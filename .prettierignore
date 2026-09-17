@@ -3,3 +3,4 @@ dist
 .wrangler
 pnpm-lock.yaml
 coverage
+apps/*/worker-configuration.d.ts
