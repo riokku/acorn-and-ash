@@ -25,13 +25,16 @@ import {
 
 /** Positions are sent as whole centimetres. */
 export const POSITION_SCALE = 100;
+/** Speeds are sent as whole centimetres per second, which tops out at 327 m/s. */
+export const VELOCITY_SCALE = 100;
+const MAX_QUANTISED_VELOCITY = 32767;
 /** Angles are sent as a fraction of a full turn in 16 bits: about 0.005 degrees. */
 const ANGLE_SCALE = 65536 / TAU;
 
 const BYTES_PER_INPUT = 5;
 const INPUT_HEADER_BYTES = 6;
-/** netId(2) + x,y,z(4 each) + yaw(2) + flags(1) */
-const BYTES_PER_SNAPSHOT_ENTITY = 17;
+/** netId(2) + x,y,z(4 each) + vx,vy,vz(2 each) + yaw(2) + flags(1) */
+const BYTES_PER_SNAPSHOT_ENTITY = 23;
 const SNAPSHOT_HEADER_BYTES = 14;
 
 /** A bundle never carries more than this, so a bad client cannot make us work. */
@@ -45,6 +48,18 @@ export function quantisePosition(metres: number): number {
 
 export function dequantisePosition(centimetres: number): number {
   return centimetres / POSITION_SCALE;
+}
+
+export function quantiseVelocity(metresPerSecond: number): number {
+  return clamp(
+    Math.round(metresPerSecond * VELOCITY_SCALE),
+    -MAX_QUANTISED_VELOCITY,
+    MAX_QUANTISED_VELOCITY,
+  );
+}
+
+export function dequantiseVelocity(packed: number): number {
+  return packed / VELOCITY_SCALE;
 }
 
 export function quantiseAngle(radians: number): number {
@@ -192,8 +207,11 @@ export function encodeSnapshot(
     view.setInt32(offset + 2, quantisePosition(entity.x), true);
     view.setInt32(offset + 6, quantisePosition(entity.y), true);
     view.setInt32(offset + 10, quantisePosition(entity.z), true);
-    view.setUint16(offset + 14, quantiseAngle(entity.yaw), true);
-    view.setUint8(offset + 16, entity.flags & 0xff);
+    view.setInt16(offset + 14, quantiseVelocity(entity.vx), true);
+    view.setInt16(offset + 16, quantiseVelocity(entity.vy), true);
+    view.setInt16(offset + 18, quantiseVelocity(entity.vz), true);
+    view.setUint16(offset + 20, quantiseAngle(entity.yaw), true);
+    view.setUint8(offset + 22, entity.flags & 0xff);
     offset += BYTES_PER_SNAPSHOT_ENTITY;
   }
   return buffer;
@@ -256,8 +274,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           x: dequantisePosition(view.getInt32(offset + 2, true)),
           y: dequantisePosition(view.getInt32(offset + 6, true)),
           z: dequantisePosition(view.getInt32(offset + 10, true)),
-          yaw: dequantiseAngle(view.getUint16(offset + 14, true)),
-          flags: view.getUint8(offset + 16),
+          vx: dequantiseVelocity(view.getInt16(offset + 14, true)),
+          vy: dequantiseVelocity(view.getInt16(offset + 16, true)),
+          vz: dequantiseVelocity(view.getInt16(offset + 18, true)),
+          yaw: dequantiseAngle(view.getUint16(offset + 20, true)),
+          flags: view.getUint8(offset + 22),
         });
         offset += BYTES_PER_SNAPSHOT_ENTITY;
       }

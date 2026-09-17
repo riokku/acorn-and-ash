@@ -36,12 +36,21 @@ export interface WorldSimulationOptions {
   readonly withProps?: boolean;
 }
 
-/** One player as it appears in a snapshot. */
+/**
+ * One player as it appears in a snapshot.
+ *
+ * Velocity travels too. The client that owns this player needs it to re-run its
+ * own movement from the server's answer, and for everybody else it lets the
+ * client keep a late player gliding instead of freezing.
+ */
 export interface SnapshotEntity {
   netId: number;
   x: number;
   y: number;
   z: number;
+  vx: number;
+  vy: number;
+  vz: number;
   yaw: number;
   flags: number;
 }
@@ -317,6 +326,9 @@ export class WorldSimulation {
           x: position.x,
           y: position.y,
           z: position.z,
+          vx: velocity.x,
+          vy: velocity.y,
+          vz: velocity.z,
           yaw: facing.yaw,
           flags,
         });

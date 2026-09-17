@@ -132,8 +132,8 @@ describe('server messages', () => {
 
   it('round-trips a snapshot', () => {
     const entities: SnapshotEntity[] = [
-      { netId: 1, x: 12.34, y: 0, z: -56.78, yaw: 1.2, flags: 1 },
-      { netId: 2, x: -0.01, y: 1.5, z: 0.99, yaw: -3.0, flags: 0 },
+      { netId: 1, x: 12.34, y: 0, z: -56.78, vx: 3.2, vy: 0, vz: -1.05, yaw: 1.2, flags: 1 },
+      { netId: 2, x: -0.01, y: 1.5, z: 0.99, vx: 0, vy: -24.5, vz: 0, yaw: -3.0, flags: 0 },
     ];
     const decoded = decodeServerMessage(encodeSnapshot(90, 5000, 41, entities));
 
@@ -150,14 +150,17 @@ describe('server messages', () => {
       expect(entity.x).toBeCloseTo(original.x, 2);
       expect(entity.y).toBeCloseTo(original.y, 2);
       expect(entity.z).toBeCloseTo(original.z, 2);
+      expect(entity.vx).toBeCloseTo(original.vx, 2);
+      expect(entity.vy).toBeCloseTo(original.vy, 2);
+      expect(entity.vz).toBeCloseTo(original.vz, 2);
       expect(entity.yaw).toBeCloseTo(original.yaw, 3);
       expect(entity.flags).toBe(original.flags);
     });
   });
 
   it('keeps a snapshot for a busy world small', () => {
-    expect(snapshotBytes(10)).toBeLessThan(200);
-    expect(snapshotBytes(MAX_PLAYERS_PER_WORLD)).toBeLessThan(900);
+    expect(snapshotBytes(10)).toBeLessThan(256);
+    expect(snapshotBytes(MAX_PLAYERS_PER_WORLD)).toBeLessThan(1200);
   });
 
   it('round-trips the small messages', () => {
@@ -180,7 +183,7 @@ describe('server messages', () => {
   });
 
   it('rejects a snapshot whose length does not match its count', () => {
-    const buffer = new ArrayBuffer(14 + 17);
+    const buffer = new ArrayBuffer(14 + 23);
     const view = new DataView(buffer);
     view.setUint8(0, 0x11);
     view.setUint8(13, 4);

@@ -1,0 +1,123 @@
+:root {
+  --ink: #f3efe4;
+  --ink-dim: #b9b3a3;
+  --panel: rgba(24, 28, 24, 0.72);
+  --panel-edge: rgba(243, 239, 228, 0.14);
+  --good: #9ed17a;
+  --warn: #e8c46a;
+  --bad: #e58a7b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #101410;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* The HUD is plain HTML drawn over the canvas, never inside the 3D scene. */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  min-width: 190px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--ink-dim);
+}
+
+.hud-row > span:last-child {
+  color: var(--ink);
+}
+
+.hud-status-good {
+  color: var(--good);
+}
+.hud-status-warn {
+  color: var(--warn);
+}
+.hud-status-bad {
+  color: var(--bad);
+}
+
+.hud-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.hud-curtain {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  background: rgba(16, 20, 16, 0.78);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.hud-curtain h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.hud-curtain p {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14px;
+}

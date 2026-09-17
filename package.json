@@ -13,7 +13,7 @@
     "dev:server": "pnpm --filter @acorn/game-server dev",
     "dev:web": "pnpm --filter @acorn/web dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -22,10 +22,13 @@
     "check:assets": "node tools/check-asset-licenses.mjs",
     "bench:tick": "pnpm --filter @acorn/tools bench:tick",
     "loadtest": "pnpm --filter @acorn/tools loadtest",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm check:assets && pnpm build"
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm check:assets && pnpm build",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.19.0",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
