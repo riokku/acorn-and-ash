@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLEARING_HALF, PLAYABLE_HALF_EXTENT, SPAWN_POSITION, PLAYER_RADIUS } from '../src/constants';
+import {
+  CLEARING_HALF,
+  PLAYABLE_HALF_EXTENT,
+  SPAWN_POSITION,
+  PLAYER_RADIUS,
+} from '../src/constants';
 import { buildTestClearing } from '../src/world/clearing';
 
 describe('the test clearing', () => {

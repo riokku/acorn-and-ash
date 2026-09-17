@@ -35,13 +35,7 @@ export interface PlayerInput {
   readonly buttons: number;
 }
 
-export function createInput(
-  seq: number,
-  moveX = 0,
-  moveZ = 0,
-  yaw = 0,
-  buttons = 0,
-): PlayerInput {
+export function createInput(seq: number, moveX = 0, moveZ = 0, yaw = 0, buttons = 0): PlayerInput {
   return { seq, moveX: clamp(moveX, -1, 1), moveZ: clamp(moveZ, -1, 1), yaw, buttons };
 }
 

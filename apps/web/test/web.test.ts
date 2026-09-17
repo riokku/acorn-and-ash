@@ -27,10 +27,9 @@ describe('the API', () => {
 
 describe('reaching the World Durable Object', () => {
   it('forwards a realtime connection to the world', async () => {
-    const response = await SELF.fetch(
-      `https://acorn.test/api/worlds/${DEFAULT_WORLD_ID}/ws`,
-      { headers: { Upgrade: 'websocket' } },
-    );
+    const response = await SELF.fetch(`https://acorn.test/api/worlds/${DEFAULT_WORLD_ID}/ws`, {
+      headers: { Upgrade: 'websocket' },
+    });
     // The stub world stands in for the game server Worker here; what matters is
     // that the binding resolved and the upgrade header survived the hop.
     expect(await response.json()).toMatchObject({

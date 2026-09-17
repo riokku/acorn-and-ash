@@ -18,13 +18,7 @@ function createPlayer(): LocalPlayer {
   return new LocalPlayer(SPAWN_POSITION, collision);
 }
 
-function serverState(
-  netId: number,
-  x: number,
-  z: number,
-  vx = 0,
-  vz = 0,
-): SnapshotEntity {
+function serverState(netId: number, x: number, z: number, vx = 0, vz = 0): SnapshotEntity {
   return { netId, x, y: 0, z, vx, vy: 0, vz, yaw: 0, flags: 0 };
 }
 
@@ -87,10 +81,7 @@ describe('being corrected by the server', () => {
     // The server has only simulated the first two of the five inputs. Replaying
     // the other three on top of its answer should land back where we were.
     const afterTwo = replayFromSpawn(2);
-    player.reconcile(
-      serverState(1, afterTwo.x, afterTwo.z, afterTwo.vx, afterTwo.vz),
-      2,
-    );
+    player.reconcile(serverState(1, afterTwo.x, afterTwo.z, afterTwo.vx, afterTwo.vz), 2);
 
     expect(player.motion.position.z).toBeCloseTo(predicted.z, 5);
     expect(player.stats.pendingInputs).toBe(3);

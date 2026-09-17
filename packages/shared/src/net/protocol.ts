@@ -307,7 +307,8 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const reason = view.getUint8(1);
       return {
         type: 'rejected',
-        reason: reason === RejectReason.WorldFull ? RejectReason.WorldFull : RejectReason.BadMessage,
+        reason:
+          reason === RejectReason.WorldFull ? RejectReason.WorldFull : RejectReason.BadMessage,
       };
     }
     default:

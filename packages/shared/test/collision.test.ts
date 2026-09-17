@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { COLLISION_SKIN_WIDTH, createCollisionWorld, resolveCapsule } from '../src/collision/capsule';
+import {
+  COLLISION_SKIN_WIDTH,
+  createCollisionWorld,
+  resolveCapsule,
+} from '../src/collision/capsule';
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../src/constants';
 import { box, cylinder } from '../src/world/colliders';
 import { createFlatTerrain } from '../src/world/terrain';

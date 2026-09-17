@@ -6,11 +6,12 @@
   "description": "Worker that serves the game client and routes realtime traffic to the World Durable Object.",
   "scripts": {
     "build": "pnpm --filter @acorn/client build",
-    "dev": "wrangler dev -c wrangler.jsonc -c ../game-server/wrangler.jsonc",
-    "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "deploy:staging": "wrangler deploy --env staging",
+    "dev": "wrangler dev -c wrangler.jsonc -c ../game-server/wrangler.jsonc",
+    "pretest": "pnpm --filter @acorn/client build",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "types": "wrangler types"
   },
   "dependencies": {

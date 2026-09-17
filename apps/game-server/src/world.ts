@@ -83,9 +83,8 @@ export class World extends DurableObject<WorldEnv> {
     }
 
     const requestedKey = url.searchParams.get('player');
-    const playerKey = requestedKey !== null && PLAYER_KEY_PATTERN.test(requestedKey)
-      ? requestedKey
-      : null;
+    const playerKey =
+      requestedKey !== null && PLAYER_KEY_PATTERN.test(requestedKey) ? requestedKey : null;
 
     const netId = this.claimNetId();
     const { 0: client, 1: server } = new WebSocketPair();
@@ -388,13 +387,7 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private writePlayer(
-    playerKey: string,
-    x: number,
-    y: number,
-    z: number,
-    facingYaw: number,
-  ): void {
+  private writePlayer(playerKey: string, x: number, y: number, z: number, facingYaw: number): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO players (player_key, x, y, z, facing_yaw, updated_at) ' +
         'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +

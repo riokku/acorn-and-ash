@@ -72,7 +72,8 @@ export class FollowCamera {
     } else {
       // Ease back out once the way is clear again.
       const room = Math.min(blocked, RESTING_DISTANCE);
-      this.currentDistance += (room - this.currentDistance) * Math.min(1, PULL_OUT_RATE * deltaSeconds);
+      this.currentDistance +=
+        (room - this.currentDistance) * Math.min(1, PULL_OUT_RATE * deltaSeconds);
     }
 
     this.desired.copy(this.direction).multiplyScalar(this.currentDistance).add(this.target);

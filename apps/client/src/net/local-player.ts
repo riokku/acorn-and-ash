@@ -67,12 +67,7 @@ export class LocalPlayer {
    *
    * Returns the inputs produced, so the caller can send them.
    */
-  advance(
-    deltaSeconds: number,
-    moveX: number,
-    moveZ: number,
-    cameraYaw: number,
-  ): PlayerInput[] {
+  advance(deltaSeconds: number, moveX: number, moveZ: number, cameraYaw: number): PlayerInput[] {
     // A long pause (a background tab) must not make the player sprint to catch up.
     this.accumulator = Math.min(this.accumulator + deltaSeconds, TICK_SECONDS * 5);
 
@@ -141,9 +136,12 @@ export class LocalPlayer {
   /** Where to draw the player right now, part way between two ticks. */
   renderPosition(into: Vec3): Vec3 {
     const alpha = Math.min(1, this.accumulator / TICK_SECONDS);
-    into.x = this.previous.x + (this.motion.position.x - this.previous.x) * alpha + this.smoothing.x;
-    into.y = this.previous.y + (this.motion.position.y - this.previous.y) * alpha + this.smoothing.y;
-    into.z = this.previous.z + (this.motion.position.z - this.previous.z) * alpha + this.smoothing.z;
+    into.x =
+      this.previous.x + (this.motion.position.x - this.previous.x) * alpha + this.smoothing.x;
+    into.y =
+      this.previous.y + (this.motion.position.y - this.previous.y) * alpha + this.smoothing.y;
+    into.z =
+      this.previous.z + (this.motion.position.z - this.previous.z) * alpha + this.smoothing.z;
     return into;
   }
 

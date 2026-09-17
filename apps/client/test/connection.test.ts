@@ -15,7 +15,12 @@ describe('finding the world server', () => {
   });
 
   it('uses ws, not wss, when the page is not secure', () => {
-    const url = worldSocketUrl('home-clearing', 'abcdefgh1234', undefined, 'http://localhost:5173/');
+    const url = worldSocketUrl(
+      'home-clearing',
+      'abcdefgh1234',
+      undefined,
+      'http://localhost:5173/',
+    );
     expect(url.startsWith('ws://localhost:5173/')).toBe(true);
   });
 

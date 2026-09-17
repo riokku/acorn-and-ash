@@ -26,7 +26,13 @@ import { propKindIndex } from '../data/props';
 import type { Vec3 } from '../math/vec3';
 import { buildTestClearing, type Clearing } from '../world/clearing';
 import { createFlatTerrain, type Terrain } from '../world/terrain';
-import { createPlayerMotion, idleInput, stepPlayer, type PlayerInput, type PlayerMotion } from './player';
+import {
+  createPlayerMotion,
+  idleInput,
+  stepPlayer,
+  type PlayerInput,
+  type PlayerMotion,
+} from './player';
 
 export interface WorldSimulationOptions {
   readonly seed: number;
@@ -137,9 +143,7 @@ export class WorldSimulation {
   addPlayer(netId: number, saved?: PersistedPlayer): void {
     if (this.players.has(netId)) return;
 
-    const spawn = saved
-      ? { x: saved.x, y: saved.y, z: saved.z }
-      : this.nextSpawnPosition();
+    const spawn = saved ? { x: saved.x, y: saved.y, z: saved.z } : this.nextSpawnPosition();
     const facingYaw = saved?.facingYaw ?? 0;
 
     const entity = this.world.spawn(
@@ -227,7 +231,12 @@ export class WorldSimulation {
         const steps = inputsToConsume(runtime.queue.length);
         if (steps === 0) {
           // No packet arrived in time: the player coasts to a stop where they are.
-          stepPlayer(scratch, idleInput(runtime.lastProcessedSeq, aim.yaw), TICK_SECONDS, this.collision);
+          stepPlayer(
+            scratch,
+            idleInput(runtime.lastProcessedSeq, aim.yaw),
+            TICK_SECONDS,
+            this.collision,
+          );
         } else {
           for (let i = 0; i < steps; i++) {
             const input = runtime.queue.shift();

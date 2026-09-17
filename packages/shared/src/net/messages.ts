@@ -70,8 +70,4 @@ export interface RejectedMessage {
 }
 
 export type ServerMessage =
-  | WelcomeMessage
-  | SnapshotMessage
-  | PlayerLeftMessage
-  | PongMessage
-  | RejectedMessage;
+  WelcomeMessage | SnapshotMessage | PlayerLeftMessage | PongMessage | RejectedMessage;

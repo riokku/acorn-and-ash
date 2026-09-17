@@ -185,10 +185,14 @@ describe('remembering where a player was', () => {
       first.walk(1, 1, 0, 8);
       await sleep(150);
     }
-    await waitFor('to have moved', () => {
-      const here = first.positionOf(firstId);
-      return here !== undefined && Math.hypot(here.x, here.z - 6) > 2;
-    }, 6000);
+    await waitFor(
+      'to have moved',
+      () => {
+        const here = first.positionOf(firstId);
+        return here !== undefined && Math.hypot(here.x, here.z - 6) > 2;
+      },
+      6000,
+    );
 
     const before = first.positionOf(firstId);
     if (before === undefined) throw new Error('lost the player');
