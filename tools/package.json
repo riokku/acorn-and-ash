@@ -1,0 +1,21 @@
+{
+  "name": "@acorn/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Asset pipeline scripts, load-test bots and simulation benchmarks.",
+  "scripts": {
+    "build": "echo \"@acorn/tools has nothing to build\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"@acorn/tools has no tests\"",
+    "bench:tick": "tsx load-test/tick-bench.ts",
+    "loadtest": "tsx load-test/bots.ts"
+  },
+  "dependencies": {
+    "@acorn/shared": "workspace:*",
+    "koota": "^0.6.6"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}

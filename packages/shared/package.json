@@ -1,0 +1,23 @@
+{
+  "name": "@acorn/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic game rules, collision, ECS traits, data tables and network formats shared by client and server.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "echo \"@acorn/shared is consumed as TypeScript source; nothing to build\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "koota": "^0.6.6"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}
