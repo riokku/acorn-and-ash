@@ -110,6 +110,9 @@ jobs:
       # give it a preview URL, and that preview talks to the staging world.
       - name: Upload the preview
         id: upload
+        # A failure here is handled below: the very first pull request cannot
+        # have a preview, because there is no deployed Worker to add a version to.
+        continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -117,37 +120,78 @@ jobs:
           workingDirectory: apps/web
           command: versions upload --env staging --preview-alias pr-${{ github.event.number }}
 
-      - name: Find the preview link
-        id: link
+      - name: Work out what happened
+        id: result
         env:
-          WRANGLER_OUTPUT: ${{ steps.upload.outputs.command-output }}
+          OUTCOME: ${{ steps.upload.outcome }}
+          WRANGLER_STDOUT: ${{ steps.upload.outputs.command-output }}
+          WRANGLER_STDERR: ${{ steps.upload.outputs.command-stderr }}
           ALIAS: pr-${{ github.event.number }}
         run: |
-          # Prefer the aliased URL; fall back to whatever workers.dev link is there.
-          url=$(printf '%s' "$WRANGLER_OUTPUT" \
-            | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' \
-            | grep -F "$ALIAS" | head -1)
-          if [ -z "$url" ]; then
-            url=$(printf '%s' "$WRANGLER_OUTPUT" \
-              | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1)
+          set -u
+          output=$(printf '%s\n%s' "$WRANGLER_STDOUT" "$WRANGLER_STDERR")
+
+          if [ "$OUTCOME" = "success" ]; then
+            # Prefer the aliased link; fall back to any workers.dev link in the output.
+            url=$(printf '%s' "$output" \
+              | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' \
+              | grep -F "$ALIAS" | head -1 || true)
+            if [ -z "$url" ]; then
+              url=$(printf '%s' "$output" \
+                | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1 || true)
+            fi
+            echo "state=ready" >> "$GITHUB_OUTPUT"
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+          # Cloudflare can only add a preview version to a Worker that already
+          # exists. Until main has been merged once and staging deployed, there is
+          # nothing to preview. This is the only failure we let through.
+          if printf '%s' "$output" | grep -q 'Worker that does not yet exist'; then
+            echo "state=no-staging-yet" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "The preview upload failed for a reason we do not recognise:"
+          printf '%s\n' "$output"
+          echo "state=failed" >> "$GITHUB_OUTPUT"
+          exit 1
 
       - name: Comment the link on the pull request
+        if: always() && steps.result.outputs.state != 'failed'
         uses: actions/github-script@v7
         env:
-          PREVIEW_URL: ${{ steps.link.outputs.url }}
+          PREVIEW_URL: ${{ steps.result.outputs.url }}
+          PREVIEW_STATE: ${{ steps.result.outputs.state }}
         with:
           script: |
-            const url = process.env.PREVIEW_URL;
             const marker = '<!-- acorn-preview -->';
-            const body = url
-              ? `${marker}\n### Play this change\n\n${url}\n\n` +
+            const url = process.env.PREVIEW_URL;
+            const state = process.env.PREVIEW_STATE;
+            const commit = context.sha.slice(0, 7);
+
+            let body;
+            if (state === 'no-staging-yet') {
+              body =
+                `${marker}\n### No preview link yet\n\n` +
+                `Cloudflare can only add a preview version to a Worker that already exists, and ` +
+                `staging has not been deployed yet. **Merging this pull request deploys staging**, ` +
+                `and every pull request after that gets a link here automatically.\n\n` +
+                `In the meantime you can play it on your own machine: \`pnpm install\` then ` +
+                `\`pnpm dev:web\`, and open http://localhost:8787 in two tabs.\n\n` +
+                `_Checked at commit ${commit}._`;
+            } else if (url) {
+              body =
+                `${marker}\n### Play this change\n\n${url}\n\n` +
                 `The game client from this pull request, connected to the **staging** world. ` +
                 `Open it in two tabs to see two players.\n\n` +
-                `_Updated for commit ${context.sha.slice(0, 7)}._`
-              : `${marker}\n### Preview build\n\nThe preview uploaded, but the link could not be ` +
-                `read from the Wrangler output. Check the workflow log.`;
+                `_Updated for commit ${commit}._`;
+            } else {
+              body =
+                `${marker}\n### Preview build\n\nThe preview uploaded, but the link could not be ` +
+                `read from the Wrangler output. Check the workflow log.\n\n_Commit ${commit}._`;
+            }
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
