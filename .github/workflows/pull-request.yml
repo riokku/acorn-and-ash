@@ -104,15 +104,50 @@ jobs:
       - name: Build the client
         run: pnpm --filter @acorn/client build
 
+      # The preview attaches to the deployed staging Worker, so the name has to
+      # match. If it is ever renamed, fail here rather than quietly deciding
+      # staging does not exist.
+      - name: Check the staging Worker is still called what we think
+        run: |
+          grep -q '"name": "acorn-ash-web-staging"' apps/web/wrangler.jsonc
+
+      # Cloudflare can only add a preview version to a Worker that already
+      # exists, so on a repository that has never deployed there is nothing to
+      # preview. Asking the API outright is far more reliable than trying to
+      # recognise Wrangler's error message.
+      - name: Has staging been deployed yet?
+        id: staging
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/acorn-ash-web-staging")
+
+          case "$status" in
+            200)
+              echo "Staging exists; a preview can be uploaded."
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "Staging has never been deployed, so there is nothing to preview yet."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "The Cloudflare API answered $status, which we cannot interpret."
+              echo "Check that CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set correctly."
+              exit 1
+              ;;
+          esac
+
       # A preview version of the staging web Worker. It is not promoted to any
       # traffic; it just gets its own URL. Because apps/web borrows the World
       # class from the game server rather than implementing it, Cloudflare will
       # give it a preview URL, and that preview talks to the staging world.
       - name: Upload the preview
         id: upload
-        # A failure here is handled below: the very first pull request cannot
-        # have a preview, because there is no deployed Worker to add a version to.
-        continue-on-error: true
+        if: steps.staging.outputs.exists == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -120,66 +155,43 @@ jobs:
           workingDirectory: apps/web
           command: versions upload --env staging --preview-alias pr-${{ github.event.number }}
 
-      - name: Work out what happened
-        id: result
+      - name: Find the preview link
+        id: link
+        if: steps.staging.outputs.exists == 'true'
         env:
-          OUTCOME: ${{ steps.upload.outcome }}
-          WRANGLER_STDOUT: ${{ steps.upload.outputs.command-output }}
-          WRANGLER_STDERR: ${{ steps.upload.outputs.command-stderr }}
+          WRANGLER_OUTPUT: ${{ steps.upload.outputs.command-output }}
           ALIAS: pr-${{ github.event.number }}
         run: |
-          set -u
-          output=$(printf '%s\n%s' "$WRANGLER_STDOUT" "$WRANGLER_STDERR")
-
-          if [ "$OUTCOME" = "success" ]; then
-            # Prefer the aliased link; fall back to any workers.dev link in the output.
-            url=$(printf '%s' "$output" \
-              | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' \
-              | grep -F "$ALIAS" | head -1 || true)
-            if [ -z "$url" ]; then
-              url=$(printf '%s' "$output" \
-                | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1 || true)
-            fi
-            echo "state=ready" >> "$GITHUB_OUTPUT"
-            echo "url=$url" >> "$GITHUB_OUTPUT"
-            exit 0
+          # Prefer the aliased link; fall back to any workers.dev link in the output.
+          url=$(printf '%s' "$WRANGLER_OUTPUT" \
+            | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' \
+            | grep -F "$ALIAS" | head -1 || true)
+          if [ -z "$url" ]; then
+            url=$(printf '%s' "$WRANGLER_OUTPUT" \
+              | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1 || true)
           fi
-
-          # Cloudflare can only add a preview version to a Worker that already
-          # exists. Until main has been merged once and staging deployed, there is
-          # nothing to preview. This is the only failure we let through.
-          if printf '%s' "$output" | grep -q 'Worker that does not yet exist'; then
-            echo "state=no-staging-yet" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "The preview upload failed for a reason we do not recognise:"
-          printf '%s\n' "$output"
-          echo "state=failed" >> "$GITHUB_OUTPUT"
-          exit 1
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Comment the link on the pull request
-        if: always() && steps.result.outputs.state != 'failed'
         uses: actions/github-script@v7
         env:
-          PREVIEW_URL: ${{ steps.result.outputs.url }}
-          PREVIEW_STATE: ${{ steps.result.outputs.state }}
+          PREVIEW_URL: ${{ steps.link.outputs.url }}
+          STAGING_EXISTS: ${{ steps.staging.outputs.exists }}
         with:
           script: |
             const marker = '<!-- acorn-preview -->';
             const url = process.env.PREVIEW_URL;
-            const state = process.env.PREVIEW_STATE;
             const commit = context.sha.slice(0, 7);
 
             let body;
-            if (state === 'no-staging-yet') {
+            if (process.env.STAGING_EXISTS !== 'true') {
               body =
                 `${marker}\n### No preview link yet\n\n` +
-                `Cloudflare can only add a preview version to a Worker that already exists, and ` +
-                `staging has not been deployed yet. **Merging this pull request deploys staging**, ` +
-                `and every pull request after that gets a link here automatically.\n\n` +
-                `In the meantime you can play it on your own machine: \`pnpm install\` then ` +
-                `\`pnpm dev:web\`, and open http://localhost:8787 in two tabs.\n\n` +
+                `Cloudflare can only add a preview to a Worker that already exists, and staging ` +
+                `has not been deployed yet. **Merging this pull request deploys staging**, and ` +
+                `every pull request after that gets a link here automatically.\n\n` +
+                `In the meantime you can play it on your own machine: \`pnpm install\`, then ` +
+                `\`pnpm dev:web\`, then open http://localhost:8787 in two tabs.\n\n` +
                 `_Checked at commit ${commit}._`;
             } else if (url) {
               body =
