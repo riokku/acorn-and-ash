@@ -111,3 +111,44 @@ test('two tabs see each other move', async ({ browser }) => {
   await walker.close();
   await watcher.close();
 });
+
+test('sprinting covers more ground than walking', async ({ page }) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const beforeWalk = positionOf(await hudValue(page, 'Position'));
+  await hold(page, 'KeyW', 1000);
+  await page.waitForTimeout(500);
+  const afterWalk = positionOf(await hudValue(page, 'Position'));
+
+  await page.keyboard.down('Shift');
+  await hold(page, 'KeyW', 1000);
+  await page.keyboard.up('Shift');
+  await page.waitForTimeout(500);
+  const afterSprint = positionOf(await hudValue(page, 'Position'));
+
+  const walked = beforeWalk.z - afterWalk.z;
+  const sprinted = afterWalk.z - afterSprint.z;
+  expect(walked).toBeGreaterThan(1);
+  // Sprinting is 7 m/s against 4.5, so roughly half again as far in the same time.
+  expect(sprinted).toBeGreaterThan(walked * 1.2);
+});
+
+test('jumping lifts the player off the ground and puts them back', async ({ page }) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const heightNow = async (): Promise<number> =>
+    (await page.evaluate(() => window.acornDebug?.localPosition()))?.y ?? 0;
+  expect(await heightNow()).toBeLessThan(0.01);
+
+  // Holding Space hops over and over, so there is plenty of air time to catch.
+  await page.keyboard.down('Space');
+  await expect.poll(heightNow).toBeGreaterThan(0.5);
+  await page.keyboard.up('Space');
+
+  // And the player comes down on their own, without being told to.
+  await expect.poll(heightNow).toBeLessThan(0.01);
+});

@@ -7,9 +7,22 @@ cabin you can upgrade and decorate.
 The game is online-only. Every world runs on the server.
 
 > **Phase 0 — Foundation.** Right now there is a flat test clearing with
-> placeholder trees and rocks, a capsule you walk around with WASD, a
+> placeholder trees and rocks, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. See
 > [the roadmap](#roadmap).
+
+## Controls
+
+| Key                               | Does                |
+| --------------------------------- | ------------------- |
+| `W` `A` `S` `D` or the arrow keys | Walk                |
+| `Shift` (held)                    | Sprint              |
+| `Space`                           | Jump                |
+| Mouse                             | Look around         |
+| `Esc`                             | Let go of the mouse |
+
+There is nothing to land on yet, so a jump is a hop in place. Standing on things
+comes with the cabin in Phase 3.
 
 ## Running it locally
 

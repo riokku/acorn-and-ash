@@ -36,15 +36,32 @@ export const PLAYER_EYE_HEIGHT = 1.55;
 
 /** How the player moves. */
 export const PLAYER_WALK_SPEED = 4.5;
+/** Holding sprint. Phase 2 will make this cost energy; for now it is free. */
+export const PLAYER_SPRINT_SPEED = 7;
 export const PLAYER_ACCELERATION = 45;
 export const PLAYER_DECELERATION = 30;
+/**
+ * How much of that acceleration is available while airborne. Full control in
+ * mid-air makes a jump feel weightless; none at all makes it feel like a rail.
+ */
+export const PLAYER_AIR_CONTROL = 0.35;
 /** How quickly the character model swings around to face where it is walking. */
 export const PLAYER_TURN_RATE = 14;
 /** Below this speed the character keeps the facing it already had. */
 export const PLAYER_TURN_SPEED_THRESHOLD = 0.2;
+/**
+ * Above this horizontal speed a player is reported as sprinting. It sits halfway
+ * between the two speeds, so a walker never trips it and a sprinter always does.
+ */
+export const SPRINT_REPORTING_SPEED = (PLAYER_WALK_SPEED + PLAYER_SPRINT_SPEED) / 2;
 
 export const GRAVITY = -24;
 export const TERMINAL_FALL_SPEED = -55;
+/**
+ * Upward speed at the moment of a jump. Stepped at 20 Hz under this gravity the
+ * hop peaks at 1.26 m and is over in 0.65 s: springy, and nowhere near a roof.
+ */
+export const PLAYER_JUMP_VELOCITY = 7.2;
 /** Walking off a small lip should not look like falling. */
 export const GROUND_SNAP_DISTANCE = 0.3;
 

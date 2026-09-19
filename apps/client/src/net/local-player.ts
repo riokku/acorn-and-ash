@@ -67,7 +67,13 @@ export class LocalPlayer {
    *
    * Returns the inputs produced, so the caller can send them.
    */
-  advance(deltaSeconds: number, moveX: number, moveZ: number, cameraYaw: number): PlayerInput[] {
+  advance(
+    deltaSeconds: number,
+    moveX: number,
+    moveZ: number,
+    cameraYaw: number,
+    buttons = 0,
+  ): PlayerInput[] {
     // A long pause (a background tab) must not make the player sprint to catch up.
     this.accumulator = Math.min(this.accumulator + deltaSeconds, TICK_SECONDS * 5);
 
@@ -77,7 +83,7 @@ export class LocalPlayer {
       this.previous = cloneVec3(this.motion.position);
       this.previousYaw = this.motion.facingYaw;
 
-      const input = createInput(++this.sequence, moveX, moveZ, cameraYaw);
+      const input = createInput(++this.sequence, moveX, moveZ, cameraYaw, buttons);
       stepPlayer(this.motion, input, TICK_SECONDS, this.collision);
       this.pending.push(input);
       produced.push(input);
