@@ -1,6 +1,7 @@
 import { CLEARING_HALF, PLAYABLE_HALF_EXTENT, SPAWN_POSITION } from '../constants';
 import { createRng } from '../rng';
 import { PROP_KINDS, propHeight, type PropKindId } from '../data/props';
+import type { ItemId } from '../data/items';
 import { cylinder, type Collider } from './colliders';
 
 /** One piece of scenery standing in the world. */
@@ -13,11 +14,36 @@ export interface PlacedProp {
   readonly scale: number;
 }
 
+/**
+ * Something lying in the world waiting to be picked up.
+ *
+ * Pickups are part of the seeded clearing, so the client already knows where
+ * each one is and the server only has to say which ones are still there.
+ */
+export interface PlacedPickup {
+  readonly id: number;
+  readonly item: ItemId;
+  readonly x: number;
+  readonly z: number;
+  /** How high off the ground to draw it. */
+  readonly y: number;
+}
+
 export interface Clearing {
   readonly seed: number;
   readonly props: readonly PlacedProp[];
+  readonly pickups: readonly PlacedPickup[];
   readonly colliders: readonly Collider[];
 }
+
+/**
+ * Where the first axe is waiting: sunk into an old stump beside the big oak.
+ *
+ * It is far enough from the spawn point that you have to look around for it,
+ * and next to the landmark you can actually navigate by.
+ */
+export const AXE_STUMP = { x: -8.2, z: -9.4 } as const;
+export const AXE_PICKUP_ID = 1;
 
 /** Nothing is placed inside this circle, so players always spawn in the open. */
 const SPAWN_CLEAR_RADIUS = 7;
@@ -72,7 +98,22 @@ export function buildTestClearing(seed: number): Clearing {
     add(rng.pick(ROCK_KINDS), x, z, rng.nextRange(0.7, 1.35));
   }
 
-  return { seed, props, colliders: props.map(colliderForProp) };
+  // Added last so that everything above keeps the layout it had before there
+  // was an axe: the same seed still grows the same clearing.
+  add('stump', AXE_STUMP.x, AXE_STUMP.z, 1);
+
+  const pickups: PlacedPickup[] = [
+    {
+      id: AXE_PICKUP_ID,
+      item: 'axe',
+      x: AXE_STUMP.x,
+      z: AXE_STUMP.z,
+      // Resting in the top of the stump rather than on the ground.
+      y: PROP_KINDS.stump.shape.height,
+    },
+  ];
+
+  return { seed, props, pickups, colliders: props.map(colliderForProp) };
 }
 
 function isNearSpawn(x: number, z: number): boolean {

@@ -8,7 +8,9 @@ import {
   TICK_HZ,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
+import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
+import { AXE_PICKUP_ID, AXE_STUMP } from '../src/world/clearing';
 import { inputsToConsume, WorldSimulation, SnapshotFlag } from '../src/sim/world-sim';
 
 /** Every world a test builds, so they can be handed back when it finishes. */
@@ -263,5 +265,107 @@ describe('the world simulation', () => {
     expect(after.position.x).toBeCloseTo(before.position.x, 6);
     expect(after.position.z).toBeCloseTo(before.position.z, 6);
     expect(after.facingYaw).toBeCloseTo(before.facingYaw, 6);
+  });
+});
+
+describe('picking the axe up', () => {
+  /** Put a player next to the stump and hold the interact button for one tick. */
+  function reachForTheAxe(sim: WorldSimulation, netId: number, seq = 1): void {
+    sim.placePlayer(netId, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.queueInput(netId, createInput(seq, 0, 0, 0, PlayerButton.Interact));
+    sim.step();
+  }
+
+  it('does nothing while the player is somewhere else', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 0, 1, 1, PlayerButton.Interact);
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+    expect(sim.takenPickupIds()).toEqual([]);
+  });
+
+  it('does nothing while the player stands there without asking', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    expect(sim.reachablePickup(1)?.id).toBe(AXE_PICKUP_ID);
+
+    drive(sim, 1, 0, 0, 5);
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+  });
+
+  it('hands over the axe to a player who reaches for it', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    reachForTheAxe(sim, 1);
+
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
+    expect(sim.drainPickupEvents()).toEqual([{ netId: 1, pickupId: AXE_PICKUP_ID, item: 'axe' }]);
+  });
+
+  it('reports each pickup exactly once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    reachForTheAxe(sim, 1);
+    expect(sim.drainPickupEvents()).toHaveLength(1);
+    // Draining twice must not replay it.
+    expect(sim.drainPickupEvents()).toEqual([]);
+  });
+
+  it('gives it to one player, not to both', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.addPlayer(2);
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.placePlayer(2, { x: AXE_STUMP.x - 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step();
+
+    const held = countOf(sim.inventoryOf(1), 'axe') + countOf(sim.inventoryOf(2), 'axe');
+    expect(held).toBe(1);
+    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
+    expect(sim.drainPickupEvents()).toHaveLength(1);
+  });
+
+  it('will not hand out the same axe twice, however long you hold the button', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    for (let i = 1; i <= 30; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Interact));
+      sim.step();
+    }
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(sim.drainPickupEvents()).toHaveLength(1);
+    expect(sim.reachablePickup(1)).toBeNull();
+  });
+
+  it('keeps the axe when the player logs out and comes back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    reachForTheAxe(sim, 1);
+
+    const saved = sim.persistablePlayers()[0];
+    expect(saved?.items).toEqual([{ item: 'axe', count: 1 }]);
+    sim.removePlayer(1);
+
+    const later = createWorld();
+    later.restoreTakenPickups(sim.takenPickupIds());
+    if (saved === undefined) throw new Error('nothing was saved');
+    later.addPlayer(9, saved);
+
+    expect(countOf(later.inventoryOf(9), 'axe')).toBe(1);
+    // And it is not sitting in the stump waiting to be found a second time.
+    later.placePlayer(9, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    expect(later.reachablePickup(9)).toBeNull();
+  });
+
+  it('starts a brand new player with nothing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    expect(sim.inventoryOf(1)).toEqual({});
+    expect(sim.persistablePlayers()[0]?.items).toEqual([]);
   });
 });

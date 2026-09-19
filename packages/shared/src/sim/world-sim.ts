@@ -24,12 +24,23 @@ import {
   Velocity,
 } from '../ecs/traits';
 import { propKindIndex } from '../data/props';
+import type { ItemId } from '../data/items';
 import type { Vec3 } from '../math/vec3';
-import { buildTestClearing, type Clearing } from '../world/clearing';
+import { buildTestClearing, type Clearing, type PlacedPickup } from '../world/clearing';
 import { createFlatTerrain, type Terrain } from '../world/terrain';
 import {
+  addItem,
+  createInventory,
+  inventoryEntries,
+  inventoryFromEntries,
+  type Inventory,
+} from './inventory';
+import { pickupInReach } from './pickups';
+import {
+  PlayerButton,
   createPlayerMotion,
   idleInput,
+  isHeld,
   stepPlayer,
   type PlayerInput,
   type PlayerMotion,
@@ -76,12 +87,21 @@ export interface PersistedPlayer {
   readonly y: number;
   readonly z: number;
   readonly facingYaw: number;
+  readonly items: readonly { readonly item: ItemId; readonly count: number }[];
+}
+
+/** Somebody picked something up. The world server turns these into messages. */
+export interface PickupTaken {
+  readonly netId: number;
+  readonly pickupId: number;
+  readonly item: ItemId;
 }
 
 interface PlayerRuntime {
   readonly netId: number;
   readonly entity: Entity;
   readonly queue: PlayerInput[];
+  readonly inventory: Inventory;
   lastProcessedSeq: number;
   /** Inputs thrown away because the client was sending faster than it should. */
   droppedInputs: number;
@@ -104,6 +124,10 @@ export class WorldSimulation {
   tick = 0;
 
   private readonly players = new Map<number, PlayerRuntime>();
+  /** Pickups that somebody has already taken, by id. */
+  private readonly takenPickups = new Set<number>();
+  /** Drained by the world server each tick and turned into messages. */
+  private readonly pickupEvents: PickupTaken[] = [];
   private spawnCounter = 0;
   /** Reused every tick so a busy world does not allocate per player. */
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
@@ -176,6 +200,7 @@ export class WorldSimulation {
       netId,
       entity,
       queue: [],
+      inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
       lastProcessedSeq: 0,
       droppedInputs: 0,
     });
@@ -243,6 +268,7 @@ export class WorldSimulation {
         scratch.facingYaw = facing.yaw;
         scratch.grounded = grounded.value;
 
+        let wantsToInteract = false;
         const steps = inputsToConsume(runtime.queue.length);
         if (steps === 0) {
           // No packet arrived in time: the player coasts to a stop where they are.
@@ -257,10 +283,15 @@ export class WorldSimulation {
             const input = runtime.queue.shift();
             if (input === undefined) break;
             stepPlayer(scratch, input, TICK_SECONDS, this.collision);
+            if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
           }
         }
+
+        // Reaching for something is judged where the player ended up, not where
+        // they started, and only the server ever decides who got it.
+        if (wantsToInteract) this.tryPickup(runtime, scratch.position);
 
         position.x = scratch.position.x;
         position.y = scratch.position.y;
@@ -272,6 +303,55 @@ export class WorldSimulation {
         grounded.value = scratch.grounded;
         lastProcessed.seq = runtime.lastProcessedSeq;
       });
+  }
+
+  /**
+   * Take whatever this player is standing next to.
+   *
+   * Nothing happens if there is nothing in reach or their pack is already full,
+   * and a pickup only ever leaves the world once however many people reach for
+   * it in the same tick.
+   */
+  private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>): void {
+    const pickup = pickupInReach(position, this.clearing.pickups, (id) =>
+      this.takenPickups.has(id),
+    );
+    if (pickup === null) return;
+    if (addItem(runtime.inventory, pickup.item) === 0) return;
+
+    this.takenPickups.add(pickup.id);
+    this.pickupEvents.push({
+      netId: runtime.netId,
+      pickupId: pickup.id,
+      item: pickup.item,
+    });
+  }
+
+  /** What this player could pick up right now, or null. Used by tests. */
+  reachablePickup(netId: number): PlacedPickup | null {
+    const position = this.players.get(netId)?.entity.get(Position);
+    if (position === undefined) return null;
+    return pickupInReach(position, this.clearing.pickups, (id) => this.takenPickups.has(id));
+  }
+
+  /** What a player is carrying. The client is told this; it never decides it. */
+  inventoryOf(netId: number): Inventory {
+    return this.players.get(netId)?.inventory ?? {};
+  }
+
+  /** Pickups already taken, for sending to a client and for saving. */
+  takenPickupIds(): number[] {
+    return [...this.takenPickups];
+  }
+
+  /** Put back the set of taken pickups after the world wakes from storage. */
+  restoreTakenPickups(ids: Iterable<number>): void {
+    for (const id of ids) this.takenPickups.add(id);
+  }
+
+  /** Hand over everything that happened since this was last asked. */
+  drainPickupEvents(): PickupTaken[] {
+    return this.pickupEvents.splice(0);
   }
 
   /** Read one player's state, mostly for tests and for saving. */
@@ -314,6 +394,7 @@ export class WorldSimulation {
         y: position.y,
         z: position.z,
         facingYaw: facing.yaw,
+        items: inventoryEntries(runtime.inventory),
       });
     }
     return saved;

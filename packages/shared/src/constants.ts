@@ -74,6 +74,12 @@ export const CLEARING_HALF = CLEARING_SIZE / 2;
  */
 export const PLAYABLE_HALF_EXTENT = 38;
 
+/**
+ * How close you have to be to pick something up, measured from the player to the
+ * item. Generous enough that you do not have to hunt for the exact spot.
+ */
+export const PICKUP_REACH = 2;
+
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;
 /** New players are spread around the spawn point so they do not stack up. */

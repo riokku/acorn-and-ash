@@ -1,7 +1,14 @@
 import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
-import { SNAPSHOT_HZ, TICK_HZ } from '@acorn/shared';
+import {
+  AXE_PICKUP_ID,
+  AXE_STUMP,
+  PICKUP_REACH,
+  PlayerButton,
+  SNAPSHOT_HZ,
+  TICK_HZ,
+} from '@acorn/shared';
 
 import { sleep, TestClient, waitFor } from './helpers';
 
@@ -256,5 +263,140 @@ describe('the tick loop', () => {
     expect(status.players).toBe(0);
     // Timers prevent hibernation, so the loop has to stop when the world empties.
     expect(status.running).toBe(false);
+  });
+});
+
+/**
+ * Walk a client over to the stump the axe is standing in.
+ *
+ * The heading is worked out again on every step, so bumping into a rock on the
+ * way just means the player steers round it rather than losing the plot.
+ */
+async function walkToTheAxe(client: TestClient): Promise<void> {
+  await waitFor('a welcome', () => client.received.length > 0);
+  const netId = client.welcome().netId;
+  await waitFor('a first snapshot', () => client.positionOf(netId) !== undefined);
+
+  for (let step = 0; step < 60; step++) {
+    const here = client.positionOf(netId);
+    if (here === undefined) break;
+    const gap = Math.hypot(here.x - AXE_STUMP.x, here.z - AXE_STUMP.z);
+    if (gap < PICKUP_REACH - 0.4) return;
+    // Walking forward is walking down -Z, so this is the heading that lines up.
+    const yaw = Math.atan2(-(AXE_STUMP.x - here.x), -(AXE_STUMP.z - here.z));
+    client.walk(0, 1, yaw, 4);
+    await sleep(110);
+  }
+  const ended = client.positionOf(netId);
+  throw new Error(`Never reached the stump; stopped at ${ended?.x}, ${ended?.z}`);
+}
+
+describe('finding the axe', () => {
+  it('tells a new player they have nothing and that nothing has been taken', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'fresh-player');
+    await waitFor('the opening messages', () => client.countOfMessages('inventory') > 0);
+
+    expect(client.inventory()).toEqual([]);
+    expect(client.takenPickups()).toEqual([]);
+    client.close();
+  });
+
+  it('hands over the axe when a player reaches for it', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'axe-finder');
+    await walkToTheAxe(client);
+
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => client.inventory().length > 0);
+
+    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(client.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    client.close();
+  });
+
+  it('still has the axe after logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'returning-player');
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().length > 0);
+    first.close();
+    await sleep(200);
+
+    const second = await TestClient.connect(worldId, 'returning-player');
+    await waitFor('the opening messages', () => second.countOfMessages('inventory') > 0);
+
+    expect(second.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    // And it is not sitting in the stump waiting to be found all over again.
+    expect(second.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    second.close();
+  });
+
+  it('tells a second player the axe is already gone', async () => {
+    const worldId = nextWorldId();
+    const finder = await TestClient.connect(worldId, 'the-finder');
+    await walkToTheAxe(finder);
+    finder.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => finder.inventory().length > 0);
+
+    const latecomer = await TestClient.connect(worldId, 'the-latecomer');
+    await waitFor('the opening messages', () => latecomer.countOfMessages('inventory') > 0);
+
+    expect(latecomer.inventory()).toEqual([]);
+    expect(latecomer.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    finder.close();
+    latecomer.close();
+  });
+
+  it('does not hand out an axe to somebody standing in the middle of the clearing', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'nowhere-near');
+    await waitFor('the opening messages', () => client.countOfMessages('inventory') > 0);
+
+    for (let i = 0; i < 6; i++) {
+      client.walk(0, 0, 0, 4, PlayerButton.Interact);
+      await sleep(80);
+    }
+
+    expect(client.inventory()).toEqual([]);
+    expect(client.takenPickups()).toEqual([]);
+    client.close();
+  });
+});
+
+describe('a world that empties and fills again', () => {
+  it('does not leave a ghost behind when the last player leaves', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'the-first-visitor');
+    await waitFor('a welcome', () => first.received.length > 0);
+    await waitFor('a snapshot', () => first.snapshots().length > 0);
+    first.close();
+    // Long enough for the world to save itself and let go of its ECS world.
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'the-second-visitor');
+    await waitFor('some snapshots', () => second.snapshots().length >= 3);
+
+    // Exactly one player in the world: the one who is actually here.
+    expect(second.latestSnapshot().entities).toHaveLength(1);
+    expect(second.latestSnapshot().entities[0]?.netId).toBe(second.welcome().netId);
+    second.close();
+  });
+
+  it('remembers the tick count and what was taken across the gap', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'the-finder');
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().length > 0);
+    const tickBefore = first.latestSnapshot().tick;
+    first.close();
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'somebody-else');
+    await waitFor('some snapshots', () => second.snapshots().length >= 2);
+
+    expect(second.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    // The world picks up where it left off rather than starting over.
+    expect(second.latestSnapshot().tick).toBeGreaterThanOrEqual(tickBefore);
+    second.close();
   });
 });

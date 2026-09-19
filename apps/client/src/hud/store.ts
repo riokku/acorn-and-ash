@@ -1,3 +1,5 @@
+import type { ItemId } from '@acorn/shared';
+
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
 
@@ -15,6 +17,10 @@ export interface HudState {
   readonly correctionCm: number;
   readonly pointerLocked: boolean;
   readonly ready: boolean;
+  /** What the server says this player is carrying. */
+  readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
+  /** What is within reach right now, if anything. */
+  readonly nearbyItem: ItemId | null;
 }
 
 const INITIAL: HudState = {
@@ -30,6 +36,8 @@ const INITIAL: HudState = {
   correctionCm: 0,
   pointerLocked: false,
   ready: false,
+  carrying: [],
+  nearbyItem: null,
 };
 
 /**

@@ -80,12 +80,14 @@ export class Controls {
    *
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
-   * cannot climb the sky.
+   * cannot climb the sky. Holding E is harmless in the same way: the server
+   * hands over each thing exactly once.
    */
   buttons(): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
+    if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
     return buttons;
   }
 

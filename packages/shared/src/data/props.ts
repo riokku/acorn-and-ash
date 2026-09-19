@@ -6,7 +6,7 @@
  * placeholder shape; art replaces them once the mechanic around them is fun.
  */
 
-export type PropFamily = 'tree' | 'rock';
+export type PropFamily = 'tree' | 'rock' | 'stump';
 
 export interface TreeShape {
   readonly family: 'tree';
@@ -22,10 +22,17 @@ export interface RockShape {
   readonly height: number;
 }
 
+/** What a tree leaves behind. Also where the first axe is waiting. */
+export interface StumpShape {
+  readonly family: 'stump';
+  readonly radius: number;
+  readonly height: number;
+}
+
 export interface PropKind {
   readonly id: PropKindId;
   readonly displayName: string;
-  readonly shape: TreeShape | RockShape;
+  readonly shape: TreeShape | RockShape | StumpShape;
   /** What the player bumps into, as a radius in metres. */
   readonly colliderRadius: number;
   /** Triangle budget for the art that eventually replaces the placeholder. */
@@ -34,7 +41,7 @@ export interface PropKind {
   readonly placeholderColor: number;
 }
 
-export type PropKindId = 'pine' | 'birch' | 'oak' | 'boulder' | 'mossyRock';
+export type PropKindId = 'pine' | 'birch' | 'oak' | 'boulder' | 'mossyRock' | 'stump';
 
 export const PROP_KINDS = {
   pine: {
@@ -95,6 +102,14 @@ export const PROP_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x6f7d63,
   },
+  stump: {
+    id: 'stump',
+    displayName: 'Stump',
+    shape: { family: 'stump', radius: 0.42, height: 0.5 },
+    colliderRadius: 0.42,
+    triangleBudget: 500,
+    placeholderColor: 0x6b5336,
+  },
 } as const satisfies Record<PropKindId, PropKind>;
 
 /** A stable order, so a prop kind can be sent over the wire as a small number. */
@@ -104,6 +119,7 @@ export const PROP_KIND_ORDER: readonly PropKindId[] = [
   'oak',
   'boulder',
   'mossyRock',
+  'stump',
 ];
 
 export function propKindIndex(id: PropKindId): number {
