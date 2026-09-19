@@ -253,12 +253,22 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   await context.close();
 });
 
-/** Swing at a tree until it comes down, in taps rather than one long hold. */
+/**
+ * Swing at a tree until it comes down, in taps rather than one long hold.
+ *
+ * It watches the count come down as it goes. A swing that never lands is a
+ * different failure from a swing that lands slowly, and saying which is which
+ * beats timing out in silence: that is exactly what this test did the first
+ * time it ran on a browser whose mouse behaved differently.
+ */
 async function chopUntilFelled(
   page: Page,
   tree: { id: number; x: number; z: number },
 ): Promise<void> {
-  for (let step = 0; step < 60; step++) {
+  let lastSeen: number | null = null;
+  let tapsWithoutProgress = 0;
+
+  for (let step = 0; step < 40; step++) {
     const felled = await page.evaluate(() => window.acornDebug?.felledTrees() ?? []);
     if (felled.includes(tree.id)) return;
 
@@ -272,6 +282,22 @@ async function chopUntilFelled(
     await page.waitForTimeout(200);
     await page.mouse.up();
     await page.waitForTimeout(150);
+
+    const swingsLeft =
+      (await page.evaluate(() => window.acornDebug?.aimedTree()))?.swingsLeft ?? null;
+    tapsWithoutProgress =
+      swingsLeft !== null && swingsLeft === lastSeen ? tapsWithoutProgress + 1 : 0;
+    lastSeen = swingsLeft;
+
+    if (tapsWithoutProgress >= 8) {
+      const state = await page.evaluate(() => ({
+        pointerLocked: document.pointerLockElement !== null,
+        position: window.acornDebug?.localPosition(),
+        carrying: window.acornDebug?.carrying(),
+        aimed: window.acornDebug?.aimedTree(),
+      }));
+      throw new Error(`swings are not landing after ${step + 1} taps: ${JSON.stringify(state)}`);
+    }
   }
   throw new Error(`tree ${tree.id} never came down`);
 }
