@@ -1,0 +1,9 @@
+node_modules
+dist
+.wrangler
+pnpm-lock.yaml
+coverage
+apps/*/worker-configuration.d.ts
+
+# The project brief is Chris's document, not ours to reformat.
+CLAUDE.md

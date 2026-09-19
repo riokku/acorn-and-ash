@@ -1,0 +1,229 @@
+name: Pull request
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to the same pull request makes the previous run pointless.
+concurrency:
+  group: pr-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Asset licences
+        run: pnpm check:assets
+
+      - name: Build
+        run: pnpm build
+
+  smoke:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Runs the real stack: the built client served by apps/web, talking to the
+      # World Durable Object in apps/game-server, all locally.
+      - name: Play the game
+        run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  preview:
+    name: Preview build
+    needs: check
+    runs-on: ubuntu-latest
+    # Pull requests from forks cannot see the repository secrets, so there is
+    # nothing to upload with.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the client
+        run: pnpm --filter @acorn/client build
+
+      # The preview attaches to the deployed staging Worker, so the name has to
+      # match. If it is ever renamed, fail here rather than quietly deciding
+      # staging does not exist.
+      - name: Check the staging Worker is still called what we think
+        run: |
+          grep -q '"name": "acorn-ash-web-staging"' apps/web/wrangler.jsonc
+
+      # Cloudflare can only add a preview version to a Worker that already
+      # exists, so on a repository that has never deployed there is nothing to
+      # preview. Asking the API outright is far more reliable than trying to
+      # recognise Wrangler's error message.
+      - name: Has staging been deployed yet?
+        id: staging
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/acorn-ash-web-staging")
+
+          case "$status" in
+            200)
+              echo "Staging exists; a preview can be uploaded."
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "Staging has never been deployed, so there is nothing to preview yet."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "The Cloudflare API answered $status, which we cannot interpret."
+              echo "Check that CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set correctly."
+              exit 1
+              ;;
+          esac
+
+      # A preview version of the staging web Worker. It is not promoted to any
+      # traffic; it just gets its own URL. Because apps/web borrows the World
+      # class from the game server rather than implementing it, Cloudflare will
+      # give it a preview URL, and that preview talks to the staging world.
+      - name: Upload the preview
+        id: upload
+        if: steps.staging.outputs.exists == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: versions upload --env staging --preview-alias pr-${{ github.event.number }}
+
+      - name: Find the preview link
+        id: link
+        if: steps.staging.outputs.exists == 'true'
+        env:
+          WRANGLER_OUTPUT: ${{ steps.upload.outputs.command-output }}
+          ALIAS: pr-${{ github.event.number }}
+        run: |
+          # Prefer the aliased link; fall back to any workers.dev link in the output.
+          url=$(printf '%s' "$WRANGLER_OUTPUT" \
+            | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' \
+            | grep -F "$ALIAS" | head -1 || true)
+          if [ -z "$url" ]; then
+            url=$(printf '%s' "$WRANGLER_OUTPUT" \
+              | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1 || true)
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the link on the pull request
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.link.outputs.url }}
+          STAGING_EXISTS: ${{ steps.staging.outputs.exists }}
+        with:
+          script: |
+            const marker = '<!-- acorn-preview -->';
+            const url = process.env.PREVIEW_URL;
+            const commit = context.sha.slice(0, 7);
+
+            let body;
+            if (process.env.STAGING_EXISTS !== 'true') {
+              body =
+                `${marker}\n### No preview link yet\n\n` +
+                `Cloudflare can only add a preview to a Worker that already exists, and staging ` +
+                `has not been deployed yet. **Merging this pull request deploys staging**, and ` +
+                `every pull request after that gets a link here automatically.\n\n` +
+                `In the meantime you can play it on your own machine: \`pnpm install\`, then ` +
+                `\`pnpm dev:web\`, then open http://localhost:8787 in two tabs.\n\n` +
+                `_Checked at commit ${commit}._`;
+            } else if (url) {
+              body =
+                `${marker}\n### Play this change\n\n${url}\n\n` +
+                `The game client from this pull request, connected to the **staging** world. ` +
+                `Open it in two tabs to see two players.\n\n` +
+                `_Updated for commit ${commit}._`;
+            } else {
+              body =
+                `${marker}\n### Preview build\n\nThe preview uploaded, but the link could not be ` +
+                `read from the Wrangler output. Check the workflow log.\n\n_Commit ${commit}._`;
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

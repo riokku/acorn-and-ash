@@ -1,0 +1,94 @@
+import { CLEARING_HALF, PLAYABLE_HALF_EXTENT, SPAWN_POSITION } from '../constants';
+import { createRng } from '../rng';
+import { PROP_KINDS, propHeight, type PropKindId } from '../data/props';
+import { cylinder, type Collider } from './colliders';
+
+/** One piece of scenery standing in the world. */
+export interface PlacedProp {
+  readonly id: number;
+  readonly kind: PropKindId;
+  readonly x: number;
+  readonly z: number;
+  readonly rotationY: number;
+  readonly scale: number;
+}
+
+export interface Clearing {
+  readonly seed: number;
+  readonly props: readonly PlacedProp[];
+  readonly colliders: readonly Collider[];
+}
+
+/** Nothing is placed inside this circle, so players always spawn in the open. */
+const SPAWN_CLEAR_RADIUS = 7;
+/** How far into the tree line the wall of trunks runs. */
+const TREE_LINE_INNER = CLEARING_HALF - 4;
+const TREE_LINE_OUTER = PLAYABLE_HALF_EXTENT + 2;
+
+const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
+const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
+
+/**
+ * Build the hand-built home clearing: flat ground with a ring of trees around
+ * the edge, a few landmark trees inside it and some scattered rocks.
+ *
+ * The same seed always produces the same clearing, on the server and on every
+ * client, so nobody has to send the scenery over the network.
+ */
+export function buildTestClearing(seed: number): Clearing {
+  const rng = createRng(seed);
+  const props: PlacedProp[] = [];
+  let nextId = 1;
+
+  const add = (kind: PropKindId, x: number, z: number, scale: number): void => {
+    props.push({ id: nextId++, kind, x, z, rotationY: rng.nextRange(0, Math.PI * 2), scale });
+  };
+
+  // Hand-placed landmarks, so the clearing has a shape you can navigate by.
+  add('oak', -9, -11, 1.25);
+  add('pine', 12, -14, 1.1);
+  add('birch', 15, 4, 1);
+  add('birch', 17.5, 6.5, 0.9);
+  add('boulder', -14, 9, 1.2);
+  add('boulder', -16.5, 7.5, 0.85);
+  add('mossyRock', 6, 13, 1);
+  add('mossyRock', 7.4, 14.2, 0.8);
+  add('pine', -20, -18, 1.15);
+
+  // A ring of trees marking the edge of the clearing.
+  const ringCount = 132;
+  for (let i = 0; i < ringCount; i++) {
+    const angle = (i / ringCount) * Math.PI * 2 + rng.nextRange(-0.012, 0.012);
+    const radius = rng.nextRange(TREE_LINE_INNER, TREE_LINE_OUTER);
+    const kind = rng.pick(TREE_KINDS);
+    add(kind, Math.cos(angle) * radius, Math.sin(angle) * radius, rng.nextRange(0.85, 1.3));
+  }
+
+  // Rocks scattered across the open ground, kept away from the spawn point.
+  for (let i = 0; i < 26; i++) {
+    const x = rng.nextRange(-TREE_LINE_INNER + 3, TREE_LINE_INNER - 3);
+    const z = rng.nextRange(-TREE_LINE_INNER + 3, TREE_LINE_INNER - 3);
+    if (isNearSpawn(x, z)) continue;
+    add(rng.pick(ROCK_KINDS), x, z, rng.nextRange(0.7, 1.35));
+  }
+
+  return { seed, props, colliders: props.map(colliderForProp) };
+}
+
+function isNearSpawn(x: number, z: number): boolean {
+  const dx = x - SPAWN_POSITION.x;
+  const dz = z - SPAWN_POSITION.z;
+  return dx * dx + dz * dz < SPAWN_CLEAR_RADIUS * SPAWN_CLEAR_RADIUS;
+}
+
+/** Everything in the clearing is a cylinder you cannot walk through. */
+export function colliderForProp(prop: PlacedProp): Collider {
+  const kind = PROP_KINDS[prop.kind];
+  return cylinder(
+    prop.x,
+    prop.z,
+    kind.colliderRadius * prop.scale,
+    propHeight(kind) * prop.scale,
+    0,
+  );
+}

@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'tools'
+
+# Native binaries these tools ship with need their install scripts to run.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

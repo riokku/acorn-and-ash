@@ -1,0 +1,26 @@
+{
+  "name": "@acorn/game-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Worker that implements the World Durable Object: 20 Hz simulation and realtime WebSockets.",
+  "scripts": {
+    "build": "wrangler deploy --env staging --dry-run --outdir dist",
+    "dev": "wrangler dev",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@acorn/shared": "workspace:*",
+    "hono": "^4.13.8",
+    "koota": "^0.6.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.133.0"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "acorn-ash-game-server",
+  "main": "src/index.ts",
+  // Held at a date the bundled test runtime also supports, so tests run on the
+  // same runtime as production. Raise both together.
+  "compatibility_date": "2026-08-22",
+  "observability": { "enabled": true },
+
+  // The free plan only supports SQLite-backed Durable Objects, and each world
+  // keeps its state in its own SQLite database inside the object.
+  "durable_objects": {
+    "bindings": [{ "name": "WORLD", "class_name": "World" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }],
+
+  "env": {
+    "staging": {
+      "name": "acorn-ash-game-server-staging",
+      "observability": { "enabled": true },
+      "durable_objects": {
+        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+      },
+    },
+    "production": {
+      "name": "acorn-ash-game-server-production",
+      "observability": { "enabled": true },
+      "durable_objects": {
+        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+      },
+    },
+  },
+}
