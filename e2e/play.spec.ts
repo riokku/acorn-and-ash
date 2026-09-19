@@ -9,6 +9,7 @@ declare global {
       carrying(): Array<{ item: string; count: number }>;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+      nearbyItem(): string | null;
       faceTowards(x: number, z: number): void;
     };
   }
@@ -157,29 +158,41 @@ test('jumping lifts the player off the ground and puts them back', async ({ page
   await expect.poll(heightNow).toBeLessThan(0.01);
 });
 
-/** Walk to a spot in the world, steering as you go, the way a person would. */
-async function walkTo(page: Page, x: number, z: number): Promise<void> {
-  await page.keyboard.down('KeyW');
-  try {
-    await expect
-      .poll(
-        async () => {
-          await page.evaluate(
-            ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
-            [x, z],
-          );
-          const here = await page.evaluate(() => window.acornDebug?.localPosition());
-          return Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
-        },
-        { timeout: 30_000 },
-      )
-      .toBeLessThan(1.5);
-  } finally {
+/**
+ * Walk to a spot until the game says you can reach what is there.
+ *
+ * In short steps, stopping between each one. Holding the key down and watching
+ * the distance does not work: on a slow machine the player keeps walking for as
+ * long as it takes to let go, which is long enough to sail straight past.
+ *
+ * The condition is the game's own answer rather than a distance we work out
+ * here, so the test ends up where the player would actually get the prompt.
+ */
+async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void> {
+  for (let step = 0; step < 80; step++) {
+    const reachable = await page.evaluate(() => window.acornDebug?.nearbyItem() ?? null);
+    if (reachable !== null) return;
+
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
+    await page.evaluate(
+      ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
+      [x, z],
+    );
+
+    // Long steps while there is ground to cover, short ones on the approach.
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
     await page.keyboard.up('KeyW');
+    // Let them come to a stop before looking again.
+    await page.waitForTimeout(200);
   }
+  throw new Error(`Never got within reach of ${x}, ${z}`);
 }
 
 test('you can find the axe, pick it up, and still have it next time', async ({ browser }) => {
+  // Walking there in steps takes a while on a slow machine.
+  test.setTimeout(180_000);
   // One browser context throughout, so the second visit is the same player
   // coming back rather than a stranger: the key that identifies them lives in
   // this browser's storage.
@@ -202,7 +215,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   expect(axe).toBeDefined();
   if (axe === undefined) throw new Error('no axe in the clearing');
 
-  await walkTo(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z);
 
   // Standing next to it, the game offers it.
   await expect(page.locator('.hud-hint')).toContainText('Press E to pick up the axe');
