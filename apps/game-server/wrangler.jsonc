@@ -15,6 +15,19 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }],
 
   "env": {
+    // One of these is deployed per pull request, renamed on the command line to
+    // acorn-ash-game-server-pr-<number>, so a preview link is the whole game
+    // rather than this branch's client talking to the old staging server. The
+    // name here is only a placeholder; nothing is ever deployed under it.
+    // Removed again when the pull request closes.
+    // See .github/workflows/pull-request.yml and pull-request-closed.yml.
+    "preview": {
+      "name": "acorn-ash-game-server-preview",
+      "observability": { "enabled": true },
+      "durable_objects": {
+        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+      },
+    },
     "staging": {
       "name": "acorn-ash-game-server-staging",
       "observability": { "enabled": true },
