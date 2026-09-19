@@ -6,6 +6,8 @@ import {
   decodeClientMessage,
   decodeServerMessage,
   encodeInputBundle,
+  encodeInventory,
+  encodePickupsTaken,
   encodePing,
   encodePlayerLeft,
   encodePong,
@@ -193,5 +195,60 @@ describe('server messages', () => {
   it('survives a ping round trip', () => {
     const decoded = decodeClientMessage(encodePing(4242));
     expect(decoded).toEqual({ type: 'ping', clientTimeMs: 4242 });
+  });
+});
+
+describe('telling a player what they carry', () => {
+  it('survives a round trip', () => {
+    const items = [
+      { item: 'axe', count: 1 },
+      { item: 'log', count: 7 },
+    ] as const;
+    const decoded = decodeServerMessage(encodeInventory(items));
+    expect(decoded).toEqual({ type: 'inventory', items: [...items] });
+  });
+
+  it('sends an empty pack as an empty pack, not as nothing', () => {
+    const decoded = decodeServerMessage(encodeInventory([]));
+    expect(decoded).toEqual({ type: 'inventory', items: [] });
+  });
+
+  it('stays small: a full pack is under twenty bytes', () => {
+    const full = encodeInventory([
+      { item: 'axe', count: 1 },
+      { item: 'log', count: 10 },
+    ]);
+    expect(full.byteLength).toBeLessThan(20);
+  });
+
+  it('refuses a message that has been cut short', () => {
+    const encoded = encodeInventory([{ item: 'log', count: 3 }]);
+    expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = encodeInventory([{ item: 'log', count: 3 }]);
+    // Rewrite the item index to one that does not exist.
+    new DataView(encoded).setUint8(2, 200);
+    expect(decodeServerMessage(encoded)).toBeNull();
+  });
+});
+
+describe('telling players which pickups are gone', () => {
+  it('survives a round trip', () => {
+    const decoded = decodeServerMessage(encodePickupsTaken([1, 4, 9]));
+    expect(decoded).toEqual({ type: 'pickupsTaken', pickupIds: [1, 4, 9] });
+  });
+
+  it('says so plainly when nothing has been taken yet', () => {
+    expect(decodeServerMessage(encodePickupsTaken([]))).toEqual({
+      type: 'pickupsTaken',
+      pickupIds: [],
+    });
+  });
+
+  it('refuses a message that has been cut short', () => {
+    const encoded = encodePickupsTaken([1, 2]);
+    expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
   });
 });

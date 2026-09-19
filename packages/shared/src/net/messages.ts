@@ -1,3 +1,4 @@
+import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type { SnapshotEntity } from '../sim/world-sim';
 
@@ -14,6 +15,8 @@ export const ServerMessageType = {
   PlayerLeft: 0x12,
   Pong: 0x13,
   Rejected: 0x14,
+  Inventory: 0x15,
+  PickupsTaken: 0x16,
 } as const;
 
 export const RejectReason = {
@@ -69,5 +72,28 @@ export interface RejectedMessage {
   readonly reason: RejectReasonCode;
 }
 
+/** Everything this player is carrying. Sent on arrival and whenever it changes. */
+export interface InventoryMessage {
+  readonly type: 'inventory';
+  readonly items: readonly { readonly item: ItemId; readonly count: number }[];
+}
+
+/**
+ * Which pickups are gone.
+ *
+ * The client already knows where every pickup in the clearing is, because the
+ * clearing is built from the seed, so only the ids have to travel.
+ */
+export interface PickupsTakenMessage {
+  readonly type: 'pickupsTaken';
+  readonly pickupIds: readonly number[];
+}
+
 export type ServerMessage =
-  WelcomeMessage | SnapshotMessage | PlayerLeftMessage | PongMessage | RejectedMessage;
+  | WelcomeMessage
+  | SnapshotMessage
+  | PlayerLeftMessage
+  | PongMessage
+  | RejectedMessage
+  | InventoryMessage
+  | PickupsTakenMessage;

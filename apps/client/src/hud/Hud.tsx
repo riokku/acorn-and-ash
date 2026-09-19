@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+import { ITEM_KINDS } from '@acorn/shared';
+
 import type { HudStore, HudState } from './store';
 
 interface HudProps {
@@ -25,6 +27,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
           value={`${state.position.x.toFixed(1)}, ${state.position.z.toFixed(1)}`}
         />
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
+        <Row label="Carrying" value={carrying(state)} />
       </div>
 
       {state.ready && !state.pointerLocked ? (
@@ -37,7 +40,9 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
 
       {state.ready && state.pointerLocked ? (
         <p className="hud-hint">
-          WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go
+          {state.nearbyItem === null
+            ? 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go'
+            : `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`}
         </p>
       ) : null}
 
@@ -69,6 +74,20 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
   };
   const entry = labels[state.connection];
   return <span className={entry[1]}>{entry[0]}</span>;
+}
+
+/** What the pack holds, as one short line. */
+function carrying(state: HudState): string {
+  if (state.carrying.length === 0) return 'nothing yet';
+  return state.carrying
+    .map((entry) => {
+      const kind = ITEM_KINDS[entry.item];
+      // A tool you either have or do not; wood is worth counting against the limit.
+      return kind.maxCarry === 1
+        ? kind.displayName
+        : `${kind.displayName}s ${entry.count}/${kind.maxCarry}`;
+    })
+    .join(' · ');
 }
 
 function renderer(state: HudState): string {

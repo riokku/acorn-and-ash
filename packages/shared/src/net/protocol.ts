@@ -10,6 +10,7 @@
  */
 
 import { SNAPSHOT_HZ, TICK_HZ } from '../constants';
+import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
@@ -41,6 +42,12 @@ const SNAPSHOT_HEADER_BYTES = 14;
 export const MAX_INPUTS_PER_BUNDLE = 32;
 /** A snapshot never carries more than this many entities. */
 export const MAX_SNAPSHOT_ENTITIES = 255;
+/** Both of these lists carry a one-byte length, so 255 is the ceiling. */
+export const MAX_INVENTORY_ENTRIES = 255;
+export const MAX_TAKEN_PICKUPS = 255;
+
+const BYTES_PER_INVENTORY_ENTRY = 3;
+const BYTES_PER_TAKEN_PICKUP = 2;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -234,6 +241,41 @@ export function encodePong(clientTimeMs: number, serverTimeMs: number): ArrayBuf
   return buffer;
 }
 
+export function encodeInventory(
+  items: readonly { readonly item: ItemId; readonly count: number }[],
+): ArrayBuffer {
+  const count = Math.min(items.length, MAX_INVENTORY_ENTRIES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_INVENTORY_ENTRY);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Inventory);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const entry = items[i];
+    if (entry === undefined) break;
+    view.setUint8(offset, itemIndex(entry.item));
+    view.setUint16(offset + 1, clamp(Math.round(entry.count), 0, 65535), true);
+    offset += BYTES_PER_INVENTORY_ENTRY;
+  }
+  return buffer;
+}
+
+export function encodePickupsTaken(pickupIds: readonly number[]): ArrayBuffer {
+  const count = Math.min(pickupIds.length, MAX_TAKEN_PICKUPS);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_TAKEN_PICKUP);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.PickupsTaken);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    view.setUint16(offset, (pickupIds[i] ?? 0) & 0xffff, true);
+    offset += BYTES_PER_TAKEN_PICKUP;
+  }
+  return buffer;
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -301,6 +343,34 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         clientTimeMs: view.getUint32(1, true),
         serverTimeMs: view.getUint32(5, true),
       };
+    }
+    case ServerMessageType.Inventory: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_INVENTORY_ENTRY) return null;
+      const items: { item: ItemId; count: number }[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        const item = itemFromIndex(view.getUint8(offset));
+        // An item this build has never heard of means the server is newer than
+        // we are. Dropping the whole message is safer than showing half a pack.
+        if (item === null) return null;
+        items.push({ item, count: view.getUint16(offset + 1, true) });
+        offset += BYTES_PER_INVENTORY_ENTRY;
+      }
+      return { type: 'inventory', items };
+    }
+    case ServerMessageType.PickupsTaken: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_TAKEN_PICKUP) return null;
+      const pickupIds: number[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        pickupIds.push(view.getUint16(offset, true));
+        offset += BYTES_PER_TAKEN_PICKUP;
+      }
+      return { type: 'pickupsTaken', pickupIds };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

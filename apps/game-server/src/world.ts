@@ -10,11 +10,17 @@ import {
   RejectReason,
   WorldSimulation,
   decodeClientMessage,
+  encodeInventory,
+  encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
   encodeRejected,
   encodeSnapshot,
   encodeWelcome,
+  inventoryEntries,
+  itemFromIndex,
+  itemIndex,
+  type ItemId,
   type PersistedPlayer,
   type SnapshotEntity,
 } from '@acorn/shared';
@@ -96,6 +102,9 @@ export class World extends DurableObject<WorldEnv> {
 
     simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
+    // What you are carrying, and what is no longer lying about to be found.
+    server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
+    server.send(encodePickupsTaken(simulation.takenPickupIds()));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -151,6 +160,7 @@ export class World extends DurableObject<WorldEnv> {
         // running would keep this object awake and billable forever.
         this.save(simulation);
         this.stopTicking();
+        this.releaseSimulation();
       }
     }
   }
@@ -190,6 +200,7 @@ export class World extends DurableObject<WorldEnv> {
     this.lastTickAtMs = startedAt;
 
     simulation.step();
+    this.announcePickups(simulation);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -210,6 +221,34 @@ export class World extends DurableObject<WorldEnv> {
             `${this.slowTickCount} slow ticks so far)`,
         );
       }
+    }
+  }
+
+  /**
+   * Tell everybody about anything that was picked up this tick.
+   *
+   * The taker is told what they now carry, everybody is told the thing is gone,
+   * and it is written to storage straight away rather than waiting for the next
+   * save: finding the axe is not something anybody should have to do twice.
+   */
+  private announcePickups(simulation: WorldSimulation): void {
+    const events = simulation.drainPickupEvents();
+    if (events.length === 0) return;
+
+    for (const event of events) this.writeTakenPickup(event.pickupId, event.netId);
+
+    const takenMessage = encodePickupsTaken(simulation.takenPickupIds());
+    const takers = new Set(events.map((event) => event.netId));
+
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      this.trySend(ws, takenMessage);
+      if (!takers.has(attachment.netId)) continue;
+
+      const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
+      this.trySend(ws, encodeInventory(items));
+      if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
   }
 
@@ -254,6 +293,20 @@ export class World extends DurableObject<WorldEnv> {
   /* ---------------------------------------------------------------------- */
 
   /**
+   * Let go of the empty world.
+   *
+   * Koota hands out a fixed number of ECS worlds per isolate, and Durable
+   * Objects share isolates, so a server that never gave one back would stop
+   * being able to open new worlds after a couple of dozen. An empty world is
+   * about to hibernate anyway, and `ensureSimulation` rebuilds it from storage
+   * and the live sockets when somebody next knocks.
+   */
+  private releaseSimulation(): void {
+    this.simulation?.dispose();
+    this.simulation = null;
+  }
+
+  /**
    * Get the simulation, rebuilding it if this object was restarted.
    *
    * A Durable Object can be evicted and woken again with its sockets intact, so
@@ -264,6 +317,7 @@ export class World extends DurableObject<WorldEnv> {
 
     const simulation = new WorldSimulation({ seed: this.seed() });
     this.simulation = simulation;
+    simulation.restoreTakenPickups(this.loadTakenPickups());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -336,6 +390,20 @@ export class World extends DurableObject<WorldEnv> {
       facing_yaw REAL NOT NULL,
       updated_at INTEGER NOT NULL
     )`);
+    // What each player is carrying. One row per kind of thing they hold.
+    sql.exec(`CREATE TABLE IF NOT EXISTS player_items (
+      player_key TEXT NOT NULL,
+      item_index INTEGER NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (player_key, item_index)
+    )`);
+    // Things somebody has taken out of the world. The clearing itself is built
+    // from the seed, so only what has changed since has to be stored.
+    sql.exec(`CREATE TABLE IF NOT EXISTS pickups_taken (
+      pickup_id INTEGER PRIMARY KEY,
+      net_id INTEGER NOT NULL,
+      taken_at INTEGER NOT NULL
+    )`);
   }
 
   private readMeta(key: string): string | null {
@@ -370,7 +438,40 @@ export class World extends DurableObject<WorldEnv> {
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
-    return { netId: 0, x: row.x, y: row.y, z: row.z, facingYaw: row.facing_yaw };
+    return {
+      netId: 0,
+      x: row.x,
+      y: row.y,
+      z: row.z,
+      facingYaw: row.facing_yaw,
+      items: this.loadPlayerItems(playerKey),
+    };
+  }
+
+  private loadPlayerItems(playerKey: string): { item: ItemId; count: number }[] {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        item_index: number;
+        count: number;
+      }>('SELECT item_index, count FROM player_items WHERE player_key = ?', playerKey)
+      .toArray();
+
+    const items: { item: ItemId; count: number }[] = [];
+    for (const row of rows) {
+      const item = itemFromIndex(row.item_index);
+      // A row written by a newer build that knew about an item this one does
+      // not. Skipping it is better than refusing to let the player in.
+      if (item === null) continue;
+      items.push({ item, count: row.count });
+    }
+    return items;
+  }
+
+  private loadTakenPickups(): number[] {
+    return this.ctx.storage.sql
+      .exec<{ pickup_id: number }>('SELECT pickup_id FROM pickups_taken')
+      .toArray()
+      .map((row) => row.pickup_id);
   }
 
   /** Write one player's position, used when they disconnect. */
@@ -384,6 +485,10 @@ export class World extends DurableObject<WorldEnv> {
       motion.position.y,
       motion.position.z,
       motion.facingYaw,
+    );
+    this.writePlayerItems(
+      attachment.playerKey,
+      inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
   }
 
@@ -402,6 +507,34 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
+  private writePlayerItems(
+    playerKey: string,
+    items: readonly { readonly item: ItemId; readonly count: number }[],
+  ): void {
+    const sql = this.ctx.storage.sql;
+    // Replace the lot rather than reconcile: a pack is a handful of rows, and
+    // this cannot leave a stale row behind for something no longer carried.
+    sql.exec('DELETE FROM player_items WHERE player_key = ?', playerKey);
+    for (const entry of items) {
+      sql.exec(
+        'INSERT INTO player_items (player_key, item_index, count) VALUES (?, ?, ?)',
+        playerKey,
+        itemIndex(entry.item),
+        entry.count,
+      );
+    }
+  }
+
+  private writeTakenPickup(pickupId: number, netId: number): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO pickups_taken (pickup_id, net_id, taken_at) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(pickup_id) DO NOTHING',
+      pickupId,
+      netId,
+      Date.now(),
+    );
+  }
+
   /** Write everything worth keeping: the tick count and where everyone is. */
   private save(simulation: WorldSimulation): void {
     this.writeMeta('tick', String(simulation.tick));
@@ -416,6 +549,7 @@ export class World extends DurableObject<WorldEnv> {
       const attachment = byNetId.get(player.netId);
       if (attachment?.playerKey == null) continue;
       this.writePlayer(attachment.playerKey, player.x, player.y, player.z, player.facingYaw);
+      this.writePlayerItems(attachment.playerKey, player.items);
     }
   }
 

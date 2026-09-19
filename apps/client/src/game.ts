@@ -6,8 +6,10 @@ import {
   buildTestClearing,
   createCollisionWorld,
   createFlatTerrain,
+  pickupInReach,
   vec3,
   type Clearing,
+  type ItemId,
   type ServerMessage,
   type Vec3,
 } from '@acorn/shared';
@@ -35,6 +37,20 @@ export interface GameDebug {
   selfNetId(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+  /** What the server says we carry. */
+  carrying(): Array<{ item: string; count: number }>;
+  /** Which pickups the server says are gone. */
+  takenPickups(): number[];
+  /** Everything the clearing has lying about to be found. */
+  pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+  /**
+   * Turn the camera towards a spot in the world.
+   *
+   * The same thing the mouse does, and no more: the camera heading has always
+   * been the client's to choose, and is sent to the server with every input.
+   * Smoke tests use it so they can walk somewhere without steering by hand.
+   */
+  faceTowards(x: number, z: number): void;
 }
 
 export interface GameOptions {
@@ -60,6 +76,11 @@ export class Game {
   private sun: THREE.DirectionalLight | null = null;
 
   private clearingScene: ClearingScene | null = null;
+  private clearing: Clearing | null = null;
+  /** What the server says is gone, and what it says we carry. Never guessed. */
+  private readonly takenPickups = new Set<number>();
+  private carrying: readonly { item: ItemId; count: number }[] = [];
+  private nearbyItem: ItemId | null = null;
   private localPlayer: LocalPlayer | null = null;
   private localCharacter: Character | null = null;
   private selfNetId = 0;
@@ -122,6 +143,23 @@ export class Game {
           const pose = this.remotePlayers.poseOf(netId);
           return { netId, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
         }),
+      carrying: () => this.carrying.map((entry) => ({ ...entry })),
+      takenPickups: () => [...this.takenPickups],
+      pickups: () =>
+        (this.clearing?.pickups ?? []).map((entry) => ({
+          id: entry.id,
+          item: entry.item,
+          x: entry.x,
+          z: entry.z,
+        })),
+      faceTowards: (x, z) => {
+        const camera = this.camera;
+        if (camera === null) return;
+        const from = this.motionOrOrigin();
+        // Walking forward means walking down -Z, so a heading of zero already
+        // points that way: this is the angle that lines the two up.
+        camera.look.yaw = Math.atan2(-(x - from.x), -(z - from.z));
+      },
     };
   }
 
@@ -189,6 +227,16 @@ export class Game {
         this.removeRemote(message.netId);
         break;
       }
+      case 'inventory': {
+        this.carrying = message.items.map((entry) => ({ ...entry }));
+        break;
+      }
+      case 'pickupsTaken': {
+        this.takenPickups.clear();
+        for (const id of message.pickupIds) this.takenPickups.add(id);
+        this.clearingScene?.setTakenPickups(this.takenPickups);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -212,7 +260,9 @@ export class Game {
   private enterWorld(clearing: Clearing): void {
     if (this.clearingScene !== null) return;
 
+    this.clearing = clearing;
     this.clearingScene = buildClearingScene(clearing);
+    this.clearingScene.setTakenPickups(this.takenPickups);
     this.scene.add(this.clearingScene.group);
 
     const collision = createCollisionWorld(createFlatTerrain(0), clearing.colliders);
@@ -298,6 +348,15 @@ export class Game {
 
     camera.update(position, deltaSeconds, clearing.cameraBlockers);
 
+    // Only a hint. The server decides who actually gets it.
+    const reachable =
+      this.clearing === null
+        ? null
+        : pickupInReach(player.motion.position, this.clearing.pickups, (id) =>
+            this.takenPickups.has(id),
+          );
+    this.nearbyItem = reachable?.item ?? null;
+
     // Keep the shadow map centred on the player instead of on the origin.
     if (this.sun !== null) {
       this.sun.position.set(position.x + 28, position.y + 40, position.z + 18);
@@ -337,6 +396,8 @@ export class Game {
       serverTick: this.serverTick,
       position: player === null ? { x: 0, y: 0, z: 0 } : { ...player.motion.position },
       correctionCm: (player?.stats.lastCorrection ?? 0) * 100,
+      carrying: this.carrying,
+      nearbyItem: this.nearbyItem,
     });
   }
 

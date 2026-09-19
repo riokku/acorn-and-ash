@@ -6,6 +6,10 @@ declare global {
       selfNetId(): number;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+      carrying(): Array<{ item: string; count: number }>;
+      takenPickups(): number[];
+      pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+      faceTowards(x: number, z: number): void;
     };
   }
 }
@@ -151,4 +155,84 @@ test('jumping lifts the player off the ground and puts them back', async ({ page
 
   // And the player comes down on their own, without being told to.
   await expect.poll(heightNow).toBeLessThan(0.01);
+});
+
+/** Walk to a spot in the world, steering as you go, the way a person would. */
+async function walkTo(page: Page, x: number, z: number): Promise<void> {
+  await page.keyboard.down('KeyW');
+  try {
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(
+            ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
+            [x, z],
+          );
+          const here = await page.evaluate(() => window.acornDebug?.localPosition());
+          return Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
+        },
+        { timeout: 30_000 },
+      )
+      .toBeLessThan(1.5);
+  } finally {
+    await page.keyboard.up('KeyW');
+  }
+}
+
+test('you can find the axe, pick it up, and still have it next time', async ({ browser }) => {
+  // One browser context throughout, so the second visit is the same player
+  // coming back rather than a stranger: the key that identifies them lives in
+  // this browser's storage.
+  const context = await browser.newContext();
+  // A fresh world, so the axe is definitely still in its stump.
+  const page = await context.newPage();
+  await page.goto(`/?world=axe-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Nothing to start with, and the axe is out there waiting.
+  expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
+  expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([]);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
+    'nothing yet',
+  );
+
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  expect(axe).toBeDefined();
+  if (axe === undefined) throw new Error('no axe in the clearing');
+
+  await walkTo(page, axe.x, axe.z);
+
+  // Standing next to it, the game offers it.
+  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up the axe');
+
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
+    .toBeGreaterThan(0);
+
+  expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([
+    { item: 'axe', count: 1 },
+  ]);
+  expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Axe');
+
+  // Reload the page: the world server still knows it is ours.
+  const url = page.url();
+  await page.close();
+
+  const again = await context.newPage();
+  await again.goto(url);
+  await waitForConnected(again);
+  await expect
+    .poll(async () => (await again.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
+    .toBeGreaterThan(0);
+  expect(await again.evaluate(() => window.acornDebug?.carrying())).toEqual([
+    { item: 'axe', count: 1 },
+  ]);
+  // And it is no longer standing in the stump for anybody else to find.
+  expect(await again.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
+  await again.close();
+  await context.close();
 });

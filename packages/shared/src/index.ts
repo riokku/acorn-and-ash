@@ -17,12 +17,15 @@ export * from './world/colliders';
 export * from './world/clearing';
 
 export * from './data/props';
+export * from './data/items';
 
 export * from './collision/capsule';
 
 export * from './ecs/traits';
 
 export * from './sim/player';
+export * from './sim/inventory';
+export * from './sim/pickups';
 export * from './sim/world-sim';
 
 export * from './net/messages';

@@ -2,9 +2,11 @@ import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import {
+  ITEM_KINDS,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   type Clearing,
+  type PlacedPickup,
   type PlacedProp,
   type PropKind,
 } from '@acorn/shared';
@@ -14,6 +16,8 @@ export interface ClearingScene {
   readonly group: THREE.Group;
   /** A single merged mesh of every trunk and rock, for camera raycasts. */
   readonly cameraBlockers: THREE.Mesh;
+  /** Hide whatever the server says has already been picked up. */
+  setTakenPickups(taken: ReadonlySet<number>): void;
   dispose(): void;
 }
 
@@ -76,14 +80,74 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   cameraBlockers.visible = false;
   group.add(cameraBlockers);
 
+  const pickups = new Map<number, THREE.Object3D>();
+  for (const pickup of clearing.pickups) {
+    const model = createPickup(pickup, disposables);
+    pickups.set(pickup.id, model);
+    group.add(model);
+  }
+
   return {
     group,
     cameraBlockers,
+    setTakenPickups: (taken) => {
+      for (const [id, model] of pickups) model.visible = !taken.has(id);
+    },
     dispose: () => {
       for (const item of disposables) item.dispose();
       cameraBlockers.geometry.dispose();
     },
   };
+}
+
+/**
+ * An axe standing in a stump, as two placeholder blocks.
+ *
+ * It is tilted and pale against the dark stump so you can pick it out from
+ * across the clearing, which is the whole point of it being there.
+ */
+function createPickup(
+  pickup: PlacedPickup,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  const group = new THREE.Group();
+  const kind = ITEM_KINDS[pickup.item];
+
+  const handleGeometry = new THREE.CylinderGeometry(0.035, 0.03, 0.7, 6);
+  const handleMaterial = new THREE.MeshStandardMaterial({
+    color: kind.placeholderColor,
+    roughness: 0.9,
+    flatShading: true,
+  });
+  const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+  handle.position.y = 0.3;
+  handle.castShadow = true;
+
+  const headGeometry = new THREE.BoxGeometry(0.1, 0.22, 0.3);
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc8ccd2,
+    roughness: 0.45,
+    metalness: 0.35,
+    flatShading: true,
+  });
+  const head = new THREE.Mesh(headGeometry, headMaterial);
+  head.position.set(0, 0.6, 0.08);
+  head.castShadow = true;
+
+  group.add(handle, head);
+  group.position.set(pickup.x, pickup.y, pickup.z);
+  // Sunk into the stump at an angle, the way somebody would have left it.
+  group.rotation.set(0.38, 0.9, 0.1);
+
+  disposables.push({
+    dispose: () => {
+      handleGeometry.dispose();
+      handleMaterial.dispose();
+      headGeometry.dispose();
+      headMaterial.dispose();
+    },
+  });
+  return group;
 }
 
 interface PropPart {
@@ -114,6 +178,23 @@ function createPropMeshes(kind: PropKind, count: number): PropPart[] {
       trunkHeight + canopyHeight / 2,
     );
     return [trunk, canopy];
+  }
+
+  if (kind.shape.family === 'stump') {
+    const { radius, height } = kind.shape;
+    return [
+      instanced(
+        // Wider at the base than the cut, like a tree that was felled here.
+        new THREE.CylinderGeometry(radius * 0.92, radius * 1.15, height, 9),
+        new THREE.MeshStandardMaterial({
+          color: kind.placeholderColor,
+          roughness: 1,
+          flatShading: true,
+        }),
+        count,
+        height / 2,
+      ),
+    ];
   }
 
   const { radius, height } = kind.shape;

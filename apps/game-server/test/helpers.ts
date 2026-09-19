@@ -5,6 +5,8 @@ import {
   encodeInputBundle,
   encodePing,
   createInput,
+  type InventoryMessage,
+  type PickupsTakenMessage,
   type ServerMessage,
   type SnapshotMessage,
   type WelcomeMessage,
@@ -44,9 +46,9 @@ export class TestClient {
   }
 
   /** Send a run of identical inputs, as a real client bundles them. */
-  walk(moveX: number, moveZ: number, yaw: number, count: number): void {
+  walk(moveX: number, moveZ: number, yaw: number, count: number, buttons = 0): void {
     const inputs = Array.from({ length: count }, () =>
-      createInput(++this.sequence, moveX, moveZ, yaw),
+      createInput(++this.sequence, moveX, moveZ, yaw, buttons),
     );
     this.socket.send(encodeInputBundle(inputs));
   }
@@ -78,6 +80,22 @@ export class TestClient {
     const last = snapshots[snapshots.length - 1];
     if (last === undefined) throw new Error('Never received a snapshot');
     return last;
+  }
+
+  /** The newest pack the server has sent, or an empty one. */
+  inventory(): InventoryMessage['items'] {
+    const messages = this.received.filter((entry) => entry.type === 'inventory');
+    return messages[messages.length - 1]?.items ?? [];
+  }
+
+  /** The newest list of pickups the server says are gone. */
+  takenPickups(): PickupsTakenMessage['pickupIds'] {
+    const messages = this.received.filter((entry) => entry.type === 'pickupsTaken');
+    return messages[messages.length - 1]?.pickupIds ?? [];
+  }
+
+  countOfMessages(type: ServerMessage['type']): number {
+    return this.received.filter((entry) => entry.type === type).length;
   }
 
   /** Where this client currently believes another player is. */

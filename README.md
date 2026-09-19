@@ -6,10 +6,11 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
-> **Phase 0 — Foundation.** Right now there is a flat test clearing with
+> **Phase 1 — First steps.** Right now there is a flat test clearing with
 > placeholder trees and rocks, a capsule you walk, sprint and jump around, a
-> third-person camera, and a server that decides where everybody is. See
-> [the roadmap](#roadmap).
+> third-person camera, and a server that decides where everybody is. There is an
+> axe standing in a stump for you to find, and the world remembers you took it.
+> Chopping is next. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -18,11 +19,15 @@ The game is online-only. Every world runs on the server.
 | `W` `A` `S` `D` or the arrow keys | Walk                |
 | `Shift` (held)                    | Sprint              |
 | `Space`                           | Jump                |
+| `E`                               | Pick up             |
 | Mouse                             | Look around         |
 | `Esc`                             | Let go of the mouse |
 
 There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
+
+You can carry one axe and ten logs. The limits live in
+[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts).
 
 ## Running it locally
 
