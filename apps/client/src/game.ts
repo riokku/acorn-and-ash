@@ -43,6 +43,8 @@ export interface GameDebug {
   takenPickups(): number[];
   /** Everything the clearing has lying about to be found. */
   pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+  /** What is within reach right now, if anything. */
+  nearbyItem(): string | null;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -145,6 +147,7 @@ export class Game {
         }),
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
+      nearbyItem: () => this.nearbyItem,
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
