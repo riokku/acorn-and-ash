@@ -7,6 +7,7 @@ import {
   MAX_QUEUED_INPUTS_PER_PLAYER,
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
+  SPRINT_REPORTING_SPEED,
   TICK_SECONDS,
 } from '../constants';
 import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
@@ -64,6 +65,8 @@ export interface SnapshotEntity {
 export const SnapshotFlag = {
   Moving: 1 << 0,
   Airborne: 1 << 1,
+  /** Moving at sprint pace. Derived from speed, so shoving a tree is not a sprint. */
+  Sprinting: 1 << 2,
 } as const;
 
 /** A player's saved state, as it goes into and comes out of storage. */
@@ -125,6 +128,18 @@ export class WorldSimulation {
         );
       }
     }
+  }
+
+  /**
+   * Let go of the ECS world.
+   *
+   * Koota hands out a fixed number of world ids per process, so anything that
+   * builds more than one world in a row (tests, the load-test benchmark) has to
+   * give them back. A Durable Object holds exactly one for its whole life.
+   */
+  dispose(): void {
+    this.players.clear();
+    this.world.destroy();
   }
 
   get playerCount(): number {
@@ -330,6 +345,9 @@ export class WorldSimulation {
         let flags = 0;
         if (speedSquared > 0.04) flags |= SnapshotFlag.Moving;
         if (!grounded.value) flags |= SnapshotFlag.Airborne;
+        if (speedSquared > SPRINT_REPORTING_SPEED * SPRINT_REPORTING_SPEED) {
+          flags |= SnapshotFlag.Sprinting;
+        }
         into.push({
           netId: networkId.value,
           x: position.x,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PLAYER_WALK_SPEED,
+  PlayerButton,
   SPAWN_POSITION,
   TICK_SECONDS,
   createCollisionWorld,
@@ -138,3 +139,32 @@ function replayFromSpawn(count: number): { x: number; z: number; vx: number; vz:
     vz: player.motion.velocity.z,
   };
 }
+
+describe('jumping and sprinting on the client', () => {
+  it('sends the buttons it was given to the server', () => {
+    const player = createPlayer();
+    const inputs = player.advance(TICK_SECONDS * 2, 0, 1, 0, PlayerButton.Sprint);
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input.buttons & PlayerButton.Sprint).toBeTruthy();
+    }
+  });
+
+  it('predicts a sprint locally instead of waiting for the reply', () => {
+    const walker = createPlayer();
+    walker.advance(TICK_SECONDS * 40, 0, 1, 0);
+    const sprinter = createPlayer();
+    sprinter.advance(TICK_SECONDS * 40, 0, 1, 0, PlayerButton.Sprint);
+
+    const walked = SPAWN_POSITION.z - walker.motion.position.z;
+    const sprinted = SPAWN_POSITION.z - sprinter.motion.position.z;
+    expect(sprinted).toBeGreaterThan(walked);
+  });
+
+  it('predicts a jump locally', () => {
+    const player = createPlayer();
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Jump);
+    expect(player.motion.position.y).toBeGreaterThan(0);
+    expect(player.motion.grounded).toBe(false);
+  });
+});

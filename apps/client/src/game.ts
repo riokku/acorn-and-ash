@@ -285,7 +285,11 @@ export class Game {
     if (player === null || character === null || clearing === null) return;
 
     const intent = this.controls?.moveIntent() ?? { x: 0, z: 0 };
-    const produced = player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw);
+    const buttons = this.controls?.buttons() ?? 0;
+    const produced = player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw, buttons);
+    // A tap is only forgotten once a tick has carried it, so a quick press of
+    // Space between two frames still turns into a jump.
+    if (produced.length > 0) this.controls?.forgetTaps();
     for (const input of produced) this.connection?.send(input);
 
     const position = player.renderPosition(this.scratch);

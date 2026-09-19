@@ -5,6 +5,8 @@
  * no mobile support at launch, so nothing here worries about touch.
  */
 
+import { PlayerButton } from '@acorn/shared';
+
 export interface MoveIntent {
   /** -1 is left, 1 is right. */
   readonly x: number;
@@ -12,7 +14,8 @@ export interface MoveIntent {
   readonly z: number;
 }
 
-const MOVE_KEYS = new Set([
+/** Keys the browser must not act on itself: Space would otherwise scroll the page. */
+const GAME_KEYS = new Set([
   'KeyW',
   'KeyA',
   'KeyS',
@@ -21,10 +24,19 @@ const MOVE_KEYS = new Set([
   'ArrowLeft',
   'ArrowDown',
   'ArrowRight',
+  'Space',
 ]);
 
 export class Controls {
   private readonly held = new Set<string>();
+  /**
+   * Keys pressed since the last tick was built.
+   *
+   * A frame does not always produce a simulation tick, and a fast tap of Space
+   * can start and finish inside one frame. Remembering the press until a tick
+   * carries it means a jump is never quietly swallowed.
+   */
+  private readonly tapped = new Set<string>();
   private pointerLocked = false;
   private mouseDeltaX = 0;
   private mouseDeltaY = 0;
@@ -63,6 +75,25 @@ export class Controls {
     return { x, z };
   }
 
+  /**
+   * Which action buttons to put on this tick, as the bit field the server expects.
+   *
+   * Holding Space keeps the jump bit set, so the player hops again the moment
+   * they land. The shared rule only lets a jump start from the ground, so that
+   * cannot climb the sky.
+   */
+  buttons(): number {
+    let buttons = 0;
+    if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
+    if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
+    return buttons;
+  }
+
+  /** Called once a tick has actually carried the taps, so they are not sent twice. */
+  forgetTaps(): void {
+    this.tapped.clear();
+  }
+
   /** How far the mouse has moved since this was last asked, then reset. */
   takeMouseDelta(): { x: number; y: number } {
     const delta = { x: this.mouseDeltaX, y: this.mouseDeltaY };
@@ -80,8 +111,9 @@ export class Controls {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
-    if (MOVE_KEYS.has(event.code)) event.preventDefault();
+    if (GAME_KEYS.has(event.code)) event.preventDefault();
     this.held.add(event.code);
+    this.tapped.add(event.code);
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
@@ -91,11 +123,15 @@ export class Controls {
   /** Clicking away must not leave the player walking into a tree forever. */
   private readonly handleBlur = (): void => {
     this.held.clear();
+    this.tapped.clear();
   };
 
   private readonly handlePointerLockChange = (): void => {
     this.pointerLocked = document.pointerLockElement === this.canvas;
-    if (!this.pointerLocked) this.held.clear();
+    if (!this.pointerLocked) {
+      this.held.clear();
+      this.tapped.clear();
+    }
     this.onPointerLockChange(this.pointerLocked);
   };
 

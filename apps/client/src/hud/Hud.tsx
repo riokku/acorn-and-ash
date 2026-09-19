@@ -31,12 +31,14 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         <div className="hud-curtain" onClick={onPlay} role="presentation">
           <h1>Acorn &amp; Ash</h1>
           <p>Click to play</p>
-          <p>WASD to walk · mouse to look · Esc to let go</p>
+          <p>WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go</p>
         </div>
       ) : null}
 
       {state.ready && state.pointerLocked ? (
-        <p className="hud-hint">WASD to walk · mouse to look · Esc to let go</p>
+        <p className="hud-hint">
+          WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go
+        </p>
       ) : null}
 
       {!state.ready ? (

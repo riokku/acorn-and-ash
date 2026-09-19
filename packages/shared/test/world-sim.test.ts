@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_WORLD_SEED,
@@ -8,11 +8,20 @@ import {
   TICK_HZ,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
-import { createInput } from '../src/sim/player';
+import { PlayerButton, createInput } from '../src/sim/player';
 import { inputsToConsume, WorldSimulation, SnapshotFlag } from '../src/sim/world-sim';
 
-function createWorld(): WorldSimulation {
-  return new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
+/** Every world a test builds, so they can be handed back when it finishes. */
+const built: WorldSimulation[] = [];
+
+afterEach(() => {
+  for (const sim of built.splice(0)) sim.dispose();
+});
+
+function createWorld(seed = DEFAULT_WORLD_SEED): WorldSimulation {
+  const sim = new WorldSimulation({ seed });
+  built.push(sim);
+  return sim;
 }
 
 /** Hold a direction for a number of ticks, feeding one input per tick. */
@@ -23,10 +32,11 @@ function drive(
   moveZ: number,
   ticks: number,
   startSeq = 1,
+  buttons = 0,
 ): number {
   let seq = startSeq;
   for (let i = 0; i < ticks; i++) {
-    sim.queueInput(netId, createInput(seq++, moveX, moveZ, 0));
+    sim.queueInput(netId, createInput(seq++, moveX, moveZ, 0, buttons));
     sim.step();
   }
   return seq;
@@ -168,6 +178,47 @@ describe('the world simulation', () => {
     expect(entity?.flags).toBe(SnapshotFlag.Moving);
   });
 
+  it('marks a sprinting player as sprinting, and a walking one not', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 1, 10, 1, PlayerButton.Sprint);
+    const [sprinting] = sim.snapshotFor(1);
+    expect(sprinting && sprinting.flags & SnapshotFlag.Sprinting).toBeTruthy();
+
+    const walker = createWorld();
+    walker.addPlayer(1);
+    drive(walker, 1, 0, 1, 40);
+    const [walking] = walker.snapshotFor(1);
+    expect(walking && walking.flags & SnapshotFlag.Sprinting).toBeFalsy();
+  });
+
+  it('lifts a jumping player off the ground and marks them airborne', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 0, 1, 1, PlayerButton.Jump);
+
+    const [entity] = sim.snapshotFor(1);
+    expect(entity && entity.flags & SnapshotFlag.Airborne).toBeTruthy();
+    expect(sim.readPlayer(1)?.position.y).toBeGreaterThan(0);
+
+    // And they come back down on their own, without the client being asked.
+    drive(sim, 1, 0, 0, 40, 2);
+    expect(sim.readPlayer(1)?.position.y).toBe(0);
+    expect(sim.readPlayer(1)?.grounded).toBe(true);
+  });
+
+  it('refuses to let a client fly by holding jump', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    let highest = 0;
+    for (let i = 0; i < 200; i++) {
+      sim.queueInput(1, createInput(i + 1, 0, 1, 0, PlayerButton.Jump | PlayerButton.Sprint));
+      sim.step();
+      highest = Math.max(highest, sim.readPlayer(1)?.position.y ?? 0);
+    }
+    expect(highest).toBeLessThan(1.5);
+  });
+
   it('leaves out players who are too far away to care about', () => {
     const sim = createWorld();
     sim.addPlayer(1);
@@ -181,7 +232,7 @@ describe('the world simulation', () => {
 
   it('gives the same result twice from the same inputs', () => {
     const run = (): unknown => {
-      const sim = new WorldSimulation({ seed: 777 });
+      const sim = createWorld(777);
       sim.addPlayer(1);
       sim.addPlayer(2);
       for (let i = 1; i <= 100; i++) {

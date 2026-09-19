@@ -2,9 +2,12 @@ import {
   GRAVITY,
   GROUND_SNAP_DISTANCE,
   PLAYER_ACCELERATION,
+  PLAYER_AIR_CONTROL,
   PLAYER_DECELERATION,
   PLAYER_HEIGHT,
+  PLAYER_JUMP_VELOCITY,
   PLAYER_RADIUS,
+  PLAYER_SPRINT_SPEED,
   PLAYER_TURN_RATE,
   PLAYER_TURN_SPEED_THRESHOLD,
   PLAYER_WALK_SPEED,
@@ -18,6 +21,10 @@ import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
 export const PlayerButton = {
   /** Reserved for Phase 2 onwards; nothing reads it yet. */
   Interact: 1 << 0,
+  /** Space. Only leaves the ground if the player is standing on it. */
+  Jump: 1 << 1,
+  /** Shift, held. Phase 2 will make this cost energy. */
+  Sprint: 1 << 2,
 } as const;
 
 /**
@@ -85,12 +92,15 @@ export function stepPlayer(
 
   const sinYaw = Math.sin(input.yaw);
   const cosYaw = Math.cos(input.yaw);
+  const topSpeed = isHeld(input, PlayerButton.Sprint) ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
   // Yaw 0 looks down -Z, which matches the camera's resting position.
-  const desiredX = (-sinYaw * moveZ + cosYaw * moveX) * normalise * PLAYER_WALK_SPEED;
-  const desiredZ = (-cosYaw * moveZ - sinYaw * moveX) * normalise * PLAYER_WALK_SPEED;
+  const desiredX = (-sinYaw * moveZ + cosYaw * moveX) * normalise * topSpeed;
+  const desiredZ = (-cosYaw * moveZ - sinYaw * moveX) * normalise * topSpeed;
 
   const wantsToMove = inputLength > 1e-3;
-  const rate = (wantsToMove ? PLAYER_ACCELERATION : PLAYER_DECELERATION) * deltaSeconds;
+  // Mid-air you get only a fraction of your usual grip on the world.
+  const grip = motion.grounded ? 1 : PLAYER_AIR_CONTROL;
+  const rate = (wantsToMove ? PLAYER_ACCELERATION : PLAYER_DECELERATION) * grip * deltaSeconds;
   // Steer the whole horizontal velocity at once. Accelerating each axis on its
   // own would make walking diagonally speed up faster than walking straight.
   const deltaX = desiredX - velocity.x;
@@ -107,15 +117,29 @@ export function stepPlayer(
 
   velocity.y = Math.max(velocity.y + GRAVITY * deltaSeconds, TERMINAL_FALL_SPEED);
 
+  // A jump only counts from the ground. Holding the key down in mid-air does
+  // nothing, so a client cannot climb the sky by spamming it.
+  if (motion.grounded && isHeld(input, PlayerButton.Jump)) {
+    velocity.y = PLAYER_JUMP_VELOCITY;
+    motion.grounded = false;
+  }
+
   position.x += velocity.x * deltaSeconds;
   position.y += velocity.y * deltaSeconds;
   position.z += velocity.z * deltaSeconds;
 
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
 
-  // Settle onto the ground, including small steps down.
+  // Settle onto the ground.
   const groundHeight = world.terrain.heightAt(position.x, position.z);
-  if (position.y <= groundHeight + GROUND_SNAP_DISTANCE && velocity.y <= 0) {
+  const landed = position.y <= groundHeight;
+  // Walking off a small lip should not look like falling, but that only applies
+  // to someone who was already walking: a player coming down from a jump has to
+  // reach the ground properly rather than being caught early.
+  const steppedDown =
+    motion.grounded && velocity.y <= 0 && position.y <= groundHeight + GROUND_SNAP_DISTANCE;
+
+  if (landed || steppedDown) {
     position.y = groundHeight;
     velocity.y = 0;
     motion.grounded = true;
@@ -129,4 +153,9 @@ export function stepPlayer(
     const targetYaw = Math.atan2(-velocity.x, -velocity.z);
     motion.facingYaw = rotateToward(motion.facingYaw, targetYaw, PLAYER_TURN_RATE * deltaSeconds);
   }
+}
+
+/** Is this button held down in the given input? */
+export function isHeld(input: PlayerInput, button: number): boolean {
+  return (input.buttons & button) !== 0;
 }
