@@ -96,8 +96,8 @@ docs/decisions/     Short notes on why things are the way they are
 
 Cloudflare does not generate preview URLs for a Worker that implements a Durable
 Object. Keeping the `World` Durable Object in `game-server` lets `apps/web` get a
-preview link for every pull request. Previews connect to the **staging** world.
-See [decision 0001](docs/decisions/0001-two-workers-for-preview-urls.md).
+preview link for every pull request. See
+[decision 0001](docs/decisions/0001-two-workers-for-preview-urls.md).
 
 ## How the game is wired together
 
@@ -123,8 +123,22 @@ why they agree.
 
 Each environment has its own D1 database, R2 bucket and Durable Object namespace.
 
-Pull requests get their own preview build of `apps/web`, linked in a comment on
-the pull request. Previews talk to the **staging** world server.
+Pull requests get a preview link in a comment on the pull request, and it is the
+whole game: that branch's client **and** a world server built from that branch,
+deployed as `acorn-ash-game-server-pr-<number>` and removed again when the pull
+request closes. So anything in a pull request can be played before it is merged,
+including changes to the game rules and the server. Each preview world starts
+empty. See [decision 0011](docs/decisions/0011-a-world-server-per-pull-request.md).
+
+### A red check that is not ours
+
+Pull requests show a failing **Workers Builds: acorn-and-ash** check. It is not
+from this repository: it is a Cloudflare dashboard Git integration, set up in the
+Cloudflare web UI, trying to deploy a Worker named after the repository that does
+not exist in the code. It fails on every commit, including on `main`, and there
+is nothing here to fix. To stop it: Cloudflare dashboard → **Workers & Pages** →
+**acorn-and-ash** → **Settings** → **Build** → disconnect the Git repository.
+Our own deploys do not use it.
 
 ## Assets and licensing
 
