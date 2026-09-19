@@ -39,26 +39,29 @@ because **the fallback is the path that could break quietly**.
 So: a browser without WebGPU gets a working game, silently, with no error and no
 special build. That is the thing we needed to know.
 
-### What Chris found in real browsers
+### What Chris found on his own machine
 
-I could not test real WebGPU, Firefox or Safari myself: there is no graphics card
-on the build machine and neither browser is installed on it. Chris checked the
-staging build on 19 September 2026 and reported the same answer in all three:
+I could not test real WebGPU myself: there is no graphics card on the build
+machine, and no Firefox or Safari installed on it either. Chris opened the
+staging build on his own machine on 19 September 2026.
 
-| Browser | Renderer line says | Notes             |
-| ------- | ------------------ | ----------------- |
-| Chrome  | WebGPU             | Got the fast path |
-| Firefox | WebGPU             | Got the fast path |
-| Safari  | WebGPU             | Got the fast path |
+| Browser | Renderer line says | How we know                                   |
+| ------- | ------------------ | --------------------------------------------- |
+| Edge    | WebGPU             | Chris checked it                              |
+| Chrome  | not checked        | Same engine as Edge, so near-certainly WebGPU |
+| Firefox | not checked        | Not installed on the machine he had to hand   |
+| Safari  | not checked        | Needs a Mac                                   |
 
-So on a current machine every browser we care about takes the WebGPU path, and a
-machine without it still gets a working game through WebGL 2. Both halves of the
-question are answered, and answered the good way round.
+So WebGPU genuinely works on real hardware, and a machine without it still gets a
+working game through the WebGL 2 fallback. Both halves of the question now have a
+real answer rather than a hopeful one.
 
-**This does not mean the fallback stops mattering.** Plenty of real players will
-be on older machines, older browser versions, or hardware where the browser
-declines WebGPU for its own reasons, and those players land on the WebGL 2 path
-that none of us will be looking at day to day.
+Edge and Chrome are the same browser underneath — Chromium, with the same WebGPU
+implementation — so Chrome can be treated as near-certain without anybody having
+measured it. **Firefox and Safari are different engines with their own separate
+WebGPU implementations, and are genuinely unchecked.** Neither blocks Phase 0:
+whichever path they pick, the game runs, because the fallback is proven. It is
+worth thirty seconds the first time somebody playtests on a different machine.
 
 **One thing to watch as we build:** anything written against a WebGPU-only
 feature will break the fallback without any warning. The `?renderer=webgl2`
@@ -171,8 +174,8 @@ player's full position ten times a second.
 
 ## In short
 
-| Experiment                | Verdict                                                                                                                           |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| WebGPU fallback           | Both paths work. Chrome, Firefox and Safari all take WebGPU; a machine without it silently falls back to WebGL 2 and still plays. |
-| Koota in a Durable Object | Works. No WebAssembly problem, small, fast.                                                                                       |
-| 50 players                | 0.40 ms mean tick against a 10 ms budget, 12 MB against 128 MB, no dropped snapshots. Plenty of room.                             |
+| Experiment                | Verdict                                                                                                                                                         |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WebGPU fallback           | Both paths work. WebGPU confirmed in Edge on real hardware, and a machine without it falls back to WebGL 2 and still plays. Firefox and Safari not yet checked. |
+| Koota in a Durable Object | Works. No WebAssembly problem, small, fast.                                                                                                                     |
+| 50 players                | 0.40 ms mean tick against a 10 ms budget, 12 MB against 128 MB, no dropped snapshots. Plenty of room.                                                           |
