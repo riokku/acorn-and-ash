@@ -7,6 +7,8 @@ import {
   createInput,
   type InventoryMessage,
   type PickupsTakenMessage,
+  type TreeHitMessage,
+  type TreesFelledMessage,
   type ServerMessage,
   type SnapshotMessage,
   type WelcomeMessage,
@@ -92,6 +94,17 @@ export class TestClient {
   takenPickups(): PickupsTakenMessage['pickupIds'] {
     const messages = this.received.filter((entry) => entry.type === 'pickupsTaken');
     return messages[messages.length - 1]?.pickupIds ?? [];
+  }
+
+  /** The newest list of trees the server says are down. */
+  felledTrees(): TreesFelledMessage['treeIds'] {
+    const messages = this.received.filter((entry) => entry.type === 'treesFelled');
+    return messages[messages.length - 1]?.treeIds ?? [];
+  }
+
+  /** Every swing the server has told us about. */
+  treeHits(): TreeHitMessage[] {
+    return this.received.filter((entry) => entry.type === 'treeHit');
   }
 
   countOfMessages(type: ServerMessage['type']): number {

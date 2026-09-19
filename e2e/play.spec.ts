@@ -10,6 +10,9 @@ declare global {
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
       nearbyItem(): string | null;
+      felledTrees(): number[];
+      trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
+      aimedTree(): { name: string; swingsLeft: number } | null;
       faceTowards(x: number, z: number): void;
     };
   }
@@ -246,6 +249,88 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   ]);
   // And it is no longer standing in the stump for anybody else to find.
   expect(await again.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
+  await again.close();
+  await context.close();
+});
+
+/** Swing at a tree until it comes down, in taps rather than one long hold. */
+async function chopUntilFelled(
+  page: Page,
+  tree: { id: number; x: number; z: number },
+): Promise<void> {
+  for (let step = 0; step < 60; step++) {
+    const felled = await page.evaluate(() => window.acornDebug?.felledTrees() ?? []);
+    if (felled.includes(tree.id)) return;
+
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [tree.x, tree.z],
+    );
+    // Taps, not a hold: a slow machine must not lose the button press, and the
+    // server paces the swings anyway.
+    await page.mouse.down();
+    await page.waitForTimeout(200);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+  }
+  throw new Error(`tree ${tree.id} never came down`);
+}
+
+test('you can chop a tree down, and the stump is still there next time', async ({ browser }) => {
+  test.setTimeout(240_000);
+  // One context throughout, so coming back is the same player returning.
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`/?world=chop-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Nothing is down to begin with.
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([]);
+
+  // Fetch the axe first: no axe, no chopping.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
+    .toBeGreaterThan(0);
+
+  // The big oak stands right beside the axe's stump.
+  const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
+  const oak = trees.find((tree) => tree.kind === 'oak');
+  if (oak === undefined) throw new Error('no oak in the clearing');
+
+  // Facing it, the game offers the swing and says how much is left in it.
+  await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0), [oak.x, oak.z]);
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
+  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+
+  await chopUntilFelled(page, oak);
+
+  // It is down, and the wood is ours.
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Logs');
+
+  // Nothing left to swing at where it stood.
+  await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0), [oak.x, oak.z]);
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).toBeNull();
+
+  // The Phase 1 promise: log out, come back, the stump is still there.
+  const url = page.url();
+  await page.close();
+  const again = await context.newPage();
+  await again.goto(url);
+  await waitForConnected(again);
+  await expect
+    .poll(async () => (await again.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length)
+    .toBe(1);
+  expect(await again.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+
   await again.close();
   await context.close();
 });

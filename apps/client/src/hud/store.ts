@@ -21,6 +21,8 @@ export interface HudState {
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
+  /** The tree a swing would land on, and how many more it needs. */
+  readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
 }
 
 const INITIAL: HudState = {
@@ -38,6 +40,7 @@ const INITIAL: HudState = {
   ready: false,
   carrying: [],
   nearbyItem: null,
+  aimedTree: null,
 };
 
 /**

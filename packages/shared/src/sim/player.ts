@@ -25,6 +25,8 @@ export const PlayerButton = {
   Jump: 1 << 1,
   /** Shift, held. Phase 2 will make this cost energy. */
   Sprint: 1 << 2,
+  /** Left mouse button. Swings whatever you are holding at whatever is in front. */
+  Swing: 1 << 3,
 } as const;
 
 /**

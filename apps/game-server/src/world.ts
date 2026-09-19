@@ -16,12 +16,15 @@ import {
   encodePong,
   encodeRejected,
   encodeSnapshot,
+  encodeTreeHit,
+  encodeTreesFelled,
   encodeWelcome,
   inventoryEntries,
   itemFromIndex,
   itemIndex,
   type ItemId,
   type PersistedPlayer,
+  type PersistedTree,
   type SnapshotEntity,
 } from '@acorn/shared';
 
@@ -105,6 +108,7 @@ export class World extends DurableObject<WorldEnv> {
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
+    server.send(encodeTreesFelled(simulation.felledTreeIds()));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -201,6 +205,7 @@ export class World extends DurableObject<WorldEnv> {
 
     simulation.step();
     this.announcePickups(simulation);
+    this.announceChopping(simulation);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -246,6 +251,45 @@ export class World extends DurableObject<WorldEnv> {
       this.trySend(ws, takenMessage);
       if (!takers.has(attachment.netId)) continue;
 
+      const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
+      this.trySend(ws, encodeInventory(items));
+      if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
+    }
+  }
+
+  /**
+   * Tell everybody about every swing that landed this tick.
+   *
+   * Each hit goes to everyone so a tree can shake for whoever is watching, not
+   * just for whoever is swinging. A tree that came down is written to storage
+   * straight away, along with the logs it paid out, rather than waiting for the
+   * next save: nobody should have to chop the same tree twice.
+   */
+  private announceChopping(simulation: WorldSimulation): void {
+    const events = simulation.drainChopEvents();
+    if (events.length === 0) return;
+
+    const choppers = new Set<number>();
+    let anythingFell = false;
+    for (const event of events) {
+      this.broadcast(encodeTreeHit(event.treeId, event.swingsLeft));
+      if (event.swingsLeft === 0) anythingFell = true;
+      if (event.logsGained > 0) choppers.add(event.netId);
+    }
+
+    if (anythingFell) {
+      // Sending the whole list is cheap while a clearing has a hundred and
+      // forty trees; a bigger world would want to send only what changed.
+      this.broadcast(encodeTreesFelled(simulation.felledTreeIds()));
+    }
+
+    // Only the trees that are down or part cut, which is a short list.
+    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
+
+    if (choppers.size === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null || !choppers.has(attachment.netId)) continue;
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
@@ -318,6 +362,7 @@ export class World extends DurableObject<WorldEnv> {
     const simulation = new WorldSimulation({ seed: this.seed() });
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
+    simulation.restoreTrees(this.loadTrees());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -404,6 +449,14 @@ export class World extends DurableObject<WorldEnv> {
       net_id INTEGER NOT NULL,
       taken_at INTEGER NOT NULL
     )`);
+    // Trees that are down, and trees somebody has started on. The clearing
+    // itself comes from the seed, so only what has changed is stored.
+    sql.exec(`CREATE TABLE IF NOT EXISTS trees (
+      tree_id INTEGER PRIMARY KEY,
+      swings_taken INTEGER NOT NULL,
+      felled INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`);
   }
 
   private readMeta(key: string): string | null {
@@ -465,6 +518,34 @@ export class World extends DurableObject<WorldEnv> {
       items.push({ item, count: row.count });
     }
     return items;
+  }
+
+  private loadTrees(): PersistedTree[] {
+    return this.ctx.storage.sql
+      .exec<{
+        tree_id: number;
+        swings_taken: number;
+        felled: number;
+      }>('SELECT tree_id, swings_taken, felled FROM trees')
+      .toArray()
+      .map((row) => ({
+        treeId: row.tree_id,
+        swingsTaken: row.swings_taken,
+        felled: row.felled !== 0,
+      }));
+  }
+
+  private writeTree(tree: PersistedTree): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO trees (tree_id, swings_taken, felled, updated_at) ' +
+        'VALUES (?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
+        'swings_taken = excluded.swings_taken, felled = excluded.felled, ' +
+        'updated_at = excluded.updated_at',
+      tree.treeId,
+      tree.swingsTaken,
+      tree.felled ? 1 : 0,
+      Date.now(),
+    );
   }
 
   private loadTakenPickups(): number[] {
@@ -538,6 +619,7 @@ export class World extends DurableObject<WorldEnv> {
   /** Write everything worth keeping: the tick count and where everyone is. */
   private save(simulation: WorldSimulation): void {
     this.writeMeta('tick', String(simulation.tick));
+    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
 
     const byNetId = new Map<number, ConnectionAttachment>();
     for (const ws of this.ctx.getWebSockets()) {

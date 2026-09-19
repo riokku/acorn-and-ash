@@ -8,9 +8,10 @@ The game is online-only. Every world runs on the server.
 
 > **Phase 1 — First steps.** Right now there is a flat test clearing with
 > placeholder trees and rocks, a capsule you walk, sprint and jump around, a
-> third-person camera, and a server that decides where everybody is. There is an
-> axe standing in a stump for you to find, and the world remembers you took it.
-> Chopping is next. See [the roadmap](#roadmap).
+> third-person camera, and a server that decides where everybody is. Find the
+> axe standing in a stump, chop a tree down with it, and the world remembers
+> both: log out, come back, and the stump is still there. Trees growing back is
+> next. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -20,6 +21,7 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held)                    | Sprint              |
 | `Space`                           | Jump                |
 | `E`                               | Pick up             |
+| Left mouse                        | Swing the axe       |
 | Mouse                             | Look around         |
 | `Esc`                             | Let go of the mouse |
 
@@ -27,7 +29,9 @@ There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
 
 You can carry one axe and ten logs. The limits live in
-[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts).
+[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), and
+what each tree costs in swings and pays in logs lives in
+[`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts).
 
 ## Running it locally
 

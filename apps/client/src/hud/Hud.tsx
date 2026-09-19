@@ -38,13 +38,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         </div>
       ) : null}
 
-      {state.ready && state.pointerLocked ? (
-        <p className="hud-hint">
-          {state.nearbyItem === null
-            ? 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go'
-            : `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`}
-        </p>
-      ) : null}
+      {state.ready && state.pointerLocked ? <p className="hud-hint">{hint(state)}</p> : null}
 
       {!state.ready ? (
         <div className="hud-curtain">
@@ -74,6 +68,25 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
   };
   const entry = labels[state.connection];
   return <span className={entry[1]}>{entry[0]}</span>;
+}
+
+/**
+ * The strip along the bottom.
+ *
+ * Whatever you could do right now beats the list of what the keys are, and
+ * picking something up beats chopping: you are more likely to be reaching for
+ * the thing at your feet than swinging at the tree behind it.
+ */
+function hint(state: HudState): string {
+  if (state.nearbyItem !== null) {
+    return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
+  }
+  if (state.aimedTree !== null) {
+    const { name, swingsLeft } = state.aimedTree;
+    const swings = swingsLeft === 1 ? '1 swing left' : `${swingsLeft} swings left`;
+    return `Left click to chop the ${name.toLowerCase()} · ${swings}`;
+  }
+  return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
 }
 
 /** What the pack holds, as one short line. */

@@ -9,6 +9,8 @@ import {
   encodeInventory,
   encodePickupsTaken,
   encodePing,
+  encodeTreeHit,
+  encodeTreesFelled,
   encodePlayerLeft,
   encodePong,
   encodeRejected,
@@ -250,5 +252,58 @@ describe('telling players which pickups are gone', () => {
   it('refuses a message that has been cut short', () => {
     const encoded = encodePickupsTaken([1, 2]);
     expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+});
+
+describe('telling players which trees are down', () => {
+  it('survives a round trip', () => {
+    expect(decodeServerMessage(encodeTreesFelled([3, 17, 140]))).toEqual({
+      type: 'treesFelled',
+      treeIds: [3, 17, 140],
+    });
+  });
+
+  it('says so plainly when the clearing is untouched', () => {
+    expect(decodeServerMessage(encodeTreesFelled([]))).toEqual({
+      type: 'treesFelled',
+      treeIds: [],
+    });
+  });
+
+  it('carries a whole clearing of felled trees in under three hundred bytes', () => {
+    const everyTree = Array.from({ length: 141 }, (_, i) => i + 1);
+    expect(encodeTreesFelled(everyTree).byteLength).toBeLessThan(300);
+  });
+
+  it('refuses a message that has been cut short', () => {
+    const encoded = encodeTreesFelled([1, 2]);
+    expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+});
+
+describe('telling players a swing landed', () => {
+  it('survives a round trip', () => {
+    expect(decodeServerMessage(encodeTreeHit(42, 3))).toEqual({
+      type: 'treeHit',
+      treeId: 42,
+      swingsLeft: 3,
+    });
+  });
+
+  it('says zero swings left for the one that felled it', () => {
+    expect(decodeServerMessage(encodeTreeHit(42, 0))).toEqual({
+      type: 'treeHit',
+      treeId: 42,
+      swingsLeft: 0,
+    });
+  });
+
+  it('is tiny, because one goes out for every swing anybody takes', () => {
+    expect(encodeTreeHit(42, 3).byteLength).toBeLessThanOrEqual(4);
+  });
+
+  it('refuses a message of the wrong length', () => {
+    const encoded = encodeTreeHit(42, 3);
+    expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
   });
 });

@@ -2,13 +2,19 @@ import * as THREE from 'three/webgpu';
 
 import {
   DEFAULT_WORLD_SEED,
+  PROP_KINDS,
   SPAWN_POSITION,
   buildTestClearing,
+  choppingRuleFor,
   createCollisionWorld,
   createFlatTerrain,
   pickupInReach,
+  replaceCollider,
+  stumpColliderFor,
+  treeInReach,
   vec3,
   type Clearing,
+  type CollisionWorld,
   type ItemId,
   type ServerMessage,
   type Vec3,
@@ -45,6 +51,12 @@ export interface GameDebug {
   pickups(): Array<{ id: number; item: string; x: number; z: number }>;
   /** What is within reach right now, if anything. */
   nearbyItem(): string | null;
+  /** Trees the server says are down. */
+  felledTrees(): number[];
+  /** Every tree in the clearing, with what it takes to fell it. */
+  trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
+  /** The tree a swing would land on right now, if any. */
+  aimedTree(): { name: string; swingsLeft: number } | null;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -83,6 +95,11 @@ export class Game {
   private readonly takenPickups = new Set<number>();
   private carrying: readonly { item: ItemId; count: number }[] = [];
   private nearbyItem: ItemId | null = null;
+  /** Trees the server says are down, and how far along the others are. */
+  private readonly felledTrees = new Set<number>();
+  private readonly swingsLeft = new Map<number, number>();
+  private collision: CollisionWorld | null = null;
+  private aimedTree: { name: string; swingsLeft: number } | null = null;
   private localPlayer: LocalPlayer | null = null;
   private localCharacter: Character | null = null;
   private selfNetId = 0;
@@ -148,6 +165,18 @@ export class Game {
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
+      felledTrees: () => [...this.felledTrees],
+      trees: () =>
+        (this.clearing?.props ?? [])
+          .map((prop) => ({
+            id: prop.id,
+            kind: prop.kind,
+            x: prop.x,
+            z: prop.z,
+            swingsToFell: choppingRuleFor(PROP_KINDS[prop.kind])?.swingsToFell ?? 0,
+          }))
+          .filter((tree) => tree.swingsToFell > 0),
+      aimedTree: () => (this.aimedTree === null ? null : { ...this.aimedTree }),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -240,6 +269,16 @@ export class Game {
         this.clearingScene?.setTakenPickups(this.takenPickups);
         break;
       }
+      case 'treesFelled': {
+        this.felledTrees.clear();
+        for (const id of message.treeIds) this.felledTrees.add(id);
+        this.applyFelledTrees();
+        break;
+      }
+      case 'treeHit': {
+        this.swingsLeft.set(message.treeId, message.swingsLeft);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -269,12 +308,32 @@ export class Game {
     this.scene.add(this.clearingScene.group);
 
     const collision = createCollisionWorld(createFlatTerrain(0), clearing.colliders);
+    this.collision = collision;
     this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
+    this.applyFelledTrees();
 
     this.localCharacter = createCharacter(colorForPlayer(this.selfNetId || 1));
     this.scene.add(this.localCharacter.group);
 
     this.options.hud.publish({ ready: true });
+  }
+
+  /**
+   * Take the felled trees out of the world we walk around in as well as the one
+   * we look at, so a stump stops blocking like a trunk.
+   */
+  private applyFelledTrees(): void {
+    this.clearingScene?.setFelledTrees(this.felledTrees);
+
+    const clearing = this.clearing;
+    const collision = this.collision;
+    if (clearing === null || collision === null) return;
+    for (const treeId of this.felledTrees) {
+      const index = clearing.indexById.get(treeId);
+      const tree = index === undefined ? undefined : clearing.props[index];
+      if (index === undefined || tree === undefined) continue;
+      replaceCollider(collision, index, stumpColliderFor(tree));
+    }
   }
 
   private removeRemote(netId: number): void {
@@ -360,6 +419,20 @@ export class Game {
           );
     this.nearbyItem = reachable?.item ?? null;
 
+    const target =
+      this.clearing === null
+        ? null
+        : treeInReach(player.motion.position, camera.look.yaw, this.clearing.props, (id) =>
+            this.felledTrees.has(id),
+          );
+    this.aimedTree =
+      target === null
+        ? null
+        : {
+            name: PROP_KINDS[target.prop.kind].displayName,
+            swingsLeft: this.swingsLeft.get(target.prop.id) ?? target.rule.swingsToFell,
+          };
+
     // Keep the shadow map centred on the player instead of on the origin.
     if (this.sun !== null) {
       this.sun.position.set(position.x + 28, position.y + 40, position.z + 18);
@@ -401,6 +474,7 @@ export class Game {
       correctionCm: (player?.stats.lastCorrection ?? 0) * 100,
       carrying: this.carrying,
       nearbyItem: this.nearbyItem,
+      aimedTree: this.aimedTree,
     });
   }
 
