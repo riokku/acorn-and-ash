@@ -1,0 +1,72 @@
+name: Tidy up after a pull request
+
+# Every pull request gets a world server of its own so its preview link is the
+# whole game. This takes it away again when the pull request is done, whether it
+# was merged or abandoned. Without this they pile up, each one holding on to a
+# Durable Object namespace.
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  remove-the-world-server:
+    name: Remove the preview world server
+    runs-on: ubuntu-latest
+    # A pull request from a fork never had one: it cannot see the secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      PR_GAME_SERVER: acorn-ash-game-server-pr-${{ github.event.number }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Not every pull request has one: a draft that never ran the preview job,
+      # or one opened before this existed. Ask before deleting, so a missing
+      # server is a quiet no-op and a real failure is still a failure.
+      - name: Is there one to remove?
+        id: exists
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/$PR_GAME_SERVER")
+
+          case "$status" in
+            200)
+              echo "$PR_GAME_SERVER exists and will be removed."
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "No $PR_GAME_SERVER to remove; nothing to do."
+              echo "found=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "The Cloudflare API answered $status, which we cannot interpret."
+              echo "Check that CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set correctly."
+              exit 1
+              ;;
+          esac
+
+      # --force because the world server owns Durable Objects holding this
+      # preview's world. That world is throwaway by design: it was only ever
+      # here so this pull request could be played.
+      - name: Remove it
+        if: steps.exists.outputs.found == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/game-server
+          command: delete ${{ env.PR_GAME_SERVER }} --force

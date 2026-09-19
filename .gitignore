@@ -12,3 +12,5 @@ playwright-report/
 test-results/
 .vite/
 .turbo/
+# Written by CI to aim a preview at that pull request's own world server.
+apps/web/wrangler.preview.jsonc

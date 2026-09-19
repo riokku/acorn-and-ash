@@ -82,6 +82,9 @@ jobs:
     name: Preview build
     needs: check
     runs-on: ubuntu-latest
+    env:
+      # One throwaway world server per pull request, named after it.
+      PR_GAME_SERVER: acorn-ash-game-server-pr-${{ github.event.number }}
     # Pull requests from forks cannot see the repository secrets, so there is
     # nothing to upload with.
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -141,10 +144,36 @@ jobs:
               ;;
           esac
 
+      # A preview used to be this branch's client wired to the staging world
+      # server, which runs whatever is on main. Anything touching the shared
+      # rules or the server could not be played before merging. So each pull
+      # request now gets a world server of its own, built from its own code.
+      - name: Give this pull request its own world server
+        if: steps.staging.outputs.exists == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/game-server
+          command: deploy --env preview --name ${{ env.PR_GAME_SERVER }}
+
+      # Point the preview at that server instead of the staging one. The live
+      # staging Worker is untouched: only this uploaded version carries the
+      # different binding.
+      - name: Aim the preview at it
+        if: steps.staging.outputs.exists == 'true'
+        run: |
+          # Fail loudly if the binding is ever renamed, rather than uploading a
+          # preview that quietly talks to staging again.
+          grep -q '"script_name": "acorn-ash-game-server-staging"' apps/web/wrangler.jsonc
+          sed 's/acorn-ash-game-server-staging/'"$PR_GAME_SERVER"'/' \
+            apps/web/wrangler.jsonc > apps/web/wrangler.preview.jsonc
+          grep -q "\"script_name\": \"$PR_GAME_SERVER\"" apps/web/wrangler.preview.jsonc
+
       # A preview version of the staging web Worker. It is not promoted to any
       # traffic; it just gets its own URL. Because apps/web borrows the World
-      # class from the game server rather than implementing it, Cloudflare will
-      # give it a preview URL, and that preview talks to the staging world.
+      # class from a game server rather than implementing it, Cloudflare will
+      # give it a preview URL.
       - name: Upload the preview
         id: upload
         if: steps.staging.outputs.exists == 'true'
@@ -153,7 +182,9 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
-          command: versions upload --env staging --preview-alias pr-${{ github.event.number }}
+          command: >-
+            versions upload -c wrangler.preview.jsonc --env staging
+            --preview-alias pr-${{ github.event.number }}
 
       - name: Find the preview link
         id: link
@@ -196,8 +227,12 @@ jobs:
             } else if (url) {
               body =
                 `${marker}\n### Play this change\n\n${url}\n\n` +
-                `The game client from this pull request, connected to the **staging** world. ` +
-                `Open it in two tabs to see two players.\n\n` +
+                `The whole game from this pull request: this branch's client **and** a world ` +
+                `server of its own, built from this branch. Everything here is testable before ` +
+                `it merges.\n\n` +
+                `Its world starts empty every time the branch is new, so anything already ` +
+                `gathered on staging is not carried over. Open it in two tabs to see two ` +
+                `players.\n\n` +
                 `_Updated for commit ${commit}._`;
             } else {
               body =
