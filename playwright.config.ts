@@ -26,6 +26,16 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // The full browser, not the stripped-down headless shell Playwright
+        // reaches for by default. The shell is the wrong thing to test a game
+        // on: this is WebGL, pointer lock and mouse buttons, which is the very
+        // surface it trims. Chopping passed here and failed in CI until this
+        // was set, because a swing is a mouse button under pointer lock.
+        //
+        // Not set alongside an explicit executable: Wrangler's Playwright
+        // refuses both at once, and a machine with its own browser is already
+        // saying which one to use.
+        ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? {} : { channel: 'chromium' }),
         launchOptions: {
           // Software rendering, because CI machines have no GPU. The point of
           // these tests is that the game runs, not how fast it draws.

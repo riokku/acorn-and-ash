@@ -14,6 +14,9 @@ export interface MoveIntent {
   readonly z: number;
 }
 
+const mouseCode = (button: number): string => `Mouse${button}`;
+const LEFT_MOUSE = mouseCode(0);
+
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
   'KeyW',
@@ -53,6 +56,9 @@ export class Controls {
     window.addEventListener('blur', this.handleBlur);
     document.addEventListener('pointerlockchange', this.handlePointerLockChange);
     canvas.addEventListener('mousemove', this.handleMouseMove);
+    canvas.addEventListener('mousedown', this.handleMouseDown);
+    // On the window, so letting go outside the canvas still counts as letting go.
+    window.addEventListener('mouseup', this.handleMouseUp);
   }
 
   /** Ask the browser to capture the mouse so the camera can turn freely. */
@@ -81,13 +87,15 @@ export class Controls {
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
    * cannot climb the sky. Holding E is harmless in the same way: the server
-   * hands over each thing exactly once.
+   * hands over each thing exactly once. Holding the mouse button chops at a
+   * steady rhythm, because the server decides how often an axe may swing.
    */
   buttons(): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
     if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
+    if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) buttons |= PlayerButton.Swing;
     return buttons;
   }
 
@@ -110,6 +118,8 @@ export class Controls {
     window.removeEventListener('blur', this.handleBlur);
     document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
+    this.canvas.removeEventListener('mousedown', this.handleMouseDown);
+    window.removeEventListener('mouseup', this.handleMouseUp);
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
@@ -141,5 +151,21 @@ export class Controls {
     if (!this.pointerLocked) return;
     this.mouseDeltaX += event.movementX;
     this.mouseDeltaY += event.movementY;
+  };
+
+  /**
+   * Mouse buttons are kept alongside the keys, under made-up names.
+   *
+   * Only while the mouse is captured: the click that starts the game must not
+   * also be read as a swing at whatever happens to be in front of you.
+   */
+  private readonly handleMouseDown = (event: MouseEvent): void => {
+    if (!this.pointerLocked) return;
+    this.held.add(mouseCode(event.button));
+    this.tapped.add(mouseCode(event.button));
+  };
+
+  private readonly handleMouseUp = (event: MouseEvent): void => {
+    this.held.delete(mouseCode(event.button));
   };
 }

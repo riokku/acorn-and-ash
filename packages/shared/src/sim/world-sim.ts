@@ -8,6 +8,7 @@ import {
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
   SPRINT_REPORTING_SPEED,
+  SWING_COOLDOWN_TICKS,
   TICK_SECONDS,
 } from '../constants';
 import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
@@ -23,19 +24,27 @@ import {
   StaticTag,
   Velocity,
 } from '../ecs/traits';
-import { propKindIndex } from '../data/props';
+import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
 import type { ItemId } from '../data/items';
+import { replaceCollider } from '../collision/capsule';
 import type { Vec3 } from '../math/vec3';
-import { buildTestClearing, type Clearing, type PlacedPickup } from '../world/clearing';
+import {
+  buildTestClearing,
+  stumpColliderFor,
+  type Clearing,
+  type PlacedPickup,
+} from '../world/clearing';
 import { createFlatTerrain, type Terrain } from '../world/terrain';
 import {
   addItem,
+  hasItem,
   createInventory,
   inventoryEntries,
   inventoryFromEntries,
   type Inventory,
 } from './inventory';
 import { pickupInReach } from './pickups';
+import { treeInReach, type ChopTarget } from './chopping';
 import {
   PlayerButton,
   createPlayerMotion,
@@ -97,11 +106,30 @@ export interface PickupTaken {
   readonly item: ItemId;
 }
 
+/** A swing landed on a tree. */
+export interface TreeChopped {
+  readonly netId: number;
+  readonly treeId: number;
+  /** Swings still to go. Zero means it came down. */
+  readonly swingsLeft: number;
+  /** Logs that went into the chopper's pack, once it did. */
+  readonly logsGained: number;
+}
+
+/** A tree's progress towards falling, as it goes into and comes out of storage. */
+export interface PersistedTree {
+  readonly treeId: number;
+  readonly swingsTaken: number;
+  readonly felled: boolean;
+}
+
 interface PlayerRuntime {
   readonly netId: number;
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
+  /** Ticks left before this player may swing again. */
+  swingCooldownTicks: number;
   lastProcessedSeq: number;
   /** Inputs thrown away because the client was sending faster than it should. */
   droppedInputs: number;
@@ -128,6 +156,11 @@ export class WorldSimulation {
   private readonly takenPickups = new Set<number>();
   /** Drained by the world server each tick and turned into messages. */
   private readonly pickupEvents: PickupTaken[] = [];
+  /** Trees that have come down, by prop id. */
+  private readonly felledTrees = new Set<number>();
+  /** Swings taken out of a tree that is still standing, by prop id. */
+  private readonly treeSwings = new Map<number, number>();
+  private readonly chopEvents: TreeChopped[] = [];
   private spawnCounter = 0;
   /** Reused every tick so a busy world does not allocate per player. */
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
@@ -201,6 +234,7 @@ export class WorldSimulation {
       entity,
       queue: [],
       inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
+      swingCooldownTicks: 0,
       lastProcessedSeq: 0,
       droppedInputs: 0,
     });
@@ -269,6 +303,8 @@ export class WorldSimulation {
         scratch.grounded = grounded.value;
 
         let wantsToInteract = false;
+        let wantsToSwing = false;
+        let aimedYaw = aim.yaw;
         const steps = inputsToConsume(runtime.queue.length);
         if (steps === 0) {
           // No packet arrived in time: the player coasts to a stop where they are.
@@ -284,14 +320,19 @@ export class WorldSimulation {
             if (input === undefined) break;
             stepPlayer(scratch, input, TICK_SECONDS, this.collision);
             if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
+            if (isHeld(input, PlayerButton.Swing)) wantsToSwing = true;
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
+            aimedYaw = input.yaw;
           }
         }
 
-        // Reaching for something is judged where the player ended up, not where
-        // they started, and only the server ever decides who got it.
+        // Reaching and swinging are judged where the player ended up, not where
+        // they started, and only the server ever decides what happens.
         if (wantsToInteract) this.tryPickup(runtime, scratch.position);
+
+        if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
+        if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
 
         position.x = scratch.position.x;
         position.y = scratch.position.y;
@@ -325,6 +366,106 @@ export class WorldSimulation {
       pickupId: pickup.id,
       item: pickup.item,
     });
+  }
+
+  /**
+   * Swing at whatever is in front of this player.
+   *
+   * Nothing happens without an axe, without a tree in reach, or before the
+   * cooldown is up, so holding the button down chops at a steady rhythm rather
+   * than as fast as packets arrive.
+   */
+  private trySwing(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
+    if (runtime.swingCooldownTicks > 0) return;
+    if (!hasItem(runtime.inventory, 'axe')) return;
+
+    const target = this.treeInReachOf(position, aimYaw);
+    if (target === null) return;
+
+    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+
+    const swingsTaken = (this.treeSwings.get(target.prop.id) ?? 0) + 1;
+    const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
+
+    if (swingsLeft > 0) {
+      this.treeSwings.set(target.prop.id, swingsTaken);
+      this.chopEvents.push({
+        netId: runtime.netId,
+        treeId: target.prop.id,
+        swingsLeft,
+        logsGained: 0,
+      });
+      return;
+    }
+
+    this.fellTree(target.prop.id);
+    // A full pack means the wood stays on the ground. The tree still falls:
+    // you did chop it down, you just cannot carry what came off it.
+    const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
+    this.chopEvents.push({
+      netId: runtime.netId,
+      treeId: target.prop.id,
+      swingsLeft: 0,
+      logsGained,
+    });
+  }
+
+  /** Take a tree out of the world: it stops blocking, and a stump blocks instead. */
+  private fellTree(treeId: number): void {
+    if (this.felledTrees.has(treeId)) return;
+    this.felledTrees.add(treeId);
+    this.treeSwings.delete(treeId);
+
+    const index = this.clearing.indexById.get(treeId);
+    const tree = index === undefined ? undefined : this.clearing.props[index];
+    if (index === undefined || tree === undefined) return;
+    replaceCollider(this.collision, index, stumpColliderFor(tree));
+  }
+
+  /** The tree this player would hit if they swung, or null. Used by tests. */
+  treeInReachOf(position: Readonly<Vec3>, aimYaw: number): ChopTarget | null {
+    return treeInReach(position, aimYaw, this.clearing.props, (id) => this.felledTrees.has(id));
+  }
+
+  /** How many more swings this tree needs, or null if it is already down. */
+  swingsLeftOn(treeId: number): number | null {
+    if (this.felledTrees.has(treeId)) return null;
+    const index = this.clearing.indexById.get(treeId);
+    const tree = index === undefined ? undefined : this.clearing.props[index];
+    if (tree === undefined) return null;
+    const rule = choppingRuleFor(PROP_KINDS[tree.kind]);
+    if (rule === null) return null;
+    return rule.swingsToFell - (this.treeSwings.get(treeId) ?? 0);
+  }
+
+  /** Trees that have come down, for sending to a client and for saving. */
+  felledTreeIds(): number[] {
+    return [...this.felledTrees];
+  }
+
+  /** Everything worth saving about the trees: what is down, and what is half cut. */
+  persistableTrees(): PersistedTree[] {
+    const saved: PersistedTree[] = [];
+    for (const treeId of this.felledTrees) {
+      saved.push({ treeId, swingsTaken: 0, felled: true });
+    }
+    for (const [treeId, swingsTaken] of this.treeSwings) {
+      saved.push({ treeId, swingsTaken, felled: false });
+    }
+    return saved;
+  }
+
+  /** Put the trees back as they were after the world wakes from storage. */
+  restoreTrees(trees: Iterable<PersistedTree>): void {
+    for (const tree of trees) {
+      if (tree.felled) this.fellTree(tree.treeId);
+      else if (tree.swingsTaken > 0) this.treeSwings.set(tree.treeId, tree.swingsTaken);
+    }
+  }
+
+  /** Hand over every swing that landed since this was last asked. */
+  drainChopEvents(): TreeChopped[] {
+    return this.chopEvents.splice(0);
   }
 
   /** What this player could pick up right now, or null. Used by tests. */

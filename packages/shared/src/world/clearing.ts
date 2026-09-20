@@ -1,6 +1,6 @@
 import { CLEARING_HALF, PLAYABLE_HALF_EXTENT, SPAWN_POSITION } from '../constants';
 import { createRng } from '../rng';
-import { PROP_KINDS, propHeight, type PropKindId } from '../data/props';
+import { PROP_KINDS, propHeight, stumpScaleFor, type PropKindId } from '../data/props';
 import type { ItemId } from '../data/items';
 import { cylinder, type Collider } from './colliders';
 
@@ -34,6 +34,13 @@ export interface Clearing {
   readonly props: readonly PlacedProp[];
   readonly pickups: readonly PlacedPickup[];
   readonly colliders: readonly Collider[];
+  /**
+   * Where each prop sits in `props` and `colliders`, by its id.
+   *
+   * Felling a tree has to find its collider to swap it for a stump, and this
+   * saves scanning a hundred and forty trees to do it.
+   */
+  readonly indexById: ReadonlyMap<number, number>;
 }
 
 /**
@@ -113,7 +120,10 @@ export function buildTestClearing(seed: number): Clearing {
     },
   ];
 
-  return { seed, props, pickups, colliders: props.map(colliderForProp) };
+  const indexById = new Map<number, number>();
+  props.forEach((prop, index) => indexById.set(prop.id, index));
+
+  return { seed, props, pickups, colliders: props.map(colliderForProp), indexById };
 }
 
 function isNearSpawn(x: number, z: number): boolean {
@@ -132,4 +142,18 @@ export function colliderForProp(prop: PlacedProp): Collider {
     propHeight(kind) * prop.scale,
     0,
   );
+}
+
+/** The stump left where a tree used to stand. */
+export function stumpFor(tree: PlacedProp): PlacedProp {
+  return {
+    ...tree,
+    kind: 'stump',
+    scale: stumpScaleFor(PROP_KINDS[tree.kind], tree.scale),
+  };
+}
+
+/** What the player bumps into once a tree is down: the stump, not the trunk. */
+export function stumpColliderFor(tree: PlacedProp): Collider {
+  return colliderForProp(stumpFor(tree));
 }

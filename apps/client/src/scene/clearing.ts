@@ -5,6 +5,8 @@ import {
   ITEM_KINDS,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
+  choppingRuleFor,
+  stumpFor,
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
@@ -14,12 +16,20 @@ import {
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
 export interface ClearingScene {
   readonly group: THREE.Group;
-  /** A single merged mesh of every trunk and rock, for camera raycasts. */
-  readonly cameraBlockers: THREE.Mesh;
+  /**
+   * A single merged mesh of every trunk and rock, for camera raycasts. Replaced
+   * when a tree comes down, so the camera stops avoiding a trunk that is gone.
+   */
+  cameraBlockers: THREE.Mesh;
   /** Hide whatever the server says has already been picked up. */
   setTakenPickups(taken: ReadonlySet<number>): void;
+  /** Swap felled trees for the stumps they left. */
+  setFelledTrees(felled: ReadonlySet<number>): void;
   dispose(): void;
 }
+
+/** A matrix that draws nothing, used to take an instance out of the world. */
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /**
  * The ground runs well past the tree line so its edge is never visible: it
@@ -48,7 +58,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     else existing.push(prop);
   }
 
-  const blockerGeometries: THREE.BufferGeometry[] = [];
+  /** Where a tree's instance sits, so it can be taken away when it is felled. */
+  const standing = new Map<number, { parts: PropPart[]; index: number }>();
 
   for (const [kindId, props] of byKind) {
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
@@ -58,24 +69,28 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
       disposables.push(part);
     }
 
-    const matrix = new THREE.Matrix4();
+    const isTree = choppingRuleFor(kind) !== null;
     props.forEach((prop, index) => {
-      matrix.compose(
-        new THREE.Vector3(prop.x, 0, prop.z),
-        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.rotationY),
-        new THREE.Vector3(prop.scale, prop.scale, prop.scale),
-      );
-      for (const part of parts) {
-        const local = part.offset.clone().premultiply(matrix);
-        part.mesh.setMatrixAt(index, local);
-      }
-      blockerGeometries.push(blockerGeometry(kind, prop));
+      placeInstance(parts, index, prop);
+      if (isTree) standing.set(prop.id, { parts, index });
     });
 
     for (const part of parts) part.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  const cameraBlockers = createCameraBlockers(blockerGeometries);
+  // One spare stump per tree, waiting out of sight until that tree comes down.
+  const trees = clearing.props.filter((prop) => choppingRuleFor(PROP_KINDS[prop.kind]) !== null);
+  const freshStumps = createPropMeshes(PROP_KINDS.stump, trees.length);
+  for (const part of freshStumps) {
+    group.add(part.mesh);
+    disposables.push(part);
+    for (let i = 0; i < trees.length; i++) part.mesh.setMatrixAt(i, HIDDEN);
+    part.mesh.instanceMatrix.needsUpdate = true;
+  }
+  const stumpSlotOf = new Map<number, number>();
+  trees.forEach((tree, index) => stumpSlotOf.set(tree.id, index));
+
+  let cameraBlockers = createCameraBlockers(blockersFor(clearing, new Set()));
   // Never drawn: it exists so the camera can feel the trees.
   cameraBlockers.visible = false;
   group.add(cameraBlockers);
@@ -87,17 +102,82 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     group.add(model);
   }
 
-  return {
+  const felledNow = new Set<number>();
+
+  const scene: ClearingScene = {
     group,
     cameraBlockers,
     setTakenPickups: (taken) => {
       for (const [id, model] of pickups) model.visible = !taken.has(id);
+    },
+    setFelledTrees: (felled) => {
+      let changed = false;
+      for (const tree of trees) {
+        const isDown = felled.has(tree.id);
+        if (isDown === felledNow.has(tree.id)) continue;
+        changed = true;
+
+        const slot = standing.get(tree.id);
+        if (slot !== undefined) {
+          for (const part of slot.parts) {
+            if (isDown) part.mesh.setMatrixAt(slot.index, HIDDEN);
+            else placeOneInstance(part, slot.index, tree);
+            part.mesh.instanceMatrix.needsUpdate = true;
+          }
+        }
+
+        const stumpSlot = stumpSlotOf.get(tree.id);
+        if (stumpSlot !== undefined) {
+          for (const part of freshStumps) {
+            if (isDown) placeOneInstance(part, stumpSlot, stumpFor(tree));
+            else part.mesh.setMatrixAt(stumpSlot, HIDDEN);
+            part.mesh.instanceMatrix.needsUpdate = true;
+          }
+        }
+
+        if (isDown) felledNow.add(tree.id);
+        else felledNow.delete(tree.id);
+      }
+
+      // The camera should stop shying away from a trunk that is no longer
+      // there. Rebuilt only when the set actually changes, which is rare.
+      if (!changed) return;
+      group.remove(cameraBlockers);
+      cameraBlockers.geometry.dispose();
+      cameraBlockers = createCameraBlockers(blockersFor(clearing, felledNow));
+      cameraBlockers.visible = false;
+      group.add(cameraBlockers);
+      scene.cameraBlockers = cameraBlockers;
     },
     dispose: () => {
       for (const item of disposables) item.dispose();
       cameraBlockers.geometry.dispose();
     },
   };
+
+  return scene;
+}
+
+/** Put one prop into every part of its instanced mesh. */
+function placeInstance(parts: PropPart[], index: number, prop: PlacedProp): void {
+  for (const part of parts) placeOneInstance(part, index, prop);
+}
+
+function placeOneInstance(part: PropPart, index: number, prop: PlacedProp): void {
+  const matrix = new THREE.Matrix4().compose(
+    new THREE.Vector3(prop.x, 0, prop.z),
+    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.rotationY),
+    new THREE.Vector3(prop.scale, prop.scale, prop.scale),
+  );
+  part.mesh.setMatrixAt(index, part.offset.clone().premultiply(matrix));
+}
+
+/** A cylinder for everything still standing, with stumps where trees came down. */
+function blockersFor(clearing: Clearing, felled: ReadonlySet<number>): THREE.BufferGeometry[] {
+  return clearing.props.map((prop) => {
+    const standing = felled.has(prop.id) ? stumpFor(prop) : prop;
+    return blockerGeometry(PROP_KINDS[standing.kind], standing);
+  });
 }
 
 /**

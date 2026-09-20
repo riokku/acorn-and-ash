@@ -80,6 +80,23 @@ export const PLAYABLE_HALF_EXTENT = 38;
  */
 export const PICKUP_REACH = 2;
 
+/**
+ * Chopping.
+ *
+ * Reach is measured to the trunk's surface rather than its middle, so a fat oak
+ * is no harder to get at than a slender birch.
+ */
+export const CHOP_REACH = 2.2;
+/** Seconds between swings. A tree of four swings takes about two seconds. */
+export const SWING_INTERVAL_SECONDS = 0.45;
+export const SWING_COOLDOWN_TICKS = Math.round(SWING_INTERVAL_SECONDS * TICK_HZ);
+/**
+ * How far off-centre a tree can be and still be hit, as the cosine of the angle
+ * from where the camera is pointed. 0.5 is sixty degrees either side: you have
+ * to be facing the tree, but not perfectly squared up to it.
+ */
+export const CHOP_FACING_COSINE = 0.5;
+
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;
 /** New players are spread around the spawn point so they do not stack up. */

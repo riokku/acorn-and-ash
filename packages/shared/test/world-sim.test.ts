@@ -5,13 +5,20 @@ import {
   INTEREST_RADIUS,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   PLAYER_RADIUS,
+  SWING_COOLDOWN_TICKS,
   TICK_HZ,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
+import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
 import { AXE_PICKUP_ID, AXE_STUMP } from '../src/world/clearing';
-import { inputsToConsume, WorldSimulation, SnapshotFlag } from '../src/sim/world-sim';
+import {
+  inputsToConsume,
+  WorldSimulation,
+  SnapshotFlag,
+  type PersistedPlayer,
+} from '../src/sim/world-sim';
 
 /** Every world a test builds, so they can be handed back when it finishes. */
 const built: WorldSimulation[] = [];
@@ -367,5 +374,217 @@ describe('picking the axe up', () => {
     sim.addPlayer(1);
     expect(sim.inventoryOf(1)).toEqual({});
     expect(sim.persistablePlayers()[0]?.items).toEqual([]);
+  });
+});
+
+describe('chopping a tree down', () => {
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'axe', count: 1 }],
+  });
+
+  /** The first tree of this kind in the clearing. */
+  function findTree(sim: WorldSimulation, kind: 'oak' | 'birch' | 'pine') {
+    const tree = sim.clearing.props.find((prop) => prop.kind === kind);
+    if (tree === undefined) throw new Error(`no ${kind} in the clearing`);
+    return tree;
+  }
+
+  /** Stand a metre clear of the trunk, looking straight at it. */
+  function standAt(
+    sim: WorldSimulation,
+    netId: number,
+    tree: { x: number; z: number; kind: string; scale: number },
+  ): void {
+    const radius = PROP_KINDS[tree.kind as keyof typeof PROP_KINDS].colliderRadius * tree.scale;
+    sim.placePlayer(netId, { x: tree.x, y: 0, z: tree.z + radius + 1 }, 0);
+  }
+
+  /** Swing until the tree is down, or give up. Returns how many swings landed. */
+  function swingUntilFelled(sim: WorldSimulation, netId: number, treeId: number): number {
+    let landed = 0;
+    let seq = 1;
+    for (let tick = 0; tick < 200; tick++) {
+      sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      sim.step();
+      landed += sim.drainChopEvents().length;
+      if (sim.felledTreeIds().includes(treeId)) return landed;
+    }
+    throw new Error('the tree never came down');
+  }
+
+  it('does nothing at all without an axe', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    for (let i = 1; i <= 40; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
+      sim.step();
+    }
+
+    expect(sim.felledTreeIds()).toEqual([]);
+    expect(sim.drainChopEvents()).toEqual([]);
+    expect(sim.swingsLeftOn(tree.id)).toBe(choppingRuleFor(PROP_KINDS.oak)?.swingsToFell);
+  });
+
+  it('takes the number of swings the tree is worth', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    const expected = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
+    expect(swingUntilFelled(sim, 1, tree.id)).toBe(expected);
+  });
+
+  it('counts down as you go, so you can see it coming', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'birch');
+    standAt(sim, 1, tree);
+    const total = choppingRuleFor(PROP_KINDS.birch)?.swingsToFell ?? 0;
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
+    sim.step();
+
+    expect(sim.drainChopEvents()).toEqual([
+      { netId: 1, treeId: tree.id, swingsLeft: total - 1, logsGained: 0 },
+    ]);
+    expect(sim.swingsLeftOn(tree.id)).toBe(total - 1);
+  });
+
+  it('will not chop faster than the axe swings', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    // Hold the button down for one cooldown's worth of ticks.
+    let landed = 0;
+    for (let i = 1; i <= SWING_COOLDOWN_TICKS; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
+      sim.step();
+      landed += sim.drainChopEvents().length;
+    }
+    expect(landed).toBe(1);
+  });
+
+  it("puts the logs in the chopper's pack", () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+    swingUntilFelled(sim, 1, tree.id);
+
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(choppingRuleFor(PROP_KINDS.oak)?.logs);
+  });
+
+  it('leaves the tree down and out of the way', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    const index = sim.clearing.indexById.get(tree.id);
+    if (index === undefined) throw new Error('tree has no collider');
+    const before = sim.collision.colliders[index];
+    standAt(sim, 1, tree);
+    swingUntilFelled(sim, 1, tree.id);
+
+    const after = sim.collision.colliders[index];
+    expect(sim.felledTreeIds()).toEqual([tree.id]);
+    expect(sim.swingsLeftOn(tree.id)).toBeNull();
+    // You can walk where the trunk was: only the stump is left to bump into.
+    if (before?.shape !== 'cylinder' || after?.shape !== 'cylinder') {
+      throw new Error('expected cylinders');
+    }
+    expect(after.radius).toBeLessThan(before.radius);
+    expect(after.height).toBeLessThan(before.height);
+  });
+
+  it('cannot be chopped twice', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'birch');
+    standAt(sim, 1, tree);
+    swingUntilFelled(sim, 1, tree.id);
+    const logsAfterFirst = countOf(sim.inventoryOf(1), 'log');
+
+    for (let i = 500; i < 560; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
+      sim.step();
+    }
+    expect(sim.drainChopEvents()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(logsAfterFirst);
+    expect(sim.treeInReachOf({ x: tree.x, y: 0, z: tree.z + 1.5 }, 0)).toBeNull();
+  });
+
+  it('still fells a tree when the pack is full, and says no logs were gained', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      ...withAxe(1),
+      items: [
+        { item: 'axe', count: 1 },
+        { item: 'log', count: 10 },
+      ],
+    });
+    const tree = findTree(sim, 'birch');
+    standAt(sim, 1, tree);
+
+    let lastEvent: { swingsLeft: number; logsGained: number } | undefined;
+    let seq = 1;
+    for (let tick = 0; tick < 200; tick++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      sim.step();
+      for (const event of sim.drainChopEvents()) lastEvent = event;
+      if (sim.felledTreeIds().includes(tree.id)) break;
+    }
+
+    expect(sim.felledTreeIds()).toEqual([tree.id]);
+    expect(lastEvent?.swingsLeft).toBe(0);
+    expect(lastEvent?.logsGained).toBe(0);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(10);
+  });
+
+  it('remembers half-chopped trees and felled ones across a restart', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const felled = findTree(sim, 'birch');
+    standAt(sim, 1, felled);
+    swingUntilFelled(sim, 1, felled.id);
+
+    const halfDone = findTree(sim, 'oak');
+    standAt(sim, 1, halfDone);
+    sim.queueInput(1, createInput(900, 0, 0, 0, PlayerButton.Swing));
+    sim.step();
+    const swingsLeft = sim.swingsLeftOn(halfDone.id);
+
+    const saved = sim.persistableTrees();
+    const later = createWorld();
+    later.restoreTrees(saved);
+
+    expect(later.felledTreeIds()).toEqual([felled.id]);
+    expect(later.swingsLeftOn(halfDone.id)).toBe(swingsLeft);
+    // And the stump is still standing in for the trunk after the restart.
+    const index = later.clearing.indexById.get(felled.id);
+    const collider = index === undefined ? undefined : later.collision.colliders[index];
+    if (collider?.shape !== 'cylinder') throw new Error('expected a cylinder');
+    expect(collider.height).toBeLessThan(1);
+  });
+
+  it('reports each swing exactly once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'birch');
+    standAt(sim, 1, tree);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
+    sim.step();
+    expect(sim.drainChopEvents()).toHaveLength(1);
+    expect(sim.drainChopEvents()).toEqual([]);
   });
 });

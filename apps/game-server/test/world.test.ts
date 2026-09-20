@@ -5,9 +5,12 @@ import {
   AXE_PICKUP_ID,
   AXE_STUMP,
   PICKUP_REACH,
+  PROP_KINDS,
   PlayerButton,
   SNAPSHOT_HZ,
   TICK_HZ,
+  buildTestClearing,
+  choppingRuleFor,
 } from '@acorn/shared';
 
 import { sleep, TestClient, waitFor } from './helpers';
@@ -398,5 +401,126 @@ describe('a world that empties and fills again', () => {
     // The world picks up where it left off rather than starting over.
     expect(second.latestSnapshot().tick).toBeGreaterThanOrEqual(tickBefore);
     second.close();
+  });
+});
+
+describe('chopping a tree down', () => {
+  /** The landmark oak, which happens to stand right beside the axe's stump. */
+  function theOak(seed: number) {
+    const tree = buildTestClearing(seed).props.find((prop) => prop.kind === 'oak');
+    if (tree === undefined) throw new Error('no oak in the clearing');
+    return tree;
+  }
+
+  /** Face a spot and hold the swing, until the tree is down or we give up. */
+  async function chopUntilFelled(
+    client: TestClient,
+    target: { x: number; z: number },
+    treeId: number,
+  ): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 60; step++) {
+      if (client.felledTrees().includes(treeId)) return;
+      const here = client.positionOf(netId);
+      if (here === undefined) break;
+      const yaw = Math.atan2(-(target.x - here.x), -(target.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Swing);
+      await sleep(120);
+    }
+    throw new Error('the tree never came down');
+  }
+
+  it('refuses to chop for somebody with no axe', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'no-axe-here');
+    await walkToTheAxe(client);
+    // Standing by the stump, the oak is well within reach, but bare hands.
+    const oak = theOak(client.welcome().seed);
+    for (let i = 0; i < 12; i++) {
+      const here = client.positionOf(client.welcome().netId);
+      const yaw = here === undefined ? 0 : Math.atan2(-(oak.x - here.x), -(oak.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Swing);
+      await sleep(100);
+    }
+
+    expect(client.treeHits()).toEqual([]);
+    expect(client.felledTrees()).toEqual([]);
+    client.close();
+  });
+
+  it('fells the oak once you have the axe, and pays out logs', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-woodcutter');
+    await walkToTheAxe(client);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => client.inventory().length > 0);
+
+    const oak = theOak(client.welcome().seed);
+    await chopUntilFelled(client, oak, oak.id);
+
+    const swings = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
+    const logs = choppingRuleFor(PROP_KINDS.oak)?.logs ?? 0;
+
+    expect(client.felledTrees()).toEqual([oak.id]);
+    // One message per swing, counting down to the one that felled it.
+    const hits = client.treeHits().filter((hit) => hit.treeId === oak.id);
+    expect(hits).toHaveLength(swings);
+    expect(hits.map((hit) => hit.swingsLeft)).toEqual(
+      Array.from({ length: swings }, (_, i) => swings - 1 - i),
+    );
+
+    await waitFor('the logs', () => client.inventory().some((entry) => entry.item === 'log'));
+    expect(client.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'log', count: logs },
+    ]);
+    client.close();
+  });
+
+  it('leaves the stump there after logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'comes-back');
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().length > 0);
+
+    const oak = theOak(first.welcome().seed);
+    await chopUntilFelled(first, oak, oak.id);
+    await waitFor('the logs', () => first.inventory().some((entry) => entry.item === 'log'));
+    first.close();
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'comes-back');
+    await waitFor('the opening messages', () => second.countOfMessages('treesFelled') > 0);
+
+    // This is the Phase 1 promise: chop a tree, log out, come back, stump still there.
+    expect(second.felledTrees()).toEqual([oak.id]);
+    expect(second.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'log', count: choppingRuleFor(PROP_KINDS.oak)?.logs },
+    ]);
+    second.close();
+  });
+
+  it('shows a second player the tree coming down', async () => {
+    const worldId = nextWorldId();
+    const chopper = await TestClient.connect(worldId, 'the-chopper');
+    const watcher = await TestClient.connect(worldId, 'the-watcher');
+    await waitFor(
+      'both welcomes',
+      () => chopper.received.length > 0 && watcher.received.length > 0,
+    );
+
+    await walkToTheAxe(chopper);
+    chopper.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => chopper.inventory().length > 0);
+
+    const oak = theOak(chopper.welcome().seed);
+    await chopUntilFelled(chopper, oak, oak.id);
+
+    await waitFor('the watcher to see it fall', () => watcher.felledTrees().includes(oak.id));
+    expect(watcher.treeHits().length).toBeGreaterThan(0);
+    // Watching somebody chop does not fill your own pack.
+    expect(watcher.inventory()).toEqual([]);
+    chopper.close();
+    watcher.close();
   });
 });

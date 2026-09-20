@@ -29,10 +29,25 @@ export interface StumpShape {
   readonly height: number;
 }
 
+/**
+ * How a tree comes down. Only trees have one.
+ *
+ * Bigger trees take more swings and give more wood, so choosing what to chop
+ * means something even before there is anything to build with it.
+ */
+export interface ChoppingRule {
+  /** Swings with an axe before it falls. */
+  readonly swingsToFell: number;
+  /** Logs it gives when it does. */
+  readonly logs: number;
+}
+
 export interface PropKind {
   readonly id: PropKindId;
   readonly displayName: string;
   readonly shape: TreeShape | RockShape | StumpShape;
+  /** Present on trees, absent on everything else. */
+  readonly chopping?: ChoppingRule;
   /** What the player bumps into, as a radius in metres. */
   readonly colliderRadius: number;
   /** Triangle budget for the art that eventually replaces the placeholder. */
@@ -54,6 +69,7 @@ export const PROP_KINDS = {
       canopyRadius: 1.7,
       canopyHeight: 4.6,
     },
+    chopping: { swingsToFell: 4, logs: 3 },
     colliderRadius: 0.5,
     triangleBudget: 4000,
     placeholderColor: 0x3f6b4a,
@@ -68,6 +84,7 @@ export const PROP_KINDS = {
       canopyRadius: 1.35,
       canopyHeight: 3.2,
     },
+    chopping: { swingsToFell: 3, logs: 2 },
     colliderRadius: 0.42,
     triangleBudget: 4000,
     placeholderColor: 0x7fa85c,
@@ -82,6 +99,7 @@ export const PROP_KINDS = {
       canopyRadius: 2.5,
       canopyHeight: 3.4,
     },
+    chopping: { swingsToFell: 5, logs: 4 },
     colliderRadius: 0.72,
     triangleBudget: 4000,
     placeholderColor: 0x4e7c42,
@@ -139,4 +157,16 @@ export function propHeight(kind: PropKind): number {
   return kind.shape.family === 'tree'
     ? kind.shape.trunkHeight + kind.shape.canopyHeight
     : kind.shape.height;
+}
+
+/** What it takes to fell this kind of thing, or null if it is not a tree. */
+export function choppingRuleFor(kind: PropKind): ChoppingRule | null {
+  return kind.chopping ?? null;
+}
+
+/** The stump a felled tree of this size leaves behind. */
+export function stumpScaleFor(kind: PropKind, scale: number): number {
+  if (kind.shape.family !== 'tree') return scale;
+  // Roughly as wide as the trunk was, so the stump reads as its remains.
+  return (kind.shape.trunkRadius / PROP_KINDS.stump.shape.radius) * scale;
 }

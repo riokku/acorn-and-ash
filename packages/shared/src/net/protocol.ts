@@ -42,12 +42,19 @@ const SNAPSHOT_HEADER_BYTES = 14;
 export const MAX_INPUTS_PER_BUNDLE = 32;
 /** A snapshot never carries more than this many entities. */
 export const MAX_SNAPSHOT_ENTITIES = 255;
-/** Both of these lists carry a one-byte length, so 255 is the ceiling. */
+/** These lists carry a one-byte length, so 255 is the ceiling for each. */
 export const MAX_INVENTORY_ENTRIES = 255;
 export const MAX_TAKEN_PICKUPS = 255;
+/**
+ * The clearing has about a hundred and forty trees, so a world where every one
+ * is down still fits. Regrowth will keep this list shrinking; a bigger world
+ * will need a two-byte count.
+ */
+export const MAX_FELLED_TREES = 255;
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
+const BYTES_PER_FELLED_TREE = 2;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -276,6 +283,30 @@ export function encodePickupsTaken(pickupIds: readonly number[]): ArrayBuffer {
   return buffer;
 }
 
+export function encodeTreesFelled(treeIds: readonly number[]): ArrayBuffer {
+  const count = Math.min(treeIds.length, MAX_FELLED_TREES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_FELLED_TREE);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.TreesFelled);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    view.setUint16(offset, (treeIds[i] ?? 0) & 0xffff, true);
+    offset += BYTES_PER_FELLED_TREE;
+  }
+  return buffer;
+}
+
+export function encodeTreeHit(treeId: number, swingsLeft: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.TreeHit);
+  view.setUint16(1, treeId & 0xffff, true);
+  view.setUint8(3, clamp(Math.round(swingsLeft), 0, 255));
+  return buffer;
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -371,6 +402,26 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offset += BYTES_PER_TAKEN_PICKUP;
       }
       return { type: 'pickupsTaken', pickupIds };
+    }
+    case ServerMessageType.TreesFelled: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_FELLED_TREE) return null;
+      const treeIds: number[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        treeIds.push(view.getUint16(offset, true));
+        offset += BYTES_PER_FELLED_TREE;
+      }
+      return { type: 'treesFelled', treeIds };
+    }
+    case ServerMessageType.TreeHit: {
+      if (data.byteLength !== 4) return null;
+      return {
+        type: 'treeHit',
+        treeId: view.getUint16(1, true),
+        swingsLeft: view.getUint8(3),
+      };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

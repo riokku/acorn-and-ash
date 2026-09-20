@@ -12,7 +12,15 @@ import type { Terrain } from '../world/terrain';
 /** Everything the movement code needs to know about the world around it. */
 export interface CollisionWorld {
   readonly terrain: Terrain;
-  readonly colliders: readonly Collider[];
+  /**
+   * What the player bumps into.
+   *
+   * Not frozen, because the world changes: felling a tree swaps its trunk for
+   * the much smaller stump it leaves behind. Use `replaceCollider` rather than
+   * writing to this directly, so the client and the server change it the same
+   * way.
+   */
+  readonly colliders: Collider[];
   /** Players are held inside this square, measured from the origin. */
   readonly boundsHalfExtent: number;
 }
@@ -22,7 +30,13 @@ export function createCollisionWorld(
   colliders: readonly Collider[],
   boundsHalfExtent: number = PLAYABLE_HALF_EXTENT,
 ): CollisionWorld {
-  return { terrain, colliders, boundsHalfExtent };
+  return { terrain, colliders: [...colliders], boundsHalfExtent };
+}
+
+/** Swap one collider out, for when a tree comes down. */
+export function replaceCollider(world: CollisionWorld, index: number, collider: Collider): void {
+  if (index < 0 || index >= world.colliders.length) return;
+  world.colliders[index] = collider;
 }
 
 /**

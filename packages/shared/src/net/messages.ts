@@ -17,6 +17,8 @@ export const ServerMessageType = {
   Rejected: 0x14,
   Inventory: 0x15,
   PickupsTaken: 0x16,
+  TreesFelled: 0x17,
+  TreeHit: 0x18,
 } as const;
 
 export const RejectReason = {
@@ -89,6 +91,24 @@ export interface PickupsTakenMessage {
   readonly pickupIds: readonly number[];
 }
 
+/**
+ * Which trees are down.
+ *
+ * Like pickups, the clearing itself comes from the seed, so only the ids of the
+ * trees that have changed have to travel.
+ */
+export interface TreesFelledMessage {
+  readonly type: 'treesFelled';
+  readonly treeIds: readonly number[];
+}
+
+/** A swing landed. `swingsLeft` of zero means that was the one that felled it. */
+export interface TreeHitMessage {
+  readonly type: 'treeHit';
+  readonly treeId: number;
+  readonly swingsLeft: number;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -96,4 +116,6 @@ export type ServerMessage =
   | PongMessage
   | RejectedMessage
   | InventoryMessage
-  | PickupsTakenMessage;
+  | PickupsTakenMessage
+  | TreesFelledMessage
+  | TreeHitMessage;
