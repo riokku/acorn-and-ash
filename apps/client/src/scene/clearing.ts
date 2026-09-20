@@ -7,6 +7,7 @@ import {
   PROP_KINDS,
   choppingRuleFor,
   stumpFor,
+  treeAtGeneration,
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
@@ -23,9 +24,18 @@ export interface ClearingScene {
   cameraBlockers: THREE.Mesh;
   /** Hide whatever the server says has already been picked up. */
   setTakenPickups(taken: ReadonlySet<number>): void;
-  /** Swap felled trees for the stumps they left. */
-  setFelledTrees(felled: ReadonlySet<number>): void;
+  /**
+   * Put the trees where the server says they are: felled ones as stumps, grown
+   * ones back at whatever size this generation of them is.
+   */
+  setTreeStates(states: ReadonlyMap<number, TreeAppearance>): void;
   dispose(): void;
+}
+
+/** What the server says about one tree that is not as the seed left it. */
+export interface TreeAppearance {
+  readonly generation: number;
+  readonly felled: boolean;
 }
 
 /** A matrix that draws nothing, used to take an instance out of the world. */
@@ -90,7 +100,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const stumpSlotOf = new Map<number, number>();
   trees.forEach((tree, index) => stumpSlotOf.set(tree.id, index));
 
-  let cameraBlockers = createCameraBlockers(blockersFor(clearing, new Set()));
+  let cameraBlockers = createCameraBlockers(blockersFor(clearing, new Map()));
   // Never drawn: it exists so the camera can feel the trees.
   cameraBlockers.visible = false;
   group.add(cameraBlockers);
@@ -102,7 +112,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     group.add(model);
   }
 
-  const felledNow = new Set<number>();
+  /** What is drawn right now, so nothing is rebuilt that has not changed. */
+  const drawn = new Map<number, TreeAppearance>();
 
   const scene: ClearingScene = {
     group,
@@ -110,18 +121,22 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     setTakenPickups: (taken) => {
       for (const [id, model] of pickups) model.visible = !taken.has(id);
     },
-    setFelledTrees: (felled) => {
+    setTreeStates: (states) => {
       let changed = false;
+
       for (const tree of trees) {
-        const isDown = felled.has(tree.id);
-        if (isDown === felledNow.has(tree.id)) continue;
+        const want = states.get(tree.id) ?? UNTOUCHED;
+        const have = drawn.get(tree.id) ?? UNTOUCHED;
+        if (want.felled === have.felled && want.generation === have.generation) continue;
         changed = true;
+
+        const grown = treeAtGeneration(clearing.seed, tree, want.generation);
 
         const slot = standing.get(tree.id);
         if (slot !== undefined) {
           for (const part of slot.parts) {
-            if (isDown) part.mesh.setMatrixAt(slot.index, HIDDEN);
-            else placeOneInstance(part, slot.index, tree);
+            if (want.felled) part.mesh.setMatrixAt(slot.index, HIDDEN);
+            else placeOneInstance(part, slot.index, grown);
             part.mesh.instanceMatrix.needsUpdate = true;
           }
         }
@@ -129,22 +144,22 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         const stumpSlot = stumpSlotOf.get(tree.id);
         if (stumpSlot !== undefined) {
           for (const part of freshStumps) {
-            if (isDown) placeOneInstance(part, stumpSlot, stumpFor(tree));
+            if (want.felled) placeOneInstance(part, stumpSlot, stumpFor(grown));
             else part.mesh.setMatrixAt(stumpSlot, HIDDEN);
             part.mesh.instanceMatrix.needsUpdate = true;
           }
         }
 
-        if (isDown) felledNow.add(tree.id);
-        else felledNow.delete(tree.id);
+        drawn.set(tree.id, want);
       }
 
       // The camera should stop shying away from a trunk that is no longer
-      // there. Rebuilt only when the set actually changes, which is rare.
+      // there, and start minding one that has grown back. Rebuilt only when
+      // something actually changed, which is rare.
       if (!changed) return;
       group.remove(cameraBlockers);
       cameraBlockers.geometry.dispose();
-      cameraBlockers = createCameraBlockers(blockersFor(clearing, felledNow));
+      cameraBlockers = createCameraBlockers(blockersFor(clearing, drawn));
       cameraBlockers.visible = false;
       group.add(cameraBlockers);
       scene.cameraBlockers = cameraBlockers;
@@ -157,6 +172,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 
   return scene;
 }
+
+const UNTOUCHED: TreeAppearance = { generation: 0, felled: false };
 
 /** Put one prop into every part of its instanced mesh. */
 function placeInstance(parts: PropPart[], index: number, prop: PlacedProp): void {
@@ -173,10 +190,15 @@ function placeOneInstance(part: PropPart, index: number, prop: PlacedProp): void
 }
 
 /** A cylinder for everything still standing, with stumps where trees came down. */
-function blockersFor(clearing: Clearing, felled: ReadonlySet<number>): THREE.BufferGeometry[] {
+function blockersFor(
+  clearing: Clearing,
+  states: ReadonlyMap<number, TreeAppearance>,
+): THREE.BufferGeometry[] {
   return clearing.props.map((prop) => {
-    const standing = felled.has(prop.id) ? stumpFor(prop) : prop;
-    return blockerGeometry(PROP_KINDS[standing.kind], standing);
+    const state = states.get(prop.id);
+    const grown = treeAtGeneration(clearing.seed, prop, state?.generation ?? 0);
+    const here: PlacedProp = state?.felled === true ? stumpFor(grown) : grown;
+    return blockerGeometry(PROP_KINDS[here.kind], here);
   });
 }
 

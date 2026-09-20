@@ -6,16 +6,19 @@ import {
   SPAWN_POSITION,
   buildTestClearing,
   choppingRuleFor,
+  colliderForProp,
   createCollisionWorld,
   createFlatTerrain,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
+  treeAtGeneration,
   treeInReach,
   vec3,
   type Clearing,
   type CollisionWorld,
   type ItemId,
+  type PlacedProp,
   type ServerMessage,
   type Vec3,
 } from '@acorn/shared';
@@ -53,6 +56,8 @@ export interface GameDebug {
   nearbyItem(): string | null;
   /** Trees the server says are down. */
   felledTrees(): number[];
+  /** How many times each changed tree has grown back. */
+  treeGenerations(): Array<{ id: number; generation: number }>;
   /** Every tree in the clearing, with what it takes to fell it. */
   trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
   /** The tree a swing would land on right now, if any. */
@@ -95,9 +100,14 @@ export class Game {
   private readonly takenPickups = new Set<number>();
   private carrying: readonly { item: ItemId; count: number }[] = [];
   private nearbyItem: ItemId | null = null;
-  /** Trees the server says are down, and how far along the others are. */
-  private readonly felledTrees = new Set<number>();
+  /**
+   * What the server says about every tree that is not as the seed left it, and
+   * how far along the one being chopped is.
+   */
+  private readonly treeStates = new Map<number, { generation: number; felled: boolean }>();
   private readonly swingsLeft = new Map<number, number>();
+  /** The props as they stand: a regrown tree is a different size from the seeded one. */
+  private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
   private aimedTree: { name: string; swingsLeft: number } | null = null;
   private localPlayer: LocalPlayer | null = null;
@@ -165,7 +175,9 @@ export class Game {
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
-      felledTrees: () => [...this.felledTrees],
+      felledTrees: () => [...this.treeStates].filter(([, state]) => state.felled).map(([id]) => id),
+      treeGenerations: () =>
+        [...this.treeStates].map(([id, state]) => ({ id, generation: state.generation })),
       trees: () =>
         (this.clearing?.props ?? [])
           .map((prop) => ({
@@ -269,10 +281,15 @@ export class Game {
         this.clearingScene?.setTakenPickups(this.takenPickups);
         break;
       }
-      case 'treesFelled': {
-        this.felledTrees.clear();
-        for (const id of message.treeIds) this.felledTrees.add(id);
-        this.applyFelledTrees();
+      case 'treeStates': {
+        this.treeStates.clear();
+        for (const tree of message.trees) {
+          this.treeStates.set(tree.treeId, {
+            generation: tree.generation,
+            felled: tree.felled,
+          });
+        }
+        this.applyTreeStates();
         break;
       }
       case 'treeHit': {
@@ -310,7 +327,7 @@ export class Game {
     const collision = createCollisionWorld(createFlatTerrain(0), clearing.colliders);
     this.collision = collision;
     this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
-    this.applyFelledTrees();
+    this.applyTreeStates();
 
     this.localCharacter = createCharacter(colorForPlayer(this.selfNetId || 1));
     this.scene.add(this.localCharacter.group);
@@ -319,21 +336,36 @@ export class Game {
   }
 
   /**
-   * Take the felled trees out of the world we walk around in as well as the one
-   * we look at, so a stump stops blocking like a trunk.
+   * Put the trees where the server says they are, in the world we walk around
+   * as well as the one we look at: a stump stops blocking like a trunk, and a
+   * tree that grew back starts blocking again at its new size.
    */
-  private applyFelledTrees(): void {
-    this.clearingScene?.setFelledTrees(this.felledTrees);
+  private applyTreeStates(): void {
+    this.clearingScene?.setTreeStates(this.treeStates);
 
     const clearing = this.clearing;
     const collision = this.collision;
     if (clearing === null || collision === null) return;
-    for (const treeId of this.felledTrees) {
+
+    const standing = [...clearing.props];
+    for (const [treeId, state] of this.treeStates) {
       const index = clearing.indexById.get(treeId);
-      const tree = index === undefined ? undefined : clearing.props[index];
-      if (index === undefined || tree === undefined) continue;
-      replaceCollider(collision, index, stumpColliderFor(tree));
+      const original = index === undefined ? undefined : clearing.props[index];
+      if (index === undefined || original === undefined) continue;
+
+      const grown = treeAtGeneration(clearing.seed, original, state.generation);
+      standing[index] = grown;
+      replaceCollider(
+        collision,
+        index,
+        state.felled ? stumpColliderFor(grown) : colliderForProp(grown),
+      );
     }
+    this.standingProps = standing;
+  }
+
+  private isFelled(treeId: number): boolean {
+    return this.treeStates.get(treeId)?.felled === true;
   }
 
   private removeRemote(netId: number): void {
@@ -422,8 +454,8 @@ export class Game {
     const target =
       this.clearing === null
         ? null
-        : treeInReach(player.motion.position, camera.look.yaw, this.clearing.props, (id) =>
-            this.felledTrees.has(id),
+        : treeInReach(player.motion.position, camera.look.yaw, this.standingProps, (id) =>
+            this.isFelled(id),
           );
     this.aimedTree =
       target === null

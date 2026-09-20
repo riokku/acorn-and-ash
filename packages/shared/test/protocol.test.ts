@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_PLAYERS_PER_WORLD, SNAPSHOT_HZ, TICK_HZ } from '../src/constants';
+import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../src/constants';
 import { RejectReason } from '../src/net/messages';
 import {
   decodeClientMessage,
@@ -10,7 +10,7 @@ import {
   encodePickupsTaken,
   encodePing,
   encodeTreeHit,
-  encodeTreesFelled,
+  encodeTreeStates,
   encodePlayerLeft,
   encodePong,
   encodeRejected,
@@ -255,28 +255,55 @@ describe('telling players which pickups are gone', () => {
   });
 });
 
-describe('telling players which trees are down', () => {
+describe('telling players how the trees stand', () => {
+  const trees = [
+    { treeId: 3, generation: 0, felled: true },
+    { treeId: 17, generation: 2, felled: false },
+    { treeId: 140, generation: 1, felled: true },
+  ];
+
   it('survives a round trip', () => {
-    expect(decodeServerMessage(encodeTreesFelled([3, 17, 140]))).toEqual({
-      type: 'treesFelled',
-      treeIds: [3, 17, 140],
+    expect(decodeServerMessage(encodeTreeStates(trees))).toEqual({
+      type: 'treeStates',
+      trees,
     });
   });
 
   it('says so plainly when the clearing is untouched', () => {
-    expect(decodeServerMessage(encodeTreesFelled([]))).toEqual({
-      type: 'treesFelled',
-      treeIds: [],
+    expect(decodeServerMessage(encodeTreeStates([]))).toEqual({
+      type: 'treeStates',
+      trees: [],
     });
   });
 
-  it('carries a whole clearing of felled trees in under three hundred bytes', () => {
-    const everyTree = Array.from({ length: 141 }, (_, i) => i + 1);
-    expect(encodeTreesFelled(everyTree).byteLength).toBeLessThan(300);
+  it('keeps a tree that grew back apart from one that is still down', () => {
+    const decoded = decodeServerMessage(encodeTreeStates(trees));
+    if (decoded?.type !== 'treeStates') throw new Error('wrong message');
+    expect(decoded.trees.filter((tree) => tree.felled).map((tree) => tree.treeId)).toEqual([
+      3, 140,
+    ]);
+    expect(decoded.trees.find((tree) => tree.treeId === 17)?.generation).toBe(2);
+  });
+
+  it('will not let a generation past the one byte it travels in', () => {
+    const decoded = decodeServerMessage(
+      encodeTreeStates([{ treeId: 4, generation: MAX_TREE_GENERATION + 5, felled: false }]),
+    );
+    if (decoded?.type !== 'treeStates') throw new Error('expected tree states');
+    expect(decoded.trees[0]?.generation).toBe(MAX_TREE_GENERATION);
+  });
+
+  it('carries a whole clearing of changed trees in under six hundred bytes', () => {
+    const everyTree = Array.from({ length: 141 }, (_, i) => ({
+      treeId: i + 1,
+      generation: 3,
+      felled: i % 2 === 0,
+    }));
+    expect(encodeTreeStates(everyTree).byteLength).toBeLessThan(600);
   });
 
   it('refuses a message that has been cut short', () => {
-    const encoded = encodeTreesFelled([1, 2]);
+    const encoded = encodeTreeStates(trees);
     expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
   });
 });

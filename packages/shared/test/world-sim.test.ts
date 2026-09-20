@@ -4,12 +4,15 @@ import {
   DEFAULT_WORLD_SEED,
   INTEREST_RADIUS,
   MAX_QUEUED_INPUTS_PER_PLAYER,
+  MAX_TREE_GENERATION,
   PLAYER_RADIUS,
   SWING_COOLDOWN_TICKS,
   TICK_HZ,
+  TICK_MILLISECONDS,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
+import { regrowDueAtMs } from '../src/sim/regrowth';
 import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
 import { AXE_PICKUP_ID, AXE_STUMP } from '../src/world/clearing';
@@ -22,6 +25,15 @@ import {
 
 /** Every world a test builds, so they can be handed back when it finishes. */
 const built: WorldSimulation[] = [];
+
+/**
+ * A clock the tests drive by hand.
+ *
+ * Real time only matters to regrowth, and a test that wants to watch an hour
+ * pass should not have to wait for one.
+ */
+let clockMs = 1_700_000_000_000;
+const tickClock = (): number => (clockMs += TICK_MILLISECONDS);
 
 afterEach(() => {
   for (const sim of built.splice(0)) sim.dispose();
@@ -46,7 +58,7 @@ function drive(
   let seq = startSeq;
   for (let i = 0; i < ticks; i++) {
     sim.queueInput(netId, createInput(seq++, moveX, moveZ, 0, buttons));
-    sim.step();
+    sim.step(tickClock());
   }
   return seq;
 }
@@ -113,7 +125,7 @@ describe('the world simulation', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     drive(sim, 1, 0, 1, 20);
-    for (let i = 0; i < 40; i++) sim.step();
+    for (let i = 0; i < 40; i++) sim.step(tickClock());
 
     const motion = sim.readPlayer(1);
     if (!motion) throw new Error('missing player');
@@ -128,7 +140,7 @@ describe('the world simulation', () => {
 
     // A replayed old packet must not move the player again.
     sim.queueInput(1, createInput(3, 0, 1, 0));
-    sim.step();
+    sim.step(tickClock());
     expect(sim.lastProcessedSeq(1)).toBe(10);
     const afterReplay = sim.readPlayer(1)?.position.z;
     if (afterTen === undefined || afterReplay === undefined) throw new Error('missing player');
@@ -222,7 +234,7 @@ describe('the world simulation', () => {
     let highest = 0;
     for (let i = 0; i < 200; i++) {
       sim.queueInput(1, createInput(i + 1, 0, 1, 0, PlayerButton.Jump | PlayerButton.Sprint));
-      sim.step();
+      sim.step(tickClock());
       highest = Math.max(highest, sim.readPlayer(1)?.position.y ?? 0);
     }
     expect(highest).toBeLessThan(1.5);
@@ -247,7 +259,7 @@ describe('the world simulation', () => {
       for (let i = 1; i <= 100; i++) {
         sim.queueInput(1, createInput(i, Math.sin(i * 0.2), 1, i * 0.03));
         sim.queueInput(2, createInput(i, 1, Math.cos(i * 0.11), -i * 0.02));
-        sim.step();
+        sim.step(tickClock());
       }
       return [sim.readPlayer(1), sim.readPlayer(2)];
     };
@@ -280,7 +292,7 @@ describe('picking the axe up', () => {
   function reachForTheAxe(sim: WorldSimulation, netId: number, seq = 1): void {
     sim.placePlayer(netId, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
     sim.queueInput(netId, createInput(seq, 0, 0, 0, PlayerButton.Interact));
-    sim.step();
+    sim.step(tickClock());
   }
 
   it('does nothing while the player is somewhere else', () => {
@@ -328,7 +340,7 @@ describe('picking the axe up', () => {
     sim.placePlayer(2, { x: AXE_STUMP.x - 1, y: 0, z: AXE_STUMP.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
-    sim.step();
+    sim.step(tickClock());
 
     const held = countOf(sim.inventoryOf(1), 'axe') + countOf(sim.inventoryOf(2), 'axe');
     expect(held).toBe(1);
@@ -342,7 +354,7 @@ describe('picking the axe up', () => {
     sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
     for (let i = 1; i <= 30; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Interact));
-      sim.step();
+      sim.step(tickClock());
     }
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
     expect(sim.drainPickupEvents()).toHaveLength(1);
@@ -410,7 +422,7 @@ describe('chopping a tree down', () => {
     let seq = 1;
     for (let tick = 0; tick < 200; tick++) {
       sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
-      sim.step();
+      sim.step(tickClock());
       landed += sim.drainChopEvents().length;
       if (sim.felledTreeIds().includes(treeId)) return landed;
     }
@@ -425,7 +437,7 @@ describe('chopping a tree down', () => {
 
     for (let i = 1; i <= 40; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
-      sim.step();
+      sim.step(tickClock());
     }
 
     expect(sim.felledTreeIds()).toEqual([]);
@@ -451,7 +463,7 @@ describe('chopping a tree down', () => {
     const total = choppingRuleFor(PROP_KINDS.birch)?.swingsToFell ?? 0;
 
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
-    sim.step();
+    sim.step(tickClock());
 
     expect(sim.drainChopEvents()).toEqual([
       { netId: 1, treeId: tree.id, swingsLeft: total - 1, logsGained: 0 },
@@ -469,7 +481,7 @@ describe('chopping a tree down', () => {
     let landed = 0;
     for (let i = 1; i <= SWING_COOLDOWN_TICKS; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
-      sim.step();
+      sim.step(tickClock());
       landed += sim.drainChopEvents().length;
     }
     expect(landed).toBe(1);
@@ -516,7 +528,7 @@ describe('chopping a tree down', () => {
 
     for (let i = 500; i < 560; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
-      sim.step();
+      sim.step(tickClock());
     }
     expect(sim.drainChopEvents()).toEqual([]);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(logsAfterFirst);
@@ -539,7 +551,7 @@ describe('chopping a tree down', () => {
     let seq = 1;
     for (let tick = 0; tick < 200; tick++) {
       sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
-      sim.step();
+      sim.step(tickClock());
       for (const event of sim.drainChopEvents()) lastEvent = event;
       if (sim.felledTreeIds().includes(tree.id)) break;
     }
@@ -560,7 +572,7 @@ describe('chopping a tree down', () => {
     const halfDone = findTree(sim, 'oak');
     standAt(sim, 1, halfDone);
     sim.queueInput(1, createInput(900, 0, 0, 0, PlayerButton.Swing));
-    sim.step();
+    sim.step(tickClock());
     const swingsLeft = sim.swingsLeftOn(halfDone.id);
 
     const saved = sim.persistableTrees();
@@ -583,8 +595,196 @@ describe('chopping a tree down', () => {
     standAt(sim, 1, tree);
 
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
-    sim.step();
+    sim.step(tickClock());
     expect(sim.drainChopEvents()).toHaveLength(1);
     expect(sim.drainChopEvents()).toEqual([]);
+  });
+});
+
+describe('trees growing back', () => {
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'axe', count: 1 }],
+  });
+
+  function findTree(sim: WorldSimulation, kind: 'oak' | 'birch' | 'pine') {
+    const tree = sim.clearing.props.find((prop) => prop.kind === kind);
+    if (tree === undefined) throw new Error(`no ${kind} in the clearing`);
+    return tree;
+  }
+
+  /** Chop a tree down and report when it is due back. */
+  function fell(sim: WorldSimulation, netId: number, kind: 'oak' | 'birch' | 'pine') {
+    const tree = findTree(sim, kind);
+    const radius = PROP_KINDS[tree.kind].colliderRadius * tree.scale;
+    sim.placePlayer(netId, { x: tree.x, y: 0, z: tree.z + radius + 1 }, 0);
+
+    let seq = 1;
+    let felledAt = 0;
+    for (let tick = 0; tick < 200; tick++) {
+      sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      felledAt = tickClock();
+      sim.step(felledAt);
+      if (sim.isFelled(tree.id)) break;
+    }
+    if (!sim.isFelled(tree.id)) throw new Error('the tree never came down');
+    return { tree, dueAt: regrowDueAtMs(sim.seed, tree.id, 0, felledAt) };
+  }
+
+  it('leaves the stump alone until its time is up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+
+    expect(sim.regrowTrees(dueAt - 60_000)).toEqual([]);
+    expect(sim.isFelled(tree.id)).toBe(true);
+  });
+
+  it('brings the tree back once it is due', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    // Stand well clear so the spot is free.
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+
+    expect(sim.regrowTrees(dueAt)).toEqual([{ treeId: tree.id, generation: 1 }]);
+    expect(sim.isFelled(tree.id)).toBe(false);
+    expect(sim.generationOf(tree.id)).toBe(1);
+  });
+
+  it('reports each return exactly once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { dueAt } = fell(sim, 1, 'birch');
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+
+    expect(sim.regrowTrees(dueAt)).toHaveLength(1);
+    expect(sim.regrowTrees(dueAt + 60_000)).toEqual([]);
+  });
+
+  it('will not grow through somebody standing on the spot', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    sim.placePlayer(1, { x: tree.x, y: 0, z: tree.z }, 0);
+
+    // Long overdue, but occupied.
+    expect(sim.regrowTrees(dueAt + 10 * 60_000)).toEqual([]);
+    expect(sim.isFelled(tree.id)).toBe(true);
+
+    // It comes back the moment they wander off.
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    expect(sim.regrowTrees(dueAt + 10 * 60_000)).toHaveLength(1);
+    expect(sim.isFelled(tree.id)).toBe(false);
+  });
+
+  it('comes back as a tree you can bump into and chop again', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    const index = sim.clearing.indexById.get(tree.id);
+    if (index === undefined) throw new Error('tree has no collider');
+
+    const asStump = sim.collision.colliders[index];
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    sim.regrowTrees(dueAt);
+    const asTree = sim.collision.colliders[index];
+
+    if (asStump?.shape !== 'cylinder' || asTree?.shape !== 'cylinder') {
+      throw new Error('expected cylinders');
+    }
+    expect(asTree.height).toBeGreaterThan(asStump.height);
+    expect(sim.swingsLeftOn(tree.id)).toBe(choppingRuleFor(PROP_KINDS.birch)?.swingsToFell);
+
+    // And reach finds it again, at whatever size it came back.
+    const inFront = { x: tree.x, y: 0, z: tree.z + asTree.radius + 1 };
+    expect(sim.treeInReachOf(inFront, 0)?.prop.id).toBe(tree.id);
+  });
+
+  it('comes back a different size from the one that was cut', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    const index = sim.clearing.indexById.get(tree.id);
+    if (index === undefined) throw new Error('tree has no collider');
+
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    sim.regrowTrees(dueAt);
+
+    const grown = sim.collision.colliders[index];
+    if (grown?.shape !== 'cylinder') throw new Error('expected a cylinder');
+    const originalRadius = PROP_KINDS.birch.colliderRadius * tree.scale;
+    expect(grown.radius).not.toBeCloseTo(originalRadius, 6);
+  });
+
+  it('counts the wait through a world that was asleep', () => {
+    // The whole point: a world with nobody in it does not tick, so a tree
+    // felled before bed has to be back by morning.
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    const saved = sim.persistableTrees();
+    expect(saved.find((entry) => entry.treeId === tree.id)?.felledAtMs).toBeGreaterThan(0);
+
+    const later = createWorld();
+    later.restoreTrees(saved);
+    expect(later.isFelled(tree.id)).toBe(true);
+
+    // Nobody is in this world at all, and the due time has long passed.
+    expect(later.regrowTrees(dueAt + 60 * 60_000)).toEqual([{ treeId: tree.id, generation: 1 }]);
+  });
+
+  it('remembers how many times a spot has grown back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    sim.regrowTrees(dueAt);
+
+    const saved = sim.persistableTrees().find((entry) => entry.treeId === tree.id);
+    expect(saved?.generation).toBe(1);
+    expect(saved?.felled).toBe(false);
+
+    const later = createWorld();
+    later.restoreTrees(sim.persistableTrees());
+    expect(later.generationOf(tree.id)).toBe(1);
+    // And it is the same tree as the one that grew, not the seeded one.
+    const index = later.clearing.indexById.get(tree.id);
+    const restored = index === undefined ? undefined : later.collision.colliders[index];
+    const inThisWorld = index === undefined ? undefined : sim.collision.colliders[index];
+    expect(restored).toEqual(inThisWorld);
+  });
+
+  it('stops counting at the cap instead of growing a tree nobody else can draw', () => {
+    // The count is what both ends work the size out from, and it travels in one
+    // byte. A spot chopped past that goes on growing trees; it simply stops
+    // counting, so the server and every browser stay of one mind about it.
+    const sim = createWorld();
+    const tree = findTree(sim, 'birch');
+    const felledAtMs = 1_700_000_000_000;
+    sim.restoreTrees([
+      {
+        treeId: tree.id,
+        swingsTaken: 0,
+        felled: true,
+        felledAtMs,
+        generation: MAX_TREE_GENERATION,
+      },
+    ]);
+
+    const dueAt = regrowDueAtMs(sim.seed, tree.id, MAX_TREE_GENERATION, felledAtMs);
+    expect(sim.regrowTrees(dueAt)).toEqual([{ treeId: tree.id, generation: MAX_TREE_GENERATION }]);
+    expect(sim.isFelled(tree.id)).toBe(false);
+    expect(sim.generationOf(tree.id)).toBe(MAX_TREE_GENERATION);
+  });
+
+  it('leaves untouched trees out of storage entirely', () => {
+    const sim = createWorld();
+    expect(sim.persistableTrees()).toEqual([]);
+    expect(sim.changedTrees()).toEqual([]);
   });
 });

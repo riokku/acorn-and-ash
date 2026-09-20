@@ -27,6 +27,7 @@ export * from './sim/player';
 export * from './sim/inventory';
 export * from './sim/pickups';
 export * from './sim/chopping';
+export * from './sim/regrowth';
 export * from './sim/world-sim';
 
 export * from './net/messages';

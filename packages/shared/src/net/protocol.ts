@@ -9,7 +9,7 @@
  * 20:1: one message carrying three inputs costs a twentieth of three messages.
  */
 
-import { SNAPSHOT_HZ, TICK_HZ } from '../constants';
+import { MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
@@ -22,6 +22,7 @@ import {
   type ClientMessage,
   type RejectReasonCode,
   type ServerMessage,
+  type TreeState,
 } from './messages';
 
 /** Positions are sent as whole centimetres. */
@@ -47,14 +48,15 @@ export const MAX_INVENTORY_ENTRIES = 255;
 export const MAX_TAKEN_PICKUPS = 255;
 /**
  * The clearing has about a hundred and forty trees, so a world where every one
- * is down still fits. Regrowth will keep this list shrinking; a bigger world
- * will need a two-byte count.
+ * has been touched still fits. A bigger world will need a two-byte count.
  */
-export const MAX_FELLED_TREES = 255;
+export const MAX_CHANGED_TREES = 255;
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
-const BYTES_PER_FELLED_TREE = 2;
+/** treeId(2) + generation(1) + flags(1) */
+const BYTES_PER_TREE_STATE = 4;
+const TREE_FELLED_FLAG = 1;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -283,17 +285,21 @@ export function encodePickupsTaken(pickupIds: readonly number[]): ArrayBuffer {
   return buffer;
 }
 
-export function encodeTreesFelled(treeIds: readonly number[]): ArrayBuffer {
-  const count = Math.min(treeIds.length, MAX_FELLED_TREES);
-  const buffer = new ArrayBuffer(2 + count * BYTES_PER_FELLED_TREE);
+export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
+  const count = Math.min(trees.length, MAX_CHANGED_TREES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_TREE_STATE);
   const view = new DataView(buffer);
-  view.setUint8(0, ServerMessageType.TreesFelled);
+  view.setUint8(0, ServerMessageType.TreeStates);
   view.setUint8(1, count);
 
   let offset = 2;
   for (let i = 0; i < count; i++) {
-    view.setUint16(offset, (treeIds[i] ?? 0) & 0xffff, true);
-    offset += BYTES_PER_FELLED_TREE;
+    const tree = trees[i];
+    if (tree === undefined) break;
+    view.setUint16(offset, tree.treeId & 0xffff, true);
+    view.setUint8(offset + 2, clamp(Math.round(tree.generation), 0, MAX_TREE_GENERATION));
+    view.setUint8(offset + 3, tree.felled ? TREE_FELLED_FLAG : 0);
+    offset += BYTES_PER_TREE_STATE;
   }
   return buffer;
 }
@@ -403,17 +409,21 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       return { type: 'pickupsTaken', pickupIds };
     }
-    case ServerMessageType.TreesFelled: {
+    case ServerMessageType.TreeStates: {
       if (data.byteLength < 2) return null;
       const count = view.getUint8(1);
-      if (data.byteLength !== 2 + count * BYTES_PER_FELLED_TREE) return null;
-      const treeIds: number[] = [];
+      if (data.byteLength !== 2 + count * BYTES_PER_TREE_STATE) return null;
+      const trees: TreeState[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
-        treeIds.push(view.getUint16(offset, true));
-        offset += BYTES_PER_FELLED_TREE;
+        trees.push({
+          treeId: view.getUint16(offset, true),
+          generation: view.getUint8(offset + 2),
+          felled: (view.getUint8(offset + 3) & TREE_FELLED_FLAG) !== 0,
+        });
+        offset += BYTES_PER_TREE_STATE;
       }
-      return { type: 'treesFelled', treeIds };
+      return { type: 'treeStates', trees };
     }
     case ServerMessageType.TreeHit: {
       if (data.byteLength !== 4) return null;

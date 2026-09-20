@@ -7,10 +7,18 @@ import { defineConfig } from 'vitest/config';
  * the way they will when the game is deployed.
  */
 export default defineConfig({
-  plugins: [cloudflareTest({ wrangler: { configPath: './wrangler.jsonc' } })],
+  plugins: [
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.jsonc' },
+      // Trees come back in seconds here rather than the minute a local run
+      // uses, so a test can watch one return without dawdling. Not shorter:
+      // a tree that returns mid-chop would make the felling tests flaky.
+      miniflare: { bindings: { WORLD_REGROW_SECONDS: '5' } },
+    }),
+  ],
   test: {
     include: ['test/**/*.test.ts'],
     // The tick loop runs in real time, so these tests spend real seconds waiting.
-    testTimeout: 20_000,
+    testTimeout: 30_000,
   },
 });

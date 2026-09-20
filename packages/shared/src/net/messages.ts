@@ -17,7 +17,7 @@ export const ServerMessageType = {
   Rejected: 0x14,
   Inventory: 0x15,
   PickupsTaken: 0x16,
-  TreesFelled: 0x17,
+  TreeStates: 0x17,
   TreeHit: 0x18,
 } as const;
 
@@ -91,15 +91,25 @@ export interface PickupsTakenMessage {
   readonly pickupIds: readonly number[];
 }
 
+/** One tree that is not as the seed left it. */
+export interface TreeState {
+  readonly treeId: number;
+  /** How many times this spot has grown back. It decides the tree's size. */
+  readonly generation: number;
+  readonly felled: boolean;
+}
+
 /**
- * Which trees are down.
+ * Every tree that has changed since the clearing was built.
  *
- * Like pickups, the clearing itself comes from the seed, so only the ids of the
- * trees that have changed have to travel.
+ * The clearing itself comes from the seed, so a tree nobody has touched is not
+ * in here at all. A tree that has grown back is, because its size is not the
+ * one the seed gave it: both ends work that size out from the generation
+ * rather than it being sent.
  */
-export interface TreesFelledMessage {
-  readonly type: 'treesFelled';
-  readonly treeIds: readonly number[];
+export interface TreeStatesMessage {
+  readonly type: 'treeStates';
+  readonly trees: readonly TreeState[];
 }
 
 /** A swing landed. `swingsLeft` of zero means that was the one that felled it. */
@@ -117,5 +127,5 @@ export type ServerMessage =
   | RejectedMessage
   | InventoryMessage
   | PickupsTakenMessage
-  | TreesFelledMessage
+  | TreeStatesMessage
   | TreeHitMessage;

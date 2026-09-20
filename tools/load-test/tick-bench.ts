@@ -66,7 +66,7 @@ function measure(playerCount: number): Result {
   /** One tick exactly as the Durable Object runs it, snapshots included. */
   const runTick = (): void => {
     feedInputs();
-    simulation.step();
+    simulation.step(Date.now());
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       for (let i = 1; i <= playerCount; i++) {
         const entities = simulation.snapshotFor(i, scratch);

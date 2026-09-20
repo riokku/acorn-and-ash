@@ -1,8 +1,9 @@
-import { SELF } from 'cloudflare:test';
+import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 import {
   AXE_PICKUP_ID,
+  DEFAULT_WORLD_SEED,
   AXE_STUMP,
   PICKUP_REACH,
   PROP_KINDS,
@@ -489,7 +490,7 @@ describe('chopping a tree down', () => {
     await sleep(300);
 
     const second = await TestClient.connect(worldId, 'comes-back');
-    await waitFor('the opening messages', () => second.countOfMessages('treesFelled') > 0);
+    await waitFor('the opening messages', () => second.countOfMessages('treeStates') > 0);
 
     // This is the Phase 1 promise: chop a tree, log out, come back, stump still there.
     expect(second.felledTrees()).toEqual([oak.id]);
@@ -523,4 +524,134 @@ describe('chopping a tree down', () => {
     chopper.close();
     watcher.close();
   });
+});
+
+describe('a world played before trees grew back', () => {
+  it('adds what its tree table is missing instead of falling over', async () => {
+    const worldId = nextWorldId();
+    const stub = env.WORLD.get(env.WORLD.idFromName(worldId));
+
+    const oak = buildTestClearing(DEFAULT_WORLD_SEED).props.find((prop) => prop.kind === 'oak');
+    if (oak === undefined) throw new Error('no oak in the clearing');
+
+    await runInDurableObject(stub, (instance, state) => {
+      const sql = state.storage.sql;
+      // The table as the previous release left it: a felled tree, with nothing
+      // saying when it fell or how many have stood in that spot.
+      sql.exec('DROP TABLE IF EXISTS trees');
+      sql.exec(`CREATE TABLE trees (
+        tree_id INTEGER PRIMARY KEY,
+        swings_taken INTEGER NOT NULL,
+        felled INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`);
+      sql.exec('INSERT INTO trees VALUES (?, ?, ?, ?)', oak.id, 5, 1, Date.now());
+
+      // What the next wake does, without waiting for this object to be evicted.
+      (instance as unknown as { createSchema(): void }).createSchema();
+
+      const columns = sql
+        .exec<{ name: string }>('SELECT name FROM pragma_table_info(?)', 'trees')
+        .toArray()
+        .map((row) => row.name);
+      expect(columns).toContain('felled_at_ms');
+      expect(columns).toContain('generation');
+
+      // The old stump is treated as freshly cut rather than as felled in 1970,
+      // so it waits its turn instead of coming back the instant anybody joins.
+      const row = sql
+        .exec<{
+          felled_at_ms: number;
+          generation: number;
+        }>('SELECT felled_at_ms, generation FROM trees WHERE tree_id = ?', oak.id)
+        .toArray()[0];
+      expect(row?.generation).toBe(0);
+      expect(row?.felled_at_ms ?? 0).toBeGreaterThan(0);
+    });
+
+    // And the world still opens, with the tree still down.
+    const client = await TestClient.connect(worldId, 'came-back-after-the-update');
+    await waitFor('the opening word on the trees', () => client.countOfMessages('treeStates') > 0);
+    expect(client.felledTrees()).toEqual([oak.id]);
+    client.close();
+  });
+});
+
+describe('trees growing back', () => {
+  function theOak(seed: number) {
+    const tree = buildTestClearing(seed).props.find((prop) => prop.kind === 'oak');
+    if (tree === undefined) throw new Error('no oak in the clearing');
+    return tree;
+  }
+
+  async function chopUntilFelled(
+    client: TestClient,
+    target: { x: number; z: number },
+    treeId: number,
+  ): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 60; step++) {
+      if (client.felledTrees().includes(treeId)) return;
+      const here = client.positionOf(netId);
+      if (here === undefined) break;
+      const yaw = Math.atan2(-(target.x - here.x), -(target.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Swing);
+      await sleep(120);
+    }
+    throw new Error('the tree never came down');
+  }
+
+  it('brings the tree back on its own, and says how many times it has', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-forester');
+    await walkToTheAxe(client);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => client.inventory().length > 0);
+
+    const oak = theOak(client.welcome().seed);
+    await chopUntilFelled(client, oak, oak.id);
+    expect(client.felledTrees()).toEqual([oak.id]);
+
+    // Stand well clear: a tree will not grow through somebody.
+    for (let i = 0; i < 12; i++) {
+      client.walk(0, 1, Math.PI, 4);
+      await sleep(100);
+    }
+
+    // The test runtime brings them back in a second or two.
+    await waitFor('the oak to come back', () => !client.felledTrees().includes(oak.id), 25_000);
+
+    const grown = client.treeStates().find((tree) => tree.treeId === oak.id);
+    expect(grown?.felled).toBe(false);
+    expect(grown?.generation).toBe(1);
+    client.close();
+  });
+
+  it('counts the wait through a world that was asleep', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'chops-then-leaves');
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().length > 0);
+
+    const oak = theOak(first.welcome().seed);
+    await chopUntilFelled(first, oak, oak.id);
+    expect(first.felledTrees()).toEqual([oak.id]);
+
+    // Everybody leaves. The world saves, lets go and stops ticking entirely.
+    first.close();
+    // Long enough that the oak comes due while nobody is here to see it.
+    await sleep(7000);
+
+    // Somebody comes back to a clearing that healed while nobody was here. The
+    // very first word on the trees already has it standing: a world that was
+    // asleep catches up before it says anything, rather than showing the stump
+    // that was left and turning it into a tree a tick later.
+    const second = await TestClient.connect(worldId, 'comes-back-later');
+    await waitFor('the opening word on the trees', () => second.countOfMessages('treeStates') > 0);
+
+    const opening = second.openingTreeStates().find((tree) => tree.treeId === oak.id);
+    expect(opening?.felled).toBe(false);
+    expect(opening?.generation).toBe(1);
+    second.close();
+  }, 45_000);
 });

@@ -11,6 +11,7 @@ declare global {
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
       nearbyItem(): string | null;
       felledTrees(): number[];
+      treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
       faceTowards(x: number, z: number): void;
@@ -193,6 +194,32 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
   throw new Error(`Never got within reach of ${x}, ${z}`);
 }
 
+/**
+ * Walk up to a tree until the game says a swing would reach it.
+ *
+ * Never assume standing where the axe was leaves you in range of the oak beside
+ * it: where you stop depends on which way you came in, and the difference
+ * between two and three metres is the difference between chopping and flailing.
+ */
+async function walkWithinReachOfTree(page: Page, tree: { x: number; z: number }): Promise<void> {
+  for (let step = 0; step < 80; step++) {
+    if ((await page.evaluate(() => window.acornDebug?.aimedTree() ?? null)) !== null) return;
+
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - tree.x, (here?.z ?? 0) - tree.z);
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [tree.x, tree.z],
+    );
+
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
+    await page.keyboard.up('KeyW');
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`Never got within swinging distance of the tree at ${tree.x}, ${tree.z}`);
+}
+
 test('you can find the axe, pick it up, and still have it next time', async ({ browser }) => {
   // Walking there in steps takes a while on a slow machine.
   test.setTimeout(180_000);
@@ -329,8 +356,10 @@ test('you can chop a tree down, and the stump is still there next time', async (
   const oak = trees.find((tree) => tree.kind === 'oak');
   if (oak === undefined) throw new Error('no oak in the clearing');
 
+  // Walk up to it: the axe's stump is beside the oak, not against it.
+  await walkWithinReachOfTree(page, oak);
+
   // Facing it, the game offers the swing and says how much is left in it.
-  await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0), [oak.x, oak.z]);
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
   await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
 
@@ -358,5 +387,59 @@ test('you can chop a tree down, and the stump is still there next time', async (
   expect(await again.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
 
   await again.close();
+  await context.close();
+});
+
+test('a chopped tree grows back on its own', async ({ browser }) => {
+  // Locally a tree takes two to four minutes to come back, and this waits it out.
+  test.setTimeout(600_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`/?world=regrow-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Fetch the axe and fell the oak beside it.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
+    .toBeGreaterThan(0);
+
+  const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
+  const oak = trees.find((tree) => tree.kind === 'oak');
+  if (oak === undefined) throw new Error('no oak in the clearing');
+  await walkWithinReachOfTree(page, oak);
+  await chopUntilFelled(page, oak);
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+
+  // Walk well away: a tree will not grow through somebody standing on it.
+  await page.evaluate(() => window.acornDebug?.faceTowards(0, 30));
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(2500);
+  await page.keyboard.up('KeyW');
+
+  // Locally and on a preview the shortest wait is two minutes rather than half
+  // an hour, and a tree takes between that and twice it, so this has to be
+  // willing to sit through four. Staging and production use the real wait.
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length, {
+      timeout: 260_000,
+      intervals: [2_000],
+    })
+    .toBe(0);
+
+  // It came back as a new tree in the same spot, and the game knows it is the
+  // second one to stand there.
+  const generations = await page.evaluate(() => window.acornDebug?.treeGenerations() ?? []);
+  expect(generations.find((tree) => tree.id === oak.id)?.generation).toBe(1);
+
+  // And it is a tree again: something to swing at, not a stump.
+  await walkWithinReachOfTree(page, oak);
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
+
   await context.close();
 });
