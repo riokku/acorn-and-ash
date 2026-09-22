@@ -25,8 +25,12 @@ first flagged input, in the player's own inputs, which are made at a steady
 twenty a second of their own time. One second means one second for everybody,
 whatever their connection. A click made before the first flagged input is too
 soon, even if it reaches the server after the bite: it was made while the float
-was still only nibbling. A browser that never answers loses the fish after five
-seconds.
+was still only nibbling. A browser that never answers loses the fish after
+twenty seconds — generous, because a click can only be sent once the browser's
+own render loop gets to run, and that loop can stall for several seconds under
+nothing worse than a busy machine. A browser test caught this at five seconds:
+a busy CI runner lost fish it had clicked on time for, because the stall ate
+the whole window before the click could be sent at all.
 
 **The pond is a few overlapping circles,** each a wall the collision code
 already understands, kept after the props' own colliders so a felled tree still
@@ -48,9 +52,15 @@ bite.
 
 - One more input bit and one more server message: eight bytes, for a cast, a
   bite, a catch or one that got away. Everybody hears about everybody's line.
-- A modified browser can hold the flag back to buy itself time, up to the five
-  seconds. There is nothing to fight over in a pond, so that is an acceptable
-  price for fairness to honest players on slow connections.
+- A modified browser can hold the flag back to buy itself time, up to the
+  twenty seconds. There is nothing to fight over in a pond, so that is an
+  acceptable price for fairness to honest players on slow connections.
+- Whether a line is biting, and what just happened to it, is pushed to the HUD
+  the moment it is known rather than waiting for the next frame. The same
+  stall that can delay a click can just as easily swallow a message shown for
+  only a few seconds if it is only ever refreshed from inside the render loop,
+  which is exactly what the same CI run showed: a caught fish that never
+  appeared on screen at all.
 - The camera tilts down a little when a line lands. At its usual angle a float
   five metres out sits right behind your own back. Looking up cancels it.
 - The pond never runs out, fish cannot be eaten yet, and there is one rod per
