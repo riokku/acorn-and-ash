@@ -1,4 +1,4 @@
-import { CLEARING_HALF, PLAYABLE_HALF_EXTENT, SPAWN_POSITION } from '../constants';
+import { CLEARING_TREE_LINE_INNER, CLEARING_TREE_LINE_OUTER, SPAWN_POSITION } from '../constants';
 import { createRng } from '../rng';
 import { PROP_KINDS, propHeight, stumpScaleFor, type PropKindId } from '../data/props';
 import type { ItemId } from '../data/items';
@@ -11,6 +11,13 @@ export interface PlacedProp {
   readonly kind: PropKindId;
   readonly x: number;
   readonly z: number;
+  /**
+   * Base height off the ground, in metres. Absent, or zero, everywhere in the
+   * hand-built clearing, which is flat; the wilderness sets this from the
+   * terrain so a tree on a hillside sits on the slope rather than floating
+   * above or sinking into it.
+   */
+  readonly y?: number;
   readonly rotationY: number;
   readonly scale: number;
 }
@@ -81,8 +88,8 @@ export const ROD_PICKUP_ID = 2;
 /** Nothing is placed inside this circle, so players always spawn in the open. */
 const SPAWN_CLEAR_RADIUS = 7;
 /** How far into the tree line the wall of trunks runs. */
-const TREE_LINE_INNER = CLEARING_HALF - 4;
-const TREE_LINE_OUTER = PLAYABLE_HALF_EXTENT + 2;
+const TREE_LINE_INNER = CLEARING_TREE_LINE_INNER;
+const TREE_LINE_OUTER = CLEARING_TREE_LINE_OUTER;
 
 const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
@@ -195,7 +202,7 @@ export function colliderForProp(prop: PlacedProp): Collider {
     prop.z,
     kind.colliderRadius * prop.scale,
     propHeight(kind) * prop.scale,
-    0,
+    prop.y ?? 0,
   );
 }
 

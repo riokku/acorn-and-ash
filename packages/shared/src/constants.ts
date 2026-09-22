@@ -69,10 +69,47 @@ export const GROUND_SNAP_DISTANCE = 0.3;
 export const CLEARING_SIZE = 64;
 export const CLEARING_HALF = CLEARING_SIZE / 2;
 /**
- * Phase 0 has no generated wilderness yet, so players are held just inside the
- * tree line instead of walking off into empty space.
+ * Where the clearing's own ring of trees sits, regardless of how far the
+ * generated wilderness beyond it reaches. Same numbers Phase 0 used
+ * (`CLEARING_HALF - 4` to `CLEARING_HALF + 8`): chopping and the clearing's
+ * shape do not move just because the world around it grew.
  */
-export const PLAYABLE_HALF_EXTENT = 38;
+export const CLEARING_TREE_LINE_INNER = CLEARING_HALF - 4;
+export const CLEARING_TREE_LINE_OUTER = CLEARING_HALF + 8;
+/**
+ * The edge of the world: an invisible wall players are held inside, past the
+ * generated wilderness. Bounded rather than infinite for now — real chunk
+ * streaming is a later change.
+ */
+export const PLAYABLE_HALF_EXTENT = 150;
+
+/**
+ * The wilderness: generated forest and rolling ground between the clearing's
+ * tree line and the wall at the edge of the world.
+ */
+export const WILDERNESS = {
+  /** Ground stays flat out to here, through the clearing's own ring of trees. */
+  flatRadius: CLEARING_TREE_LINE_OUTER + 2,
+  /** Metres over which flat ground eases into hills, starting at `flatRadius`. */
+  hillBlend: 18,
+  /** Ground flattens again over the last stretch before the wall, so the edge of the world is never a slope. */
+  edgeFlat: 20,
+  /** How far a hill rises or a hollow dips at full strength. */
+  hillHeight: 5,
+  /** Metres per bump of terrain noise. Bigger is broader, gentler hills. */
+  noiseScale: 1 / 60,
+  /** Metres between candidate spots for a tree or rock, before jitter and thinning. */
+  cellSize: 4,
+  /** How far a candidate spot is jittered from its cell's centre, so a grid does not read as a grid. */
+  jitter: 1.7,
+  /** Metres per bump of the noise that decides forest from glade. */
+  densityNoiseScale: 1 / 40,
+  /** The sparsest and densest a patch of wilderness ever gets, as a share of candidate spots that get something. */
+  densityMin: 0.08,
+  densityMax: 0.62,
+  /** How far scenery is scattered past the wall, so the tree line does not stop exactly on it. */
+  scatterMargin: 6,
+} as const;
 
 /**
  * How close you have to be to pick something up, measured from the player to the

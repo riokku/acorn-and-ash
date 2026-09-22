@@ -77,7 +77,11 @@ export class FollowCamera {
     this.look.pitch = clamp(this.look.pitch + deltaY * sensitivity, MIN_PITCH, MAX_PITCH);
   }
 
-  update(playerPosition: Readonly<Vec3>, deltaSeconds: number, blockers: THREE.Object3D): void {
+  update(
+    playerPosition: Readonly<Vec3>,
+    deltaSeconds: number,
+    blockers: readonly THREE.Object3D[],
+  ): void {
     this.target.set(playerPosition.x, playerPosition.y + TARGET_HEIGHT, playerPosition.z);
 
     if (this.pitchNudge !== null) {
@@ -110,13 +114,19 @@ export class FollowCamera {
     this.camera.lookAt(this.target);
   }
 
-  /** How far the camera can go before it hits something. */
-  private distanceToBlocker(blockers: THREE.Object3D): number {
+  /** How far the camera can go before it hits something, across every blocker mesh. */
+  private distanceToBlocker(blockers: readonly THREE.Object3D[]): number {
     this.raycaster.set(this.target, this.direction);
     this.raycaster.far = RESTING_DISTANCE;
-    const hits = this.raycaster.intersectObject(blockers, false);
-    const nearest = hits[0];
-    if (nearest === undefined) return RESTING_DISTANCE;
-    return clamp(nearest.distance - BLOCKER_PADDING, MIN_DISTANCE, RESTING_DISTANCE);
+
+    let nearestDistance: number | undefined;
+    for (const blocker of blockers) {
+      const hit = this.raycaster.intersectObject(blocker, false)[0];
+      if (hit !== undefined && (nearestDistance === undefined || hit.distance < nearestDistance)) {
+        nearestDistance = hit.distance;
+      }
+    }
+    if (nearestDistance === undefined) return RESTING_DISTANCE;
+    return clamp(nearestDistance - BLOCKER_PADDING, MIN_DISTANCE, RESTING_DISTANCE);
   }
 }

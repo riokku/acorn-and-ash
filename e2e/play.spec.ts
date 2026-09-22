@@ -166,6 +166,39 @@ test('jumping lifts the player off the ground and puts them back', async ({ page
   await expect.poll(heightNow).toBeLessThan(0.01);
 });
 
+test('walking away from the clearing leads into generated wilderness, not a wall', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Straight out from the clearing, away from its own ring of trees, which
+  // stops around 40 m out.
+  await page.evaluate(() => window.acornDebug?.faceTowards(0, -400));
+
+  const positionNow = async (): Promise<{ x: number; y: number; z: number }> =>
+    (await page.evaluate(() => window.acornDebug?.localPosition())) ?? { x: 0, y: 0, z: 0 };
+
+  let sawHills = false;
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('KeyW');
+  let last = await positionNow();
+  for (let step = 0; step < 40 && last.z > -70; step++) {
+    await page.waitForTimeout(500);
+    last = await positionNow();
+    if (Math.abs(last.y) > 0.05) sawHills = true;
+  }
+  await page.keyboard.up('KeyW');
+  await page.keyboard.up('Shift');
+
+  // Well past the clearing's own tree line, not stopped at the old Phase 0
+  // wall (38 m): the wilderness opened the world up rather than fencing it.
+  expect(last.z).toBeLessThan(-70);
+  // And the ground out there is not flat the way the clearing's is.
+  expect(sawHills).toBe(true);
+});
+
 /**
  * Walk to a spot until the game says you can reach what is there.
  *

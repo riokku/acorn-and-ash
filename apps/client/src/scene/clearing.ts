@@ -1,9 +1,7 @@
 import * as THREE from 'three/webgpu';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import {
   ITEM_KINDS,
-  PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   choppingRuleFor,
   stumpFor,
@@ -11,10 +9,18 @@ import {
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
-  type PropKind,
 } from '@acorn/shared';
 
 import { createPond } from './pond';
+import {
+  HIDDEN_INSTANCE,
+  blockerGeometry,
+  createCameraBlockers,
+  createPropMeshes,
+  placeInstance,
+  placeOneInstance,
+  type PropPart,
+} from './props';
 
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
 export interface ClearingScene {
@@ -40,28 +46,20 @@ export interface TreeAppearance {
   readonly felled: boolean;
 }
 
-/** A matrix that draws nothing, used to take an instance out of the world. */
-const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
-
-/**
- * The ground runs well past the tree line so its edge is never visible: it
- * disappears into the fog long before it stops.
- */
-const GROUND_SIZE = PLAYABLE_HALF_EXTENT * 2 + 340;
-
 /**
  * Build the clearing out of placeholder shapes.
  *
  * Every tree of the same kind is drawn with one instanced mesh, so a hundred and
  * fifty trees cost a handful of draw calls instead of three hundred.
+ *
+ * The ground itself is not built here: the wilderness scene draws one mesh for
+ * the whole visible world, flat through the clearing and rolling into hills
+ * beyond it, so there is only ever one surface to stand on and nothing for two
+ * flat planes to z-fight over.
  */
 export function buildClearingScene(clearing: Clearing): ClearingScene {
   const group = new THREE.Group();
   const disposables: Array<{ dispose(): void }> = [];
-
-  const ground = createGround();
-  group.add(ground.mesh);
-  disposables.push(ground);
 
   const pond = createPond(clearing.water);
   group.add(pond.group);
@@ -100,7 +98,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   for (const part of freshStumps) {
     group.add(part.mesh);
     disposables.push(part);
-    for (let i = 0; i < trees.length; i++) part.mesh.setMatrixAt(i, HIDDEN);
+    for (let i = 0; i < trees.length; i++) part.mesh.setMatrixAt(i, HIDDEN_INSTANCE);
     part.mesh.instanceMatrix.needsUpdate = true;
   }
   const stumpSlotOf = new Map<number, number>();
@@ -141,7 +139,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         const slot = standing.get(tree.id);
         if (slot !== undefined) {
           for (const part of slot.parts) {
-            if (want.felled) part.mesh.setMatrixAt(slot.index, HIDDEN);
+            if (want.felled) part.mesh.setMatrixAt(slot.index, HIDDEN_INSTANCE);
             else placeOneInstance(part, slot.index, grown);
             part.mesh.instanceMatrix.needsUpdate = true;
           }
@@ -151,7 +149,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         if (stumpSlot !== undefined) {
           for (const part of freshStumps) {
             if (want.felled) placeOneInstance(part, stumpSlot, stumpFor(grown));
-            else part.mesh.setMatrixAt(stumpSlot, HIDDEN);
+            else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
             part.mesh.instanceMatrix.needsUpdate = true;
           }
         }
@@ -180,20 +178,6 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 }
 
 const UNTOUCHED: TreeAppearance = { generation: 0, felled: false };
-
-/** Put one prop into every part of its instanced mesh. */
-function placeInstance(parts: PropPart[], index: number, prop: PlacedProp): void {
-  for (const part of parts) placeOneInstance(part, index, prop);
-}
-
-function placeOneInstance(part: PropPart, index: number, prop: PlacedProp): void {
-  const matrix = new THREE.Matrix4().compose(
-    new THREE.Vector3(prop.x, 0, prop.z),
-    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.rotationY),
-    new THREE.Vector3(prop.scale, prop.scale, prop.scale),
-  );
-  part.mesh.setMatrixAt(index, part.offset.clone().premultiply(matrix));
-}
 
 /** A cylinder for everything still standing, with stumps where trees came down. */
 function blockersFor(
@@ -310,131 +294,4 @@ function createAxePickup(
     },
   });
   return group;
-}
-
-interface PropPart {
-  readonly mesh: THREE.InstancedMesh;
-  /** Where this part sits inside its prop, before the prop is placed. */
-  readonly offset: THREE.Matrix4;
-  dispose(): void;
-}
-
-function createPropMeshes(kind: PropKind, count: number): PropPart[] {
-  if (kind.shape.family === 'tree') {
-    const { trunkRadius, trunkHeight, canopyRadius, canopyHeight } = kind.shape;
-
-    const trunk = instanced(
-      new THREE.CylinderGeometry(trunkRadius * 0.82, trunkRadius, trunkHeight, 7),
-      new THREE.MeshStandardMaterial({ color: 0x6b4c33, roughness: 0.95, flatShading: true }),
-      count,
-      trunkHeight / 2,
-    );
-    const canopy = instanced(
-      new THREE.ConeGeometry(canopyRadius, canopyHeight, 8),
-      new THREE.MeshStandardMaterial({
-        color: kind.placeholderColor,
-        roughness: 0.9,
-        flatShading: true,
-      }),
-      count,
-      trunkHeight + canopyHeight / 2,
-    );
-    return [trunk, canopy];
-  }
-
-  if (kind.shape.family === 'stump') {
-    const { radius, height } = kind.shape;
-    return [
-      instanced(
-        // Wider at the base than the cut, like a tree that was felled here.
-        new THREE.CylinderGeometry(radius * 0.92, radius * 1.15, height, 9),
-        new THREE.MeshStandardMaterial({
-          color: kind.placeholderColor,
-          roughness: 1,
-          flatShading: true,
-        }),
-        count,
-        height / 2,
-      ),
-    ];
-  }
-
-  const { radius, height } = kind.shape;
-  return [
-    instanced(
-      new THREE.IcosahedronGeometry(radius, 0),
-      new THREE.MeshStandardMaterial({
-        color: kind.placeholderColor,
-        roughness: 1,
-        flatShading: true,
-      }),
-      count,
-      height / 2,
-    ),
-  ];
-}
-
-function instanced(
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  count: number,
-  centreHeight: number,
-): PropPart {
-  const mesh = new THREE.InstancedMesh(geometry, material, count);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  // Trees never move, so let the renderer stop re-reading their matrices.
-  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-  return {
-    mesh,
-    offset: new THREE.Matrix4().makeTranslation(0, centreHeight, 0),
-    dispose: () => {
-      geometry.dispose();
-      material.dispose();
-      mesh.dispose();
-    },
-  };
-}
-
-function createGround(): { mesh: THREE.Mesh; dispose(): void } {
-  const geometry = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE, 1, 1);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({ color: 0x5f7c46, roughness: 1 });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.receiveShadow = true;
-  return {
-    mesh,
-    dispose: () => {
-      geometry.dispose();
-      material.dispose();
-    },
-  };
-}
-
-/** A cylinder standing where the prop does, matching what the server collides with. */
-function blockerGeometry(kind: PropKind, prop: PlacedProp): THREE.BufferGeometry {
-  const radius = kind.colliderRadius * prop.scale;
-  const height =
-    (kind.shape.family === 'tree'
-      ? kind.shape.trunkHeight + kind.shape.canopyHeight
-      : kind.shape.height) * prop.scale;
-  const geometry = new THREE.CylinderGeometry(radius, radius, height, 6, 1);
-  geometry.translate(prop.x, height / 2, prop.z);
-  return geometry;
-}
-
-/**
- * Merge every blocker into one mesh and build a bounding volume hierarchy over
- * it, so the camera can ask "is there a tree between me and the player?" cheaply.
- */
-function createCameraBlockers(geometries: THREE.BufferGeometry[]): THREE.Mesh {
-  const merged = geometries.length > 0 ? mergeGeometries(geometries, false) : null;
-  for (const geometry of geometries) geometry.dispose();
-
-  const geometry = merged ?? new THREE.BufferGeometry();
-  if (merged !== null) geometry.computeBoundsTree();
-
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
-  mesh.matrixAutoUpdate = false;
-  return mesh;
 }

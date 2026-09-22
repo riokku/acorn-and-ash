@@ -9,11 +9,12 @@ import {
   PlayerButton,
   SPAWN_POSITION,
   buildTestClearing,
+  buildWilderness,
   castLanding,
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
-  createFlatTerrain,
+  createWildernessTerrain,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
@@ -35,6 +36,7 @@ import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from
 import { LocalPlayer } from './net/local-player';
 import { RemotePlayers } from './net/remote-players';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
+import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
@@ -120,6 +122,7 @@ export class Game {
   private sun: THREE.DirectionalLight | null = null;
 
   private clearingScene: ClearingScene | null = null;
+  private wildernessScene: WildernessScene | null = null;
   private clearing: Clearing | null = null;
   /** What the server says is gone, and what it says we carry. Never guessed. */
   private readonly takenPickups = new Set<number>();
@@ -254,6 +257,7 @@ export class Game {
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
+    this.wildernessScene?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
@@ -285,7 +289,7 @@ export class Game {
       case 'welcome': {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
-        this.enterWorld(buildTestClearing(message.seed));
+        this.enterWorld(message.seed);
         break;
       }
       case 'snapshot': {
@@ -400,21 +404,34 @@ export class Game {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Build the clearing from the seed the server gave us.
+   * Build the clearing and the wilderness around it from the seed the server
+   * gave us.
    *
-   * The scenery is never sent over the network: the same seed run through the
-   * same code produces the same trees on the server and in every browser.
+   * Neither is ever sent over the network: the same seed run through the same
+   * code produces the same trees, the same hills and the same forest on the
+   * server and in every browser.
    */
-  private enterWorld(clearing: Clearing): void {
+  private enterWorld(seed: number): void {
     if (this.clearingScene !== null) return;
+
+    const clearing = buildTestClearing(seed);
+    const terrain = createWildernessTerrain(seed);
+    const wilderness = buildWilderness(seed, terrain);
 
     this.clearing = clearing;
     this.clearingScene = buildClearingScene(clearing);
     this.clearingScene.setTakenPickups(this.takenPickups);
     this.scene.add(this.clearingScene.group);
+
+    this.wildernessScene = buildWildernessScene(wilderness, terrain);
+    this.scene.add(this.wildernessScene.group);
+
     this.scene.add(this.floats.group);
 
-    const collision = createCollisionWorld(createFlatTerrain(0), clearing.colliders);
+    const collision = createCollisionWorld(terrain, [
+      ...clearing.colliders,
+      ...wilderness.colliders,
+    ]);
     this.collision = collision;
     this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
     this.applyTreeStates();
@@ -502,7 +519,7 @@ export class Game {
       this.connectionState !== 'connected' &&
       now > this.offlineFallbackAt
     ) {
-      this.enterWorld(buildTestClearing(DEFAULT_WORLD_SEED));
+      this.enterWorld(DEFAULT_WORLD_SEED);
     }
 
     this.updateLocalPlayer(deltaSeconds, camera);
@@ -517,7 +534,8 @@ export class Game {
     const player = this.localPlayer;
     const character = this.localCharacter;
     const clearing = this.clearingScene;
-    if (player === null || character === null || clearing === null) return;
+    const wilderness = this.wildernessScene;
+    if (player === null || character === null || clearing === null || wilderness === null) return;
 
     const intent = this.controls?.moveIntent() ?? { x: 0, z: 0 };
     // While the float is under on this screen, every input says so: the server
@@ -536,7 +554,7 @@ export class Game {
     character.group.rotation.y =
       this.facingWhileFishing(this.selfNetId, position) ?? player.renderYaw();
 
-    camera.update(position, deltaSeconds, clearing.cameraBlockers);
+    camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);
 
     // Only a hint. The server decides who actually gets it.
     const reachable =

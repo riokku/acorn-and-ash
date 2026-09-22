@@ -115,8 +115,11 @@ describe('walking', () => {
   });
 
   it('cannot walk out of the world', () => {
-    const motion = walk(0, 1, 0, 600);
-    expect(motion.position.z).toBeGreaterThanOrEqual(-PLAYABLE_HALF_EXTENT);
+    // Comfortably more than PLAYABLE_HALF_EXTENT / PLAYER_WALK_SPEED / TICK_SECONDS
+    // ticks, so the walk actually reaches the wall rather than just not having
+    // gone far enough yet.
+    const motion = walk(0, 1, 0, 800);
+    expect(motion.position.z).toBeCloseTo(-PLAYABLE_HALF_EXTENT, 6);
   });
 
   it('ignores an input that asks to move faster than one', () => {
