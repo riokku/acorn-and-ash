@@ -158,8 +158,16 @@ export const BITE_WINDOW_SECONDS = 1;
 /**
  * How long the server waits, after a bite, for a browser that has gone quiet.
  * Past this the fish is gone however the click turns out.
+ *
+ * Generous on purpose. A click can only be sent once the browser's own render
+ * loop gets to run, and that loop can stall for several seconds under load
+ * without the tab being anywhere near crashed: a browser test caught exactly
+ * this on a busy CI runner, losing fish it had genuinely clicked on time for
+ * because the five seconds this used to be ran out before the click could be
+ * sent at all. This only bounds a truly silent browser; one that is merely
+ * slow still gets its full second to click once it catches up.
  */
-export const BITE_GIVE_UP_SECONDS = 5;
+export const BITE_GIVE_UP_SECONDS = 20;
 /** A breather after every cast ends, so the click that caught a fish does not cast again. */
 export const CAST_COOLDOWN_SECONDS = 0.5;
 /**

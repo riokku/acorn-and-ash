@@ -49,8 +49,16 @@ const MOUSE_SENSITIVITY = 0.0023;
 const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
 const OFFLINE_FALLBACK_MS = 4000;
-/** How long news from the water stays on screen. */
-const NEWS_MS = 3500;
+/**
+ * How long news from the water stays on screen.
+ *
+ * Generous, for the same reason `BITE_GIVE_UP_SECONDS` is: it is measured from
+ * the moment the event happens, but showing it depends on the render loop
+ * getting a turn, and that loop can stall for a while under load. A short
+ * window can elapse entirely during a stall like that, so the message never
+ * appears on screen at all rather than merely appearing late.
+ */
+const NEWS_MS = 8000;
 /**
  * How far down the camera looks while a line is out. At the usual angle a
  * float five metres out sits right behind your own back; from a little higher
@@ -369,19 +377,24 @@ export class Game {
       this.fishingPhase = 'waiting';
       this.fishingNews = null;
       this.camera?.lookDownTo(FISHING_CAMERA_PITCH);
-      return;
-    }
-    if (event.kind === 'bite') {
+    } else if (event.kind === 'bite') {
       this.fishingPhase = 'biting';
-      return;
+    } else {
+      this.fishingPhase = null;
+      const now = performance.now();
+      this.fishingNews = { text: newsFor(event), until: now + NEWS_MS };
+      this.castReadyAt = now + CAST_COOLDOWN_SECONDS * 1000;
     }
-    this.fishingPhase = null;
-    const now = performance.now();
-    this.fishingNews = { text: newsFor(event), until: now + NEWS_MS };
-    this.castReadyAt = now + CAST_COOLDOWN_SECONDS * 1000;
+
+    // Not left for the next frame. `updateHud` only runs from inside the render
+    // loop, and that loop can stall for a while under load without the tab
+    // being anywhere near crashed. A stall like that must not be able to eat
+    // the whole few seconds this news is shown for, or swallow it outright, so
+    // the moment this is known it goes straight to the HUD.
+    this.options.hud.publish({ fishing: this.fishingPhase, fishingNews: this.currentNews() });
   }
 
-  private currentNews(now: number): string | null {
+  private currentNews(now = performance.now()): string | null {
     const news = this.fishingNews;
     return news !== null && now < news.until ? news.text : null;
   }
