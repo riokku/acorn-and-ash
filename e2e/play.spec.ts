@@ -19,6 +19,8 @@ declare global {
       canCast(): boolean;
       fishing(): 'waiting' | 'biting' | null;
       fishingNews(): string | null;
+      hunger(): number;
+      hungerNews(): string | null;
     };
   }
 }

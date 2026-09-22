@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import { ITEM_KINDS } from '@acorn/shared';
+import { HUNGER_LOW_THRESHOLD, HUNGER_MAX, ITEM_KINDS, isFood } from '@acorn/shared';
 
 import type { HudStore, HudState } from './store';
 
@@ -27,6 +27,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
           value={`${state.position.x.toFixed(1)}, ${state.position.z.toFixed(1)}`}
         />
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
+        <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Carrying" value={carrying(state)} />
       </div>
 
@@ -38,12 +39,20 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         </div>
       ) : null}
 
-      {state.ready && state.pointerLocked && state.fishingNews !== null ? (
-        <p className="hud-news">{state.fishingNews}</p>
+      {state.ready &&
+      state.pointerLocked &&
+      (state.fishingNews !== null || state.hungerNews !== null) ? (
+        <p className="hud-news">{state.fishingNews ?? state.hungerNews}</p>
       ) : null}
 
       {state.ready && state.pointerLocked ? (
-        <p className={state.fishing === 'biting' ? 'hud-hint hud-hint-urgent' : 'hud-hint'}>
+        <p
+          className={
+            state.fishing === 'biting' || state.hunger <= 0
+              ? 'hud-hint hud-hint-urgent'
+              : 'hud-hint'
+          }
+        >
           {hint(state)}
         </p>
       ) : null}
@@ -78,6 +87,20 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
   return <span className={entry[1]}>{entry[0]}</span>;
 }
 
+function Hunger({ state }: { state: HudState }): React.JSX.Element {
+  const className =
+    state.hunger <= 0
+      ? 'hud-status-bad'
+      : state.hunger < HUNGER_LOW_THRESHOLD
+        ? 'hud-status-warn'
+        : undefined;
+  return (
+    <span className={className}>
+      {Math.round(state.hunger)}/{HUNGER_MAX}
+    </span>
+  );
+}
+
 /**
  * The strip along the bottom.
  *
@@ -90,6 +113,9 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
 function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
   if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
+  // Empty is a clear nudge, so it beats everything but an actual bite: there
+  // is nothing worse than being hungry yet, but it should not go unnoticed.
+  if (state.hunger <= 0) return hungerHint(state);
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
@@ -97,7 +123,17 @@ function hint(state: HudState): string {
   if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
   if (state.canCast) return 'Left click to cast';
   if (state.aimedTree !== null) return chopHint(state.aimedTree);
+  // A gentler reminder once nothing more useful is going on.
+  if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
+}
+
+function hungerHint(state: HudState): string {
+  const hasFood = state.carrying.some((entry) => isFood(entry.item) && entry.count > 0);
+  if (state.hunger <= 0) {
+    return hasFood ? "You're hungry. Press E to eat" : "You're hungry. Go catch something to eat";
+  }
+  return hasFood ? 'Press E to eat · getting hungry' : 'Getting hungry';
 }
 
 function chopHint(tree: NonNullable<HudState['aimedTree']>): string {

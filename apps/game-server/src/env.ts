@@ -16,4 +16,12 @@ export interface WorldEnv extends Env {
    * rather than waited out. Unset everywhere real, where it is half an hour.
    */
   readonly WORLD_REGROW_SECONDS?: string;
+  /**
+   * How long a full hunger meter takes to run out, in seconds, if nothing is
+   * eaten.
+   *
+   * Set low on previews and local runs so it can be watched rather than
+   * waited out. Unset everywhere real, where it is twenty minutes.
+   */
+  readonly WORLD_HUNGER_EMPTY_SECONDS?: string;
 }

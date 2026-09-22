@@ -14,7 +14,7 @@ import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
-import type { FishingEvent, SnapshotEntity } from '../sim/world-sim';
+import type { FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
 import {
   ClientMessageType,
   RejectReason,
@@ -71,6 +71,11 @@ const FISHING_KIND_CODES = {
 } as const satisfies Record<FishingEvent['kind'], number>;
 const INT16_MIN = -32768;
 const INT16_MAX = 32767;
+
+/** type(1) + netId(2) + hunger(1) + what was eaten, if anything(1) */
+const HUNGER_MESSAGE_BYTES = 5;
+/** Nothing was eaten: this is only the meter running down. */
+const NO_ITEM_EATEN = 0xff;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -376,6 +381,33 @@ function decodeFishing(view: DataView): FishingEvent | null {
   }
 }
 
+/**
+ * How hungry a player is now, in five bytes.
+ *
+ * `ate` names what was just eaten, for a HUD toast, or the "no item" sentinel
+ * when this is only the meter running down on its own.
+ */
+export function encodeHunger(event: HungerEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(HUNGER_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Hunger);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, clamp(Math.round(event.hunger), 0, 255));
+  view.setUint8(4, event.ate === null ? NO_ITEM_EATEN : itemIndex(event.ate));
+  return buffer;
+}
+
+function decodeHunger(view: DataView): HungerEvent {
+  const ateIndex = view.getUint8(4);
+  return {
+    netId: view.getUint16(1, true),
+    hunger: view.getUint8(3),
+    // An id this build does not know is still worth showing the number for,
+    // so this only drops the toast rather than the whole message.
+    ate: ateIndex === NO_ITEM_EATEN ? null : itemFromIndex(ateIndex),
+  };
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -500,6 +532,10 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== FISHING_MESSAGE_BYTES) return null;
       const event = decodeFishing(view);
       return event === null ? null : { type: 'fishing', event };
+    }
+    case ServerMessageType.Hunger: {
+      if (data.byteLength !== HUNGER_MESSAGE_BYTES) return null;
+      return { type: 'hunger', event: decodeHunger(view) };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

@@ -8,6 +8,7 @@ import {
   DEFAULT_WORLD_SEED,
   FISHING_LEASH,
   FLOAT_SHORE_MARGIN,
+  HUNGER_MAX,
   PLAYER_RADIUS,
   TICK_HZ,
   TICK_MILLISECONDS,
@@ -327,7 +328,7 @@ function createWorld(): WorldSimulation {
 }
 
 function carrying(netId: number, items: Array<{ item: ItemId; count: number }>): PersistedPlayer {
-  return { netId, x: 0, y: 0, z: 0, facingYaw: 0, items };
+  return { netId, x: 0, y: 0, z: 0, facingYaw: 0, items, hunger: HUNGER_MAX };
 }
 
 /** One tick of standing still, looking one way, with the button up or down. */

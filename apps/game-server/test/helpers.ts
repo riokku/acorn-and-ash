@@ -6,6 +6,7 @@ import {
   encodePing,
   createInput,
   type FishingEvent,
+  type HungerEvent,
   type InventoryMessage,
   type PickupsTakenMessage,
   type TreeHitMessage,
@@ -120,6 +121,17 @@ export class TestClient {
   /** Everything the server has said about lines in the water, oldest first. */
   fishing(): FishingEvent[] {
     return this.received.flatMap((entry) => (entry.type === 'fishing' ? [entry.event] : []));
+  }
+
+  /** Everything the server has said about this client's own hunger, oldest first. */
+  hunger(): HungerEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'hunger' ? [entry.event] : []));
+  }
+
+  /** The newest word on this client's hunger. */
+  latestHunger(): HungerEvent | undefined {
+    const events = this.hunger();
+    return events[events.length - 1];
   }
 
   /** Every swing the server has told us about. */

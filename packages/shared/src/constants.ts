@@ -177,6 +177,26 @@ export const CAST_COOLDOWN_SECONDS = 0.5;
 export const WATER_WALL_HEIGHT = 3;
 
 /**
+ * Hunger.
+ *
+ * Cozy-light survival: this is the only meter that runs down on its own right
+ * now. Running out is a nudge to go eat, not a penalty - there is nothing
+ * worse here yet, on purpose. A real consequence can come later, once there
+ * is a creature or a knockout system for it to plug into.
+ */
+export const HUNGER_MAX = 100;
+/**
+ * How long a full meter takes to run out, if nothing is eaten.
+ *
+ * Turned right down for previews and local runs, so it can be watched rather
+ * than waited out. Left alone everywhere real: twenty minutes, so it starts
+ * to matter across a session without nagging.
+ */
+export const HUNGER_EMPTY_AFTER_SECONDS = 20 * 60;
+/** Below this the HUD nudges the player to go eat. */
+export const HUNGER_LOW_THRESHOLD = 30;
+
+/**
  * Growing back.
  *
  * Chris settled "at least thirty minutes, somewhat random"; an hour is the top

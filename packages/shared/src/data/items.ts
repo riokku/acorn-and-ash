@@ -21,6 +21,8 @@ export interface ItemKind {
   readonly maxCarry: number;
   /** Placeholder colour, as 0xRRGGBB. */
   readonly placeholderColor: number;
+  /** How much hunger eating one restores, or undefined if it cannot be eaten. */
+  readonly restoresHunger?: number;
 }
 
 export const ITEM_KINDS = {
@@ -30,6 +32,7 @@ export const ITEM_KINDS = {
     pluralName: 'Axes',
     maxCarry: 1,
     placeholderColor: 0x9a7b4f,
+    restoresHunger: undefined,
   },
   log: {
     id: 'log',
@@ -37,6 +40,7 @@ export const ITEM_KINDS = {
     pluralName: 'Logs',
     maxCarry: 10,
     placeholderColor: 0x8c6239,
+    restoresHunger: undefined,
   },
   rod: {
     id: 'rod',
@@ -44,6 +48,7 @@ export const ITEM_KINDS = {
     pluralName: 'Fishing rods',
     maxCarry: 1,
     placeholderColor: 0xb89a5e,
+    restoresHunger: undefined,
   },
   perch: {
     id: 'perch',
@@ -51,6 +56,7 @@ export const ITEM_KINDS = {
     pluralName: 'Perch',
     maxCarry: 10,
     placeholderColor: 0x8fa35a,
+    restoresHunger: 40,
   },
   trout: {
     id: 'trout',
@@ -58,6 +64,7 @@ export const ITEM_KINDS = {
     pluralName: 'Trout',
     maxCarry: 10,
     placeholderColor: 0xc98f86,
+    restoresHunger: 40,
   },
   goldenCarp: {
     id: 'goldenCarp',
@@ -65,6 +72,7 @@ export const ITEM_KINDS = {
     pluralName: 'Golden carp',
     maxCarry: 10,
     placeholderColor: 0xe8b53a,
+    restoresHunger: 40,
   },
 } as const satisfies Record<ItemId, ItemKind>;
 
@@ -85,3 +93,11 @@ export function itemIndex(id: ItemId): number {
 export function itemFromIndex(index: number): ItemId | null {
   return ITEM_ORDER[index] ?? null;
 }
+
+/** Whether eating this does anything. */
+export function isFood(item: ItemId): boolean {
+  return ITEM_KINDS[item].restoresHunger !== undefined;
+}
+
+/** Every item that can be eaten, in the wire order. Common fish go first. */
+export const FOOD_ITEMS: readonly ItemId[] = ITEM_ORDER.filter(isFood);
