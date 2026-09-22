@@ -17,7 +17,7 @@ import {
   encodeRejected,
   encodeSnapshot,
   encodeTreeHit,
-  encodeTreesFelled,
+  encodeTreeStates,
   encodeWelcome,
   inventoryEntries,
   itemFromIndex,
@@ -108,7 +108,7 @@ export class World extends DurableObject<WorldEnv> {
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
-    server.send(encodeTreesFelled(simulation.felledTreeIds()));
+    server.send(encodeTreeStates(simulation.changedTrees()));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -203,9 +203,10 @@ export class World extends DurableObject<WorldEnv> {
     const sinceLastTick = startedAt - this.lastTickAtMs;
     this.lastTickAtMs = startedAt;
 
-    simulation.step();
+    simulation.step(startedAt);
     this.announcePickups(simulation);
     this.announceChopping(simulation);
+    this.announceRegrowth(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -280,7 +281,7 @@ export class World extends DurableObject<WorldEnv> {
     if (anythingFell) {
       // Sending the whole list is cheap while a clearing has a hundred and
       // forty trees; a bigger world would want to send only what changed.
-      this.broadcast(encodeTreesFelled(simulation.felledTreeIds()));
+      this.broadcast(encodeTreeStates(simulation.changedTrees()));
     }
 
     // Only the trees that are down or part cut, which is a short list.
@@ -294,6 +295,22 @@ export class World extends DurableObject<WorldEnv> {
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
+  }
+
+  /**
+   * Bring back anything whose time is up, and say so.
+   *
+   * Checked every tick because the check is cheap: it walks only the trees
+   * somebody has touched, and skips the ones that are not due. The important
+   * run is the first one after a world wakes, when everything felled while
+   * nobody was here comes back at once.
+   */
+  private announceRegrowth(simulation: WorldSimulation, nowMs: number): void {
+    const grown = simulation.regrowTrees(nowMs);
+    if (grown.length === 0) return;
+
+    this.broadcast(encodeTreeStates(simulation.changedTrees()));
+    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
   }
 
   private broadcastSnapshots(simulation: WorldSimulation): void {
@@ -359,7 +376,10 @@ export class World extends DurableObject<WorldEnv> {
   private ensureSimulation(): WorldSimulation {
     if (this.simulation !== null) return this.simulation;
 
-    const simulation = new WorldSimulation({ seed: this.seed() });
+    const simulation = new WorldSimulation({
+      seed: this.seed(),
+      regrowMinSeconds: this.regrowMinSeconds(),
+    });
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
@@ -377,6 +397,11 @@ export class World extends DurableObject<WorldEnv> {
     this.nextNetId = highestNetId + 1;
 
     simulation.tick = this.loadTick();
+    // A sleeping world counts nothing, so anything due back is brought back
+    // here, before the first snapshot goes out. Otherwise somebody walking in
+    // an hour later would be shown the stump they left and then watch it turn
+    // into a tree a tick afterwards.
+    this.announceRegrowth(simulation, Date.now());
     if (simulation.playerCount > 0) this.startTicking();
     return simulation;
   }
@@ -392,6 +417,18 @@ export class World extends DurableObject<WorldEnv> {
         : DEFAULT_WORLD_SEED;
     this.writeMeta('seed', String(seed));
     return seed;
+  }
+
+  /**
+   * How long a felled tree takes to come back, if the environment says.
+   *
+   * Only honoured when it is a sensible positive number, so a typo in a
+   * dashboard variable cannot make every tree return instantly.
+   */
+  private regrowMinSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_REGROW_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
   }
 
   /** Time since the world began, derived from the tick count rather than a clock. */
@@ -455,8 +492,35 @@ export class World extends DurableObject<WorldEnv> {
       tree_id INTEGER PRIMARY KEY,
       swings_taken INTEGER NOT NULL,
       felled INTEGER NOT NULL,
+      -- Real time, not ticks: a world with nobody in it does not tick, and a
+      -- tree felled before bed still has to be back by morning.
+      felled_at_ms INTEGER NOT NULL DEFAULT 0,
+      -- How many times this spot has grown back. It decides the tree's size.
+      generation INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL
     )`);
+    // A world somebody already played in has the table as it was then, because
+    // "create if it does not exist" leaves an existing one alone. Worlds are
+    // not thrown away between releases, so anything added later has to be added
+    // to them here.
+    this.addColumn('trees', 'felled_at_ms', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('trees', 'generation', 'INTEGER NOT NULL DEFAULT 0');
+    // A tree felled before this release has no record of when it fell. Count it
+    // as having just come down, so an old clearing heals over the next half
+    // hour instead of every stump popping back the moment somebody walks in.
+    sql.exec('UPDATE trees SET felled_at_ms = ? WHERE felled = 1 AND felled_at_ms = 0', Date.now());
+  }
+
+  /** Add a column to an existing table, unless it is already there. */
+  private addColumn(table: string, column: string, definition: string): void {
+    const sql = this.ctx.storage.sql;
+    const columns = sql
+      .exec<{ name: string }>('SELECT name FROM pragma_table_info(?)', table)
+      .toArray();
+    if (columns.some((row) => row.name === column)) return;
+    // The names are ours, not anybody's input, so they can go in as text: SQLite
+    // will not take a placeholder for a column name.
+    sql.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   private readMeta(key: string): string | null {
@@ -526,24 +590,31 @@ export class World extends DurableObject<WorldEnv> {
         tree_id: number;
         swings_taken: number;
         felled: number;
-      }>('SELECT tree_id, swings_taken, felled FROM trees')
+        felled_at_ms: number;
+        generation: number;
+      }>('SELECT tree_id, swings_taken, felled, felled_at_ms, generation FROM trees')
       .toArray()
       .map((row) => ({
         treeId: row.tree_id,
         swingsTaken: row.swings_taken,
         felled: row.felled !== 0,
+        felledAtMs: row.felled_at_ms,
+        generation: row.generation,
       }));
   }
 
   private writeTree(tree: PersistedTree): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO trees (tree_id, swings_taken, felled, updated_at) ' +
-        'VALUES (?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
+      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
         'swings_taken = excluded.swings_taken, felled = excluded.felled, ' +
+        'felled_at_ms = excluded.felled_at_ms, generation = excluded.generation, ' +
         'updated_at = excluded.updated_at',
       tree.treeId,
       tree.swingsTaken,
       tree.felled ? 1 : 0,
+      tree.felledAtMs,
+      tree.generation,
       Date.now(),
     );
   }

@@ -10,8 +10,8 @@ The game is online-only. Every world runs on the server.
 > placeholder trees and rocks, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump, chop a tree down with it, and the world remembers
-> both: log out, come back, and the stump is still there. Trees growing back is
-> next. See [the roadmap](#roadmap).
+> both: log out, come back, and the stump is still there. Leave it long enough
+> and a new tree grows in its place. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -32,6 +32,20 @@ You can carry one axe and ten logs. The limits live in
 [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), and
 what each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts).
+
+### Trees growing back
+
+A felled tree comes back on its own, somewhere between half an hour and an hour
+later, at a size of its own. It counts in real time rather than in ticks, so a
+tree felled before bed is standing again by morning even though the world was
+asleep the whole time. A tree will not grow back through somebody standing on
+the spot; it waits until they move. See
+[decision 0013](docs/decisions/0013-trees-growing-back.md).
+
+Half an hour is a long time to wait while working on it, so `local` runs and
+preview links use two minutes instead, set by `WORLD_REGROW_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
+production use the real wait.
 
 ## Running it locally
 
@@ -83,6 +97,9 @@ Run these from the repository root.
 | `pnpm check:assets` | Check every asset has a licence row                        |
 | `pnpm bench:tick`   | Measure server tick time and memory with simulated players |
 | `pnpm loadtest`     | Point a crowd of bots at a running world                   |
+
+`pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
+then waits for it to grow back.
 
 ## Repository layout
 

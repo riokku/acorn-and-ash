@@ -8,7 +8,7 @@ import {
   type InventoryMessage,
   type PickupsTakenMessage,
   type TreeHitMessage,
-  type TreesFelledMessage,
+  type TreeStatesMessage,
   type ServerMessage,
   type SnapshotMessage,
   type WelcomeMessage,
@@ -96,10 +96,24 @@ export class TestClient {
     return messages[messages.length - 1]?.pickupIds ?? [];
   }
 
-  /** The newest list of trees the server says are down. */
-  felledTrees(): TreesFelledMessage['treeIds'] {
-    const messages = this.received.filter((entry) => entry.type === 'treesFelled');
-    return messages[messages.length - 1]?.treeIds ?? [];
+  /** The newest word on the trees that are not as the seed left them. */
+  treeStates(): TreeStatesMessage['trees'] {
+    const messages = this.received.filter((entry) => entry.type === 'treeStates');
+    return messages[messages.length - 1]?.trees ?? [];
+  }
+
+  /** The first word on the trees, sent the moment you join. */
+  openingTreeStates(): TreeStatesMessage['trees'] {
+    const message = this.received.find((entry) => entry.type === 'treeStates');
+    if (message === undefined) throw new Error('Never received the opening tree states');
+    return message.trees;
+  }
+
+  /** The ids of the trees the server says are down right now. */
+  felledTrees(): number[] {
+    return this.treeStates()
+      .filter((tree) => tree.felled)
+      .map((tree) => tree.treeId);
   }
 
   /** Every swing the server has told us about. */

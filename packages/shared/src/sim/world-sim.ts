@@ -5,6 +5,8 @@ import {
   INTEREST_RADIUS,
   MAX_INPUTS_PER_TICK,
   MAX_QUEUED_INPUTS_PER_PLAYER,
+  MAX_TREE_GENERATION,
+  REGROW_MIN_SECONDS,
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
   SPRINT_REPORTING_SPEED,
@@ -25,14 +27,17 @@ import {
   Velocity,
 } from '../ecs/traits';
 import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
+import { colliderFootprintRadius } from '../world/colliders';
 import type { ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
 import type { Vec3 } from '../math/vec3';
 import {
   buildTestClearing,
+  colliderForProp,
   stumpColliderFor,
   type Clearing,
   type PlacedPickup,
+  type PlacedProp,
 } from '../world/clearing';
 import { createFlatTerrain, type Terrain } from '../world/terrain';
 import {
@@ -45,6 +50,7 @@ import {
 } from './inventory';
 import { pickupInReach } from './pickups';
 import { treeInReach, type ChopTarget } from './chopping';
+import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
 import {
   PlayerButton,
   createPlayerMotion,
@@ -61,6 +67,14 @@ export interface WorldSimulationOptions {
   readonly terrain?: Terrain;
   /** Skip spawning scenery entities. Only used by benchmarks. */
   readonly withProps?: boolean;
+  /**
+   * The shortest a felled tree takes to come back, in seconds. Trees return
+   * somewhere between this and twice it.
+   *
+   * Turned right down for previews and local runs, so a tree growing back can
+   * be watched rather than waited out. Left alone everywhere real.
+   */
+  readonly regrowMinSeconds?: number;
 }
 
 /**
@@ -116,11 +130,46 @@ export interface TreeChopped {
   readonly logsGained: number;
 }
 
-/** A tree's progress towards falling, as it goes into and comes out of storage. */
+/** A tree's state, as it goes into and comes out of storage. */
 export interface PersistedTree {
   readonly treeId: number;
   readonly swingsTaken: number;
   readonly felled: boolean;
+  /**
+   * When it was felled, in real time.
+   *
+   * Real time rather than ticks, because a world with nobody in it stops
+   * ticking: a tree felled at midnight has to be back when somebody logs in at
+   * one, having counted nothing in between.
+   */
+  readonly felledAtMs: number;
+  /** How many times this spot has grown back. It decides the tree's size. */
+  readonly generation: number;
+}
+
+/**
+ * The turn after this one.
+ *
+ * The count is what both ends work the tree's size out from and it travels in
+ * one byte, so a spot chopped hundreds of times stops counting rather than
+ * growing a tree every browser would draw at a different size.
+ */
+function nextGeneration(generation: number): number {
+  return Math.min(generation + 1, MAX_TREE_GENERATION);
+}
+
+/** A tree that has come back. */
+export interface TreeRegrown {
+  readonly treeId: number;
+  readonly generation: number;
+}
+
+/** Everything the world knows about one tree. */
+interface TreeState {
+  swingsTaken: number;
+  felled: boolean;
+  felledAtMs: number;
+  generation: number;
 }
 
 interface PlayerRuntime {
@@ -147,29 +196,42 @@ export class WorldSimulation {
   readonly seed: number;
   readonly clearing: Clearing;
   readonly collision: CollisionWorld;
+  readonly regrowMinSeconds: number;
 
   /** How many ticks have been simulated since the world was created. */
   tick = 0;
+
+  /** Real time as of the tick being simulated, supplied by the caller. */
+  private nowMs = 0;
 
   private readonly players = new Map<number, PlayerRuntime>();
   /** Pickups that somebody has already taken, by id. */
   private readonly takenPickups = new Set<number>();
   /** Drained by the world server each tick and turned into messages. */
   private readonly pickupEvents: PickupTaken[] = [];
-  /** Trees that have come down, by prop id. */
-  private readonly felledTrees = new Set<number>();
-  /** Swings taken out of a tree that is still standing, by prop id. */
-  private readonly treeSwings = new Map<number, number>();
+  /** Every tree anybody has touched, by prop id. Untouched trees are not here. */
+  private readonly trees = new Map<number, TreeState>();
   private readonly chopEvents: TreeChopped[] = [];
+  private readonly regrowthEvents: TreeRegrown[] = [];
+  /**
+   * The props as they stand right now.
+   *
+   * A tree that has grown back is a different size from the one the clearing
+   * was built with, and reach, collision and drawing all have to agree about
+   * which one is there.
+   */
+  private readonly standing: PlacedProp[];
   private spawnCounter = 0;
   /** Reused every tick so a busy world does not allocate per player. */
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
+    this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
     this.clearing = buildTestClearing(options.seed);
     const terrain = options.terrain ?? createFlatTerrain(0);
     this.collision = createCollisionWorld(terrain, this.clearing.colliders);
+    this.standing = [...this.clearing.props];
     this.world = createWorld();
 
     if (options.withProps !== false) {
@@ -282,8 +344,16 @@ export class WorldSimulation {
     return this.players.get(netId)?.droppedInputs ?? 0;
   }
 
-  /** Simulate a single 20 Hz tick. */
-  step(): void {
+  /**
+   * Simulate a single 20 Hz tick.
+   *
+   * `nowMs` is real time, and it is here rather than read from a clock because
+   * shared code must stay deterministic and because Workers freeze the clock
+   * between I/O anyway. Only regrowth uses it, and only to stamp the moment a
+   * tree came down.
+   */
+  step(nowMs: number): void {
+    this.nowMs = nowMs;
     this.tick += 1;
     const scratch = this.scratch;
 
@@ -384,11 +454,12 @@ export class WorldSimulation {
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
 
-    const swingsTaken = (this.treeSwings.get(target.prop.id) ?? 0) + 1;
+    const state = this.treeState(target.prop.id);
+    const swingsTaken = state.swingsTaken + 1;
     const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
 
     if (swingsLeft > 0) {
-      this.treeSwings.set(target.prop.id, swingsTaken);
+      state.swingsTaken = swingsTaken;
       this.chopEvents.push({
         netId: runtime.netId,
         treeId: target.prop.id,
@@ -398,7 +469,7 @@ export class WorldSimulation {
       return;
     }
 
-    this.fellTree(target.prop.id);
+    this.fellTree(target.prop.id, this.nowMs);
     // A full pack means the wood stays on the ground. The tree still falls:
     // you did chop it down, you just cannot carry what came off it.
     const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
@@ -411,46 +482,144 @@ export class WorldSimulation {
   }
 
   /** Take a tree out of the world: it stops blocking, and a stump blocks instead. */
-  private fellTree(treeId: number): void {
-    if (this.felledTrees.has(treeId)) return;
-    this.felledTrees.add(treeId);
-    this.treeSwings.delete(treeId);
+  private fellTree(treeId: number, felledAtMs: number): void {
+    const state = this.treeState(treeId);
+    if (state.felled) return;
+    state.felled = true;
+    state.swingsTaken = 0;
+    state.felledAtMs = felledAtMs;
 
     const index = this.clearing.indexById.get(treeId);
-    const tree = index === undefined ? undefined : this.clearing.props[index];
+    const tree = index === undefined ? undefined : this.standing[index];
     if (index === undefined || tree === undefined) return;
     replaceCollider(this.collision, index, stumpColliderFor(tree));
   }
 
+  /**
+   * Put a tree back, at whatever size this generation of it is.
+   *
+   * Both the thing you bump into and the thing reach is measured against have
+   * to agree it is a tree again, and agree about how big.
+   */
+  private growTree(treeId: number, state: TreeState): void {
+    state.felled = false;
+    state.swingsTaken = 0;
+    state.generation = nextGeneration(state.generation);
+
+    const index = this.clearing.indexById.get(treeId);
+    const original = index === undefined ? undefined : this.clearing.props[index];
+    if (index === undefined || original === undefined) return;
+
+    const grown = treeAtGeneration(this.seed, original, state.generation);
+    this.standing[index] = grown;
+    replaceCollider(this.collision, index, colliderForProp(grown));
+    this.regrowthEvents.push({ treeId, generation: state.generation });
+  }
+
+  private treeState(treeId: number): TreeState {
+    const existing = this.trees.get(treeId);
+    if (existing !== undefined) return existing;
+    const fresh: TreeState = { swingsTaken: 0, felled: false, felledAtMs: 0, generation: 0 };
+    this.trees.set(treeId, fresh);
+    return fresh;
+  }
+
+  /**
+   * Bring back every tree whose time is up and whose spot is free.
+   *
+   * Called with real time, because a world with nobody in it does not tick. On
+   * waking, everything that fell long enough ago comes back at once.
+   */
+  regrowTrees(nowMs: number): TreeRegrown[] {
+    const players: Vec3[] = [];
+    for (const runtime of this.players.values()) {
+      const position = runtime.entity.get(Position);
+      if (position !== undefined) players.push({ x: position.x, y: position.y, z: position.z });
+    }
+
+    for (const [treeId, state] of this.trees) {
+      if (!state.felled) continue;
+      const dueAt = regrowDueAtMs(
+        this.seed,
+        treeId,
+        state.generation,
+        state.felledAtMs,
+        this.regrowMinSeconds,
+      );
+      if (nowMs < dueAt) continue;
+
+      const index = this.clearing.indexById.get(treeId);
+      const original = index === undefined ? undefined : this.clearing.props[index];
+      if (index === undefined || original === undefined) continue;
+
+      // The same tree `growTree` is about to put here, so the room it asks for
+      // is the room it will take.
+      const grown = treeAtGeneration(this.seed, original, nextGeneration(state.generation));
+      const footprint = colliderFootprintRadius(colliderForProp(grown));
+      // Somebody is standing here: it waits rather than growing through them.
+      if (!spotIsClear(grown.x, grown.z, footprint, players)) continue;
+
+      this.growTree(treeId, state);
+    }
+
+    return this.regrowthEvents.splice(0);
+  }
+
   /** The tree this player would hit if they swung, or null. Used by tests. */
   treeInReachOf(position: Readonly<Vec3>, aimYaw: number): ChopTarget | null {
-    return treeInReach(position, aimYaw, this.clearing.props, (id) => this.felledTrees.has(id));
+    return treeInReach(position, aimYaw, this.standing, (id) => this.isFelled(id));
+  }
+
+  isFelled(treeId: number): boolean {
+    return this.trees.get(treeId)?.felled === true;
   }
 
   /** How many more swings this tree needs, or null if it is already down. */
   swingsLeftOn(treeId: number): number | null {
-    if (this.felledTrees.has(treeId)) return null;
+    const state = this.trees.get(treeId);
+    if (state?.felled === true) return null;
     const index = this.clearing.indexById.get(treeId);
-    const tree = index === undefined ? undefined : this.clearing.props[index];
+    const tree = index === undefined ? undefined : this.standing[index];
     if (tree === undefined) return null;
     const rule = choppingRuleFor(PROP_KINDS[tree.kind]);
     if (rule === null) return null;
-    return rule.swingsToFell - (this.treeSwings.get(treeId) ?? 0);
+    return rule.swingsToFell - (state?.swingsTaken ?? 0);
   }
 
-  /** Trees that have come down, for sending to a client and for saving. */
+  /** Trees that are down right now, for sending to a client. */
   felledTreeIds(): number[] {
-    return [...this.felledTrees];
+    const down: number[] = [];
+    for (const [treeId, state] of this.trees) if (state.felled) down.push(treeId);
+    return down;
   }
 
-  /** Everything worth saving about the trees: what is down, and what is half cut. */
+  /** How many times this spot has grown back. Zero for a tree nobody has touched. */
+  generationOf(treeId: number): number {
+    return this.trees.get(treeId)?.generation ?? 0;
+  }
+
+  /** What the client needs to draw the trees that are not as the seed left them. */
+  changedTrees(): Array<{ treeId: number; generation: number; felled: boolean }> {
+    const changed: Array<{ treeId: number; generation: number; felled: boolean }> = [];
+    for (const [treeId, state] of this.trees) {
+      if (!state.felled && state.generation === 0) continue;
+      changed.push({ treeId, generation: state.generation, felled: state.felled });
+    }
+    return changed;
+  }
+
+  /** Everything worth saving about the trees. Untouched trees are not saved. */
   persistableTrees(): PersistedTree[] {
     const saved: PersistedTree[] = [];
-    for (const treeId of this.felledTrees) {
-      saved.push({ treeId, swingsTaken: 0, felled: true });
-    }
-    for (const [treeId, swingsTaken] of this.treeSwings) {
-      saved.push({ treeId, swingsTaken, felled: false });
+    for (const [treeId, state] of this.trees) {
+      if (!state.felled && state.swingsTaken === 0 && state.generation === 0) continue;
+      saved.push({
+        treeId,
+        swingsTaken: state.swingsTaken,
+        felled: state.felled,
+        felledAtMs: state.felledAtMs,
+        generation: state.generation,
+      });
     }
     return saved;
   }
@@ -458,8 +627,19 @@ export class WorldSimulation {
   /** Put the trees back as they were after the world wakes from storage. */
   restoreTrees(trees: Iterable<PersistedTree>): void {
     for (const tree of trees) {
-      if (tree.felled) this.fellTree(tree.treeId);
-      else if (tree.swingsTaken > 0) this.treeSwings.set(tree.treeId, tree.swingsTaken);
+      const state = this.treeState(tree.treeId);
+      state.generation = tree.generation;
+      state.swingsTaken = tree.swingsTaken;
+
+      const index = this.clearing.indexById.get(tree.treeId);
+      const original = index === undefined ? undefined : this.clearing.props[index];
+      if (index !== undefined && original !== undefined && tree.generation > 0) {
+        const grown = treeAtGeneration(this.seed, original, tree.generation);
+        this.standing[index] = grown;
+        replaceCollider(this.collision, index, colliderForProp(grown));
+      }
+
+      if (tree.felled) this.fellTree(tree.treeId, tree.felledAtMs);
     }
   }
 

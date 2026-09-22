@@ -14,6 +14,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }],
 
+  // Running locally, trees come back in a couple of minutes rather than half an
+  // hour, so regrowth can be watched instead of waited out. Not shorter than
+  // this: a tree that returns while you are still busy with the last one reads
+  // as a glitch rather than as the forest recovering, and it makes the tests
+  // that chop a tree and expect to find the stump race against it.
+  "vars": { "WORLD_REGROW_SECONDS": "120" },
+
   "env": {
     // One of these is deployed per pull request, renamed on the command line to
     // acorn-ash-game-server-pr-<number>, so a preview link is the whole game
@@ -27,6 +34,9 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
+      // A preview is for trying things out, so trees come back while you watch:
+      // two to four minutes rather than thirty to sixty.
+      "vars": { "WORLD_REGROW_SECONDS": "120" },
     },
     "staging": {
       "name": "acorn-ash-game-server-staging",
@@ -34,6 +44,10 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
+      // The real wait: half an hour, up to an hour. Spelled out rather than
+      // left to the default, because an environment that says nothing here
+      // makes Wrangler warn on every deploy.
+      "vars": { "WORLD_REGROW_SECONDS": "1800" },
     },
     "production": {
       "name": "acorn-ash-game-server-production",
@@ -41,6 +55,7 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
+      "vars": { "WORLD_REGROW_SECONDS": "1800" },
     },
   },
 }

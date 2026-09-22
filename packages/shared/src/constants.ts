@@ -97,6 +97,35 @@ export const SWING_COOLDOWN_TICKS = Math.round(SWING_INTERVAL_SECONDS * TICK_HZ)
  */
 export const CHOP_FACING_COSINE = 0.5;
 
+/**
+ * Growing back.
+ *
+ * Chris settled "at least thirty minutes, somewhat random"; an hour is the top
+ * of that range until it has been lived with. Long enough that you walk back
+ * into a clearing that healed while you were elsewhere, rather than watching it
+ * happen.
+ */
+export const REGROW_MIN_SECONDS = 30 * 60;
+/** Always twice the shortest wait, so turning one down turns both down. */
+export const REGROW_MAX_SECONDS = REGROW_MIN_SECONDS * 2;
+/** A tree that grows back is a new tree, and comes in at a new size. */
+export const REGROWN_SCALE_MIN = 0.8;
+export const REGROWN_SCALE_MAX = 1.35;
+/**
+ * How much room a tree wants before it will grow back. A tree appearing around
+ * somebody standing on the spot would be a nasty surprise, so it waits.
+ */
+export const REGROW_CLEARANCE = 1.5;
+/**
+ * How many times one spot is counted as having grown back.
+ *
+ * The count is what both ends work the tree's size out from, and it travels in
+ * a single byte, so this is where the counting stops. A spot at the cap still
+ * grows back; every tree after it is simply the same one. At half an hour a
+ * turn that is about five days of chopping the same stump without pause.
+ */
+export const MAX_TREE_GENERATION = 255;
+
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;
 /** New players are spread around the spawn point so they do not stack up. */
