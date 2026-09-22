@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {
   CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
+  HUNGER_MAX,
   ITEM_KINDS,
   POND_FISH,
   PROP_KINDS,
@@ -24,6 +25,7 @@ import {
   type Clearing,
   type CollisionWorld,
   type FishingEvent,
+  type HungerEvent,
   type ItemId,
   type PlacedProp,
   type ServerMessage,
@@ -105,6 +107,10 @@ export interface GameDebug {
   fishing(): FishingPhase;
   /** The last thing said about our fishing, if it is still on screen. */
   fishingNews(): string | null;
+  /** How hungry we are, from `HUNGER_MAX` (full) down to zero. */
+  hunger(): number;
+  /** The last thing said about what we ate, if it is still on screen. */
+  hungerNews(): string | null;
 }
 
 export interface GameOptions {
@@ -151,6 +157,9 @@ export class Game {
   /** Our own line, as far as the server has told us. */
   private fishingPhase: FishingPhase = null;
   private fishingNews: { text: string; until: number } | null = null;
+  /** How hungry we are, as far as the server has told us. */
+  private hunger = HUNGER_MAX;
+  private hungerNews: { text: string; until: number } | null = null;
   /** The server takes a breath after every cast ends; so does the hint. */
   private castReadyAt = 0;
   private canCast = false;
@@ -252,6 +261,8 @@ export class Game {
       canCast: () => this.canCast,
       fishing: () => this.fishingPhase,
       fishingNews: () => this.currentNews(performance.now()),
+      hunger: () => this.hunger,
+      hungerNews: () => this.currentHungerNews(performance.now()),
     };
   }
 
@@ -351,6 +362,10 @@ export class Game {
         this.hearFromTheWater(message.event);
         break;
       }
+      case 'hunger': {
+        this.hearAboutHunger(message.event);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -396,6 +411,25 @@ export class Game {
 
   private currentNews(now = performance.now()): string | null {
     const news = this.fishingNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /** Only ever about us: nobody else's hunger is any of our business. */
+  private hearAboutHunger(event: HungerEvent): void {
+    this.hunger = event.hunger;
+    if (event.ate !== null) {
+      const now = performance.now();
+      const name = ITEM_KINDS[event.ate].displayName.toLowerCase();
+      this.hungerNews = { text: `You ate a ${name}.`, until: now + NEWS_MS };
+    }
+    // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
+    // than left for the next frame, so a stall in the render loop cannot eat
+    // the window this news is shown for.
+    this.options.hud.publish({ hunger: this.hunger, hungerNews: this.currentHungerNews() });
+  }
+
+  private currentHungerNews(now = performance.now()): string | null {
+    const news = this.hungerNews;
     return news !== null && now < news.until ? news.text : null;
   }
 
@@ -663,6 +697,8 @@ export class Game {
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),
+      hunger: this.hunger,
+      hungerNews: this.currentHungerNews(now),
     });
   }
 

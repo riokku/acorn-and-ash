@@ -19,7 +19,10 @@
   // this: a tree that returns while you are still busy with the last one reads
   // as a glitch rather than as the forest recovering, and it makes the tests
   // that chop a tree and expect to find the stump race against it.
-  "vars": { "WORLD_REGROW_SECONDS": "120" },
+  //
+  // Hunger empties in three minutes rather than twenty, for the same reason:
+  // fast enough to watch happen in one sitting, not so fast it feels broken.
+  "vars": { "WORLD_REGROW_SECONDS": "120", "WORLD_HUNGER_EMPTY_SECONDS": "180" },
 
   "env": {
     // One of these is deployed per pull request, renamed on the command line to
@@ -35,8 +38,9 @@
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
       // A preview is for trying things out, so trees come back while you watch:
-      // two to four minutes rather than thirty to sixty.
-      "vars": { "WORLD_REGROW_SECONDS": "120" },
+      // two to four minutes rather than thirty to sixty. Hunger empties in
+      // three minutes rather than twenty, for the same reason.
+      "vars": { "WORLD_REGROW_SECONDS": "120", "WORLD_HUNGER_EMPTY_SECONDS": "180" },
     },
     "staging": {
       "name": "acorn-ash-game-server-staging",
@@ -44,10 +48,11 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
-      // The real wait: half an hour, up to an hour. Spelled out rather than
-      // left to the default, because an environment that says nothing here
-      // makes Wrangler warn on every deploy.
-      "vars": { "WORLD_REGROW_SECONDS": "1800" },
+      // The real wait: half an hour, up to an hour. Hunger takes the real
+      // twenty minutes too. Both spelled out rather than left to the default,
+      // because an environment that says nothing here makes Wrangler warn on
+      // every deploy.
+      "vars": { "WORLD_REGROW_SECONDS": "1800", "WORLD_HUNGER_EMPTY_SECONDS": "1200" },
     },
     "production": {
       "name": "acorn-ash-game-server-production",
@@ -55,7 +60,7 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
-      "vars": { "WORLD_REGROW_SECONDS": "1800" },
+      "vars": { "WORLD_REGROW_SECONDS": "1800", "WORLD_HUNGER_EMPTY_SECONDS": "1200" },
     },
   },
 }

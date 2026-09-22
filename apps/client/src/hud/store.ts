@@ -1,4 +1,4 @@
-import type { ItemId } from '@acorn/shared';
+import { HUNGER_MAX, type ItemId } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
@@ -31,6 +31,10 @@ export interface HudState {
   readonly fishing: FishingPhase;
   /** What just happened to our line, while it is still worth showing. */
   readonly fishingNews: string | null;
+  /** How hungry we are, from `HUNGER_MAX` (full) down to zero. */
+  readonly hunger: number;
+  /** What we last ate, while it is still worth showing. */
+  readonly hungerNews: string | null;
 }
 
 const INITIAL: HudState = {
@@ -52,6 +56,8 @@ const INITIAL: HudState = {
   canCast: false,
   fishing: null,
   fishingNews: null,
+  hunger: HUNGER_MAX,
+  hungerNews: null,
 };
 
 /**

@@ -1,6 +1,6 @@
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
-import type { FishingEvent, SnapshotEntity } from '../sim/world-sim';
+import type { FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
 
 /** What a client is allowed to say. */
 export const ClientMessageType = {
@@ -20,6 +20,7 @@ export const ServerMessageType = {
   TreeStates: 0x17,
   TreeHit: 0x18,
   Fishing: 0x19,
+  Hunger: 0x1a,
 } as const;
 
 export const RejectReason = {
@@ -131,6 +132,17 @@ export interface FishingMessage {
   readonly event: FishingEvent;
 }
 
+/**
+ * How hungry this player is now.
+ *
+ * Only that player is ever told: hunger is nobody else's business. Sent on
+ * arrival and whenever it changes.
+ */
+export interface HungerMessage {
+  readonly type: 'hunger';
+  readonly event: HungerEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -141,4 +153,5 @@ export type ServerMessage =
   | PickupsTakenMessage
   | TreeStatesMessage
   | TreeHitMessage
-  | FishingMessage;
+  | FishingMessage
+  | HungerMessage;

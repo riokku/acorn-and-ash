@@ -5,6 +5,7 @@ import {
   AXE_PICKUP_ID,
   DEFAULT_WORLD_SEED,
   AXE_STUMP,
+  HUNGER_MAX,
   ITEM_KINDS,
   POND_FISH,
   ROD_PICKUP_ID,
@@ -16,6 +17,7 @@ import {
   TICK_HZ,
   buildTestClearing,
   choppingRuleFor,
+  type ItemId,
 } from '@acorn/shared';
 
 import { sleep, TestClient, waitFor } from './helpers';
@@ -771,4 +773,93 @@ describe('fishing', () => {
     angler.close();
     onlooker.close();
   }, 45_000);
+});
+
+describe('hunger', () => {
+  /** Looking along +X, which from the rod is straight out over the pond. */
+  const EAST = -Math.PI / 2;
+
+  async function readyToFish(client: TestClient): Promise<void> {
+    await walkWithinReach(client, ROD_SPOT);
+    client.walk(0, 0, EAST, 3, PlayerButton.Interact);
+    await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
+    // Let go of the button, so the first click to cast is a fresh one.
+    client.walk(0, 0, EAST, 2);
+    await sleep(150);
+  }
+
+  /** A press and a release, carrying whatever else a browser would be saying. */
+  function click(client: TestClient, extra = 0): void {
+    client.walk(0, 0, EAST, 1, PlayerButton.Swing | extra);
+    client.walk(0, 0, EAST, 1, extra);
+  }
+
+  /** Cast, wait for a bite and land it, the same way the fishing tests do. */
+  async function catchAFish(client: TestClient): Promise<ItemId> {
+    await readyToFish(client);
+    click(client);
+    await waitFor('a bite', () => client.fishing().some((event) => event.kind === 'bite'), 12_000);
+    click(client, PlayerButton.SawBite);
+
+    await waitFor('the catch', () => client.fishing().some((event) => event.kind === 'caught'));
+    const caught = client.fishing().find((event) => event.kind === 'caught');
+    if (caught?.kind !== 'caught') throw new Error('expected a catch');
+    return caught.item;
+  }
+
+  it('tells a new player they start full', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a hunger reading', () => client.hunger().length > 0);
+    expect(client.latestHunger()?.hunger).toBe(HUNGER_MAX);
+    client.close();
+  });
+
+  it('drains on its own while the world ticks', async () => {
+    // Three seconds to empty in this test run; see vitest.config.ts.
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a hunger reading', () => client.hunger().length > 0);
+
+    await waitFor(
+      'hunger to have dropped',
+      () => (client.latestHunger()?.hunger ?? HUNGER_MAX) < HUNGER_MAX,
+      4_000,
+    );
+    client.close();
+  }, 15_000);
+
+  it('eats a fish when there is nothing else to reach for, and says which', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-eater');
+    const item = await catchAFish(client);
+    await waitFor('the fish in the pack', () =>
+      client.inventory().some((entry) => entry.item === item),
+    );
+    const before = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
+
+    // The rod is already in hand and the axe is nowhere near the pond, so the
+    // same button that would pick something up reaches into the pack instead.
+    client.walk(0, 0, EAST, 3, PlayerButton.Interact);
+    await waitFor('a meal', () => client.hunger().some((event) => event.ate === item));
+
+    const after = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
+    expect(after).toBe(before - 1);
+    client.close();
+  }, 45_000);
+
+  it('keeps hunger across logging out and coming back', async () => {
+    // Waits for the meter to bottom out rather than comparing a reading taken
+    // mid-drain: with hunger still moving, the moment between capturing "what
+    // it was" and the connection actually closing is enough real time for the
+    // fast test rate to move it again, and the comparison would be flaky.
+    // Zero is a stable floor to compare against instead.
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'the-hungry-one');
+    await waitFor('hunger to bottom out', () => first.latestHunger()?.hunger === 0, 5_000);
+    first.close();
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'the-hungry-one');
+    await waitFor('a hunger reading after coming back', () => second.hunger().length > 0);
+    expect(second.latestHunger()?.hunger).toBe(0);
+    second.close();
+  }, 15_000);
 });

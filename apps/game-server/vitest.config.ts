@@ -13,7 +13,8 @@ export default defineConfig({
       // Trees come back in seconds here rather than the minute a local run
       // uses, so a test can watch one return without dawdling. Not shorter:
       // a tree that returns mid-chop would make the felling tests flaky.
-      miniflare: { bindings: { WORLD_REGROW_SECONDS: '5' } },
+      // Hunger empties in seconds too, for the same reason.
+      miniflare: { bindings: { WORLD_REGROW_SECONDS: '5', WORLD_HUNGER_EMPTY_SECONDS: '3' } },
     }),
   ],
   test: {

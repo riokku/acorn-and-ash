@@ -11,7 +11,8 @@ The game is online-only. Every world runs on the server.
 > can walk out into, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump and chop trees down; they grow back while you are
-> away. Find the rod on the bank of the pond and catch fish. See
+> away. Find the rod on the bank of the pond and catch fish. You get hungry
+> the longer you play, and eating a fish tops you back up. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -21,7 +22,7 @@ The game is online-only. Every world runs on the server.
 | `W` `A` `S` `D` or the arrow keys | Walk                |
 | `Shift` (held)                    | Sprint              |
 | `Space`                           | Jump                |
-| `E`                               | Pick up             |
+| `E`                               | Pick up, eat        |
 | Left mouse                        | Chop, cast, hook    |
 | Mouse                             | Look around         |
 | `Esc`                             | Let go of the mouse |
@@ -30,7 +31,7 @@ There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
 
 You can carry one axe, one fishing rod, ten logs and ten of each kind of fish.
-The limits live in
+The limits, and how much hunger eating a fish restores, live in
 [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), what
 each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
@@ -58,6 +59,20 @@ You have a second to click from the moment the float goes under on your own
 screen, however slow your connection. The server times it on your side of the
 wire, from a flag your browser sets on everything it sends while it is showing
 the bite. See [decision 0014](docs/decisions/0014-fishing.md).
+
+### Hunger
+
+You get hungrier the longer you play. Press `E` and, if there is nothing at
+your feet to pick up, you will eat a fish out of your pack instead, common
+ones first. Running out is a nudge, not a penalty: the HUD says so and the
+hint turns urgent, but nothing worse happens yet. See
+[decision 0016](docs/decisions/0016-hunger-and-eating.md).
+
+A full meter takes twenty minutes to run out for real. `local` runs and
+preview links use three minutes instead, set by `WORLD_HUNGER_EMPTY_SECONDS`
+in [`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc), the
+same way tree regrowth is turned down. Staging and production use the real
+wait.
 
 ### Trees growing back
 
@@ -93,7 +108,7 @@ offline, which is fine for working on how things look.
 To play against the deployed staging world:
 
 ```bash
-VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.workers.dev pnpm dev
+VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.chrisistinson.workers.dev pnpm dev
 ```
 
 ### Handy switches

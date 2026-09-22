@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_WORLD_SEED,
+  HUNGER_MAX,
   INTEREST_RADIUS,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
@@ -389,6 +390,100 @@ describe('picking the axe up', () => {
   });
 });
 
+describe('hunger', () => {
+  function createHungryWorld(hungerEmptyAfterSeconds: number): WorldSimulation {
+    const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED, hungerEmptyAfterSeconds });
+    built.push(sim);
+    return sim;
+  }
+
+  function withFish(netId: number, hunger: number, count = 2): PersistedPlayer {
+    return {
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'perch', count }],
+      hunger,
+    };
+  }
+
+  it('starts a new player full', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    expect(sim.hungerOf(1)).toBe(HUNGER_MAX);
+  });
+
+  it('drains while the world ticks, at the pace it is given', () => {
+    const sim = createHungryWorld(10);
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 0, TICK_HZ * 5);
+    expect(sim.hungerOf(1)).toBeCloseTo(50, 0);
+  });
+
+  it('never drains below zero', () => {
+    const sim = createHungryWorld(1);
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 0, TICK_HZ * 5);
+    expect(sim.hungerOf(1)).toBe(0);
+  });
+
+  it('does nothing when there is nothing to eat', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(sim.drainHungerEvents()).toEqual([]);
+  });
+
+  it('eats a fish when the player asks and it would help', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withFish(1, 50));
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+    expect(sim.hungerOf(1)).toBe(90);
+    expect(sim.drainHungerEvents()).toEqual([{ netId: 1, hunger: 90, ate: 'perch' }]);
+  });
+
+  it('reports each meal exactly once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withFish(1, 50));
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(sim.drainHungerEvents()).toHaveLength(1);
+    expect(sim.drainHungerEvents()).toEqual([]);
+  });
+
+  it('picking something up still wins over eating', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withFish(1, 50));
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(2);
+  });
+
+  it('keeps hunger across logging out and coming back', () => {
+    const sim = createHungryWorld(10);
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 0, TICK_HZ * 3);
+    const before = sim.hungerOf(1);
+
+    const saved = sim.persistablePlayers()[0];
+    if (saved === undefined) throw new Error('nothing was saved');
+    sim.removePlayer(1);
+
+    const later = createWorld();
+    later.addPlayer(9, saved);
+    expect(later.hungerOf(9)).toBe(before);
+  });
+});
+
 describe('chopping a tree down', () => {
   const withAxe = (netId: number): PersistedPlayer => ({
     netId,
@@ -397,6 +492,7 @@ describe('chopping a tree down', () => {
     z: 0,
     facingYaw: 0,
     items: [{ item: 'axe', count: 1 }],
+    hunger: HUNGER_MAX,
   });
 
   /** The first tree of this kind in the clearing. */
@@ -609,6 +705,7 @@ describe('trees growing back', () => {
     z: 0,
     facingYaw: 0,
     items: [{ item: 'axe', count: 1 }],
+    hunger: HUNGER_MAX,
   });
 
   function findTree(sim: WorldSimulation, kind: 'oak' | 'birch' | 'pine') {

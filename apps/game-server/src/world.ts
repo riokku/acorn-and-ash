@@ -15,6 +15,7 @@ import {
   encodePlayerLeft,
   encodePong,
   encodeFishing,
+  encodeHunger,
   encodeRejected,
   encodeSnapshot,
   encodeTreeHit,
@@ -110,6 +111,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
+    server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -208,6 +210,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announcePickups(simulation);
     this.announceChopping(simulation);
     this.announceFishing(simulation);
+    this.announceHunger(simulation);
     this.announceRegrowth(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
@@ -308,6 +311,31 @@ export class World extends DurableObject<WorldEnv> {
     this.sendPacks(simulation, landed);
   }
 
+  /**
+   * Tell each player what just happened to their own hunger.
+   *
+   * Private to the one it happened to: nobody else's business how hungry
+   * anybody else is, or what they just ate.
+   */
+  private announceHunger(simulation: WorldSimulation): void {
+    const events = simulation.drainHungerEvents();
+    if (events.length === 0) return;
+
+    const byNetId = new Map(events.map((event) => [event.netId, event]));
+    const ate = new Set<number>();
+    for (const event of events) if (event.ate !== null) ate.add(event.netId);
+
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeHunger(event));
+    }
+    // Eating took something out of the pack; say so, the same as any other
+    // way a pack changes.
+    this.sendPacks(simulation, ate);
+  }
+
   /** Send these players their packs, and save them straight away. */
   private sendPacks(simulation: WorldSimulation, netIds: ReadonlySet<number>): void {
     if (netIds.size === 0) return;
@@ -402,6 +430,7 @@ export class World extends DurableObject<WorldEnv> {
     const simulation = new WorldSimulation({
       seed: this.seed(),
       regrowMinSeconds: this.regrowMinSeconds(),
+      hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
     });
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
@@ -454,6 +483,18 @@ export class World extends DurableObject<WorldEnv> {
     return configured;
   }
 
+  /**
+   * How long a full hunger meter takes to run out, if the environment says.
+   *
+   * Only honoured when it is a sensible positive number, so a typo in a
+   * dashboard variable cannot make hunger run out instantly.
+   */
+  private hungerEmptyAfterSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_HUNGER_EMPTY_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
+  }
+
   /** Time since the world began, derived from the tick count rather than a clock. */
   private worldTimeMs(): number {
     const tick = this.simulation?.tick ?? 0;
@@ -493,6 +534,8 @@ export class World extends DurableObject<WorldEnv> {
       y REAL NOT NULL,
       z REAL NOT NULL,
       facing_yaw REAL NOT NULL,
+      -- How hungry they were when last saved. A hundred is full; see HUNGER_MAX.
+      hunger REAL NOT NULL DEFAULT 100,
       updated_at INTEGER NOT NULL
     )`);
     // What each player is carrying. One row per kind of thing they hold.
@@ -528,6 +571,9 @@ export class World extends DurableObject<WorldEnv> {
     // to them here.
     this.addColumn('trees', 'felled_at_ms', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('trees', 'generation', 'INTEGER NOT NULL DEFAULT 0');
+    // A player saved before this release has no hunger on record. The default
+    // above starts them full, same as anybody arriving fresh.
+    this.addColumn('players', 'hunger', 'REAL NOT NULL DEFAULT 100');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -574,7 +620,8 @@ export class World extends DurableObject<WorldEnv> {
         y: number;
         z: number;
         facing_yaw: number;
-      }>('SELECT x, y, z, facing_yaw FROM players WHERE player_key = ?', playerKey)
+        hunger: number;
+      }>('SELECT x, y, z, facing_yaw, hunger FROM players WHERE player_key = ?', playerKey)
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -585,6 +632,7 @@ export class World extends DurableObject<WorldEnv> {
       z: row.z,
       facingYaw: row.facing_yaw,
       items: this.loadPlayerItems(playerKey),
+      hunger: row.hunger,
     };
   }
 
@@ -660,6 +708,7 @@ export class World extends DurableObject<WorldEnv> {
       motion.position.y,
       motion.position.z,
       motion.facingYaw,
+      simulation.hungerOf(attachment.netId),
     );
     this.writePlayerItems(
       attachment.playerKey,
@@ -667,17 +716,25 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private writePlayer(playerKey: string, x: number, y: number, z: number, facingYaw: number): void {
+  private writePlayer(
+    playerKey: string,
+    x: number,
+    y: number,
+    z: number,
+    facingYaw: number,
+    hunger: number,
+  ): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO players (player_key, x, y, z, facing_yaw, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
-        'x = excluded.x, y = excluded.y, z = excluded.z, ' +
-        'facing_yaw = excluded.facing_yaw, updated_at = excluded.updated_at',
+      'INSERT INTO players (player_key, x, y, z, facing_yaw, hunger, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+        'x = excluded.x, y = excluded.y, z = excluded.z, facing_yaw = excluded.facing_yaw, ' +
+        'hunger = excluded.hunger, updated_at = excluded.updated_at',
       playerKey,
       x,
       y,
       z,
       facingYaw,
+      hunger,
       Date.now(),
     );
   }
@@ -724,7 +781,14 @@ export class World extends DurableObject<WorldEnv> {
     for (const player of simulation.persistablePlayers()) {
       const attachment = byNetId.get(player.netId);
       if (attachment?.playerKey == null) continue;
-      this.writePlayer(attachment.playerKey, player.x, player.y, player.z, player.facingYaw);
+      this.writePlayer(
+        attachment.playerKey,
+        player.x,
+        player.y,
+        player.z,
+        player.facingYaw,
+        player.hunger,
+      );
       this.writePlayerItems(attachment.playerKey, player.items);
     }
   }

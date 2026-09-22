@@ -10,6 +10,7 @@ import {
   encodePickupsTaken,
   encodePing,
   encodeFishing,
+  encodeHunger,
   encodeTreeHit,
   encodeTreeStates,
   encodePlayerLeft,
@@ -22,7 +23,7 @@ import {
   MAX_INPUTS_PER_BUNDLE,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
-import type { FishingEvent, SnapshotEntity } from '../src/sim/world-sim';
+import type { FishingEvent, HungerEvent, SnapshotEntity } from '../src/sim/world-sim';
 
 describe('input bundles', () => {
   it('survives a round trip', () => {
@@ -384,5 +385,37 @@ describe('telling players what happened at the water', () => {
     const nonsense = new Uint8Array(encoded.slice(0));
     nonsense[3] = 99;
     expect(decodeServerMessage(nonsense.buffer)).toBeNull();
+  });
+});
+
+describe('telling a player how hungry they are', () => {
+  const roundTrip = (event: HungerEvent): HungerEvent | null => {
+    const decoded = decodeServerMessage(encodeHunger(event));
+    return decoded?.type === 'hunger' ? decoded.event : null;
+  };
+
+  it('carries the number and who it is for', () => {
+    expect(roundTrip({ netId: 7, hunger: 63, ate: null })).toEqual({
+      netId: 7,
+      hunger: 63,
+      ate: null,
+    });
+  });
+
+  it('carries what was just eaten', () => {
+    expect(roundTrip({ netId: 3, hunger: 100, ate: 'goldenCarp' })).toEqual({
+      netId: 3,
+      hunger: 100,
+      ate: 'goldenCarp',
+    });
+  });
+
+  it('fits in five bytes', () => {
+    expect(encodeHunger({ netId: 1, hunger: 50, ate: null }).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeHunger({ netId: 1, hunger: 50, ate: null });
+    expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
   });
 });

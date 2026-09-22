@@ -33,6 +33,7 @@ export * from './sim/pickups';
 export * from './sim/chopping';
 export * from './sim/regrowth';
 export * from './sim/fishing';
+export * from './sim/hunger';
 export * from './sim/world-sim';
 
 export * from './net/messages';

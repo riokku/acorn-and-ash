@@ -1,6 +1,8 @@
 import { createWorld, type Entity, type World } from 'koota';
 
 import {
+  HUNGER_EMPTY_AFTER_SECONDS,
+  HUNGER_MAX,
   INPUT_BACKLOG_CATCHUP_THRESHOLD,
   INTEREST_RADIUS,
   MAX_INPUTS_PER_TICK,
@@ -45,6 +47,7 @@ import { buildWilderness, type Wilderness } from '../world/wilderness';
 import {
   addItem,
   hasItem,
+  removeItem,
   createInventory,
   inventoryEntries,
   inventoryFromEntries,
@@ -61,6 +64,7 @@ import {
   type CastEnd,
   type CastInput,
 } from './fishing';
+import { drainHunger, eat, foodToEat, hungerDrainPerSecond } from './hunger';
 import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
 import {
   PlayerButton,
@@ -86,6 +90,14 @@ export interface WorldSimulationOptions {
    * be watched rather than waited out. Left alone everywhere real.
    */
   readonly regrowMinSeconds?: number;
+  /**
+   * How long a full hunger meter takes to empty, in seconds, if nothing is
+   * eaten.
+   *
+   * Turned right down for previews and local runs, so it can be watched
+   * rather than waited out. Left alone everywhere real.
+   */
+  readonly hungerEmptyAfterSeconds?: number;
 }
 
 /**
@@ -122,6 +134,7 @@ export interface PersistedPlayer {
   readonly z: number;
   readonly facingYaw: number;
   readonly items: readonly { readonly item: ItemId; readonly count: number }[];
+  readonly hunger: number;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -187,6 +200,17 @@ export type FishingEvent =
     }
   | { readonly kind: 'tooSoon' | 'tooLate' | 'walkedAway'; readonly netId: number };
 
+/**
+ * Word that a player's hunger changed, for that player alone: nobody else
+ * needs to know how hungry somebody is or what they just ate.
+ */
+export interface HungerEvent {
+  readonly netId: number;
+  readonly hunger: number;
+  /** What was just eaten, for a HUD toast. Null when this is only the meter running down. */
+  readonly ate: ItemId | null;
+}
+
 /** A tree that has come back. */
 export interface TreeRegrown {
   readonly treeId: number;
@@ -219,6 +243,13 @@ interface PlayerRuntime {
   lastProcessedSeq: number;
   /** Inputs thrown away because the client was sending faster than it should. */
   droppedInputs: number;
+  /** How hungry they are, from `HUNGER_MAX` (full) down to zero. */
+  hunger: number;
+  /**
+   * The last whole number of hunger this player was actually sent, so a
+   * message only goes out when it would show something different.
+   */
+  lastSentHunger: number;
 }
 
 /**
@@ -240,6 +271,7 @@ export class WorldSimulation {
   readonly wilderness: Wilderness;
   readonly collision: CollisionWorld;
   readonly regrowMinSeconds: number;
+  readonly hungerDrainPerSecond: number;
 
   /** How many ticks have been simulated since the world was created. */
   tick = 0;
@@ -259,6 +291,7 @@ export class WorldSimulation {
   private readonly fishingEvents: FishingEvent[] = [];
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
+  private readonly hungerEvents: HungerEvent[] = [];
   /**
    * The props as they stand right now.
    *
@@ -274,6 +307,9 @@ export class WorldSimulation {
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
     this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
+    this.hungerDrainPerSecond = hungerDrainPerSecond(
+      options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
+    );
     this.clearing = buildTestClearing(options.seed);
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
@@ -341,6 +377,7 @@ export class WorldSimulation {
       AimYaw({ yaw: facingYaw }),
     );
 
+    const hunger = saved?.hunger ?? HUNGER_MAX;
     this.players.set(netId, {
       netId,
       entity,
@@ -351,6 +388,10 @@ export class WorldSimulation {
       cast: null,
       lastProcessedSeq: 0,
       droppedInputs: 0,
+      hunger,
+      // Matches what `addPlayer`'s caller is about to be told separately, on
+      // arrival, so the tick loop does not repeat itself the moment it runs.
+      lastSentHunger: Math.round(hunger),
     });
   }
 
@@ -415,6 +456,8 @@ export class WorldSimulation {
         const runtime = this.players.get(networkId.value);
         if (runtime === undefined) return;
 
+        runtime.hunger = drainHunger(runtime.hunger, TICK_SECONDS, this.hungerDrainPerSecond);
+
         scratch.position.x = position.x;
         scratch.position.y = position.y;
         scratch.position.z = position.z;
@@ -471,7 +514,12 @@ export class WorldSimulation {
 
         // Reaching and swinging are judged where the player ended up, not where
         // they started, and only the server ever decides what happens.
-        if (wantsToInteract) this.tryPickup(runtime, scratch.position);
+        if (wantsToInteract) {
+          // The same button reaches for what is at your feet first, and only
+          // failing that reaches into your own pack instead.
+          const pickedUp = this.tryPickup(runtime, scratch.position);
+          if (!pickedUp) this.tryEat(runtime);
+        }
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
         if (runtime.cast === null) {
@@ -488,6 +536,10 @@ export class WorldSimulation {
         facing.yaw = scratch.facingYaw;
         grounded.value = scratch.grounded;
         lastProcessed.seq = runtime.lastProcessedSeq;
+
+        // Catches the meter crossing a whole point on its own, if eating did
+        // not already say something this tick.
+        this.queueHungerEvent(runtime, null);
       });
   }
 
@@ -496,14 +548,15 @@ export class WorldSimulation {
    *
    * Nothing happens if there is nothing in reach or their pack is already full,
    * and a pickup only ever leaves the world once however many people reach for
-   * it in the same tick.
+   * it in the same tick. Returns whether it happened, so the caller can fall
+   * back to something else the same button might mean.
    */
-  private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>): void {
+  private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
     const pickup = pickupInReach(position, this.clearing.pickups, (id) =>
       this.takenPickups.has(id),
     );
-    if (pickup === null) return;
-    if (addItem(runtime.inventory, pickup.item) === 0) return;
+    if (pickup === null) return false;
+    if (addItem(runtime.inventory, pickup.item) === 0) return false;
 
     this.takenPickups.add(pickup.id);
     this.pickupEvents.push({
@@ -511,6 +564,28 @@ export class WorldSimulation {
       pickupId: pickup.id,
       item: pickup.item,
     });
+    return true;
+  }
+
+  /** Eat something out of the pack, if there is any food in it that would actually help. */
+  private tryEat(runtime: PlayerRuntime): void {
+    const item = foodToEat(runtime.inventory, runtime.hunger);
+    if (item === null) return;
+
+    removeItem(runtime.inventory, item);
+    runtime.hunger = eat(runtime.hunger, item);
+    this.queueHungerEvent(runtime, item);
+  }
+
+  /**
+   * Tell this player their hunger, but only when it is worth a message: right
+   * after eating, or once the passing seconds have moved it by a whole point.
+   */
+  private queueHungerEvent(runtime: PlayerRuntime, ate: ItemId | null): void {
+    const rounded = Math.round(runtime.hunger);
+    if (ate === null && rounded === runtime.lastSentHunger) return;
+    runtime.lastSentHunger = rounded;
+    this.hungerEvents.push({ netId: runtime.netId, hunger: rounded, ate });
   }
 
   /**
@@ -790,6 +865,16 @@ export class WorldSimulation {
     return this.players.get(netId)?.inventory ?? {};
   }
 
+  /** How hungry a player is right now, from `HUNGER_MAX` down to zero. */
+  hungerOf(netId: number): number {
+    return Math.round(this.players.get(netId)?.hunger ?? HUNGER_MAX);
+  }
+
+  /** Hand over every change to anybody's hunger since this was last asked. */
+  drainHungerEvents(): HungerEvent[] {
+    return this.hungerEvents.splice(0);
+  }
+
   /** Pickups already taken, for sending to a client and for saving. */
   takenPickupIds(): number[] {
     return [...this.takenPickups];
@@ -846,6 +931,7 @@ export class WorldSimulation {
         z: position.z,
         facingYaw: facing.yaw,
         items: inventoryEntries(runtime.inventory),
+        hunger: runtime.hunger,
       });
     }
     return saved;
