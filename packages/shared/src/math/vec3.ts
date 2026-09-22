@@ -48,6 +48,18 @@ export function lerp(from: number, to: number, alpha: number): number {
   return from + (to - from) * alpha;
 }
 
+/**
+ * 0 at and before `edge0`, 1 at and after `edge1`, eased in between.
+ *
+ * The ease has zero slope at both ends, so terrain blended with this never
+ * shows a crease where it meets flat ground.
+ */
+export function smoothstep(value: number, edge0: number, edge1: number): number {
+  if (edge0 === edge1) return value < edge0 ? 0 : 1;
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Step `from` toward `to` by at most `maxDelta`. */
 export function moveToward(from: number, to: number, maxDelta: number): number {
   const delta = to - from;

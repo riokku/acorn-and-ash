@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLEARING_HALF,
-  PLAYABLE_HALF_EXTENT,
+  CLEARING_TREE_LINE_OUTER,
   SPAWN_POSITION,
   PLAYER_RADIUS,
 } from '../src/constants';
@@ -38,11 +38,11 @@ describe('the test clearing', () => {
     expect(new Set(props.map((prop) => prop.id)).size).toBe(props.length);
   });
 
-  it('keeps every prop inside the walled-off area', () => {
+  it('keeps every prop inside the hand-built clearing, whatever the wilderness beyond it does', () => {
     const { props } = buildTestClearing(4242);
     expect(props.length).toBeGreaterThan(100);
     for (const prop of props) {
-      expect(Math.hypot(prop.x, prop.z)).toBeLessThanOrEqual(PLAYABLE_HALF_EXTENT + 3);
+      expect(Math.hypot(prop.x, prop.z)).toBeLessThanOrEqual(CLEARING_TREE_LINE_OUTER + 3);
     }
   });
 

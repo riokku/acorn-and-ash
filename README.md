@@ -6,11 +6,12 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
-> **Phase 2 — Survive.** Right now there is a flat test clearing with
-> placeholder trees, rocks and a pond, a capsule you walk, sprint and jump
-> around, a third-person camera, and a server that decides where everybody is.
-> Find the axe standing in a stump and chop trees down; they grow back while you
-> are away. Find the rod on the bank of the pond and catch fish. See
+> **Phase 2 — Survive.** Right now there is a hand-built home clearing with
+> placeholder trees, rocks and a pond, surrounded by generated wilderness you
+> can walk out into, a capsule you walk, sprint and jump around, a
+> third-person camera, and a server that decides where everybody is. Find the
+> axe standing in a stump and chop trees down; they grow back while you are
+> away. Find the rod on the bank of the pond and catch fish. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -35,6 +36,16 @@ each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
 which fish bite and how often lives in
 [`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts).
+
+### The wilderness
+
+Past the clearing's own ring of trees the ground rolls into hills, and the
+forest thickens the further out you go, out to a wall 150 m from the centre.
+It's generated from the world's seed, so the server and every browser draw
+the same hills and the same trees without anything about them going over the
+wire - the same trick the clearing itself already uses. Nothing out there can
+be chopped or picked up yet; it's somewhere to walk, for now. See
+[decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
 
 ### Fishing
 

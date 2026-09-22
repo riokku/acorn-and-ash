@@ -39,8 +39,9 @@ import {
   type PlacedPickup,
   type PlacedProp,
 } from '../world/clearing';
-import { createFlatTerrain, type Terrain } from '../world/terrain';
+import { createWildernessTerrain, type Terrain } from '../world/terrain';
 import { castLanding } from '../world/water';
+import { buildWilderness, type Wilderness } from '../world/wilderness';
 import {
   addItem,
   hasItem,
@@ -73,7 +74,7 @@ import {
 
 export interface WorldSimulationOptions {
   readonly seed: number;
-  /** Defaults to the flat Phase 0 terrain. */
+  /** Defaults to the generated wilderness terrain, built from `seed`. */
   readonly terrain?: Terrain;
   /** Skip spawning scenery entities. Only used by benchmarks. */
   readonly withProps?: boolean;
@@ -231,6 +232,12 @@ export class WorldSimulation {
   readonly world: World;
   readonly seed: number;
   readonly clearing: Clearing;
+  /**
+   * The generated forest beyond the clearing. Built once from the seed and
+   * never touched again: none of it is ever chopped or picked up, so unlike
+   * `clearing` it has no state worth keeping past construction.
+   */
+  readonly wilderness: Wilderness;
   readonly collision: CollisionWorld;
   readonly regrowMinSeconds: number;
 
@@ -268,8 +275,12 @@ export class WorldSimulation {
     this.seed = options.seed;
     this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
     this.clearing = buildTestClearing(options.seed);
-    const terrain = options.terrain ?? createFlatTerrain(0);
-    this.collision = createCollisionWorld(terrain, this.clearing.colliders);
+    const terrain = options.terrain ?? createWildernessTerrain(options.seed);
+    this.wilderness = buildWilderness(options.seed, terrain);
+    this.collision = createCollisionWorld(terrain, [
+      ...this.clearing.colliders,
+      ...this.wilderness.colliders,
+    ]);
     this.standing = [...this.clearing.props];
     this.world = createWorld();
 
