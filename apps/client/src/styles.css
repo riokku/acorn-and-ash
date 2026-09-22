@@ -104,6 +104,27 @@ body {
   white-space: nowrap;
 }
 
+/* A fish on the line: the one moment the hint has to shout. */
+.hud-hint-urgent {
+  border-color: #e8b53a;
+  color: #fff4d6;
+  font-weight: 600;
+}
+
+/* What just happened to your line, just above the hint. */
+.hud-news {
+  position: absolute;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
 .hud-curtain {
   position: absolute;
   inset: 0;

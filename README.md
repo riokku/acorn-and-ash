@@ -6,12 +6,12 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
-> **Phase 1 — First steps.** Right now there is a flat test clearing with
-> placeholder trees and rocks, a capsule you walk, sprint and jump around, a
-> third-person camera, and a server that decides where everybody is. Find the
-> axe standing in a stump, chop a tree down with it, and the world remembers
-> both: log out, come back, and the stump is still there. Leave it long enough
-> and a new tree grows in its place. See [the roadmap](#roadmap).
+> **Phase 2 — Survive.** Right now there is a flat test clearing with
+> placeholder trees, rocks and a pond, a capsule you walk, sprint and jump
+> around, a third-person camera, and a server that decides where everybody is.
+> Find the axe standing in a stump and chop trees down; they grow back while you
+> are away. Find the rod on the bank of the pond and catch fish. See
+> [the roadmap](#roadmap).
 
 ## Controls
 
@@ -21,17 +21,32 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held)                    | Sprint              |
 | `Space`                           | Jump                |
 | `E`                               | Pick up             |
-| Left mouse                        | Swing the axe       |
+| Left mouse                        | Chop, cast, hook    |
 | Mouse                             | Look around         |
 | `Esc`                             | Let go of the mouse |
 
 There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
 
-You can carry one axe and ten logs. The limits live in
-[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), and
-what each tree costs in swings and pays in logs lives in
-[`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts).
+You can carry one axe, one fishing rod, ten logs and ten of each kind of fish.
+The limits live in
+[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), what
+each tree costs in swings and pays in logs lives in
+[`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
+which fish bite and how often lives in
+[`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts).
+
+### Fishing
+
+The rod lies on the bank of the pond. Face the water and left click to cast. The
+float bobs while fish nibble; when it goes right under, click. Too soon or too
+slow and the fish gets away. Three kinds bite: perch, trout, and now and then a
+golden carp.
+
+You have a second to click from the moment the float goes under on your own
+screen, however slow your connection. The server times it on your side of the
+wire, from a flag your browser sets on everything it sends while it is showing
+the bite. See [decision 0014](docs/decisions/0014-fishing.md).
 
 ### Trees growing back
 
@@ -99,7 +114,7 @@ Run these from the repository root.
 | `pnpm loadtest`     | Point a crowd of bots at a running world                   |
 
 `pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
-then waits for it to grow back.
+then waits for it to grow back, and another waits at the pond for a bite.
 
 ## Repository layout
 
@@ -182,12 +197,12 @@ licence forbids redistribution.
 
 ## Roadmap
 
-| Phase             | Goal                                                                      | Done when                                                                      |
-| ----------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **P0 Foundation** | Monorepo, CI/CD, test clearing, a capsule with WASD, World Durable Object | Merging to `main` deploys to staging, and two browser tabs see each other move |
-| P1 First steps    | Explore and gather                                                        | Chop a tree, log out, come back, and the stump is still there                  |
-| P2 Survive        | Craft, eat, fish, hunt                                                    | A 30-minute session feels good                                                 |
-| P3 Home           | Build and decorate a cabin                                                | The cabin looks the same the next day                                          |
-| P4 Danger         | Combat, creatures, knockout and buried items                              | Nights feel tense but fair                                                     |
-| P5 Together       | Multiplayer at scale                                                      | 50 bots plus 10 people in one world stay smooth                                |
-| P6 Launch         | Polish and public release                                                 | Live and linked from itch.io                                                   |
+| Phase          | Goal                                                                      | Done when                                                                      |
+| -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| P0 Foundation  | Monorepo, CI/CD, test clearing, a capsule with WASD, World Durable Object | Merging to `main` deploys to staging, and two browser tabs see each other move |
+| P1 First steps | Explore and gather                                                        | Chop a tree, log out, come back, and the stump is still there                  |
+| **P2 Survive** | Craft, eat, fish, hunt                                                    | A 30-minute session feels good                                                 |
+| P3 Home        | Build and decorate a cabin                                                | The cabin looks the same the next day                                          |
+| P4 Danger      | Combat, creatures, knockout and buried items                              | Nights feel tense but fair                                                     |
+| P5 Together    | Multiplayer at scale                                                      | 50 bots plus 10 people in one world stay smooth                                |
+| P6 Launch      | Polish and public release                                                 | Live and linked from itch.io                                                   |

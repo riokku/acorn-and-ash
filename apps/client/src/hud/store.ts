@@ -3,6 +3,9 @@ import type { ItemId } from '@acorn/shared';
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
 
+/** Our own line: none out, waiting for a bite, or a fish on right now. */
+export type FishingPhase = 'waiting' | 'biting' | null;
+
 /** Everything the HUD shows. */
 export interface HudState {
   readonly connection: ConnectionState;
@@ -23,6 +26,11 @@ export interface HudState {
   readonly nearbyItem: ItemId | null;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
+  /** Whether a click right now would cast a line. */
+  readonly canCast: boolean;
+  readonly fishing: FishingPhase;
+  /** What just happened to our line, while it is still worth showing. */
+  readonly fishingNews: string | null;
 }
 
 const INITIAL: HudState = {
@@ -41,6 +49,9 @@ const INITIAL: HudState = {
   carrying: [],
   nearbyItem: null,
   aimedTree: null,
+  canCast: false,
+  fishing: null,
+  fishingNews: null,
 };
 
 /**

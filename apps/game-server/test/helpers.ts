@@ -5,6 +5,7 @@ import {
   encodeInputBundle,
   encodePing,
   createInput,
+  type FishingEvent,
   type InventoryMessage,
   type PickupsTakenMessage,
   type TreeHitMessage,
@@ -114,6 +115,11 @@ export class TestClient {
     return this.treeStates()
       .filter((tree) => tree.felled)
       .map((tree) => tree.treeId);
+  }
+
+  /** Everything the server has said about lines in the water, oldest first. */
+  fishing(): FishingEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'fishing' ? [entry.event] : []));
   }
 
   /** Every swing the server has told us about. */

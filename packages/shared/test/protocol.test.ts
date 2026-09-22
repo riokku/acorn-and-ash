@@ -9,6 +9,7 @@ import {
   encodeInventory,
   encodePickupsTaken,
   encodePing,
+  encodeFishing,
   encodeTreeHit,
   encodeTreeStates,
   encodePlayerLeft,
@@ -21,7 +22,7 @@ import {
   MAX_INPUTS_PER_BUNDLE,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
-import type { SnapshotEntity } from '../src/sim/world-sim';
+import type { FishingEvent, SnapshotEntity } from '../src/sim/world-sim';
 
 describe('input bundles', () => {
   it('survives a round trip', () => {
@@ -332,5 +333,56 @@ describe('telling players a swing landed', () => {
   it('refuses a message of the wrong length', () => {
     const encoded = encodeTreeHit(42, 3);
     expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
+  });
+});
+
+describe('telling players what happened at the water', () => {
+  const roundTrip = (event: FishingEvent): FishingEvent | null => {
+    const decoded = decodeServerMessage(encodeFishing(event));
+    return decoded?.type === 'fishing' ? decoded.event : null;
+  };
+
+  it('carries where the float landed, to the centimetre', () => {
+    const decoded = roundTrip({ kind: 'cast', netId: 7, x: 12.345, z: -6.789 });
+    expect(decoded?.kind).toBe('cast');
+    if (decoded?.kind !== 'cast') return;
+    expect(decoded.netId).toBe(7);
+    expect(decoded.x).toBeCloseTo(12.35, 2);
+    expect(decoded.z).toBeCloseTo(-6.79, 2);
+  });
+
+  it('carries which fish was caught and how many were kept', () => {
+    expect(roundTrip({ kind: 'caught', netId: 3, item: 'goldenCarp', added: 1 })).toEqual({
+      kind: 'caught',
+      netId: 3,
+      item: 'goldenCarp',
+      added: 1,
+    });
+    expect(roundTrip({ kind: 'caught', netId: 3, item: 'perch', added: 0 })).toEqual({
+      kind: 'caught',
+      netId: 3,
+      item: 'perch',
+      added: 0,
+    });
+  });
+
+  it('carries every way a cast can end', () => {
+    for (const kind of ['bite', 'tooSoon', 'tooLate', 'walkedAway'] as const) {
+      expect(roundTrip({ kind, netId: 12 })).toEqual({ kind, netId: 12 });
+    }
+  });
+
+  it('fits in eight bytes', () => {
+    expect(encodeFishing({ kind: 'cast', netId: 1, x: 1, z: 1 }).byteLength).toBe(8);
+    expect(encodeFishing({ kind: 'bite', netId: 1 }).byteLength).toBe(8);
+  });
+
+  it('refuses one that has been cut short or says nothing it knows', () => {
+    const encoded = encodeFishing({ kind: 'bite', netId: 1 });
+    expect(decodeServerMessage(encoded.slice(0, 7))).toBeNull();
+
+    const nonsense = new Uint8Array(encoded.slice(0));
+    nonsense[3] = 99;
+    expect(decodeServerMessage(nonsense.buffer)).toBeNull();
   });
 });

@@ -1,10 +1,15 @@
 import * as THREE from 'three/webgpu';
 
 import {
+  CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
+  ITEM_KINDS,
+  POND_FISH,
   PROP_KINDS,
+  PlayerButton,
   SPAWN_POSITION,
   buildTestClearing,
+  castLanding,
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
@@ -17,6 +22,7 @@ import {
   vec3,
   type Clearing,
   type CollisionWorld,
+  type FishingEvent,
   type ItemId,
   type PlacedProp,
   type ServerMessage,
@@ -30,16 +36,27 @@ import { LocalPlayer } from './net/local-player';
 import { RemotePlayers } from './net/remote-players';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
+import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
-import type { HudStore } from './hud/store';
+import type { FishingPhase, HudStore } from './hud/store';
 
 const MOUSE_SENSITIVITY = 0.0023;
 /** How often the HUD is refreshed. Every frame would be wasted work. */
 const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
 const OFFLINE_FALLBACK_MS = 4000;
+/** How long news from the water stays on screen. */
+const NEWS_MS = 3500;
+/**
+ * How far down the camera looks while a line is out. At the usual angle a
+ * float five metres out sits right behind your own back; from a little higher
+ * it shows over your head.
+ */
+const FISHING_CAMERA_PITCH = 0.62;
+/** The fish that bites least often, for a word of congratulation. */
+const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item ?? null;
 
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
@@ -70,6 +87,14 @@ export interface GameDebug {
    * Smoke tests use it so they can walk somewhere without steering by hand.
    */
   faceTowards(x: number, z: number): void;
+  /** The pond, as the circles it is made of. */
+  pond(): Array<{ x: number; z: number; radius: number }>;
+  /** Whether a click right now would cast. */
+  canCast(): boolean;
+  /** Where our own line is at: none out, waiting, or a fish on. */
+  fishing(): FishingPhase;
+  /** The last thing said about our fishing, if it is still on screen. */
+  fishingNews(): string | null;
 }
 
 export interface GameOptions {
@@ -110,6 +135,14 @@ export class Game {
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
   private aimedTree: { name: string; swingsLeft: number } | null = null;
+  /** Every float in the pond, ours and everybody else's. */
+  private readonly floats = new Floats();
+  /** Our own line, as far as the server has told us. */
+  private fishingPhase: FishingPhase = null;
+  private fishingNews: { text: string; until: number } | null = null;
+  /** The server takes a breath after every cast ends; so does the hint. */
+  private castReadyAt = 0;
+  private canCast = false;
   private localPlayer: LocalPlayer | null = null;
   private localCharacter: Character | null = null;
   private selfNetId = 0;
@@ -204,6 +237,10 @@ export class Game {
         // points that way: this is the angle that lines the two up.
         camera.look.yaw = Math.atan2(-(x - from.x), -(z - from.z));
       },
+      pond: () => (this.clearing?.water ?? []).map((circle) => ({ ...circle })),
+      canCast: () => this.canCast,
+      fishing: () => this.fishingPhase,
+      fishingNews: () => this.currentNews(performance.now()),
     };
   }
 
@@ -217,6 +254,7 @@ export class Game {
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
+    this.floats.dispose();
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
     this.remoteCharacters.clear();
@@ -269,6 +307,7 @@ export class Game {
       case 'playerLeft': {
         this.remotePlayers.remove(message.netId);
         this.removeRemote(message.netId);
+        this.floats.reelIn(message.netId);
         break;
       }
       case 'inventory': {
@@ -296,6 +335,10 @@ export class Game {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
         break;
       }
+      case 'fishing': {
+        this.hearFromTheWater(message.event);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -304,6 +347,52 @@ export class Game {
       default:
         break;
     }
+  }
+
+  /**
+   * Something happened at the water.
+   *
+   * Every float is drawn, whoever it belongs to. Only news about our own line
+   * changes what the HUD says.
+   */
+  private hearFromTheWater(event: FishingEvent): void {
+    if (event.kind === 'cast') this.floats.cast(event.netId, event.x, event.z);
+    else if (event.kind === 'bite') this.floats.bite(event.netId);
+    else this.floats.reelIn(event.netId);
+
+    if (event.netId !== this.selfNetId) return;
+    if (event.kind === 'cast') {
+      this.fishingPhase = 'waiting';
+      this.fishingNews = null;
+      this.camera?.lookDownTo(FISHING_CAMERA_PITCH);
+      return;
+    }
+    if (event.kind === 'bite') {
+      this.fishingPhase = 'biting';
+      return;
+    }
+    this.fishingPhase = null;
+    const now = performance.now();
+    this.fishingNews = { text: newsFor(event), until: now + NEWS_MS };
+    this.castReadyAt = now + CAST_COOLDOWN_SECONDS * 1000;
+  }
+
+  private currentNews(now: number): string | null {
+    const news = this.fishingNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /**
+   * Where somebody holding a line is drawn, so their rod and line start from
+   * them. Read off the drawn character rather than the network, because that
+   * is already turned to face the float.
+   */
+  private anglerOf(netId: number): Angler | undefined {
+    const character =
+      netId === this.selfNetId ? this.localCharacter : this.remoteCharacters.get(netId);
+    if (character === null || character === undefined) return undefined;
+    const { x, y, z } = character.group.position;
+    return { x, y, z, yaw: character.group.rotation.y };
   }
 
   /* ---------------------------------------------------------------------- */
@@ -323,6 +412,7 @@ export class Game {
     this.clearingScene = buildClearingScene(clearing);
     this.clearingScene.setTakenPickups(this.takenPickups);
     this.scene.add(this.clearingScene.group);
+    this.scene.add(this.floats.group);
 
     const collision = createCollisionWorld(createFlatTerrain(0), clearing.colliders);
     this.collision = collision;
@@ -417,6 +507,7 @@ export class Game {
 
     this.updateLocalPlayer(deltaSeconds, camera);
     this.updateRemotePlayers(deltaSeconds);
+    this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
 
     setup.renderer.render(this.scene, camera.camera);
     this.updateHud(now, deltaSeconds);
@@ -429,7 +520,11 @@ export class Game {
     if (player === null || character === null || clearing === null) return;
 
     const intent = this.controls?.moveIntent() ?? { x: 0, z: 0 };
-    const buttons = this.controls?.buttons() ?? 0;
+    // While the float is under on this screen, every input says so: the server
+    // counts the time to click from the first of them, so a slow connection
+    // does not shorten it.
+    const buttons =
+      (this.controls?.buttons() ?? 0) | (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
     const produced = player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw, buttons);
     // A tap is only forgotten once a tick has carried it, so a quick press of
     // Space between two frames still turns into a jump.
@@ -438,7 +533,8 @@ export class Game {
 
     const position = player.renderPosition(this.scratch);
     character.group.position.set(position.x, position.y, position.z);
-    character.group.rotation.y = player.renderYaw();
+    character.group.rotation.y =
+      this.facingWhileFishing(this.selfNetId, position) ?? player.renderYaw();
 
     camera.update(position, deltaSeconds, clearing.cameraBlockers);
 
@@ -465,12 +561,38 @@ export class Game {
             swingsLeft: this.swingsLeft.get(target.prop.id) ?? target.rule.swingsToFell,
           };
 
+    // The same rule the server uses: a tree you could chop gets the click
+    // first, and otherwise a rod and some water in front of you make a cast.
+    const couldChop = target !== null && this.isCarrying('axe');
+    this.canCast =
+      this.fishingPhase === null &&
+      performance.now() >= this.castReadyAt &&
+      !couldChop &&
+      this.isCarrying('rod') &&
+      this.clearing !== null &&
+      castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
+
     // Keep the shadow map centred on the player instead of on the origin.
     if (this.sun !== null) {
       this.sun.position.set(position.x + 28, position.y + 40, position.z + 18);
       this.sun.target.position.set(position.x, position.y, position.z);
       this.sun.target.updateMatrixWorld();
     }
+  }
+
+  /**
+   * Somebody with a line out faces their float, whichever way they last walked.
+   * Only how they are drawn: which way they face is not something the server
+   * needs to hear about.
+   */
+  private facingWhileFishing(netId: number, at: Readonly<Vec3>): number | undefined {
+    const float = this.floats.floatOf(netId);
+    if (float === undefined) return undefined;
+    return Math.atan2(-(float.x - at.x), -(float.z - at.z));
+  }
+
+  private isCarrying(item: ItemId): boolean {
+    return this.carrying.some((entry) => entry.item === item && entry.count > 0);
   }
 
   private updateRemotePlayers(deltaSeconds: number): void {
@@ -482,7 +604,7 @@ export class Game {
       if (pose === undefined) continue;
       const character = this.characterFor(netId);
       character.group.position.set(pose.x, pose.y, pose.z);
-      character.group.rotation.y = pose.yaw;
+      character.group.rotation.y = this.facingWhileFishing(netId, pose) ?? pose.yaw;
     }
   }
 
@@ -507,6 +629,9 @@ export class Game {
       carrying: this.carrying,
       nearbyItem: this.nearbyItem,
       aimedTree: this.aimedTree,
+      canCast: this.canCast,
+      fishing: this.fishingPhase,
+      fishingNews: this.currentNews(now),
     });
   }
 
@@ -516,4 +641,23 @@ export class Game {
     setup.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.camera.resize(window.innerWidth, window.innerHeight);
   };
+}
+
+/** What to say when a line comes in. */
+function newsFor(event: FishingEvent): string {
+  switch (event.kind) {
+    case 'caught': {
+      const name = ITEM_KINDS[event.item].displayName.toLowerCase();
+      if (event.added === 0) return `No room for another ${name}, so you let it go.`;
+      return event.item === RAREST_FISH ? `A ${name}! That's a rare one.` : `You caught a ${name}!`;
+    }
+    case 'tooSoon':
+      return 'Too soon. It swam off.';
+    case 'tooLate':
+      return 'Too slow. It got away.';
+    case 'walkedAway':
+      return 'You reeled in.';
+    default:
+      return '';
+  }
 }

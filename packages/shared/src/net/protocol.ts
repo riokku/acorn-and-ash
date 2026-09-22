@@ -14,7 +14,7 @@ import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
-import type { SnapshotEntity } from '../sim/world-sim';
+import type { FishingEvent, SnapshotEntity } from '../sim/world-sim';
 import {
   ClientMessageType,
   RejectReason,
@@ -57,6 +57,20 @@ const BYTES_PER_TAKEN_PICKUP = 2;
 /** treeId(2) + generation(1) + flags(1) */
 const BYTES_PER_TREE_STATE = 4;
 const TREE_FELLED_FLAG = 1;
+
+/** type(1) + netId(2) + what happened(1) + two numbers that depend on it(2 each) */
+const FISHING_MESSAGE_BYTES = 8;
+/** What happened at the water, as one byte. Only ever add to the end. */
+const FISHING_KIND_CODES = {
+  cast: 1,
+  bite: 2,
+  caught: 3,
+  tooSoon: 4,
+  tooLate: 5,
+  walkedAway: 6,
+} as const satisfies Record<FishingEvent['kind'], number>;
+const INT16_MIN = -32768;
+const INT16_MAX = 32767;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -313,6 +327,55 @@ export function encodeTreeHit(treeId: number, swingsLeft: number): ArrayBuffer {
   return buffer;
 }
 
+/**
+ * One thing that happened at the water, in eight bytes.
+ *
+ * The last two numbers mean different things for different news: where the
+ * float landed for a cast, and which fish and how many were kept for a catch.
+ */
+export function encodeFishing(event: FishingEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(FISHING_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Fishing);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, FISHING_KIND_CODES[event.kind]);
+
+  if (event.kind === 'cast') {
+    view.setInt16(4, clamp(quantisePosition(event.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(6, clamp(quantisePosition(event.z), INT16_MIN, INT16_MAX), true);
+  } else if (event.kind === 'caught') {
+    view.setInt16(4, itemIndex(event.item), true);
+    view.setInt16(6, clamp(Math.round(event.added), 0, INT16_MAX), true);
+  }
+  return buffer;
+}
+
+function decodeFishing(view: DataView): FishingEvent | null {
+  const netId = view.getUint16(1, true);
+  const a = view.getInt16(4, true);
+  const b = view.getInt16(6, true);
+
+  switch (view.getUint8(3)) {
+    case FISHING_KIND_CODES.cast:
+      return { kind: 'cast', netId, x: dequantisePosition(a), z: dequantisePosition(b) };
+    case FISHING_KIND_CODES.bite:
+      return { kind: 'bite', netId };
+    case FISHING_KIND_CODES.caught: {
+      const item = itemFromIndex(a);
+      if (item === null) return null;
+      return { kind: 'caught', netId, item, added: b };
+    }
+    case FISHING_KIND_CODES.tooSoon:
+      return { kind: 'tooSoon', netId };
+    case FISHING_KIND_CODES.tooLate:
+      return { kind: 'tooLate', netId };
+    case FISHING_KIND_CODES.walkedAway:
+      return { kind: 'walkedAway', netId };
+    default:
+      return null;
+  }
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -432,6 +495,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         treeId: view.getUint16(1, true),
         swingsLeft: view.getUint8(3),
       };
+    }
+    case ServerMessageType.Fishing: {
+      if (data.byteLength !== FISHING_MESSAGE_BYTES) return null;
+      const event = decodeFishing(view);
+      return event === null ? null : { type: 'fishing', event };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

@@ -13,6 +13,13 @@ const MAX_PITCH = 1.15;
 const PULL_OUT_RATE = 6;
 /** Keep the camera this far off whatever it bumped into. */
 const BLOCKER_PADDING = 0.3;
+/** How quickly a nudge from the game tilts the camera, per second. */
+const NUDGE_RATE = 4;
+/**
+ * How far up the player has to look, in one go, to wave a nudge away. Enough
+ * to tell a deliberate look upwards from the wobble of a click.
+ */
+const NUDGE_CANCEL_PITCH = 0.02;
 
 export interface CameraLook {
   /** Which way the camera is pointing. Movement is relative to this. */
@@ -31,6 +38,8 @@ export class FollowCamera {
   readonly look: CameraLook = { yaw: 0, pitch: 0.32 };
 
   private currentDistance = RESTING_DISTANCE;
+  /** A pitch the game has asked the camera to ease towards, until the mouse moves. */
+  private pitchNudge: number | null = null;
   private readonly target = new THREE.Vector3();
   private readonly desired = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
@@ -48,14 +57,34 @@ export class FollowCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * Ease the camera round to look at least this far down.
+   *
+   * Only a nudge: looking up with the mouse cancels it, so the camera never
+   * fights the player for the view. Looking further down already, nothing
+   * happens.
+   */
+  lookDownTo(pitch: number): void {
+    if (this.look.pitch >= pitch) return;
+    this.pitchNudge = clamp(pitch, MIN_PITCH, MAX_PITCH);
+  }
+
   /** Turn the camera in response to the mouse. */
   turn(deltaX: number, deltaY: number, sensitivity: number): void {
+    // Moving the mouse up looks up; that is the player saying no thanks.
+    if (deltaY * sensitivity < -NUDGE_CANCEL_PITCH) this.pitchNudge = null;
     this.look.yaw -= deltaX * sensitivity;
     this.look.pitch = clamp(this.look.pitch + deltaY * sensitivity, MIN_PITCH, MAX_PITCH);
   }
 
   update(playerPosition: Readonly<Vec3>, deltaSeconds: number, blockers: THREE.Object3D): void {
     this.target.set(playerPosition.x, playerPosition.y + TARGET_HEIGHT, playerPosition.z);
+
+    if (this.pitchNudge !== null) {
+      const remaining = this.pitchNudge - this.look.pitch;
+      this.look.pitch += remaining * Math.min(1, NUDGE_RATE * deltaSeconds);
+      if (Math.abs(remaining) < 0.01) this.pitchNudge = null;
+    }
 
     // Yaw 0 puts the camera behind a player facing -Z.
     const cosPitch = Math.cos(this.look.pitch);

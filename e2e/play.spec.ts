@@ -15,6 +15,10 @@ declare global {
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
       faceTowards(x: number, z: number): void;
+      pond(): Array<{ x: number; z: number; radius: number }>;
+      canCast(): boolean;
+      fishing(): 'waiting' | 'biting' | null;
+      fishingNews(): string | null;
     };
   }
 }
@@ -440,6 +444,92 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   // And it is a tree again: something to swing at, not a stump.
   await walkWithinReachOfTree(page, oak);
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
+
+  await context.close();
+});
+
+/** A quick press of the left mouse button, the way a person clicks. */
+async function click(page: Page): Promise<void> {
+  await page.mouse.down();
+  await page.waitForTimeout(90);
+  await page.mouse.up();
+}
+
+test('you can find the rod, cast into the pond and land a fish', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`/?world=fish-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // The rod is lying on the bank.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const rod = pickups.find((entry) => entry.item === 'rod');
+  if (rod === undefined) throw new Error('no rod in the clearing');
+  await walkWithinReachOf(page, rod.x, rod.z);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up the fishing rod');
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'rod',
+      ),
+    )
+    .toBe(true);
+
+  // Turn to the water, and the game offers a cast.
+  const pond = await page.evaluate(() => window.acornDebug?.pond() ?? []);
+  const middle = pond[0];
+  if (middle === undefined) throw new Error('no pond in the clearing');
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+    [middle.x, middle.z],
+  );
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.canCast())).toBe(true);
+  await expect(page.locator('.hud-hint')).toContainText('Left click to cast');
+
+  const fishing = async (): Promise<string | null | undefined> =>
+    page.evaluate(() => window.acornDebug?.fishing());
+
+  // A few goes, the way a person would have. The window is a second of the
+  // player's own time, and a test that has to notice the dip and then send a
+  // click through the browser can take most of that on a slow machine.
+  let news: string | null | undefined = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await expect.poll(async () => page.evaluate(() => window.acornDebug?.canCast())).toBe(true);
+    await click(page);
+    await expect.poll(fishing).toBe('waiting');
+    await expect(page.locator('.hud-hint')).toContainText('Watch the float');
+
+    // Somewhere between three and ten seconds later, the float goes under.
+    await expect.poll(fishing, { timeout: 20_000, intervals: [25] }).toBe('biting');
+    await click(page);
+
+    await expect.poll(fishing).toBeNull();
+    news = await page.evaluate(() => window.acornDebug?.fishingNews());
+    console.log(`Cast ${attempt + 1}: ${news}`);
+    if (news !== null && news !== undefined && /caught|rare one/.test(news)) {
+      // And the HUD says so, above the hint.
+      await expect(page.locator('.hud-news')).toContainText(/caught|rare one/);
+      break;
+    }
+  }
+  expect(news).toMatch(/caught|rare one/);
+
+  // In the pack, and the pack says so.
+  const fish = ['perch', 'trout', 'goldenCarp'];
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some((entry) =>
+        fish.includes(entry.item),
+      ),
+    )
+    .toBe(true);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
+    /Perch|Trout|Golden carp/,
+  );
+  expect(await page.evaluate(() => window.acornDebug?.fishing())).toBeNull();
 
   await context.close();
 });

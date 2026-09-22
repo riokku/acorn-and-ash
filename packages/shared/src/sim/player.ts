@@ -27,6 +27,12 @@ export const PlayerButton = {
   Sprint: 1 << 2,
   /** Left mouse button. Swings whatever you are holding at whatever is in front. */
   Swing: 1 << 3,
+  /**
+   * Set on every input made while this browser is showing a fish on the line.
+   * The first one tells the server when the player could first see the bite,
+   * so the time to click is counted from there. See sim/fishing.ts.
+   */
+  SawBite: 1 << 4,
 } as const;
 
 /**

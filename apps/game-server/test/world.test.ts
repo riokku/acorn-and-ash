@@ -5,6 +5,10 @@ import {
   AXE_PICKUP_ID,
   DEFAULT_WORLD_SEED,
   AXE_STUMP,
+  ITEM_KINDS,
+  POND_FISH,
+  ROD_PICKUP_ID,
+  ROD_SPOT,
   PICKUP_REACH,
   PROP_KINDS,
   PlayerButton,
@@ -276,7 +280,11 @@ describe('the tick loop', () => {
  * The heading is worked out again on every step, so bumping into a rock on the
  * way just means the player steers round it rather than losing the plot.
  */
-async function walkToTheAxe(client: TestClient): Promise<void> {
+/** Walk a client until it is within reach of something lying on the ground. */
+async function walkWithinReach(
+  client: TestClient,
+  spot: { readonly x: number; readonly z: number },
+): Promise<void> {
   await waitFor('a welcome', () => client.received.length > 0);
   const netId = client.welcome().netId;
   await waitFor('a first snapshot', () => client.positionOf(netId) !== undefined);
@@ -284,15 +292,19 @@ async function walkToTheAxe(client: TestClient): Promise<void> {
   for (let step = 0; step < 60; step++) {
     const here = client.positionOf(netId);
     if (here === undefined) break;
-    const gap = Math.hypot(here.x - AXE_STUMP.x, here.z - AXE_STUMP.z);
+    const gap = Math.hypot(here.x - spot.x, here.z - spot.z);
     if (gap < PICKUP_REACH - 0.4) return;
     // Walking forward is walking down -Z, so this is the heading that lines up.
-    const yaw = Math.atan2(-(AXE_STUMP.x - here.x), -(AXE_STUMP.z - here.z));
+    const yaw = Math.atan2(-(spot.x - here.x), -(spot.z - here.z));
     client.walk(0, 1, yaw, 4);
     await sleep(110);
   }
   const ended = client.positionOf(netId);
-  throw new Error(`Never reached the stump; stopped at ${ended?.x}, ${ended?.z}`);
+  throw new Error(`Never reached ${spot.x}, ${spot.z}; stopped at ${ended?.x}, ${ended?.z}`);
+}
+
+async function walkToTheAxe(client: TestClient): Promise<void> {
+  await walkWithinReach(client, AXE_STUMP);
 }
 
 describe('finding the axe', () => {
@@ -653,5 +665,110 @@ describe('trees growing back', () => {
     expect(opening?.felled).toBe(false);
     expect(opening?.generation).toBe(1);
     second.close();
+  }, 45_000);
+});
+
+describe('fishing', () => {
+  /** Looking along +X, which from the rod is straight out over the pond. */
+  const EAST = -Math.PI / 2;
+
+  /**
+   * Pick up the rod and turn to the water.
+   *
+   * The rod lies close enough to the pond to cast from where you pick it up.
+   * Walking on until the water stops you does not work: the bank is round, so
+   * you slide along it instead of stopping.
+   */
+  async function readyToFish(client: TestClient): Promise<number> {
+    await walkWithinReach(client, ROD_SPOT);
+    client.walk(0, 0, EAST, 3, PlayerButton.Interact);
+    await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
+    // Let go of the button, so the first click to cast is a fresh one.
+    client.walk(0, 0, EAST, 2);
+    await sleep(150);
+    return client.welcome().netId;
+  }
+
+  /** A press and a release, carrying whatever else a browser would be saying. */
+  function click(client: TestClient, extra = 0): void {
+    client.walk(0, 0, EAST, 1, PlayerButton.Swing | extra);
+    client.walk(0, 0, EAST, 1, extra);
+  }
+
+  it('leaves a rod by the pond for somebody to find', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'rod-finder');
+    await walkWithinReach(client, ROD_SPOT);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
+    expect(client.takenPickups()).toContain(ROD_PICKUP_ID);
+    client.close();
+  });
+
+  it('lands a fish: cast, wait for the float to go under, click', async () => {
+    const worldId = nextWorldId();
+    const client = await TestClient.connect(worldId, 'the-angler');
+    const netId = await readyToFish(client);
+
+    click(client);
+    await waitFor('the cast', () =>
+      client.fishing().some((event) => event.kind === 'cast' && event.netId === netId),
+    );
+
+    // Somewhere between three and ten seconds.
+    await waitFor(
+      'a bite',
+      () => client.fishing().some((event) => event.kind === 'bite' && event.netId === netId),
+      12_000,
+    );
+    // A browser showing the bite says so on every input, the click included.
+    click(client, PlayerButton.SawBite);
+
+    await waitFor('the catch', () => client.fishing().some((event) => event.kind === 'caught'));
+    const caught = client.fishing().find((event) => event.kind === 'caught');
+    if (caught?.kind !== 'caught') throw new Error('expected a catch');
+    expect(caught.netId).toBe(netId);
+    expect(caught.added).toBe(1);
+    expect(POND_FISH.map((row) => row.item)).toContain(caught.item);
+    await waitFor('the fish in the pack', () =>
+      client.inventory().some((entry) => entry.item === caught.item),
+    );
+
+    // And it is still in the pack after logging out and coming back.
+    client.close();
+    await sleep(300);
+    const again = await TestClient.connect(worldId, 'the-angler');
+    await waitFor('the pack', () => again.countOfMessages('inventory') > 0);
+    expect(again.inventory()).toContainEqual({ item: caught.item, count: 1 });
+    expect(ITEM_KINDS[caught.item].maxCarry).toBe(10);
+    again.close();
+  }, 45_000);
+
+  it('lets the fish go when you click before it bites', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'impatient');
+    const netId = await readyToFish(client);
+
+    click(client);
+    await waitFor('the cast', () => client.fishing().some((event) => event.kind === 'cast'));
+    click(client);
+
+    await waitFor('the line to come in', () =>
+      client.fishing().some((event) => event.kind === 'tooSoon' && event.netId === netId),
+    );
+    expect(client.inventory().some((entry) => entry.item !== 'rod')).toBe(false);
+    client.close();
+  }, 45_000);
+
+  it('shows everybody else the float', async () => {
+    const worldId = nextWorldId();
+    const angler = await TestClient.connect(worldId, 'fishing-in-company');
+    const onlooker = await TestClient.connect(worldId, 'watching-the-float');
+    const netId = await readyToFish(angler);
+
+    click(angler);
+    await waitFor('the onlooker to see the cast', () =>
+      onlooker.fishing().some((event) => event.kind === 'cast' && event.netId === netId),
+    );
+    angler.close();
+    onlooker.close();
   }, 45_000);
 });

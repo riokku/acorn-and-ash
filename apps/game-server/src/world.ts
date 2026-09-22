@@ -14,6 +14,7 @@ import {
   encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
+  encodeFishing,
   encodeRejected,
   encodeSnapshot,
   encodeTreeHit,
@@ -206,6 +207,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.step(startedAt);
     this.announcePickups(simulation);
     this.announceChopping(simulation);
+    this.announceFishing(simulation);
     this.announceRegrowth(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
@@ -287,10 +289,31 @@ export class World extends DurableObject<WorldEnv> {
     // Only the trees that are down or part cut, which is a short list.
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);
 
-    if (choppers.size === 0) return;
+    this.sendPacks(simulation, choppers);
+  }
+
+  /**
+   * Tell everybody what happened at the water, and tell whoever landed a fish
+   * what is in their pack now.
+   */
+  private announceFishing(simulation: WorldSimulation): void {
+    const events = simulation.drainFishingEvents();
+    if (events.length === 0) return;
+
+    const landed = new Set<number>();
+    for (const event of events) {
+      this.broadcast(encodeFishing(event));
+      if (event.kind === 'caught' && event.added > 0) landed.add(event.netId);
+    }
+    this.sendPacks(simulation, landed);
+  }
+
+  /** Send these players their packs, and save them straight away. */
+  private sendPacks(simulation: WorldSimulation, netIds: ReadonlySet<number>): void {
+    if (netIds.size === 0) return;
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.attachmentFor(ws);
-      if (attachment === null || !choppers.has(attachment.netId)) continue;
+      if (attachment === null || !netIds.has(attachment.netId)) continue;
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);

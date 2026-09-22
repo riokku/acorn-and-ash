@@ -98,6 +98,40 @@ export const SWING_COOLDOWN_TICKS = Math.round(SWING_INTERVAL_SECONDS * TICK_HZ)
 export const CHOP_FACING_COSINE = 0.5;
 
 /**
+ * Fishing.
+ *
+ * A cast lands as far out as the water allows, between these two distances in
+ * front of you, and never so near the bank that the float looks beached.
+ */
+export const CAST_DISTANCE_MAX = 5;
+export const CAST_DISTANCE_MIN = 1.5;
+export const FLOAT_SHORE_MARGIN = 0.4;
+/** Wander further than this from where you cast and the line comes in. */
+export const FISHING_LEASH = 1.5;
+/** How long a fish takes to bite, drawn fresh for every cast. */
+export const BITE_DELAY_MIN_SECONDS = 3;
+export const BITE_DELAY_MAX_SECONDS = 10;
+/**
+ * How long you have to click once the float goes under.
+ *
+ * Timed from the moment your own browser showed it, not from when the server
+ * decided it, so a slow connection does not eat into it.
+ */
+export const BITE_WINDOW_SECONDS = 1;
+/**
+ * How long the server waits, after a bite, for a browser that has gone quiet.
+ * Past this the fish is gone however the click turns out.
+ */
+export const BITE_GIVE_UP_SECONDS = 5;
+/** A breather after every cast ends, so the click that caught a fish does not cast again. */
+export const CAST_COOLDOWN_SECONDS = 0.5;
+/**
+ * How tall the invisible wall around the water is. Well above the top of a jump,
+ * so nobody hops into the pond.
+ */
+export const WATER_WALL_HEIGHT = 3;
+
+/**
  * Growing back.
  *
  * Chris settled "at least thirty minutes, somewhat random"; an hour is the top
