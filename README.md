@@ -93,7 +93,7 @@ offline, which is fine for working on how things look.
 To play against the deployed staging world:
 
 ```bash
-VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.workers.dev pnpm dev
+VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.chrisistinson.workers.dev pnpm dev
 ```
 
 ### Handy switches
