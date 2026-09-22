@@ -6,7 +6,7 @@ import {
   SPAWN_POSITION,
   PLAYER_RADIUS,
 } from '../src/constants';
-import { buildTestClearing } from '../src/world/clearing';
+import { STICK_PATCHES, buildTestClearing } from '../src/world/clearing';
 
 describe('the test clearing', () => {
   it('is identical every time it is built from the same seed', () => {
@@ -50,5 +50,26 @@ describe('the test clearing', () => {
     const { props } = buildTestClearing(4242);
     const onTheEdge = props.filter((prop) => Math.hypot(prop.x, prop.z) > CLEARING_HALF - 5);
     expect(onTheEdge.length).toBeGreaterThan(100);
+  });
+});
+
+describe('the gather spots', () => {
+  it('carries the stick patches, so every client agrees where they are', () => {
+    const { gatherSpots } = buildTestClearing(4242);
+    expect(gatherSpots).toEqual(STICK_PATCHES);
+  });
+
+  it('is in the same place for every seed, so it can always be found', () => {
+    for (const seed of [1, 99, 0x4143_4f52]) {
+      expect(buildTestClearing(seed).gatherSpots).toEqual(STICK_PATCHES);
+    }
+  });
+
+  it('keeps a scattered rock from landing on top of one', () => {
+    const { props, gatherSpots } = buildTestClearing(4242);
+    for (const spot of gatherSpots) {
+      const onTopOfIt = props.some((prop) => Math.hypot(prop.x - spot.x, prop.z - spot.z) < 0.5);
+      expect(onTopOfIt).toBe(false);
+    }
   });
 });

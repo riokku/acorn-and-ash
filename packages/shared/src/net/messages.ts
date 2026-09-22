@@ -1,11 +1,12 @@
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
-import type { FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
+import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
 
 /** What a client is allowed to say. */
 export const ClientMessageType = {
   InputBundle: 0x01,
   Ping: 0x02,
+  Craft: 0x03,
 } as const;
 
 /** What the server says back. */
@@ -21,6 +22,7 @@ export const ServerMessageType = {
   TreeHit: 0x18,
   Fishing: 0x19,
   Hunger: 0x1a,
+  Crafted: 0x1b,
 } as const;
 
 export const RejectReason = {
@@ -39,7 +41,19 @@ export interface PingMessage {
   readonly clientTimeMs: number;
 }
 
-export type ClientMessage = InputBundleMessage | PingMessage;
+/**
+ * Make something out of whatever is in the pack.
+ *
+ * Crafting is not aimed at anything the way a swing or a cast is, so unlike
+ * those it travels as its own small message rather than a bit on the input
+ * bundle.
+ */
+export interface CraftMessage {
+  readonly type: 'craft';
+  readonly item: ItemId;
+}
+
+export type ClientMessage = InputBundleMessage | PingMessage | CraftMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';
@@ -143,6 +157,17 @@ export interface HungerMessage {
   readonly event: HungerEvent;
 }
 
+/**
+ * Word that this player crafted something, for a HUD toast.
+ *
+ * Only that player is ever told: like hunger, nobody else has any reason to
+ * know what somebody else just made.
+ */
+export interface CraftedMessage {
+  readonly type: 'crafted';
+  readonly event: CraftedEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -154,4 +179,5 @@ export type ServerMessage =
   | TreeStatesMessage
   | TreeHitMessage
   | FishingMessage
-  | HungerMessage;
+  | HungerMessage
+  | CraftedMessage;

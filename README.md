@@ -11,27 +11,28 @@ The game is online-only. Every world runs on the server.
 > can walk out into, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump and chop trees down; they grow back while you are
-> away. Find the rod on the bank of the pond and catch fish. You get hungry
-> the longer you play, and eating a fish tops you back up. See
-> [the roadmap](#roadmap).
+> away. Find the rod on the bank of the pond and catch fish. Gather sticks by
+> hand and craft your own axe or rod instead. You get hungry the longer you
+> play, and eating a fish tops you back up. See [the roadmap](#roadmap).
 
 ## Controls
 
-| Key                               | Does                |
-| --------------------------------- | ------------------- |
-| `W` `A` `S` `D` or the arrow keys | Walk                |
-| `Shift` (held)                    | Sprint              |
-| `Space`                           | Jump                |
-| `E`                               | Pick up, eat        |
-| Left mouse                        | Chop, cast, hook    |
-| Mouse                             | Look around         |
-| `Esc`                             | Let go of the mouse |
+| Key                               | Does                       |
+| --------------------------------- | -------------------------- |
+| `W` `A` `S` `D` or the arrow keys | Walk                       |
+| `Shift` (held)                    | Sprint                     |
+| `Space`                           | Jump                       |
+| `E`                               | Pick up, gather, eat       |
+| `1` / `2`                         | Craft an axe / fishing rod |
+| Left mouse                        | Chop, cast, hook           |
+| Mouse                             | Look around                |
+| `Esc`                             | Let go of the mouse        |
 
 There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
 
-You can carry one axe, one fishing rod, ten logs and ten of each kind of fish.
-The limits, and how much hunger eating a fish restores, live in
+You can carry one axe, one fishing rod, ten logs, ten sticks and ten of each
+kind of fish. The limits, and how much hunger eating a fish restores, live in
 [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), what
 each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
@@ -59,6 +60,20 @@ You have a second to click from the moment the float goes under on your own
 screen, however slow your connection. The server times it on your side of the
 wire, from a flag your browser sets on everything it sends while it is showing
 the bite. See [decision 0014](docs/decisions/0014-fishing.md).
+
+### Crafting
+
+Sticks are gathered by hand - no tool needed - from a couple of patches of
+fallen branches in the clearing. Press `E` next to one, the same as picking
+something up off the ground. A patch never runs out, so it does not matter if
+somebody else already grabbed the world's one axe or rod: you can still get
+your own.
+
+Press `1` to make an axe out of three sticks, or `2` to make a fishing rod out
+of two logs. The side panel lists both recipes and lights one up once your
+pack can afford it. Finding the axe in the stump and the rod on the bank still
+work exactly as before; crafting is another way to get one. See
+[decision 0017](docs/decisions/0017-crafting.md).
 
 ### Hunger
 

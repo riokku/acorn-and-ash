@@ -17,6 +17,9 @@ export interface MoveIntent {
 const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
 
+/** Hotkeys for crafting, in recipe order: 1 is the first recipe, 2 the second. */
+const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'] as const;
+
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
   'KeyW',
@@ -102,6 +105,25 @@ export class Controls {
   /** Called once a tick has actually carried the taps, so they are not sent twice. */
   forgetTaps(): void {
     this.tapped.clear();
+  }
+
+  /**
+   * Which craft hotkeys were pressed since this was last asked, as indices
+   * into recipe order (0 for the first recipe, 1 for the second, and so on).
+   *
+   * Read and cleared eagerly, on its own, rather than waiting on a produced
+   * tick the way movement taps do: crafting is not part of the fixed-step
+   * simulation, so there is no tick for it to ride along on.
+   */
+  takeCraftTaps(): number[] {
+    const indices: number[] = [];
+    CRAFT_KEYS.forEach((key, index) => {
+      if (this.tapped.has(key)) {
+        indices.push(index);
+        this.tapped.delete(key);
+      }
+    });
+    return indices;
   }
 
   /** How far the mouse has moved since this was last asked, then reset. */

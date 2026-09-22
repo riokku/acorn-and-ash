@@ -37,10 +37,22 @@ export interface PlacedPickup {
   readonly y: number;
 }
 
+/**
+ * A patch of fallen branches anybody can gather sticks from, by hand, any
+ * time. Unlike a pickup it is never used up, so it carries no id and nothing
+ * about it is ever sent over the wire: every client already knows it is
+ * always there, the same way it knows where every tree is.
+ */
+export interface GatherSpot {
+  readonly x: number;
+  readonly z: number;
+}
+
 export interface Clearing {
   readonly seed: number;
   readonly props: readonly PlacedProp[];
   readonly pickups: readonly PlacedPickup[];
+  readonly gatherSpots: readonly GatherSpot[];
   /** The pond, as the overlapping circles it is made of. */
   readonly water: readonly WaterCircle[];
   /**
@@ -84,6 +96,17 @@ export const POND: readonly WaterCircle[] = [
 /** Where the first fishing rod lies, on the bank nearest the start. */
 export const ROD_SPOT = { x: 5.6, z: -4.2 } as const;
 export const ROD_PICKUP_ID = 2;
+
+/**
+ * Fallen branches you can gather sticks from. One near the spawn point, so it
+ * is the very first thing a new player finds, and one further out by the axe
+ * stump, so a second player who missed out on the axe still has a reason to
+ * walk that way.
+ */
+export const STICK_PATCHES: readonly { x: number; z: number }[] = [
+  { x: 2.6, z: 1.8 },
+  { x: -6.6, z: -13.6 },
+];
 
 /** Nothing is placed inside this circle, so players always spawn in the open. */
 const SPAWN_CLEAR_RADIUS = 7;
@@ -155,13 +178,15 @@ export function buildTestClearing(seed: number): Clearing {
     },
     { id: ROD_PICKUP_ID, item: 'rod', x: ROD_SPOT.x, z: ROD_SPOT.z, y: 0 },
   ];
+  const gatherSpots = STICK_PATCHES;
 
   const water = POND;
   // Scattered rocks were placed before there was a pond, so a few land in it or
   // on top of something waiting to be found. They are taken out afterwards
   // rather than never placed: skipping one while placing would shift every id
   // after it, and trees are saved by their ids.
-  const kept = props.filter((prop) => !isRockInTheWay(prop, water, pickups));
+  const spotsToKeepClear = [...pickups, ...gatherSpots];
+  const kept = props.filter((prop) => !isRockInTheWay(prop, water, spotsToKeepClear));
 
   const indexById = new Map<number, number>();
   kept.forEach((prop, index) => indexById.set(prop.id, index));
@@ -170,22 +195,23 @@ export function buildTestClearing(seed: number): Clearing {
     seed,
     props: kept,
     pickups,
+    gatherSpots,
     water,
     colliders: [...kept.map(colliderForProp), ...waterColliders(water)],
     indexById,
   };
 }
 
-/** A rock sitting in the pond, or on something you are meant to find. */
+/** A rock sitting in the pond, or on top of something you are meant to find. */
 function isRockInTheWay(
   prop: PlacedProp,
   water: readonly WaterCircle[],
-  pickups: readonly PlacedPickup[],
+  spots: readonly { readonly x: number; readonly z: number }[],
 ): boolean {
   if (!ROCK_KINDS.includes(prop.kind)) return false;
   const footprint = PROP_KINDS[prop.kind].colliderRadius * prop.scale + ROCK_CLEARANCE;
   if (overlapsWater(water, prop.x, prop.z, footprint)) return true;
-  return pickups.some((pickup) => Math.hypot(pickup.x - prop.x, pickup.z - prop.z) < footprint);
+  return spots.some((spot) => Math.hypot(spot.x - prop.x, spot.z - prop.z) < footprint);
 }
 
 function isNearSpawn(x: number, z: number): boolean {

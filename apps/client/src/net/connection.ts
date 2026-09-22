@@ -2,8 +2,10 @@ import {
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
   decodeServerMessage,
+  encodeCraft,
   encodeInputBundle,
   encodePing,
+  type ItemId,
   type PlayerInput,
   type ServerMessage,
 } from '@acorn/shared';
@@ -82,6 +84,18 @@ export class WorldConnection {
     if (this.outgoing.length > MAX_INPUTS_PER_BUNDLE) {
       this.outgoing = this.outgoing.slice(-MAX_INPUTS_PER_BUNDLE);
     }
+  }
+
+  /**
+   * Ask to make something out of the pack.
+   *
+   * Sent the moment it is pressed, rather than queued with the next input
+   * bundle: crafting is a rare, deliberate action, not part of the steady
+   * stream of movement the bundle exists to batch up.
+   */
+  sendCraft(item: ItemId): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeCraft(item));
   }
 
   close(): void {

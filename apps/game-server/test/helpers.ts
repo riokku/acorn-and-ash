@@ -2,12 +2,15 @@ import { SELF } from 'cloudflare:test';
 
 import {
   decodeServerMessage,
+  encodeCraft,
   encodeInputBundle,
   encodePing,
   createInput,
+  type CraftedEvent,
   type FishingEvent,
   type HungerEvent,
   type InventoryMessage,
+  type ItemId,
   type PickupsTakenMessage,
   type TreeHitMessage,
   type TreeStatesMessage,
@@ -59,6 +62,10 @@ export class TestClient {
 
   ping(clientTimeMs: number): void {
     this.socket.send(encodePing(clientTimeMs));
+  }
+
+  craft(item: ItemId): void {
+    this.socket.send(encodeCraft(item));
   }
 
   sendRaw(payload: ArrayBuffer | string): void {
@@ -132,6 +139,11 @@ export class TestClient {
   latestHunger(): HungerEvent | undefined {
     const events = this.hunger();
     return events[events.length - 1];
+  }
+
+  /** Everything the server has said about what this client crafted, oldest first. */
+  crafted(): CraftedEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'crafted' ? [entry.event] : []));
   }
 
   /** Every swing the server has told us about. */

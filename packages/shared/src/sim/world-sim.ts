@@ -54,6 +54,8 @@ import {
   type Inventory,
 } from './inventory';
 import { pickupInReach } from './pickups';
+import { gatherSpotInReach } from './gathering';
+import { craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import {
   CAST_COOLDOWN_TICKS,
@@ -211,6 +213,15 @@ export interface HungerEvent {
   readonly ate: ItemId | null;
 }
 
+/**
+ * Word that a player crafted something, for that player alone: nobody else
+ * needs to know what somebody else just made.
+ */
+export interface CraftedEvent {
+  readonly netId: number;
+  readonly item: ItemId;
+}
+
 /** A tree that has come back. */
 export interface TreeRegrown {
   readonly treeId: number;
@@ -230,7 +241,7 @@ interface PlayerRuntime {
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
-  /** Ticks left before this player may swing again. */
+  /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
    * Whether the button was down in the last input, so a fresh press can be told
@@ -292,6 +303,9 @@ export class WorldSimulation {
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
   private readonly hungerEvents: HungerEvent[] = [];
+  private readonly craftEvents: CraftedEvent[] = [];
+  /** Who gathered a stick this tick, so the world server knows whose pack to send. */
+  private readonly gatherEvents: number[] = [];
   /**
    * The props as they stand right now.
    *
@@ -515,10 +529,14 @@ export class WorldSimulation {
         // Reaching and swinging are judged where the player ended up, not where
         // they started, and only the server ever decides what happens.
         if (wantsToInteract) {
-          // The same button reaches for what is at your feet first, and only
-          // failing that reaches into your own pack instead.
+          // The same button reaches for what is at your feet first, then for
+          // a patch of sticks, and only failing both reaches into your own
+          // pack instead.
           const pickedUp = this.tryPickup(runtime, scratch.position);
-          if (!pickedUp) this.tryEat(runtime);
+          if (!pickedUp) {
+            const gathered = this.tryGather(runtime, scratch.position);
+            if (!gathered) this.tryEat(runtime);
+          }
         }
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
@@ -564,6 +582,24 @@ export class WorldSimulation {
       pickupId: pickup.id,
       item: pickup.item,
     });
+    return true;
+  }
+
+  /**
+   * Gather a stick from a nearby patch of fallen branches, if there is one in
+   * reach and this player is not still catching their breath from a swing, a
+   * cast or a gather of their own. Unlike a pickup the patch is never used
+   * up - only how often any one player may draw from it. Returns whether it
+   * happened.
+   */
+  private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    if (runtime.swingCooldownTicks > 0) return false;
+    const spot = gatherSpotInReach(position, this.clearing.gatherSpots);
+    if (spot === null) return false;
+    if (addItem(runtime.inventory, 'stick') === 0) return false;
+
+    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+    this.gatherEvents.push(runtime.netId);
     return true;
   }
 
@@ -873,6 +909,34 @@ export class WorldSimulation {
   /** Hand over every change to anybody's hunger since this was last asked. */
   drainHungerEvents(): HungerEvent[] {
     return this.hungerEvents.splice(0);
+  }
+
+  /**
+   * Make something out of whatever this player is carrying, if there is a
+   * recipe for it, they can afford it and have room for the result.
+   *
+   * Crafting is not tied to reach or facing the way chopping and picking
+   * things up are, so unlike those it does not wait for the next tick: a
+   * client's request is settled the moment it arrives. Returns whether
+   * anything was actually made.
+   */
+  craftItem(netId: number, item: ItemId): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return false;
+    if (!craft(runtime.inventory, item)) return false;
+
+    this.craftEvents.push({ netId, item });
+    return true;
+  }
+
+  /** Hand over every craft since this was last asked. */
+  drainCraftEvents(): CraftedEvent[] {
+    return this.craftEvents.splice(0);
+  }
+
+  /** Who gathered a stick since this was last asked, so their pack can be sent. */
+  drainGatherEvents(): number[] {
+    return this.gatherEvents.splice(0);
   }
 
   /** Pickups already taken, for sending to a client and for saving. */

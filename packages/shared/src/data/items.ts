@@ -5,7 +5,7 @@
  * new thing to carry means adding a row here.
  */
 
-export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp';
+export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -74,6 +74,14 @@ export const ITEM_KINDS = {
     placeholderColor: 0xe8b53a,
     restoresHunger: 40,
   },
+  stick: {
+    id: 'stick',
+    displayName: 'Stick',
+    pluralName: 'Sticks',
+    maxCarry: 10,
+    placeholderColor: 0xb5895a,
+    restoresHunger: undefined,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -82,7 +90,15 @@ export const ITEM_KINDS = {
  * Only ever add to the end. Packs are saved by these numbers, so reordering
  * would turn somebody's logs into fish.
  */
-export const ITEM_ORDER: readonly ItemId[] = ['axe', 'log', 'rod', 'perch', 'trout', 'goldenCarp'];
+export const ITEM_ORDER: readonly ItemId[] = [
+  'axe',
+  'log',
+  'rod',
+  'perch',
+  'trout',
+  'goldenCarp',
+  'stick',
+];
 
 export function itemIndex(id: ItemId): number {
   const index = ITEM_ORDER.indexOf(id);

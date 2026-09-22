@@ -12,11 +12,12 @@ import {
   TICK_MILLISECONDS,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
+import { ITEM_KINDS } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
-import { AXE_PICKUP_ID, AXE_STUMP } from '../src/world/clearing';
+import { AXE_PICKUP_ID, AXE_STUMP, STICK_PATCHES } from '../src/world/clearing';
 import {
   inputsToConsume,
   WorldSimulation,
@@ -481,6 +482,165 @@ describe('hunger', () => {
     const later = createWorld();
     later.addPlayer(9, saved);
     expect(later.hungerOf(9)).toBe(before);
+  });
+});
+
+describe('gathering sticks', () => {
+  const spot = STICK_PATCHES[0];
+  if (spot === undefined) throw new Error('no stick patch to test against');
+
+  it('gathers one when a patch is in reach', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+  });
+
+  it('does nothing far from every patch', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+  });
+
+  it('is never used up: two players can draw from the same patch at once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.addPlayer(2);
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.placePlayer(2, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+    expect(countOf(sim.inventoryOf(2), 'stick')).toBe(1);
+  });
+
+  it('will not gather faster than the cooldown allows', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+
+    // Hold the button down for one cooldown's worth of ticks, the same as a
+    // held axe only lands one swing.
+    for (let i = 1; i <= SWING_COOLDOWN_TICKS; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Interact));
+      sim.step(tickClock());
+    }
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+  });
+
+  it('wins over eating, the same as a pickup does', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'perch', count: 1 }],
+      hunger: 50,
+    });
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+    expect(sim.hungerOf(1)).toBe(50);
+  });
+
+  it('falls through to eating once the stick pile is full', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'stick', count: ITEM_KINDS.stick.maxCarry },
+        { item: 'perch', count: 1 },
+      ],
+      hunger: 50,
+    });
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
+    expect(sim.hungerOf(1)).toBeGreaterThan(50);
+  });
+});
+
+describe('crafting', () => {
+  const withSticks = (netId: number, count = 3): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'stick', count }],
+    hunger: HUNGER_MAX,
+  });
+
+  it('makes an axe out of sticks', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withSticks(1, 3));
+    expect(sim.craftItem(1, 'axe')).toBe(true);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+  });
+
+  it('does nothing without enough materials, and spends nothing either', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withSticks(1, 2));
+    expect(sim.craftItem(1, 'axe')).toBe(false);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(2);
+  });
+
+  it('refuses a craft the pack has no room for', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'axe', count: 1 },
+        { item: 'stick', count: 3 },
+      ],
+      hunger: HUNGER_MAX,
+    });
+    expect(sim.craftItem(1, 'axe')).toBe(false);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(3);
+  });
+
+  it('takes effect immediately, without waiting for a tick to run', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withSticks(1, 3));
+    sim.craftItem(1, 'axe');
+    // No sim.step() call at all: unlike chopping or picking things up,
+    // crafting is not tied to the fixed-step simulation.
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+  });
+
+  it('reports each craft exactly once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withSticks(1, 3));
+    sim.craftItem(1, 'axe');
+    expect(sim.drainCraftEvents()).toEqual([{ netId: 1, item: 'axe' }]);
+    expect(sim.drainCraftEvents()).toEqual([]);
+  });
+
+  it('does nothing for a player who is not in the world', () => {
+    const sim = createWorld();
+    expect(sim.craftItem(99, 'axe')).toBe(false);
+    expect(sim.drainCraftEvents()).toEqual([]);
   });
 });
 

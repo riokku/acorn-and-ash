@@ -14,7 +14,7 @@ import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
-import type { FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
+import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
 import {
   ClientMessageType,
   RejectReason,
@@ -76,6 +76,11 @@ const INT16_MAX = 32767;
 const HUNGER_MESSAGE_BYTES = 5;
 /** Nothing was eaten: this is only the meter running down. */
 const NO_ITEM_EATEN = 0xff;
+
+/** type(1) + which item to make(1) */
+const CRAFT_MESSAGE_BYTES = 2;
+/** type(1) + netId(2) + what was made(1) */
+const CRAFTED_MESSAGE_BYTES = 4;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -156,6 +161,14 @@ export function encodePing(clientTimeMs: number): ArrayBuffer {
   return buffer;
 }
 
+export function encodeCraft(item: ItemId): ArrayBuffer {
+  const buffer = new ArrayBuffer(CRAFT_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Craft);
+  view.setUint8(1, itemIndex(item));
+  return buffer;
+}
+
 /**
  * Read a message from a client.
  *
@@ -192,6 +205,13 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   if (type === ClientMessageType.Ping) {
     if (data.byteLength !== 5) return null;
     return { type: 'ping', clientTimeMs: view.getUint32(1, true) };
+  }
+
+  if (type === ClientMessageType.Craft) {
+    if (data.byteLength !== CRAFT_MESSAGE_BYTES) return null;
+    const item = itemFromIndex(view.getUint8(1));
+    if (item === null) return null;
+    return { type: 'craft', item };
   }
 
   return null;
@@ -408,6 +428,22 @@ function decodeHunger(view: DataView): HungerEvent {
   };
 }
 
+/** What a player just made, in four bytes. Only they are ever sent it. */
+export function encodeCrafted(event: CraftedEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(CRAFTED_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Crafted);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, itemIndex(event.item));
+  return buffer;
+}
+
+function decodeCrafted(view: DataView): CraftedEvent | null {
+  const item = itemFromIndex(view.getUint8(3));
+  if (item === null) return null;
+  return { netId: view.getUint16(1, true), item };
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -536,6 +572,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.Hunger: {
       if (data.byteLength !== HUNGER_MESSAGE_BYTES) return null;
       return { type: 'hunger', event: decodeHunger(view) };
+    }
+    case ServerMessageType.Crafted: {
+      if (data.byteLength !== CRAFTED_MESSAGE_BYTES) return null;
+      const event = decodeCrafted(view);
+      return event === null ? null : { type: 'crafted', event };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

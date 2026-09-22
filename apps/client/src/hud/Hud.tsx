@@ -1,6 +1,17 @@
 import { useSyncExternalStore } from 'react';
 
-import { HUNGER_LOW_THRESHOLD, HUNGER_MAX, ITEM_KINDS, isFood } from '@acorn/shared';
+import {
+  HUNGER_LOW_THRESHOLD,
+  HUNGER_MAX,
+  ITEM_KINDS,
+  RECIPE_ITEMS,
+  canAfford,
+  inventoryFromEntries,
+  isFood,
+  recipeFor,
+  roomFor,
+  type Recipe,
+} from '@acorn/shared';
 
 import type { HudStore, HudState } from './store';
 
@@ -29,6 +40,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Carrying" value={carrying(state)} />
+        <Row label="Craft" value={<Crafting state={state} />} />
       </div>
 
       {state.ready && !state.pointerLocked ? (
@@ -41,8 +53,8 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
 
       {state.ready &&
       state.pointerLocked &&
-      (state.fishingNews !== null || state.hungerNews !== null) ? (
-        <p className="hud-news">{state.fishingNews ?? state.hungerNews}</p>
+      (state.fishingNews !== null || state.hungerNews !== null || state.craftingNews !== null) ? (
+        <p className="hud-news">{state.fishingNews ?? state.hungerNews ?? state.craftingNews}</p>
       ) : null}
 
       {state.ready && state.pointerLocked ? (
@@ -101,6 +113,37 @@ function Hunger({ state }: { state: HudState }): React.JSX.Element {
   );
 }
 
+/** Every recipe, with its hotkey and cost, lit up green once it could be made right now. */
+function Crafting({ state }: { state: HudState }): React.JSX.Element {
+  const inventory = inventoryFromEntries(state.carrying);
+  return (
+    <>
+      {RECIPE_ITEMS.map((item, index) => {
+        const recipe = recipeFor(item);
+        if (recipe === null) return null;
+        const ready = roomFor(inventory, item) > 0 && canAfford(inventory, recipe);
+        return (
+          <span key={item} className={ready ? 'hud-status-good' : undefined}>
+            {index > 0 ? ' · ' : ''}[{index + 1}] {ITEM_KINDS[item].displayName} (
+            {costLabel(recipe)})
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** "3 sticks", "2 logs" - however many costs a recipe has. */
+function costLabel(recipe: Recipe): string {
+  return recipe.costs
+    .map((cost) => {
+      const kind = ITEM_KINDS[cost.item];
+      const name = cost.amount === 1 ? kind.displayName : kind.pluralName;
+      return `${cost.amount} ${name.toLowerCase()}`;
+    })
+    .join(', ');
+}
+
 /**
  * The strip along the bottom.
  *
@@ -119,6 +162,7 @@ function hint(state: HudState): string {
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
+  if (state.nearGatherSpot) return 'Press E to gather sticks';
   const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
   if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
   if (state.canCast) return 'Left click to cast';
