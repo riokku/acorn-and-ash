@@ -15,9 +15,11 @@ export * from './rng';
 export * from './world/terrain';
 export * from './world/colliders';
 export * from './world/clearing';
+export * from './world/water';
 
 export * from './data/props';
 export * from './data/items';
+export * from './data/fish';
 
 export * from './collision/capsule';
 
@@ -28,6 +30,7 @@ export * from './sim/inventory';
 export * from './sim/pickups';
 export * from './sim/chopping';
 export * from './sim/regrowth';
+export * from './sim/fishing';
 export * from './sim/world-sim';
 
 export * from './net/messages';

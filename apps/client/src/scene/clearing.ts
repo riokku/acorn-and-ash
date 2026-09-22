@@ -14,6 +14,8 @@ import {
   type PropKind,
 } from '@acorn/shared';
 
+import { createPond } from './pond';
+
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
 export interface ClearingScene {
   readonly group: THREE.Group;
@@ -60,6 +62,10 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const ground = createGround();
   group.add(ground.mesh);
   disposables.push(ground);
+
+  const pond = createPond(clearing.water);
+  group.add(pond.group);
+  disposables.push(pond);
 
   const byKind = new Map<string, PlacedProp[]>();
   for (const prop of clearing.props) {
@@ -202,13 +208,67 @@ function blockersFor(
   });
 }
 
+/** Something lying in the clearing to be found, in placeholder shapes. */
+function createPickup(
+  pickup: PlacedPickup,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  if (pickup.item === 'rod') return createRodPickup(pickup, disposables);
+  return createAxePickup(pickup, disposables);
+}
+
+/**
+ * A fishing rod left on the bank: a long pole propped up off the grass, with
+ * its red and white float hanging from the tip so it reads as a rod and not
+ * as a stick.
+ */
+function createRodPickup(
+  pickup: PlacedPickup,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const poleGeometry = new THREE.CylinderGeometry(0.018, 0.03, 1.7, 6);
+  // Measured from the butt end, so the whole rod pivots about where it rests.
+  poleGeometry.translate(0, 0.85, 0);
+  const poleMaterial = new THREE.MeshStandardMaterial({
+    color: ITEM_KINDS.rod.placeholderColor,
+    roughness: 0.8,
+    flatShading: true,
+  });
+  const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+  // Leaning east, out over the water, at a lazy angle.
+  pole.rotation.z = -1.05;
+  pole.castShadow = true;
+
+  const floatGeometry = new THREE.SphereGeometry(0.06, 8, 6);
+  const floatMaterial = new THREE.MeshStandardMaterial({ color: 0xd8432f, roughness: 0.5 });
+  const float = new THREE.Mesh(floatGeometry, floatMaterial);
+  const tip = new THREE.Vector3(0, 1.7, 0).applyEuler(pole.rotation);
+  float.position.set(tip.x, tip.y - 0.35, tip.z);
+  float.castShadow = true;
+
+  group.add(pole, float);
+  group.position.set(pickup.x, pickup.y + 0.05, pickup.z);
+
+  disposables.push({
+    dispose: () => {
+      poleGeometry.dispose();
+      poleMaterial.dispose();
+      floatGeometry.dispose();
+      floatMaterial.dispose();
+    },
+  });
+  return group;
+}
+
 /**
  * An axe standing in a stump, as two placeholder blocks.
  *
  * It is tilted and pale against the dark stump so you can pick it out from
  * across the clearing, which is the whole point of it being there.
  */
-function createPickup(
+function createAxePickup(
   pickup: PlacedPickup,
   disposables: Array<{ dispose(): void }>,
 ): THREE.Object3D {

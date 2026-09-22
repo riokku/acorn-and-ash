@@ -32,9 +32,9 @@ describe('the test clearing', () => {
     }
   });
 
-  it('gives every prop a collider and a unique id', () => {
-    const { props, colliders } = buildTestClearing(4242);
-    expect(colliders).toHaveLength(props.length);
+  it('gives every prop a collider and a unique id, and walls the water', () => {
+    const { props, colliders, water } = buildTestClearing(4242);
+    expect(colliders).toHaveLength(props.length + water.length);
     expect(new Set(props.map((prop) => prop.id)).size).toBe(props.length);
   });
 

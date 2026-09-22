@@ -38,7 +38,15 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         </div>
       ) : null}
 
-      {state.ready && state.pointerLocked ? <p className="hud-hint">{hint(state)}</p> : null}
+      {state.ready && state.pointerLocked && state.fishingNews !== null ? (
+        <p className="hud-news">{state.fishingNews}</p>
+      ) : null}
+
+      {state.ready && state.pointerLocked ? (
+        <p className={state.fishing === 'biting' ? 'hud-hint hud-hint-urgent' : 'hud-hint'}>
+          {hint(state)}
+        </p>
+      ) : null}
 
       {!state.ready ? (
         <div className="hud-curtain">
@@ -73,20 +81,28 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
 /**
  * The strip along the bottom.
  *
- * Whatever you could do right now beats the list of what the keys are, and
- * picking something up beats chopping: you are more likely to be reaching for
- * the thing at your feet than swinging at the tree behind it.
+ * Whatever you could do right now beats the list of what the keys are. A line
+ * in the water beats everything, because the moment matters. Picking something
+ * up beats chopping: you are more likely to be reaching for the thing at your
+ * feet than swinging at the tree behind it. And a tree you can chop beats a
+ * cast, the same way round as the server decides it.
  */
 function hint(state: HudState): string {
+  if (state.fishing === 'biting') return "It's biting! Click!";
+  if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
-  if (state.aimedTree !== null) {
-    const { name, swingsLeft } = state.aimedTree;
-    const swings = swingsLeft === 1 ? '1 swing left' : `${swingsLeft} swings left`;
-    return `Left click to chop the ${name.toLowerCase()} · ${swings}`;
-  }
+  const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
+  if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
+  if (state.canCast) return 'Left click to cast';
+  if (state.aimedTree !== null) return chopHint(state.aimedTree);
   return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
+}
+
+function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
+  const swings = tree.swingsLeft === 1 ? '1 swing left' : `${tree.swingsLeft} swings left`;
+  return `Left click to chop the ${tree.name.toLowerCase()} · ${swings}`;
 }
 
 /** What the pack holds, as one short line. */
@@ -95,10 +111,10 @@ function carrying(state: HudState): string {
   return state.carrying
     .map((entry) => {
       const kind = ITEM_KINDS[entry.item];
-      // A tool you either have or do not; wood is worth counting against the limit.
+      // A tool you either have or do not; wood and fish are worth counting.
       return kind.maxCarry === 1
         ? kind.displayName
-        : `${kind.displayName}s ${entry.count}/${kind.maxCarry}`;
+        : `${kind.pluralName} ${entry.count}/${kind.maxCarry}`;
     })
     .join(' · ');
 }

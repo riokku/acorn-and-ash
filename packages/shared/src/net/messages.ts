@@ -1,6 +1,6 @@
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
-import type { SnapshotEntity } from '../sim/world-sim';
+import type { FishingEvent, SnapshotEntity } from '../sim/world-sim';
 
 /** What a client is allowed to say. */
 export const ClientMessageType = {
@@ -19,6 +19,7 @@ export const ServerMessageType = {
   PickupsTaken: 0x16,
   TreeStates: 0x17,
   TreeHit: 0x18,
+  Fishing: 0x19,
 } as const;
 
 export const RejectReason = {
@@ -119,6 +120,17 @@ export interface TreeHitMessage {
   readonly swingsLeft: number;
 }
 
+/**
+ * Something happened at the water: a cast, a bite, a catch or one that got away.
+ *
+ * Everybody hears about everybody's line, so the float somebody else is
+ * watching bobs for you too.
+ */
+export interface FishingMessage {
+  readonly type: 'fishing';
+  readonly event: FishingEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -128,4 +140,5 @@ export type ServerMessage =
   | InventoryMessage
   | PickupsTakenMessage
   | TreeStatesMessage
-  | TreeHitMessage;
+  | TreeHitMessage
+  | FishingMessage;

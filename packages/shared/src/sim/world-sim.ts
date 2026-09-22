@@ -40,6 +40,7 @@ import {
   type PlacedProp,
 } from '../world/clearing';
 import { createFlatTerrain, type Terrain } from '../world/terrain';
+import { castLanding } from '../world/water';
 import {
   addItem,
   hasItem,
@@ -50,6 +51,15 @@ import {
 } from './inventory';
 import { pickupInReach } from './pickups';
 import { treeInReach, type ChopTarget } from './chopping';
+import {
+  CAST_COOLDOWN_TICKS,
+  readCastInput,
+  startCast,
+  tickCast,
+  type Cast,
+  type CastEnd,
+  type CastInput,
+} from './fishing';
 import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
 import {
   PlayerButton,
@@ -158,6 +168,24 @@ function nextGeneration(generation: number): number {
   return Math.min(generation + 1, MAX_TREE_GENERATION);
 }
 
+/**
+ * Something that happened at the water, for everybody to see.
+ *
+ * Everyone is told, not only the one fishing, so a float bobbing in the pond is
+ * the same float for everybody standing round it.
+ */
+export type FishingEvent =
+  | { readonly kind: 'cast'; readonly netId: number; readonly x: number; readonly z: number }
+  | { readonly kind: 'bite'; readonly netId: number }
+  /** `added` is how many went into the pack: none when it was already full. */
+  | {
+      readonly kind: 'caught';
+      readonly netId: number;
+      readonly item: ItemId;
+      readonly added: number;
+    }
+  | { readonly kind: 'tooSoon' | 'tooLate' | 'walkedAway'; readonly netId: number };
+
 /** A tree that has come back. */
 export interface TreeRegrown {
   readonly treeId: number;
@@ -179,6 +207,14 @@ interface PlayerRuntime {
   readonly inventory: Inventory;
   /** Ticks left before this player may swing again. */
   swingCooldownTicks: number;
+  /**
+   * Whether the button was down in the last input, so a fresh press can be told
+   * from one being held. Chopping is happy with a held button; a cast wants a
+   * click.
+   */
+  swingWasHeld: boolean;
+  /** Their line in the water, if they have one out. */
+  cast: Cast | null;
   lastProcessedSeq: number;
   /** Inputs thrown away because the client was sending faster than it should. */
   droppedInputs: number;
@@ -213,6 +249,9 @@ export class WorldSimulation {
   private readonly trees = new Map<number, TreeState>();
   private readonly chopEvents: TreeChopped[] = [];
   private readonly regrowthEvents: TreeRegrown[] = [];
+  private readonly fishingEvents: FishingEvent[] = [];
+  /** Every cast in this world gets its own number, so no two share a roll. */
+  private castCounter = 0;
   /**
    * The props as they stand right now.
    *
@@ -297,6 +336,8 @@ export class WorldSimulation {
       queue: [],
       inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
       swingCooldownTicks: 0,
+      swingWasHeld: false,
+      cast: null,
       lastProcessedSeq: 0,
       droppedInputs: 0,
     });
@@ -374,7 +415,13 @@ export class WorldSimulation {
 
         let wantsToInteract = false;
         let wantsToSwing = false;
+        let wantsToCast = false;
         let aimedYaw = aim.yaw;
+
+        // A line in the water keeps its own time: the fish bites when it bites,
+        // and wandering off brings the line in, whether or not inputs arrived.
+        if (runtime.cast !== null) this.tickLine(runtime, runtime.cast, scratch.position);
+
         const steps = inputsToConsume(runtime.queue.length);
         if (steps === 0) {
           // No packet arrived in time: the player coasts to a stop where they are.
@@ -390,7 +437,21 @@ export class WorldSimulation {
             if (input === undefined) break;
             stepPlayer(scratch, input, TICK_SECONDS, this.collision);
             if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
-            if (isHeld(input, PlayerButton.Swing)) wantsToSwing = true;
+            const swingHeld = isHeld(input, PlayerButton.Swing);
+            const clicked = swingHeld && !runtime.swingWasHeld;
+            runtime.swingWasHeld = swingHeld;
+            if (runtime.cast !== null) {
+              // With a line out, the button is for the fish and nothing else,
+              // and each input is read in turn: when the click was made matters.
+              this.readLine(runtime, runtime.cast, {
+                seq: input.seq,
+                clicked,
+                sawBite: isHeld(input, PlayerButton.SawBite),
+              });
+            } else {
+              if (swingHeld) wantsToSwing = true;
+              if (clicked) wantsToCast = true;
+            }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
             aimedYaw = input.yaw;
@@ -402,7 +463,10 @@ export class WorldSimulation {
         if (wantsToInteract) this.tryPickup(runtime, scratch.position);
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
-        if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
+        if (runtime.cast === null) {
+          if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
+          if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
+        }
 
         position.x = scratch.position.x;
         position.y = scratch.position.y;
@@ -479,6 +543,51 @@ export class WorldSimulation {
       swingsLeft: 0,
       logsGained,
     });
+  }
+
+  /**
+   * Cast a line, if this player has a rod and is facing water.
+   *
+   * A tree you could chop comes first: with an axe in the pack and a trunk in
+   * reach, the click was for the tree.
+   */
+  private tryCast(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
+    if (runtime.swingCooldownTicks > 0) return;
+    if (!hasItem(runtime.inventory, 'rod')) return;
+    if (hasItem(runtime.inventory, 'axe') && this.treeInReachOf(position, aimYaw) !== null) return;
+
+    const spot = castLanding(position, aimYaw, this.clearing.water);
+    if (spot === null) return;
+
+    runtime.cast = startCast(this.seed, this.castCounter++, this.tick, position, spot);
+    this.fishingEvents.push({ kind: 'cast', netId: runtime.netId, x: spot.x, z: spot.z });
+  }
+
+  /** A tick of waiting at the water: the bite, the leash and giving up. */
+  private tickLine(runtime: PlayerRuntime, cast: Cast, position: Readonly<Vec3>): void {
+    const progress = tickCast(cast, this.tick, position);
+    if (progress.bit) this.fishingEvents.push({ kind: 'bite', netId: runtime.netId });
+    if (progress.end !== null) this.endCast(runtime, progress.end);
+  }
+
+  /** One of the angler's inputs: did they click, and did they see the bite? */
+  private readLine(runtime: PlayerRuntime, cast: Cast, input: CastInput): void {
+    const end = readCastInput(cast, this.seed, this.tick, input);
+    if (end !== null) this.endCast(runtime, end);
+  }
+
+  /** The line comes in, with or without a fish, and everybody hears how. */
+  private endCast(runtime: PlayerRuntime, end: CastEnd): void {
+    runtime.cast = null;
+    runtime.swingCooldownTicks = CAST_COOLDOWN_TICKS;
+
+    if (end.outcome === 'caught') {
+      // Hooked either way; a full pack means it goes back in the water.
+      const added = addItem(runtime.inventory, end.item);
+      this.fishingEvents.push({ kind: 'caught', netId: runtime.netId, item: end.item, added });
+      return;
+    }
+    this.fishingEvents.push({ kind: end.outcome, netId: runtime.netId });
   }
 
   /** Take a tree out of the world: it stops blocking, and a stump blocks instead. */
@@ -646,6 +755,16 @@ export class WorldSimulation {
   /** Hand over every swing that landed since this was last asked. */
   drainChopEvents(): TreeChopped[] {
     return this.chopEvents.splice(0);
+  }
+
+  /** Hand over everything that happened at the water since this was last asked. */
+  drainFishingEvents(): FishingEvent[] {
+    return this.fishingEvents.splice(0);
+  }
+
+  /** This player's line, if they have one out. Used by tests. */
+  castOf(netId: number): Readonly<Cast> | null {
+    return this.players.get(netId)?.cast ?? null;
   }
 
   /** What this player could pick up right now, or null. Used by tests. */
