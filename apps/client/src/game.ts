@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   ANIMAL_KINDS,
+  BUILDABLE_KINDS,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
   HUNGER_MAX,
@@ -13,6 +14,7 @@ import {
   SPAWN_POSITION,
   SnapshotFlag,
   animalInReach,
+  buildSpotFor,
   buildTestClearing,
   buildWilderness,
   castLanding,
@@ -28,6 +30,8 @@ import {
   treeInReach,
   vec3,
   type AnimalCaught,
+  type BuildBlocker,
+  type BuiltProp,
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
@@ -48,6 +52,7 @@ import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
+import { createCampfire, type Campfire } from './scene/campfire';
 import { createCritter, type Critter } from './scene/critter';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
@@ -113,6 +118,10 @@ export interface GameDebug {
   aimedTree(): { name: string; swingsLeft: number } | null;
   /** The animal a swing would land on right now, if any. A tree in reach always wins. */
   aimedAnimal(): { name: string } | null;
+  /** Whether pressing Build right now would place a campfire. */
+  canBuild(): boolean;
+  /** Everything anybody has built, wherever this browser last heard it was. */
+  builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -155,6 +164,9 @@ export class Game {
   private readonly remoteCharacters = new Map<number, Character>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter>();
+  private readonly campfires = new Map<number, Campfire>();
+  private builtProps: readonly BuiltProp[] = [];
+  private canBuild = false;
   private readonly scratch: Vec3 = vec3();
 
   private setup: RendererSetup | null = null;
@@ -281,6 +293,8 @@ export class Game {
           .filter((tree) => tree.swingsToFell > 0),
       aimedTree: () => (this.aimedTree === null ? null : { ...this.aimedTree }),
       aimedAnimal: () => (this.aimedAnimal === null ? null : { ...this.aimedAnimal }),
+      canBuild: () => this.canBuild,
+      builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -325,6 +339,8 @@ export class Game {
     this.remoteCharacters.clear();
     for (const critter of this.critters.values()) critter.dispose();
     this.critters.clear();
+    for (const campfire of this.campfires.values()) campfire.dispose();
+    this.campfires.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -423,6 +439,11 @@ export class Game {
       }
       case 'caught': {
         this.hearAboutCatching(message.event);
+        break;
+      }
+      case 'builtProps': {
+        this.builtProps = message.props;
+        this.applyBuiltProps();
         break;
       }
       case 'rejected': {
@@ -581,6 +602,7 @@ export class Game {
     this.collision = collision;
     this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
     this.applyTreeStates();
+    this.applyBuiltProps();
 
     this.localCharacter = createCharacter(colorForPlayer(this.selfNetId || 1));
     this.scene.add(this.localCharacter.group);
@@ -619,6 +641,34 @@ export class Game {
 
   private isFelled(treeId: number): boolean {
     return this.treeStates.get(treeId)?.felled === true;
+  }
+
+  /**
+   * Put every built prop where the server says it is.
+   *
+   * Sent whole each time, so this reconciles rather than only ever adding:
+   * anything drawn that is no longer in the list is torn down. Nothing is
+   * ever actually removed yet, but a client that reconnects mid-session
+   * should not have to care whether that stays true forever.
+   */
+  private applyBuiltProps(): void {
+    if (this.clearingScene === null) return;
+    const present = new Set(this.builtProps.map((prop) => prop.id));
+
+    for (const [id, campfire] of this.campfires) {
+      if (present.has(id)) continue;
+      this.scene.remove(campfire.group);
+      campfire.dispose();
+      this.campfires.delete(id);
+    }
+
+    for (const prop of this.builtProps) {
+      if (this.campfires.has(prop.id)) continue;
+      const campfire = createCampfire();
+      campfire.group.position.set(prop.x, 0, prop.z);
+      this.scene.add(campfire.group);
+      this.campfires.set(prop.id, campfire);
+    }
   }
 
   private removeRemote(netId: number): void {
@@ -787,6 +837,38 @@ export class Game {
       this.clearing !== null &&
       castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
 
+    // Its own key, so it never competes with a swing or a cast for the click.
+    const campfire = BUILDABLE_KINDS.campfire;
+    const canAffordCampfire = campfire.costs.every(
+      (cost) =>
+        (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
+    );
+    const buildBlockers: BuildBlocker[] =
+      canAffordCampfire && this.clearing !== null
+        ? [
+            ...this.standingProps.map((prop) => ({
+              x: prop.x,
+              z: prop.z,
+              footprintRadius: PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+            })),
+            ...this.builtProps.map((prop) => ({
+              x: prop.x,
+              z: prop.z,
+              footprintRadius: BUILDABLE_KINDS[prop.kind].footprintRadius,
+            })),
+          ]
+        : [];
+    this.canBuild =
+      canAffordCampfire &&
+      this.clearing !== null &&
+      buildSpotFor(
+        player.motion.position,
+        camera.look.yaw,
+        campfire.footprintRadius,
+        this.clearing.water,
+        buildBlockers,
+      ) !== null;
+
     // Keep the shadow map centred on the player instead of on the origin.
     if (this.sun !== null) {
       this.sun.position.set(position.x + 28, position.y + 40, position.z + 18);
@@ -859,6 +941,7 @@ export class Game {
       nearGatherSpot: this.nearGatherSpot,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
+      canBuild: this.canBuild,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),

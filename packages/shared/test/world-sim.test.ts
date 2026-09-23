@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
   HUNGER_MAX,
   INTEREST_RADIUS,
@@ -1289,5 +1290,126 @@ describe('catching wildlife', () => {
     sim.queueInput(1, createInput(seq, 0, 0, FACE_DEN, PlayerButton.Swing));
     sim.step(tickClock());
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
+  });
+});
+
+describe('building', () => {
+  const withLogs = (netId: number, count = 4): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'log', count }],
+    hunger: HUNGER_MAX,
+  });
+  const FACE_OUT = 0;
+
+  /** Idle ticks, so the shared cooldown from a previous swing or build clears. */
+  function waitOutCooldown(sim: WorldSimulation, netId: number, seq: number): number {
+    for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
+      sim.queueInput(netId, createInput(seq++, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+    }
+    return seq;
+  }
+
+  it('places a campfire in front of you, and spends the logs', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+
+    const events = sim.drainBuildEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.netId).toBe(1);
+    expect(events[0]?.prop.kind).toBe('campfire');
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    expect(sim.builtPropsList()).toEqual([events[0]?.prop]);
+  });
+
+  it('refuses without enough logs, and spends nothing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1, 3));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+
+    expect(sim.drainBuildEvents()).toEqual([]);
+    expect(sim.builtPropsList()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(3);
+  });
+
+  it('refuses a spot out past the tree line', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: -(CLEARING_TREE_LINE_INNER - 1) }, FACE_OUT);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+
+    expect(sim.drainBuildEvents()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
+  });
+
+  it('will not stack a second campfire on top of the first', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1, 8));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+    expect(sim.drainBuildEvents()).toHaveLength(1);
+
+    const seq = waitOutCooldown(sim, 1, 2);
+    sim.queueInput(1, createInput(seq, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+
+    // Blocked by the campfire already sitting there, so the second attempt
+    // never happened and never spent the logs it would have needed.
+    expect(sim.drainBuildEvents()).toEqual([]);
+    expect(sim.builtPropsList()).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
+  });
+
+  it('holding the button down places only one', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1, 12));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    // The same bundle a client that has not yet noticed the button was
+    // released would send: held across several ticks in a row.
+    for (let i = 0; i < 5; i++) {
+      sim.queueInput(1, createInput(1 + i, 0, 0, FACE_OUT, PlayerButton.Build));
+      sim.step(tickClock());
+    }
+
+    expect(sim.drainBuildEvents()).toHaveLength(1);
+  });
+
+  it('restores what was built after the world wakes from storage', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    sim.step(tickClock());
+    const built = sim.builtPropsList();
+    expect(built).toHaveLength(1);
+
+    const restored = createWorld();
+    restored.restoreBuiltProps(built);
+    expect(restored.builtPropsList()).toEqual(built);
+
+    // A fresh build in the restored world gets its own id, never one already
+    // taken by something restored from storage.
+    restored.addPlayer(2, withLogs(2));
+    restored.placePlayer(2, { x: 15, y: 0, z: 0 }, FACE_OUT);
+    restored.queueInput(2, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
+    restored.step(tickClock());
+    const ids = restored.builtPropsList().map((prop) => prop.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

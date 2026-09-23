@@ -9,11 +9,14 @@ import {
   TICK_MILLISECONDS,
   RejectReason,
   WorldSimulation,
+  buildableKindFromIndex,
+  buildableKindIndex,
   decodeClientMessage,
   encodeInventory,
   encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
+  encodeBuiltProps,
   encodeCaught,
   encodeCrafted,
   encodeFishing,
@@ -26,6 +29,7 @@ import {
   inventoryEntries,
   itemFromIndex,
   itemIndex,
+  type BuiltProp,
   type ItemId,
   type PersistedPlayer,
   type PersistedTree,
@@ -113,6 +117,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
+    server.send(encodeBuiltProps(simulation.builtPropsList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     this.startTicking();
 
@@ -221,6 +226,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceGathering(simulation);
     this.announceChopping(simulation);
     this.announceCatching(simulation);
+    this.announceBuilding(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
     this.announceRegrowth(simulation, startedAt);
@@ -339,6 +345,23 @@ export class World extends DurableObject<WorldEnv> {
       if (event !== undefined) this.trySend(ws, encodeCaught(event));
     }
     this.sendPacks(simulation, new Set(byNetId.keys()));
+  }
+
+  /**
+   * Tell everybody about anything placed this tick, and write it to storage
+   * straight away: nobody should have to build the same campfire twice.
+   *
+   * Sent to everybody, unlike a catch or a craft, because a build changes
+   * the world itself, not just one player's pack - the same reason a felled
+   * tree goes out to everybody too.
+   */
+  private announceBuilding(simulation: WorldSimulation): void {
+    const events = simulation.drainBuildEvents();
+    if (events.length === 0) return;
+
+    for (const event of events) this.writeBuiltProp(event.prop);
+    this.broadcast(encodeBuiltProps(simulation.builtPropsList()));
+    this.sendPacks(simulation, new Set(events.map((event) => event.netId)));
   }
 
   /**
@@ -502,6 +525,7 @@ export class World extends DurableObject<WorldEnv> {
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
+    simulation.restoreBuiltProps(this.loadBuiltProps());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -645,6 +669,15 @@ export class World extends DurableObject<WorldEnv> {
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
     sql.exec('UPDATE trees SET felled_at_ms = ? WHERE felled = 1 AND felled_at_ms = 0', Date.now());
+    // Everything anybody has placed. Nothing is ever removed from it yet, so
+    // unlike trees and pickups there is no need to reconcile it against a seed.
+    sql.exec(`CREATE TABLE IF NOT EXISTS built_props (
+      id INTEGER PRIMARY KEY,
+      kind_index INTEGER NOT NULL,
+      x REAL NOT NULL,
+      z REAL NOT NULL,
+      built_at_ms INTEGER NOT NULL
+    )`);
   }
 
   /** Add a column to an existing table, unless it is already there. */
@@ -753,6 +786,39 @@ export class World extends DurableObject<WorldEnv> {
       tree.felled ? 1 : 0,
       tree.felledAtMs,
       tree.generation,
+      Date.now(),
+    );
+  }
+
+  private loadBuiltProps(): BuiltProp[] {
+    const props: BuiltProp[] = [];
+    const rows = this.ctx.storage.sql
+      .exec<{
+        id: number;
+        kind_index: number;
+        x: number;
+        z: number;
+      }>('SELECT id, kind_index, x, z FROM built_props')
+      .toArray();
+    for (const row of rows) {
+      const kind = buildableKindFromIndex(row.kind_index);
+      // A row written by a newer build that knew about a kind this one does
+      // not. Skipping it is better than refusing to let anybody in.
+      if (kind === null) continue;
+      props.push({ id: row.id, kind, x: row.x, z: row.z });
+    }
+    return props;
+  }
+
+  /** Built props are never updated once placed, so this is always a fresh insert. */
+  private writeBuiltProp(prop: BuiltProp): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO built_props (id, kind_index, x, z, built_at_ms) VALUES (?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(id) DO NOTHING',
+      prop.id,
+      buildableKindIndex(prop.kind),
+      prop.x,
+      prop.z,
       Date.now(),
     );
   }

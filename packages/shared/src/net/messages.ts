@@ -2,6 +2,7 @@ import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type {
   AnimalCaught,
+  BuiltProp,
   CraftedEvent,
   FishingEvent,
   HungerEvent,
@@ -30,6 +31,7 @@ export const ServerMessageType = {
   Hunger: 0x1a,
   Crafted: 0x1b,
   Caught: 0x1c,
+  BuiltProps: 0x1d,
 } as const;
 
 export const RejectReason = {
@@ -187,6 +189,18 @@ export interface CaughtMessage {
   readonly event: AnimalCaught;
 }
 
+/**
+ * Everything anybody has ever built.
+ *
+ * Sent whole, the same way tree states are: cheap while there is not much
+ * built yet, and simplest to keep in sync. Sent on arrival, and again
+ * whenever somebody places something new.
+ */
+export interface BuiltPropsMessage {
+  readonly type: 'builtProps';
+  readonly props: readonly BuiltProp[];
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -200,4 +214,5 @@ export type ServerMessage =
   | FishingMessage
   | HungerMessage
   | CraftedMessage
-  | CaughtMessage;
+  | CaughtMessage
+  | BuiltPropsMessage;

@@ -11,11 +11,13 @@
 
 import { MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
+import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
 import type {
   AnimalCaught,
+  BuiltProp,
   CraftedEvent,
   FishingEvent,
   HungerEvent,
@@ -57,12 +59,16 @@ export const MAX_TAKEN_PICKUPS = 255;
  * has been touched still fits. A bigger world will need a two-byte count.
  */
 export const MAX_CHANGED_TREES = 255;
+/** Handful of these for now; a one-byte count leaves plenty of room to grow. */
+export const MAX_BUILT_PROPS = 255;
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
 /** treeId(2) + generation(1) + flags(1) */
 const BYTES_PER_TREE_STATE = 4;
 const TREE_FELLED_FLAG = 1;
+/** id(2) + kind(1) + x(2) + z(2) */
+const BYTES_PER_BUILT_PROP = 7;
 
 /** type(1) + netId(2) + what happened(1) + two numbers that depend on it(2 each) */
 const FISHING_MESSAGE_BYTES = 8;
@@ -352,6 +358,27 @@ export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
   return buffer;
 }
 
+/** Everything anybody has ever built, sent whole - the same way tree states are. */
+export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
+  const count = Math.min(props.length, MAX_BUILT_PROPS);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_BUILT_PROP);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.BuiltProps);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const prop = props[i];
+    if (prop === undefined) break;
+    view.setUint16(offset, prop.id & 0xffff, true);
+    view.setUint8(offset + 2, buildableKindIndex(prop.kind));
+    view.setInt16(offset + 3, clamp(quantisePosition(prop.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(offset + 5, clamp(quantisePosition(prop.z), INT16_MIN, INT16_MAX), true);
+    offset += BYTES_PER_BUILT_PROP;
+  }
+  return buffer;
+}
+
 export function encodeTreeHit(treeId: number, swingsLeft: number): ArrayBuffer {
   const buffer = new ArrayBuffer(4);
   const view = new DataView(buffer);
@@ -581,6 +608,25 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offset += BYTES_PER_TREE_STATE;
       }
       return { type: 'treeStates', trees };
+    }
+    case ServerMessageType.BuiltProps: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_BUILT_PROP) return null;
+      const props: BuiltProp[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        const kind = buildableKindFromIndex(view.getUint8(offset + 2));
+        if (kind === null) return null;
+        props.push({
+          id: view.getUint16(offset, true),
+          kind,
+          x: dequantisePosition(view.getInt16(offset + 3, true)),
+          z: dequantisePosition(view.getInt16(offset + 5, true)),
+        });
+        offset += BYTES_PER_BUILT_PROP;
+      }
+      return { type: 'builtProps', props };
     }
     case ServerMessageType.TreeHit: {
       if (data.byteLength !== 4) return null;

@@ -118,6 +118,15 @@ export const WILDERNESS = {
 export const PICKUP_REACH = 2;
 
 /**
+ * Building.
+ *
+ * A build always lands this far in front of the player - aim and place,
+ * nothing free-form yet - close enough to feel deliberate rather than
+ * flung.
+ */
+export const BUILD_DISTANCE = 2.6;
+
+/**
  * Chopping.
  *
  * Reach is measured to the trunk's surface rather than its middle, so a fat oak

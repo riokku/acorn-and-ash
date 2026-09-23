@@ -32,6 +32,7 @@ import {
 } from '../ecs/traits';
 import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
 import { ANIMAL_KINDS, type AnimalKindId } from '../data/animals';
+import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import { colliderFootprintRadius } from '../world/colliders';
 import type { ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
@@ -66,9 +67,10 @@ import {
 } from './inventory';
 import { pickupInReach } from './pickups';
 import { gatherSpotInReach } from './gathering';
-import { craft } from './crafting';
+import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import { animalInReach, type CatchCandidate } from './hunting';
+import { buildSpotFor, type BuildBlocker } from './building';
 import {
   CAST_COOLDOWN_TICKS,
   readCastInput,
@@ -197,6 +199,26 @@ export interface AnimalCaught {
   readonly added: number;
 }
 
+/** Something a player has placed in the world. */
+export interface BuiltProp {
+  readonly id: number;
+  readonly kind: BuildableKindId;
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * A player placed something.
+ *
+ * Everybody hears about the build itself from the next `builtPropsList` -
+ * the same way a felled tree needs no message of its own beyond
+ * `TreeChopped` - so this is only for the builder's own pack changing.
+ */
+export interface BuildEvent {
+  readonly netId: number;
+  readonly prop: BuiltProp;
+}
+
 /** A tree's state, as it goes into and comes out of storage. */
 export interface PersistedTree {
   readonly treeId: number;
@@ -290,6 +312,8 @@ interface PlayerRuntime {
    * click.
    */
   swingWasHeld: boolean;
+  /** Same idea as `swingWasHeld`, but for the build button: a click places one, not a hold. */
+  buildWasHeld: boolean;
   /** Their line in the water, if they have one out. */
   cast: Cast | null;
   lastProcessedSeq: number;
@@ -368,6 +392,10 @@ export class WorldSimulation {
   private readonly craftEvents: CraftedEvent[] = [];
   /** Who gathered a stick this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
+  /** Everything anybody has ever built. Nothing is ever removed from it yet. */
+  private readonly builtProps: BuiltProp[] = [];
+  private nextBuiltPropId = 1;
+  private readonly buildEvents: BuildEvent[] = [];
   /**
    * The props as they stand right now.
    *
@@ -492,6 +520,7 @@ export class WorldSimulation {
       inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
       swingCooldownTicks: 0,
       swingWasHeld: false,
+      buildWasHeld: false,
       cast: null,
       lastProcessedSeq: 0,
       droppedInputs: 0,
@@ -577,6 +606,7 @@ export class WorldSimulation {
         let wantsToInteract = false;
         let wantsToSwing = false;
         let wantsToCast = false;
+        let wantsToBuild = false;
         let aimedYaw = aim.yaw;
 
         // A line in the water keeps its own time: the fish bites when it bites,
@@ -601,6 +631,9 @@ export class WorldSimulation {
             const swingHeld = isHeld(input, PlayerButton.Swing);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
+            const buildHeld = isHeld(input, PlayerButton.Build);
+            const buildClicked = buildHeld && !runtime.buildWasHeld;
+            runtime.buildWasHeld = buildHeld;
             if (runtime.cast !== null) {
               // With a line out, the button is for the fish and nothing else,
               // and each input is read in turn: when the click was made matters.
@@ -612,6 +645,7 @@ export class WorldSimulation {
             } else {
               if (swingHeld) wantsToSwing = true;
               if (clicked) wantsToCast = true;
+              if (buildClicked) wantsToBuild = true;
             }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
@@ -636,6 +670,7 @@ export class WorldSimulation {
         if (runtime.cast === null) {
           if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
           if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
+          if (wantsToBuild) this.tryBuild(runtime, scratch.position, aimedYaw);
         }
 
         position.x = scratch.position.x;
@@ -895,6 +930,47 @@ export class WorldSimulation {
     this.fishingEvents.push({ kind: 'cast', netId: runtime.netId, x: spot.x, z: spot.z });
   }
 
+  /**
+   * Place a campfire in front of this player, if they can afford one and
+   * there is a clear spot for it.
+   *
+   * Only one kind exists yet, so there is nothing to choose between - once a
+   * second one does, this is where picking one comes in.
+   */
+  private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
+    if (runtime.swingCooldownTicks > 0) return;
+    const buildable = BUILDABLE_KINDS.campfire;
+    if (!canAfford(runtime.inventory, buildable)) return;
+
+    const blockers: BuildBlocker[] = [
+      ...this.standing.map((prop) => ({
+        x: prop.x,
+        z: prop.z,
+        footprintRadius: PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+      })),
+      ...this.builtProps.map((built) => ({
+        x: built.x,
+        z: built.z,
+        footprintRadius: BUILDABLE_KINDS[built.kind].footprintRadius,
+      })),
+    ];
+    const spot = buildSpotFor(
+      position,
+      aimYaw,
+      buildable.footprintRadius,
+      this.clearing.water,
+      blockers,
+    );
+    if (spot === null) return;
+
+    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+    for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
+
+    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind: 'campfire', x: spot.x, z: spot.z };
+    this.builtProps.push(prop);
+    this.buildEvents.push({ netId: runtime.netId, prop });
+  }
+
   /** A tick of waiting at the water: the bite, the leash and giving up. */
   private tickLine(runtime: PlayerRuntime, cast: Cast, position: Readonly<Vec3>): void {
     const progress = tickCast(cast, this.tick, position);
@@ -1097,6 +1173,24 @@ export class WorldSimulation {
 
       if (tree.felled) this.fellTree(tree.treeId, tree.felledAtMs);
     }
+  }
+
+  /** Everything anybody has ever built, for sending to a client or saving to storage. */
+  builtPropsList(): readonly BuiltProp[] {
+    return [...this.builtProps];
+  }
+
+  /** Put built props back as they were after the world wakes from storage. */
+  restoreBuiltProps(props: Iterable<BuiltProp>): void {
+    for (const prop of props) {
+      this.builtProps.push(prop);
+      this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
+    }
+  }
+
+  /** Hand over every build placed since this was last asked. */
+  drainBuildEvents(): BuildEvent[] {
+    return this.buildEvents.splice(0);
   }
 
   /** Hand over every swing that landed since this was last asked. */

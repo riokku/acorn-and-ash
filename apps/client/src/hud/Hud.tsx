@@ -175,6 +175,7 @@ function hint(state: HudState): string {
   if (state.canCast) return 'Left click to cast';
   if (state.aimedTree !== null) return chopHint(state.aimedTree);
   if (state.aimedAnimal !== null) return catchHint(state.aimedAnimal);
+  if (state.canBuild) return 'Press B to build a campfire';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';

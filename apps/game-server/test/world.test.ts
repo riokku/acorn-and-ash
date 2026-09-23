@@ -17,6 +17,7 @@ import {
   PlayerButton,
   SNAPSHOT_HZ,
   SnapshotFlag,
+  SPAWN_POSITION,
   STICK_PATCHES,
   TICK_HZ,
   buildTestClearing,
@@ -1060,4 +1061,153 @@ describe('catching wildlife', () => {
     expect(client.caught()).toEqual([]);
     client.close();
   }, 40_000);
+});
+
+describe('building', () => {
+  /** The landmark oak, which happens to stand right beside the axe's stump. */
+  function theOak(seed: number) {
+    const tree = buildTestClearing(seed).props.find((prop) => prop.kind === 'oak');
+    if (tree === undefined) throw new Error('no oak in the clearing');
+    return tree;
+  }
+
+  /** Face a spot and hold the swing, until the tree is down or we give up. */
+  async function chopUntilFelled(
+    client: TestClient,
+    target: { x: number; z: number },
+    treeId: number,
+  ): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 60; step++) {
+      if (client.felledTrees().includes(treeId)) return;
+      const here = client.positionOf(netId);
+      if (here === undefined) break;
+      const yaw = Math.atan2(-(target.x - here.x), -(target.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Swing);
+      await sleep(120);
+    }
+    throw new Error('the tree never came down');
+  }
+
+  /** Fell the landmark oak: exactly enough logs for one campfire, no more. */
+  async function getLogsForACampfire(client: TestClient): Promise<void> {
+    await walkToTheAxe(client);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+
+    const oak = theOak(client.welcome().seed);
+    await chopUntilFelled(client, oak, oak.id);
+    await waitFor('the logs', () => client.inventory().some((entry) => entry.item === 'log'));
+  }
+
+  /** Walk back to open ground near spawn - clear of every landmark - to build on. */
+  async function walkToOpenGround(client: TestClient): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 60; step++) {
+      const here = client.positionOf(netId);
+      if (here === undefined) break;
+      const gap = Math.hypot(here.x - SPAWN_POSITION.x, here.z - SPAWN_POSITION.z);
+      if (gap < 3) return;
+      const yaw = Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
+      client.walk(0, 1, yaw, 4);
+      await sleep(110);
+    }
+    throw new Error('never made it back to open ground');
+  }
+
+  /** Face the middle of the clearing and hold Build until something appears. */
+  async function buildCampfire(client: TestClient): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 20; step++) {
+      if (client.builtProps().length > 0) return;
+      const here = client.positionOf(netId);
+      const yaw =
+        here === undefined
+          ? 0
+          : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      await sleep(120);
+    }
+    throw new Error('never built anything');
+  }
+
+  it('places a campfire once you have the logs for one, and spends them', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-builder');
+    await getLogsForACampfire(client);
+    // The oak pays out exactly what a campfire costs, so this is the plainest
+    // possible check that a build is not free.
+    expect(client.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'log', count: 4 },
+    ]);
+
+    await walkToOpenGround(client);
+    await buildCampfire(client);
+
+    const props = client.builtProps();
+    expect(props).toHaveLength(1);
+    expect(props[0]?.kind).toBe('campfire');
+    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    client.close();
+  }, 30_000);
+
+  it('shows a second player the campfire appear', async () => {
+    const worldId = nextWorldId();
+    const builder = await TestClient.connect(worldId, 'the-other-builder');
+    const watcher = await TestClient.connect(worldId, 'the-watcher');
+    await waitFor(
+      'both welcomes',
+      () => builder.received.length > 0 && watcher.received.length > 0,
+    );
+
+    await getLogsForACampfire(builder);
+    await walkToOpenGround(builder);
+    await buildCampfire(builder);
+
+    await waitFor('the watcher to see it too', () => watcher.builtProps().length > 0);
+    expect(watcher.builtProps()).toEqual(builder.builtProps());
+    builder.close();
+    watcher.close();
+  }, 30_000);
+
+  it('refuses without enough logs, and spends nothing', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'no-logs-here');
+    await waitFor(
+      'a first snapshot',
+      () => client.positionOf(client.welcome().netId) !== undefined,
+    );
+    await walkToOpenGround(client);
+
+    const netId = client.welcome().netId;
+    for (let i = 0; i < 10; i++) {
+      const here = client.positionOf(netId);
+      const yaw =
+        here === undefined
+          ? 0
+          : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
+      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      await sleep(100);
+    }
+
+    expect(client.builtProps()).toEqual([]);
+    expect(client.inventory()).toEqual([]);
+    client.close();
+  });
+
+  it('leaves the campfire there after logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'comes-back-to-build');
+    await getLogsForACampfire(first);
+    await walkToOpenGround(first);
+    await buildCampfire(first);
+    const built = first.builtProps();
+    expect(built).toHaveLength(1);
+    first.close();
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'comes-back-to-build');
+    await waitFor('the opening built props', () => second.countOfMessages('builtProps') > 0);
+    expect(second.openingBuiltProps()).toEqual(built);
+    second.close();
+  }, 30_000);
 });

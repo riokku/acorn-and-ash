@@ -18,6 +18,8 @@ declare global {
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
       aimedAnimal(): { name: string } | null;
+      canBuild(): boolean;
+      builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       canCast(): boolean;
@@ -797,4 +799,127 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
 
   // Nothing thrown while walking out, swinging or drawing the wildlife.
   expect(errors).toEqual([]);
+});
+
+/**
+ * Walk back toward a remembered spot, in long sprint holds rather than many
+ * short polls - the same lesson the trip out to a rabbit's den already
+ * taught this file: each poll is a round trip through the browser, and
+ * those add up to more than the walk itself does under a slow render loop.
+ */
+async function walkToward(page: Page, target: { x: number; z: number }): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - target.x, (here?.z ?? 0) - target.z);
+    if (gap < 3) return;
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [target.x, target.z],
+    );
+
+    const holdMs = Math.min(6_000, Math.max(300, (gap / 7) * 1_300));
+    await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(holdMs);
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('ShiftLeft');
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`Never made it back to ${target.x}, ${target.z}`);
+}
+
+/** Face the given spot and hold Build until a campfire appears somewhere. */
+async function buildCampfireFacing(page: Page, target: { x: number; z: number }): Promise<void> {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) return;
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [target.x, target.z],
+    );
+    await page.keyboard.down('KeyB');
+    await page.waitForTimeout(200);
+    await page.keyboard.up('KeyB');
+    await page.waitForTimeout(150);
+  }
+  throw new Error('never built a campfire');
+}
+
+test('you can chop enough logs to build a campfire, and it is still there next time', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=build-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Remembered before walking anywhere: wherever a fresh player spawns is
+  // guaranteed clear of every landmark, so it is always somewhere to build.
+  const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+
+  // Fetch the axe and fell the landmark oak beside it, the same as the
+  // chopping test does - the oak pays out exactly what a campfire costs.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
+  const oak = trees.find((tree) => tree.kind === 'oak');
+  if (oak === undefined) throw new Error('no oak in the clearing');
+  await walkWithinReachOfTree(page, oak);
+  await chopUntilFelled(page, oak);
+
+  const carriedLogs = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carriedLogs.find((entry) => entry.item === 'log')?.count).toBe(4);
+
+  // Back to open ground to build on - the axe stump and the felled oak are
+  // both still standing right where the logs came from.
+  await walkToward(page, spawnSpot);
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+    [spawnSpot.x, spawnSpot.z],
+  );
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
+  await expect(page.locator('.hud-hint')).toContainText('Press B to build a campfire');
+
+  await buildCampfireFacing(page, spawnSpot);
+
+  const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
+  expect(built).toHaveLength(1);
+  expect(built[0]?.kind).toBe('campfire');
+  expect(await page.evaluate(() => window.acornDebug?.carrying() ?? [])).toEqual([
+    { item: 'axe', count: 1 },
+  ]);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).not.toContainText('Log');
+
+  // The Phase 1 promise, for a campfire this time: log out, come back, it is
+  // still there.
+  const url = page.url();
+  await page.close();
+  const again = await context.newPage();
+  await again.goto(url);
+  await waitForConnected(again);
+  await expect
+    .poll(async () => (await again.evaluate(() => window.acornDebug?.builtProps() ?? [])).length)
+    .toBe(1);
+  const rebuilt = await again.evaluate(() => window.acornDebug?.builtProps() ?? []);
+  expect(rebuilt).toEqual(built);
+
+  // Nothing thrown while chopping, walking back or placing the campfire.
+  expect(errors).toEqual([]);
+
+  await context.close();
 });
