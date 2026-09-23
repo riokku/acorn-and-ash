@@ -23,7 +23,7 @@ import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { addItem, countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
-import { AXE_PICKUP_ID, AXE_STUMP, STICK_PATCHES } from '../src/world/clearing';
+import { AXE_PICKUP_ID, AXE_STUMP, FLOWER_PATCHES, STICK_PATCHES } from '../src/world/clearing';
 import {
   inputsToConsume,
   WorldSimulation,
@@ -590,6 +590,21 @@ describe('gathering sticks', () => {
 
     expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
     expect(sim.hungerOf(1)).toBeGreaterThan(50);
+  });
+});
+
+describe('gathering flowers', () => {
+  const spot = FLOWER_PATCHES[0];
+  if (spot === undefined) throw new Error('no flower patch to test against');
+
+  it('gathers a flower, not a stick, at a flower patch', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'flower')).toBe(1);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
   });
 });
 
@@ -1516,6 +1531,99 @@ describe('building', () => {
       const position = fresh.snapshotFor(2).find((entity) => entity.netId === 2);
       expect(position?.x).toBe(SPAWN_POSITION.x);
       expect(position?.z).toBe(SPAWN_POSITION.z);
+    });
+  });
+
+  describe('personal decorations', () => {
+    const withFlowers = (netId: number, count = 6): PersistedPlayer => ({
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'flower', count }],
+      hunger: HUNGER_MAX,
+    });
+
+    it('costs flowers and is capped per player, but is not a home', () => {
+      expect(BUILDABLE_KINDS.flowerBed.costs).toEqual([{ item: 'flower', amount: 6 }]);
+      expect(BUILDABLE_KINDS.flowerBed.capPerPlayer).toBe(true);
+      expect(BUILDABLE_KINDS.flowerBed.isHome).toBe(false);
+      expect(BUILDABLE_KINDS.lantern.costs).toEqual([{ item: 'flower', amount: 4 }]);
+      expect(BUILDABLE_KINDS.lantern.capPerPlayer).toBe(true);
+      expect(BUILDABLE_KINDS.lantern.isHome).toBe(false);
+    });
+
+    it('refuses a second flower bed for somebody who already has one', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withFlowers(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      // Topped back up, so it is the cap refusing this - not a lack of flowers.
+      addItem(sim.inventoryOf(1), 'flower', 6);
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', seq);
+      expect(sim.drainBuildEvents()).toEqual([]);
+    });
+
+    it('owning a flower bed does not stop the same player building a lantern too', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withFlowers(1, 10), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      // A different kind, so the flower bed's own cap has nothing to say
+      // about it - the four flowers left over are exactly a lantern's cost.
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'lantern', seq);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+    });
+
+    it('owning a cabin does not stop the same player decorating too', () => {
+      const sim = createWorld();
+      sim.addPlayer(
+        1,
+        {
+          netId: 1,
+          x: 0,
+          y: 0,
+          z: 0,
+          facingYaw: 0,
+          items: [
+            { item: 'log', count: 10 },
+            { item: 'flower', count: 6 },
+          ],
+          hunger: HUNGER_MAX,
+        },
+        'chris',
+      );
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', seq);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+    });
+
+    it('a guest with no persistent key is never capped', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withFlowers(1));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      addItem(sim.inventoryOf(1), 'flower', 6);
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'flowerBed', seq);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
     });
   });
 });

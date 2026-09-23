@@ -56,6 +56,8 @@ import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createCabin, type Cabin } from './scene/cabin';
+import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
+import { createLantern, type Lantern } from './scene/lantern';
 import { createCritter, type Critter } from './scene/critter';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
@@ -92,6 +94,20 @@ function isAnimalEntity(entity: SnapshotEntity): boolean {
   return (entity.flags & SnapshotFlag.Animal) !== 0;
 }
 
+/** The placeholder model for whatever kind of thing somebody built. */
+function createBuiltMesh(kind: BuildableKindId): Campfire | Cabin | FlowerBed | Lantern {
+  switch (kind) {
+    case 'campfire':
+      return createCampfire();
+    case 'cabin':
+      return createCabin();
+    case 'flowerBed':
+      return createFlowerBed();
+    case 'lantern':
+      return createLantern();
+  }
+}
+
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
@@ -105,12 +121,12 @@ export interface GameDebug {
   takenPickups(): number[];
   /** Everything the clearing has lying about to be found. */
   pickups(): Array<{ id: number; item: string; x: number; z: number }>;
-  /** Every patch of fallen branches you could gather a stick from. */
-  gatherSpots(): Array<{ x: number; z: number }>;
+  /** Every patch you could gather from, and what it offers. */
+  gatherSpots(): Array<{ x: number; z: number; item: string }>;
   /** What is within reach right now, if anything. */
   nearbyItem(): string | null;
-  /** Whether a patch of sticks is within reach right now. */
-  nearGatherSpot(): boolean;
+  /** What a nearby patch would gather, if anything is within reach right now. */
+  nearGatherSpot(): string | null;
   /** Trees the server says are down. */
   felledTrees(): number[];
   /** How many times each changed tree has grown back. */
@@ -169,7 +185,7 @@ export class Game {
   private readonly remoteCharacters = new Map<number, Character>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter>();
-  private readonly builtMeshes = new Map<number, Campfire | Cabin>();
+  private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
   private builtProps: readonly BuiltProp[] = [];
   private canBuild = false;
   private buildMenuOpen = false;
@@ -188,7 +204,7 @@ export class Game {
   private readonly takenPickups = new Set<number>();
   private carrying: readonly { item: ItemId; count: number }[] = [];
   private nearbyItem: ItemId | null = null;
-  private nearGatherSpot = false;
+  private nearGatherSpot: ItemId | null = null;
   /**
    * What the server says about every tree that is not as the seed left it, and
    * how far along the one being chopped is.
@@ -671,7 +687,7 @@ export class Game {
 
     for (const prop of this.builtProps) {
       if (this.builtMeshes.has(prop.id)) continue;
-      const built = prop.kind === 'cabin' ? createCabin() : createCampfire();
+      const built = createBuiltMesh(prop.kind);
       built.group.position.set(prop.x, 0, prop.z);
       this.scene.add(built.group);
       this.builtMeshes.set(prop.id, built);
@@ -821,8 +837,9 @@ export class Game {
     this.nearbyItem = reachable?.item ?? null;
 
     this.nearGatherSpot =
-      this.clearing !== null &&
-      gatherSpotInReach(player.motion.position, this.clearing.gatherSpots) !== null;
+      this.clearing === null
+        ? null
+        : (gatherSpotInReach(player.motion.position, this.clearing.gatherSpots)?.item ?? null);
 
     const target =
       this.clearing === null

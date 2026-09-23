@@ -24,8 +24,8 @@ export interface HudState {
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
-  /** Whether a patch of sticks is within reach right now. */
-  readonly nearGatherSpot: boolean;
+  /** What a nearby patch would gather, if anything is within reach right now. */
+  readonly nearGatherSpot: ItemId | null;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
@@ -64,7 +64,7 @@ const INITIAL: HudState = {
   ready: false,
   carrying: [],
   nearbyItem: null,
-  nearGatherSpot: false,
+  nearGatherSpot: null,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,

@@ -10,9 +10,9 @@ declare global {
       carrying(): Array<{ item: string; count: number }>;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
-      gatherSpots(): Array<{ x: number; z: number }>;
+      gatherSpots(): Array<{ x: number; z: number; item: string }>;
       nearbyItem(): string | null;
-      nearGatherSpot(): boolean;
+      nearGatherSpot(): string | null;
       felledTrees(): number[];
       treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
@@ -242,10 +242,10 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
   throw new Error(`Never got within reach of ${x}, ${z}`);
 }
 
-/** Walk to a gather spot until the game says a patch of sticks is in reach. */
+/** Walk to a gather spot until the game says something is in reach there. */
 async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Promise<void> {
   for (let step = 0; step < 80; step++) {
-    if (await page.evaluate(() => window.acornDebug?.nearGatherSpot() ?? false)) return;
+    if ((await page.evaluate(() => window.acornDebug?.nearGatherSpot() ?? null)) !== null) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
@@ -856,10 +856,14 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
 }
 
 /**
- * Face the given spot, open the build menu with B, and pick a campfire (menu
- * slot 1) until one appears somewhere.
+ * Face the given spot, open the build menu with B, and pick the given menu
+ * slot until something appears somewhere.
  */
-async function buildCampfireFacing(page: Page, target: { x: number; z: number }): Promise<void> {
+async function buildFacing(
+  page: Page,
+  target: { x: number; z: number },
+  digit: string,
+): Promise<void> {
   for (let attempt = 0; attempt < 15; attempt++) {
     if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) return;
     await page.evaluate(
@@ -868,10 +872,10 @@ async function buildCampfireFacing(page: Page, target: { x: number; z: number })
     );
     await page.keyboard.press('KeyB');
     await page.waitForTimeout(150);
-    await page.keyboard.press('Digit1');
+    await page.keyboard.press(digit);
     await page.waitForTimeout(200);
   }
-  throw new Error('never built a campfire');
+  throw new Error('never built anything');
 }
 
 test('you can chop enough logs to build a campfire, and it is still there next time', async ({
@@ -935,7 +939,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
   expect(await page.evaluate(() => window.acornDebug?.buildMenuOpen() ?? true)).toBe(false);
 
-  await buildCampfireFacing(page, spawnSpot);
+  await buildFacing(page, spawnSpot, 'Digit1');
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built).toHaveLength(1);
@@ -962,4 +966,68 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(errors).toEqual([]);
 
   await context.close();
+});
+
+test('you can gather flowers and plant something pretty for the garden', async ({ page }) => {
+  // Two real walks (out to a patch and back to open ground) on top of the
+  // gathering itself, the same reason the campfire test budgets generously.
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=flowers-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Remembered before wandering off to a flower patch, the same reason the
+  // campfire test remembers it: guaranteed clear of every landmark to build on.
+  const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+
+  const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
+  const spot = spots.find((entry) => entry.item === 'flower');
+  expect(spot).toBeDefined();
+  if (spot === undefined) throw new Error('no flower patch in the clearing');
+
+  await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to gather flowers');
+
+  // A lantern is the cheaper of the two decorations, at four - gathered in
+  // taps, the same pacing the stick patches already use.
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(600);
+  }
+  const gathered = await page.evaluate(
+    () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
+  );
+  expect(gathered).toBeGreaterThanOrEqual(4);
+
+  await walkToward(page, spawnSpot);
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+    [spawnSpot.x, spawnSpot.z],
+  );
+  await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
+
+  // All four buildables now show in the menu, in the same order every time.
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Press 1 for a campfire, 2 for a cabin, 3 for a flower bed, 4 for a lantern',
+  );
+  await page.keyboard.press('KeyB');
+  await page.waitForTimeout(150);
+
+  await buildFacing(page, spawnSpot, 'Digit4');
+
+  const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
+  expect(built).toHaveLength(1);
+  expect(built[0]?.kind).toBe('lantern');
+
+  const spent = await page.evaluate(
+    () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
+  );
+  expect(spent).toBe(gathered - 4);
+
+  // Nothing thrown while gathering, walking back or planting the lantern.
+  expect(errors).toEqual([]);
 });

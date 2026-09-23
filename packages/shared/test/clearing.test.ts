@@ -6,7 +6,7 @@ import {
   SPAWN_POSITION,
   PLAYER_RADIUS,
 } from '../src/constants';
-import { STICK_PATCHES, buildTestClearing } from '../src/world/clearing';
+import { FLOWER_PATCHES, STICK_PATCHES, buildTestClearing } from '../src/world/clearing';
 
 describe('the test clearing', () => {
   it('is identical every time it is built from the same seed', () => {
@@ -54,14 +54,19 @@ describe('the test clearing', () => {
 });
 
 describe('the gather spots', () => {
-  it('carries the stick patches, so every client agrees where they are', () => {
+  const expectedSpots = [
+    ...STICK_PATCHES.map((spot) => ({ ...spot, item: 'stick' })),
+    ...FLOWER_PATCHES.map((spot) => ({ ...spot, item: 'flower' })),
+  ];
+
+  it('carries the stick and flower patches, so every client agrees where they are', () => {
     const { gatherSpots } = buildTestClearing(4242);
-    expect(gatherSpots).toEqual(STICK_PATCHES);
+    expect(gatherSpots).toEqual(expectedSpots);
   });
 
   it('is in the same place for every seed, so it can always be found', () => {
     for (const seed of [1, 99, 0x4143_4f52]) {
-      expect(buildTestClearing(seed).gatherSpots).toEqual(STICK_PATCHES);
+      expect(buildTestClearing(seed).gatherSpots).toEqual(expectedSpots);
     }
   });
 

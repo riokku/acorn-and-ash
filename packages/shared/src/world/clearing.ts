@@ -38,14 +38,15 @@ export interface PlacedPickup {
 }
 
 /**
- * A patch of fallen branches anybody can gather sticks from, by hand, any
- * time. Unlike a pickup it is never used up, so it carries no id and nothing
- * about it is ever sent over the wire: every client already knows it is
- * always there, the same way it knows where every tree is.
+ * A patch anybody can gather from by hand, any time - fallen branches for a
+ * stick, wildflowers for a flower. Unlike a pickup it is never used up, so it
+ * carries no id and nothing about it is ever sent over the wire: every client
+ * already knows it is always there, the same way it knows where every tree is.
  */
 export interface GatherSpot {
   readonly x: number;
   readonly z: number;
+  readonly item: ItemId;
 }
 
 export interface Clearing {
@@ -106,6 +107,16 @@ export const ROD_PICKUP_ID = 2;
 export const STICK_PATCHES: readonly { x: number; z: number }[] = [
   { x: 2.6, z: 1.8 },
   { x: -6.6, z: -13.6 },
+];
+
+/**
+ * Wildflowers you can gather by hand, the same way as a stick patch. One a
+ * short walk from spawn, one out by the pond, so there is a reason to wander
+ * either way once building is worth doing.
+ */
+export const FLOWER_PATCHES: readonly { x: number; z: number }[] = [
+  { x: -4, z: 13 },
+  { x: 19, z: -8 },
 ];
 
 /** Nothing is placed inside this circle, so players always spawn in the open. */
@@ -178,7 +189,10 @@ export function buildTestClearing(seed: number): Clearing {
     },
     { id: ROD_PICKUP_ID, item: 'rod', x: ROD_SPOT.x, z: ROD_SPOT.z, y: 0 },
   ];
-  const gatherSpots = STICK_PATCHES;
+  const gatherSpots: GatherSpot[] = [
+    ...STICK_PATCHES.map((spot) => ({ ...spot, item: 'stick' as const })),
+    ...FLOWER_PATCHES.map((spot) => ({ ...spot, item: 'flower' as const })),
+  ];
 
   const water = POND;
   // Scattered rocks were placed before there was a pond, so a few land in it or

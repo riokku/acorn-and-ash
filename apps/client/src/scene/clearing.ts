@@ -120,7 +120,11 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   // Never taken away, unlike a pickup: there is nothing here to track once it
   // is placed.
   for (const spot of clearing.gatherSpots) {
-    group.add(createStickPile(spot, disposables));
+    const model =
+      spot.item === 'flower'
+        ? createFlowerPatch(spot, disposables)
+        : createStickPile(spot, disposables);
+    group.add(model);
   }
 
   /** What is drawn right now, so nothing is rebuilt that has not changed. */
@@ -334,6 +338,57 @@ function createStickPile(
     dispose: () => {
       geometry.dispose();
       material.dispose();
+    },
+  });
+  return group;
+}
+
+/**
+ * A little patch of wildflowers: a handful of thin stems, each topped with a
+ * small bloom, scattered within a step or two of the spot's centre.
+ */
+function createFlowerPatch(
+  spot: GatherSpot,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const stemGeometry = new THREE.CylinderGeometry(0.012, 0.018, 0.3, 5);
+  const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.9 });
+  const headGeometry = new THREE.SphereGeometry(0.07, 6, 5);
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: ITEM_KINDS.flower.placeholderColor,
+    roughness: 0.7,
+    flatShading: true,
+  });
+
+  const offsets = [
+    { x: 0, z: 0 },
+    { x: 0.28, z: 0.12 },
+    { x: -0.22, z: 0.2 },
+    { x: 0.1, z: -0.26 },
+    { x: -0.26, z: -0.1 },
+  ];
+  for (const offset of offsets) {
+    const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+    stem.position.set(offset.x, 0.15, offset.z);
+    stem.castShadow = true;
+    group.add(stem);
+
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.set(offset.x, 0.32, offset.z);
+    head.castShadow = true;
+    group.add(head);
+  }
+
+  group.position.set(spot.x, 0, spot.z);
+
+  disposables.push({
+    dispose: () => {
+      stemGeometry.dispose();
+      stemMaterial.dispose();
+      headGeometry.dispose();
+      headMaterial.dispose();
     },
   });
   return group;

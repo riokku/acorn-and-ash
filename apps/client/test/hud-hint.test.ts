@@ -19,7 +19,7 @@ const BASE_STATE: HudState = {
   ready: true,
   carrying: [],
   nearbyItem: null,
-  nearGatherSpot: false,
+  nearGatherSpot: null,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,
@@ -82,6 +82,18 @@ describe('the hint along the bottom', () => {
       aimedTree: { name: 'Oak', swingsLeft: 3 },
       carrying: [{ item: 'axe', count: 1 }],
     };
-    expect(hint(state)).toBe('Press 1 for a campfire, 2 for a cabin - or B to cancel');
+    expect(hint(state)).toBe(
+      'Press 1 for a campfire, 2 for a cabin, 3 for a flower bed, 4 for a lantern - or B to cancel',
+    );
+  });
+
+  it('names sticks when a stick patch is the one within reach', () => {
+    const state: HudState = { ...BASE_STATE, nearGatherSpot: 'stick' };
+    expect(hint(state)).toBe('Press E to gather sticks');
+  });
+
+  it('names flowers when a flower patch is the one within reach', () => {
+    const state: HudState = { ...BASE_STATE, nearGatherSpot: 'flower' };
+    expect(hint(state)).toBe('Press E to gather flowers');
   });
 });

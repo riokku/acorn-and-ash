@@ -5,7 +5,8 @@
  * new thing to carry means adding a row here.
  */
 
-export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat';
+export type ItemId =
+  'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat' | 'flower';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -92,6 +93,14 @@ export const ITEM_KINDS = {
     // the right moment, so it is worth a little more than one.
     restoresHunger: 50,
   },
+  flower: {
+    id: 'flower',
+    displayName: 'Flower',
+    pluralName: 'Flowers',
+    maxCarry: 10,
+    placeholderColor: 0xdd5fa8,
+    restoresHunger: undefined,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -109,6 +118,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'goldenCarp',
   'stick',
   'meat',
+  'flower',
 ];
 
 export function itemIndex(id: ItemId): number {
