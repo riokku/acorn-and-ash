@@ -94,6 +94,20 @@ running. The internal field it reads was renamed from `fleeing` to
 calm was pulled out into one shared `wanderStep`, since prey and an
 unprovoked threat do exactly the same thing while left alone.
 
+**The browser test proves the wiring, not the whole fight.** Fighting a
+raccoon all the way down risks a real knockout, and a knocked-out player has
+to walk all the way back out to finish the job - the same shape of call
+decision 0022 already made for the cabin, once a mechanic has thorough,
+fast, deterministic coverage elsewhere. Every rule about noticing, chasing,
+the wind-up, multi-hit defeat and the knockout-and-heal itself is already
+covered, in memory and through real storage, by the shared and game-server
+suites above. Trying to also win a live fight end to end in a browser added
+several minutes per attempt for no more confidence, and in this sandbox
+sometimes did not finish at all. The browser test instead proves only what
+only it can: the raccoon renders, the hint names it and its hit count, and
+one real swing from a real client reaches the real server and comes back as
+a lower count.
+
 ## Consequences
 
 - Charged attacks and a dodge are still to come, per Chris's own call to
@@ -110,3 +124,7 @@ unprovoked threat do exactly the same thing while left alone.
   bug is easy to hit again anywhere code reaches for a component outside a
   query loop and expects to write through it. Worth a second look if a
   future change to a player or animal's position quietly does nothing.
+- No browser test yet proves defeating a raccoon or a knockout end to end in
+  a live client - only that a swing lands and is reported back correctly.
+  The shared and game-server suites cover the rest, the same trade-off
+  decision 0022 already made for the cabin.
