@@ -159,7 +159,7 @@ function costLabel(recipe: Recipe): string {
  * swing at beats a cast, the same way round as the server decides it - a tree
  * beats the animal too, if somehow both are in reach at once.
  */
-function hint(state: HudState): string {
+export function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
   if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
   // Empty is a clear nudge, so it beats everything but an actual bite: there
@@ -169,12 +169,13 @@ function hint(state: HudState): string {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
   if (state.nearGatherSpot) return 'Press E to gather sticks';
+  // A tree or animal only offers a hint once there is an axe to swing: without
+  // one the server ignores the click outright (trySwing's own first check), so
+  // hinting at it here would send you to click on something that does nothing.
   const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
   if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
   if (state.aimedAnimal !== null && hasAxe) return catchHint(state.aimedAnimal);
   if (state.canCast) return 'Left click to cast';
-  if (state.aimedTree !== null) return chopHint(state.aimedTree);
-  if (state.aimedAnimal !== null) return catchHint(state.aimedAnimal);
   if (state.canBuild) return 'Press B to build a campfire';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
