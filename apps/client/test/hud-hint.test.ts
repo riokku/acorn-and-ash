@@ -1,4 +1,4 @@
-import { HUNGER_MAX } from '@acorn/shared';
+import { HEALTH_MAX, HUNGER_MAX } from '@acorn/shared';
 import { describe, expect, it } from 'vitest';
 
 import { hint } from '../src/hud/Hud';
@@ -29,6 +29,8 @@ const BASE_STATE: HudState = {
   fishingNews: null,
   hunger: HUNGER_MAX,
   hungerNews: null,
+  health: HEALTH_MAX,
+  healthNews: null,
   craftingNews: null,
   huntingNews: null,
 };
@@ -95,5 +97,33 @@ describe('the hint along the bottom', () => {
   it('names flowers when a flower patch is the one within reach', () => {
     const state: HudState = { ...BASE_STATE, nearGatherSpot: 'flower' };
     expect(hint(state)).toBe('Press E to gather flowers');
+  });
+
+  it('offers to catch prey with no mention of hits, since one swing is always enough', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'axe', count: 1 }],
+      aimedAnimal: { name: 'Rabbit' },
+    };
+    expect(hint(state)).toBe('Left click to catch the rabbit');
+  });
+
+  it('offers to fight off a threat, naming how many hits it has left', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'axe', count: 1 }],
+      aimedAnimal: { name: 'Masked raccoon', hitsLeft: 2 },
+    };
+    expect(hint(state)).toBe('Left click to fight off the masked raccoon · 2 hits left');
+  });
+
+  it('warns plainly once health is low, ahead of everything but an actual bite', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      health: 20,
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+      carrying: [{ item: 'axe', count: 1 }],
+    };
+    expect(hint(state)).toBe('Hurt badly - one more hit and you are down');
   });
 });

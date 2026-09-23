@@ -2,6 +2,7 @@ import { createWorld, type Entity, type World } from 'koota';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  HEALTH_MAX,
   HUNGER_EMPTY_AFTER_SECONDS,
   HUNGER_MAX,
   INPUT_BACKLOG_CATCHUP_THRESHOLD,
@@ -31,7 +32,12 @@ import {
   Velocity,
 } from '../ecs/traits';
 import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
-import { ANIMAL_KINDS, type AnimalKindId } from '../data/animals';
+import {
+  ANIMAL_KINDS,
+  type AnimalKind,
+  type AnimalKindId,
+  type ThreatBehavior,
+} from '../data/animals';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import { colliderFootprintRadius } from '../world/colliders';
 import type { ItemId } from '../data/items';
@@ -55,6 +61,7 @@ import {
   shouldFlee,
   towardDirection,
   wanderTarget,
+  type Direction2D,
 } from './animals';
 import {
   addItem,
@@ -160,6 +167,13 @@ export interface PersistedPlayer {
   readonly facingYaw: number;
   readonly items: readonly { readonly item: ItemId; readonly count: number }[];
   readonly hunger: number;
+  /**
+   * Optional, and defaults to full: added after every existing save already
+   * had a player in it, the same reason `addPlayer`'s `playerKey` is its own
+   * optional trailing argument rather than a required one everything else
+   * would have needed to change for.
+   */
+  readonly health?: number;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -194,9 +208,36 @@ export interface CatchTarget {
  */
 export interface AnimalCaught {
   readonly netId: number;
-  readonly item: ItemId;
-  /** How many went into the pack. Zero means there was no room. */
+  /** Null for a threat defeated with nothing to show for it - see `ThreatHit`. */
+  readonly item: ItemId | null;
+  /** How many went into the pack. Zero means there was no room, or nothing to gain. */
   readonly added: number;
+}
+
+/**
+ * A swing landed on a threat that is still standing, or one just came back
+ * from being defeated.
+ *
+ * Told to everybody, the same as a tree shaking: whoever is fighting it
+ * benefits from seeing it react, but so does anyone else nearby.
+ */
+export interface ThreatHit {
+  readonly animalId: number;
+  /** Swings still needed to defeat it. A fresh arrival, or one just back from being defeated, reports its full count. */
+  readonly hitsLeft: number;
+}
+
+/**
+ * A threat's attack landed, or a player was otherwise knocked out.
+ *
+ * Only the one it happened to is ever told: nobody else's business how hurt
+ * anybody else is, the same reason a `HungerEvent` is private.
+ */
+export interface HealthEvent {
+  readonly netId: number;
+  readonly health: number;
+  /** Whether this took them all the way to zero - see the next snapshot for where they woke up. */
+  readonly knockedOut: boolean;
 }
 
 /** Something a player has placed in the world. */
@@ -342,6 +383,8 @@ interface PlayerRuntime {
    * message only goes out when it would show something different.
    */
   lastSentHunger: number;
+  /** How much a threat has left to take before they are knocked out. */
+  health: number;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -351,16 +394,27 @@ interface AnimalRuntime {
   readonly kind: AnimalKindId;
   readonly denX: number;
   readonly denZ: number;
-  fleeing: boolean;
-  /** Where it is ambling toward, while calm. Meaningless while fleeing. */
+  /** Aware of, and reacting to, the nearest player - fleeing for prey, chasing for a threat. */
+  engaged: boolean;
+  /** Where it is ambling toward, while calm. Meaningless while engaged. */
   targetX: number;
   targetZ: number;
   /** How many wander targets it has drawn before, so the next one is a fresh hash. */
   decisionSeq: number;
-  /** Caught, and waiting out `ANIMAL_RESPAWN_SECONDS` before it is back at its den. */
+  /** Caught, or a threat defeated, and waiting out `ANIMAL_RESPAWN_SECONDS` before it is back at its den. */
   caught: boolean;
   /** When it is due back, in real time. Meaningless unless `caught`. */
   respawnAtMs: number;
+  /**
+   * A threat's own attack, mid-sequence: standing still to wind up, then
+   * recovering afterward either way. Meaningless on prey, which has no
+   * `threat` to read a duration from.
+   */
+  attackState: 'none' | 'windup' | 'cooldown';
+  /** When the current `attackState` resolves, in real time. Meaningless while `attackState` is 'none'. */
+  attackStateEndsAtMs: number;
+  /** Swings landed on a threat since it last came back from being defeated. */
+  hitsTaken: number;
 }
 
 /**
@@ -400,11 +454,13 @@ export class WorldSimulation {
   private readonly trees = new Map<number, TreeState>();
   private readonly chopEvents: TreeChopped[] = [];
   private readonly catchEvents: AnimalCaught[] = [];
+  private readonly threatHitEvents: ThreatHit[] = [];
   private readonly regrowthEvents: TreeRegrown[] = [];
   private readonly fishingEvents: FishingEvent[] = [];
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
   private readonly hungerEvents: HungerEvent[] = [];
+  private readonly healthEvents: HealthEvent[] = [];
   private readonly craftEvents: CraftedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
@@ -476,7 +532,7 @@ export class WorldSimulation {
       kind: den.kind,
       denX: den.x,
       denZ: den.z,
-      fleeing: false,
+      engaged: false,
       // Starting already "arrived" makes the first tick draw a real wander
       // target rather than needing a special case for a fresh spawn.
       targetX: den.x,
@@ -484,6 +540,9 @@ export class WorldSimulation {
       decisionSeq: 0,
       caught: false,
       respawnAtMs: 0,
+      attackState: 'none',
+      attackStateEndsAtMs: 0,
+      hitsTaken: 0,
     });
   }
 
@@ -557,6 +616,7 @@ export class WorldSimulation {
       // Matches what `addPlayer`'s caller is about to be told separately, on
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
+      health: saved?.health ?? HEALTH_MAX,
     });
   }
 
@@ -726,13 +786,17 @@ export class WorldSimulation {
     this.stepAnimals();
   }
 
-  /** Amble, bolt from the nearest player, or wait out a catch - whichever this tick calls for. */
+  /** Amble, react to the nearest player, or wait out a catch - whichever this tick calls for. */
   private stepAnimals(): void {
     this.world
       .query(AnimalTag, Position, Velocity, Facing, NetworkId)
       .updateEach(([position, velocity, facing, networkId]) => {
         const runtime = this.animals.get(networkId.value);
         if (runtime === undefined) return;
+        // Widened from the narrow per-kind literal `as const` gives it, so an
+        // optional field like `threat` reads the same regardless of which
+        // kind this happens to be.
+        const kind: AnimalKind = ANIMAL_KINDS[runtime.kind];
 
         if (runtime.caught) {
           if (this.nowMs < runtime.respawnAtMs) {
@@ -742,7 +806,8 @@ export class WorldSimulation {
           }
           // Time is up: back at the den, as if it had never left.
           runtime.caught = false;
-          runtime.fleeing = false;
+          runtime.engaged = false;
+          runtime.attackState = 'none';
           runtime.targetX = runtime.denX;
           runtime.targetZ = runtime.denZ;
           position.x = runtime.denX;
@@ -750,36 +815,44 @@ export class WorldSimulation {
           position.y = this.collision.terrain.heightAt(runtime.denX, runtime.denZ);
           velocity.x = 0;
           velocity.z = 0;
+          // A threat back from being defeated is worth full hits again - the
+          // same reason a client needs telling, not just assuming, when a
+          // built prop reappears.
+          if (kind.threat !== undefined) {
+            this.threatHitEvents.push({ animalId: runtime.id, hitsLeft: kind.threat.hitsToDefeat });
+          }
           return;
         }
 
-        const kind = ANIMAL_KINDS[runtime.kind];
-
-        const nearestPlayer = this.nearestPlayerPosition(position);
+        const nearestPlayer = this.nearestPlayerRuntime(position);
+        const nearestPosition = nearestPlayer?.entity.get(Position) ?? null;
         const nearestDistance =
-          nearestPlayer === null ? Infinity : horizontalDistance(position, nearestPlayer);
-        runtime.fleeing = shouldFlee(runtime.fleeing, nearestDistance, kind);
+          nearestPosition === null ? Infinity : horizontalDistance(position, nearestPosition);
 
-        let direction: { x: number; z: number };
+        if (kind.threat !== undefined) {
+          this.stepThreatAnimal(
+            runtime,
+            kind,
+            kind.threat,
+            position,
+            velocity,
+            facing,
+            nearestPlayer,
+            nearestPosition,
+            nearestDistance,
+          );
+          return;
+        }
+
+        runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, kind);
+
+        let direction: Direction2D;
         let speed: number;
-        if (runtime.fleeing && nearestPlayer !== null) {
-          direction = fleeDirection(position.x, position.z, nearestPlayer.x, nearestPlayer.z);
-          speed = kind.fleeSpeed;
+        if (runtime.engaged && nearestPosition !== null) {
+          direction = fleeDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
+          speed = kind.fleeSpeed ?? 0;
         } else {
-          if (hasReachedTarget(position.x, position.z, runtime.targetX, runtime.targetZ)) {
-            runtime.decisionSeq += 1;
-            const next = wanderTarget(
-              this.seed,
-              runtime.id,
-              runtime.decisionSeq,
-              runtime.denX,
-              runtime.denZ,
-              kind.leashRadius,
-            );
-            runtime.targetX = next.x;
-            runtime.targetZ = next.z;
-          }
-          direction = towardDirection(position.x, position.z, runtime.targetX, runtime.targetZ);
+          direction = this.wanderStep(runtime, kind, position);
           speed = kind.wanderSpeed;
         }
 
@@ -794,9 +867,96 @@ export class WorldSimulation {
       });
   }
 
-  /** The nearest connected player to a point, or null in an empty world. */
-  private nearestPlayerPosition(from: Readonly<Vec3>): Vec3 | null {
-    let best: Vec3 | null = null;
+  /**
+   * A hostile animal's tick: wander when nothing is near, close the distance
+   * once it notices a player, then stand dead still to wind up - so the
+   * attack is plainly telegraphed - before landing a hit if they are still
+   * this close when it resolves.
+   */
+  private stepThreatAnimal(
+    runtime: AnimalRuntime,
+    kind: AnimalKind,
+    threat: ThreatBehavior,
+    position: { x: number; y: number; z: number },
+    velocity: { x: number; z: number },
+    facing: { yaw: number },
+    nearestPlayer: PlayerRuntime | null,
+    nearestPosition: Readonly<Vec3> | null,
+    nearestDistance: number,
+  ): void {
+    if (runtime.attackState !== 'none') {
+      velocity.x = 0;
+      velocity.z = 0;
+      if (this.nowMs < runtime.attackStateEndsAtMs) return;
+
+      if (runtime.attackState === 'windup') {
+        if (nearestPlayer !== null && nearestDistance <= threat.attackRadius) {
+          this.damagePlayer(nearestPlayer, threat.damage);
+        }
+        runtime.attackState = 'cooldown';
+        runtime.attackStateEndsAtMs = this.nowMs + threat.attackCooldownSeconds * 1000;
+        return;
+      }
+      // Cooldown just ended: free to close the distance or wind up again.
+      runtime.attackState = 'none';
+    }
+
+    runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, kind);
+
+    let direction: Direction2D;
+    let speed: number;
+    if (runtime.engaged && nearestPosition !== null) {
+      if (nearestDistance <= threat.attackRadius) {
+        runtime.attackState = 'windup';
+        runtime.attackStateEndsAtMs = this.nowMs + threat.windupSeconds * 1000;
+        velocity.x = 0;
+        velocity.z = 0;
+        facing.yaw = Math.atan2(
+          -(nearestPosition.x - position.x),
+          -(nearestPosition.z - position.z),
+        );
+        return;
+      }
+      direction = towardDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
+      speed = threat.chaseSpeed;
+    } else {
+      direction = this.wanderStep(runtime, kind, position);
+      speed = kind.wanderSpeed;
+    }
+
+    velocity.x = direction.x * speed;
+    velocity.z = direction.z * speed;
+    position.x += velocity.x * TICK_SECONDS;
+    position.z += velocity.z * TICK_SECONDS;
+    position.y = this.collision.terrain.heightAt(position.x, position.z);
+    if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
+  }
+
+  /** Amble toward a fresh point near the den once the last one is reached - calm prey and a calm threat alike. */
+  private wanderStep(
+    runtime: AnimalRuntime,
+    kind: AnimalKind,
+    position: Readonly<Vec3>,
+  ): Direction2D {
+    if (hasReachedTarget(position.x, position.z, runtime.targetX, runtime.targetZ)) {
+      runtime.decisionSeq += 1;
+      const next = wanderTarget(
+        this.seed,
+        runtime.id,
+        runtime.decisionSeq,
+        runtime.denX,
+        runtime.denZ,
+        kind.leashRadius,
+      );
+      runtime.targetX = next.x;
+      runtime.targetZ = next.z;
+    }
+    return towardDirection(position.x, position.z, runtime.targetX, runtime.targetZ);
+  }
+
+  /** The nearest connected player to a point, as their whole runtime, or null in an empty world. */
+  private nearestPlayerRuntime(from: Readonly<Vec3>): PlayerRuntime | null {
+    let best: PlayerRuntime | null = null;
     let bestDistance = Infinity;
     for (const runtime of this.players.values()) {
       const position = runtime.entity.get(Position);
@@ -804,7 +964,7 @@ export class WorldSimulation {
       const distance = horizontalDistance(from, position);
       if (distance < bestDistance) {
         bestDistance = distance;
-        best = position;
+        best = runtime;
       }
     }
     return best;
@@ -929,22 +1089,64 @@ export class WorldSimulation {
    * Catch an animal that is not a tree: the swing that just missed a trunk
    * lands on whatever wildlife was in reach instead.
    *
-   * It goes back to its den once `ANIMAL_RESPAWN_SECONDS` is up, the same
-   * way a tree waits out `regrowMinSeconds` before it is worth chopping
-   * again.
+   * Prey goes down in one landed swing, the same as always. A threat takes
+   * `hitsToDefeat` of them, the same shape of rule as a tree's `swingsToFell`
+   * - each one short of the last is a `ThreatHit`, not yet a catch.
+   *
+   * Either way it goes back to its den once `ANIMAL_RESPAWN_SECONDS` is up,
+   * the same way a tree waits out `regrowMinSeconds` before it is worth
+   * chopping again.
    */
   private catchAnimal(runtime: PlayerRuntime, animalId: number): void {
     const animal = this.animals.get(animalId);
     if (animal === undefined) return;
+    const kind: AnimalKind = ANIMAL_KINDS[animal.kind];
+
+    if (kind.threat !== undefined) {
+      animal.hitsTaken += 1;
+      const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
+      if (hitsLeft > 0) {
+        this.threatHitEvents.push({ animalId: animal.id, hitsLeft });
+        return;
+      }
+    }
 
     animal.caught = true;
     animal.respawnAtMs = this.nowMs + ANIMAL_RESPAWN_SECONDS * 1000;
+    animal.hitsTaken = 0;
 
-    const item = ANIMAL_KINDS[animal.kind].catchItem;
+    const item = kind.catchItem;
     // A full pack means it was still caught - the den stays empty for the
-    // same reason a felled tree still falls with no room for the logs.
-    const added = addItem(runtime.inventory, item, 1);
-    this.catchEvents.push({ netId: runtime.netId, item, added });
+    // same reason a felled tree still falls with no room for the logs. A
+    // threat with nothing to pay out - the masked raccoon, for now - still
+    // counts as caught, just with nothing added.
+    const added = item === undefined ? 0 : addItem(runtime.inventory, item, 1);
+    this.catchEvents.push({ netId: runtime.netId, item: item ?? null, added });
+  }
+
+  /**
+   * Take health off a player, knocking them out the instant it empties: woken
+   * up wherever `wakePosition` says - their own home, or the shared clearing
+   * if they have none - and healed straight back to full, the same tick.
+   */
+  private damagePlayer(runtime: PlayerRuntime, amount: number): void {
+    const remaining = Math.max(0, runtime.health - amount);
+    const knockedOut = remaining <= 0;
+    runtime.health = knockedOut ? HEALTH_MAX : remaining;
+
+    if (knockedOut) {
+      const wake = this.wakePosition(runtime.playerKey);
+      // Whichever way they already happened to be facing - a knockout has no
+      // reason to also spin them around.
+      const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
+      this.placePlayer(runtime.netId, wake, facingYaw);
+    }
+
+    this.healthEvents.push({
+      netId: runtime.netId,
+      health: Math.round(runtime.health),
+      knockedOut,
+    });
   }
 
   /**
@@ -1040,6 +1242,12 @@ export class WorldSimulation {
       return { x: home.x, y: 0, z: home.z + footprint + 1.5 };
     }
     return null;
+  }
+
+  /** Where a knocked-out player wakes up: their own home, or the shared clearing if they have none yet. */
+  private wakePosition(playerKey: string | null): Vec3 {
+    const home = playerKey !== null ? this.homePositionFor(playerKey) : null;
+    return home ?? this.nextSpawnPosition();
   }
 
   /** A tick of waiting at the water: the bite, the leash and giving up. */
@@ -1275,6 +1483,16 @@ export class WorldSimulation {
     return this.catchEvents.splice(0);
   }
 
+  /** Hand over every swing that landed on a threat without defeating it since this was last asked. */
+  drainThreatHitEvents(): ThreatHit[] {
+    return this.threatHitEvents.splice(0);
+  }
+
+  /** Hand over every change to anybody's health since this was last asked. */
+  drainHealthEvents(): HealthEvent[] {
+    return this.healthEvents.splice(0);
+  }
+
   /** Hand over everything that happened at the water since this was last asked. */
   drainFishingEvents(): FishingEvent[] {
     return this.fishingEvents.splice(0);
@@ -1300,6 +1518,11 @@ export class WorldSimulation {
   /** How hungry a player is right now, from `HUNGER_MAX` down to zero. */
   hungerOf(netId: number): number {
     return Math.round(this.players.get(netId)?.hunger ?? HUNGER_MAX);
+  }
+
+  /** How much health a player has left right now, from `HEALTH_MAX` down to zero. */
+  healthOf(netId: number): number {
+    return Math.round(this.players.get(netId)?.health ?? HEALTH_MAX);
   }
 
   /** Hand over every change to anybody's hunger since this was last asked. */
@@ -1392,6 +1615,7 @@ export class WorldSimulation {
         facingYaw: facing.yaw,
         items: inventoryEntries(runtime.inventory),
         hunger: runtime.hunger,
+        health: runtime.health,
       });
     }
     return saved;

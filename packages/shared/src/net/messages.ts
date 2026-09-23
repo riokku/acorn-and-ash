@@ -6,8 +6,10 @@ import type {
   BuiltProp,
   CraftedEvent,
   FishingEvent,
+  HealthEvent,
   HungerEvent,
   SnapshotEntity,
+  ThreatHit,
 } from '../sim/world-sim';
 
 /** What a client is allowed to say. */
@@ -34,6 +36,8 @@ export const ServerMessageType = {
   Crafted: 0x1b,
   Caught: 0x1c,
   BuiltProps: 0x1d,
+  ThreatHit: 0x1e,
+  Health: 0x1f,
 } as const;
 
 export const RejectReason = {
@@ -216,6 +220,29 @@ export interface BuiltPropsMessage {
   readonly props: readonly BuiltProp[];
 }
 
+/**
+ * A swing landed on a threat without defeating it, or one just came back
+ * from being defeated. `hitsLeft` is how many more swings it will take.
+ *
+ * Everybody hears about it, the same as a tree shaking: whoever is fighting
+ * it benefits most, but anyone nearby should see it react too.
+ */
+export interface ThreatHitMessage {
+  readonly type: 'threatHit';
+  readonly event: ThreatHit;
+}
+
+/**
+ * How much health this player has left.
+ *
+ * Only that player is ever told: like hunger, nobody else's business. Sent
+ * whenever a threat's attack lands, or otherwise knocks them out.
+ */
+export interface HealthMessage {
+  readonly type: 'health';
+  readonly event: HealthEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -230,4 +257,6 @@ export type ServerMessage =
   | HungerMessage
   | CraftedMessage
   | CaughtMessage
-  | BuiltPropsMessage;
+  | BuiltPropsMessage
+  | ThreatHitMessage
+  | HealthMessage;

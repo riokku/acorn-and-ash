@@ -4,6 +4,7 @@ import {
   ANIMAL_RESPAWN_SECONDS,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
+  HEALTH_MAX,
   HUNGER_MAX,
   INTEREST_RADIUS,
   MAX_QUEUED_INPUTS_PER_PLAYER,
@@ -1307,6 +1308,235 @@ describe('catching wildlife', () => {
     sim.queueInput(1, createInput(seq, 0, 0, FACE_DEN, PlayerButton.Swing));
     sim.step(tickClock());
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
+  });
+});
+
+describe('threats', () => {
+  const raccoonDen = ANIMAL_DENS.find((entry) => entry.id === 1005);
+  if (raccoonDen === undefined) throw new Error('the masked raccoon den is gone from the data table');
+  const threat = ANIMAL_KINDS.maskedRaccoon.threat;
+  if (threat === undefined) throw new Error('the masked raccoon has lost its threat behaviour');
+  // Right at attack range: close enough that it never has to chase to reach it.
+  const closeToDen = { x: raccoonDen.x, y: 0, z: raccoonDen.z + threat.attackRadius - 0.1 };
+
+  /** An animal entity out of a snapshot, or throws: every test here expects one. */
+  function animalEntity(sim: WorldSimulation, viewerNetId: number, animalId: number) {
+    const found = sim
+      .snapshotFor(viewerNetId)
+      .find((entity) => entity.netId === animalId && (entity.flags & SnapshotFlag.Animal) !== 0);
+    if (found === undefined) throw new Error(`Animal ${animalId} was not in the snapshot`);
+    return found;
+  }
+
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'axe', count: 1 }],
+    hunger: HUNGER_MAX,
+  });
+
+  it('is marked as a threat, unlike a rabbit', () => {
+    expect(ANIMAL_KINDS.maskedRaccoon.threat).toBeDefined();
+    expect('threat' in ANIMAL_KINDS.rabbit).toBe(false);
+  });
+
+  it('closes the distance once a player is near, instead of fleeing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    // Inside the alert radius, but outside attack range.
+    sim.placePlayer(1, { x: raccoonDen.x, y: 0, z: raccoonDen.z + 5 }, 0);
+
+    const gap = (): number => {
+      const entity = animalEntity(sim, 1, raccoonDen.id);
+      return Math.hypot(entity.x - raccoonDen.x, entity.z - (raccoonDen.z + 5));
+    };
+    const before = gap();
+    for (let i = 0; i < 10; i++) sim.step(tickClock());
+    expect(gap()).toBeLessThan(before);
+  });
+
+  it('freezes dead still to wind up once close enough to attack', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, closeToDen, 0);
+
+    sim.step(tickClock());
+    const first = animalEntity(sim, 1, raccoonDen.id);
+    sim.step(tickClock());
+    const second = animalEntity(sim, 1, raccoonDen.id);
+    expect(second.x).toBeCloseTo(first.x, 5);
+    expect(second.z).toBeCloseTo(first.z, 5);
+    expect(second.vx).toBe(0);
+    expect(second.vz).toBe(0);
+  });
+
+  it('lands a hit if you stay close through the wind-up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, closeToDen, 0);
+
+    // Comfortably past one wind-up (twelve ticks), short of the cooldown
+    // after it (thirty more) - exactly one hit should have landed.
+    for (let i = 0; i < 20; i++) sim.step(tickClock());
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+  });
+
+  it('misses if you back out of range before the wind-up finishes', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, closeToDen, 0);
+
+    sim.step(tickClock()); // starts the wind-up
+    sim.placePlayer(1, { x: raccoonDen.x, y: 0, z: raccoonDen.z + 20 }, 0);
+    for (let i = 0; i < 20; i++) sim.step(tickClock());
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX);
+  });
+
+  it('will not attack again until the cooldown passes, even standing right there', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, closeToDen, 0);
+
+    for (let i = 0; i < 20; i++) sim.step(tickClock());
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+
+    // Forty ticks in total is still short of the cooldown ending at forty-two.
+    for (let i = 0; i < 20; i++) sim.step(tickClock());
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+  });
+
+  it('winds up again once the cooldown passes, if you are still close', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, closeToDen, 0);
+
+    // Just past two full wind-up-then-cooldown cycles (forty-two ticks
+    // each), short of a third wind-up resolving.
+    for (let i = 0; i < 90; i++) sim.step(tickClock());
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage * 2);
+  });
+
+  it('takes several swings to fight off, one ThreatHit short each time', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    sim.placePlayer(1, closeToDen, 0);
+
+    let seq = 1;
+    for (let hit = 1; hit < threat.hitsToDefeat; hit++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+      expect(sim.drainThreatHitEvents()).toEqual([
+        { animalId: raccoonDen.id, hitsLeft: threat.hitsToDefeat - hit },
+      ]);
+      expect(sim.drainCatchEvents()).toEqual([]);
+      for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+        sim.step(tickClock());
+      }
+    }
+
+    sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+    sim.step(tickClock());
+    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: null, added: 0 }]);
+  });
+
+  it('reports full hits again once a defeated one comes back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    sim.placePlayer(1, closeToDen, 0);
+
+    let seq = 1;
+    let defeatedAt = 0;
+    for (let hit = 1; hit <= threat.hitsToDefeat; hit++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      defeatedAt = tickClock();
+      sim.step(defeatedAt);
+      sim.drainThreatHitEvents();
+      sim.drainCatchEvents();
+      for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+        sim.step(tickClock());
+      }
+    }
+
+    sim.queueInput(1, createInput(seq, 0, 0, 0, 0));
+    sim.step(defeatedAt + ANIMAL_RESPAWN_SECONDS * 1000 + TICK_MILLISECONDS);
+    expect(sim.drainThreatHitEvents()).toEqual([
+      { animalId: raccoonDen.id, hitsLeft: threat.hitsToDefeat },
+    ]);
+  });
+
+  describe('a knockout', () => {
+    it('teleports you away and heals fully once health empties', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+
+      // Four full wind-up-then-cooldown cycles: enough to empty a hundred
+      // health at twenty-five a hit, with room to spare before a fifth starts.
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX);
+      const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
+      expect(position).toBeDefined();
+      if (position === undefined) return;
+      const gapFromDen = Math.hypot(position.x - raccoonDen.x, position.z - raccoonDen.z);
+      expect(gapFromDen).toBeGreaterThan(20);
+    });
+
+    it('wakes you at your own cabin instead, if you have one', () => {
+      const sim = createWorld();
+      sim.addPlayer(
+        1,
+        {
+          netId: 1,
+          x: 0,
+          y: 0,
+          z: 0,
+          facingYaw: 0,
+          items: [{ item: 'log', count: 10 }],
+          hunger: HUNGER_MAX,
+        },
+        'chris',
+      );
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+      sim.requestBuild(1, 'cabin');
+      sim.queueInput(1, createInput(1, 0, 0, 0, 0));
+      sim.step(tickClock());
+      const home = sim.drainBuildEvents()[0]?.prop;
+      expect(home).toBeDefined();
+      if (home === undefined) return;
+
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+
+      const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
+      expect(position).toBeDefined();
+      if (position === undefined) return;
+      const gapFromHome = Math.hypot(position.x - home.x, position.z - home.z);
+      expect(gapFromHome).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
+      expect(gapFromHome).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 3);
+    });
+
+    it("a player's health survives a save and restore, the same as hunger does", () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 20; i++) sim.step(tickClock());
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+
+      const saved = sim.persistablePlayers().find((player) => player.netId === 1);
+      expect(saved).toBeDefined();
+      if (saved === undefined) return;
+      expect(saved.health).toBe(HEALTH_MAX - threat.damage);
+
+      const restored = createWorld();
+      restored.addPlayer(2, { ...saved, netId: 2 });
+      expect(restored.healthOf(2)).toBe(HEALTH_MAX - threat.damage);
+    });
   });
 });
 

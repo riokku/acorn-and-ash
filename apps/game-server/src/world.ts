@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 import {
   DEFAULT_WORLD_SEED,
+  HEALTH_MAX,
   MAX_PLAYERS_PER_WORLD,
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
@@ -20,9 +21,11 @@ import {
   encodeCaught,
   encodeCrafted,
   encodeFishing,
+  encodeHealth,
   encodeHunger,
   encodeRejected,
   encodeSnapshot,
+  encodeThreatHit,
   encodeTreeHit,
   encodeTreeStates,
   encodeWelcome,
@@ -119,6 +122,9 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(encodeBuiltProps(simulation.builtPropsList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
+    server.send(
+      encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false }),
+    );
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -233,9 +239,11 @@ export class World extends DurableObject<WorldEnv> {
     this.announceGathering(simulation);
     this.announceChopping(simulation);
     this.announceCatching(simulation);
+    this.announceThreatHits(simulation);
     this.announceBuilding(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
+    this.announceHealth(simulation);
     this.announceRegrowth(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
@@ -355,6 +363,16 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
+   * Tell everybody a threat got hit without going down, or came back from
+   * being defeated - the same reason a tree hit goes to everybody, not just
+   * whoever is swinging.
+   */
+  private announceThreatHits(simulation: WorldSimulation): void {
+    const events = simulation.drainThreatHitEvents();
+    for (const event of events) this.broadcast(encodeThreatHit(event));
+  }
+
+  /**
    * Tell everybody about anything placed this tick, and write it to storage
    * straight away: nobody should have to build the same campfire twice.
    *
@@ -410,6 +428,26 @@ export class World extends DurableObject<WorldEnv> {
     // Eating took something out of the pack; say so, the same as any other
     // way a pack changes.
     this.sendPacks(simulation, ate);
+  }
+
+  /**
+   * Tell each player what just happened to their own health.
+   *
+   * Private to the one it happened to, the same reason hunger is: nobody
+   * else's business how hurt anybody else is. A knockout's new position
+   * needs no message of its own - it is already in the next snapshot.
+   */
+  private announceHealth(simulation: WorldSimulation): void {
+    const events = simulation.drainHealthEvents();
+    if (events.length === 0) return;
+
+    const byNetId = new Map(events.map((event) => [event.netId, event]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeHealth(event));
+    }
   }
 
   /**
@@ -635,6 +673,8 @@ export class World extends DurableObject<WorldEnv> {
       facing_yaw REAL NOT NULL,
       -- How hungry they were when last saved. A hundred is full; see HUNGER_MAX.
       hunger REAL NOT NULL DEFAULT 100,
+      -- Health when last saved. A hundred is full; see HEALTH_MAX.
+      health REAL NOT NULL DEFAULT 100,
       updated_at INTEGER NOT NULL
     )`);
     // What each player is carrying. One row per kind of thing they hold.
@@ -673,6 +713,9 @@ export class World extends DurableObject<WorldEnv> {
     // A player saved before this release has no hunger on record. The default
     // above starts them full, same as anybody arriving fresh.
     this.addColumn('players', 'hunger', 'REAL NOT NULL DEFAULT 100');
+    // Likewise health, added when knockout shipped: nobody was ever hurt
+    // before that, so full is the only sensible default here too.
+    this.addColumn('players', 'health', 'REAL NOT NULL DEFAULT 100');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -733,7 +776,11 @@ export class World extends DurableObject<WorldEnv> {
         z: number;
         facing_yaw: number;
         hunger: number;
-      }>('SELECT x, y, z, facing_yaw, hunger FROM players WHERE player_key = ?', playerKey)
+        health: number;
+      }>(
+        'SELECT x, y, z, facing_yaw, hunger, health FROM players WHERE player_key = ?',
+        playerKey,
+      )
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -745,6 +792,7 @@ export class World extends DurableObject<WorldEnv> {
       facingYaw: row.facing_yaw,
       items: this.loadPlayerItems(playerKey),
       hunger: row.hunger,
+      health: row.health,
     };
   }
 
@@ -856,6 +904,7 @@ export class World extends DurableObject<WorldEnv> {
       motion.position.z,
       motion.facingYaw,
       simulation.hungerOf(attachment.netId),
+      simulation.healthOf(attachment.netId),
     );
     this.writePlayerItems(
       attachment.playerKey,
@@ -870,18 +919,20 @@ export class World extends DurableObject<WorldEnv> {
     z: number,
     facingYaw: number,
     hunger: number,
+    health: number,
   ): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO players (player_key, x, y, z, facing_yaw, hunger, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+      'INSERT INTO players (player_key, x, y, z, facing_yaw, hunger, health, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
         'x = excluded.x, y = excluded.y, z = excluded.z, facing_yaw = excluded.facing_yaw, ' +
-        'hunger = excluded.hunger, updated_at = excluded.updated_at',
+        'hunger = excluded.hunger, health = excluded.health, updated_at = excluded.updated_at',
       playerKey,
       x,
       y,
       z,
       facingYaw,
       hunger,
+      health,
       Date.now(),
     );
   }
@@ -935,6 +986,9 @@ export class World extends DurableObject<WorldEnv> {
         player.z,
         player.facingYaw,
         player.hunger,
+        // Optional on PersistedPlayer only so an old save without it still
+        // loads - persistablePlayers() itself always sets it.
+        player.health ?? HEALTH_MAX,
       );
       this.writePlayerItems(attachment.playerKey, player.items);
     }

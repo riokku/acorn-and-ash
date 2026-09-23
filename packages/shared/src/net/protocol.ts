@@ -24,8 +24,10 @@ import type {
   BuiltProp,
   CraftedEvent,
   FishingEvent,
+  HealthEvent,
   HungerEvent,
   SnapshotEntity,
+  ThreatHit,
 } from '../sim/world-sim';
 import {
   ClientMessageType,
@@ -90,8 +92,10 @@ const INT16_MAX = 32767;
 
 /** type(1) + netId(2) + hunger(1) + what was eaten, if anything(1) */
 const HUNGER_MESSAGE_BYTES = 5;
-/** Nothing was eaten: this is only the meter running down. */
-const NO_ITEM_EATEN = 0xff;
+/** No item at all - nothing eaten, or nothing paid out for a catch. */
+const NO_ITEM = 0xff;
+/** type(1) + netId(2) + health(1) + knocked out or not(1) */
+const HEALTH_MESSAGE_BYTES = 5;
 
 /** type(1) + which item to make(1) */
 const CRAFT_MESSAGE_BYTES = 2;
@@ -469,7 +473,7 @@ export function encodeHunger(event: HungerEvent): ArrayBuffer {
   view.setUint8(0, ServerMessageType.Hunger);
   view.setUint16(1, event.netId & 0xffff, true);
   view.setUint8(3, clamp(Math.round(event.hunger), 0, 255));
-  view.setUint8(4, event.ate === null ? NO_ITEM_EATEN : itemIndex(event.ate));
+  view.setUint8(4, event.ate === null ? NO_ITEM : itemIndex(event.ate));
   return buffer;
 }
 
@@ -480,7 +484,7 @@ function decodeHunger(view: DataView): HungerEvent {
     hunger: view.getUint8(3),
     // An id this build does not know is still worth showing the number for,
     // so this only drops the toast rather than the whole message.
-    ate: ateIndex === NO_ITEM_EATEN ? null : itemFromIndex(ateIndex),
+    ate: ateIndex === NO_ITEM ? null : itemFromIndex(ateIndex),
   };
 }
 
@@ -500,21 +504,66 @@ function decodeCrafted(view: DataView): CraftedEvent | null {
   return { netId: view.getUint16(1, true), item };
 }
 
-/** What a player just caught, in five bytes. Only they are ever sent it. */
+/**
+ * What a player just caught, in five bytes. Only they are ever sent it.
+ *
+ * `item` is the "no item" sentinel for a threat defeated with nothing to
+ * show for it, the same as `Hunger`'s `ate` is when nothing was eaten.
+ */
 export function encodeCaught(event: AnimalCaught): ArrayBuffer {
   const buffer = new ArrayBuffer(CAUGHT_MESSAGE_BYTES);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.Caught);
   view.setUint16(1, event.netId & 0xffff, true);
-  view.setUint8(3, itemIndex(event.item));
+  view.setUint8(3, event.item === null ? NO_ITEM : itemIndex(event.item));
   view.setUint8(4, clamp(Math.round(event.added), 0, 255));
   return buffer;
 }
 
 function decodeCaught(view: DataView): AnimalCaught | null {
-  const item = itemFromIndex(view.getUint8(3));
+  const itemIndexByte = view.getUint8(3);
+  if (itemIndexByte === NO_ITEM) {
+    return { netId: view.getUint16(1, true), item: null, added: view.getUint8(4) };
+  }
+  const item = itemFromIndex(itemIndexByte);
   if (item === null) return null;
   return { netId: view.getUint16(1, true), item, added: view.getUint8(4) };
+}
+
+/**
+ * A swing landed on a threat, or one just came back from being defeated, in
+ * four bytes. Everybody is sent it, the same as a tree hit.
+ */
+export function encodeThreatHit(event: ThreatHit): ArrayBuffer {
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.ThreatHit);
+  view.setUint16(1, event.animalId & 0xffff, true);
+  view.setUint8(3, clamp(Math.round(event.hitsLeft), 0, 255));
+  return buffer;
+}
+
+function decodeThreatHit(view: DataView): ThreatHit {
+  return { animalId: view.getUint16(1, true), hitsLeft: view.getUint8(3) };
+}
+
+/** How much health a player has left, in five bytes. Only they are ever sent it. */
+export function encodeHealth(event: HealthEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(HEALTH_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Health);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, clamp(Math.round(event.health), 0, 255));
+  view.setUint8(4, event.knockedOut ? 1 : 0);
+  return buffer;
+}
+
+function decodeHealth(view: DataView): HealthEvent {
+  return {
+    netId: view.getUint16(1, true),
+    health: view.getUint8(3),
+    knockedOut: view.getUint8(4) !== 0,
+  };
 }
 
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
@@ -674,6 +723,14 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== CAUGHT_MESSAGE_BYTES) return null;
       const event = decodeCaught(view);
       return event === null ? null : { type: 'caught', event };
+    }
+    case ServerMessageType.ThreatHit: {
+      if (data.byteLength !== 4) return null;
+      return { type: 'threatHit', event: decodeThreatHit(view) };
+    }
+    case ServerMessageType.Health: {
+      if (data.byteLength !== HEALTH_MESSAGE_BYTES) return null;
+      return { type: 'health', event: decodeHealth(view) };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

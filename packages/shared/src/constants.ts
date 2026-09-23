@@ -202,8 +202,18 @@ export const HUNGER_MAX = 100;
  * to matter across a session without nagging.
  */
 export const HUNGER_EMPTY_AFTER_SECONDS = 20 * 60;
+
+/**
+ * How much a hit from a threat can take before you are knocked out.
+ *
+ * Unlike hunger, running this out is a real consequence: Phase 4's first
+ * creature, so it is the first meter here that is not cozy-light.
+ */
+export const HEALTH_MAX = 100;
 /** Below this the HUD nudges the player to go eat. */
 export const HUNGER_LOW_THRESHOLD = 30;
+/** Below this the HUD warns you plainly: one more hit like the last one and you are down. */
+export const HEALTH_LOW_THRESHOLD = 25;
 
 /**
  * Growing back.

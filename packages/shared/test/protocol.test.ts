@@ -15,7 +15,9 @@ import {
   encodeCaught,
   encodeCrafted,
   encodeFishing,
+  encodeHealth,
   encodeHunger,
+  encodeThreatHit,
   encodeTreeHit,
   encodeTreeStates,
   encodePlayerLeft,
@@ -33,8 +35,10 @@ import type {
   BuiltProp,
   CraftedEvent,
   FishingEvent,
+  HealthEvent,
   HungerEvent,
   SnapshotEntity,
+  ThreatHit,
 } from '../src/sim/world-sim';
 
 describe('input bundles', () => {
@@ -349,6 +353,30 @@ describe('telling players a swing landed', () => {
   });
 });
 
+describe('telling players a threat was hit', () => {
+  const roundTrip = (event: ThreatHit): ThreatHit | null => {
+    const decoded = decodeServerMessage(encodeThreatHit(event));
+    return decoded?.type === 'threatHit' ? decoded.event : null;
+  };
+
+  it('carries which one and how many swings it has left', () => {
+    expect(roundTrip({ animalId: 1005, hitsLeft: 2 })).toEqual({ animalId: 1005, hitsLeft: 2 });
+  });
+
+  it('says a full count again for one just back from being defeated', () => {
+    expect(roundTrip({ animalId: 1005, hitsLeft: 3 })).toEqual({ animalId: 1005, hitsLeft: 3 });
+  });
+
+  it('is tiny, the same as a tree hit', () => {
+    expect(encodeThreatHit({ animalId: 1005, hitsLeft: 2 }).byteLength).toBeLessThanOrEqual(4);
+  });
+
+  it('refuses a message of the wrong length', () => {
+    const encoded = encodeThreatHit({ animalId: 1005, hitsLeft: 2 });
+    expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
+  });
+});
+
 describe('telling players what happened at the water', () => {
   const roundTrip = (event: FishingEvent): FishingEvent | null => {
     const decoded = decodeServerMessage(encodeFishing(event));
@@ -428,6 +456,38 @@ describe('telling a player how hungry they are', () => {
 
   it('refuses one that has been cut short', () => {
     const encoded = encodeHunger({ netId: 1, hunger: 50, ate: null });
+    expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
+  });
+});
+
+describe('telling a player how much health they have', () => {
+  const roundTrip = (event: HealthEvent): HealthEvent | null => {
+    const decoded = decodeServerMessage(encodeHealth(event));
+    return decoded?.type === 'health' ? decoded.event : null;
+  };
+
+  it('carries the number and who it is for', () => {
+    expect(roundTrip({ netId: 7, health: 75, knockedOut: false })).toEqual({
+      netId: 7,
+      health: 75,
+      knockedOut: false,
+    });
+  });
+
+  it('carries a knockout', () => {
+    expect(roundTrip({ netId: 3, health: 100, knockedOut: true })).toEqual({
+      netId: 3,
+      health: 100,
+      knockedOut: true,
+    });
+  });
+
+  it('fits in five bytes', () => {
+    expect(encodeHealth({ netId: 1, health: 50, knockedOut: false }).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeHealth({ netId: 1, health: 50, knockedOut: false });
     expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
   });
 });
@@ -520,6 +580,14 @@ describe('telling a player what they caught', () => {
     expect(roundTrip({ netId: 3, item: 'meat', added: 0 })).toEqual({
       netId: 3,
       item: 'meat',
+      added: 0,
+    });
+  });
+
+  it('carries a threat fought off with nothing to show for it', () => {
+    expect(roundTrip({ netId: 5, item: null, added: 0 })).toEqual({
+      netId: 5,
+      item: null,
       added: 0,
     });
   });
