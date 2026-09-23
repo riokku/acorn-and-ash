@@ -669,7 +669,12 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
 async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<void> {
   let lastPosition: { x: number; z: number } | null = null;
 
-  for (let attempt = 0; attempt < 24; attempt++) {
+  // A rabbit only startles once a player is within its alertRadius (7m), and
+  // calms down only past its safeRadius (11m) - comfortably above either, an
+  // animal this far off is still just ambling near its den, not fleeing.
+  const POSSIBLY_FLEEING_RANGE = 12;
+
+  for (let attempt = 0; attempt < 90; attempt++) {
     if ((await page.evaluate(() => window.acornDebug?.aimedAnimal() ?? null)) !== null) return;
 
     const animal = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).find(
@@ -683,41 +688,56 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
       [animal.x, animal.z],
     );
 
-    // Wildlife is out in generated wilderness, not the hand-built clearing, so
-    // a straight line at it can walk the player straight into a rock or a
-    // trunk. A sprint covers many metres in eight seconds when the ground is
-    // clear, so barely having moved means whatever is in the way is not going
-    // to move for us: sidestep it before pushing forward again, the way a
-    // person would.
-    const stuck =
-      lastPosition !== null &&
-      Math.hypot((here?.x ?? 0) - lastPosition.x, (here?.z ?? 0) - lastPosition.z) < 3;
-    lastPosition = here === undefined ? null : { x: here.x, z: here.z };
+    if (gap > POSSIBLY_FLEEING_RANGE) {
+      // Wildlife is out in generated wilderness, not the hand-built clearing,
+      // so a straight line at it can walk the player straight into a rock or
+      // a trunk. A sprint covers many metres in eight seconds when the ground
+      // is clear, so barely having moved means whatever is in the way is not
+      // going to move for us: sidestep it before pushing forward again, the
+      // way a person would.
+      const stuck =
+        lastPosition !== null &&
+        Math.hypot((here?.x ?? 0) - lastPosition.x, (here?.z ?? 0) - lastPosition.z) < 3;
+      lastPosition = here === undefined ? null : { x: here.x, z: here.z };
 
-    if (stuck) {
-      const sidestep = attempt % 2 === 0 ? 'KeyA' : 'KeyD';
+      if (stuck) {
+        const sidestep = attempt % 2 === 0 ? 'KeyA' : 'KeyD';
+        await page.keyboard.down('ShiftLeft');
+        await page.keyboard.down(sidestep);
+        await page.waitForTimeout(2_000);
+        await page.keyboard.up(sidestep);
+        await page.keyboard.up('ShiftLeft');
+      }
+
+      // One long, unbroken sprint rather than many short polls - each poll is
+      // a round trip through the browser, and under a slow enough render loop
+      // those add up to more than the walk itself does - but capped to
+      // roughly how long the remaining gap actually needs at a sprint, so
+      // closing in from nearby does not sail straight past a den that is only
+      // a few metres off. Only safe while too far off to startle it yet:
+      // fifty-odd metres of wilderness is the common case, not the exception.
+      const SPRINT_METRES_PER_SECOND = 7;
+      const holdMs = Math.min(8_000, Math.max(300, (gap / SPRINT_METRES_PER_SECOND) * 1_300));
       await page.keyboard.down('ShiftLeft');
-      await page.keyboard.down(sidestep);
-      await page.waitForTimeout(2_000);
-      await page.keyboard.up(sidestep);
+      await page.keyboard.down('KeyW');
+      await page.waitForTimeout(holdMs);
+      await page.keyboard.up('KeyW');
       await page.keyboard.up('ShiftLeft');
+      await page.waitForTimeout(300);
+      continue;
     }
 
-    // One long, unbroken sprint rather than many short polls - each poll is a
-    // round trip through the browser, and under a slow enough render loop
-    // those add up to more than the walk itself does - but capped to roughly
-    // how long the remaining gap actually needs at a sprint, so closing in
-    // from nearby does not sail straight past a den that is only a few
-    // metres off. Capped high while the gap is still large: fifty-odd metres
-    // of wilderness is the common case, not the exception.
-    const SPRINT_METRES_PER_SECOND = 7;
-    const holdMs = Math.min(8_000, Math.max(300, (gap / SPRINT_METRES_PER_SECOND) * 1_300));
+    // Close enough that it may already be bolting, curving fresh every tick
+    // to run straight away from whoever is chasing it - aiming once and then
+    // sprinting blind for seconds just walks to where it *was*. A sprinting
+    // player only just outpaces a fleeing rabbit (7 m/s vs 6), so the chase
+    // only gains ground by re-aiming often: a short hold, then look again.
     await page.keyboard.down('ShiftLeft');
     await page.keyboard.down('KeyW');
-    await page.waitForTimeout(holdMs);
+    await page.waitForTimeout(400);
     await page.keyboard.up('KeyW');
     await page.keyboard.up('ShiftLeft');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(80);
   }
   throw new Error(`Never got within swinging distance of animal ${animalId}`);
 }
