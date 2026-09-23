@@ -144,6 +144,20 @@ export const SWING_COOLDOWN_TICKS = Math.round(SWING_INTERVAL_SECONDS * TICK_HZ)
 export const CHOP_FACING_COSINE = 0.5;
 
 /**
+ * Dodging.
+ *
+ * The other half of "readable enemy wind-ups": timed right, this is what
+ * actually gets you through one, rather than only backing out of reach.
+ */
+/** How far one dodge moves you, in metres - a decisive step, not a stroll. */
+export const DODGE_DISTANCE = 4;
+/** How long a dodge leaves you untouchable, in seconds. */
+export const DODGE_INVULNERABLE_SECONDS = 0.35;
+/** How long before you can dodge again, in seconds. */
+export const DODGE_COOLDOWN_SECONDS = 1.2;
+export const DODGE_COOLDOWN_TICKS = Math.round(DODGE_COOLDOWN_SECONDS * TICK_HZ);
+
+/**
  * Fishing.
  *
  * A cast lands as far out as the water allows, between these two distances in

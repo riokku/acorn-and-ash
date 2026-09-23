@@ -588,6 +588,9 @@ export class Game {
     if (event.knockedOut) {
       const now = performance.now();
       this.healthNews = { text: 'Knocked out! You wake up safe.', until: now + NEWS_MS };
+    } else if (event.dodged) {
+      const now = performance.now();
+      this.healthNews = { text: 'Dodged!', until: now + NEWS_MS };
     }
     // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
     // than left for the next frame, so a stall in the render loop cannot eat

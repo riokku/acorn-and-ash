@@ -2,6 +2,9 @@ import { createWorld, type Entity, type World } from 'koota';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  DODGE_COOLDOWN_TICKS,
+  DODGE_DISTANCE,
+  DODGE_INVULNERABLE_SECONDS,
   HEALTH_MAX,
   HUNGER_EMPTY_AFTER_SECONDS,
   HUNGER_MAX,
@@ -10,6 +13,8 @@ import {
   MAX_INPUTS_PER_TICK,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
+  PLAYER_HEIGHT,
+  PLAYER_RADIUS,
   REGROW_MIN_SECONDS,
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
@@ -17,7 +22,7 @@ import {
   SWING_COOLDOWN_TICKS,
   TICK_SECONDS,
 } from '../constants';
-import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
+import { createCollisionWorld, resolveCapsule, type CollisionWorld } from '../collision/capsule';
 import {
   AimYaw,
   AnimalTag,
@@ -95,6 +100,7 @@ import {
   idleInput,
   isHeld,
   stepPlayer,
+  worldMoveDirection,
   type PlayerInput,
   type PlayerMotion,
 } from './player';
@@ -238,6 +244,8 @@ export interface HealthEvent {
   readonly health: number;
   /** Whether this took them all the way to zero - see the next snapshot for where they woke up. */
   readonly knockedOut: boolean;
+  /** Whether a dodge is the only reason this did not cost any health. */
+  readonly dodged: boolean;
 }
 
 /** Something a player has placed in the world. */
@@ -385,6 +393,10 @@ interface PlayerRuntime {
   lastSentHunger: number;
   /** How much a threat has left to take before they are knocked out. */
   health: number;
+  /** Ticks left before this player may dodge again. */
+  dodgeCooldownTicks: number;
+  /** Until this real time, any attack simply misses - see `damagePlayer`. */
+  invulnerableUntilMs: number;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -617,6 +629,8 @@ export class WorldSimulation {
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
       health: saved?.health ?? HEALTH_MAX,
+      dodgeCooldownTicks: 0,
+      invulnerableUntilMs: 0,
     });
   }
 
@@ -702,7 +716,12 @@ export class WorldSimulation {
         let wantsToInteract = false;
         let wantsToSwing = false;
         let wantsToCast = false;
+        let wantsToDodge = false;
         let aimedYaw = aim.yaw;
+        // Whatever was held on the input that asked to dodge - same idea as
+        // `aimedYaw`, judged from wherever the player ended up this tick.
+        let dodgeMoveX = 0;
+        let dodgeMoveZ = 0;
 
         // A line in the water keeps its own time: the fish bites when it bites,
         // and wandering off brings the line in, whether or not inputs arrived.
@@ -738,6 +757,14 @@ export class WorldSimulation {
               if (swingHeld) wantsToSwing = true;
               if (clicked) wantsToCast = true;
             }
+            // Held, the same as a swing - the cooldown is what stops a dodge
+            // from repeating faster than `tryDodge` allows, so there is no
+            // need to also demand a fresh press.
+            if (isHeld(input, PlayerButton.Dodge)) {
+              wantsToDodge = true;
+              dodgeMoveX = input.moveX;
+              dodgeMoveZ = input.moveZ;
+            }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
             aimedYaw = input.yaw;
@@ -758,9 +785,13 @@ export class WorldSimulation {
         }
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
+        if (runtime.dodgeCooldownTicks > 0) runtime.dodgeCooldownTicks -= 1;
         if (runtime.cast === null) {
           if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
           if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
+          if (wantsToDodge) {
+            this.tryDodge(runtime, scratch.position, aimedYaw, dodgeMoveX, dodgeMoveZ);
+          }
           if (runtime.pendingBuild !== null) {
             const kind = runtime.pendingBuild;
             runtime.pendingBuild = null;
@@ -1128,8 +1159,21 @@ export class WorldSimulation {
    * Take health off a player, knocking them out the instant it empties: woken
    * up wherever `wakePosition` says - their own home, or the shared clearing
    * if they have none - and healed straight back to full, the same tick.
+   *
+   * A dodge timed right beats this outright: while `invulnerableUntilMs`
+   * holds, the hit simply never lands.
    */
   private damagePlayer(runtime: PlayerRuntime, amount: number): void {
+    if (this.nowMs < runtime.invulnerableUntilMs) {
+      this.healthEvents.push({
+        netId: runtime.netId,
+        health: Math.round(runtime.health),
+        knockedOut: false,
+        dodged: true,
+      });
+      return;
+    }
+
     const remaining = Math.max(0, runtime.health - amount);
     const knockedOut = remaining <= 0;
     runtime.health = knockedOut ? HEALTH_MAX : remaining;
@@ -1146,7 +1190,37 @@ export class WorldSimulation {
       netId: runtime.netId,
       health: Math.round(runtime.health),
       knockedOut,
+      dodged: false,
     });
+  }
+
+  /**
+   * A quick, decisive step in whatever direction is held - or straight back,
+   * if nothing is - that leaves the player briefly untouchable. See
+   * `damagePlayer` for how that window is spent.
+   */
+  private tryDodge(
+    runtime: PlayerRuntime,
+    position: Vec3,
+    aimYaw: number,
+    moveX: number,
+    moveZ: number,
+  ): void {
+    if (runtime.dodgeCooldownTicks > 0) return;
+
+    const input = worldMoveDirection(moveX, moveZ, aimYaw);
+    const hasInput = input.x !== 0 || input.z !== 0;
+    // No direction held: step straight back, away from wherever you are facing.
+    const dirX = hasInput ? input.x : Math.sin(aimYaw);
+    const dirZ = hasInput ? input.z : Math.cos(aimYaw);
+
+    position.x += dirX * DODGE_DISTANCE;
+    position.z += dirZ * DODGE_DISTANCE;
+    resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision);
+    position.y = this.collision.terrain.heightAt(position.x, position.z);
+
+    runtime.dodgeCooldownTicks = DODGE_COOLDOWN_TICKS;
+    runtime.invulnerableUntilMs = this.nowMs + DODGE_INVULNERABLE_SECONDS * 1000;
   }
 
   /**

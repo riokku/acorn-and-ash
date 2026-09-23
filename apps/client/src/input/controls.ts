@@ -100,6 +100,9 @@ export class Controls {
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
     if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
     if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) buttons |= PlayerButton.Swing;
+    if (this.held.has('ControlLeft') || this.tapped.has('ControlLeft')) {
+      buttons |= PlayerButton.Dodge;
+    }
     return buttons;
   }
 

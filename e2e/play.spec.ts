@@ -161,6 +161,24 @@ test('sprinting covers more ground than walking', async ({ page }) => {
   expect(sprinted).toBeGreaterThan(walked * 1.2);
 });
 
+test('dodging moves you a decisive step, on command', async ({ page }) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const before = positionOf(await hudValue(page, 'Position'));
+  await hold(page, 'ControlLeft', 100);
+
+  // A dodge lands the instant the server sees the button, so this only needs
+  // a moment to arrive - not the long hold a walk or a sprint would.
+  await expect
+    .poll(async () => {
+      const after = positionOf(await hudValue(page, 'Position'));
+      return Math.hypot(after.x - before.x, after.z - before.z);
+    })
+    .toBeGreaterThan(3);
+});
+
 test('jumping lifts the player off the ground and puts them back', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);

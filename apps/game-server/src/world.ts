@@ -122,7 +122,9 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(encodeBuiltProps(simulation.builtPropsList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
-    server.send(encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false }));
+    server.send(
+      encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
+    );
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
