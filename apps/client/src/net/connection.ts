@@ -2,9 +2,11 @@ import {
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
   decodeServerMessage,
+  encodeBuild,
   encodeCraft,
   encodeInputBundle,
   encodePing,
+  type BuildableKindId,
   type ItemId,
   type PlayerInput,
   type ServerMessage,
@@ -96,6 +98,18 @@ export class WorldConnection {
   sendCraft(item: ItemId): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeCraft(item));
+  }
+
+  /**
+   * Ask to build whatever was picked from the build menu.
+   *
+   * Sent the moment it is picked, the same as crafting - the server still
+   * places it wherever this player currently stands and looks, using
+   * whatever it already has on hand for the tick that follows.
+   */
+  sendBuild(kind: BuildableKindId): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeBuild(kind));
   }
 
   close(): void {

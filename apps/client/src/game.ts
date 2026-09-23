@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {
   ANIMAL_KINDS,
   BUILDABLE_KINDS,
+  BUILDABLE_KIND_ORDER,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
   HUNGER_MAX,
@@ -30,6 +31,7 @@ import {
   treeInReach,
   vec3,
   type AnimalCaught,
+  type BuildableKindId,
   type BuildBlocker,
   type BuiltProp,
   type Clearing,
@@ -53,6 +55,7 @@ import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
+import { createCabin, type Cabin } from './scene/cabin';
 import { createCritter, type Critter } from './scene/critter';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
@@ -118,8 +121,10 @@ export interface GameDebug {
   aimedTree(): { name: string; swingsLeft: number } | null;
   /** The animal a swing would land on right now, if any. A tree in reach always wins. */
   aimedAnimal(): { name: string } | null;
-  /** Whether pressing Build right now would place a campfire. */
+  /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
+  /** Whether the build menu (opened with B) is currently showing. */
+  buildMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
   /**
@@ -164,9 +169,10 @@ export class Game {
   private readonly remoteCharacters = new Map<number, Character>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter>();
-  private readonly campfires = new Map<number, Campfire>();
+  private readonly builtMeshes = new Map<number, Campfire | Cabin>();
   private builtProps: readonly BuiltProp[] = [];
   private canBuild = false;
+  private buildMenuOpen = false;
   private readonly scratch: Vec3 = vec3();
 
   private setup: RendererSetup | null = null;
@@ -294,6 +300,7 @@ export class Game {
       aimedTree: () => (this.aimedTree === null ? null : { ...this.aimedTree }),
       aimedAnimal: () => (this.aimedAnimal === null ? null : { ...this.aimedAnimal }),
       canBuild: () => this.canBuild,
+      buildMenuOpen: () => this.buildMenuOpen,
       builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
@@ -339,8 +346,8 @@ export class Game {
     this.remoteCharacters.clear();
     for (const critter of this.critters.values()) critter.dispose();
     this.critters.clear();
-    for (const campfire of this.campfires.values()) campfire.dispose();
-    this.campfires.clear();
+    for (const built of this.builtMeshes.values()) built.dispose();
+    this.builtMeshes.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -655,19 +662,19 @@ export class Game {
     if (this.clearingScene === null) return;
     const present = new Set(this.builtProps.map((prop) => prop.id));
 
-    for (const [id, campfire] of this.campfires) {
+    for (const [id, built] of this.builtMeshes) {
       if (present.has(id)) continue;
-      this.scene.remove(campfire.group);
-      campfire.dispose();
-      this.campfires.delete(id);
+      this.scene.remove(built.group);
+      built.dispose();
+      this.builtMeshes.delete(id);
     }
 
     for (const prop of this.builtProps) {
-      if (this.campfires.has(prop.id)) continue;
-      const campfire = createCampfire();
-      campfire.group.position.set(prop.x, 0, prop.z);
-      this.scene.add(campfire.group);
-      this.campfires.set(prop.id, campfire);
+      if (this.builtMeshes.has(prop.id)) continue;
+      const built = prop.kind === 'cabin' ? createCabin() : createCampfire();
+      built.group.position.set(prop.x, 0, prop.z);
+      this.scene.add(built.group);
+      this.builtMeshes.set(prop.id, built);
     }
   }
 
@@ -727,9 +734,12 @@ export class Game {
     if (mouse.x !== 0 || mouse.y !== 0) camera.turn(mouse.x, mouse.y, MOUSE_SENSITIVITY);
 
     // Read ahead of anything below that might forget taps for a produced
-    // movement tick, so a craft key pressed this frame is never swallowed by
-    // that blanket clear before this gets a look at it.
-    this.handleCraftInput(controls);
+    // movement tick, so a craft or build key pressed this frame is never
+    // swallowed by that blanket clear before this gets a look at it. The
+    // build menu takes the same digit keys over while it is open, so it
+    // reads first and craft only gets a turn once it is closed.
+    this.handleBuildMenuInput(controls);
+    if (!this.buildMenuOpen) this.handleCraftInput(controls);
 
     // If the server never answers, let the player walk about on their own rather
     // than staring at a loading screen.
@@ -749,6 +759,23 @@ export class Game {
     setup.renderer.render(this.scene, camera.camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /**
+   * B opens or closes the build menu. While it is open, a digit key picks
+   * from it and sends the request, the same moment a craft key would - the
+   * server still places it wherever this player currently stands and looks.
+   */
+  private handleBuildMenuInput(controls: Controls): void {
+    if (controls.takeBuildMenuToggle()) this.buildMenuOpen = !this.buildMenuOpen;
+    if (!this.buildMenuOpen) return;
+    for (const index of controls.takeBuildTaps()) {
+      const kind = BUILDABLE_KIND_ORDER[index];
+      if (kind === undefined) continue;
+      this.connection?.sendBuild(kind);
+      this.buildMenuOpen = false;
+      break;
+    }
+  }
 
   /** Turn any craft hotkeys pressed this frame into requests to the server. */
   private handleCraftInput(controls: Controls): void {
@@ -838,14 +865,16 @@ export class Game {
       castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
 
     // Its own key, so it never competes with a swing or a cast for the click.
-    const campfire = BUILDABLE_KINDS.campfire;
-    const canAffordCampfire = campfire.costs.every(
-      (cost) =>
-        (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
-    );
+    const clearingData = this.clearing;
+    const canAfford = (kind: BuildableKindId): boolean =>
+      BUILDABLE_KINDS[kind].costs.every(
+        (cost) =>
+          (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
+      );
     const buildBlockers: BuildBlocker[] =
-      canAffordCampfire && this.clearing !== null
-        ? [
+      clearingData === null
+        ? []
+        : [
             ...this.standingProps.map((prop) => ({
               x: prop.x,
               z: prop.z,
@@ -856,18 +885,22 @@ export class Game {
               z: prop.z,
               footprintRadius: BUILDABLE_KINDS[prop.kind].footprintRadius,
             })),
-          ]
-        : [];
+          ];
+    // Any one of them being placeable right now is enough to offer the hint -
+    // the build menu is where you pick which.
     this.canBuild =
-      canAffordCampfire &&
-      this.clearing !== null &&
-      buildSpotFor(
-        player.motion.position,
-        camera.look.yaw,
-        campfire.footprintRadius,
-        this.clearing.water,
-        buildBlockers,
-      ) !== null;
+      clearingData !== null &&
+      BUILDABLE_KIND_ORDER.some(
+        (kind) =>
+          canAfford(kind) &&
+          buildSpotFor(
+            player.motion.position,
+            camera.look.yaw,
+            BUILDABLE_KINDS[kind].footprintRadius,
+            clearingData.water,
+            buildBlockers,
+          ) !== null,
+      );
 
     // Keep the shadow map centred on the player instead of on the origin.
     if (this.sun !== null) {
@@ -942,6 +975,7 @@ export class Game {
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,
+      buildMenuOpen: this.buildMenuOpen,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),

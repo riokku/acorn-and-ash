@@ -1,3 +1,4 @@
+import type { BuildableKindId } from '../data/buildables';
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type {
@@ -14,6 +15,7 @@ export const ClientMessageType = {
   InputBundle: 0x01,
   Ping: 0x02,
   Craft: 0x03,
+  Build: 0x04,
 } as const;
 
 /** What the server says back. */
@@ -62,7 +64,20 @@ export interface CraftMessage {
   readonly item: ItemId;
 }
 
-export type ClientMessage = InputBundleMessage | PingMessage | CraftMessage;
+/**
+ * Build whatever was picked from the build menu, aimed wherever the player
+ * currently stands and looks.
+ *
+ * Like crafting, this is its own small message rather than a bit on the input
+ * bundle - unlike crafting, where it lands still depends on the player's
+ * position and aim, which the server already tracks every tick regardless.
+ */
+export interface BuildMessage {
+  readonly type: 'build';
+  readonly kind: BuildableKindId;
+}
+
+export type ClientMessage = InputBundleMessage | PingMessage | CraftMessage | BuildMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';

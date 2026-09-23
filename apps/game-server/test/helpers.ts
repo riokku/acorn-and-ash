@@ -2,11 +2,13 @@ import { SELF } from 'cloudflare:test';
 
 import {
   decodeServerMessage,
+  encodeBuild,
   encodeCraft,
   encodeInputBundle,
   encodePing,
   createInput,
   type AnimalCaught,
+  type BuildableKindId,
   type BuiltPropsMessage,
   type CraftedEvent,
   type FishingEvent,
@@ -68,6 +70,10 @@ export class TestClient {
 
   craft(item: ItemId): void {
     this.socket.send(encodeCraft(item));
+  }
+
+  build(kind: BuildableKindId): void {
+    this.socket.send(encodeBuild(kind));
   }
 
   sendRaw(payload: ArrayBuffer | string): void {

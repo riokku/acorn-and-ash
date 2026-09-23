@@ -213,10 +213,15 @@ export interface BuiltProp {
  * Everybody hears about the build itself from the next `builtPropsList` -
  * the same way a felled tree needs no message of its own beyond
  * `TreeChopped` - so this is only for the builder's own pack changing.
+ *
+ * `ownerKey` is null for anything communal, and for a home built by a guest
+ * with no persistent key to remember it by. It never goes to the client - it
+ * only exists so the game server can save who a home belongs to.
  */
 export interface BuildEvent {
   readonly netId: number;
   readonly prop: BuiltProp;
+  readonly ownerKey: string | null;
 }
 
 /** A tree's state, as it goes into and comes out of storage. */
@@ -301,6 +306,12 @@ interface TreeState {
 
 interface PlayerRuntime {
   readonly netId: number;
+  /**
+   * The stable identity this player's session was opened with, or null for a
+   * guest with nothing to remember them by. Unlike `netId` - a fresh slot
+   * every reconnect - this is what a home belongs to.
+   */
+  readonly playerKey: string | null;
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
@@ -312,8 +323,13 @@ interface PlayerRuntime {
    * click.
    */
   swingWasHeld: boolean;
-  /** Same idea as `swingWasHeld`, but for the build button: a click places one, not a hold. */
-  buildWasHeld: boolean;
+  /**
+   * What to build on the next tick, chosen from the client's build menu, or
+   * null when nothing is waiting. A discrete request rather than a held
+   * button - like crafting, it is settled the moment it arrives - so there is
+   * no held/clicked edge to track here the way there is for a swing.
+   */
+  pendingBuild: BuildableKindId | null;
   /** Their line in the water, if they have one out. */
   cast: Cast | null;
   lastProcessedSeq: number;
@@ -396,6 +412,8 @@ export class WorldSimulation {
   private readonly builtProps: BuiltProp[] = [];
   private nextBuiltPropId = 1;
   private readonly buildEvents: BuildEvent[] = [];
+  /** Built-prop id -> whoever it belongs to, for the homes among them. */
+  private readonly homeOwners = new Map<number, string>();
   /**
    * The props as they stand right now.
    *
@@ -494,11 +512,21 @@ export class WorldSimulation {
     return [...this.players.keys()];
   }
 
-  /** Put a player into the world, either fresh or restored from storage. */
-  addPlayer(netId: number, saved?: PersistedPlayer): void {
+  /**
+   * Put a player into the world, either fresh or restored from storage.
+   *
+   * `playerKey` is optional and defaults to no persistent identity, so every
+   * existing call site that only ever cared about `netId` and `saved` still
+   * behaves exactly as it did before homes existed.
+   */
+  addPlayer(netId: number, saved?: PersistedPlayer, playerKey: string | null = null): void {
     if (this.players.has(netId)) return;
 
-    const spawn = saved ? { x: saved.x, y: saved.y, z: saved.z } : this.nextSpawnPosition();
+    // A home beats both: wherever they physically stood before beats the
+    // shared clearing, but their own doorstep beats that too, every time.
+    const home = playerKey !== null ? this.homePositionFor(playerKey) : null;
+    const spawn =
+      home ?? (saved ? { x: saved.x, y: saved.y, z: saved.z } : this.nextSpawnPosition());
     const facingYaw = saved?.facingYaw ?? 0;
 
     const entity = this.world.spawn(
@@ -515,12 +543,13 @@ export class WorldSimulation {
     const hunger = saved?.hunger ?? HUNGER_MAX;
     this.players.set(netId, {
       netId,
+      playerKey,
       entity,
       queue: [],
       inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
       swingCooldownTicks: 0,
       swingWasHeld: false,
-      buildWasHeld: false,
+      pendingBuild: null,
       cast: null,
       lastProcessedSeq: 0,
       droppedInputs: 0,
@@ -529,6 +558,13 @@ export class WorldSimulation {
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
     });
+  }
+
+  /** Ask to build whatever is picked from the client's menu, next tick. */
+  requestBuild(netId: number, kind: BuildableKindId): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return;
+    runtime.pendingBuild = kind;
   }
 
   removePlayer(netId: number): boolean {
@@ -606,7 +642,6 @@ export class WorldSimulation {
         let wantsToInteract = false;
         let wantsToSwing = false;
         let wantsToCast = false;
-        let wantsToBuild = false;
         let aimedYaw = aim.yaw;
 
         // A line in the water keeps its own time: the fish bites when it bites,
@@ -631,9 +666,6 @@ export class WorldSimulation {
             const swingHeld = isHeld(input, PlayerButton.Swing);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
-            const buildHeld = isHeld(input, PlayerButton.Build);
-            const buildClicked = buildHeld && !runtime.buildWasHeld;
-            runtime.buildWasHeld = buildHeld;
             if (runtime.cast !== null) {
               // With a line out, the button is for the fish and nothing else,
               // and each input is read in turn: when the click was made matters.
@@ -645,7 +677,6 @@ export class WorldSimulation {
             } else {
               if (swingHeld) wantsToSwing = true;
               if (clicked) wantsToCast = true;
-              if (buildClicked) wantsToBuild = true;
             }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
@@ -670,7 +701,11 @@ export class WorldSimulation {
         if (runtime.cast === null) {
           if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
           if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
-          if (wantsToBuild) this.tryBuild(runtime, scratch.position, aimedYaw);
+          if (runtime.pendingBuild !== null) {
+            const kind = runtime.pendingBuild;
+            runtime.pendingBuild = null;
+            this.tryBuild(runtime, scratch.position, aimedYaw, kind);
+          }
         }
 
         position.x = scratch.position.x;
@@ -931,16 +966,22 @@ export class WorldSimulation {
   }
 
   /**
-   * Place a campfire in front of this player, if they can afford one and
-   * there is a clear spot for it.
-   *
-   * Only one kind exists yet, so there is nothing to choose between - once a
-   * second one does, this is where picking one comes in.
+   * Place whatever was picked from the build menu in front of this player, if
+   * they can afford it, there is a clear spot for it, and - for a home - they
+   * do not already have one.
    */
-  private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
+  private tryBuild(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    aimYaw: number,
+    kind: BuildableKindId,
+  ): void {
     if (runtime.swingCooldownTicks > 0) return;
-    const buildable = BUILDABLE_KINDS.campfire;
+    const buildable = BUILDABLE_KINDS[kind];
     if (!canAfford(runtime.inventory, buildable)) return;
+    // One home per player: the whole point is that it is always the same
+    // place to come back to, which a second one would only confuse.
+    if (buildable.isHome && runtime.playerKey !== null && this.hasHome(runtime.playerKey)) return;
 
     const blockers: BuildBlocker[] = [
       ...this.standing.map((prop) => ({
@@ -966,9 +1007,31 @@ export class WorldSimulation {
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
 
-    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind: 'campfire', x: spot.x, z: spot.z };
+    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z };
     this.builtProps.push(prop);
-    this.buildEvents.push({ netId: runtime.netId, prop });
+    const ownerKey = buildable.isHome ? runtime.playerKey : null;
+    if (ownerKey !== null) this.homeOwners.set(prop.id, ownerKey);
+    this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
+  }
+
+  /** Whether this player already has a home built somewhere in the world. */
+  private hasHome(playerKey: string): boolean {
+    for (const owner of this.homeOwners.values()) {
+      if (owner === playerKey) return true;
+    }
+    return false;
+  }
+
+  /** Just outside this player's own front door, or null if they have no home. */
+  private homePositionFor(playerKey: string): Vec3 | null {
+    for (const [id, owner] of this.homeOwners) {
+      if (owner !== playerKey) continue;
+      const home = this.builtProps.find((prop) => prop.id === id);
+      if (home === undefined) continue;
+      const footprint = BUILDABLE_KINDS[home.kind].footprintRadius;
+      return { x: home.x, y: 0, z: home.z + footprint + 1.5 };
+    }
+    return null;
   }
 
   /** A tick of waiting at the water: the bite, the leash and giving up. */
@@ -1181,10 +1244,11 @@ export class WorldSimulation {
   }
 
   /** Put built props back as they were after the world wakes from storage. */
-  restoreBuiltProps(props: Iterable<BuiltProp>): void {
-    for (const prop of props) {
+  restoreBuiltProps(props: Iterable<BuiltProp & { readonly ownerKey: string | null }>): void {
+    for (const { ownerKey, ...prop } of props) {
       this.builtProps.push(prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
+      if (ownerKey !== null) this.homeOwners.set(prop.id, ownerKey);
     }
   }
 

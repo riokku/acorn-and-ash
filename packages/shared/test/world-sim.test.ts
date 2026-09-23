@@ -9,17 +9,19 @@ import {
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
   PLAYER_RADIUS,
+  SPAWN_POSITION,
   SWING_COOLDOWN_TICKS,
   TICK_HZ,
   TICK_MILLISECONDS,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
 import { ANIMAL_KINDS } from '../src/data/animals';
+import { BUILDABLE_KINDS, type BuildableKindId } from '../src/data/buildables';
 import { ITEM_KINDS } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
-import { countOf } from '../src/sim/inventory';
+import { addItem, countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
 import { AXE_PICKUP_ID, AXE_STUMP, STICK_PATCHES } from '../src/world/clearing';
 import {
@@ -1314,13 +1316,25 @@ describe('building', () => {
     return seq;
   }
 
+  /** Ask to build, aimed FACE_OUT unless told otherwise, and let one tick settle it. */
+  function requestAndStep(
+    sim: WorldSimulation,
+    netId: number,
+    kind: BuildableKindId,
+    seq: number,
+    yaw = FACE_OUT,
+  ): void {
+    sim.requestBuild(netId, kind);
+    sim.queueInput(netId, createInput(seq, 0, 0, yaw, 0));
+    sim.step(tickClock());
+  }
+
   it('places a campfire in front of you, and spends the logs', () => {
     const sim = createWorld();
     sim.addPlayer(1, withLogs(1));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', 1);
 
     const events = sim.drainBuildEvents();
     expect(events).toHaveLength(1);
@@ -1335,8 +1349,7 @@ describe('building', () => {
     sim.addPlayer(1, withLogs(1, 3));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', 1);
 
     expect(sim.drainBuildEvents()).toEqual([]);
     expect(sim.builtPropsList()).toEqual([]);
@@ -1348,8 +1361,7 @@ describe('building', () => {
     sim.addPlayer(1, withLogs(1));
     sim.placePlayer(1, { x: 0, y: 0, z: -(CLEARING_TREE_LINE_INNER - 1) }, FACE_OUT);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', 1);
 
     expect(sim.drainBuildEvents()).toEqual([]);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
@@ -1360,13 +1372,11 @@ describe('building', () => {
     sim.addPlayer(1, withLogs(1, 8));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', 1);
     expect(sim.drainBuildEvents()).toHaveLength(1);
 
     const seq = waitOutCooldown(sim, 1, 2);
-    sim.queueInput(1, createInput(seq, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', seq);
 
     // Blocked by the campfire already sitting there, so the second attempt
     // never happened and never spent the logs it would have needed.
@@ -1375,41 +1385,137 @@ describe('building', () => {
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
   });
 
-  it('holding the button down places only one', () => {
+  it('a second request before the cooldown clears does nothing', () => {
     const sim = createWorld();
     sim.addPlayer(1, withLogs(1, 12));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
-    // The same bundle a client that has not yet noticed the button was
-    // released would send: held across several ticks in a row.
-    for (let i = 0; i < 5; i++) {
-      sim.queueInput(1, createInput(1 + i, 0, 0, FACE_OUT, PlayerButton.Build));
-      sim.step(tickClock());
-    }
-
+    requestAndStep(sim, 1, 'campfire', 1);
     expect(sim.drainBuildEvents()).toHaveLength(1);
+
+    // Asked again straight away, still on the same cooldown a swing or a cast
+    // would share: nothing happens yet, whatever else might have blocked it.
+    requestAndStep(sim, 1, 'campfire', 2);
+    expect(sim.drainBuildEvents()).toEqual([]);
   });
 
   it('restores what was built after the world wakes from storage', () => {
     const sim = createWorld();
     sim.addPlayer(1, withLogs(1));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    sim.step(tickClock());
+    requestAndStep(sim, 1, 'campfire', 1);
     const built = sim.builtPropsList();
     expect(built).toHaveLength(1);
 
     const restored = createWorld();
-    restored.restoreBuiltProps(built);
+    restored.restoreBuiltProps(built.map((prop) => ({ ...prop, ownerKey: null })));
     expect(restored.builtPropsList()).toEqual(built);
 
     // A fresh build in the restored world gets its own id, never one already
     // taken by something restored from storage.
     restored.addPlayer(2, withLogs(2));
     restored.placePlayer(2, { x: 15, y: 0, z: 0 }, FACE_OUT);
-    restored.queueInput(2, createInput(1, 0, 0, FACE_OUT, PlayerButton.Build));
-    restored.step(tickClock());
+    requestAndStep(restored, 2, 'campfire', 1);
     const ids = restored.builtPropsList().map((prop) => prop.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  describe('a home to come back to', () => {
+    const withTenLogs = (netId: number): PersistedPlayer => ({
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'log', count: 10 }],
+      hunger: HUNGER_MAX,
+    });
+
+    it('costs ten logs and is marked as a home', () => {
+      expect(BUILDABLE_KINDS.cabin.costs).toEqual([{ item: 'log', amount: 10 }]);
+      expect(BUILDABLE_KINDS.cabin.isHome).toBe(true);
+      expect(BUILDABLE_KINDS.campfire.isHome).toBe(false);
+    });
+
+    it('refuses a second cabin for somebody who already has one', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      // Far enough away that footprint overlap is not what blocks this one -
+      // already owning a home is.
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', seq);
+      expect(sim.drainBuildEvents()).toEqual([]);
+    });
+
+    it('lets a different player build their own cabin', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      sim.addPlayer(2, withTenLogs(2), 'someone-else');
+      sim.placePlayer(2, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 2, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+    });
+
+    it('a guest with no persistent key can still build one, just not one that is remembered as theirs', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      // Ten logs is also the most a pack can ever hold, so a second cabin
+      // needs a fresh ten gathered in between - topped up directly here,
+      // the same as a trip back to the woods would in a real session.
+      addItem(sim.inventoryOf(1), 'log', 10);
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', seq);
+      // Nothing to say this guest already has one, so a second is allowed.
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+    });
+
+    it('starts its owner just outside their own front door next time', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      const home = sim.drainBuildEvents()[0]?.prop;
+      expect(home).toBeDefined();
+
+      const back = createWorld();
+      back.restoreBuiltProps(sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris' })));
+      back.addPlayer(9, undefined, 'chris');
+      const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
+      expect(position).toBeDefined();
+      if (home === undefined || position === undefined) return;
+      const gap = Math.hypot(position.x - home.x, position.z - home.z);
+      expect(gap).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
+      expect(gap).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 3);
+    });
+
+    it('somebody with no cabin yet still spawns exactly as before', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'cabin', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      const fresh = createWorld();
+      fresh.restoreBuiltProps(sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris' })));
+      // A different key: this player owns nothing here, home or otherwise.
+      fresh.addPlayer(2, undefined, 'somebody-else');
+      const position = fresh.snapshotFor(2).find((entity) => entity.netId === 2);
+      expect(position?.x).toBe(SPAWN_POSITION.x);
+      expect(position?.z).toBe(SPAWN_POSITION.z);
+    });
   });
 });

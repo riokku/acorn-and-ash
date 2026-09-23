@@ -30,8 +30,10 @@ export interface HudState {
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
   readonly aimedAnimal: { readonly name: string } | null;
-  /** Whether pressing Build right now would place a campfire. */
+  /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
+  /** Whether the build menu (opened with B) is currently showing. */
+  readonly buildMenuOpen: boolean;
   /** Whether a click right now would cast a line. */
   readonly canCast: boolean;
   readonly fishing: FishingPhase;
@@ -66,6 +68,7 @@ const INITIAL: HudState = {
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,
+  buildMenuOpen: false,
   canCast: false,
   fishing: null,
   fishingNews: null,

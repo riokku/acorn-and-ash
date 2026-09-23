@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 import {
+  BUILDABLE_KINDS,
+  BUILDABLE_KIND_ORDER,
   HUNGER_LOW_THRESHOLD,
   HUNGER_MAX,
   ITEM_KINDS,
@@ -41,6 +43,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Carrying" value={carrying(state)} />
         <Row label="Craft" value={<Crafting state={state} />} />
+        <Row label="Build" value={<Building state={state} />} />
       </div>
 
       {state.ready && !state.pointerLocked ? (
@@ -138,8 +141,29 @@ function Crafting({ state }: { state: HudState }): React.JSX.Element {
   );
 }
 
-/** "3 sticks", "2 logs" - however many costs a recipe has. */
-function costLabel(recipe: Recipe): string {
+/**
+ * Every buildable kind, with its menu number and cost, lit up green once it
+ * could be placed right where you are standing.
+ */
+function Building({ state }: { state: HudState }): React.JSX.Element {
+  const inventory = inventoryFromEntries(state.carrying);
+  return (
+    <>
+      {BUILDABLE_KIND_ORDER.map((kind, index) => {
+        const buildable = BUILDABLE_KINDS[kind];
+        const ready = canAfford(inventory, buildable);
+        return (
+          <span key={kind} className={ready ? 'hud-status-good' : undefined}>
+            {index > 0 ? ' · ' : ''}[{index + 1}] {buildable.displayName} ({costLabel(buildable)})
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** "3 sticks", "2 logs" - however many costs a recipe or buildable has. */
+function costLabel(recipe: { readonly costs: Recipe['costs'] }): string {
   return recipe.costs
     .map((cost) => {
       const kind = ITEM_KINDS[cost.item];
@@ -159,23 +183,27 @@ function costLabel(recipe: Recipe): string {
  * swing at beats a cast, the same way round as the server decides it - a tree
  * beats the animal too, if somehow both are in reach at once.
  */
-function hint(state: HudState): string {
+export function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
   if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
+  // Asked for the menu, so resolving it beats whatever else is going on -
+  // it stays open until a pick closes it or B does.
+  if (state.buildMenuOpen) return buildMenuHint();
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
   if (state.nearGatherSpot) return 'Press E to gather sticks';
+  // A tree or animal only offers a hint once there is an axe to swing: without
+  // one the server ignores the click outright (trySwing's own first check), so
+  // hinting at it here would send you to click on something that does nothing.
   const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
   if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
   if (state.aimedAnimal !== null && hasAxe) return catchHint(state.aimedAnimal);
   if (state.canCast) return 'Left click to cast';
-  if (state.aimedTree !== null) return chopHint(state.aimedTree);
-  if (state.aimedAnimal !== null) return catchHint(state.aimedAnimal);
-  if (state.canBuild) return 'Press B to build a campfire';
+  if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
@@ -196,6 +224,14 @@ function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
 
 function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
   return `Left click to catch the ${animal.name.toLowerCase()}`;
+}
+
+/** "1 for a campfire, 2 for a cabin" - built from the same order the menu uses. */
+function buildMenuHint(): string {
+  const choices = BUILDABLE_KIND_ORDER.map(
+    (kind, index) => `${index + 1} for a ${BUILDABLE_KINDS[kind].displayName.toLowerCase()}`,
+  ).join(', ');
+  return `Press ${choices} - or B to cancel`;
 }
 
 /** What the pack holds, as one short line. */

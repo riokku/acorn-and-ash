@@ -1115,7 +1115,7 @@ describe('building', () => {
     throw new Error('never made it back to open ground');
   }
 
-  /** Face the middle of the clearing and hold Build until something appears. */
+  /** Face the middle of the clearing and ask to build until something appears. */
   async function buildCampfire(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
@@ -1125,7 +1125,8 @@ describe('building', () => {
         here === undefined
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
-      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      client.walk(0, 0, yaw, 4);
+      client.build('campfire');
       await sleep(120);
     }
     throw new Error('never built anything');
@@ -1185,7 +1186,8 @@ describe('building', () => {
         here === undefined
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
-      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      client.walk(0, 0, yaw, 4);
+      client.build('campfire');
       await sleep(100);
     }
 
@@ -1210,4 +1212,86 @@ describe('building', () => {
     expect(second.openingBuiltProps()).toEqual(built);
     second.close();
   }, 30_000);
+
+  /** The oak plus every other hand-placed tree near it: enough logs for a cabin. */
+  function treesNearTheOak(seed: number) {
+    const props = buildTestClearing(seed).props;
+    const oak = props.find((prop) => prop.kind === 'oak');
+    const pine = props.find((prop) => prop.kind === 'pine');
+    const birches = props.filter((prop) => prop.kind === 'birch');
+    if (oak === undefined || pine === undefined || birches.length < 2) {
+      throw new Error('expected the clearing to have an oak, a pine and two birches');
+    }
+    return [oak, pine, birches[0]!, birches[1]!];
+  }
+
+  /** Fell four trees for ten logs - the most a pack can hold, and a cabin's cost. */
+  async function getLogsForACabin(client: TestClient): Promise<void> {
+    await walkToTheAxe(client);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+
+    for (const tree of treesNearTheOak(client.welcome().seed)) {
+      await walkWithinReach(client, tree);
+      await chopUntilFelled(client, tree, tree.id);
+    }
+    await waitFor(
+      'ten logs',
+      () => (client.inventory().find((entry) => entry.item === 'log')?.count ?? 0) >= 10,
+    );
+  }
+
+  /** Face the middle of the clearing and ask to build a cabin until one appears. */
+  async function buildCabin(client: TestClient): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 20; step++) {
+      if (client.builtProps().some((prop) => prop.kind === 'cabin')) return;
+      const here = client.positionOf(netId);
+      const yaw =
+        here === undefined
+          ? 0
+          : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
+      client.walk(0, 0, yaw, 4);
+      client.build('cabin');
+      await sleep(120);
+    }
+    throw new Error('never built a cabin');
+  }
+
+  it('a cabin is capped at one, and is where its owner starts next time', async () => {
+    const worldId = nextWorldId();
+    const owner = await TestClient.connect(worldId, 'has-a-cabin');
+    await getLogsForACabin(owner);
+    await walkToOpenGround(owner);
+    await buildCabin(owner);
+
+    const home = owner.builtProps().find((prop) => prop.kind === 'cabin');
+    expect(home).toBeDefined();
+    if (home === undefined) throw new Error('no cabin was built');
+
+    // A second player never sees somebody else's home count against them.
+    const stranger = await TestClient.connect(worldId, 'no-cabin-here');
+    await waitFor(
+      'the stranger to have a position',
+      () => stranger.positionOf(stranger.welcome().netId) !== undefined,
+    );
+    stranger.close();
+
+    owner.close();
+    await sleep(300);
+
+    // Reconnecting starts right outside the cabin now, not back where they
+    // stood when they logged out.
+    const returning = await TestClient.connect(worldId, 'has-a-cabin');
+    await waitFor(
+      'a first snapshot',
+      () => returning.positionOf(returning.welcome().netId) !== undefined,
+    );
+    const position = returning.positionOf(returning.welcome().netId);
+    if (position === undefined) throw new Error('lost the returning player');
+    const gapFromHome = Math.hypot(position.x - home.x, position.z - home.z);
+    expect(gapFromHome).toBeGreaterThan(0);
+    expect(gapFromHome).toBeLessThan(6);
+    returning.close();
+  }, 60_000);
 });

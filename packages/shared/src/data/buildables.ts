@@ -3,12 +3,12 @@
  *
  * What you can place in the world, and what it costs. Content lives in typed
  * data tables, not scattered through code, so a new buildable means a new row
- * here. One kind for now, the same way `ANIMAL_KINDS` started with one.
+ * here.
  */
 
 import type { RecipeCost } from './recipes';
 
-export type BuildableKindId = 'campfire';
+export type BuildableKindId = 'campfire' | 'cabin';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -16,6 +16,13 @@ export interface BuildableKind {
   readonly costs: readonly RecipeCost[];
   /** How much room it needs, so two of them - or one and a tree - don't overlap. */
   readonly footprintRadius: number;
+  /**
+   * Whether this is the kind of thing a player calls home: capped at one per
+   * player, and where they start next time instead of the shared clearing
+   * spawn or wherever they last stood. False for anything communal, like the
+   * campfire, that anyone can build any number of.
+   */
+  readonly isHome: boolean;
   /** Triangle budget for the art that eventually replaces the placeholder. */
   readonly triangleBudget: number;
   /** Placeholder colour, as 0xRRGGBB. */
@@ -28,13 +35,26 @@ export const BUILDABLE_KINDS = {
     displayName: 'Campfire',
     costs: [{ item: 'log', amount: 4 }],
     footprintRadius: 0.6,
+    isHome: false,
     triangleBudget: 1500,
     placeholderColor: 0x6b4a32,
+  },
+  cabin: {
+    id: 'cabin',
+    displayName: 'Cabin',
+    // Logs have a maxCarry of 10 - the most a player can ever hold at once -
+    // so this is as much as a single trip can possibly pay for, and the most
+    // this recipe could ever cost without becoming unbuildable.
+    costs: [{ item: 'log', amount: 10 }],
+    footprintRadius: 3,
+    isHome: true,
+    triangleBudget: 6000,
+    placeholderColor: 0x8a6642,
   },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
-export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = ['campfire'];
+export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = ['campfire', 'cabin'];
 
 export function buildableKindIndex(id: BuildableKindId): number {
   const index = BUILDABLE_KIND_ORDER.indexOf(id);
