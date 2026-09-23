@@ -17,6 +17,7 @@ import {
   PlayerButton,
   SNAPSHOT_HZ,
   SnapshotFlag,
+  FLOWER_PATCHES,
   SPAWN_POSITION,
   STICK_PATCHES,
   TICK_HZ,
@@ -1292,6 +1293,72 @@ describe('building', () => {
     const gapFromHome = Math.hypot(position.x - home.x, position.z - home.z);
     expect(gapFromHome).toBeGreaterThan(0);
     expect(gapFromHome).toBeLessThan(6);
+    returning.close();
+  }, 60_000);
+
+  /** Hold the interact button at a flower patch until the pack has this many. */
+  async function gatherFlowers(client: TestClient, count: number): Promise<void> {
+    const enough = (): boolean =>
+      (client.inventory().find((entry) => entry.item === 'flower')?.count ?? 0) >= count;
+    for (let step = 0; step < 60 && !enough(); step++) {
+      client.walk(0, 0, 0, 4, PlayerButton.Interact);
+      await sleep(120);
+    }
+    if (!enough()) throw new Error('never gathered enough flowers');
+  }
+
+  /** Face the middle of the clearing and ask to build a lantern until one appears. */
+  async function buildLantern(client: TestClient): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 20; step++) {
+      if (client.builtProps().some((prop) => prop.kind === 'lantern')) return;
+      const here = client.positionOf(netId);
+      const yaw =
+        here === undefined
+          ? 0
+          : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
+      client.walk(0, 0, yaw, 4);
+      client.build('lantern');
+      await sleep(120);
+    }
+    throw new Error('never built a lantern');
+  }
+
+  it('a lantern (a decoration, not a home) is still capped through a real reconnect', async () => {
+    const worldId = nextWorldId();
+    const owner = await TestClient.connect(worldId, 'has-a-lantern');
+    const patch = FLOWER_PATCHES[0];
+    if (patch === undefined) throw new Error('no flower patch to test against');
+
+    await walkWithinReach(owner, patch);
+    await gatherFlowers(owner, 4);
+    await walkToOpenGround(owner);
+    await buildLantern(owner);
+    expect(owner.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
+    owner.close();
+    await sleep(300);
+
+    // A fresh connection, same player: the owner_key this lantern was saved
+    // with has to round-trip through real storage for the cap to still know
+    // it is theirs, not just the in-memory session that built it.
+    const returning = await TestClient.connect(worldId, 'has-a-lantern');
+    await waitFor(
+      'a first snapshot',
+      () => returning.positionOf(returning.welcome().netId) !== undefined,
+    );
+    expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
+
+    // The same patch, never used up - a real reason nobody needs to remember
+    // which flower patch was whose.
+    await walkWithinReach(returning, patch);
+    await gatherFlowers(returning, 4);
+    await walkToOpenGround(returning);
+    for (let step = 0; step < 10; step++) {
+      returning.walk(0, 0, 0, 4);
+      returning.build('lantern');
+      await sleep(100);
+    }
+    expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
     returning.close();
   }, 60_000);
 });

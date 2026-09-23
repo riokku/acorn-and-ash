@@ -195,7 +195,9 @@ export function hint(state: HudState): string {
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
-  if (state.nearGatherSpot) return 'Press E to gather sticks';
+  if (state.nearGatherSpot !== null) {
+    return `Press E to gather ${ITEM_KINDS[state.nearGatherSpot].pluralName.toLowerCase()}`;
+  }
   // A tree or animal only offers a hint once there is an axe to swing: without
   // one the server ignores the click outright (trySwing's own first check), so
   // hinting at it here would send you to click on something that does nothing.

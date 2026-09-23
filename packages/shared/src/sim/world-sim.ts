@@ -406,14 +406,14 @@ export class WorldSimulation {
   private castCounter = 0;
   private readonly hungerEvents: HungerEvent[] = [];
   private readonly craftEvents: CraftedEvent[] = [];
-  /** Who gathered a stick this tick, so the world server knows whose pack to send. */
+  /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
   /** Everything anybody has ever built. Nothing is ever removed from it yet. */
   private readonly builtProps: BuiltProp[] = [];
   private nextBuiltPropId = 1;
   private readonly buildEvents: BuildEvent[] = [];
-  /** Built-prop id -> whoever it belongs to, for the homes among them. */
-  private readonly homeOwners = new Map<number, string>();
+  /** Built-prop id -> whoever it belongs to, for anything capped per player. */
+  private readonly ownedBuiltProps = new Map<number, string>();
   /**
    * The props as they stand right now.
    *
@@ -835,17 +835,17 @@ export class WorldSimulation {
   }
 
   /**
-   * Gather a stick from a nearby patch of fallen branches, if there is one in
-   * reach and this player is not still catching their breath from a swing, a
-   * cast or a gather of their own. Unlike a pickup the patch is never used
-   * up - only how often any one player may draw from it. Returns whether it
-   * happened.
+   * Gather from a nearby patch - sticks or flowers, whatever it offers - if
+   * there is one in reach and this player is not still catching their breath
+   * from a swing, a cast or a gather of their own. Unlike a pickup the patch
+   * is never used up - only how often any one player may draw from it.
+   * Returns whether it happened.
    */
   private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
     if (runtime.swingCooldownTicks > 0) return false;
     const spot = gatherSpotInReach(position, this.clearing.gatherSpots);
     if (spot === null) return false;
-    if (addItem(runtime.inventory, 'stick') === 0) return false;
+    if (addItem(runtime.inventory, spot.item) === 0) return false;
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     this.gatherEvents.push(runtime.netId);
@@ -967,8 +967,8 @@ export class WorldSimulation {
 
   /**
    * Place whatever was picked from the build menu in front of this player, if
-   * they can afford it, there is a clear spot for it, and - for a home - they
-   * do not already have one.
+   * they can afford it, there is a clear spot for it, and - for anything
+   * capped to one per player - they do not already have one of that kind.
    */
   private tryBuild(
     runtime: PlayerRuntime,
@@ -979,9 +979,15 @@ export class WorldSimulation {
     if (runtime.swingCooldownTicks > 0) return;
     const buildable = BUILDABLE_KINDS[kind];
     if (!canAfford(runtime.inventory, buildable)) return;
-    // One home per player: the whole point is that it is always the same
-    // place to come back to, which a second one would only confuse.
-    if (buildable.isHome && runtime.playerKey !== null && this.hasHome(runtime.playerKey)) return;
+    // Capped kinds are capped per kind, not shared across all of them: a
+    // cabin does not block a flower bed, and one flower bed does not block a
+    // second, different, capped decoration.
+    if (
+      buildable.capPerPlayer &&
+      runtime.playerKey !== null &&
+      this.ownsBuildable(runtime.playerKey, kind)
+    )
+      return;
 
     const blockers: BuildBlocker[] = [
       ...this.standing.map((prop) => ({
@@ -1009,25 +1015,27 @@ export class WorldSimulation {
 
     const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z };
     this.builtProps.push(prop);
-    const ownerKey = buildable.isHome ? runtime.playerKey : null;
-    if (ownerKey !== null) this.homeOwners.set(prop.id, ownerKey);
+    const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
+    if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
   }
 
-  /** Whether this player already has a home built somewhere in the world. */
-  private hasHome(playerKey: string): boolean {
-    for (const owner of this.homeOwners.values()) {
-      if (owner === playerKey) return true;
+  /** Whether this player already has one of this particular kind built somewhere. */
+  private ownsBuildable(playerKey: string, kind: BuildableKindId): boolean {
+    for (const [id, owner] of this.ownedBuiltProps) {
+      if (owner !== playerKey) continue;
+      const prop = this.builtProps.find((candidate) => candidate.id === id);
+      if (prop !== undefined && prop.kind === kind) return true;
     }
     return false;
   }
 
   /** Just outside this player's own front door, or null if they have no home. */
   private homePositionFor(playerKey: string): Vec3 | null {
-    for (const [id, owner] of this.homeOwners) {
+    for (const [id, owner] of this.ownedBuiltProps) {
       if (owner !== playerKey) continue;
       const home = this.builtProps.find((prop) => prop.id === id);
-      if (home === undefined) continue;
+      if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) continue;
       const footprint = BUILDABLE_KINDS[home.kind].footprintRadius;
       return { x: home.x, y: 0, z: home.z + footprint + 1.5 };
     }
@@ -1248,7 +1256,7 @@ export class WorldSimulation {
     for (const { ownerKey, ...prop } of props) {
       this.builtProps.push(prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
-      if (ownerKey !== null) this.homeOwners.set(prop.id, ownerKey);
+      if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     }
   }
 
