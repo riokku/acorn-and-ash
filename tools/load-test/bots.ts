@@ -16,6 +16,7 @@ import { parseArgs } from 'node:util';
 import {
   INPUT_SEND_INTERVAL_MS,
   MAX_PLAYERS_PER_WORLD,
+  SnapshotFlag,
   TICK_MILLISECONDS,
   createInput,
   decodeServerMessage,
@@ -91,7 +92,12 @@ function startBot(index: number, stats: BotStats): { stop: () => void } {
     if (message?.type !== 'snapshot') return;
     if (stats.snapshots === 0) stats.firstSnapshotMs = performance.now() - connectedAt;
     stats.snapshots += 1;
-    stats.playersSeen = Math.max(stats.playersSeen, message.entities.length);
+    // The wildlife rides along in the same snapshot as everybody else, so this
+    // has to be told apart from a player to mean what it says.
+    const players = message.entities.filter(
+      (entity) => (entity.flags & SnapshotFlag.Animal) === 0,
+    ).length;
+    stats.playersSeen = Math.max(stats.playersSeen, players);
   });
 
   socket.addEventListener('error', () => stats.errors.push('socket error'));
