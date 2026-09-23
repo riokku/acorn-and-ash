@@ -10,6 +10,7 @@ import {
   encodePickupsTaken,
   encodePing,
   encodeCraft,
+  encodeBuiltProps,
   encodeCaught,
   encodeCrafted,
   encodeFishing,
@@ -28,6 +29,7 @@ import {
 import { createInput } from '../src/sim/player';
 import type {
   AnimalCaught,
+  BuiltProp,
   CraftedEvent,
   FishingEvent,
   HungerEvent,
@@ -511,6 +513,53 @@ describe('telling a player what they caught', () => {
   it('refuses an item this build has never heard of', () => {
     const encoded = new Uint8Array(encodeCaught({ netId: 1, item: 'meat', added: 1 }).slice(0));
     encoded[3] = 200;
+    expect(decodeServerMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('telling everybody what has been built', () => {
+  const roundTrip = (props: readonly BuiltProp[]): readonly BuiltProp[] | null => {
+    const decoded = decodeServerMessage(encodeBuiltProps(props));
+    return decoded?.type === 'builtProps' ? decoded.props : null;
+  };
+
+  it('carries an empty world', () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it('carries every campfire, with its id and where it stands', () => {
+    const props: BuiltProp[] = [
+      { id: 1, kind: 'campfire', x: 4.2, z: -6.75 },
+      { id: 2, kind: 'campfire', x: -30, z: 12.5 },
+    ];
+    const decoded = roundTrip(props);
+    expect(decoded).toHaveLength(2);
+    expect(decoded?.[0]?.id).toBe(1);
+    expect(decoded?.[0]?.kind).toBe('campfire');
+    expect(decoded?.[0]?.x).toBeCloseTo(4.2, 2);
+    expect(decoded?.[0]?.z).toBeCloseTo(-6.75, 2);
+    expect(decoded?.[1]).toEqual(expect.objectContaining({ id: 2, kind: 'campfire' }));
+  });
+
+  it('fits an empty list in two bytes', () => {
+    expect(encodeBuiltProps([]).byteLength).toBe(2);
+  });
+
+  it('costs seven bytes a prop', () => {
+    const props: BuiltProp[] = [{ id: 1, kind: 'campfire', x: 0, z: 0 }];
+    expect(encodeBuiltProps(props).byteLength).toBe(9);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0 }]);
+    expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
+  });
+
+  it('refuses a kind this build has never heard of', () => {
+    const encoded = new Uint8Array(
+      encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0 }]).slice(0),
+    );
+    encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
   });
 });

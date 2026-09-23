@@ -8,12 +8,20 @@
  */
 
 import type { ItemId } from '../data/items';
-import { recipeFor, type Recipe } from '../data/recipes';
+import { recipeFor, type RecipeCost } from '../data/recipes';
 import { addItem, countOf, removeItem, roomFor, type Inventory } from './inventory';
 
-/** Whether this pack has everything a recipe costs. */
-export function canAfford(inventory: Inventory, recipe: Recipe): boolean {
-  return recipe.costs.every((cost) => countOf(inventory, cost.item) >= cost.amount);
+/**
+ * Whether this pack has everything something costs.
+ *
+ * Takes anything with a `costs` list rather than a `Recipe` specifically, so
+ * a buildable - which makes nothing you carry - can be checked the same way.
+ */
+export function canAfford(
+  inventory: Inventory,
+  costed: { readonly costs: readonly RecipeCost[] },
+): boolean {
+  return costed.costs.every((cost) => countOf(inventory, cost.item) >= cost.amount);
 }
 
 /**

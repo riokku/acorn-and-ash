@@ -7,6 +7,7 @@ import {
   encodePing,
   createInput,
   type AnimalCaught,
+  type BuiltPropsMessage,
   type CraftedEvent,
   type FishingEvent,
   type HungerEvent,
@@ -150,6 +151,19 @@ export class TestClient {
   /** Everything the server has said about what this client caught, oldest first. */
   caught(): AnimalCaught[] {
     return this.received.flatMap((entry) => (entry.type === 'caught' ? [entry.event] : []));
+  }
+
+  /** The newest word on everything anybody has built. */
+  builtProps(): BuiltPropsMessage['props'] {
+    const messages = this.received.filter((entry) => entry.type === 'builtProps');
+    return messages[messages.length - 1]?.props ?? [];
+  }
+
+  /** The first word on what has been built, sent the moment you join. */
+  openingBuiltProps(): BuiltPropsMessage['props'] {
+    const message = this.received.find((entry) => entry.type === 'builtProps');
+    if (message === undefined) throw new Error('Never received the opening built props');
+    return message.props;
   }
 
   /** Every swing the server has told us about. */

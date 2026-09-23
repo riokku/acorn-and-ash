@@ -6,7 +6,7 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
-> **Phase 2 — Survive.** Right now there is a hand-built home clearing with
+> **Phase 3 — Home.** Right now there is a hand-built home clearing with
 > placeholder trees, rocks and a pond, surrounded by generated wilderness you
 > can walk out into, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
@@ -15,8 +15,9 @@ The game is online-only. Every world runs on the server.
 > hand and craft your own axe or rod instead. You get hungry the longer you
 > play, and eating a fish tops you back up. Rabbits live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
-> that fells a tree and it pays out meat, worth even more than a fish. See
-> [the roadmap](#roadmap).
+> that fells a tree and it pays out meat, worth even more than a fish. Chop
+> enough logs and you can build a campfire, the first thing Phase 3 lets you
+> place in the world. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -27,6 +28,7 @@ The game is online-only. Every world runs on the server.
 | `Space`                           | Jump                       |
 | `E`                               | Pick up, gather, eat       |
 | `1` / `2`                         | Craft an axe / fishing rod |
+| `B`                               | Build a campfire           |
 | Left mouse                        | Chop, cast, hook           |
 | Mouse                             | Look around                |
 | `Esc`                             | Let go of the mouse        |
@@ -118,6 +120,18 @@ Half an hour is a long time to wait while working on it, so `local` runs and
 preview links use two minutes instead, set by `WORLD_REGROW_SECONDS` in
 [`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
 production use the real wait.
+
+### Building
+
+Press `B` to place a campfire (a placeholder pile of logs, for now) just in
+front of you, anywhere in the clearing - it costs four logs, exactly what
+felling the landmark oak by the axe stump pays out. The hint at the bottom
+tells you when the spot you're facing is clear and your pack can afford one.
+What a campfire costs lives in
+[`packages/shared/src/data/buildables.ts`](packages/shared/src/data/buildables.ts).
+It does nothing yet beyond standing there - the first small step toward
+Phase 3's cabin. See
+[decision 0020](docs/decisions/0020-a-campfire-you-can-build.md).
 
 ## Running it locally
 

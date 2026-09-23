@@ -25,6 +25,7 @@ export * from './data/items';
 export * from './data/fish';
 export * from './data/recipes';
 export * from './data/animals';
+export * from './data/buildables';
 
 export * from './collision/capsule';
 
@@ -36,6 +37,7 @@ export * from './sim/pickups';
 export * from './sim/gathering';
 export * from './sim/chopping';
 export * from './sim/hunting';
+export * from './sim/building';
 export * from './sim/crafting';
 export * from './sim/regrowth';
 export * from './sim/fishing';
