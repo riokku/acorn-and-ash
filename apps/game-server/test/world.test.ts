@@ -14,6 +14,7 @@ import {
   PROP_KINDS,
   PlayerButton,
   SNAPSHOT_HZ,
+  SnapshotFlag,
   STICK_PATCHES,
   TICK_HZ,
   buildTestClearing,
@@ -27,6 +28,9 @@ import { sleep, TestClient, waitFor } from './helpers';
 /** Each test gets its own world so they cannot tread on each other. */
 let worldCounter = 0;
 const nextWorldId = (): string => `world-${++worldCounter}-${Math.random().toString(36).slice(2)}`;
+
+/** The hand-placed wildlife rides along in every snapshot now; this tells it apart from a player. */
+const isAnimal = (entity: { flags: number }): boolean => (entity.flags & SnapshotFlag.Animal) !== 0;
 
 describe('the game server Worker', () => {
   it('answers a health check', async () => {
@@ -60,8 +64,9 @@ describe('joining a world', () => {
 
     const snapshot = client.latestSnapshot();
     expect(snapshot.tick).toBeGreaterThan(0);
-    expect(snapshot.entities).toHaveLength(1);
-    expect(snapshot.entities[0]?.netId).toBe(client.welcome().netId);
+    const players = snapshot.entities.filter((entity) => !isAnimal(entity));
+    expect(players).toHaveLength(1);
+    expect(players[0]?.netId).toBe(client.welcome().netId);
     client.close();
   });
 
@@ -396,8 +401,9 @@ describe('a world that empties and fills again', () => {
     await waitFor('some snapshots', () => second.snapshots().length >= 3);
 
     // Exactly one player in the world: the one who is actually here.
-    expect(second.latestSnapshot().entities).toHaveLength(1);
-    expect(second.latestSnapshot().entities[0]?.netId).toBe(second.welcome().netId);
+    const players = second.latestSnapshot().entities.filter((entity) => !isAnimal(entity));
+    expect(players).toHaveLength(1);
+    expect(players[0]?.netId).toBe(second.welcome().netId);
     second.close();
   });
 
@@ -938,5 +944,37 @@ describe('hunger', () => {
     await waitFor('a hunger reading after coming back', () => second.hunger().length > 0);
     expect(second.latestHunger()?.hunger).toBe(0);
     second.close();
+  }, 15_000);
+});
+
+describe('wildlife', () => {
+  it('rides along in the snapshot every player already gets', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a snapshot with wildlife in it', () =>
+      client.latestSnapshot().entities.some(isAnimal),
+    );
+    client.close();
+  });
+
+  it('moves on its own while the world ticks, not only in the shared package tests', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a snapshot with wildlife in it', () =>
+      client.latestSnapshot().entities.some(isAnimal),
+    );
+    const first = client.latestSnapshot().entities.find(isAnimal);
+    if (first === undefined) throw new Error('expected an animal in the snapshot');
+    const { netId: animalId, x: startX, z: startZ } = first;
+
+    await waitFor(
+      'that animal to have wandered off its den',
+      () => {
+        const now = client
+          .latestSnapshot()
+          .entities.find((entity) => entity.netId === animalId && isAnimal(entity));
+        return now !== undefined && Math.hypot(now.x - startX, now.z - startZ) > 0.15;
+      },
+      6_000,
+    );
+    client.close();
   }, 15_000);
 });

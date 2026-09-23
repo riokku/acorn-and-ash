@@ -13,7 +13,9 @@ The game is online-only. Every world runs on the server.
 > axe standing in a stump and chop trees down; they grow back while you are
 > away. Find the rod on the bank of the pond and catch fish. Gather sticks by
 > hand and craft your own axe or rod instead. You get hungry the longer you
-> play, and eating a fish tops you back up. See [the roadmap](#roadmap).
+> play, and eating a fish tops you back up. Rabbits now live out in the
+> wilderness - walk up on one and it bolts, though catching it is still to
+> come. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -48,6 +50,14 @@ the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+
+### Wildlife
+
+A few rabbits (a placeholder box with two ears, for now) live at fixed spots
+out in the wilderness. Left alone they amble about near home; get too close
+and one bolts, curving away for as long as you keep following. There is
+nothing to do with one yet - catching it is the next change. See
+[decision 0018](docs/decisions/0018-a-rabbit-that-flees.md).
 
 ### Fishing
 

@@ -12,8 +12,10 @@ import {
   TICK_MILLISECONDS,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
+import { ANIMAL_KINDS } from '../src/data/animals';
 import { ITEM_KINDS } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
+import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
@@ -187,10 +189,16 @@ describe('the world simulation', () => {
     sim.addPlayer(2);
     drive(sim, 1, 0, 1, 20);
 
-    const seenByOne = sim.snapshotFor(1);
-    const seenByTwo = sim.snapshotFor(2);
-    expect(seenByOne.map((entity) => entity.netId).sort()).toEqual([1, 2]);
-    expect(seenByTwo.map((entity) => entity.netId).sort()).toEqual([1, 2]);
+    // Both are within earshot of some of the hand-placed wildlife too; this
+    // is about the players, so wildlife is filtered back out.
+    const playerIdsSeenBy = (netId: number): number[] =>
+      sim
+        .snapshotFor(netId)
+        .filter((entity) => (entity.flags & SnapshotFlag.Animal) === 0)
+        .map((entity) => entity.netId)
+        .sort((a, b) => a - b);
+    expect(playerIdsSeenBy(1)).toEqual([1, 2]);
+    expect(playerIdsSeenBy(2)).toEqual([1, 2]);
   });
 
   it('marks a walking player as moving', () => {
@@ -248,9 +256,14 @@ describe('the world simulation', () => {
     sim.addPlayer(2);
     sim.placePlayer(2, { x: INTEREST_RADIUS + 50, y: 0, z: 0 }, 0);
 
-    expect(sim.snapshotFor(1).map((entity) => entity.netId)).toEqual([1]);
+    const playerIdsSeenBy = (netId: number): number[] =>
+      sim
+        .snapshotFor(netId)
+        .filter((entity) => (entity.flags & SnapshotFlag.Animal) === 0)
+        .map((entity) => entity.netId);
+    expect(playerIdsSeenBy(1)).toEqual([1]);
     // A player always sees themselves, however far out they are.
-    expect(sim.snapshotFor(2).map((entity) => entity.netId)).toEqual([2]);
+    expect(playerIdsSeenBy(2)).toEqual([2]);
   });
 
   it('gives the same result twice from the same inputs', () => {
@@ -1043,5 +1056,88 @@ describe('trees growing back', () => {
     const sim = createWorld();
     expect(sim.persistableTrees()).toEqual([]);
     expect(sim.changedTrees()).toEqual([]);
+  });
+});
+
+describe('wildlife', () => {
+  /** An animal entity out of a snapshot, or throws: every test here expects one. */
+  function animalEntity(sim: WorldSimulation, viewerNetId: number, animalId: number) {
+    const found = sim
+      .snapshotFor(viewerNetId)
+      .find((entity) => entity.netId === animalId && (entity.flags & SnapshotFlag.Animal) !== 0);
+    if (found === undefined) throw new Error(`Animal ${animalId} was not in the snapshot`);
+    return found;
+  }
+
+  it('spawns one animal per den, flagged as wildlife and nowhere else', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const entities = sim.snapshotFor(1);
+    const animals = entities.filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(animals.map((entity) => entity.netId).sort()).toEqual(
+      ANIMAL_DENS.map((den) => den.id).sort(),
+    );
+    // The one player in this snapshot is not mistaken for wildlife.
+    expect(entities.filter((entity) => (entity.flags & SnapshotFlag.Animal) === 0)).toHaveLength(1);
+  });
+
+  it('starts sitting right at its den', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const den = ANIMAL_DENS[0];
+    if (den === undefined) throw new Error('no den to test against');
+    const entity = animalEntity(sim, 1, den.id);
+    expect(entity.x).toBeCloseTo(den.x, 5);
+    expect(entity.z).toBeCloseTo(den.z, 5);
+  });
+
+  it('ambles about without ever wandering past its leash', () => {
+    const sim = createWorld();
+    // Left at the default spawn point, which every den is well clear of, so
+    // nothing here ever startles.
+    sim.addPlayer(1);
+    const den = ANIMAL_DENS[0];
+    if (den === undefined) throw new Error('no den to test against');
+    const leash = ANIMAL_KINDS.rabbit.leashRadius;
+
+    let moved = false;
+    for (let i = 0; i < 600; i++) {
+      sim.step(tickClock());
+      const entity = animalEntity(sim, 1, den.id);
+      const distanceFromDen = Math.hypot(entity.x - den.x, entity.z - den.z);
+      expect(distanceFromDen).toBeLessThanOrEqual(leash + 0.2);
+      if (distanceFromDen > 0.5) moved = true;
+    }
+    // Not just sitting still the whole time - it actually went somewhere.
+    expect(moved).toBe(true);
+  });
+
+  it('bolts once a player gets close, and puts distance between them', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const den = ANIMAL_DENS[0];
+    if (den === undefined) throw new Error('no den to test against');
+    // Well inside the alert radius.
+    sim.placePlayer(1, { x: den.x, y: 0, z: den.z + 1 }, 0);
+
+    const distanceToPlayer = (): number => {
+      const entity = animalEntity(sim, 1, den.id);
+      return Math.hypot(entity.x - den.x, entity.z - (den.z + 1));
+    };
+
+    const before = distanceToPlayer();
+    for (let i = 0; i < 40; i++) sim.step(tickClock());
+    expect(distanceToPlayer()).toBeGreaterThan(before);
+  });
+
+  it('only tells a player about wildlife within the interest radius', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    // Nowhere near any of the hand-placed dens.
+    sim.placePlayer(1, { x: 140, y: 0, z: 140 }, 0);
+    const animals = sim
+      .snapshotFor(1)
+      .filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(animals).toEqual([]);
   });
 });

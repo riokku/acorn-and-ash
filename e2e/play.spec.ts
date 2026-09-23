@@ -6,6 +6,7 @@ declare global {
       selfNetId(): number;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+      animals(): Array<{ id: number; x: number; y: number; z: number }>;
       carrying(): Array<{ item: string; count: number }>;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
@@ -342,9 +343,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   await context.close();
 });
 
-test('you can gather sticks and craft your own axe, without ever finding one', async ({
-  page,
-}) => {
+test('you can gather sticks and craft your own axe, without ever finding one', async ({ page }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

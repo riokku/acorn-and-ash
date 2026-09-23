@@ -10,6 +10,7 @@ import {
   PlayerButton,
   RECIPE_ITEMS,
   SPAWN_POSITION,
+  SnapshotFlag,
   buildTestClearing,
   buildWilderness,
   castLanding,
@@ -32,6 +33,7 @@ import {
   type ItemId,
   type PlacedProp,
   type ServerMessage,
+  type SnapshotEntity,
   type Vec3,
 } from '@acorn/shared';
 
@@ -39,10 +41,11 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer } from './net/local-player';
-import { RemotePlayers } from './net/remote-players';
+import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
+import { createCritter, type Critter } from './scene/critter';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
@@ -73,11 +76,18 @@ const FISHING_CAMERA_PITCH = 0.62;
 /** The fish that bites least often, for a word of congratulation. */
 const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item ?? null;
 
+/** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
+function isAnimalEntity(entity: SnapshotEntity): boolean {
+  return (entity.flags & SnapshotFlag.Animal) !== 0;
+}
+
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+  /** Every animal currently in view, wherever this browser last heard it was. */
+  animals(): Array<{ id: number; x: number; y: number; z: number }>;
   /** What the server says we carry. */
   carrying(): Array<{ item: string; count: number }>;
   /** Which pickups the server says are gone. */
@@ -134,8 +144,10 @@ export interface GameOptions {
 export class Game {
   private readonly options: GameOptions;
   private readonly scene = new THREE.Scene();
-  private readonly remotePlayers = new RemotePlayers();
+  private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
+  private readonly remoteAnimals = new InterpolatedEntities();
+  private readonly critters = new Map<number, Critter>();
   private readonly scratch: Vec3 = vec3();
 
   private setup: RendererSetup | null = null;
@@ -236,6 +248,11 @@ export class Game {
           const pose = this.remotePlayers.poseOf(netId);
           return { netId, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
         }),
+      animals: () =>
+        this.remoteAnimals.netIds().map((id) => {
+          const pose = this.remoteAnimals.poseOf(id);
+          return { id, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
+        }),
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
@@ -295,6 +312,8 @@ export class Game {
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
     this.remoteCharacters.clear();
+    for (const critter of this.critters.values()) critter.dispose();
+    this.critters.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -327,18 +346,25 @@ export class Game {
       }
       case 'snapshot': {
         this.serverTick = message.tick;
-        this.playersOnline = message.entities.length;
 
-        const self = message.entities.find((entity) => entity.netId === this.selfNetId);
+        const playerEntities = message.entities.filter((entity) => !isAnimalEntity(entity));
+        const animalEntities = message.entities.filter(isAnimalEntity);
+        this.playersOnline = playerEntities.length;
+
+        const self = playerEntities.find((entity) => entity.netId === this.selfNetId);
         if (self !== undefined) this.localPlayer?.reconcile(self, message.ackSeq);
 
-        this.remotePlayers.ingest(message.serverTimeMs, message.entities, this.selfNetId);
+        this.remotePlayers.ingest(message.serverTimeMs, playerEntities, this.selfNetId);
         const present = new Set(
-          message.entities
+          playerEntities
             .filter((entity) => entity.netId !== this.selfNetId)
             .map((entity) => entity.netId),
         );
         for (const netId of this.remotePlayers.retainOnly(present)) this.removeRemote(netId);
+
+        this.remoteAnimals.ingest(message.serverTimeMs, animalEntities);
+        const presentAnimals = new Set(animalEntities.map((entity) => entity.netId));
+        for (const id of this.remoteAnimals.retainOnly(presentAnimals)) this.removeCritter(id);
         break;
       }
       case 'playerLeft': {
@@ -574,6 +600,24 @@ export class Game {
     return character;
   }
 
+  private removeCritter(animalId: number): void {
+    const critter = this.critters.get(animalId);
+    if (critter === undefined) return;
+    this.scene.remove(critter.group);
+    critter.dispose();
+    this.critters.delete(animalId);
+  }
+
+  private critterFor(animalId: number): Critter {
+    const existing = this.critters.get(animalId);
+    if (existing !== undefined) return existing;
+
+    const critter = createCritter();
+    this.scene.add(critter.group);
+    this.critters.set(animalId, critter);
+    return critter;
+  }
+
   /* ---------------------------------------------------------------------- */
   /* The frame                                                               */
   /* ---------------------------------------------------------------------- */
@@ -610,6 +654,7 @@ export class Game {
 
     this.updateLocalPlayer(deltaSeconds, camera);
     this.updateRemotePlayers(deltaSeconds);
+    this.updateRemoteAnimals(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
 
     setup.renderer.render(this.scene, camera.camera);
@@ -721,6 +766,19 @@ export class Game {
       const character = this.characterFor(netId);
       character.group.position.set(pose.x, pose.y, pose.z);
       character.group.rotation.y = this.facingWhileFishing(netId, pose) ?? pose.yaw;
+    }
+  }
+
+  private updateRemoteAnimals(deltaSeconds: number): void {
+    if (this.clearingScene === null) return;
+    this.remoteAnimals.advance(deltaSeconds);
+
+    for (const animalId of this.remoteAnimals.netIds()) {
+      const pose = this.remoteAnimals.poseOf(animalId);
+      if (pose === undefined) continue;
+      const critter = this.critterFor(animalId);
+      critter.group.position.set(pose.x, pose.y, pose.z);
+      critter.group.rotation.y = pose.yaw;
     }
   }
 
