@@ -11,7 +11,11 @@
 
 import { MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
-import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
+import {
+  buildableKindFromIndex,
+  buildableKindIndex,
+  type BuildableKindId,
+} from '../data/buildables';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
@@ -91,6 +95,7 @@ const NO_ITEM_EATEN = 0xff;
 
 /** type(1) + which item to make(1) */
 const CRAFT_MESSAGE_BYTES = 2;
+const BUILD_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
 
@@ -184,6 +189,14 @@ export function encodeCraft(item: ItemId): ArrayBuffer {
   return buffer;
 }
 
+export function encodeBuild(kind: BuildableKindId): ArrayBuffer {
+  const buffer = new ArrayBuffer(BUILD_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Build);
+  view.setUint8(1, buildableKindIndex(kind));
+  return buffer;
+}
+
 /**
  * Read a message from a client.
  *
@@ -227,6 +240,13 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     const item = itemFromIndex(view.getUint8(1));
     if (item === null) return null;
     return { type: 'craft', item };
+  }
+
+  if (type === ClientMessageType.Build) {
+    if (data.byteLength !== BUILD_MESSAGE_BYTES) return null;
+    const kind = buildableKindFromIndex(view.getUint8(1));
+    if (kind === null) return null;
+    return { type: 'build', kind };
   }
 
   return null;

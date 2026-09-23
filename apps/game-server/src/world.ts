@@ -111,7 +111,7 @@ export class World extends DurableObject<WorldEnv> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ netId, playerKey } satisfies ConnectionAttachment);
 
-    simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined);
+    simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
@@ -154,6 +154,13 @@ export class World extends DurableObject<WorldEnv> {
       // waiting for the next step.
       simulation.craftItem(attachment.netId, decoded.item);
       this.announceCrafting(simulation);
+      return;
+    }
+    if (decoded.type === 'build') {
+      // Unlike crafting this still depends on where the player is and which
+      // way they are facing, so it waits for the next tick rather than
+      // settling immediately - the tick loop already has both to hand.
+      simulation.requestBuild(attachment.netId, decoded.kind);
       return;
     }
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
@@ -359,7 +366,7 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.drainBuildEvents();
     if (events.length === 0) return;
 
-    for (const event of events) this.writeBuiltProp(event.prop);
+    for (const event of events) this.writeBuiltProp(event.prop, event.ownerKey);
     this.broadcast(encodeBuiltProps(simulation.builtPropsList()));
     this.sendPacks(simulation, new Set(events.map((event) => event.netId)));
   }
@@ -534,6 +541,7 @@ export class World extends DurableObject<WorldEnv> {
       simulation.addPlayer(
         attachment.netId,
         attachment.playerKey ? this.loadPlayer(attachment.playerKey) : undefined,
+        attachment.playerKey,
       );
       highestNetId = Math.max(highestNetId, attachment.netId);
     }
@@ -678,6 +686,10 @@ export class World extends DurableObject<WorldEnv> {
       z REAL NOT NULL,
       built_at_ms INTEGER NOT NULL
     )`);
+    // A cabin remembers whose it is, so its owner can start there next time.
+    // Nothing built before homes existed had an owner - null leaves it exactly
+    // as communal as it always was.
+    this.addColumn('built_props', 'owner_key', 'TEXT');
   }
 
   /** Add a column to an existing table, unless it is already there. */
@@ -790,36 +802,38 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private loadBuiltProps(): BuiltProp[] {
-    const props: BuiltProp[] = [];
+  private loadBuiltProps(): (BuiltProp & { readonly ownerKey: string | null })[] {
+    const props: (BuiltProp & { readonly ownerKey: string | null })[] = [];
     const rows = this.ctx.storage.sql
       .exec<{
         id: number;
         kind_index: number;
         x: number;
         z: number;
-      }>('SELECT id, kind_index, x, z FROM built_props')
+        owner_key: string | null;
+      }>('SELECT id, kind_index, x, z, owner_key FROM built_props')
       .toArray();
     for (const row of rows) {
       const kind = buildableKindFromIndex(row.kind_index);
       // A row written by a newer build that knew about a kind this one does
       // not. Skipping it is better than refusing to let anybody in.
       if (kind === null) continue;
-      props.push({ id: row.id, kind, x: row.x, z: row.z });
+      props.push({ id: row.id, kind, x: row.x, z: row.z, ownerKey: row.owner_key });
     }
     return props;
   }
 
   /** Built props are never updated once placed, so this is always a fresh insert. */
-  private writeBuiltProp(prop: BuiltProp): void {
+  private writeBuiltProp(prop: BuiltProp, ownerKey: string | null): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO built_props (id, kind_index, x, z, built_at_ms) VALUES (?, ?, ?, ?, ?) ' +
+      'INSERT INTO built_props (id, kind_index, x, z, built_at_ms, owner_key) VALUES (?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO NOTHING',
       prop.id,
       buildableKindIndex(prop.kind),
       prop.x,
       prop.z,
       Date.now(),
+      ownerKey,
     );
   }
 

@@ -9,6 +9,7 @@ import {
   encodeInventory,
   encodePickupsTaken,
   encodePing,
+  encodeBuild,
   encodeCraft,
   encodeBuiltProps,
   encodeCaught,
@@ -448,6 +449,28 @@ describe('asking to craft something', () => {
 
   it('refuses an item this build has never heard of', () => {
     const encoded = new Uint8Array(encodeCraft('axe').slice(0));
+    encoded[1] = 200;
+    expect(decodeClientMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('asking to build something', () => {
+  it('survives a round trip', () => {
+    const decoded = decodeClientMessage(encodeBuild('cabin'));
+    expect(decoded).toEqual({ type: 'build', kind: 'cabin' });
+  });
+
+  it('is two bytes: not worth batching with the input bundle', () => {
+    expect(encodeBuild('campfire').byteLength).toBe(2);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeBuild('campfire');
+    expect(decodeClientMessage(encoded.slice(0, 1))).toBeNull();
+  });
+
+  it('refuses a buildable kind this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeBuild('campfire').slice(0));
     encoded[1] = 200;
     expect(decodeClientMessage(encoded.buffer)).toBeNull();
   });

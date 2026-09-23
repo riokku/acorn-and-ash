@@ -100,7 +100,6 @@ export class Controls {
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
     if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
     if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) buttons |= PlayerButton.Swing;
-    if (this.held.has('KeyB') || this.tapped.has('KeyB')) buttons |= PlayerButton.Build;
     return buttons;
   }
 
@@ -126,6 +125,22 @@ export class Controls {
       }
     });
     return indices;
+  }
+
+  /**
+   * Which build-menu slots were picked since this was last asked, in the same
+   * order and on the same keys as `takeCraftTaps` - the menu takes them over
+   * while it is open rather than needing keys of its own.
+   */
+  takeBuildTaps(): number[] {
+    return this.takeCraftTaps();
+  }
+
+  /** Whether B was pressed since this was last asked, to toggle the build menu. */
+  takeBuildMenuToggle(): boolean {
+    const pressed = this.tapped.has('KeyB');
+    this.tapped.delete('KeyB');
+    return pressed;
   }
 
   /** How far the mouse has moved since this was last asked, then reset. */

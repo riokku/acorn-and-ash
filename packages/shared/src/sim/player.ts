@@ -33,8 +33,6 @@ export const PlayerButton = {
    * so the time to click is counted from there. See sim/fishing.ts.
    */
   SawBite: 1 << 4,
-  /** A click wants to place whatever is aimed at right now. */
-  Build: 1 << 5,
 } as const;
 
 /**

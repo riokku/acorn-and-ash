@@ -1115,7 +1115,7 @@ describe('building', () => {
     throw new Error('never made it back to open ground');
   }
 
-  /** Face the middle of the clearing and hold Build until something appears. */
+  /** Face the middle of the clearing and ask to build until something appears. */
   async function buildCampfire(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
@@ -1125,7 +1125,8 @@ describe('building', () => {
         here === undefined
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
-      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      client.walk(0, 0, yaw, 4);
+      client.build('campfire');
       await sleep(120);
     }
     throw new Error('never built anything');
@@ -1185,7 +1186,8 @@ describe('building', () => {
         here === undefined
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
-      client.walk(0, 0, yaw, 4, PlayerButton.Build);
+      client.walk(0, 0, yaw, 4);
+      client.build('campfire');
       await sleep(100);
     }
 
