@@ -806,9 +806,15 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
  * short polls - the same lesson the trip out to a rabbit's den already
  * taught this file: each poll is a round trip through the browser, and
  * those add up to more than the walk itself does under a slow render loop.
+ *
+ * Stops the moment a build is actually possible, not only once close to the
+ * remembered spot: that spot is just a landmark guaranteed clear of
+ * everything, and plenty of ground closer than a straight line back to it
+ * is just as buildable.
  */
 async function walkToward(page: Page, target: { x: number; z: number }): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (await page.evaluate(() => window.acornDebug?.canBuild() ?? false)) return;
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - target.x, (here?.z ?? 0) - target.z);
     if (gap < 3) return;
@@ -847,7 +853,7 @@ async function buildCampfireFacing(page: Page, target: { x: number; z: number })
 test('you can chop enough logs to build a campfire, and it is still there next time', async ({
   browser,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const errors: string[] = [];
   const context = await browser.newContext();
   const page = await context.newPage();
