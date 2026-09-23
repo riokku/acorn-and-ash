@@ -128,3 +128,12 @@ a lower count.
   a live client - only that a swing lands and is reported back correctly.
   The shared and game-server suites cover the rest, the same trade-off
   decision 0022 already made for the cabin.
+- That one remaining browser test could not actually be confirmed running in
+  this session: the sandbox it runs in got slow enough, late in a long
+  session, that even the pre-existing, unrelated rabbit-hunting browser test
+  timed out at the same first step, walking to the animal, before this work
+  ever touched it. Everything else here - a clean typecheck, and all 470
+  shared and game-server tests - passed on the same machine at the same
+  time, so this reads as the sandbox running low on room for a live browser
+  that night rather than anything wrong with the raccoon itself. Worth
+  running this one test again next time the suite runs.
