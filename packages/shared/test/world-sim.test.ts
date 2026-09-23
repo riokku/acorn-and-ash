@@ -4,6 +4,8 @@ import {
   ANIMAL_RESPAWN_SECONDS,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
+  DODGE_COOLDOWN_TICKS,
+  DODGE_DISTANCE,
   HEALTH_MAX,
   HUNGER_MAX,
   INTEREST_RADIUS,
@@ -23,7 +25,7 @@ import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { addItem, countOf } from '../src/sim/inventory';
-import { PlayerButton, createInput } from '../src/sim/player';
+import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
 import { AXE_PICKUP_ID, AXE_STUMP, FLOWER_PATCHES, STICK_PATCHES } from '../src/world/clearing';
 import {
   inputsToConsume,
@@ -304,6 +306,74 @@ describe('the world simulation', () => {
     expect(after.position.x).toBeCloseTo(before.position.x, 6);
     expect(after.position.z).toBeCloseTo(before.position.z, 6);
     expect(after.facingYaw).toBeCloseTo(before.facingYaw, 6);
+  });
+});
+
+describe('dodging', () => {
+  it('steps straight back when nothing is held', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    // Facing yaw 0 looks down -Z, same as everywhere else - backward is +Z.
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+
+    const after = sim.readPlayer(1)?.position;
+    if (after === undefined) throw new Error('missing player');
+    expect(after.z - before.z).toBeGreaterThan(DODGE_DISTANCE * 0.9);
+    expect(Math.abs(after.x - before.x)).toBeLessThan(0.5);
+  });
+
+  it('steps in whatever direction is held, instead of straight back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    sim.queueInput(1, createInput(1, 1, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+
+    const after = sim.readPlayer(1)?.position;
+    if (after === undefined) throw new Error('missing player');
+    expect(after.x - before.x).toBeGreaterThan(DODGE_DISTANCE * 0.9);
+    expect(Math.abs(after.z - before.z)).toBeLessThan(0.5);
+  });
+
+  it('cannot be used again until it has recharged', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+    const afterFirst = sim.readPlayer(1)?.position;
+    if (afterFirst === undefined) throw new Error('missing player');
+
+    // Straight away, comfortably inside the cooldown.
+    sim.queueInput(1, createInput(2, 0, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+    const afterSecond = sim.readPlayer(1)?.position;
+    if (afterSecond === undefined) throw new Error('missing player');
+    expect(afterSecond.z - afterFirst.z).toBeLessThan(0.5);
+  });
+
+  it('is ready again once the cooldown passes', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+    const afterFirst = sim.readPlayer(1)?.position;
+    if (afterFirst === undefined) throw new Error('missing player');
+
+    for (let i = 0; i < DODGE_COOLDOWN_TICKS; i++) sim.step(tickClock());
+
+    sim.queueInput(1, createInput(2, 0, 0, 0, PlayerButton.Dodge));
+    sim.step(tickClock());
+    const afterSecond = sim.readPlayer(1)?.position;
+    if (afterSecond === undefined) throw new Error('missing player');
+    expect(afterSecond.z - afterFirst.z).toBeGreaterThan(DODGE_DISTANCE * 0.9);
   });
 });
 
@@ -1537,6 +1607,46 @@ describe('threats', () => {
       const restored = createWorld();
       restored.addPlayer(2, { ...saved, netId: 2 });
       expect(restored.healthOf(2)).toBe(HEALTH_MAX - threat.damage);
+    });
+  });
+
+  describe('a dodge through its swing', () => {
+    // Aimed straight at the den (yaw 0 already faces it from here) rather
+    // than away: a dodge this size would otherwise carry a player already
+    // this close straight out of attack range, which would only prove
+    // distance saved them, not the untouchable window this is actually
+    // about. Landing just past the den keeps them just as reachable on the
+    // far side, so only the window itself can be what saves them.
+    const towardDen = (seq: number): PlayerInput => createInput(seq, 0, 1, 0, PlayerButton.Dodge);
+
+    it('comes through untouched if it lands shortly before the swing resolves', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+
+      // Well into the twelve-tick wind-up, but with room to spare before it
+      // resolves - the untouchable window (seven ticks) easily reaches.
+      for (let i = 0; i < 8; i++) sim.step(tickClock());
+      sim.queueInput(1, towardDen(9));
+      sim.step(tickClock());
+      for (let i = 0; i < 4; i++) sim.step(tickClock());
+
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX);
+      expect(sim.drainHealthEvents().some((event) => event.dodged)).toBe(true);
+    });
+
+    it('has worn off by the time the swing resolves, if it lands too early', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+
+      // Right as the wind-up starts: seven ticks of cover is long gone by
+      // the time it resolves, thirteen steps in.
+      sim.queueInput(1, towardDen(1));
+      sim.step(tickClock());
+      for (let i = 0; i < 12; i++) sim.step(tickClock());
+
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
     });
   });
 });

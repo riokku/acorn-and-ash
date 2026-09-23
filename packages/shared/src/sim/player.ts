@@ -16,6 +16,7 @@ import {
 import { rotateToward } from '../math/angles';
 import { clamp, type Vec3 } from '../math/vec3';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import type { Direction2D } from './animals';
 
 /** Buttons are a bit field so the wire format stays one byte. */
 export const PlayerButton = {
@@ -33,6 +34,8 @@ export const PlayerButton = {
    * so the time to click is counted from there. See sim/fishing.ts.
    */
   SawBite: 1 << 4,
+  /** A quick step that leaves you briefly untouchable. See `WorldSimulation`'s `tryDodge`. */
+  Dodge: 1 << 5,
 } as const;
 
 /**
@@ -78,6 +81,22 @@ export function createPlayerMotion(spawn: Readonly<Vec3>, facingYaw = 0): Player
 }
 
 /**
+ * Which way a move input points in the world, given the camera's heading.
+ * Yaw 0 looks down -Z. `{ x: 0, z: 0 }` if nothing is held.
+ */
+export function worldMoveDirection(moveX: number, moveZ: number, yaw: number): Direction2D {
+  const inputLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
+  if (inputLength < 1e-3) return { x: 0, z: 0 };
+  const normalise = inputLength > 1 ? 1 / inputLength : 1;
+  const sinYaw = Math.sin(yaw);
+  const cosYaw = Math.cos(yaw);
+  return {
+    x: (-sinYaw * moveZ + cosYaw * moveX) * normalise,
+    z: (-cosYaw * moveZ - sinYaw * moveX) * normalise,
+  };
+}
+
+/**
  * Advance one player by a fixed time step.
  *
  * The client runs this for the player it controls so they move the instant a key
@@ -95,17 +114,12 @@ export function stepPlayer(
   // Turn the key presses into a direction in the world, using the camera heading.
   const moveX = clamp(input.moveX, -1, 1);
   const moveZ = clamp(input.moveZ, -1, 1);
-  const inputLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
-  const normalise = inputLength > 1 ? 1 / inputLength : 1;
-
-  const sinYaw = Math.sin(input.yaw);
-  const cosYaw = Math.cos(input.yaw);
+  const direction = worldMoveDirection(moveX, moveZ, input.yaw);
   const topSpeed = isHeld(input, PlayerButton.Sprint) ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
-  // Yaw 0 looks down -Z, which matches the camera's resting position.
-  const desiredX = (-sinYaw * moveZ + cosYaw * moveX) * normalise * topSpeed;
-  const desiredZ = (-cosYaw * moveZ - sinYaw * moveX) * normalise * topSpeed;
+  const desiredX = direction.x * topSpeed;
+  const desiredZ = direction.z * topSpeed;
 
-  const wantsToMove = inputLength > 1e-3;
+  const wantsToMove = direction.x !== 0 || direction.z !== 0;
   // Mid-air you get only a fraction of your usual grip on the world.
   const grip = motion.grounded ? 1 : PLAYER_AIR_CONTROL;
   const rate = (wantsToMove ? PLAYER_ACCELERATION : PLAYER_DECELERATION) * grip * deltaSeconds;

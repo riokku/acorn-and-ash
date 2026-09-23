@@ -467,27 +467,40 @@ describe('telling a player how much health they have', () => {
   };
 
   it('carries the number and who it is for', () => {
-    expect(roundTrip({ netId: 7, health: 75, knockedOut: false })).toEqual({
+    expect(roundTrip({ netId: 7, health: 75, knockedOut: false, dodged: false })).toEqual({
       netId: 7,
       health: 75,
       knockedOut: false,
+      dodged: false,
     });
   });
 
   it('carries a knockout', () => {
-    expect(roundTrip({ netId: 3, health: 100, knockedOut: true })).toEqual({
+    expect(roundTrip({ netId: 3, health: 100, knockedOut: true, dodged: false })).toEqual({
       netId: 3,
       health: 100,
       knockedOut: true,
+      dodged: false,
+    });
+  });
+
+  it('carries a dodge, separately from a knockout', () => {
+    expect(roundTrip({ netId: 3, health: 80, knockedOut: false, dodged: true })).toEqual({
+      netId: 3,
+      health: 80,
+      knockedOut: false,
+      dodged: true,
     });
   });
 
   it('fits in five bytes', () => {
-    expect(encodeHealth({ netId: 1, health: 50, knockedOut: false }).byteLength).toBe(5);
+    expect(
+      encodeHealth({ netId: 1, health: 50, knockedOut: false, dodged: false }).byteLength,
+    ).toBe(5);
   });
 
   it('refuses one that has been cut short', () => {
-    const encoded = encodeHealth({ netId: 1, health: 50, knockedOut: false });
+    const encoded = encodeHealth({ netId: 1, health: 50, knockedOut: false, dodged: false });
     expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
   });
 });

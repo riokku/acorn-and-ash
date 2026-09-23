@@ -22,7 +22,8 @@ The game is online-only. Every world runs on the server.
 > to decorate the place. A masked raccoon lives out there too, and it is not
 > shy - it comes after you, and enough hits knock you out. You wake up safe
 > at home, or the clearing, with nothing lost but the walk back - or fight it
-> off first, with the same axe, and it runs off empty-handed. See
+> off first, with the same axe, and it runs off empty-handed. A quick dodge
+> can get you through its swing untouched, timed right. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -37,6 +38,7 @@ The game is online-only. Every world runs on the server.
 | `B`                               | Open the build menu                            |
 | `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern |
 | Left mouse                        | Chop, cast, hook, fight off                    |
+| Left `Ctrl`                       | Dodge                                          |
 | Mouse                             | Look around                                    |
 | `Esc`                             | Let go of the mouse                            |
 
@@ -88,6 +90,12 @@ you're knocked out - you wake up safe at home, if you have a cabin, or the
 shared clearing otherwise, healed straight back up. Nothing else is lost
 yet; the only cost right now is the walk back. See
 [decision 0024](docs/decisions/0024-a-masked-raccoon-that-fights-back.md).
+
+Left `Ctrl` dodges - a quick, decisive step in whatever direction you are
+holding, or straight back if you are holding nothing - and leaves you
+briefly untouchable, so timed right it gets you through a swing rather than
+only away from it. It needs a moment to recharge before it is ready again.
+See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
 ### Fishing
 
