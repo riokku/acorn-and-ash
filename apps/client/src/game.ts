@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu';
 
 import {
+  ANIMAL_DENS,
   ANIMAL_KINDS,
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
+  HEALTH_MAX,
   HUNGER_MAX,
   ITEM_KINDS,
   POND_FISH,
@@ -31,6 +33,8 @@ import {
   treeInReach,
   vec3,
   type AnimalCaught,
+  type AnimalKind,
+  type AnimalKindId,
   type BuildableKindId,
   type BuildBlocker,
   type BuiltProp,
@@ -38,6 +42,7 @@ import {
   type CollisionWorld,
   type CraftedEvent,
   type FishingEvent,
+  type HealthEvent,
   type HungerEvent,
   type ItemId,
   type PlacedProp,
@@ -59,6 +64,7 @@ import { createCabin, type Cabin } from './scene/cabin';
 import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
 import { createCritter, type Critter } from './scene/critter';
+import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
@@ -108,13 +114,28 @@ function createBuiltMesh(kind: BuildableKindId): Campfire | Cabin | FlowerBed | 
   }
 }
 
+/** The placeholder model for whichever kind of wildlife this happens to be. */
+function createCritterFor(kind: AnimalKindId): Critter | Raccoon {
+  switch (kind) {
+    case 'rabbit':
+      return createCritter();
+    case 'maskedRaccoon':
+      return createRaccoon();
+  }
+}
+
+/** A den never moves or changes kind, so this is all a client ever needs to tell them apart. */
+function animalKindOf(animalId: number): AnimalKindId | undefined {
+  return ANIMAL_DENS.find((den) => den.id === animalId)?.kind;
+}
+
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
   /** Every animal currently in view, wherever this browser last heard it was. */
-  animals(): Array<{ id: number; x: number; y: number; z: number }>;
+  animals(): Array<{ id: number; kind: string; x: number; y: number; z: number }>;
   /** What the server says we carry. */
   carrying(): Array<{ item: string; count: number }>;
   /** Which pickups the server says are gone. */
@@ -136,7 +157,7 @@ export interface GameDebug {
   /** The tree a swing would land on right now, if any. */
   aimedTree(): { name: string; swingsLeft: number } | null;
   /** The animal a swing would land on right now, if any. A tree in reach always wins. */
-  aimedAnimal(): { name: string } | null;
+  aimedAnimal(): { name: string; hitsLeft?: number } | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -163,6 +184,10 @@ export interface GameDebug {
   hunger(): number;
   /** The last thing said about what we ate, if it is still on screen. */
   hungerNews(): string | null;
+  /** How much health we have left, from `HEALTH_MAX` (full) down to zero. */
+  health(): number;
+  /** The last thing said about our health, if it is still on screen. */
+  healthNews(): string | null;
   /** The last thing said about what we crafted, if it is still on screen. */
   craftingNews(): string | null;
   /** The last thing said about what we caught, if it is still on screen. */
@@ -184,7 +209,7 @@ export class Game {
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
   private readonly remoteAnimals = new InterpolatedEntities();
-  private readonly critters = new Map<number, Critter>();
+  private readonly critters = new Map<number, Critter | Raccoon>();
   private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
   private builtProps: readonly BuiltProp[] = [];
   private canBuild = false;
@@ -211,11 +236,13 @@ export class Game {
    */
   private readonly treeStates = new Map<number, { generation: number; felled: boolean }>();
   private readonly swingsLeft = new Map<number, number>();
+  /** Same idea as `swingsLeft`, for whichever wildlife fights back. */
+  private readonly threatHitsLeft = new Map<number, number>();
   /** The props as they stand: a regrown tree is a different size from the seeded one. */
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
   private aimedTree: { name: string; swingsLeft: number } | null = null;
-  private aimedAnimal: { name: string } | null = null;
+  private aimedAnimal: { name: string; hitsLeft?: number } | null = null;
   /** Every float in the pond, ours and everybody else's. */
   private readonly floats = new Floats();
   /** Our own line, as far as the server has told us. */
@@ -224,6 +251,9 @@ export class Game {
   /** How hungry we are, as far as the server has told us. */
   private hunger = HUNGER_MAX;
   private hungerNews: { text: string; until: number } | null = null;
+  /** How much health we have left, as far as the server has told us. */
+  private health = HEALTH_MAX;
+  private healthNews: { text: string; until: number } | null = null;
   private craftingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
   /** The server takes a breath after every cast ends; so does the hint. */
@@ -294,7 +324,13 @@ export class Game {
       animals: () =>
         this.remoteAnimals.netIds().map((id) => {
           const pose = this.remoteAnimals.poseOf(id);
-          return { id, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
+          return {
+            id,
+            kind: animalKindOf(id) ?? 'rabbit',
+            x: pose?.x ?? 0,
+            y: pose?.y ?? 0,
+            z: pose?.z ?? 0,
+          };
         }),
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
@@ -340,6 +376,8 @@ export class Game {
       fishingNews: () => this.currentNews(performance.now()),
       hunger: () => this.hunger,
       hungerNews: () => this.currentHungerNews(performance.now()),
+      health: () => this.health,
+      healthNews: () => this.currentHealthNews(performance.now()),
       craftingNews: () => this.currentCraftingNews(performance.now()),
       huntingNews: () => this.currentHuntingNews(performance.now()),
     };
@@ -448,12 +486,20 @@ export class Game {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
         break;
       }
+      case 'threatHit': {
+        this.threatHitsLeft.set(message.event.animalId, message.event.hitsLeft);
+        break;
+      }
       case 'fishing': {
         this.hearFromTheWater(message.event);
         break;
       }
       case 'hunger': {
         this.hearAboutHunger(message.event);
+        break;
+      }
+      case 'health': {
+        this.hearAboutHealth(message.event);
         break;
       }
       case 'crafted': {
@@ -536,6 +582,24 @@ export class Game {
     return news !== null && now < news.until ? news.text : null;
   }
 
+  /** Only ever about us: nobody else's health is any of our business. */
+  private hearAboutHealth(event: HealthEvent): void {
+    this.health = event.health;
+    if (event.knockedOut) {
+      const now = performance.now();
+      this.healthNews = { text: 'Knocked out! You wake up safe.', until: now + NEWS_MS };
+    }
+    // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
+    // than left for the next frame, so a stall in the render loop cannot eat
+    // the window this news is shown for.
+    this.options.hud.publish({ health: this.health, healthNews: this.currentHealthNews() });
+  }
+
+  private currentHealthNews(now = performance.now()): string | null {
+    const news = this.healthNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
   /** Only ever about us: nobody else has any reason to know what we just made. */
   private hearAboutCrafting(event: CraftedEvent): void {
     const now = performance.now();
@@ -555,6 +619,13 @@ export class Game {
   /** Only ever about us: nobody else has any reason to know what we just caught. */
   private hearAboutCatching(event: AnimalCaught): void {
     const now = performance.now();
+    // A threat fought off with nothing to show for it - the same reason a
+    // caught event can even have a null item now.
+    if (event.item === null) {
+      this.huntingNews = { text: 'You fought it off!', until: now + NEWS_MS };
+      this.options.hud.publish({ huntingNews: this.currentHuntingNews() });
+      return;
+    }
     const name = ITEM_KINDS[event.item].displayName.toLowerCase();
     // No article: a catch pays out in meat, hide and the like, not one more
     // countable thing the way a fish or a craft does.
@@ -720,11 +791,11 @@ export class Game {
     this.critters.delete(animalId);
   }
 
-  private critterFor(animalId: number): Critter {
+  private critterFor(animalId: number): Critter | Raccoon {
     const existing = this.critters.get(animalId);
     if (existing !== undefined) return existing;
 
-    const critter = createCritter();
+    const critter = createCritterFor(animalKindOf(animalId) ?? 'rabbit');
     this.scene.add(critter.group);
     this.critters.set(animalId, critter);
     return critter;
@@ -862,11 +933,26 @@ export class Game {
       target === null
         ? this.remoteAnimals.netIds().flatMap((id) => {
             const pose = this.remoteAnimals.poseOf(id);
-            return pose === undefined ? [] : [{ id, x: pose.x, z: pose.z }];
+            const kind = animalKindOf(id);
+            return pose === undefined || kind === undefined
+              ? []
+              : [{ id, x: pose.x, z: pose.z, kind }];
           })
         : [];
     const animalTarget = animalInReach(player.motion.position, camera.look.yaw, animalCandidates);
-    this.aimedAnimal = animalTarget === null ? null : { name: ANIMAL_KINDS.rabbit.displayName };
+    this.aimedAnimal =
+      animalTarget === null
+        ? null
+        : (() => {
+            // Widened from the narrow per-kind literal `as const` gives it,
+            // so an optional field like `threat` reads the same regardless
+            // of which kind this happens to be.
+            const kind: AnimalKind = ANIMAL_KINDS[animalTarget.kind];
+            return {
+              name: kind.displayName,
+              hitsLeft: this.threatHitsLeft.get(animalTarget.id) ?? kind.threat?.hitsToDefeat,
+            };
+          })();
 
     // The same rule the server uses: a tree or an animal you could swing at
     // gets the click first, and otherwise a rod and some water in front of
@@ -998,6 +1084,8 @@ export class Game {
       fishingNews: this.currentNews(now),
       hunger: this.hunger,
       hungerNews: this.currentHungerNews(now),
+      health: this.health,
+      healthNews: this.currentHealthNews(now),
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
     });

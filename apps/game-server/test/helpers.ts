@@ -12,10 +12,12 @@ import {
   type BuiltPropsMessage,
   type CraftedEvent,
   type FishingEvent,
+  type HealthEvent,
   type HungerEvent,
   type InventoryMessage,
   type ItemId,
   type PickupsTakenMessage,
+  type ThreatHitMessage,
   type TreeHitMessage,
   type TreeStatesMessage,
   type ServerMessage,
@@ -147,6 +149,27 @@ export class TestClient {
   latestHunger(): HungerEvent | undefined {
     const events = this.hunger();
     return events[events.length - 1];
+  }
+
+  /** Everything the server has said about this client's own health, oldest first. */
+  health(): HealthEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'health' ? [entry.event] : []));
+  }
+
+  /** The newest word on this client's health. */
+  latestHealth(): HealthEvent | undefined {
+    const events = this.health();
+    return events[events.length - 1];
+  }
+
+  /** The first word on this client's health, sent the moment you join. */
+  openingHealth(): HealthEvent | undefined {
+    return this.health()[0];
+  }
+
+  /** Every threat hit the server has told us about. */
+  threatHits(): ThreatHitMessage[] {
+    return this.received.filter((entry) => entry.type === 'threatHit');
   }
 
   /** Everything the server has said about what this client crafted, oldest first. */

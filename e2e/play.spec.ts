@@ -6,7 +6,7 @@ declare global {
       selfNetId(): number;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
-      animals(): Array<{ id: number; x: number; y: number; z: number }>;
+      animals(): Array<{ id: number; kind: string; x: number; y: number; z: number }>;
       carrying(): Array<{ item: string; count: number }>;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
@@ -17,7 +17,7 @@ declare global {
       treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
-      aimedAnimal(): { name: string } | null;
+      aimedAnimal(): { name: string; hitsLeft?: number } | null;
       canBuild(): boolean;
       buildMenuOpen(): boolean;
       builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
@@ -28,6 +28,8 @@ declare global {
       fishingNews(): string | null;
       hunger(): number;
       hungerNews(): string | null;
+      health(): number;
+      healthNews(): string | null;
       craftingNews(): string | null;
       huntingNews(): string | null;
     };
@@ -819,6 +821,84 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
     .toBe('You caught some meat!');
 
   // Nothing thrown while walking out, swinging or drawing the wildlife.
+  expect(errors).toEqual([]);
+});
+
+test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
+  // Wildlife lives well past the tree line, the same reason the rabbit hunt does.
+  test.setTimeout(600_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=raccoon-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Fetch the axe first: no axe, no fighting back, the same rule as chopping.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+  const raccoon = animals.find((entry) => entry.kind === 'maskedRaccoon');
+  if (raccoon === undefined) throw new Error('no masked raccoon in the wilderness');
+
+  // The same helpers the rabbit hunt uses: neither cares which kind of
+  // wildlife it is, only where it is and whether a swing would land.
+  await walkWithinReachOfAnimal(page, raccoon.id);
+  // Usually the fight hint, but a walk this long can run the hunger meter out
+  // first on a slow machine (it empties in three minutes here, not the real
+  // twenty) - hungry beats everything else on purpose, so either is the hint
+  // doing its job correctly.
+  await expect(page.locator('.hud-hint')).toContainText(
+    /Left click to fight off the masked raccoon|You're hungry/,
+  );
+
+  // Noticing, chasing, the wind-up, multi-hit defeat and the knockout-and-
+  // heal all already have thorough, fast, deterministic coverage in the
+  // shared and game-server suites (decision 0024) - a raccoon fights back,
+  // so fighting one all the way down live risks a real knockout, and a
+  // knocked-out bot walking all the way back out for a second attempt could
+  // take longer than this sandbox could reliably finish in. A live browser
+  // only needs to prove what only it can: the raccoon renders, the hint
+  // names it and its hit count, and one real swing reaches the real server
+  // and comes back as a lower count.
+  const before = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
+  expect(before).not.toBeNull();
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const stillThere = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
+      (entry) => entry.id === raccoon.id,
+    );
+    if (!stillThere) break; // landed enough to fell it outright - even better
+    const hitsLeft = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
+    if (hitsLeft !== null && before !== null && hitsLeft < before) break;
+
+    await page.mouse.down();
+    await page.waitForTimeout(200);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+  }
+
+  const stillThere = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
+    (entry) => entry.id === raccoon.id,
+  );
+  if (stillThere) {
+    const after = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
+    expect(after).not.toBeNull();
+    expect(after).toBeLessThan(before ?? Infinity);
+  }
+
+  // Nothing thrown while walking out, aiming or landing a swing.
   expect(errors).toEqual([]);
 });
 

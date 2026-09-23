@@ -6,7 +6,7 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
-> **Phase 3 — Home.** Right now there is a hand-built home clearing with
+> **Phase 4 — Danger.** Right now there is a hand-built home clearing with
 > placeholder trees, rocks and a pond, surrounded by generated wilderness you
 > can walk out into, a capsule you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
@@ -19,7 +19,11 @@ The game is online-only. Every world runs on the server.
 > enough logs and you can build a campfire, or a cabin of your own - once you
 > have one, that is where you start next time, instead of the open clearing.
 > Gather flowers the same way as sticks and plant a flower bed or a lantern
-> to decorate the place. See [the roadmap](#roadmap).
+> to decorate the place. A masked raccoon lives out there too, and it is not
+> shy - it comes after you, and enough hits knock you out. You wake up safe
+> at home, or the clearing, with nothing lost but the walk back - or fight it
+> off first, with the same axe, and it runs off empty-handed. See
+> [the roadmap](#roadmap).
 
 ## Controls
 
@@ -32,7 +36,7 @@ The game is online-only. Every world runs on the server.
 | `1` / `2`                         | Craft an axe / fishing rod                     |
 | `B`                               | Open the build menu                            |
 | `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern |
-| Left mouse                        | Chop, cast, hook                               |
+| Left mouse                        | Chop, cast, hook, fight off                    |
 | Mouse                             | Look around                                    |
 | `Esc`                             | Let go of the mouse                            |
 
@@ -69,6 +73,21 @@ reach of it - and it pays out meat, which restores more hunger than a fish
 since a catch takes an actual chase. A caught rabbit is back at its den,
 ready to catch again, a minute later. See
 [decision 0019](docs/decisions/0019-catching-wildlife.md).
+
+### Danger
+
+A masked raccoon lives out there too, at its own fixed dens same as a
+rabbit. Left alone it ambles about the same way - but get too close and,
+unlike a rabbit, it does not run: it comes straight for you. Once it
+catches up it stops and plants its feet for a moment before it swings; back
+out of reach before that moment ends and it misses. Land three hits of your
+own first, with the same axe, and it runs off with nothing to show for it.
+
+Getting hit costs health, a new meter alongside hunger. Run it out and
+you're knocked out - you wake up safe at home, if you have a cabin, or the
+shared clearing otherwise, healed straight back up. Nothing else is lost
+yet; the only cost right now is the walk back. See
+[decision 0024](docs/decisions/0024-a-masked-raccoon-that-fights-back.md).
 
 ### Fishing
 
@@ -291,8 +310,8 @@ licence forbids redistribution.
 | -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | P0 Foundation  | Monorepo, CI/CD, test clearing, a capsule with WASD, World Durable Object | Merging to `main` deploys to staging, and two browser tabs see each other move |
 | P1 First steps | Explore and gather                                                        | Chop a tree, log out, come back, and the stump is still there                  |
-| **P2 Survive** | Craft, eat, fish, hunt                                                    | A 30-minute session feels good                                                 |
+| P2 Survive     | Craft, eat, fish, hunt                                                    | A 30-minute session feels good                                                 |
 | P3 Home        | Build and decorate a cabin                                                | The cabin looks the same the next day                                          |
-| P4 Danger      | Combat, creatures, knockout and buried items                              | Nights feel tense but fair                                                     |
+| **P4 Danger**  | Combat, creatures, knockout and buried items                              | Nights feel tense but fair                                                     |
 | P5 Together    | Multiplayer at scale                                                      | 50 bots plus 10 people in one world stay smooth                                |
 | P6 Launch      | Polish and public release                                                 | Live and linked from itch.io                                                   |

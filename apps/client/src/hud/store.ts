@@ -1,4 +1,4 @@
-import { HUNGER_MAX, type ItemId } from '@acorn/shared';
+import { HEALTH_MAX, HUNGER_MAX, type ItemId } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
@@ -29,7 +29,7 @@ export interface HudState {
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
-  readonly aimedAnimal: { readonly name: string } | null;
+  readonly aimedAnimal: { readonly name: string; readonly hitsLeft?: number } | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -43,6 +43,10 @@ export interface HudState {
   readonly hunger: number;
   /** What we last ate, while it is still worth showing. */
   readonly hungerNews: string | null;
+  /** How much health we have left, from `HEALTH_MAX` (full) down to zero. */
+  readonly health: number;
+  /** What just happened to our health, while it is still worth showing. */
+  readonly healthNews: string | null;
   /** What we last made, while it is still worth showing. */
   readonly craftingNews: string | null;
   /** What we last caught, while it is still worth showing. */
@@ -74,6 +78,8 @@ const INITIAL: HudState = {
   fishingNews: null,
   hunger: HUNGER_MAX,
   hungerNews: null,
+  health: HEALTH_MAX,
+  healthNews: null,
   craftingNews: null,
   huntingNews: null,
 };

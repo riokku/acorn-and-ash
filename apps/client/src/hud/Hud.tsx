@@ -3,6 +3,8 @@ import { useSyncExternalStore } from 'react';
 import {
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
+  HEALTH_LOW_THRESHOLD,
+  HEALTH_MAX,
   HUNGER_LOW_THRESHOLD,
   HUNGER_MAX,
   ITEM_KINDS,
@@ -41,6 +43,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         />
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
         <Row label="Hunger" value={<Hunger state={state} />} />
+        <Row label="Health" value={<Health state={state} />} />
         <Row label="Carrying" value={carrying(state)} />
         <Row label="Craft" value={<Crafting state={state} />} />
         <Row label="Build" value={<Building state={state} />} />
@@ -57,18 +60,23 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
       {state.ready &&
       state.pointerLocked &&
       (state.fishingNews !== null ||
+        state.healthNews !== null ||
         state.hungerNews !== null ||
         state.craftingNews !== null ||
         state.huntingNews !== null) ? (
         <p className="hud-news">
-          {state.fishingNews ?? state.hungerNews ?? state.craftingNews ?? state.huntingNews}
+          {state.fishingNews ??
+            state.healthNews ??
+            state.hungerNews ??
+            state.craftingNews ??
+            state.huntingNews}
         </p>
       ) : null}
 
       {state.ready && state.pointerLocked ? (
         <p
           className={
-            state.fishing === 'biting' || state.hunger <= 0
+            state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
               ? 'hud-hint hud-hint-urgent'
               : 'hud-hint'
           }
@@ -117,6 +125,15 @@ function Hunger({ state }: { state: HudState }): React.JSX.Element {
   return (
     <span className={className}>
       {Math.round(state.hunger)}/{HUNGER_MAX}
+    </span>
+  );
+}
+
+function Health({ state }: { state: HudState }): React.JSX.Element {
+  const className = state.health <= HEALTH_LOW_THRESHOLD ? 'hud-status-bad' : undefined;
+  return (
+    <span className={className}>
+      {Math.round(state.health)}/{HEALTH_MAX}
     </span>
   );
 }
@@ -186,6 +203,9 @@ function costLabel(recipe: { readonly costs: Recipe['costs'] }): string {
 export function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
   if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
+  // Real danger, unlike being hungry: one more hit like the last one and you
+  // are knocked out, so this beats everything but an actual bite.
+  if (state.health <= HEALTH_LOW_THRESHOLD) return 'Hurt badly - one more hit and you are down';
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
@@ -225,7 +245,11 @@ function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
 }
 
 function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
-  return `Left click to catch the ${animal.name.toLowerCase()}`;
+  const name = animal.name.toLowerCase();
+  // Only a threat reports hits left at all - prey is always caught in one.
+  if (animal.hitsLeft === undefined) return `Left click to catch the ${name}`;
+  const hits = animal.hitsLeft === 1 ? '1 hit left' : `${animal.hitsLeft} hits left`;
+  return `Left click to fight off the ${name} · ${hits}`;
 }
 
 /** "1 for a campfire, 2 for a cabin" - built from the same order the menu uses. */

@@ -22,4 +22,6 @@ export const ANIMAL_DENS: readonly AnimalDen[] = [
   { id: 1002, kind: 'rabbit', x: 48, z: 18 },
   { id: 1003, kind: 'rabbit', x: -45, z: -22 },
   { id: 1004, kind: 'rabbit', x: 12, z: 58 },
+  { id: 1005, kind: 'maskedRaccoon', x: -30, z: 40 },
+  { id: 1006, kind: 'maskedRaccoon', x: 35, z: -40 },
 ];

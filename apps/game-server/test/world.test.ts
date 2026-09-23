@@ -2,11 +2,13 @@ import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ANIMAL_DENS,
   ANIMAL_KINDS,
   AXE_PICKUP_ID,
   DEFAULT_WORLD_SEED,
   AXE_STUMP,
   CHOP_REACH,
+  HEALTH_MAX,
   HUNGER_MAX,
   ITEM_KINDS,
   POND_FISH,
@@ -1361,4 +1363,36 @@ describe('building', () => {
     expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
     returning.close();
   }, 60_000);
+});
+
+describe('threats', () => {
+  it("a threat's damage survives a real reconnect, through actual storage", async () => {
+    const raccoonDen = ANIMAL_DENS.find((entry) => entry.id === 1005);
+    if (raccoonDen === undefined) {
+      throw new Error('the masked raccoon den is gone from the data table');
+    }
+
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'gets-hurt');
+    // Stand there undefended, so only the raccoon's own attack is in play.
+    await walkWithinReach(first, raccoonDen);
+
+    await waitFor(
+      'health to drop from a real attack',
+      () => (first.latestHealth()?.health ?? HEALTH_MAX) < HEALTH_MAX,
+      20_000,
+    );
+    first.close();
+    await sleep(300);
+
+    // What the reconnect is told the instant it opens, straight from
+    // storage - not the in-memory session that actually took the hit.
+    const second = await TestClient.connect(worldId, 'gets-hurt');
+    await waitFor(
+      'a first snapshot',
+      () => second.positionOf(second.welcome().netId) !== undefined,
+    );
+    expect(second.openingHealth()?.health).toBeLessThan(HEALTH_MAX);
+    second.close();
+  }, 30_000);
 });
