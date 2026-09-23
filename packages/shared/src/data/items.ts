@@ -5,7 +5,7 @@
  * new thing to carry means adding a row here.
  */
 
-export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick';
+export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -82,6 +82,16 @@ export const ITEM_KINDS = {
     placeholderColor: 0xb5895a,
     restoresHunger: undefined,
   },
+  meat: {
+    id: 'meat',
+    displayName: 'Meat',
+    pluralName: 'Meat',
+    maxCarry: 10,
+    placeholderColor: 0xb5573f,
+    // A catch takes a real chase, unlike a fish that only takes a click at
+    // the right moment, so it is worth a little more than one.
+    restoresHunger: 50,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -98,6 +108,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'trout',
   'goldenCarp',
   'stick',
+  'meat',
 ];
 
 export function itemIndex(id: ItemId): number {

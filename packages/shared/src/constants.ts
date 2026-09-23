@@ -229,9 +229,17 @@ export const MAX_TREE_GENERATION = 255;
  * Wildlife.
  *
  * What a rabbit is - its speed, how easily it startles - lives per kind in
- * `ANIMAL_KINDS`; this is the one number every kind shares.
+ * `ANIMAL_KINDS`; these are the numbers every kind shares.
  */
 export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
+/**
+ * How long a caught animal stays gone before it is back at its den.
+ *
+ * Short enough that a session never runs out of rabbits to catch, long
+ * enough that emptying a den costs something. Already watchable without
+ * turning it down for previews, unlike a tree's half hour.
+ */
+export const ANIMAL_RESPAWN_SECONDS = 60;
 
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;

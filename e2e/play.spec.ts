@@ -17,6 +17,7 @@ declare global {
       treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
+      aimedAnimal(): { name: string } | null;
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       canCast(): boolean;
@@ -25,6 +26,7 @@ declare global {
       hunger(): number;
       hungerNews(): string | null;
       craftingNews(): string | null;
+      huntingNews(): string | null;
     };
   }
 }
@@ -647,4 +649,152 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
   expect(await page.evaluate(() => window.acornDebug?.fishing())).toBeNull();
 
   await context.close();
+});
+
+/**
+ * Walk toward wherever an animal currently is - it wanders, so this re-reads
+ * its position every attempt rather than aiming at a fixed spot - until the
+ * game says a swing would land on it.
+ *
+ * A den can be fifty metres past the tree line, and every check here is a
+ * round trip through the browser. On a slow enough machine that round trip
+ * competes with the game's own render loop for the same thread, so the fewer
+ * of them sat in the middle of the walk, the better: this holds sprint in one
+ * long, unbroken stretch and only looks up again once it is done, rather than
+ * chopping the walk into many short polls that would each add their own
+ * share of that overhead on top of the last.
+ */
+async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<void> {
+  let lastPosition: { x: number; z: number } | null = null;
+
+  for (let attempt = 0; attempt < 24; attempt++) {
+    if ((await page.evaluate(() => window.acornDebug?.aimedAnimal() ?? null)) !== null) return;
+
+    const animal = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).find(
+      (entry) => entry.id === animalId,
+    );
+    if (animal === undefined) throw new Error(`animal ${animalId} is no longer around`);
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - animal.x, (here?.z ?? 0) - animal.z);
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [animal.x, animal.z],
+    );
+
+    // Wildlife is out in generated wilderness, not the hand-built clearing, so
+    // a straight line at it can walk the player straight into a rock or a
+    // trunk. A sprint covers many metres in eight seconds when the ground is
+    // clear, so barely having moved means whatever is in the way is not going
+    // to move for us: sidestep it before pushing forward again, the way a
+    // person would.
+    const stuck =
+      lastPosition !== null &&
+      Math.hypot((here?.x ?? 0) - lastPosition.x, (here?.z ?? 0) - lastPosition.z) < 3;
+    lastPosition = here === undefined ? null : { x: here.x, z: here.z };
+
+    if (stuck) {
+      const sidestep = attempt % 2 === 0 ? 'KeyA' : 'KeyD';
+      await page.keyboard.down('ShiftLeft');
+      await page.keyboard.down(sidestep);
+      await page.waitForTimeout(2_000);
+      await page.keyboard.up(sidestep);
+      await page.keyboard.up('ShiftLeft');
+    }
+
+    // One long, unbroken sprint rather than many short polls - each poll is a
+    // round trip through the browser, and under a slow enough render loop
+    // those add up to more than the walk itself does - but capped to roughly
+    // how long the remaining gap actually needs at a sprint, so closing in
+    // from nearby does not sail straight past a den that is only a few
+    // metres off. Capped high while the gap is still large: fifty-odd metres
+    // of wilderness is the common case, not the exception.
+    const SPRINT_METRES_PER_SECOND = 7;
+    const holdMs = Math.min(8_000, Math.max(300, (gap / SPRINT_METRES_PER_SECOND) * 1_300));
+    await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(holdMs);
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('ShiftLeft');
+    await page.waitForTimeout(300);
+  }
+  throw new Error(`Never got within swinging distance of animal ${animalId}`);
+}
+
+/**
+ * Swing at the animal in taps, re-aiming each time since it can still drift
+ * before the first one lands, until the server says it is caught.
+ */
+async function catchUntilCaught(page: Page, animalId: number): Promise<void> {
+  for (let step = 0; step < 20; step++) {
+    const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+    const animal = animals.find((entry) => entry.id === animalId);
+    if (animal === undefined) return;
+
+    await page.evaluate(
+      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+      [animal.x, animal.z],
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(200);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+  }
+  throw new Error(`animal ${animalId} was never caught`);
+}
+
+test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
+  // Wildlife lives well past the tree line, so this walks a lot further than
+  // the axe or the pond do.
+  test.setTimeout(600_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=hunt-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Fetch the axe first: no axe, no catching, the same rule as chopping.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+  const rabbit = animals[0];
+  if (rabbit === undefined) throw new Error('no wildlife nearby to hunt');
+
+  await walkWithinReachOfAnimal(page, rabbit.id);
+  // Usually the catch hint, but a walk this long can run the hunger meter
+  // out first on a slow machine (it empties in three minutes here, not the
+  // real twenty) - hungry beats everything else on purpose, so either is the
+  // hint doing its job correctly.
+  await expect(page.locator('.hud-hint')).toContainText(
+    /Left click to catch the rabbit|You're hungry/,
+  );
+
+  await catchUntilCaught(page, rabbit.id);
+
+  // It is gone, and the meat is ours.
+  expect(
+    (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
+      (entry) => entry.id === rabbit.id,
+    ),
+  ).toBe(false);
+  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
+    .toBe('You caught some meat!');
+
+  // Nothing thrown while walking out, swinging or drawing the wildlife.
+  expect(errors).toEqual([]);
 });

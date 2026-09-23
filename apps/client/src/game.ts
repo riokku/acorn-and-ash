@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 
 import {
+  ANIMAL_KINDS,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_WORLD_SEED,
   HUNGER_MAX,
@@ -11,6 +12,7 @@ import {
   RECIPE_ITEMS,
   SPAWN_POSITION,
   SnapshotFlag,
+  animalInReach,
   buildTestClearing,
   buildWilderness,
   castLanding,
@@ -25,6 +27,7 @@ import {
   treeAtGeneration,
   treeInReach,
   vec3,
+  type AnimalCaught,
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
@@ -108,6 +111,8 @@ export interface GameDebug {
   trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
   /** The tree a swing would land on right now, if any. */
   aimedTree(): { name: string; swingsLeft: number } | null;
+  /** The animal a swing would land on right now, if any. A tree in reach always wins. */
+  aimedAnimal(): { name: string } | null;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -130,6 +135,8 @@ export interface GameDebug {
   hungerNews(): string | null;
   /** The last thing said about what we crafted, if it is still on screen. */
   craftingNews(): string | null;
+  /** The last thing said about what we caught, if it is still on screen. */
+  huntingNews(): string | null;
 }
 
 export interface GameOptions {
@@ -174,6 +181,7 @@ export class Game {
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
   private aimedTree: { name: string; swingsLeft: number } | null = null;
+  private aimedAnimal: { name: string } | null = null;
   /** Every float in the pond, ours and everybody else's. */
   private readonly floats = new Floats();
   /** Our own line, as far as the server has told us. */
@@ -183,6 +191,7 @@ export class Game {
   private hunger = HUNGER_MAX;
   private hungerNews: { text: string; until: number } | null = null;
   private craftingNews: { text: string; until: number } | null = null;
+  private huntingNews: { text: string; until: number } | null = null;
   /** The server takes a breath after every cast ends; so does the hint. */
   private castReadyAt = 0;
   private canCast = false;
@@ -271,6 +280,7 @@ export class Game {
           }))
           .filter((tree) => tree.swingsToFell > 0),
       aimedTree: () => (this.aimedTree === null ? null : { ...this.aimedTree }),
+      aimedAnimal: () => (this.aimedAnimal === null ? null : { ...this.aimedAnimal }),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -294,6 +304,7 @@ export class Game {
       hunger: () => this.hunger,
       hungerNews: () => this.currentHungerNews(performance.now()),
       craftingNews: () => this.currentCraftingNews(performance.now()),
+      huntingNews: () => this.currentHuntingNews(performance.now()),
     };
   }
 
@@ -410,6 +421,10 @@ export class Game {
         this.hearAboutCrafting(message.event);
         break;
       }
+      case 'caught': {
+        this.hearAboutCatching(message.event);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -490,6 +505,30 @@ export class Game {
 
   private currentCraftingNews(now = performance.now()): string | null {
     const news = this.craftingNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /** Only ever about us: nobody else has any reason to know what we just caught. */
+  private hearAboutCatching(event: AnimalCaught): void {
+    const now = performance.now();
+    const name = ITEM_KINDS[event.item].displayName.toLowerCase();
+    // No article: a catch pays out in meat, hide and the like, not one more
+    // countable thing the way a fish or a craft does.
+    this.huntingNews = {
+      text:
+        event.added === 0
+          ? `No room for more ${name}, so you let it go.`
+          : `You caught some ${name}!`,
+      until: now + NEWS_MS,
+    };
+    // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
+    // than left for the next frame, so a stall in the render loop cannot eat
+    // the window this news is shown for.
+    this.options.hud.publish({ huntingNews: this.currentHuntingNews() });
+  }
+
+  private currentHuntingNews(now = performance.now()): string | null {
+    const news = this.huntingNews;
     return news !== null && now < news.until ? news.text : null;
   }
 
@@ -722,13 +761,28 @@ export class Game {
             swingsLeft: this.swingsLeft.get(target.prop.id) ?? target.rule.swingsToFell,
           };
 
-    // The same rule the server uses: a tree you could chop gets the click
-    // first, and otherwise a rod and some water in front of you make a cast.
-    const couldChop = target !== null && this.isCarrying('axe');
+    // A tree in reach always wins a swing over an animal behind it, the same
+    // way the server's own `trySwing` decides it, so this is only worth
+    // working out when there is no tree to claim the click first.
+    const animalCandidates =
+      target === null
+        ? this.remoteAnimals.netIds().flatMap((id) => {
+            const pose = this.remoteAnimals.poseOf(id);
+            return pose === undefined ? [] : [{ id, x: pose.x, z: pose.z }];
+          })
+        : [];
+    const animalTarget = animalInReach(player.motion.position, camera.look.yaw, animalCandidates);
+    this.aimedAnimal = animalTarget === null ? null : { name: ANIMAL_KINDS.rabbit.displayName };
+
+    // The same rule the server uses: a tree or an animal you could swing at
+    // gets the click first, and otherwise a rod and some water in front of
+    // you make a cast.
+    const axeHasSomethingToHit =
+      (target !== null || animalTarget !== null) && this.isCarrying('axe');
     this.canCast =
       this.fishingPhase === null &&
       performance.now() >= this.castReadyAt &&
-      !couldChop &&
+      !axeHasSomethingToHit &&
       this.isCarrying('rod') &&
       this.clearing !== null &&
       castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
@@ -804,12 +858,14 @@ export class Game {
       nearbyItem: this.nearbyItem,
       nearGatherSpot: this.nearGatherSpot,
       aimedTree: this.aimedTree,
+      aimedAnimal: this.aimedAnimal,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),
       hunger: this.hunger,
       hungerNews: this.currentHungerNews(now),
       craftingNews: this.currentCraftingNews(now),
+      huntingNews: this.currentHuntingNews(now),
     });
   }
 

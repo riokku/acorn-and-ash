@@ -14,6 +14,7 @@ import {
   encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
+  encodeCaught,
   encodeCrafted,
   encodeFishing,
   encodeHunger,
@@ -219,6 +220,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announcePickups(simulation);
     this.announceGathering(simulation);
     this.announceChopping(simulation);
+    this.announceCatching(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
     this.announceRegrowth(simulation, startedAt);
@@ -315,6 +317,28 @@ export class World extends DurableObject<WorldEnv> {
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);
 
     this.sendPacks(simulation, choppers);
+  }
+
+  /**
+   * Tell a player what they just caught, for a HUD toast, then send their
+   * pack afterwards the same as any other way it changes.
+   *
+   * Private to the one who caught it: like crafting, nobody else has any
+   * reason to know what somebody else just caught. The animal itself
+   * vanishing is already plain to everybody from the next snapshot.
+   */
+  private announceCatching(simulation: WorldSimulation): void {
+    const events = simulation.drainCatchEvents();
+    if (events.length === 0) return;
+
+    const byNetId = new Map(events.map((event) => [event.netId, event]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeCaught(event));
+    }
+    this.sendPacks(simulation, new Set(byNetId.keys()));
   }
 
   /**

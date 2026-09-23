@@ -14,7 +14,13 @@ import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
-import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
+import type {
+  AnimalCaught,
+  CraftedEvent,
+  FishingEvent,
+  HungerEvent,
+  SnapshotEntity,
+} from '../sim/world-sim';
 import {
   ClientMessageType,
   RejectReason,
@@ -81,6 +87,9 @@ const NO_ITEM_EATEN = 0xff;
 const CRAFT_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
+
+/** type(1) + netId(2) + what was caught(1) + how many went in(1) */
+const CAUGHT_MESSAGE_BYTES = 5;
 
 export function quantisePosition(metres: number): number {
   return Math.round(metres * POSITION_SCALE);
@@ -444,6 +453,23 @@ function decodeCrafted(view: DataView): CraftedEvent | null {
   return { netId: view.getUint16(1, true), item };
 }
 
+/** What a player just caught, in five bytes. Only they are ever sent it. */
+export function encodeCaught(event: AnimalCaught): ArrayBuffer {
+  const buffer = new ArrayBuffer(CAUGHT_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Caught);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, itemIndex(event.item));
+  view.setUint8(4, clamp(Math.round(event.added), 0, 255));
+  return buffer;
+}
+
+function decodeCaught(view: DataView): AnimalCaught | null {
+  const item = itemFromIndex(view.getUint8(3));
+  if (item === null) return null;
+  return { netId: view.getUint16(1, true), item, added: view.getUint8(4) };
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -577,6 +603,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== CRAFTED_MESSAGE_BYTES) return null;
       const event = decodeCrafted(view);
       return event === null ? null : { type: 'crafted', event };
+    }
+    case ServerMessageType.Caught: {
+      if (data.byteLength !== CAUGHT_MESSAGE_BYTES) return null;
+      const event = decodeCaught(view);
+      return event === null ? null : { type: 'caught', event };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

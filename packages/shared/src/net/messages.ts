@@ -1,6 +1,12 @@
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
-import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../sim/world-sim';
+import type {
+  AnimalCaught,
+  CraftedEvent,
+  FishingEvent,
+  HungerEvent,
+  SnapshotEntity,
+} from '../sim/world-sim';
 
 /** What a client is allowed to say. */
 export const ClientMessageType = {
@@ -23,6 +29,7 @@ export const ServerMessageType = {
   Fishing: 0x19,
   Hunger: 0x1a,
   Crafted: 0x1b,
+  Caught: 0x1c,
 } as const;
 
 export const RejectReason = {
@@ -168,6 +175,18 @@ export interface CraftedMessage {
   readonly event: CraftedEvent;
 }
 
+/**
+ * Word that this player caught an animal, for a HUD toast.
+ *
+ * Only that player is ever told: like crafting, nobody else has any reason
+ * to know what somebody else just caught. The animal itself vanishing is
+ * already plain to everybody from the next snapshot.
+ */
+export interface CaughtMessage {
+  readonly type: 'caught';
+  readonly event: AnimalCaught;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -180,4 +199,5 @@ export type ServerMessage =
   | TreeHitMessage
   | FishingMessage
   | HungerMessage
-  | CraftedMessage;
+  | CraftedMessage
+  | CaughtMessage;

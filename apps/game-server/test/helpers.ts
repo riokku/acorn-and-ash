@@ -6,6 +6,7 @@ import {
   encodeInputBundle,
   encodePing,
   createInput,
+  type AnimalCaught,
   type CraftedEvent,
   type FishingEvent,
   type HungerEvent,
@@ -144,6 +145,11 @@ export class TestClient {
   /** Everything the server has said about what this client crafted, oldest first. */
   crafted(): CraftedEvent[] {
     return this.received.flatMap((entry) => (entry.type === 'crafted' ? [entry.event] : []));
+  }
+
+  /** Everything the server has said about what this client caught, oldest first. */
+  caught(): AnimalCaught[] {
+    return this.received.flatMap((entry) => (entry.type === 'caught' ? [entry.event] : []));
   }
 
   /** Every swing the server has told us about. */

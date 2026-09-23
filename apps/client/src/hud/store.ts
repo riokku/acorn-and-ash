@@ -28,6 +28,8 @@ export interface HudState {
   readonly nearGatherSpot: boolean;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
+  /** The animal a swing would land on, if any. A tree in reach always wins. */
+  readonly aimedAnimal: { readonly name: string } | null;
   /** Whether a click right now would cast a line. */
   readonly canCast: boolean;
   readonly fishing: FishingPhase;
@@ -39,6 +41,8 @@ export interface HudState {
   readonly hungerNews: string | null;
   /** What we last made, while it is still worth showing. */
   readonly craftingNews: string | null;
+  /** What we last caught, while it is still worth showing. */
+  readonly huntingNews: string | null;
 }
 
 const INITIAL: HudState = {
@@ -58,12 +62,14 @@ const INITIAL: HudState = {
   nearbyItem: null,
   nearGatherSpot: false,
   aimedTree: null,
+  aimedAnimal: null,
   canCast: false,
   fishing: null,
   fishingNews: null,
   hunger: HUNGER_MAX,
   hungerNews: null,
   craftingNews: null,
+  huntingNews: null,
 };
 
 /**

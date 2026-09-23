@@ -1,6 +1,7 @@
 import { createWorld, type Entity, type World } from 'koota';
 
 import {
+  ANIMAL_RESPAWN_SECONDS,
   HUNGER_EMPTY_AFTER_SECONDS,
   HUNGER_MAX,
   INPUT_BACKLOG_CATCHUP_THRESHOLD,
@@ -67,6 +68,7 @@ import { pickupInReach } from './pickups';
 import { gatherSpotInReach } from './gathering';
 import { craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
+import { animalInReach, type CatchCandidate } from './hunting';
 import {
   CAST_COOLDOWN_TICKS,
   readCastInput,
@@ -173,6 +175,26 @@ export interface TreeChopped {
   readonly swingsLeft: number;
   /** Logs that went into the chopper's pack, once it did. */
   readonly logsGained: number;
+}
+
+/** An animal a swing would land on right now. */
+export interface CatchTarget {
+  readonly id: number;
+  readonly kind: AnimalKindId;
+}
+
+/**
+ * A swing landed on an animal instead of a tree.
+ *
+ * Only the catcher is ever told: the animal disappearing is already plain to
+ * everybody else from the next snapshot, the same way a felled tree needs no
+ * message of its own beyond `TreeChopped`.
+ */
+export interface AnimalCaught {
+  readonly netId: number;
+  readonly item: ItemId;
+  /** How many went into the pack. Zero means there was no room. */
+  readonly added: number;
 }
 
 /** A tree's state, as it goes into and comes out of storage. */
@@ -295,6 +317,10 @@ interface AnimalRuntime {
   targetZ: number;
   /** How many wander targets it has drawn before, so the next one is a fresh hash. */
   decisionSeq: number;
+  /** Caught, and waiting out `ANIMAL_RESPAWN_SECONDS` before it is back at its den. */
+  caught: boolean;
+  /** When it is due back, in real time. Meaningless unless `caught`. */
+  respawnAtMs: number;
 }
 
 /**
@@ -333,6 +359,7 @@ export class WorldSimulation {
   /** Every tree anybody has touched, by prop id. Untouched trees are not here. */
   private readonly trees = new Map<number, TreeState>();
   private readonly chopEvents: TreeChopped[] = [];
+  private readonly catchEvents: AnimalCaught[] = [];
   private readonly regrowthEvents: TreeRegrown[] = [];
   private readonly fishingEvents: FishingEvent[] = [];
   /** Every cast in this world gets its own number, so no two share a roll. */
@@ -409,6 +436,8 @@ export class WorldSimulation {
       targetX: den.x,
       targetZ: den.z,
       decisionSeq: 0,
+      caught: false,
+      respawnAtMs: 0,
     });
   }
 
@@ -627,13 +656,33 @@ export class WorldSimulation {
     this.stepAnimals();
   }
 
-  /** Amble, or bolt from the nearest player - whichever this tick calls for. */
+  /** Amble, bolt from the nearest player, or wait out a catch - whichever this tick calls for. */
   private stepAnimals(): void {
     this.world
       .query(AnimalTag, Position, Velocity, Facing, NetworkId)
       .updateEach(([position, velocity, facing, networkId]) => {
         const runtime = this.animals.get(networkId.value);
         if (runtime === undefined) return;
+
+        if (runtime.caught) {
+          if (this.nowMs < runtime.respawnAtMs) {
+            velocity.x = 0;
+            velocity.z = 0;
+            return;
+          }
+          // Time is up: back at the den, as if it had never left.
+          runtime.caught = false;
+          runtime.fleeing = false;
+          runtime.targetX = runtime.denX;
+          runtime.targetZ = runtime.denZ;
+          position.x = runtime.denX;
+          position.z = runtime.denZ;
+          position.y = this.collision.terrain.heightAt(runtime.denX, runtime.denZ);
+          velocity.x = 0;
+          velocity.z = 0;
+          return;
+        }
+
         const kind = ANIMAL_KINDS[runtime.kind];
 
         const nearestPlayer = this.nearestPlayerPosition(position);
@@ -757,44 +806,75 @@ export class WorldSimulation {
   /**
    * Swing at whatever is in front of this player.
    *
-   * Nothing happens without an axe, without a tree in reach, or before the
-   * cooldown is up, so holding the button down chops at a steady rhythm rather
-   * than as fast as packets arrive.
+   * Nothing happens without an axe, without a tree or an animal in reach, or
+   * before the cooldown is up, so holding the button down chops at a steady
+   * rhythm rather than as fast as packets arrive. A tree in reach always
+   * wins over an animal behind it, the same way a tree already wins over a
+   * cast in `tryCast`.
    */
   private trySwing(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
     if (runtime.swingCooldownTicks > 0) return;
     if (!hasItem(runtime.inventory, 'axe')) return;
 
     const target = this.treeInReachOf(position, aimYaw);
-    if (target === null) return;
+    if (target !== null) {
+      runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
 
-    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+      const state = this.treeState(target.prop.id);
+      const swingsTaken = state.swingsTaken + 1;
+      const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
 
-    const state = this.treeState(target.prop.id);
-    const swingsTaken = state.swingsTaken + 1;
-    const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
+      if (swingsLeft > 0) {
+        state.swingsTaken = swingsTaken;
+        this.chopEvents.push({
+          netId: runtime.netId,
+          treeId: target.prop.id,
+          swingsLeft,
+          logsGained: 0,
+        });
+        return;
+      }
 
-    if (swingsLeft > 0) {
-      state.swingsTaken = swingsTaken;
+      this.fellTree(target.prop.id, this.nowMs);
+      // A full pack means the wood stays on the ground. The tree still falls:
+      // you did chop it down, you just cannot carry what came off it.
+      const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
       this.chopEvents.push({
         netId: runtime.netId,
         treeId: target.prop.id,
-        swingsLeft,
-        logsGained: 0,
+        swingsLeft: 0,
+        logsGained,
       });
       return;
     }
 
-    this.fellTree(target.prop.id, this.nowMs);
-    // A full pack means the wood stays on the ground. The tree still falls:
-    // you did chop it down, you just cannot carry what came off it.
-    const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
-    this.chopEvents.push({
-      netId: runtime.netId,
-      treeId: target.prop.id,
-      swingsLeft: 0,
-      logsGained,
-    });
+    const animalTarget = this.animalInReachOf(position, aimYaw);
+    if (animalTarget === null) return;
+
+    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+    this.catchAnimal(runtime, animalTarget.id);
+  }
+
+  /**
+   * Catch an animal that is not a tree: the swing that just missed a trunk
+   * lands on whatever wildlife was in reach instead.
+   *
+   * It goes back to its den once `ANIMAL_RESPAWN_SECONDS` is up, the same
+   * way a tree waits out `regrowMinSeconds` before it is worth chopping
+   * again.
+   */
+  private catchAnimal(runtime: PlayerRuntime, animalId: number): void {
+    const animal = this.animals.get(animalId);
+    if (animal === undefined) return;
+
+    animal.caught = true;
+    animal.respawnAtMs = this.nowMs + ANIMAL_RESPAWN_SECONDS * 1000;
+
+    const item = ANIMAL_KINDS[animal.kind].catchItem;
+    // A full pack means it was still caught - the den stays empty for the
+    // same reason a felled tree still falls with no room for the logs.
+    const added = addItem(runtime.inventory, item, 1);
+    this.catchEvents.push({ netId: runtime.netId, item, added });
   }
 
   /**
@@ -935,6 +1015,21 @@ export class WorldSimulation {
     return this.trees.get(treeId)?.felled === true;
   }
 
+  /** The animal this player would catch if they swung, or null. Used by tests. */
+  animalInReachOf(position: Readonly<Vec3>, aimYaw: number): CatchTarget | null {
+    const candidates: CatchCandidate[] = [];
+    for (const runtime of this.animals.values()) {
+      if (runtime.caught) continue;
+      const animalPosition = runtime.entity.get(Position);
+      if (animalPosition === undefined) continue;
+      candidates.push({ id: runtime.id, x: animalPosition.x, z: animalPosition.z });
+    }
+
+    const found = animalInReach(position, aimYaw, candidates);
+    const runtime = found === null ? undefined : this.animals.get(found.id);
+    return runtime === undefined ? null : { id: runtime.id, kind: runtime.kind };
+  }
+
   /** How many more swings this tree needs, or null if it is already down. */
   swingsLeftOn(treeId: number): number | null {
     const state = this.trees.get(treeId);
@@ -1007,6 +1102,11 @@ export class WorldSimulation {
   /** Hand over every swing that landed since this was last asked. */
   drainChopEvents(): TreeChopped[] {
     return this.chopEvents.splice(0);
+  }
+
+  /** Hand over every animal caught since this was last asked. */
+  drainCatchEvents(): AnimalCaught[] {
+    return this.catchEvents.splice(0);
   }
 
   /** Hand over everything that happened at the water since this was last asked. */
@@ -1176,6 +1276,11 @@ export class WorldSimulation {
     this.world
       .query(AnimalTag, Position, Velocity, Facing, NetworkId)
       .readEach(([position, velocity, facing, networkId]) => {
+        // A caught animal is gone until it respawns: left out of every
+        // viewer's snapshot entirely, the same as a pickup nobody can see
+        // once it is taken.
+        if (this.animals.get(networkId.value)?.caught === true) return;
+
         const dx = position.x - viewerPosition.x;
         const dz = position.z - viewerPosition.z;
         if (dx * dx + dz * dz > radiusSquared) return;

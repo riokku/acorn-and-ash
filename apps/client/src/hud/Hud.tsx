@@ -53,8 +53,13 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
 
       {state.ready &&
       state.pointerLocked &&
-      (state.fishingNews !== null || state.hungerNews !== null || state.craftingNews !== null) ? (
-        <p className="hud-news">{state.fishingNews ?? state.hungerNews ?? state.craftingNews}</p>
+      (state.fishingNews !== null ||
+        state.hungerNews !== null ||
+        state.craftingNews !== null ||
+        state.huntingNews !== null) ? (
+        <p className="hud-news">
+          {state.fishingNews ?? state.hungerNews ?? state.craftingNews ?? state.huntingNews}
+        </p>
       ) : null}
 
       {state.ready && state.pointerLocked ? (
@@ -150,8 +155,9 @@ function costLabel(recipe: Recipe): string {
  * Whatever you could do right now beats the list of what the keys are. A line
  * in the water beats everything, because the moment matters. Picking something
  * up beats chopping: you are more likely to be reaching for the thing at your
- * feet than swinging at the tree behind it. And a tree you can chop beats a
- * cast, the same way round as the server decides it.
+ * feet than swinging at the tree behind it. And a tree or an animal you can
+ * swing at beats a cast, the same way round as the server decides it - a tree
+ * beats the animal too, if somehow both are in reach at once.
  */
 function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
@@ -165,8 +171,10 @@ function hint(state: HudState): string {
   if (state.nearGatherSpot) return 'Press E to gather sticks';
   const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
   if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
+  if (state.aimedAnimal !== null && hasAxe) return catchHint(state.aimedAnimal);
   if (state.canCast) return 'Left click to cast';
   if (state.aimedTree !== null) return chopHint(state.aimedTree);
+  if (state.aimedAnimal !== null) return catchHint(state.aimedAnimal);
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
@@ -183,6 +191,10 @@ function hungerHint(state: HudState): string {
 function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
   const swings = tree.swingsLeft === 1 ? '1 swing left' : `${tree.swingsLeft} swings left`;
   return `Left click to chop the ${tree.name.toLowerCase()} · ${swings}`;
+}
+
+function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
+  return `Left click to catch the ${animal.name.toLowerCase()}`;
 }
 
 /** What the pack holds, as one short line. */

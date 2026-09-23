@@ -35,6 +35,7 @@ export * from './sim/inventory';
 export * from './sim/pickups';
 export * from './sim/gathering';
 export * from './sim/chopping';
+export * from './sim/hunting';
 export * from './sim/crafting';
 export * from './sim/regrowth';
 export * from './sim/fishing';
