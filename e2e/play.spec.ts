@@ -825,8 +825,9 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
 });
 
 test('you can find a masked raccoon and fight it off', async ({ page }) => {
-  // Wildlife lives well past the tree line, the same reason the rabbit hunt does.
-  test.setTimeout(600_000);
+  // Wildlife lives well past the tree line, the same reason the rabbit hunt
+  // does - plus room for a knockout to cost a second walk back out, below.
+  test.setTimeout(1_200_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
@@ -863,7 +864,22 @@ test('you can find a masked raccoon and fight it off', async ({ page }) => {
     /Left click to fight off the masked raccoon|You're hungry/,
   );
 
-  await catchUntilCaught(page, raccoon.id);
+  // A raccoon fights back, so unlike the rabbit this can end in a knockout -
+  // decision 0024's own accepted cost is just the walk back, not a failure,
+  // so a bot playing it straight tries again instead of giving up on the
+  // first setback: walk back out and keep swinging, the same as a person
+  // would. Already in reach for round one; a knockout is what would put the
+  // next round's walk to real use.
+  let foughtOff = false;
+  for (let round = 0; round < 3 && !foughtOff; round++) {
+    if (round > 0) await walkWithinReachOfAnimal(page, raccoon.id);
+    try {
+      await catchUntilCaught(page, raccoon.id);
+      foughtOff = true;
+    } catch (error) {
+      if (round === 2) throw error;
+    }
+  }
 
   // It is gone, fought off with nothing to show for it - unlike a rabbit.
   expect(
