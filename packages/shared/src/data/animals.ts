@@ -7,6 +7,8 @@
  * placeholder shape until the mechanic around it is fun.
  */
 
+import type { ItemId } from './items';
+
 export type AnimalKindId = 'rabbit';
 
 export interface AnimalKind {
@@ -26,6 +28,8 @@ export interface AnimalKind {
   readonly safeRadius: number;
   /** How far from its den it wanders while calm. */
   readonly leashRadius: number;
+  /** What a swing of the axe gets you, once it lands. */
+  readonly catchItem: ItemId;
   /** Triangle budget for the art that eventually replaces the placeholder. */
   readonly triangleBudget: number;
   /** Placeholder colour, as 0xRRGGBB. */
@@ -41,6 +45,7 @@ export const ANIMAL_KINDS = {
     alertRadius: 7,
     safeRadius: 11,
     leashRadius: 9,
+    catchItem: 'meat',
     triangleBudget: 5000,
     placeholderColor: 0xbfa88f,
   },

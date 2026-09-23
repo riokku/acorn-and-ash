@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  ANIMAL_RESPAWN_SECONDS,
   DEFAULT_WORLD_SEED,
   HUNGER_MAX,
   INTEREST_RADIUS,
@@ -1139,5 +1140,154 @@ describe('wildlife', () => {
       .snapshotFor(1)
       .filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
     expect(animals).toEqual([]);
+  });
+});
+
+describe('catching wildlife', () => {
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'axe', count: 1 }],
+    hunger: HUNGER_MAX,
+  });
+
+  const den = ANIMAL_DENS.find((entry) => entry.id === 1002);
+  if (den === undefined) throw new Error('den 1002 is gone from the data table');
+
+  // Standing north of the den, at greater z. Yaw 0 looks down -Z, so this
+  // faces the den; the same convention `treeInReach`'s own tests use.
+  const facingDen = { x: den.x, y: 0, z: den.z + 1.5 };
+  const FACE_DEN = 0;
+  const FACE_AWAY = Math.PI;
+
+  /** Stand a couple of metres from the den, facing straight at it. */
+  function standByDen(sim: WorldSimulation, netId: number): void {
+    sim.placePlayer(netId, facingDen, FACE_DEN);
+  }
+
+  it('finds the animal sitting at its den', () => {
+    const sim = createWorld();
+    expect(sim.animalInReachOf(facingDen, FACE_DEN)).toEqual({ id: den.id, kind: 'rabbit' });
+  });
+
+  it('finds nothing facing away from the den', () => {
+    const sim = createWorld();
+    expect(sim.animalInReachOf(facingDen, FACE_AWAY)).toBeNull();
+  });
+
+  it('finds nothing too far from the den to reach', () => {
+    const sim = createWorld();
+    expect(sim.animalInReachOf({ x: den.x, y: 0, z: den.z + 20 }, FACE_DEN)).toBeNull();
+  });
+
+  it('catches the animal with a swing of the axe, and pays out its item', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    standByDen(sim, 1);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+
+    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
+    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(1);
+  });
+
+  it('never lets a tree hide behind a rabbit: a swing near a den has no tree to prefer', () => {
+    // Wildlife dens sit well past the clearing's own tree line, and only
+    // clearing trees are ever chopping targets (see decision 0015): the
+    // wilderness is scenery only. So a swing here can only ever be at most
+    // one thing, and this is that there is nothing else it could be.
+    const sim = createWorld();
+    expect(sim.treeInReachOf(facingDen, FACE_DEN)).toBeNull();
+  });
+
+  it('refuses to catch anything without an axe', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    standByDen(sim, 1);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+
+    expect(sim.drainCatchEvents()).toEqual([]);
+  });
+
+  it('still counts as caught when the pack has no room for the meat', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      ...withAxe(1),
+      items: [
+        { item: 'axe', count: 1 },
+        { item: 'meat', count: ITEM_KINDS.meat.maxCarry },
+      ],
+    });
+    standByDen(sim, 1);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+
+    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 0 }]);
+    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(ITEM_KINDS.meat.maxCarry);
+  });
+
+  it('vanishes from every snapshot the moment it is caught', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    standByDen(sim, 1);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+
+    const stillThere = sim
+      .snapshotFor(1)
+      .some((entity) => entity.netId === den.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(stillThere).toBe(false);
+  });
+
+  it('is back at its den, catchable again, once the respawn wait is up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    standByDen(sim, 1);
+
+    let seq = 1;
+    sim.queueInput(1, createInput(seq++, 0, 0, FACE_DEN, PlayerButton.Swing));
+    const caughtAt = tickClock();
+    sim.step(caughtAt);
+    expect(sim.drainCatchEvents()).toHaveLength(1);
+
+    // Short of the wait: still gone. Also clears the axe's own swing cooldown
+    // from the first catch, well before the animal is due back - a rabbit
+    // fresh from its den gets one wander tick's start on running off again,
+    // so nothing here can afford to dawdle once it reappears.
+    for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, FACE_DEN, 0));
+      sim.step(tickClock());
+    }
+    expect(
+      sim
+        .snapshotFor(1)
+        .some((entity) => entity.netId === den.id && (entity.flags & SnapshotFlag.Animal) !== 0),
+    ).toBe(false);
+
+    // Push real time past the respawn wait in one jump, the same way regrowth
+    // catches up after a gap: nothing here depends on having ticked through it.
+    sim.queueInput(1, createInput(seq++, 0, 0, FACE_DEN, 0));
+    sim.step(caughtAt + ANIMAL_RESPAWN_SECONDS * 1000 + TICK_MILLISECONDS);
+
+    const backAgain = sim
+      .snapshotFor(1)
+      .find((entity) => entity.netId === den.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(backAgain).toBeDefined();
+    expect(backAgain?.x).toBeCloseTo(den.x, 3);
+    expect(backAgain?.z).toBeCloseTo(den.z, 3);
+
+    // Worth a swing on the very next tick, before it has had any chance to
+    // wander off the spot it just reappeared on.
+    sim.queueInput(1, createInput(seq, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
   });
 });

@@ -2,9 +2,11 @@ import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ANIMAL_KINDS,
   AXE_PICKUP_ID,
   DEFAULT_WORLD_SEED,
   AXE_STUMP,
+  CHOP_REACH,
   HUNGER_MAX,
   ITEM_KINDS,
   POND_FISH,
@@ -977,4 +979,85 @@ describe('wildlife', () => {
     );
     client.close();
   }, 15_000);
+});
+
+describe('catching wildlife', () => {
+  /**
+   * Connect, optionally fetch the axe, then wait for wildlife to show up in
+   * the snapshot and report which animal to go after.
+   */
+  async function readyHunter(
+    playerKey: string,
+    withAxe: boolean,
+  ): Promise<{ client: TestClient; animalId: number }> {
+    const client = await TestClient.connect(nextWorldId(), playerKey);
+    if (withAxe) {
+      await walkToTheAxe(client);
+      client.walk(0, 0, 0, 3, PlayerButton.Interact);
+      await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+    }
+    await waitFor('a snapshot with wildlife in it', () =>
+      client.latestSnapshot().entities.some(isAnimal),
+    );
+    const animal = client.latestSnapshot().entities.find(isAnimal);
+    if (animal === undefined) throw new Error('expected an animal in the snapshot');
+    return { client, animalId: animal.netId };
+  }
+
+  /**
+   * Sprint toward wherever the animal currently is - it wanders, so a fixed
+   * spot would not do - and once close enough, hold still and swing, the way
+   * `chopUntilFelled` does for a tree that cannot move. Stops early on a
+   * catch; otherwise spends the whole step budget, which is exactly what the
+   * no-axe test needs to prove a swing there still catches nothing.
+   */
+  async function huntAnimal(client: TestClient, animalId: number, steps: number): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < steps; step++) {
+      if (client.caught().some((event) => event.netId === animalId)) return;
+      const animal = client
+        .latestSnapshot()
+        .entities.find((entity) => entity.netId === animalId && isAnimal(entity));
+      if (animal === undefined) return;
+      const here = client.positionOf(netId);
+      if (here === undefined) return;
+      const yaw = Math.atan2(-(animal.x - here.x), -(animal.z - here.z));
+      const closingIn = Math.hypot(animal.x - here.x, animal.z - here.z) > CHOP_REACH - 0.5;
+      const buttons = closingIn ? PlayerButton.Sprint | PlayerButton.Swing : PlayerButton.Swing;
+      client.walk(0, closingIn ? 1 : 0, yaw, 4, buttons);
+      await sleep(110);
+    }
+  }
+
+  it('catches a rabbit with the axe, and it pays out meat', async () => {
+    const { client, animalId } = await readyHunter('the-hunter', true);
+    await huntAnimal(client, animalId, 300);
+
+    expect(client.caught()).toEqual([
+      { netId: client.welcome().netId, item: ANIMAL_KINDS.rabbit.catchItem, added: 1 },
+    ]);
+    expect(client.inventory()).toEqual(
+      expect.arrayContaining([{ item: ANIMAL_KINDS.rabbit.catchItem, count: 1 }]),
+    );
+    client.close();
+  }, 40_000);
+
+  it('makes the animal vanish from the next snapshot the moment it is caught', async () => {
+    const { client, animalId } = await readyHunter('the-other-hunter', true);
+    await huntAnimal(client, animalId, 300);
+
+    expect(client.caught().length).toBeGreaterThan(0);
+    expect(client.latestSnapshot().entities.some((entity) => entity.netId === animalId)).toBe(
+      false,
+    );
+    client.close();
+  }, 40_000);
+
+  it('refuses to catch anything for somebody with no axe', async () => {
+    const { client, animalId } = await readyHunter('no-axe-hunter', false);
+    await huntAnimal(client, animalId, 300);
+
+    expect(client.caught()).toEqual([]);
+    client.close();
+  }, 40_000);
 });

@@ -10,6 +10,7 @@ import {
   encodePickupsTaken,
   encodePing,
   encodeCraft,
+  encodeCaught,
   encodeCrafted,
   encodeFishing,
   encodeHunger,
@@ -25,7 +26,13 @@ import {
   MAX_INPUTS_PER_BUNDLE,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
-import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../src/sim/world-sim';
+import type {
+  AnimalCaught,
+  CraftedEvent,
+  FishingEvent,
+  HungerEvent,
+  SnapshotEntity,
+} from '../src/sim/world-sim';
 
 describe('input bundles', () => {
   it('survives a round trip', () => {
@@ -465,6 +472,44 @@ describe('telling a player what they made', () => {
 
   it('refuses an item this build has never heard of', () => {
     const encoded = new Uint8Array(encodeCrafted({ netId: 1, item: 'axe' }).slice(0));
+    encoded[3] = 200;
+    expect(decodeServerMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('telling a player what they caught', () => {
+  const roundTrip = (event: AnimalCaught): AnimalCaught | null => {
+    const decoded = decodeServerMessage(encodeCaught(event));
+    return decoded?.type === 'caught' ? decoded.event : null;
+  };
+
+  it('carries who caught it, what, and how many went in the pack', () => {
+    expect(roundTrip({ netId: 7, item: 'meat', added: 1 })).toEqual({
+      netId: 7,
+      item: 'meat',
+      added: 1,
+    });
+  });
+
+  it('carries a full pack turning away the catch', () => {
+    expect(roundTrip({ netId: 3, item: 'meat', added: 0 })).toEqual({
+      netId: 3,
+      item: 'meat',
+      added: 0,
+    });
+  });
+
+  it('fits in five bytes', () => {
+    expect(encodeCaught({ netId: 1, item: 'meat', added: 1 }).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeCaught({ netId: 1, item: 'meat', added: 1 });
+    expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeCaught({ netId: 1, item: 'meat', added: 1 }).slice(0));
     encoded[3] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
   });

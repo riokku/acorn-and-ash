@@ -13,9 +13,10 @@ The game is online-only. Every world runs on the server.
 > axe standing in a stump and chop trees down; they grow back while you are
 > away. Find the rod on the bank of the pond and catch fish. Gather sticks by
 > hand and craft your own axe or rod instead. You get hungry the longer you
-> play, and eating a fish tops you back up. Rabbits now live out in the
-> wilderness - walk up on one and it bolts, though catching it is still to
-> come. See [the roadmap](#roadmap).
+> play, and eating a fish tops you back up. Rabbits live out in the
+> wilderness - walk up on one and it bolts, but catch it with the same axe
+> that fells a tree and it pays out meat, worth even more than a fish. See
+> [the roadmap](#roadmap).
 
 ## Controls
 
@@ -33,8 +34,8 @@ The game is online-only. Every world runs on the server.
 There is nothing to land on yet, so a jump is a hop in place. Standing on things
 comes with the cabin in Phase 3.
 
-You can carry one axe, one fishing rod, ten logs, ten sticks and ten of each
-kind of fish. The limits, and how much hunger eating a fish restores, live in
+You can carry one axe, one fishing rod, ten logs, ten sticks, ten meat and ten
+of each kind of fish. The limits, and how much hunger eating one restores, live in
 [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), what
 each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
@@ -55,9 +56,14 @@ be chopped or picked up yet; it's somewhere to walk, for now. See
 
 A few rabbits (a placeholder box with two ears, for now) live at fixed spots
 out in the wilderness. Left alone they amble about near home; get too close
-and one bolts, curving away for as long as you keep following. There is
-nothing to do with one yet - catching it is the next change. See
+and one bolts, curving away for as long as you keep following. See
 [decision 0018](docs/decisions/0018-a-rabbit-that-flees.md).
+
+Catch one with the same swing that fells a tree - an axe, and a rabbit within
+reach of it - and it pays out meat, which restores more hunger than a fish
+since a catch takes an actual chase. A caught rabbit is back at its den,
+ready to catch again, a minute later. See
+[decision 0019](docs/decisions/0019-catching-wildlife.md).
 
 ### Fishing
 
