@@ -5,15 +5,7 @@
  * new thing to carry means adding a row here.
  */
 
-export type ItemId =
-  | 'axe'
-  | 'log'
-  | 'rod'
-  | 'perch'
-  | 'trout'
-  | 'goldenCarp'
-  | 'stick'
-  | 'meat';
+export type ItemId = 'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat';
 
 export interface ItemKind {
   readonly id: ItemId;
