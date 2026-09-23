@@ -6,10 +6,13 @@ declare global {
       selfNetId(): number;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+      animals(): Array<{ id: number; x: number; y: number; z: number }>;
       carrying(): Array<{ item: string; count: number }>;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+      gatherSpots(): Array<{ x: number; z: number }>;
       nearbyItem(): string | null;
+      nearGatherSpot(): boolean;
       felledTrees(): number[];
       treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
@@ -21,6 +24,7 @@ declare global {
       fishingNews(): string | null;
       hunger(): number;
       hungerNews(): string | null;
+      craftingNews(): string | null;
     };
   }
 }
@@ -233,6 +237,26 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
   throw new Error(`Never got within reach of ${x}, ${z}`);
 }
 
+/** Walk to a gather spot until the game says a patch of sticks is in reach. */
+async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Promise<void> {
+  for (let step = 0; step < 80; step++) {
+    if (await page.evaluate(() => window.acornDebug?.nearGatherSpot() ?? false)) return;
+
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
+    await page.evaluate(
+      ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
+      [x, z],
+    );
+
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
+    await page.keyboard.up('KeyW');
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`Never got within reach of the gather spot at ${x}, ${z}`);
+}
+
 /**
  * Walk up to a tree until the game says a swing would reach it.
  *
@@ -317,6 +341,62 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   expect(await again.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
   await again.close();
   await context.close();
+});
+
+test('you can gather sticks and craft your own axe, without ever finding one', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=craft-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
+
+  const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
+  const spot = spots[0];
+  expect(spot).toBeDefined();
+  if (spot === undefined) throw new Error('no gather spot in the clearing');
+
+  await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to gather sticks');
+
+  const craftRow = page.locator('.hud-row', { hasText: 'Craft' }).first();
+  await expect(craftRow).toContainText('Axe');
+  // Not enough sticks yet: the recipe is not lit up.
+  await expect(craftRow.locator('.hud-status-good')).toHaveCount(0);
+
+  // Taps, not a hold: the server paces gathering the same way it paces a
+  // swing, and holding down the key does not gather any faster.
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(600);
+  }
+
+  const sticks = await page.evaluate(
+    () => window.acornDebug?.carrying().find((entry) => entry.item === 'stick')?.count ?? 0,
+  );
+  expect(sticks).toBeGreaterThanOrEqual(3);
+  await expect(craftRow.locator('.hud-status-good')).toContainText('Axe');
+
+  await page.keyboard.press('Digit1');
+  await expect
+    .poll(
+      async () =>
+        (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).find(
+          (entry) => entry.item === 'axe',
+        )?.count ?? 0,
+    )
+    .toBe(1);
+
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Axe');
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.craftingNews() ?? null))
+    .toBe('You made an axe.');
+
+  // Nothing thrown while gathering, crafting or drawing the stick patches.
+  expect(errors).toEqual([]);
 });
 
 /**

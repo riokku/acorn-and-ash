@@ -9,6 +9,8 @@ import {
   encodeInventory,
   encodePickupsTaken,
   encodePing,
+  encodeCraft,
+  encodeCrafted,
   encodeFishing,
   encodeHunger,
   encodeTreeHit,
@@ -23,7 +25,7 @@ import {
   MAX_INPUTS_PER_BUNDLE,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
-import type { FishingEvent, HungerEvent, SnapshotEntity } from '../src/sim/world-sim';
+import type { CraftedEvent, FishingEvent, HungerEvent, SnapshotEntity } from '../src/sim/world-sim';
 
 describe('input bundles', () => {
   it('survives a round trip', () => {
@@ -417,5 +419,53 @@ describe('telling a player how hungry they are', () => {
   it('refuses one that has been cut short', () => {
     const encoded = encodeHunger({ netId: 1, hunger: 50, ate: null });
     expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
+  });
+});
+
+describe('asking to craft something', () => {
+  it('survives a round trip', () => {
+    const decoded = decodeClientMessage(encodeCraft('axe'));
+    expect(decoded).toEqual({ type: 'craft', item: 'axe' });
+  });
+
+  it('is two bytes: not worth batching with the input bundle', () => {
+    expect(encodeCraft('rod').byteLength).toBe(2);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeCraft('axe');
+    expect(decodeClientMessage(encoded.slice(0, 1))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeCraft('axe').slice(0));
+    encoded[1] = 200;
+    expect(decodeClientMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('telling a player what they made', () => {
+  const roundTrip = (event: CraftedEvent): CraftedEvent | null => {
+    const decoded = decodeServerMessage(encodeCrafted(event));
+    return decoded?.type === 'crafted' ? decoded.event : null;
+  };
+
+  it('carries who made it and what', () => {
+    expect(roundTrip({ netId: 7, item: 'rod' })).toEqual({ netId: 7, item: 'rod' });
+  });
+
+  it('fits in four bytes', () => {
+    expect(encodeCrafted({ netId: 1, item: 'axe' }).byteLength).toBe(4);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeCrafted({ netId: 1, item: 'axe' });
+    expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeCrafted({ netId: 1, item: 'axe' }).slice(0));
+    encoded[3] = 200;
+    expect(decodeServerMessage(encoded.buffer)).toBeNull();
   });
 });

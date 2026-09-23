@@ -14,9 +14,12 @@ import {
   PROP_KINDS,
   PlayerButton,
   SNAPSHOT_HZ,
+  SnapshotFlag,
+  STICK_PATCHES,
   TICK_HZ,
   buildTestClearing,
   choppingRuleFor,
+  recipeFor,
   type ItemId,
 } from '@acorn/shared';
 
@@ -25,6 +28,9 @@ import { sleep, TestClient, waitFor } from './helpers';
 /** Each test gets its own world so they cannot tread on each other. */
 let worldCounter = 0;
 const nextWorldId = (): string => `world-${++worldCounter}-${Math.random().toString(36).slice(2)}`;
+
+/** The hand-placed wildlife rides along in every snapshot now; this tells it apart from a player. */
+const isAnimal = (entity: { flags: number }): boolean => (entity.flags & SnapshotFlag.Animal) !== 0;
 
 describe('the game server Worker', () => {
   it('answers a health check', async () => {
@@ -58,8 +64,9 @@ describe('joining a world', () => {
 
     const snapshot = client.latestSnapshot();
     expect(snapshot.tick).toBeGreaterThan(0);
-    expect(snapshot.entities).toHaveLength(1);
-    expect(snapshot.entities[0]?.netId).toBe(client.welcome().netId);
+    const players = snapshot.entities.filter((entity) => !isAnimal(entity));
+    expect(players).toHaveLength(1);
+    expect(players[0]?.netId).toBe(client.welcome().netId);
     client.close();
   });
 
@@ -394,8 +401,9 @@ describe('a world that empties and fills again', () => {
     await waitFor('some snapshots', () => second.snapshots().length >= 3);
 
     // Exactly one player in the world: the one who is actually here.
-    expect(second.latestSnapshot().entities).toHaveLength(1);
-    expect(second.latestSnapshot().entities[0]?.netId).toBe(second.welcome().netId);
+    const players = second.latestSnapshot().entities.filter((entity) => !isAnimal(entity));
+    expect(players).toHaveLength(1);
+    expect(players[0]?.netId).toBe(second.welcome().netId);
     second.close();
   });
 
@@ -415,6 +423,81 @@ describe('a world that empties and fills again', () => {
     expect(second.takenPickups()).toEqual([AXE_PICKUP_ID]);
     // The world picks up where it left off rather than starting over.
     expect(second.latestSnapshot().tick).toBeGreaterThanOrEqual(tickBefore);
+    second.close();
+  });
+});
+
+describe('gathering and crafting', () => {
+  const stickPatch = STICK_PATCHES[0];
+  if (stickPatch === undefined) throw new Error('no stick patch to test against');
+
+  /** Hold the interact button at a gather spot until the pack has this many sticks. */
+  async function gatherSticks(client: TestClient, count: number): Promise<void> {
+    const enough = (): boolean =>
+      (client.inventory().find((entry) => entry.item === 'stick')?.count ?? 0) >= count;
+    for (let step = 0; step < 60 && !enough(); step++) {
+      client.walk(0, 0, 0, 4, PlayerButton.Interact);
+      await sleep(120);
+    }
+    if (!enough()) throw new Error('never gathered enough sticks');
+  }
+
+  function sticksForAnAxe(): number {
+    const recipe = recipeFor('axe');
+    if (recipe === null) throw new Error('no recipe for an axe');
+    return recipe.costs.find((cost) => cost.item === 'stick')?.amount ?? 0;
+  }
+
+  it('gathers a stick from a patch of fallen branches, no tool needed', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'stick-gatherer');
+    await walkWithinReach(client, stickPatch);
+
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('a stick', () => client.inventory().some((entry) => entry.item === 'stick'));
+
+    expect(client.inventory()).toEqual([{ item: 'stick', count: 1 }]);
+    client.close();
+  });
+
+  it('makes an axe once there are enough sticks, without ever finding one', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'stick-crafter');
+    await walkWithinReach(client, stickPatch);
+    await gatherSticks(client, sticksForAnAxe());
+
+    client.craft('axe');
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+
+    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(client.crafted()).toEqual([{ netId: client.welcome().netId, item: 'axe' }]);
+    client.close();
+  });
+
+  it('does nothing without enough materials, and spends nothing either', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'short-on-sticks');
+    await walkWithinReach(client, stickPatch);
+    await gatherSticks(client, 1);
+
+    client.craft('axe');
+    await sleep(150);
+
+    expect(client.inventory()).toEqual([{ item: 'stick', count: 1 }]);
+    expect(client.crafted()).toEqual([]);
+    client.close();
+  });
+
+  it('still has the crafted axe after logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'returning-crafter');
+    await walkWithinReach(first, stickPatch);
+    await gatherSticks(first, sticksForAnAxe());
+    first.craft('axe');
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
+    first.close();
+    await sleep(50);
+
+    const second = await TestClient.connect(worldId, 'returning-crafter');
+    await waitFor('the opening pack', () => second.countOfMessages('inventory') > 0);
+    expect(second.inventory()).toEqual([{ item: 'axe', count: 1 }]);
     second.close();
   });
 });
@@ -861,5 +944,37 @@ describe('hunger', () => {
     await waitFor('a hunger reading after coming back', () => second.hunger().length > 0);
     expect(second.latestHunger()?.hunger).toBe(0);
     second.close();
+  }, 15_000);
+});
+
+describe('wildlife', () => {
+  it('rides along in the snapshot every player already gets', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a snapshot with wildlife in it', () =>
+      client.latestSnapshot().entities.some(isAnimal),
+    );
+    client.close();
+  });
+
+  it('moves on its own while the world ticks, not only in the shared package tests', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a snapshot with wildlife in it', () =>
+      client.latestSnapshot().entities.some(isAnimal),
+    );
+    const first = client.latestSnapshot().entities.find(isAnimal);
+    if (first === undefined) throw new Error('expected an animal in the snapshot');
+    const { netId: animalId, x: startX, z: startZ } = first;
+
+    await waitFor(
+      'that animal to have wandered off its den',
+      () => {
+        const now = client
+          .latestSnapshot()
+          .entities.find((entity) => entity.netId === animalId && isAnimal(entity));
+        return now !== undefined && Math.hypot(now.x - startX, now.z - startZ) > 0.15;
+      },
+      6_000,
+    );
+    client.close();
   }, 15_000);
 });

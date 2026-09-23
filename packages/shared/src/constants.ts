@@ -225,6 +225,14 @@ export const REGROW_CLEARANCE = 1.5;
  */
 export const MAX_TREE_GENERATION = 255;
 
+/**
+ * Wildlife.
+ *
+ * What a rabbit is - its speed, how easily it startles - lives per kind in
+ * `ANIMAL_KINDS`; this is the one number every kind shares.
+ */
+export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
+
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;
 /** New players are spread around the spawn point so they do not stack up. */

@@ -36,3 +36,6 @@ export const Prop = trait({ kindIndex: 0, rotationY: 0, scale: 1 });
 
 /** Marks something that never moves, so it can be skipped by movement systems. */
 export const StaticTag = trait();
+
+/** Marks a wild animal, as opposed to a player. */
+export const AnimalTag = trait();

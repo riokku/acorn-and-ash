@@ -18,6 +18,7 @@ import {
 import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
 import {
   AimYaw,
+  AnimalTag,
   Facing,
   Grounded,
   LastProcessedInput,
@@ -29,10 +30,11 @@ import {
   Velocity,
 } from '../ecs/traits';
 import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
+import { ANIMAL_KINDS, type AnimalKindId } from '../data/animals';
 import { colliderFootprintRadius } from '../world/colliders';
 import type { ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
-import type { Vec3 } from '../math/vec3';
+import { horizontalDistance, type Vec3 } from '../math/vec3';
 import {
   buildTestClearing,
   colliderForProp,
@@ -44,6 +46,14 @@ import {
 import { createWildernessTerrain, type Terrain } from '../world/terrain';
 import { castLanding } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
+import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
+import {
+  fleeDirection,
+  hasReachedTarget,
+  shouldFlee,
+  towardDirection,
+  wanderTarget,
+} from './animals';
 import {
   addItem,
   hasItem,
@@ -54,6 +64,8 @@ import {
   type Inventory,
 } from './inventory';
 import { pickupInReach } from './pickups';
+import { gatherSpotInReach } from './gathering';
+import { craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import {
   CAST_COOLDOWN_TICKS,
@@ -101,11 +113,14 @@ export interface WorldSimulationOptions {
 }
 
 /**
- * One player as it appears in a snapshot.
+ * One player or animal as it appears in a snapshot.
  *
- * Velocity travels too. The client that owns this player needs it to re-run its
- * own movement from the server's answer, and for everybody else it lets the
- * client keep a late player gliding instead of freezing.
+ * `netId` is that entity's own id, from a player's `netId` or an animal's -
+ * the `Animal` flag says which, and the two are never compared against each
+ * other. Velocity travels too. The client that owns this player needs it to
+ * re-run its own movement from the server's answer, and for everybody else -
+ * player or animal - it lets the client keep a late one gliding instead of
+ * freezing.
  */
 export interface SnapshotEntity {
   netId: number;
@@ -124,6 +139,12 @@ export const SnapshotFlag = {
   Airborne: 1 << 1,
   /** Moving at sprint pace. Derived from speed, so shoving a tree is not a sprint. */
   Sprinting: 1 << 2,
+  /**
+   * This entity is wildlife, not a player. Its id is that animal's own,
+   * never a player's `netId`: the two are only ever compared within the
+   * same flag, never against each other.
+   */
+  Animal: 1 << 3,
 } as const;
 
 /** A player's saved state, as it goes into and comes out of storage. */
@@ -211,6 +232,15 @@ export interface HungerEvent {
   readonly ate: ItemId | null;
 }
 
+/**
+ * Word that a player crafted something, for that player alone: nobody else
+ * needs to know what somebody else just made.
+ */
+export interface CraftedEvent {
+  readonly netId: number;
+  readonly item: ItemId;
+}
+
 /** A tree that has come back. */
 export interface TreeRegrown {
   readonly treeId: number;
@@ -230,7 +260,7 @@ interface PlayerRuntime {
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
-  /** Ticks left before this player may swing again. */
+  /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
    * Whether the button was down in the last input, so a fresh press can be told
@@ -250,6 +280,21 @@ interface PlayerRuntime {
    * message only goes out when it would show something different.
    */
   lastSentHunger: number;
+}
+
+/** Everything the world keeps about one wild animal, between ticks. */
+interface AnimalRuntime {
+  readonly id: number;
+  readonly entity: Entity;
+  readonly kind: AnimalKindId;
+  readonly denX: number;
+  readonly denZ: number;
+  fleeing: boolean;
+  /** Where it is ambling toward, while calm. Meaningless while fleeing. */
+  targetX: number;
+  targetZ: number;
+  /** How many wander targets it has drawn before, so the next one is a fresh hash. */
+  decisionSeq: number;
 }
 
 /**
@@ -280,6 +325,7 @@ export class WorldSimulation {
   private nowMs = 0;
 
   private readonly players = new Map<number, PlayerRuntime>();
+  private readonly animals = new Map<number, AnimalRuntime>();
   /** Pickups that somebody has already taken, by id. */
   private readonly takenPickups = new Set<number>();
   /** Drained by the world server each tick and turned into messages. */
@@ -292,6 +338,9 @@ export class WorldSimulation {
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
   private readonly hungerEvents: HungerEvent[] = [];
+  private readonly craftEvents: CraftedEvent[] = [];
+  /** Who gathered a stick this tick, so the world server knows whose pack to send. */
+  private readonly gatherEvents: number[] = [];
   /**
    * The props as they stand right now.
    *
@@ -333,6 +382,34 @@ export class WorldSimulation {
         );
       }
     }
+
+    for (const den of ANIMAL_DENS) {
+      this.spawnAnimal(den, terrain);
+    }
+  }
+
+  private spawnAnimal(den: AnimalDen, terrain: Terrain): void {
+    const y = terrain.heightAt(den.x, den.z);
+    const entity = this.world.spawn(
+      AnimalTag,
+      Position({ x: den.x, y, z: den.z }),
+      Velocity({ x: 0, y: 0, z: 0 }),
+      Facing({ yaw: 0 }),
+      NetworkId({ value: den.id }),
+    );
+    this.animals.set(den.id, {
+      id: den.id,
+      entity,
+      kind: den.kind,
+      denX: den.x,
+      denZ: den.z,
+      fleeing: false,
+      // Starting already "arrived" makes the first tick draw a real wander
+      // target rather than needing a special case for a fresh spawn.
+      targetX: den.x,
+      targetZ: den.z,
+      decisionSeq: 0,
+    });
   }
 
   /**
@@ -344,6 +421,7 @@ export class WorldSimulation {
    */
   dispose(): void {
     this.players.clear();
+    this.animals.clear();
     this.world.destroy();
   }
 
@@ -515,10 +593,14 @@ export class WorldSimulation {
         // Reaching and swinging are judged where the player ended up, not where
         // they started, and only the server ever decides what happens.
         if (wantsToInteract) {
-          // The same button reaches for what is at your feet first, and only
-          // failing that reaches into your own pack instead.
+          // The same button reaches for what is at your feet first, then for
+          // a patch of sticks, and only failing both reaches into your own
+          // pack instead.
           const pickedUp = this.tryPickup(runtime, scratch.position);
-          if (!pickedUp) this.tryEat(runtime);
+          if (!pickedUp) {
+            const gathered = this.tryGather(runtime, scratch.position);
+            if (!gathered) this.tryEat(runtime);
+          }
         }
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
@@ -541,6 +623,72 @@ export class WorldSimulation {
         // not already say something this tick.
         this.queueHungerEvent(runtime, null);
       });
+
+    this.stepAnimals();
+  }
+
+  /** Amble, or bolt from the nearest player - whichever this tick calls for. */
+  private stepAnimals(): void {
+    this.world
+      .query(AnimalTag, Position, Velocity, Facing, NetworkId)
+      .updateEach(([position, velocity, facing, networkId]) => {
+        const runtime = this.animals.get(networkId.value);
+        if (runtime === undefined) return;
+        const kind = ANIMAL_KINDS[runtime.kind];
+
+        const nearestPlayer = this.nearestPlayerPosition(position);
+        const nearestDistance =
+          nearestPlayer === null ? Infinity : horizontalDistance(position, nearestPlayer);
+        runtime.fleeing = shouldFlee(runtime.fleeing, nearestDistance, kind);
+
+        let direction: { x: number; z: number };
+        let speed: number;
+        if (runtime.fleeing && nearestPlayer !== null) {
+          direction = fleeDirection(position.x, position.z, nearestPlayer.x, nearestPlayer.z);
+          speed = kind.fleeSpeed;
+        } else {
+          if (hasReachedTarget(position.x, position.z, runtime.targetX, runtime.targetZ)) {
+            runtime.decisionSeq += 1;
+            const next = wanderTarget(
+              this.seed,
+              runtime.id,
+              runtime.decisionSeq,
+              runtime.denX,
+              runtime.denZ,
+              kind.leashRadius,
+            );
+            runtime.targetX = next.x;
+            runtime.targetZ = next.z;
+          }
+          direction = towardDirection(position.x, position.z, runtime.targetX, runtime.targetZ);
+          speed = kind.wanderSpeed;
+        }
+
+        velocity.x = direction.x * speed;
+        velocity.z = direction.z * speed;
+        position.x += velocity.x * TICK_SECONDS;
+        position.z += velocity.z * TICK_SECONDS;
+        position.y = this.collision.terrain.heightAt(position.x, position.z);
+        // Standing still keeps whichever way it was last facing, rather than
+        // snapping to face the den the instant it stops.
+        if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
+      });
+  }
+
+  /** The nearest connected player to a point, or null in an empty world. */
+  private nearestPlayerPosition(from: Readonly<Vec3>): Vec3 | null {
+    let best: Vec3 | null = null;
+    let bestDistance = Infinity;
+    for (const runtime of this.players.values()) {
+      const position = runtime.entity.get(Position);
+      if (position === undefined) continue;
+      const distance = horizontalDistance(from, position);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = position;
+      }
+    }
+    return best;
   }
 
   /**
@@ -564,6 +712,24 @@ export class WorldSimulation {
       pickupId: pickup.id,
       item: pickup.item,
     });
+    return true;
+  }
+
+  /**
+   * Gather a stick from a nearby patch of fallen branches, if there is one in
+   * reach and this player is not still catching their breath from a swing, a
+   * cast or a gather of their own. Unlike a pickup the patch is never used
+   * up - only how often any one player may draw from it. Returns whether it
+   * happened.
+   */
+  private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    if (runtime.swingCooldownTicks > 0) return false;
+    const spot = gatherSpotInReach(position, this.clearing.gatherSpots);
+    if (spot === null) return false;
+    if (addItem(runtime.inventory, 'stick') === 0) return false;
+
+    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+    this.gatherEvents.push(runtime.netId);
     return true;
   }
 
@@ -875,6 +1041,34 @@ export class WorldSimulation {
     return this.hungerEvents.splice(0);
   }
 
+  /**
+   * Make something out of whatever this player is carrying, if there is a
+   * recipe for it, they can afford it and have room for the result.
+   *
+   * Crafting is not tied to reach or facing the way chopping and picking
+   * things up are, so unlike those it does not wait for the next tick: a
+   * client's request is settled the moment it arrives. Returns whether
+   * anything was actually made.
+   */
+  craftItem(netId: number, item: ItemId): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return false;
+    if (!craft(runtime.inventory, item)) return false;
+
+    this.craftEvents.push({ netId, item });
+    return true;
+  }
+
+  /** Hand over every craft since this was last asked. */
+  drainCraftEvents(): CraftedEvent[] {
+    return this.craftEvents.splice(0);
+  }
+
+  /** Who gathered a stick since this was last asked, so their pack can be sent. */
+  drainGatherEvents(): number[] {
+    return this.gatherEvents.splice(0);
+  }
+
   /** Pickups already taken, for sending to a client and for saving. */
   takenPickupIds(): number[] {
     return [...this.takenPickups];
@@ -976,6 +1170,27 @@ export class WorldSimulation {
           vz: velocity.z,
           yaw: facing.yaw,
           flags,
+        });
+      });
+
+    this.world
+      .query(AnimalTag, Position, Velocity, Facing, NetworkId)
+      .readEach(([position, velocity, facing, networkId]) => {
+        const dx = position.x - viewerPosition.x;
+        const dz = position.z - viewerPosition.z;
+        if (dx * dx + dz * dz > radiusSquared) return;
+
+        const speedSquared = velocity.x * velocity.x + velocity.z * velocity.z;
+        into.push({
+          netId: networkId.value,
+          x: position.x,
+          y: position.y,
+          z: position.z,
+          vx: velocity.x,
+          vy: velocity.y,
+          vz: velocity.z,
+          yaw: facing.yaw,
+          flags: SnapshotFlag.Animal | (speedSquared > 0.04 ? SnapshotFlag.Moving : 0),
         });
       });
 

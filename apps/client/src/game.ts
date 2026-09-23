@@ -8,7 +8,9 @@ import {
   POND_FISH,
   PROP_KINDS,
   PlayerButton,
+  RECIPE_ITEMS,
   SPAWN_POSITION,
+  SnapshotFlag,
   buildTestClearing,
   buildWilderness,
   castLanding,
@@ -16,6 +18,7 @@ import {
   colliderForProp,
   createCollisionWorld,
   createWildernessTerrain,
+  gatherSpotInReach,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
@@ -24,11 +27,13 @@ import {
   vec3,
   type Clearing,
   type CollisionWorld,
+  type CraftedEvent,
   type FishingEvent,
   type HungerEvent,
   type ItemId,
   type PlacedProp,
   type ServerMessage,
+  type SnapshotEntity,
   type Vec3,
 } from '@acorn/shared';
 
@@ -36,10 +41,11 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer } from './net/local-player';
-import { RemotePlayers } from './net/remote-players';
+import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
+import { createCritter, type Critter } from './scene/critter';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
@@ -70,19 +76,30 @@ const FISHING_CAMERA_PITCH = 0.62;
 /** The fish that bites least often, for a word of congratulation. */
 const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item ?? null;
 
+/** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
+function isAnimalEntity(entity: SnapshotEntity): boolean {
+  return (entity.flags & SnapshotFlag.Animal) !== 0;
+}
+
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+  /** Every animal currently in view, wherever this browser last heard it was. */
+  animals(): Array<{ id: number; x: number; y: number; z: number }>;
   /** What the server says we carry. */
   carrying(): Array<{ item: string; count: number }>;
   /** Which pickups the server says are gone. */
   takenPickups(): number[];
   /** Everything the clearing has lying about to be found. */
   pickups(): Array<{ id: number; item: string; x: number; z: number }>;
+  /** Every patch of fallen branches you could gather a stick from. */
+  gatherSpots(): Array<{ x: number; z: number }>;
   /** What is within reach right now, if anything. */
   nearbyItem(): string | null;
+  /** Whether a patch of sticks is within reach right now. */
+  nearGatherSpot(): boolean;
   /** Trees the server says are down. */
   felledTrees(): number[];
   /** How many times each changed tree has grown back. */
@@ -111,6 +128,8 @@ export interface GameDebug {
   hunger(): number;
   /** The last thing said about what we ate, if it is still on screen. */
   hungerNews(): string | null;
+  /** The last thing said about what we crafted, if it is still on screen. */
+  craftingNews(): string | null;
 }
 
 export interface GameOptions {
@@ -125,8 +144,10 @@ export interface GameOptions {
 export class Game {
   private readonly options: GameOptions;
   private readonly scene = new THREE.Scene();
-  private readonly remotePlayers = new RemotePlayers();
+  private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
+  private readonly remoteAnimals = new InterpolatedEntities();
+  private readonly critters = new Map<number, Critter>();
   private readonly scratch: Vec3 = vec3();
 
   private setup: RendererSetup | null = null;
@@ -142,6 +163,7 @@ export class Game {
   private readonly takenPickups = new Set<number>();
   private carrying: readonly { item: ItemId; count: number }[] = [];
   private nearbyItem: ItemId | null = null;
+  private nearGatherSpot = false;
   /**
    * What the server says about every tree that is not as the seed left it, and
    * how far along the one being chopped is.
@@ -160,6 +182,7 @@ export class Game {
   /** How hungry we are, as far as the server has told us. */
   private hunger = HUNGER_MAX;
   private hungerNews: { text: string; until: number } | null = null;
+  private craftingNews: { text: string; until: number } | null = null;
   /** The server takes a breath after every cast ends; so does the hint. */
   private castReadyAt = 0;
   private canCast = false;
@@ -225,9 +248,15 @@ export class Game {
           const pose = this.remotePlayers.poseOf(netId);
           return { netId, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
         }),
+      animals: () =>
+        this.remoteAnimals.netIds().map((id) => {
+          const pose = this.remoteAnimals.poseOf(id);
+          return { id, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
+        }),
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
+      nearGatherSpot: () => this.nearGatherSpot,
       felledTrees: () => [...this.treeStates].filter(([, state]) => state.felled).map(([id]) => id),
       treeGenerations: () =>
         [...this.treeStates].map(([id, state]) => ({ id, generation: state.generation })),
@@ -249,6 +278,7 @@ export class Game {
           x: entry.x,
           z: entry.z,
         })),
+      gatherSpots: () => (this.clearing?.gatherSpots ?? []).map((spot) => ({ ...spot })),
       faceTowards: (x, z) => {
         const camera = this.camera;
         if (camera === null) return;
@@ -263,6 +293,7 @@ export class Game {
       fishingNews: () => this.currentNews(performance.now()),
       hunger: () => this.hunger,
       hungerNews: () => this.currentHungerNews(performance.now()),
+      craftingNews: () => this.currentCraftingNews(performance.now()),
     };
   }
 
@@ -281,6 +312,8 @@ export class Game {
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
     this.remoteCharacters.clear();
+    for (const critter of this.critters.values()) critter.dispose();
+    this.critters.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -313,18 +346,25 @@ export class Game {
       }
       case 'snapshot': {
         this.serverTick = message.tick;
-        this.playersOnline = message.entities.length;
 
-        const self = message.entities.find((entity) => entity.netId === this.selfNetId);
+        const playerEntities = message.entities.filter((entity) => !isAnimalEntity(entity));
+        const animalEntities = message.entities.filter(isAnimalEntity);
+        this.playersOnline = playerEntities.length;
+
+        const self = playerEntities.find((entity) => entity.netId === this.selfNetId);
         if (self !== undefined) this.localPlayer?.reconcile(self, message.ackSeq);
 
-        this.remotePlayers.ingest(message.serverTimeMs, message.entities, this.selfNetId);
+        this.remotePlayers.ingest(message.serverTimeMs, playerEntities, this.selfNetId);
         const present = new Set(
-          message.entities
+          playerEntities
             .filter((entity) => entity.netId !== this.selfNetId)
             .map((entity) => entity.netId),
         );
         for (const netId of this.remotePlayers.retainOnly(present)) this.removeRemote(netId);
+
+        this.remoteAnimals.ingest(message.serverTimeMs, animalEntities);
+        const presentAnimals = new Set(animalEntities.map((entity) => entity.netId));
+        for (const id of this.remoteAnimals.retainOnly(presentAnimals)) this.removeCritter(id);
         break;
       }
       case 'playerLeft': {
@@ -364,6 +404,10 @@ export class Game {
       }
       case 'hunger': {
         this.hearAboutHunger(message.event);
+        break;
+      }
+      case 'crafted': {
+        this.hearAboutCrafting(message.event);
         break;
       }
       case 'rejected': {
@@ -430,6 +474,22 @@ export class Game {
 
   private currentHungerNews(now = performance.now()): string | null {
     const news = this.hungerNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /** Only ever about us: nobody else has any reason to know what we just made. */
+  private hearAboutCrafting(event: CraftedEvent): void {
+    const now = performance.now();
+    const name = ITEM_KINDS[event.item].displayName.toLowerCase();
+    this.craftingNews = { text: `You made ${article(name)} ${name}.`, until: now + NEWS_MS };
+    // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
+    // than left for the next frame, so a stall in the render loop cannot eat
+    // the window this news is shown for.
+    this.options.hud.publish({ craftingNews: this.currentCraftingNews() });
+  }
+
+  private currentCraftingNews(now = performance.now()): string | null {
+    const news = this.craftingNews;
     return news !== null && now < news.until ? news.text : null;
   }
 
@@ -540,6 +600,24 @@ export class Game {
     return character;
   }
 
+  private removeCritter(animalId: number): void {
+    const critter = this.critters.get(animalId);
+    if (critter === undefined) return;
+    this.scene.remove(critter.group);
+    critter.dispose();
+    this.critters.delete(animalId);
+  }
+
+  private critterFor(animalId: number): Critter {
+    const existing = this.critters.get(animalId);
+    if (existing !== undefined) return existing;
+
+    const critter = createCritter();
+    this.scene.add(critter.group);
+    this.critters.set(animalId, critter);
+    return critter;
+  }
+
   /* ---------------------------------------------------------------------- */
   /* The frame                                                               */
   /* ---------------------------------------------------------------------- */
@@ -559,6 +637,11 @@ export class Game {
     const mouse = controls.takeMouseDelta();
     if (mouse.x !== 0 || mouse.y !== 0) camera.turn(mouse.x, mouse.y, MOUSE_SENSITIVITY);
 
+    // Read ahead of anything below that might forget taps for a produced
+    // movement tick, so a craft key pressed this frame is never swallowed by
+    // that blanket clear before this gets a look at it.
+    this.handleCraftInput(controls);
+
     // If the server never answers, let the player walk about on their own rather
     // than staring at a loading screen.
     if (
@@ -571,11 +654,20 @@ export class Game {
 
     this.updateLocalPlayer(deltaSeconds, camera);
     this.updateRemotePlayers(deltaSeconds);
+    this.updateRemoteAnimals(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
 
     setup.renderer.render(this.scene, camera.camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /** Turn any craft hotkeys pressed this frame into requests to the server. */
+  private handleCraftInput(controls: Controls): void {
+    for (const index of controls.takeCraftTaps()) {
+      const item = RECIPE_ITEMS[index];
+      if (item !== undefined) this.connection?.sendCraft(item);
+    }
+  }
 
   private updateLocalPlayer(deltaSeconds: number, camera: FollowCamera): void {
     const player = this.localPlayer;
@@ -611,6 +703,10 @@ export class Game {
             this.takenPickups.has(id),
           );
     this.nearbyItem = reachable?.item ?? null;
+
+    this.nearGatherSpot =
+      this.clearing !== null &&
+      gatherSpotInReach(player.motion.position, this.clearing.gatherSpots) !== null;
 
     const target =
       this.clearing === null
@@ -673,6 +769,19 @@ export class Game {
     }
   }
 
+  private updateRemoteAnimals(deltaSeconds: number): void {
+    if (this.clearingScene === null) return;
+    this.remoteAnimals.advance(deltaSeconds);
+
+    for (const animalId of this.remoteAnimals.netIds()) {
+      const pose = this.remoteAnimals.poseOf(animalId);
+      if (pose === undefined) continue;
+      const critter = this.critterFor(animalId);
+      critter.group.position.set(pose.x, pose.y, pose.z);
+      critter.group.rotation.y = pose.yaw;
+    }
+  }
+
   private updateHud(now: number, deltaSeconds: number): void {
     this.frames += 1;
     this.framesSince += deltaSeconds;
@@ -693,12 +802,14 @@ export class Game {
       correctionCm: (player?.stats.lastCorrection ?? 0) * 100,
       carrying: this.carrying,
       nearbyItem: this.nearbyItem,
+      nearGatherSpot: this.nearGatherSpot,
       aimedTree: this.aimedTree,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),
       hunger: this.hunger,
       hungerNews: this.currentHungerNews(now),
+      craftingNews: this.currentCraftingNews(now),
     });
   }
 
@@ -727,4 +838,9 @@ function newsFor(event: FishingEvent): string {
     default:
       return '';
   }
+}
+
+/** "a" or "an", for a lower-cased item name. Good enough for everything the item table holds. */
+function article(name: string): string {
+  return /^[aeiou]/i.test(name) ? 'an' : 'a';
 }

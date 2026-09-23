@@ -14,6 +14,7 @@ import {
   encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
+  encodeCrafted,
   encodeFishing,
   encodeHunger,
   encodeRejected,
@@ -141,6 +142,14 @@ export class World extends DurableObject<WorldEnv> {
       simulation.queueInputs(attachment.netId, decoded.inputs);
       return;
     }
+    if (decoded.type === 'craft') {
+      // Not tied to reach or the tick loop the way chopping and picking
+      // things up are, so it is settled the moment it arrives rather than
+      // waiting for the next step.
+      simulation.craftItem(attachment.netId, decoded.item);
+      this.announceCrafting(simulation);
+      return;
+    }
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
   }
 
@@ -208,6 +217,7 @@ export class World extends DurableObject<WorldEnv> {
 
     simulation.step(startedAt);
     this.announcePickups(simulation);
+    this.announceGathering(simulation);
     this.announceChopping(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
@@ -261,6 +271,18 @@ export class World extends DurableObject<WorldEnv> {
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
+  }
+
+  /**
+   * Tell anybody who gathered a stick this tick what is in their pack now.
+   *
+   * Unlike a pickup, a gather spot never runs out, so there is nothing here
+   * for everybody else to be told about.
+   */
+  private announceGathering(simulation: WorldSimulation): void {
+    const netIds = simulation.drainGatherEvents();
+    if (netIds.length === 0) return;
+    this.sendPacks(simulation, new Set(netIds));
   }
 
   /**
@@ -334,6 +356,27 @@ export class World extends DurableObject<WorldEnv> {
     // Eating took something out of the pack; say so, the same as any other
     // way a pack changes.
     this.sendPacks(simulation, ate);
+  }
+
+  /**
+   * Tell a player what they just made, for a HUD toast, then send their pack
+   * afterwards the same as any other way it changes.
+   *
+   * Private to the one who made it: nobody else has any reason to know what
+   * somebody else just crafted.
+   */
+  private announceCrafting(simulation: WorldSimulation): void {
+    const events = simulation.drainCraftEvents();
+    if (events.length === 0) return;
+
+    const byNetId = new Map(events.map((event) => [event.netId, event]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeCrafted(event));
+    }
+    this.sendPacks(simulation, new Set(byNetId.keys()));
   }
 
   /** Send these players their packs, and save them straight away. */

@@ -7,6 +7,7 @@ import {
   stumpFor,
   treeAtGeneration,
   type Clearing,
+  type GatherSpot,
   type PlacedPickup,
   type PlacedProp,
 } from '@acorn/shared';
@@ -114,6 +115,12 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     const model = createPickup(pickup, disposables);
     pickups.set(pickup.id, model);
     group.add(model);
+  }
+
+  // Never taken away, unlike a pickup: there is nothing here to track once it
+  // is placed.
+  for (const spot of clearing.gatherSpots) {
+    group.add(createStickPile(spot, disposables));
   }
 
   /** What is drawn right now, so nothing is rebuilt that has not changed. */
@@ -291,6 +298,42 @@ function createAxePickup(
       handleMaterial.dispose();
       headGeometry.dispose();
       headMaterial.dispose();
+    },
+  });
+  return group;
+}
+
+/**
+ * A little pile of fallen branches: a few crossed sticks lying flat, sharing
+ * one geometry and material since there are only ever a couple of these.
+ */
+function createStickPile(
+  spot: GatherSpot,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const geometry = new THREE.CylinderGeometry(0.02, 0.026, 0.55, 5);
+  const material = new THREE.MeshStandardMaterial({
+    color: ITEM_KINDS.stick.placeholderColor,
+    roughness: 0.95,
+    flatShading: true,
+  });
+
+  for (const angle of [0.3, -0.45, 0.95]) {
+    const stick = new THREE.Mesh(geometry, material);
+    stick.rotation.set(Math.PI / 2 - 0.12, 0, angle);
+    stick.position.y = 0.05;
+    stick.castShadow = true;
+    group.add(stick);
+  }
+
+  group.position.set(spot.x, 0, spot.z);
+
+  disposables.push({
+    dispose: () => {
+      geometry.dispose();
+      material.dispose();
     },
   });
   return group;

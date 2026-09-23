@@ -1,6 +1,6 @@
 import { INTERPOLATION_DELAY_SECONDS, lerpAngle, type SnapshotEntity } from '@acorn/shared';
 
-/** One remembered position for a player, with the server time it applied at. */
+/** One remembered position for an entity, with the server time it applied at. */
 interface Sample {
   readonly timeMs: number;
   readonly x: number;
@@ -22,25 +22,31 @@ export interface RemotePose {
 const HISTORY_MS = 1500;
 
 /**
- * Where everybody else is.
+ * Where everybody else is - other players, and now animals too.
  *
- * Other players are drawn about a tenth of a second in the past, between the two
- * snapshots either side of that moment. Without this they would jump from one
- * snapshot to the next ten times a second.
+ * Anything only ever seen in a snapshot is drawn about a tenth of a second in
+ * the past, between the two snapshots either side of that moment. Without
+ * this it would jump from one snapshot to the next ten times a second. One
+ * tracker only ever holds one kind of id at a time - a game keeps a separate
+ * instance for players and for animals - so nothing here needs to know which
+ * kind it is.
  */
-export class RemotePlayers {
+export class InterpolatedEntities {
   private readonly history = new Map<number, Sample[]>();
   /** The client's running estimate of what time it is on the server. */
   private serverTimeMs = 0;
 
-  /** Take everything in a snapshot except the player this browser controls. */
-  ingest(serverTimeMs: number, entities: readonly SnapshotEntity[], selfNetId: number): void {
+  /**
+   * Take everything in a snapshot, except the one entity this browser
+   * controls directly - the local player has its own prediction and does not
+   * need interpolating. Nothing is excluded when there is no such entity, an
+   * animal tracker included.
+   */
+  ingest(serverTimeMs: number, entities: readonly SnapshotEntity[], excludeId?: number): void {
     this.serverTimeMs = Math.max(this.serverTimeMs, serverTimeMs);
 
-    const seen = new Set<number>();
     for (const entity of entities) {
-      if (entity.netId === selfNetId) continue;
-      seen.add(entity.netId);
+      if (entity.netId === excludeId) continue;
 
       const samples = this.history.get(entity.netId) ?? [];
       const newest = samples[samples.length - 1];

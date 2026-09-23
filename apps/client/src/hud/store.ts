@@ -24,6 +24,8 @@ export interface HudState {
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
+  /** Whether a patch of sticks is within reach right now. */
+  readonly nearGatherSpot: boolean;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** Whether a click right now would cast a line. */
@@ -35,6 +37,8 @@ export interface HudState {
   readonly hunger: number;
   /** What we last ate, while it is still worth showing. */
   readonly hungerNews: string | null;
+  /** What we last made, while it is still worth showing. */
+  readonly craftingNews: string | null;
 }
 
 const INITIAL: HudState = {
@@ -52,12 +56,14 @@ const INITIAL: HudState = {
   ready: false,
   carrying: [],
   nearbyItem: null,
+  nearGatherSpot: false,
   aimedTree: null,
   canCast: false,
   fishing: null,
   fishingNews: null,
   hunger: HUNGER_MAX,
   hungerNews: null,
+  craftingNews: null,
 };
 
 /**
