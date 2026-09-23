@@ -122,9 +122,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(encodeBuiltProps(simulation.builtPropsList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
-    server.send(
-      encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false }),
-    );
+    server.send(encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false }));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -777,10 +775,7 @@ export class World extends DurableObject<WorldEnv> {
         facing_yaw: number;
         hunger: number;
         health: number;
-      }>(
-        'SELECT x, y, z, facing_yaw, hunger, health FROM players WHERE player_key = ?',
-        playerKey,
-      )
+      }>('SELECT x, y, z, facing_yaw, hunger, health FROM players WHERE player_key = ?', playerKey)
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;

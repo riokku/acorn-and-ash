@@ -1313,7 +1313,8 @@ describe('catching wildlife', () => {
 
 describe('threats', () => {
   const raccoonDen = ANIMAL_DENS.find((entry) => entry.id === 1005);
-  if (raccoonDen === undefined) throw new Error('the masked raccoon den is gone from the data table');
+  if (raccoonDen === undefined)
+    throw new Error('the masked raccoon den is gone from the data table');
   const threat = ANIMAL_KINDS.maskedRaccoon.threat;
   if (threat === undefined) throw new Error('the masked raccoon has lost its threat behaviour');
   // Right at attack range: close enough that it never has to chase to reach it.
