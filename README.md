@@ -16,8 +16,9 @@ The game is online-only. Every world runs on the server.
 > play, and eating a fish tops you back up. Rabbits live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
 > that fells a tree and it pays out meat, worth even more than a fish. Chop
-> enough logs and you can build a campfire, the first thing Phase 3 lets you
-> place in the world. See [the roadmap](#roadmap).
+> enough logs and you can build a campfire, or a cabin of your own - once you
+> have one, that is where you start next time, instead of the open clearing.
+> See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -28,13 +29,13 @@ The game is online-only. Every world runs on the server.
 | `Space`                           | Jump                       |
 | `E`                               | Pick up, gather, eat       |
 | `1` / `2`                         | Craft an axe / fishing rod |
-| `B`                               | Build a campfire           |
+| `B`                               | Open the build menu        |
+| `1` / `2` (menu open)             | Build a campfire / cabin   |
 | Left mouse                        | Chop, cast, hook           |
 | Mouse                             | Look around                |
 | `Esc`                             | Let go of the mouse        |
 
-There is nothing to land on yet, so a jump is a hop in place. Standing on things
-comes with the cabin in Phase 3.
+There is nothing to land on yet, so a jump is a hop in place.
 
 You can carry one axe, one fishing rod, ten logs, ten sticks, ten meat and ten
 of each kind of fish. The limits, and how much hunger eating one restores, live in
@@ -123,15 +124,24 @@ production use the real wait.
 
 ### Building
 
-Press `B` to place a campfire (a placeholder pile of logs, for now) just in
-front of you, anywhere in the clearing - it costs four logs, exactly what
-felling the landmark oak by the axe stump pays out. The hint at the bottom
-tells you when the spot you're facing is clear and your pack can afford one.
-What a campfire costs lives in
+Press `B` to open a small menu of what you can place just in front of you,
+anywhere in the clearing, then a number to pick one:
+
+- **Campfire** - four logs, exactly what felling the landmark oak by the axe
+  stump pays out. A placeholder pile of logs, for now, that does nothing yet
+  beyond standing there.
+- **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
+  per player: once you have built yours, that is where you start next time,
+  instead of the open clearing. A placeholder box with a peaked roof for now
+  - walked around, not into yet.
+
+The hint at the bottom tells you when the spot you're facing is clear and
+your pack can afford whatever you have picked. What each one costs lives in
 [`packages/shared/src/data/buildables.ts`](packages/shared/src/data/buildables.ts).
-It does nothing yet beyond standing there - the first small step toward
-Phase 3's cabin. See
-[decision 0020](docs/decisions/0020-a-campfire-you-can-build.md).
+See [decision 0020](docs/decisions/0020-a-campfire-you-can-build.md) for the
+campfire and placement itself, and
+[decision 0022](docs/decisions/0022-a-cabin-of-your-own.md) for the cabin,
+ownership and the spawn-at-home rule.
 
 ## Running it locally
 

@@ -19,6 +19,7 @@ declare global {
       aimedTree(): { name: string; swingsLeft: number } | null;
       aimedAnimal(): { name: string } | null;
       canBuild(): boolean;
+      buildMenuOpen(): boolean;
       builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
@@ -854,7 +855,10 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
   throw new Error(`Never made it back to ${target.x}, ${target.z}`);
 }
 
-/** Face the given spot and hold Build until a campfire appears somewhere. */
+/**
+ * Face the given spot, open the build menu with B, and pick a campfire (menu
+ * slot 1) until one appears somewhere.
+ */
 async function buildCampfireFacing(page: Page, target: { x: number; z: number }): Promise<void> {
   for (let attempt = 0; attempt < 15; attempt++) {
     if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) return;
@@ -862,10 +866,10 @@ async function buildCampfireFacing(page: Page, target: { x: number; z: number })
       ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
       [target.x, target.z],
     );
-    await page.keyboard.down('KeyB');
-    await page.waitForTimeout(200);
-    await page.keyboard.up('KeyB');
+    await page.keyboard.press('KeyB');
     await page.waitForTimeout(150);
+    await page.keyboard.press('Digit1');
+    await page.waitForTimeout(200);
   }
   throw new Error('never built a campfire');
 }
@@ -919,7 +923,17 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     [spawnSpot.x, spawnSpot.z],
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
-  await expect(page.locator('.hud-hint')).toContainText('Press B to build a campfire');
+  await expect(page.locator('.hud-hint')).toContainText('Press B to build');
+
+  // Opening the menu with only four logs offers the campfire but not the
+  // cabin (which costs ten) - picking the unaffordable one should do
+  // nothing and leave the menu's own key free for a moment later.
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('.hud-hint')).toContainText('Press 1 for a campfire, 2 for a cabin');
+  await page.keyboard.press('Digit2');
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
+  expect(await page.evaluate(() => window.acornDebug?.buildMenuOpen() ?? true)).toBe(false);
 
   await buildCampfireFacing(page, spawnSpot);
 
