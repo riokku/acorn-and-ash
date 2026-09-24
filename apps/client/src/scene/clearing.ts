@@ -12,6 +12,7 @@ import {
   type PlacedProp,
 } from '@acorn/shared';
 
+import { flowerModelParts } from './flower-models';
 import { createPond } from './pond';
 import {
   HIDDEN_INSTANCE,
@@ -353,15 +354,6 @@ function createFlowerPatch(
 ): THREE.Object3D {
   const group = new THREE.Group();
 
-  const stemGeometry = new THREE.CylinderGeometry(0.012, 0.018, 0.3, 5);
-  const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.9 });
-  const headGeometry = new THREE.SphereGeometry(0.07, 6, 5);
-  const headMaterial = new THREE.MeshStandardMaterial({
-    color: ITEM_KINDS.flower.placeholderColor,
-    roughness: 0.7,
-    flatShading: true,
-  });
-
   const offsets = [
     { x: 0, z: 0 },
     { x: 0.28, z: 0.12 },
@@ -369,27 +361,51 @@ function createFlowerPatch(
     { x: 0.1, z: -0.26 },
     { x: -0.26, z: -0.1 },
   ];
-  for (const offset of offsets) {
-    const stem = new THREE.Mesh(stemGeometry, stemMaterial);
-    stem.position.set(offset.x, 0.15, offset.z);
-    stem.castShadow = true;
-    group.add(stem);
 
-    const head = new THREE.Mesh(headGeometry, headMaterial);
-    head.position.set(offset.x, 0.32, offset.z);
-    head.castShadow = true;
-    group.add(head);
+  const realFlower = flowerModelParts();
+  if (realFlower !== undefined) {
+    // Shared geometry and material loaded once for every flower patch and
+    // bed in the world, so this group never owns them to dispose.
+    offsets.forEach((offset, index) => {
+      for (const part of realFlower) {
+        const bloom = new THREE.Mesh(part.geometry, part.material);
+        bloom.position.set(offset.x, 0, offset.z);
+        bloom.rotation.y = index * 1.3;
+        bloom.castShadow = true;
+        group.add(bloom);
+      }
+    });
+  } else {
+    const stemGeometry = new THREE.CylinderGeometry(0.012, 0.018, 0.3, 5);
+    const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.9 });
+    const headGeometry = new THREE.SphereGeometry(0.07, 6, 5);
+    const headMaterial = new THREE.MeshStandardMaterial({
+      color: ITEM_KINDS.flower.placeholderColor,
+      roughness: 0.7,
+      flatShading: true,
+    });
+    disposables.push({
+      dispose: () => {
+        stemGeometry.dispose();
+        stemMaterial.dispose();
+        headGeometry.dispose();
+        headMaterial.dispose();
+      },
+    });
+
+    for (const offset of offsets) {
+      const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+      stem.position.set(offset.x, 0.15, offset.z);
+      stem.castShadow = true;
+      group.add(stem);
+
+      const head = new THREE.Mesh(headGeometry, headMaterial);
+      head.position.set(offset.x, 0.32, offset.z);
+      head.castShadow = true;
+      group.add(head);
+    }
   }
 
   group.position.set(spot.x, 0, spot.z);
-
-  disposables.push({
-    dispose: () => {
-      stemGeometry.dispose();
-      stemMaterial.dispose();
-      headGeometry.dispose();
-      headMaterial.dispose();
-    },
-  });
   return group;
 }

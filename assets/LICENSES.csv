@@ -1,3 +1,4 @@
 file,source_url,author,license,date_added,modifications,ai_tool,ai_plan
 assets/trees/birch.glb,https://quaternius.com/packs/ultimatestylizednature.html,Quaternius,CC0-1.0,2026-09-24,"Re-exported from the pack's BirchTree_4 glTF to a single .glb; dropped a normal-map reference we didn't bring in; Meshopt-compressed with gltf-transform",,
 assets/trees/oak.glb,https://quaternius.com/packs/ultimatestylizednature.html,Quaternius,CC0-1.0,2026-09-24,"Stand-in for the game's oak (the pack has none); re-exported from the pack's MapleTree_1 glTF to a single .glb; dropped a normal-map reference we didn't bring in; Meshopt-compressed with gltf-transform",,
+assets/flowers/flower.glb,https://quaternius.com/packs/ultimatestylizednature.html,Quaternius,CC0-1.0,2026-09-24,"Used for the flower patch gather spot and the flower bed's blooms; re-exported from the pack's Flower_2 glTF to a single .glb; Meshopt-compressed with gltf-transform",,
