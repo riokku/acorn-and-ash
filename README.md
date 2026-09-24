@@ -30,7 +30,9 @@ The game is online-only. Every world runs on the server.
 > your own that finishes a tree or a fight outright - if you can afford to
 > stand still long enough for it. A day passes every twenty minutes, the sky
 > brightening and dimming the same way for everyone in the world at once -
-> nothing plays differently by night yet, but it's there to watch. See
+> nothing plays differently by night yet, but it's there to watch. Chopping,
+> landing a hit and taking one all have a bit of weight to them now - a small
+> camera kick and a sound - and a calm tune plays once you're in. See
 > [the roadmap](#roadmap).
 
 ## Controls
