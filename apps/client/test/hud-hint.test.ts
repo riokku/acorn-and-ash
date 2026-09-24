@@ -34,6 +34,7 @@ const BASE_STATE: HudState = {
   charging: false,
   craftingNews: null,
   huntingNews: null,
+  isNight: false,
 };
 
 describe('the hint along the bottom', () => {

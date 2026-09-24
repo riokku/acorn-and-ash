@@ -83,6 +83,14 @@ test('the WebGL 2 fallback works when WebGPU is refused', async ({ page }) => {
   expect(await hudValue(page, 'Renderer')).toContain('WebGL 2');
 });
 
+test('shows whether it is day or night', async ({ page }) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  // Not a test of the 20-minute cycle itself - just that the HUD is actually
+  // showing a value the server's clock produced, one way or the other.
+  expect(await hudValue(page, 'Time')).toMatch(/^(Day|Night)$/);
+});
+
 test('walking moves the player, and the server agrees', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
