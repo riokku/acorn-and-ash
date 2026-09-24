@@ -172,10 +172,104 @@ player's full position ten times a second.
 
 ---
 
+## 4. Revisiting tick time, now that there is a game
+
+**Question:** section 3's numbers are from 17 September, when the clearing had
+trees and not much else. Do they still hold up now that players fish, hunt,
+build, fight, and leave things behind?
+
+Measured on 24 September 2026, the same way as before (`pnpm bench:tick`), but
+two real problems turned up first while looking for what would matter most as
+a world ages.
+
+### What was actually wrong
+
+The built-things and buried-things lists are both sent in full to every player
+on every change, and neither has a cap on how many can ever exist: a campfire
+costs no more than four logs and is never removed, and a buried cache never
+expires (decision 0028). Auditing that code found:
+
+- **A real bug, not just a slow path.** `encodeBuiltProps`/`encodeBuriedCaches`
+  cap a message at 255 entries by taking the _first_ 255 of an append-only
+  array. Past that count, everything built or buried afterwards would never
+  reach anybody, ever - not slowly, just silently. Fixed to keep the newest
+  entries instead: an old campfire aging out of view is a much smaller problem
+  than a new one nobody can ever see.
+- **A cost that grew with everything ever built, forever.** Checking whether a
+  player already owns a capped buildable, finding a player's home, and the
+  collision check every new build attempt runs, all looked a built prop up by
+  scanning the entire built-props array. Fine at a dozen campfires; not fine
+  at a thousand. Indexed built props by id so ownership and home lookups are
+  now O(1) - the collision check still has to look at everything on the
+  ground, which is unavoidable and, per the numbers below, still cheap enough
+  not to matter.
+
+Neither of these showed up in the existing load test, because its bots only
+ever wander in circles - nothing has ever built a campfire or buried a cache
+during a benchmark run before tonight.
+
+### Fresh numbers
+
+Same player-count sweep as before, now against everything the game has grown
+into:
+
+| Players |        Mean |         p50 |         p95 |         p99 |       Worst |  Snapshots out |        Heap |
+| ------: | ----------: | ----------: | ----------: | ----------: | ----------: | -------------: | ----------: |
+|       1 |     0.06 ms |     0.04 ms |     0.20 ms |     0.43 ms |     1.45 ms |       1.4 KB/s |     13.0 MB |
+|      10 |     0.23 ms |     0.21 ms |     0.39 ms |     0.63 ms |     1.24 ms |      36.6 KB/s |     13.1 MB |
+|      25 |     0.51 ms |     0.54 ms |     0.71 ms |     1.08 ms |     1.13 ms |     171.2 KB/s |     14.1 MB |
+|  **50** | **1.16 ms** | **1.24 ms** | **1.84 ms** | **2.28 ms** | **3.04 ms** | **615.0 KB/s** | **17.4 MB** |
+
+Mean tick time at 50 players roughly tripled since September (0.40 ms → 1.16
+ms) - everything the game gained since Phase 0 costs something - but it is
+still comfortably inside budget.
+
+New this time: the same 50 players, but with a world that has been lived in -
+hundreds or thousands of campfires and buried caches built up over time, well
+past what a single message can ever carry:
+
+| Built props (= buried caches) |    Mean |     p99 |   Worst |    Heap |
+| ----------------------------: | ------: | ------: | ------: | ------: |
+|                             0 | 1.18 ms | 2.50 ms | 3.74 ms | 20.4 MB |
+|                           255 | 1.19 ms | 2.53 ms | 3.74 ms | 16.3 MB |
+|                          2000 | 1.19 ms | 2.26 ms | 3.50 ms | 17.2 MB |
+
+Flat. A world with 2000 campfires ever built - about eight times what any
+single message can carry - costs the same per tick as a brand new one. The
+worst case measured all night, anywhere in either sweep, was **3.74 ms**:
+**25.3% of the 10 ms budget at the 99th percentile**, and about **20 MB**
+against the 128 MB a Durable Object gets. The fixes above did what they needed
+to.
+
+### What is still true from before, unchanged
+
+The per-tick player-snapshot bandwidth is still what section 3 already
+flagged: it grows with the square of the player count, because interest
+management's 100 m radius does not do much when everyone plays within a few
+dozen metres of the clearing, which is where the axe, the pond and the build
+spots all are. 615 KB/s out of one world at 50 players is not a problem for
+today's numbers, but it has not gotten any smaller since September, and it is
+the same architectural question the original write-up already named: send
+only what changed, or actually partition the world into the 32 m chunks
+CLAUDE.md describes - which, as of tonight, turned out to not actually exist
+in code. The constant is defined and unused; the 100 m cutoff is real, but
+implemented as a distance check against every player and animal, not a
+spatial index. Not attempted tonight: tick time has plenty of headroom, and
+building a spatial index unsupervised, with nobody available to review it, is
+a bigger and riskier change than fits one night's work.
+
+`pnpm loadtest` was not re-run tonight against a live server - it still only
+simulates idle movement, so it would not have measured anything the sweep
+above does not already cover more directly. Teaching it to actually chop,
+gather and build over the real network protocol remains useful future work.
+
+---
+
 ## In short
 
-| Experiment                | Verdict                                                                                                                                                         |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| WebGPU fallback           | Both paths work. WebGPU confirmed in Edge on real hardware, and a machine without it falls back to WebGL 2 and still plays. Firefox and Safari not yet checked. |
-| Koota in a Durable Object | Works. No WebAssembly problem, small, fast.                                                                                                                     |
-| 50 players                | 0.40 ms mean tick against a 10 ms budget, 12 MB against 128 MB, no dropped snapshots. Plenty of room.                                                           |
+| Experiment                | Verdict                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WebGPU fallback           | Both paths work. WebGPU confirmed in Edge on real hardware, and a machine without it falls back to WebGL 2 and still plays. Firefox and Safari not yet checked.                                                                                                                                                                                                                                                |
+| Koota in a Durable Object | Works. No WebAssembly problem, small, fast.                                                                                                                                                                                                                                                                                                                                                                    |
+| 50 players                | 0.40 ms mean tick against a 10 ms budget, 12 MB against 128 MB, no dropped snapshots. Plenty of room.                                                                                                                                                                                                                                                                                                          |
+| 50 players, revisited     | Now 1.16 ms mean (game has grown since). Fixed a real bug where a long-lived world's built props/caches would silently stop reaching anybody past 255. A world with 2000 of each still costs the same per tick as a fresh one. Player-snapshot bandwidth still grows with the square of player count, unchanged since September - not urgent yet, worth revisiting before real spatial partitioning is needed. |

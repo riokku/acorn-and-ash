@@ -392,9 +392,17 @@ export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
   return buffer;
 }
 
-/** Everything anybody has ever built, sent whole - the same way tree states are. */
+/**
+ * Everything anybody has ever built, sent whole - the same way tree states are.
+ *
+ * Campfires have no per-player cap, so a long-lived world can outgrow
+ * MAX_BUILT_PROPS. When it does, this keeps the most recently built ones
+ * rather than the oldest - losing sight of something built long ago is a much
+ * smaller problem than a new campfire silently never reaching anybody.
+ */
 export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
-  const count = Math.min(props.length, MAX_BUILT_PROPS);
+  const start = Math.max(0, props.length - MAX_BUILT_PROPS);
+  const count = props.length - start;
   const buffer = new ArrayBuffer(2 + count * BYTES_PER_BUILT_PROP);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.BuiltProps);
@@ -402,7 +410,7 @@ export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
 
   let offset = 2;
   for (let i = 0; i < count; i++) {
-    const prop = props[i];
+    const prop = props[start + i];
     if (prop === undefined) break;
     view.setUint16(offset, prop.id & 0xffff, true);
     view.setUint8(offset + 2, buildableKindIndex(prop.kind));
@@ -418,9 +426,15 @@ export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
  *
  * What each one holds never goes over the wire: nothing needs to say what is
  * in a cache, only that it is there and whose.
+ *
+ * A cache never expires (see decision 0028), so a long-lived world can
+ * outgrow MAX_BURIED_CACHES same as built props can. Keeps the most recent
+ * ones for the same reason: a very old, likely-forgotten mound is a smaller
+ * loss than a fresh one nobody can ever see.
  */
 export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuffer {
-  const count = Math.min(caches.length, MAX_BURIED_CACHES);
+  const start = Math.max(0, caches.length - MAX_BURIED_CACHES);
+  const count = caches.length - start;
   const buffer = new ArrayBuffer(2 + count * BYTES_PER_BURIED_CACHE);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.BuriedCaches);
@@ -428,7 +442,7 @@ export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuf
 
   let offset = 2;
   for (let i = 0; i < count; i++) {
-    const cache = caches[i];
+    const cache = caches[start + i];
     if (cache === undefined) break;
     view.setUint16(offset, cache.id & 0xffff, true);
     view.setUint16(

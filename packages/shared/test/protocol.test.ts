@@ -30,6 +30,8 @@ import {
   inputBundleBytes,
   snapshotBytes,
   MAX_INPUTS_PER_BUNDLE,
+  MAX_BUILT_PROPS,
+  MAX_BURIED_CACHES,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
 import type {
@@ -670,6 +672,22 @@ describe('telling everybody what has been built', () => {
     encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
   });
+
+  it('past the cap, keeps the most recently built rather than the oldest', () => {
+    // A campfire has no per-player cap, so a long-lived world can outgrow
+    // MAX_BUILT_PROPS. A fresh campfire silently never reaching anybody
+    // would be a much worse loss than an old one falling off the end.
+    const props: BuiltProp[] = Array.from({ length: MAX_BUILT_PROPS + 3 }, (_, i) => ({
+      id: i,
+      kind: 'campfire',
+      x: 0,
+      z: 0,
+    }));
+    const decoded = roundTrip(props);
+    expect(decoded).toHaveLength(MAX_BUILT_PROPS);
+    expect(decoded?.[0]?.id).toBe(3);
+    expect(decoded?.[decoded.length - 1]?.id).toBe(MAX_BUILT_PROPS + 2);
+  });
 });
 
 describe('telling everybody what is buried', () => {
@@ -707,6 +725,21 @@ describe('telling everybody what is buried', () => {
   it('refuses one that has been cut short', () => {
     const encoded = encodeBuriedCaches([{ id: 1, ownerNetId: 1, x: 0, z: 0 }]);
     expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
+  });
+
+  it('past the cap, keeps the most recently buried rather than the oldest', () => {
+    // A cache never expires (decision 0028), so a long-lived world can
+    // outgrow MAX_BURIED_CACHES the same way built props can.
+    const caches: BuriedCacheView[] = Array.from({ length: MAX_BURIED_CACHES + 3 }, (_, i) => ({
+      id: i,
+      ownerNetId: null,
+      x: 0,
+      z: 0,
+    }));
+    const decoded = roundTrip(caches);
+    expect(decoded).toHaveLength(MAX_BURIED_CACHES);
+    expect(decoded?.[0]?.id).toBe(3);
+    expect(decoded?.[decoded.length - 1]?.id).toBe(MAX_BURIED_CACHES + 2);
   });
 });
 
