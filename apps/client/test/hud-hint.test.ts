@@ -20,6 +20,7 @@ const BASE_STATE: HudState = {
   carrying: [],
   nearbyItem: null,
   nearGatherSpot: null,
+  nearBuriedCache: false,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,
@@ -34,6 +35,7 @@ const BASE_STATE: HudState = {
   charging: false,
   craftingNews: null,
   huntingNews: null,
+  cacheNews: null,
   isNight: false,
 };
 
@@ -99,6 +101,16 @@ describe('the hint along the bottom', () => {
   it('names flowers when a flower patch is the one within reach', () => {
     const state: HudState = { ...BASE_STATE, nearGatherSpot: 'flower' };
     expect(hint(state)).toBe('Press E to gather flowers');
+  });
+
+  it('offers to dig up a buried cache of your own within reach', () => {
+    const state: HudState = { ...BASE_STATE, nearBuriedCache: true };
+    expect(hint(state)).toBe('Press E to dig up your buried stash');
+  });
+
+  it('reaches for a pickup or a patch before a buried cache, the same button', () => {
+    const state: HudState = { ...BASE_STATE, nearBuriedCache: true, nearGatherSpot: 'stick' };
+    expect(hint(state)).toBe('Press E to gather sticks');
   });
 
   it('offers to catch prey with no mention of hits, since one swing is always enough', () => {

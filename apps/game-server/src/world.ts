@@ -18,6 +18,8 @@ import {
   encodePlayerLeft,
   encodePong,
   encodeBuiltProps,
+  encodeBuriedCaches,
+  encodeCache,
   encodeCaught,
   encodeCrafted,
   encodeFishing,
@@ -33,6 +35,7 @@ import {
   itemFromIndex,
   itemIndex,
   type BuiltProp,
+  type BuriedCache,
   type ItemId,
   type PersistedPlayer,
   type PersistedTree,
@@ -121,6 +124,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(encodeBuiltProps(simulation.builtPropsList()));
+    server.send(encodeBuriedCaches(simulation.buriedCachesList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
       encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
@@ -244,6 +248,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceFishing(simulation);
     this.announceHunger(simulation);
     this.announceHealth(simulation);
+    this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
@@ -451,6 +456,37 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
+   * Write a fresh burial or a dig-up to storage, tell whoever it happened to
+   * for a HUD toast, and tell everybody the mound itself just appeared or
+   * disappeared.
+   *
+   * A dig-up also changes the digger's own pack, the same as a build changes
+   * the builder's - `sendPacks` handles that the same way.
+   */
+  private announceBuriedCaches(simulation: WorldSimulation): void {
+    const changes = simulation.drainCacheEvents();
+    if (changes.length === 0) return;
+
+    for (const change of changes) {
+      if (change.kind === 'buried') this.writeBuriedCache(change.cache);
+      else this.deleteBuriedCache(change.cacheId);
+    }
+
+    const byNetId = new Map(
+      changes.map((change) => [change.netId, { netId: change.netId, kind: change.kind }]),
+    );
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeCache(event));
+    }
+    this.sendPacks(simulation, new Set(byNetId.keys()));
+
+    this.broadcast(encodeBuriedCaches(simulation.buriedCachesList()));
+  }
+
+  /**
    * Tell a player what they just made, for a HUD toast, then send their pack
    * afterwards the same as any other way it changes.
    *
@@ -571,6 +607,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
+    simulation.restoreBuriedCaches(this.loadBuriedCaches());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -733,6 +770,21 @@ export class World extends DurableObject<WorldEnv> {
     // Nothing built before homes existed had an owner - null leaves it exactly
     // as communal as it always was.
     this.addColumn('built_props', 'owner_key', 'TEXT');
+    // What a knockout buries, until it is dug back up - unlike built props,
+    // this one is deleted once its reason for existing is gone.
+    sql.exec(`CREATE TABLE IF NOT EXISTS buried_caches (
+      id INTEGER PRIMARY KEY,
+      owner_key TEXT,
+      x REAL NOT NULL,
+      z REAL NOT NULL,
+      buried_at_ms INTEGER NOT NULL
+    )`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS buried_cache_items (
+      cache_id INTEGER NOT NULL,
+      item_index INTEGER NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (cache_id, item_index)
+    )`);
   }
 
   /** Add a column to an existing table, unless it is already there. */
@@ -880,6 +932,70 @@ export class World extends DurableObject<WorldEnv> {
       Date.now(),
       ownerKey,
     );
+  }
+
+  private loadBuriedCaches(): BuriedCache[] {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        id: number;
+        owner_key: string | null;
+        x: number;
+        z: number;
+      }>('SELECT id, owner_key, x, z FROM buried_caches')
+      .toArray();
+    return rows.map((row) => ({
+      id: row.id,
+      ownerPlayerKey: row.owner_key,
+      x: row.x,
+      z: row.z,
+      items: this.loadBuriedCacheItems(row.id),
+    }));
+  }
+
+  private loadBuriedCacheItems(cacheId: number): { item: ItemId; count: number }[] {
+    const rows = this.ctx.storage.sql
+      .exec<{ item_index: number; count: number }>(
+        'SELECT item_index, count FROM buried_cache_items WHERE cache_id = ?',
+        cacheId,
+      )
+      .toArray();
+    const items: { item: ItemId; count: number }[] = [];
+    for (const row of rows) {
+      const item = itemFromIndex(row.item_index);
+      // A row written by a newer build that knew about an item this one does
+      // not. Skipping it is better than refusing to let anybody in.
+      if (item === null) continue;
+      items.push({ item, count: row.count });
+    }
+    return items;
+  }
+
+  private writeBuriedCache(cache: BuriedCache): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec(
+      'INSERT INTO buried_caches (id, owner_key, x, z, buried_at_ms) VALUES (?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(id) DO NOTHING',
+      cache.id,
+      cache.ownerPlayerKey,
+      cache.x,
+      cache.z,
+      Date.now(),
+    );
+    for (const entry of cache.items) {
+      sql.exec(
+        'INSERT INTO buried_cache_items (cache_id, item_index, count) VALUES (?, ?, ?)',
+        cache.id,
+        itemIndex(entry.item),
+        entry.count,
+      );
+    }
+  }
+
+  /** Dug up, or otherwise gone: nothing keeps a cache around once it no longer exists. */
+  private deleteBuriedCache(cacheId: number): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec('DELETE FROM buried_caches WHERE id = ?', cacheId);
+    sql.exec('DELETE FROM buried_cache_items WHERE cache_id = ?', cacheId);
   }
 
   private loadTakenPickups(): number[] {

@@ -32,6 +32,7 @@ import {
   inputsToConsume,
   WorldSimulation,
   SnapshotFlag,
+  type BuriedCache,
   type PersistedPlayer,
 } from '../src/sim/world-sim';
 
@@ -1608,6 +1609,99 @@ describe('threats', () => {
       const restored = createWorld();
       restored.addPlayer(2, { ...saved, netId: 2 });
       expect(restored.healthOf(2)).toBe(HEALTH_MAX - threat.damage);
+    });
+
+    it('buries half of what you carry, tools aside, right where you fell', () => {
+      const sim = createWorld();
+      sim.addPlayer(
+        1,
+        {
+          netId: 1,
+          x: closeToDen.x,
+          y: closeToDen.y,
+          z: closeToDen.z,
+          facingYaw: 0,
+          items: [
+            { item: 'axe', count: 1 },
+            { item: 'log', count: 7 },
+          ],
+          hunger: HUNGER_MAX,
+        },
+        'chris',
+      );
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+
+      // The axe stays - you would be stuck without it - and the pack keeps
+      // the larger half of everything else.
+      expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
+
+      const caches = sim.buriedCachesList();
+      expect(caches).toHaveLength(1);
+      expect(caches[0]).toEqual({
+        id: caches[0]?.id,
+        ownerNetId: 1,
+        x: closeToDen.x,
+        z: closeToDen.z,
+      });
+    });
+
+    it('lets you dig your own cache back up, and nobody else', () => {
+      const sim = createWorld();
+      sim.addPlayer(
+        1,
+        {
+          netId: 1,
+          x: closeToDen.x,
+          y: closeToDen.y,
+          z: closeToDen.z,
+          facingYaw: 0,
+          items: [{ item: 'log', count: 7 }],
+          hunger: HUNGER_MAX,
+        },
+        'chris',
+      );
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+      const cache = sim.buriedCachesList()[0];
+      expect(cache).toBeDefined();
+      if (cache === undefined) return;
+
+      // Standing right on top of it is not enough if it is not yours.
+      sim.addPlayer(2, withAxe(2), 'someone-else');
+      sim.placePlayer(2, { x: cache.x, y: 0, z: cache.z }, 0);
+      sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+      sim.step(tickClock());
+      expect(sim.buriedCachesList()).toHaveLength(1);
+      expect(countOf(sim.inventoryOf(2), 'log')).toBe(0);
+
+      // Its own owner, back on the spot, gets it back in full.
+      sim.placePlayer(1, { x: cache.x, y: 0, z: cache.z }, 0);
+      sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+      sim.step(tickClock());
+      expect(sim.buriedCachesList()).toHaveLength(0);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(7);
+    });
+
+    it('restores buried caches from storage, resolving the owner once they reconnect', () => {
+      const sim = createWorld();
+      const stored: BuriedCache = {
+        id: 41,
+        ownerPlayerKey: 'chris',
+        x: closeToDen.x,
+        z: closeToDen.z,
+        items: [{ item: 'log', count: 2 }],
+      };
+      sim.restoreBuriedCaches([stored]);
+
+      // Nobody is connected under that key yet, so there is nobody to hint at.
+      expect(sim.buriedCachesList()).toEqual([
+        { id: 41, ownerNetId: null, x: stored.x, z: stored.z },
+      ]);
+
+      sim.addPlayer(1, withAxe(1), 'chris');
+      expect(sim.buriedCachesList()).toEqual([{ id: 41, ownerNetId: 1, x: stored.x, z: stored.z }]);
     });
   });
 

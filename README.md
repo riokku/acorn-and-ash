@@ -21,14 +21,16 @@ The game is online-only. Every world runs on the server.
 > Gather flowers the same way as sticks and plant a flower bed or a lantern
 > to decorate the place. A masked raccoon lives out there too, and it is not
 > shy - it comes after you, and enough hits knock you out. You wake up safe
-> at home, or the clearing, with nothing lost but the walk back - or fight it
-> off first, with the same axe, and it runs off empty-handed. A quick dodge
-> can get you through its swing untouched, timed right, and holding right
-> click winds up a heavy swing of your own that finishes a tree or a fight
-> outright - if you can afford to stand still long enough for it. A day
-> passes every twenty minutes, the sky brightening and dimming the same way
-> for everyone in the world at once - nothing plays differently by night
-> yet, but it's there to watch. See [the roadmap](#roadmap).
+> at home, or the clearing, having buried half of what you were carrying
+> right where you went down - your axe and rod always stay with you - so
+> it's worth walking back for. Or fight it off first, with the same axe, and
+> it runs off empty-handed. A quick dodge can get you through its swing
+> untouched, timed right, and holding right click winds up a heavy swing of
+> your own that finishes a tree or a fight outright - if you can afford to
+> stand still long enough for it. A day passes every twenty minutes, the sky
+> brightening and dimming the same way for everyone in the world at once -
+> nothing plays differently by night yet, but it's there to watch. See
+> [the roadmap](#roadmap).
 
 ## Controls
 
@@ -37,7 +39,7 @@ The game is online-only. Every world runs on the server.
 | `W` `A` `S` `D` or the arrow keys | Walk                                           |
 | `Shift` (held)                    | Sprint                                         |
 | `Space`                           | Jump                                           |
-| `E`                               | Pick up, gather, eat                           |
+| `E`                               | Pick up, gather, dig up a cache, eat           |
 | `1` / `2`                         | Craft an axe / fishing rod                     |
 | `B`                               | Open the build menu                            |
 | `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern |
@@ -102,9 +104,15 @@ own first, with the same axe, and it runs off with nothing to show for it.
 
 Getting hit costs health, a new meter alongside hunger. Run it out and
 you're knocked out - you wake up safe at home, if you have a cabin, or the
-shared clearing otherwise, healed straight back up. Nothing else is lost
-yet; the only cost right now is the walk back. See
+shared clearing otherwise, healed straight back up. See
 [decision 0024](docs/decisions/0024-a-masked-raccoon-that-fights-back.md).
+
+A knockout buries half of what you were carrying - your axe and rod always
+stay with you - right where you went down, and heals you fully same as
+before. A small mound marks the spot; walk back to it and the HUD offers to
+dig it up, the same as reaching for anything else on the ground. Nobody but
+you can dig up your own cache. See
+[decision 0028](docs/decisions/0028-buried-items-after-a-knockout.md).
 
 Left `Ctrl` dodges - a quick, decisive step in whatever direction you are
 holding, or straight back if you are holding nothing - and leaves you

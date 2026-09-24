@@ -24,6 +24,8 @@ export interface ItemKind {
   readonly placeholderColor: number;
   /** How much hunger eating one restores, or undefined if it cannot be eaten. */
   readonly restoresHunger?: number;
+  /** Whether a knockout leaves this alone rather than burying half of it. */
+  readonly keepOnKnockout: boolean;
 }
 
 export const ITEM_KINDS = {
@@ -34,6 +36,7 @@ export const ITEM_KINDS = {
     maxCarry: 1,
     placeholderColor: 0x9a7b4f,
     restoresHunger: undefined,
+    keepOnKnockout: true,
   },
   log: {
     id: 'log',
@@ -42,6 +45,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0x8c6239,
     restoresHunger: undefined,
+    keepOnKnockout: false,
   },
   rod: {
     id: 'rod',
@@ -50,6 +54,7 @@ export const ITEM_KINDS = {
     maxCarry: 1,
     placeholderColor: 0xb89a5e,
     restoresHunger: undefined,
+    keepOnKnockout: true,
   },
   perch: {
     id: 'perch',
@@ -58,6 +63,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0x8fa35a,
     restoresHunger: 40,
+    keepOnKnockout: false,
   },
   trout: {
     id: 'trout',
@@ -66,6 +72,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0xc98f86,
     restoresHunger: 40,
+    keepOnKnockout: false,
   },
   goldenCarp: {
     id: 'goldenCarp',
@@ -74,6 +81,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0xe8b53a,
     restoresHunger: 40,
+    keepOnKnockout: false,
   },
   stick: {
     id: 'stick',
@@ -82,6 +90,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0xb5895a,
     restoresHunger: undefined,
+    keepOnKnockout: false,
   },
   meat: {
     id: 'meat',
@@ -92,6 +101,7 @@ export const ITEM_KINDS = {
     // A catch takes a real chase, unlike a fish that only takes a click at
     // the right moment, so it is worth a little more than one.
     restoresHunger: 50,
+    keepOnKnockout: false,
   },
   flower: {
     id: 'flower',
@@ -100,6 +110,7 @@ export const ITEM_KINDS = {
     maxCarry: 10,
     placeholderColor: 0xdd5fa8,
     restoresHunger: undefined,
+    keepOnKnockout: false,
   },
 } as const satisfies Record<ItemId, ItemKind>;
 

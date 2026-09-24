@@ -12,6 +12,8 @@ import {
   encodeBuild,
   encodeCraft,
   encodeBuiltProps,
+  encodeBuriedCaches,
+  encodeCache,
   encodeCaught,
   encodeCrafted,
   encodeFishing,
@@ -33,6 +35,8 @@ import { createInput } from '../src/sim/player';
 import type {
   AnimalCaught,
   BuiltProp,
+  BuriedCacheView,
+  CacheEvent,
   CraftedEvent,
   FishingEvent,
   HealthEvent,
@@ -665,5 +669,67 @@ describe('telling everybody what has been built', () => {
     );
     encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('telling everybody what is buried', () => {
+  const roundTrip = (caches: readonly BuriedCacheView[]): readonly BuriedCacheView[] | null => {
+    const decoded = decodeServerMessage(encodeBuriedCaches(caches));
+    return decoded?.type === 'buriedCaches' ? decoded.caches : null;
+  };
+
+  it('carries an empty world', () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it('carries a cache, its owner, and where it is - never what it holds', () => {
+    const decoded = roundTrip([{ id: 3, ownerNetId: 7, x: 4.2, z: -6.75 }]);
+    expect(decoded).toHaveLength(1);
+    expect(decoded?.[0]?.id).toBe(3);
+    expect(decoded?.[0]?.ownerNetId).toBe(7);
+    expect(decoded?.[0]?.x).toBeCloseTo(4.2, 2);
+    expect(decoded?.[0]?.z).toBeCloseTo(-6.75, 2);
+  });
+
+  it('carries a cache whose owner is not connected right now', () => {
+    const decoded = roundTrip([{ id: 3, ownerNetId: null, x: 0, z: 0 }]);
+    expect(decoded?.[0]?.ownerNetId).toBeNull();
+  });
+
+  it('fits an empty list in two bytes', () => {
+    expect(encodeBuriedCaches([]).byteLength).toBe(2);
+  });
+
+  it('costs eight bytes a cache', () => {
+    expect(encodeBuriedCaches([{ id: 1, ownerNetId: 1, x: 0, z: 0 }]).byteLength).toBe(10);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeBuriedCaches([{ id: 1, ownerNetId: 1, x: 0, z: 0 }]);
+    expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
+  });
+});
+
+describe("word that a player's own cache changed", () => {
+  const roundTrip = (event: CacheEvent): CacheEvent | null => {
+    const decoded = decodeServerMessage(encodeCache(event));
+    return decoded?.type === 'cache' ? decoded.event : null;
+  };
+
+  it('carries a fresh burial', () => {
+    expect(roundTrip({ netId: 4, kind: 'buried' })).toEqual({ netId: 4, kind: 'buried' });
+  });
+
+  it('carries digging one back up', () => {
+    expect(roundTrip({ netId: 4, kind: 'dugUp' })).toEqual({ netId: 4, kind: 'dugUp' });
+  });
+
+  it('fits in four bytes', () => {
+    expect(encodeCache({ netId: 1, kind: 'buried' }).byteLength).toBe(4);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeCache({ netId: 1, kind: 'buried' });
+    expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
   });
 });
