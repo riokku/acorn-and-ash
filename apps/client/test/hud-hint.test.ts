@@ -31,6 +31,7 @@ const BASE_STATE: HudState = {
   hungerNews: null,
   health: HEALTH_MAX,
   healthNews: null,
+  charging: false,
   craftingNews: null,
   huntingNews: null,
 };
@@ -125,5 +126,15 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'axe', count: 1 }],
     };
     expect(hint(state)).toBe('Hurt badly - one more hit and you are down');
+  });
+
+  it('says so while a charged attack is winding up, ahead of what you are aimed at', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      charging: true,
+      carrying: [{ item: 'axe', count: 1 }],
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+    };
+    expect(hint(state)).toBe('Charging a heavy swing - rooted to the spot');
   });
 });

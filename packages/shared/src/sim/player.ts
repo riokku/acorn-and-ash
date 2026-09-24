@@ -36,6 +36,8 @@ export const PlayerButton = {
   SawBite: 1 << 4,
   /** A quick step that leaves you briefly untouchable. See `WorldSimulation`'s `tryDodge`. */
   Dodge: 1 << 5,
+  /** Right mouse button, held. Winds up a charged attack - see `WorldSimulation`'s charging fields. */
+  Charge: 1 << 6,
 } as const;
 
 /**

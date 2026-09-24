@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  CHARGE_SECONDS,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
   DODGE_COOLDOWN_TICKS,
@@ -1647,6 +1648,114 @@ describe('threats', () => {
       for (let i = 0; i < 12; i++) sim.step(tickClock());
 
       expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+    });
+  });
+});
+
+describe('a charged attack', () => {
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [{ item: 'axe', count: 1 }],
+    hunger: HUNGER_MAX,
+  });
+
+  /** The first tree of this kind in the clearing. */
+  function findTree(sim: WorldSimulation, kind: 'oak' | 'birch' | 'pine') {
+    const tree = sim.clearing.props.find((prop) => prop.kind === kind);
+    if (tree === undefined) throw new Error(`no ${kind} in the clearing`);
+    return tree;
+  }
+
+  /** Stand a metre clear of the trunk, looking straight at it. */
+  function standAt(
+    sim: WorldSimulation,
+    netId: number,
+    tree: { x: number; z: number; kind: string; scale: number },
+  ): void {
+    const radius = PROP_KINDS[tree.kind as keyof typeof PROP_KINDS].colliderRadius * tree.scale;
+    sim.placePlayer(netId, { x: tree.x, y: 0, z: tree.z + radius + 1 }, 0);
+  }
+
+  // Real time only advances a whole tick at once, so the first tick past
+  // CHARGE_SECONDS is one tick later than the raw seconds-to-ticks maths
+  // suggests - the same off-by-one a threat's own wind-up already has.
+  const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ) + 1;
+
+  it('roots you to the spot while it winds up, even holding a direction the whole time', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    let seq = 1;
+    // Held throughout - if charging did not override it, this would have
+    // carried the player a couple of metres by now.
+    for (let i = 0; i < 10; i++) {
+      sim.queueInput(1, createInput(seq++, 0, 1, 0, PlayerButton.Charge));
+      sim.step(tickClock());
+    }
+
+    const during = sim.readPlayer(1)?.position;
+    if (during === undefined) throw new Error('missing player');
+    expect(during.x).toBeCloseTo(before.x, 5);
+    expect(during.z).toBeCloseTo(before.z, 5);
+  });
+
+  it('never starts without an axe in hand', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
+    sim.step(tickClock());
+    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+
+    expect(sim.felledTreeIds()).toEqual([]);
+    expect(sim.drainChopEvents()).toEqual([]);
+  });
+
+  it('fells a tree outright once it resolves, whatever that tree would otherwise take', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+    const swingsToFell = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
+    expect(swingsToFell).toBeGreaterThan(1);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
+    sim.step(tickClock());
+    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+
+    expect(sim.felledTreeIds()).toContain(tree.id);
+    expect(sim.drainChopEvents()).toEqual([
+      { netId: 1, treeId: tree.id, swingsLeft: 0, logsGained: expect.any(Number) },
+    ]);
+  });
+
+  describe('against a threat', () => {
+    const raccoonDen = ANIMAL_DENS.find((entry) => entry.id === 1005);
+    if (raccoonDen === undefined) {
+      throw new Error('the masked raccoon den is gone from the data table');
+    }
+    const threat = ANIMAL_KINDS.maskedRaccoon.threat;
+    if (threat === undefined) throw new Error('the masked raccoon has lost its threat behaviour');
+
+    it('defeats it outright, regardless of hitsToDefeat', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withAxe(1));
+      expect(threat.hitsToDefeat).toBeGreaterThan(1);
+      sim.placePlayer(1, { x: raccoonDen.x, y: 0, z: raccoonDen.z + threat.attackRadius - 0.1 }, 0);
+
+      sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
+      sim.step(tickClock());
+      for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+
+      expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: null, added: 0 }]);
     });
   });
 });

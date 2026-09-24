@@ -6,6 +6,7 @@ import {
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
   CAST_COOLDOWN_SECONDS,
+  CHARGE_SECONDS,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -256,6 +257,14 @@ export class Game {
   private healthNews: { text: string; until: number } | null = null;
   private craftingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
+  /**
+   * Read purely from our own held key, not anything the server has
+   * confirmed - the same as `aimedTree`/`aimedAnimal` are only ever a hint,
+   * this just says a charge is under way for exactly as long as the
+   * server's own `CHARGE_SECONDS` would have it resolve after.
+   */
+  private chargeWasHeld = false;
+  private chargingUntil: number | null = null;
   /** The server takes a breath after every cast ends; so does the hint. */
   private castReadyAt = 0;
   private canCast = false;
@@ -603,6 +612,10 @@ export class Game {
     return news !== null && now < news.until ? news.text : null;
   }
 
+  private currentlyCharging(now = performance.now()): boolean {
+    return this.chargingUntil !== null && now < this.chargingUntil;
+  }
+
   /** Only ever about us: nobody else has any reason to know what we just made. */
   private hearAboutCrafting(event: CraftedEvent): void {
     const now = performance.now();
@@ -888,6 +901,15 @@ export class Game {
     // does not shorten it.
     const buttons =
       (this.controls?.buttons() ?? 0) | (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+
+    // A fresh press starts the same local timer the server's own charge
+    // runs on - only worth starting if a swing would even do anything.
+    const chargeHeld = (buttons & PlayerButton.Charge) !== 0;
+    if (chargeHeld && !this.chargeWasHeld && this.isCarrying('axe')) {
+      this.chargingUntil = performance.now() + CHARGE_SECONDS * 1000;
+    }
+    this.chargeWasHeld = chargeHeld;
+
     const produced = player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw, buttons);
     // A tap is only forgotten once a tick has carried it, so a quick press of
     // Space between two frames still turns into a jump.
@@ -1089,6 +1111,7 @@ export class Game {
       hungerNews: this.currentHungerNews(now),
       health: this.health,
       healthNews: this.currentHealthNews(now),
+      charging: this.currentlyCharging(now),
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
     });

@@ -158,6 +158,18 @@ export const DODGE_COOLDOWN_SECONDS = 1.2;
 export const DODGE_COOLDOWN_TICKS = Math.round(DODGE_COOLDOWN_SECONDS * TICK_HZ);
 
 /**
+ * A charged attack.
+ *
+ * The last piece of "light and charged attacks, dodge, readable enemy
+ * wind-ups": held rather than tapped, and rooted to the spot for as long as
+ * it takes - your own wind-up, readable the same way a threat's is. Once it
+ * goes off it always finishes whatever it lands on outright, tree or
+ * threat, however many swings that would otherwise have taken - the payoff
+ * for standing still and committing to it.
+ */
+export const CHARGE_SECONDS = 1;
+
+/**
  * Fishing.
  *
  * A cast lands as far out as the water allows, between these two distances in

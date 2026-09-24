@@ -2,6 +2,7 @@ import { createWorld, type Entity, type World } from 'koota';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  CHARGE_SECONDS,
   DODGE_COOLDOWN_TICKS,
   DODGE_DISTANCE,
   DODGE_INVULNERABLE_SECONDS,
@@ -397,6 +398,10 @@ interface PlayerRuntime {
   dodgeCooldownTicks: number;
   /** Until this real time, any attack simply misses - see `damagePlayer`. */
   invulnerableUntilMs: number;
+  /** Winding up a charged attack, rooted to the spot until it resolves. */
+  charging: boolean;
+  /** When a charge in progress resolves, in real time. Meaningless unless `charging`. */
+  chargeReadyAtMs: number;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -631,6 +636,8 @@ export class WorldSimulation {
       health: saved?.health ?? HEALTH_MAX,
       dodgeCooldownTicks: 0,
       invulnerableUntilMs: 0,
+      charging: false,
+      chargeReadyAtMs: 0,
     });
   }
 
@@ -740,30 +747,51 @@ export class WorldSimulation {
           for (let i = 0; i < steps; i++) {
             const input = runtime.queue.shift();
             if (input === undefined) break;
-            stepPlayer(scratch, input, TICK_SECONDS, this.collision);
-            if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
-            const swingHeld = isHeld(input, PlayerButton.Swing);
-            const clicked = swingHeld && !runtime.swingWasHeld;
-            runtime.swingWasHeld = swingHeld;
-            if (runtime.cast !== null) {
-              // With a line out, the button is for the fish and nothing else,
-              // and each input is read in turn: when the click was made matters.
-              this.readLine(runtime, runtime.cast, {
-                seq: input.seq,
-                clicked,
-                sawBite: isHeld(input, PlayerButton.SawBite),
-              });
-            } else {
-              if (swingHeld) wantsToSwing = true;
-              if (clicked) wantsToCast = true;
+
+            if (
+              !runtime.charging &&
+              runtime.cast === null &&
+              runtime.swingCooldownTicks === 0 &&
+              isHeld(input, PlayerButton.Charge) &&
+              hasItem(runtime.inventory, 'axe')
+            ) {
+              runtime.charging = true;
+              runtime.chargeReadyAtMs = this.nowMs + CHARGE_SECONDS * 1000;
             }
-            // Held, the same as a swing - the cooldown is what stops a dodge
-            // from repeating faster than `tryDodge` allows, so there is no
-            // need to also demand a fresh press.
-            if (isHeld(input, PlayerButton.Dodge)) {
-              wantsToDodge = true;
-              dodgeMoveX = input.moveX;
-              dodgeMoveZ = input.moveZ;
+
+            // Rooted to the spot while charging - no steering away from
+            // whatever it is about to land on, the same commitment a
+            // threat's own wind-up asks of it.
+            const effectiveInput = runtime.charging
+              ? { ...input, moveX: 0, moveZ: 0, buttons: 0 }
+              : input;
+            stepPlayer(scratch, effectiveInput, TICK_SECONDS, this.collision);
+
+            if (!runtime.charging) {
+              if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
+              const swingHeld = isHeld(input, PlayerButton.Swing);
+              const clicked = swingHeld && !runtime.swingWasHeld;
+              runtime.swingWasHeld = swingHeld;
+              if (runtime.cast !== null) {
+                // With a line out, the button is for the fish and nothing else,
+                // and each input is read in turn: when the click was made matters.
+                this.readLine(runtime, runtime.cast, {
+                  seq: input.seq,
+                  clicked,
+                  sawBite: isHeld(input, PlayerButton.SawBite),
+                });
+              } else {
+                if (swingHeld) wantsToSwing = true;
+                if (clicked) wantsToCast = true;
+              }
+              // Held, the same as a swing - the cooldown is what stops a dodge
+              // from repeating faster than `tryDodge` allows, so there is no
+              // need to also demand a fresh press.
+              if (isHeld(input, PlayerButton.Dodge)) {
+                wantsToDodge = true;
+                dodgeMoveX = input.moveX;
+                dodgeMoveZ = input.moveZ;
+              }
             }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.yaw;
@@ -787,7 +815,11 @@ export class WorldSimulation {
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
         if (runtime.dodgeCooldownTicks > 0) runtime.dodgeCooldownTicks -= 1;
         if (runtime.cast === null) {
-          if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw);
+          if (runtime.charging && this.nowMs >= runtime.chargeReadyAtMs) {
+            runtime.charging = false;
+            this.trySwing(runtime, scratch.position, aimedYaw, true);
+          }
+          if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw, false);
           if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
           if (wantsToDodge) {
             this.tryDodge(runtime, scratch.position, aimedYaw, dodgeMoveX, dodgeMoveZ);
@@ -1072,8 +1104,17 @@ export class WorldSimulation {
    * rhythm rather than as fast as packets arrive. A tree in reach always
    * wins over an animal behind it, the same way a tree already wins over a
    * cast in `tryCast`.
+   *
+   * `charged` is the payoff for a held-down, rooted-to-the-spot charge - see
+   * where `charging` resolves in `step`: whatever it lands on goes down
+   * outright, however many swings that would otherwise have taken.
    */
-  private trySwing(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
+  private trySwing(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    aimYaw: number,
+    charged: boolean,
+  ): void {
     if (runtime.swingCooldownTicks > 0) return;
     if (!hasItem(runtime.inventory, 'axe')) return;
 
@@ -1082,7 +1123,7 @@ export class WorldSimulation {
       runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
 
       const state = this.treeState(target.prop.id);
-      const swingsTaken = state.swingsTaken + 1;
+      const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + 1;
       const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
 
       if (swingsLeft > 0) {
@@ -1113,7 +1154,7 @@ export class WorldSimulation {
     if (animalTarget === null) return;
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
-    this.catchAnimal(runtime, animalTarget.id);
+    this.catchAnimal(runtime, animalTarget.id, charged);
   }
 
   /**
@@ -1122,18 +1163,19 @@ export class WorldSimulation {
    *
    * Prey goes down in one landed swing, the same as always. A threat takes
    * `hitsToDefeat` of them, the same shape of rule as a tree's `swingsToFell`
-   * - each one short of the last is a `ThreatHit`, not yet a catch.
+   * - each one short of the last is a `ThreatHit`, not yet a catch - unless
+   * `charged` says this one swing is worth all of them at once.
    *
    * Either way it goes back to its den once `ANIMAL_RESPAWN_SECONDS` is up,
    * the same way a tree waits out `regrowMinSeconds` before it is worth
    * chopping again.
    */
-  private catchAnimal(runtime: PlayerRuntime, animalId: number): void {
+  private catchAnimal(runtime: PlayerRuntime, animalId: number, charged: boolean): void {
     const animal = this.animals.get(animalId);
     if (animal === undefined) return;
     const kind: AnimalKind = ANIMAL_KINDS[animal.kind];
 
-    if (kind.threat !== undefined) {
+    if (kind.threat !== undefined && !charged) {
       animal.hitsTaken += 1;
       const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
       if (hitsLeft > 0) {

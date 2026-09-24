@@ -534,6 +534,46 @@ test('you can chop a tree down, and the stump is still there next time', async (
   await context.close();
 });
 
+test('a charged attack fells a tree in one go', async ({ page }) => {
+  await page.goto(`/?world=charge-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
+    .toBeGreaterThan(0);
+
+  // The big oak takes several ordinary swings - one charged attack should
+  // not need any of them.
+  const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
+  const oak = trees.find((tree) => tree.kind === 'oak');
+  if (oak === undefined) throw new Error('no oak in the clearing');
+  await walkWithinReachOfTree(page, oak);
+  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+
+  // Held until the tree is down. Not a fixed wait: the charge itself only
+  // takes the server's own one second, but the hint that says so is too
+  // short-lived to assert on reliably over a real browser and connection -
+  // the hud-hint unit test already covers that text. This, per decision
+  // 0026, proves the swing lands, not the wind-up.
+  await page.mouse.down({ button: 'right' });
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length, {
+      timeout: 20_000,
+    })
+    .toBe(1);
+  await page.mouse.up({ button: 'right' });
+
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
+});
+
 test('a chopped tree grows back on its own', async ({ browser }) => {
   // Locally a tree takes two to four minutes to come back, and this waits it out.
   test.setTimeout(600_000);
