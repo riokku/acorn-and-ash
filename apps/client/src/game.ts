@@ -64,6 +64,7 @@ import { LocalPlayer } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
+import { preloadTreeModels } from './scene/tree-models';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
@@ -304,6 +305,9 @@ export class Game {
 
   async start(): Promise<void> {
     installBvhRaycasting();
+    // Kicked off now rather than in enterWorld, so it has the whole time it
+    // takes to set up the renderer and reach the server to finish loading.
+    void preloadTreeModels();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -458,7 +462,7 @@ export class Game {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
         this.syncServerClock(message.serverTimeMs);
-        this.enterWorld(message.seed);
+        void this.enterWorld(message.seed);
         break;
       }
       case 'snapshot': {
@@ -739,7 +743,12 @@ export class Game {
    * code produces the same trees, the same hills and the same forest on the
    * server and in every browser.
    */
-  private enterWorld(seed: number): void {
+  private async enterWorld(seed: number): Promise<void> {
+    if (this.clearingScene !== null) return;
+
+    // Resolves immediately once loaded; only actually waits if the world is
+    // entered before the fetch kicked off in start() has finished.
+    await preloadTreeModels();
     if (this.clearingScene !== null) return;
 
     const clearing = buildTestClearing(seed);
@@ -923,7 +932,7 @@ export class Game {
       this.connectionState !== 'connected' &&
       now > this.offlineFallbackAt
     ) {
-      this.enterWorld(DEFAULT_WORLD_SEED);
+      void this.enterWorld(DEFAULT_WORLD_SEED);
     }
 
     this.updateLocalPlayer(deltaSeconds, camera);

@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { type PlacedProp, type PropKind } from '@acorn/shared';
 
+import { realModelPartsFor } from './tree-models';
+
 /**
  * Instanced placeholder scenery.
  *
@@ -24,6 +26,13 @@ export interface PropPart {
 
 export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
   if (kind.shape.family === 'tree') {
+    const realParts = realModelPartsFor(kind.id);
+    if (realParts !== undefined) {
+      // Already scaled and grounded to this kind's design height (see
+      // tree-models.ts), so it needs no offset beyond the usual placement.
+      return realParts.map((part) => instanced(part.geometry, part.material, count, 0, false));
+    }
+
     const { trunkRadius, trunkHeight, canopyRadius, canopyHeight } = kind.shape;
 
     const trunk = instanced(
@@ -82,6 +91,10 @@ function instanced(
   material: THREE.Material,
   count: number,
   centreHeight: number,
+  // False for real models: the clearing and the wilderness each build their
+  // own instanced mesh for the same kind, sharing one geometry and material
+  // loaded once (see tree-models.ts), so neither owns it to dispose.
+  ownsResources = true,
 ): PropPart {
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   mesh.castShadow = true;
@@ -92,8 +105,10 @@ function instanced(
     mesh,
     offset: new THREE.Matrix4().makeTranslation(0, centreHeight, 0),
     dispose: () => {
-      geometry.dispose();
-      material.dispose();
+      if (ownsResources) {
+        geometry.dispose();
+        material.dispose();
+      }
       mesh.dispose();
     },
   };

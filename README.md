@@ -7,8 +7,9 @@ cabin you can upgrade and decorate.
 The game is online-only. Every world runs on the server.
 
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
-> placeholder trees, rocks and a pond, surrounded by generated wilderness you
-> can walk out into, a capsule you walk, sprint and jump around, a
+> real birch and oak trees, placeholder pine trees, rocks and a pond,
+> surrounded by generated wilderness you can walk out into, a capsule you
+> walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump and chop trees down; they grow back while you are
 > away. Find the rod on the bank of the pond and catch fish. Gather sticks by
