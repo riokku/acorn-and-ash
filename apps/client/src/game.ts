@@ -66,6 +66,7 @@ import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
+import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
@@ -339,6 +340,9 @@ export class Game {
   /** Called when the player clicks the curtain. */
   requestPointerLock(): void {
     this.controls?.requestPointerLock();
+    // Tied to this real click rather than page load: autoplay policy blocks
+    // audio started without one.
+    startAmbientMusic();
   }
 
   /**
@@ -525,11 +529,13 @@ export class Game {
       case 'treeHit': {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
         this.camera?.shake(HIT_LANDED_SHAKE);
+        playTreeHit();
         break;
       }
       case 'threatHit': {
         this.threatHitsLeft.set(message.event.animalId, message.event.hitsLeft);
         this.camera?.shake(HIT_LANDED_SHAKE);
+        playThreatHit();
         break;
       }
       case 'fishing': {
@@ -635,7 +641,10 @@ export class Game {
 
   /** Only ever about us: nobody else's health is any of our business. */
   private hearAboutHealth(event: HealthEvent): void {
-    if (event.health < this.health) this.camera?.shake(TOOK_DAMAGE_SHAKE);
+    if (event.health < this.health) {
+      this.camera?.shake(TOOK_DAMAGE_SHAKE);
+      playTookDamage();
+    }
     this.health = event.health;
     if (event.knockedOut) {
       const now = performance.now();
