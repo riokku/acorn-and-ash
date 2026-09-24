@@ -53,6 +53,8 @@ export interface HudState {
   readonly craftingNews: string | null;
   /** What we last caught, while it is still worth showing. */
   readonly huntingNews: string | null;
+  /** Whether it is currently night out. */
+  readonly isNight: boolean;
 }
 
 const INITIAL: HudState = {
@@ -85,6 +87,7 @@ const INITIAL: HudState = {
   charging: false,
   craftingNews: null,
   huntingNews: null,
+  isNight: false,
 };
 
 /**

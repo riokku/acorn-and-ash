@@ -26,7 +26,9 @@ import {
   colliderForProp,
   createCollisionWorld,
   createWildernessTerrain,
+  dayProgress,
   gatherSpotInReach,
+  isNight,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
@@ -67,7 +69,7 @@ import { createLantern, type Lantern } from './scene/lantern';
 import { createCritter, type Critter } from './scene/critter';
 import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { Floats, type Angler } from './scene/floats';
-import { addDaylight } from './scene/lighting';
+import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
@@ -221,7 +223,10 @@ export class Game {
   private camera: FollowCamera | null = null;
   private controls: Controls | null = null;
   private connection: WorldConnection | null = null;
-  private sun: THREE.DirectionalLight | null = null;
+  private daylight: DaylightRig | null = null;
+  /** The latest time the server told us, and our own clock when it told us - together, an estimate of the server's clock right now. */
+  private latestServerTimeMs = Date.now();
+  private latestServerTimeAtMs = performance.now();
 
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
@@ -294,7 +299,7 @@ export class Game {
     setup.renderer.shadowMap.enabled = true;
     setup.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    this.sun = addDaylight(this.scene);
+    this.daylight = addDaylight(this.scene);
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
     this.controls = new Controls(this.options.canvas, (locked) =>
       this.options.hud.publish({ pointerLocked: locked }),
@@ -438,11 +443,13 @@ export class Game {
       case 'welcome': {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
+        this.syncServerClock(message.serverTimeMs);
         this.enterWorld(message.seed);
         break;
       }
       case 'snapshot': {
         this.serverTick = message.tick;
+        this.syncServerClock(message.serverTimeMs);
 
         const playerEntities = message.entities.filter((entity) => !isAnimalEntity(entity));
         const animalEntities = message.entities.filter(isAnimalEntity);
@@ -858,6 +865,7 @@ export class Game {
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
+    this.daylight?.update(dayProgress(this.estimatedServerTimeMs()));
 
     setup.renderer.render(this.scene, camera.camera);
     this.updateHud(now, deltaSeconds);
@@ -886,6 +894,22 @@ export class Game {
       const item = RECIPE_ITEMS[index];
       if (item !== undefined) this.connection?.sendCraft(item);
     }
+  }
+
+  /** Records what the server just told us its clock reads, and when we heard it. */
+  private syncServerClock(serverTimeMs: number): void {
+    this.latestServerTimeMs = serverTimeMs;
+    this.latestServerTimeAtMs = performance.now();
+  }
+
+  /**
+   * The server's clock right now, as best guessed from the last time it told
+   * us plus however long ago that was. Day and night only need to be smooth
+   * and shared, not exact to the millisecond, so this needs no reconciling
+   * the way position prediction does.
+   */
+  private estimatedServerTimeMs(): number {
+    return this.latestServerTimeMs + (performance.now() - this.latestServerTimeAtMs);
   }
 
   private updateLocalPlayer(deltaSeconds: number, camera: FollowCamera): void {
@@ -1031,10 +1055,11 @@ export class Game {
       );
 
     // Keep the shadow map centred on the player instead of on the origin.
-    if (this.sun !== null) {
-      this.sun.position.set(position.x + 28, position.y + 40, position.z + 18);
-      this.sun.target.position.set(position.x, position.y, position.z);
-      this.sun.target.updateMatrixWorld();
+    const sun = this.daylight?.sun;
+    if (sun !== undefined) {
+      sun.position.set(position.x + 28, position.y + 40, position.z + 18);
+      sun.target.position.set(position.x, position.y, position.z);
+      sun.target.updateMatrixWorld();
     }
   }
 
@@ -1114,6 +1139,7 @@ export class Game {
       charging: this.currentlyCharging(now),
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
+      isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
     });
   }
 

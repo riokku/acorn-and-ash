@@ -42,6 +42,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
           value={`${state.position.x.toFixed(1)}, ${state.position.z.toFixed(1)}`}
         />
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
+        <Row label="Time" value={timeOfDay(state)} />
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Health" value={<Health state={state} />} />
         <Row label="Carrying" value={carrying(state)} />
@@ -275,6 +276,10 @@ function carrying(state: HudState): string {
         : `${kind.pluralName} ${entry.count}/${kind.maxCarry}`;
     })
     .join(' · ');
+}
+
+function timeOfDay(state: HudState): string {
+  return state.isNight ? 'Night' : 'Day';
 }
 
 function renderer(state: HudState): string {

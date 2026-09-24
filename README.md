@@ -25,8 +25,10 @@ The game is online-only. Every world runs on the server.
 > off first, with the same axe, and it runs off empty-handed. A quick dodge
 > can get you through its swing untouched, timed right, and holding right
 > click winds up a heavy swing of your own that finishes a tree or a fight
-> outright - if you can afford to stand still long enough for it. See
-> [the roadmap](#roadmap).
+> outright - if you can afford to stand still long enough for it. A day
+> passes every twenty minutes, the sky brightening and dimming the same way
+> for everyone in the world at once - nothing plays differently by night
+> yet, but it's there to watch. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -65,6 +67,16 @@ the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+
+### Day and night
+
+A 20-minute day runs the whole time a world is awake, the sky and light
+brightening and dimming smoothly between noon and midnight. It's the
+server's own clock, so it never skips and it's the same moment for everyone
+in the world; the HUD's "Time" row says which half you're in right now.
+Nothing about how the game plays changes with it yet - that's deliberately
+saved for later. See
+[decision 0027](docs/decisions/0027-a-day-and-night-cycle.md).
 
 ### Wildlife
 
@@ -232,7 +244,8 @@ Run these from the repository root.
 | `pnpm dev`          | Start the game client with hot reloading                   |
 | `pnpm dev:server`   | Start the world server locally                             |
 | `pnpm dev:web`      | Start the Worker that serves the client and the API        |
-| `pnpm check`        | Everything the pull request check runs, in one go          |
+| `pnpm check`        | Typecheck, lint, test, asset licences and build, in one go |
+| `pnpm format:check` | Check formatting - the one thing `pnpm check` leaves out   |
 | `pnpm typecheck`    | Check types in every package                               |
 | `pnpm lint`         | Lint everything                                            |
 | `pnpm test`         | Run every test                                             |
@@ -241,6 +254,10 @@ Run these from the repository root.
 | `pnpm check:assets` | Check every asset has a licence row                        |
 | `pnpm bench:tick`   | Measure server tick time and memory with simulated players |
 | `pnpm loadtest`     | Point a crowd of bots at a running world                   |
+
+The pull request check runs both `pnpm check` **and** `pnpm format:check` as
+separate steps - run both before pushing, since passing the first one alone
+does not mean the second will too.
 
 `pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
 then waits for it to grow back, and another waits at the pond for a bite.
