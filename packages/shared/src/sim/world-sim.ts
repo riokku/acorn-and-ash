@@ -535,6 +535,8 @@ export class WorldSimulation {
   private readonly gatherEvents: number[] = [];
   /** Everything anybody has ever built. Nothing is ever removed from it yet. */
   private readonly builtProps: BuiltProp[] = [];
+  /** Same props, by id - campfires have no cap, so looking one up by id must not mean scanning all of them. */
+  private readonly builtPropsById = new Map<number, BuiltProp>();
   private nextBuiltPropId = 1;
   private readonly buildEvents: BuildEvent[] = [];
   /** Built-prop id -> whoever it belongs to, for anything capped per player. */
@@ -1429,6 +1431,7 @@ export class WorldSimulation {
 
     const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z };
     this.builtProps.push(prop);
+    this.builtPropsById.set(prop.id, prop);
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
@@ -1438,7 +1441,7 @@ export class WorldSimulation {
   private ownsBuildable(playerKey: string, kind: BuildableKindId): boolean {
     for (const [id, owner] of this.ownedBuiltProps) {
       if (owner !== playerKey) continue;
-      const prop = this.builtProps.find((candidate) => candidate.id === id);
+      const prop = this.builtPropsById.get(id);
       if (prop !== undefined && prop.kind === kind) return true;
     }
     return false;
@@ -1448,7 +1451,7 @@ export class WorldSimulation {
   private homePositionFor(playerKey: string): Vec3 | null {
     for (const [id, owner] of this.ownedBuiltProps) {
       if (owner !== playerKey) continue;
-      const home = this.builtProps.find((prop) => prop.id === id);
+      const home = this.builtPropsById.get(id);
       if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) continue;
       const footprint = BUILDABLE_KINDS[home.kind].footprintRadius;
       return { x: home.x, y: 0, z: home.z + footprint + 1.5 };
@@ -1675,6 +1678,7 @@ export class WorldSimulation {
   restoreBuiltProps(props: Iterable<BuiltProp & { readonly ownerKey: string | null }>): void {
     for (const { ownerKey, ...prop } of props) {
       this.builtProps.push(prop);
+      this.builtPropsById.set(prop.id, prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     }

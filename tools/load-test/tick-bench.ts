@@ -13,6 +13,8 @@
 
 import {
   DEFAULT_WORLD_SEED,
+  MAX_BUILT_PROPS,
+  MAX_BURIED_CACHES,
   MAX_PLAYERS_PER_WORLD,
   SLOW_TICK_BUDGET_MS,
   SNAPSHOT_EVERY_N_TICKS,
@@ -25,12 +27,21 @@ import {
 
 /** Player counts to measure. */
 const PLAYER_COUNTS = [1, 10, 25, MAX_PLAYERS_PER_WORLD];
+/**
+ * Built-prop / buried-cache counts to measure, at a fixed MAX_PLAYERS_PER_WORLD.
+ * Campfires have no per-player cap and a cache never expires, so a long-lived
+ * world's counts are not bounded by player count the way everything else is -
+ * these go well past MAX_BUILT_PROPS/MAX_BURIED_CACHES (255) on purpose, to
+ * see how a genuinely old, popular world holds up rather than just a fresh one.
+ */
+const WORLD_AGE_COUNTS = [0, MAX_BUILT_PROPS, 2000];
 /** Thirty seconds of simulation at 20 Hz. */
 const MEASURED_TICKS = TICK_HZ * 30;
 const WARMUP_TICKS = TICK_HZ * 3;
 
 interface Result {
   readonly players: number;
+  readonly builtProps: number;
   readonly meanMs: number;
   readonly p50Ms: number;
   readonly p95Ms: number;
@@ -40,9 +51,35 @@ interface Result {
   readonly heapMb: number;
 }
 
-function measure(playerCount: number): Result {
+/** Scatters synthetic entries across the wilderness so distance checks have real work to do. */
+function scatteredPosition(index: number): { x: number; z: number } {
+  const spacing = 3;
+  const perRow = 200;
+  return { x: ((index % perRow) - perRow / 2) * spacing, z: Math.floor(index / perRow) * spacing };
+}
+
+function measure(playerCount: number, worldAgeCount = 0): Result {
   const simulation = new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
   for (let i = 1; i <= playerCount; i++) simulation.addPlayer(i);
+
+  if (worldAgeCount > 0) {
+    simulation.restoreBuiltProps(
+      Array.from({ length: worldAgeCount }, (_, i) => ({
+        id: i + 1,
+        kind: 'campfire' as const,
+        ownerKey: null,
+        ...scatteredPosition(i),
+      })),
+    );
+    simulation.restoreBuriedCaches(
+      Array.from({ length: worldAgeCount }, (_, i) => ({
+        id: i + 1,
+        ownerPlayerKey: null,
+        items: [],
+        ...scatteredPosition(i),
+      })),
+    );
+  }
 
   const scratch: SnapshotEntity[] = [];
   let sequence = 0;
@@ -99,6 +136,7 @@ function measure(playerCount: number): Result {
 
   return {
     players: playerCount,
+    builtProps: worldAgeCount,
     meanMs: samples.reduce((total, value) => total + value, 0) / samples.length,
     p50Ms: percentile(sorted, 0.5),
     p95Ms: percentile(sorted, 0.95),
@@ -119,7 +157,8 @@ function main(): void {
   console.log(`Acorn & Ash — server tick benchmark`);
   console.log(`Node ${process.version} · ${TICK_HZ} Hz · ${MEASURED_TICKS} ticks per run\n`);
 
-  const results = PLAYER_COUNTS.map(measure);
+  const results = PLAYER_COUNTS.map((count) => measure(count));
+  const ageResults = WORLD_AGE_COUNTS.map((count) => measure(MAX_PLAYERS_PER_WORLD, count));
 
   const header = [
     'players',
@@ -131,7 +170,7 @@ function main(): void {
     'snapshot KB/s',
     'heap MB',
   ];
-  const rows = results.map((result) => [
+  const toRow = (result: Result): string[] => [
     String(result.players),
     result.meanMs.toFixed(3),
     result.p50Ms.toFixed(3),
@@ -140,22 +179,31 @@ function main(): void {
     result.maxMs.toFixed(3),
     (result.snapshotBytesPerSecond / 1024).toFixed(1),
     result.heapMb.toFixed(1),
-  ]);
-  printTable(header, rows);
+  ];
+  printTable(header, results.map(toRow));
 
-  const busiest = results[results.length - 1];
-  if (busiest === undefined) return;
+  console.log(
+    `\n${MAX_PLAYERS_PER_WORLD} players, with a world's worth of campfires and buried caches built up over time ` +
+      `(the wire cap is ${MAX_BUILT_PROPS} built props and ${MAX_BURIED_CACHES} buried caches; ` +
+      `a long-lived world can well exceed both):\n`,
+  );
+  printTable(
+    ['built props', 'mean ms', 'p50 ms', 'p95 ms', 'p99 ms', 'max ms', 'snapshot KB/s', 'heap MB'],
+    ageResults.map((result) => [String(result.builtProps), ...toRow(result).slice(1)]),
+  );
+
+  const worst = [...results, ...ageResults].reduce((a, b) => (b.p99Ms > a.p99Ms ? b : a));
 
   console.log(
     `\nBudget is ${SLOW_TICK_BUDGET_MS} ms per tick. ` +
-      `With ${busiest.players} players the worst tick took ${busiest.maxMs.toFixed(2)} ms ` +
-      `(${((busiest.p99Ms / SLOW_TICK_BUDGET_MS) * 100).toFixed(1)}% of budget at the 99th percentile).`,
+      `The worst case (${worst.players} players, ${worst.builtProps} built props) took ${worst.maxMs.toFixed(2)} ms ` +
+      `(${((worst.p99Ms / SLOW_TICK_BUDGET_MS) * 100).toFixed(1)}% of budget at the 99th percentile).`,
   );
   console.log(
-    `A Durable Object has 128 MB. This world used about ${busiest.heapMb.toFixed(0)} MB of heap.`,
+    `A Durable Object has 128 MB. The worst case used about ${worst.heapMb.toFixed(0)} MB of heap.`,
   );
 
-  if (busiest.p99Ms > SLOW_TICK_BUDGET_MS) {
+  if (worst.p99Ms > SLOW_TICK_BUDGET_MS) {
     console.error('\nOver budget.');
     process.exitCode = 1;
   }
