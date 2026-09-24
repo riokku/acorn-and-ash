@@ -103,6 +103,10 @@ const NEWS_MS = 8000;
 const FISHING_CAMERA_PITCH = 0.62;
 /** The fish that bites least often, for a word of congratulation. */
 const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item ?? null;
+/** Camera-shake strength for a swing connecting with a tree or an animal. */
+const HIT_LANDED_SHAKE = 0.35;
+/** Camera-shake strength for taking damage ourselves - sharper than landing one. */
+const TOOK_DAMAGE_SHAKE = 0.55;
 
 /** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
 function isAnimalEntity(entity: SnapshotEntity): boolean {
@@ -520,10 +524,12 @@ export class Game {
       }
       case 'treeHit': {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
+        this.camera?.shake(HIT_LANDED_SHAKE);
         break;
       }
       case 'threatHit': {
         this.threatHitsLeft.set(message.event.animalId, message.event.hitsLeft);
+        this.camera?.shake(HIT_LANDED_SHAKE);
         break;
       }
       case 'fishing': {
@@ -629,6 +635,7 @@ export class Game {
 
   /** Only ever about us: nobody else's health is any of our business. */
   private hearAboutHealth(event: HealthEvent): void {
+    if (event.health < this.health) this.camera?.shake(TOOK_DAMAGE_SHAKE);
     this.health = event.health;
     if (event.knockedOut) {
       const now = performance.now();
