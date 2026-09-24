@@ -212,6 +212,9 @@ export function hint(state: HudState): string {
   // Asked for the menu, so resolving it beats whatever else is going on -
   // it stays open until a pick closes it or B does.
   if (state.buildMenuOpen) return buildMenuHint();
+  // Rooted to the spot until it resolves, so there is nothing else to offer
+  // right now - the same reasoning the build menu gets, just shorter-lived.
+  if (state.charging) return 'Charging a heavy swing - rooted to the spot';
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }

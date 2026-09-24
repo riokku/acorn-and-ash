@@ -47,6 +47,8 @@ export interface HudState {
   readonly health: number;
   /** What just happened to our health, while it is still worth showing. */
   readonly healthNews: string | null;
+  /** Whether a charged attack is currently winding up. */
+  readonly charging: boolean;
   /** What we last made, while it is still worth showing. */
   readonly craftingNews: string | null;
   /** What we last caught, while it is still worth showing. */
@@ -80,6 +82,7 @@ const INITIAL: HudState = {
   hungerNews: null,
   health: HEALTH_MAX,
   healthNews: null,
+  charging: false,
   craftingNews: null,
   huntingNews: null,
 };

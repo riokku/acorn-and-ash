@@ -23,7 +23,9 @@ The game is online-only. Every world runs on the server.
 > shy - it comes after you, and enough hits knock you out. You wake up safe
 > at home, or the clearing, with nothing lost but the walk back - or fight it
 > off first, with the same axe, and it runs off empty-handed. A quick dodge
-> can get you through its swing untouched, timed right. See
+> can get you through its swing untouched, timed right, and holding right
+> click winds up a heavy swing of your own that finishes a tree or a fight
+> outright - if you can afford to stand still long enough for it. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -38,6 +40,7 @@ The game is online-only. Every world runs on the server.
 | `B`                               | Open the build menu                            |
 | `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern |
 | Left mouse                        | Chop, cast, hook, fight off                    |
+| Right mouse (held)                | Charge a heavy attack                          |
 | Left `Ctrl`                       | Dodge                                          |
 | Mouse                             | Look around                                    |
 | `Esc`                             | Let go of the mouse                            |
@@ -96,6 +99,15 @@ holding, or straight back if you are holding nothing - and leaves you
 briefly untouchable, so timed right it gets you through a swing rather than
 only away from it. It needs a moment to recharge before it is ready again.
 See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
+
+Holding right click winds up a charged attack - about a second, rooted to
+the spot the whole time, the same as the raccoon's own wind-up asks of it.
+Whatever it lands on when it goes off is finished outright: a tree falls in
+one regardless of how many ordinary swings it would otherwise take, and a
+raccoon is beaten in one regardless of how many hits it has left. It is a
+real trade - you cannot move, dodge or block while charging - so it suits a
+decisive moment more than a running fight. See
+[decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md).
 
 ### Fishing
 

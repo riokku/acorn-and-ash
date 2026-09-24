@@ -16,6 +16,7 @@ export interface MoveIntent {
 
 const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
+const RIGHT_MOUSE = mouseCode(2);
 
 /** Hotkeys for crafting, in recipe order: 1 is the first recipe, 2 the second. */
 const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'] as const;
@@ -63,6 +64,9 @@ export class Controls {
     canvas.addEventListener('mousedown', this.handleMouseDown);
     // On the window, so letting go outside the canvas still counts as letting go.
     window.addEventListener('mouseup', this.handleMouseUp);
+    // Right mouse now charges an attack - the browser's own menu popping up
+    // over the game would otherwise come with it.
+    canvas.addEventListener('contextmenu', this.handleContextMenu);
   }
 
   /** Ask the browser to capture the mouse so the camera can turn freely. */
@@ -103,6 +107,7 @@ export class Controls {
     if (this.held.has('ControlLeft') || this.tapped.has('ControlLeft')) {
       buttons |= PlayerButton.Dodge;
     }
+    if (this.held.has(RIGHT_MOUSE) || this.tapped.has(RIGHT_MOUSE)) buttons |= PlayerButton.Charge;
     return buttons;
   }
 
@@ -162,6 +167,7 @@ export class Controls {
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     window.removeEventListener('mouseup', this.handleMouseUp);
+    this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
@@ -209,5 +215,9 @@ export class Controls {
 
   private readonly handleMouseUp = (event: MouseEvent): void => {
     this.held.delete(mouseCode(event.button));
+  };
+
+  private readonly handleContextMenu = (event: MouseEvent): void => {
+    if (this.pointerLocked) event.preventDefault();
   };
 }
