@@ -232,7 +232,8 @@ Run these from the repository root.
 | `pnpm dev`          | Start the game client with hot reloading                   |
 | `pnpm dev:server`   | Start the world server locally                             |
 | `pnpm dev:web`      | Start the Worker that serves the client and the API        |
-| `pnpm check`        | Everything the pull request check runs, in one go          |
+| `pnpm check`        | Typecheck, lint, test, asset licences and build, in one go |
+| `pnpm format:check` | Check formatting - the one thing `pnpm check` leaves out   |
 | `pnpm typecheck`    | Check types in every package                               |
 | `pnpm lint`         | Lint everything                                            |
 | `pnpm test`         | Run every test                                             |
@@ -241,6 +242,10 @@ Run these from the repository root.
 | `pnpm check:assets` | Check every asset has a licence row                        |
 | `pnpm bench:tick`   | Measure server tick time and memory with simulated players |
 | `pnpm loadtest`     | Point a crowd of bots at a running world                   |
+
+The pull request check runs both `pnpm check` **and** `pnpm format:check` as
+separate steps - run both before pushing, since passing the first one alone
+does not mean the second will too.
 
 `pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
 then waits for it to grow back, and another waits at the pond for a bite.
