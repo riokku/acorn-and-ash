@@ -4,26 +4,32 @@ import { loadScaledModel, type ModelPart } from './model-loading';
 
 import birchUrl from '@assets/trees/birch.glb?url';
 import oakUrl from '@assets/trees/oak.glb?url';
+import pineUrl from '@assets/trees/pine.glb?url';
+import boulderUrl from '@assets/rocks/boulder.glb?url';
+import mossyRockUrl from '@assets/rocks/mossyRock.glb?url';
 
 /**
- * Real art for a couple of tree kinds, sourced from a CC0 pack (see
- * assets/LICENSES.csv). Any kind with no entry here — pine, for now — keeps
- * drawing its placeholder shape; see the fallback in createPropMeshes.
+ * Real art for scattered trees and rocks, sourced from CC0 packs (see
+ * assets/LICENSES.csv). Any kind with no entry here keeps drawing its
+ * placeholder shape; see the fallback in createPropMeshes.
  */
 const MODEL_URLS: Partial<Record<PropKindId, string>> = {
   birch: birchUrl,
   oak: oakUrl,
+  pine: pineUrl,
+  boulder: boulderUrl,
+  mossyRock: mossyRockUrl,
 };
 
 const modelParts = new Map<PropKindId, ModelPart[]>();
 let preloadPromise: Promise<void> | null = null;
 
 /**
- * Fetches every real tree model up front. Idempotent, so both the eager
+ * Fetches every real prop model up front. Idempotent, so both the eager
  * kick-off at startup and the `await` before a world is built can call this
  * without loading anything twice.
  */
-export function preloadTreeModels(): Promise<void> {
+export function preloadPropModels(): Promise<void> {
   preloadPromise ??= loadAll();
   return preloadPromise;
 }

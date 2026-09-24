@@ -17,7 +17,8 @@
     "@gltf-transform/extensions": "^4.5.0",
     "@gltf-transform/functions": "^4.5.0",
     "koota": "^0.6.6",
-    "meshoptimizer": "^1.2.0"
+    "meshoptimizer": "^1.2.0",
+    "obj2gltf": "^3.2.0"
   },
   "devDependencies": {
     "tsx": "^4.20.6"

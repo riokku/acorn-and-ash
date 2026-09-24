@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { type PlacedProp, type PropKind } from '@acorn/shared';
 
-import { realModelPartsFor } from './tree-models';
+import { realModelPartsFor } from './prop-models';
 
 /**
  * Instanced placeholder scenery.
@@ -29,7 +29,7 @@ export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
     const realParts = realModelPartsFor(kind.id);
     if (realParts !== undefined) {
       // Already scaled and grounded to this kind's design height (see
-      // tree-models.ts), so it needs no offset beyond the usual placement.
+      // prop-models.ts), so it needs no offset beyond the usual placement.
       return realParts.map((part) => instanced(part.geometry, part.material, count, 0, false));
     }
 
@@ -71,6 +71,11 @@ export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
     ];
   }
 
+  const realParts = realModelPartsFor(kind.id);
+  if (realParts !== undefined) {
+    return realParts.map((part) => instanced(part.geometry, part.material, count, 0, false));
+  }
+
   const { radius, height } = kind.shape;
   return [
     instanced(
@@ -93,7 +98,7 @@ function instanced(
   centreHeight: number,
   // False for real models: the clearing and the wilderness each build their
   // own instanced mesh for the same kind, sharing one geometry and material
-  // loaded once (see tree-models.ts), so neither owns it to dispose.
+  // loaded once (see prop-models.ts), so neither owns it to dispose.
   ownsResources = true,
 ): PropPart {
   const mesh = new THREE.InstancedMesh(geometry, material, count);
