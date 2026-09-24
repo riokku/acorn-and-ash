@@ -7,8 +7,9 @@ cabin you can upgrade and decorate.
 The game is online-only. Every world runs on the server.
 
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
-> placeholder trees, rocks and a pond, surrounded by generated wilderness you
-> can walk out into, a capsule you walk, sprint and jump around, a
+> real birch and oak trees, placeholder pine trees, rocks and a pond,
+> surrounded by generated wilderness you can walk out into, a capsule you
+> walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump and chop trees down; they grow back while you are
 > away. Find the rod on the bank of the pond and catch fish. Gather sticks by
@@ -322,13 +323,24 @@ empty. See [decision 0011](docs/decisions/0011-a-world-server-per-pull-request.m
 
 ### A red check that is not ours
 
-Pull requests show a failing **Workers Builds: acorn-and-ash** check. It is not
-from this repository: it is a Cloudflare dashboard Git integration, set up in the
-Cloudflare web UI, trying to deploy a Worker named after the repository that does
-not exist in the code. It fails on every commit, including on `main`, and there
-is nothing here to fix. To stop it: Cloudflare dashboard → **Workers & Pages** →
-**acorn-and-ash** → **Settings** → **Build** → disconnect the Git repository.
-Our own deploys do not use it.
+A Cloudflare Worker can pick up a Git connection made in the Cloudflare web UI,
+completely separate from the deploy pipeline in this repository. When that
+happens, Cloudflare tries to build and deploy that Worker itself on every
+commit, using settings that don't match how this monorepo is actually built,
+and it fails every time, including on `main`. This has shown up twice: once as
+a stray Worker named after the whole repository with nothing in the code to
+match it, and once as a direct connection on `acorn-ash-game-server-production`
+and `acorn-ash-web-production` themselves (found and disconnected 2026-09-24).
+
+The tell, in the Cloudflare dashboard's **Workers & Pages** list: a Worker
+deployed only through our GitHub Actions workflows just shows "View
+deployments," with no commit message. One with a stray Git connection shows a
+GitHub badge and a commit message instead — that's the one to check.
+
+To stop it: Cloudflare dashboard → **Workers & Pages** → that Worker →
+**Settings** → **Build** → disconnect the Git repository. Our own deploys
+never use this feature, so disconnecting it is always safe and never affects
+the game.
 
 ## Assets and licensing
 
