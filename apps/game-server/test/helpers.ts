@@ -10,6 +10,8 @@ import {
   type AnimalCaught,
   type BuildableKindId,
   type BuiltPropsMessage,
+  type BuriedCachesMessage,
+  type CacheEvent,
   type CraftedEvent,
   type FishingEvent,
   type HealthEvent,
@@ -193,6 +195,24 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'builtProps');
     if (message === undefined) throw new Error('Never received the opening built props');
     return message.props;
+  }
+
+  /** The newest word on everything currently buried anywhere in the world. */
+  buriedCaches(): BuriedCachesMessage['caches'] {
+    const messages = this.received.filter((entry) => entry.type === 'buriedCaches');
+    return messages[messages.length - 1]?.caches ?? [];
+  }
+
+  /** The first word on what is buried, sent the moment you join. */
+  openingBuriedCaches(): BuriedCachesMessage['caches'] {
+    const message = this.received.find((entry) => entry.type === 'buriedCaches');
+    if (message === undefined) throw new Error('Never received the opening buried caches');
+    return message.caches;
+  }
+
+  /** Everything the server has said about this client's own buried cache, oldest first. */
+  cacheNews(): CacheEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'cache' ? [entry.event] : []));
   }
 
   /** Every swing the server has told us about. */

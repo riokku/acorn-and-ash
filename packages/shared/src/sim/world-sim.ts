@@ -80,6 +80,7 @@ import {
 } from './inventory';
 import { pickupInReach } from './pickups';
 import { gatherSpotInReach } from './gathering';
+import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import { animalInReach, type CatchCandidate } from './hunting';
@@ -273,6 +274,57 @@ export interface BuildEvent {
   readonly prop: BuiltProp;
   readonly ownerKey: string | null;
 }
+
+/** Half of what a player was carrying, left where a knockout took them down. */
+export interface BuriedCache {
+  readonly id: number;
+  /**
+   * The stable key of whoever buried it, not their network id - a network id
+   * only lasts as long as one connection, and a cache has to survive its
+   * owner reconnecting, or the whole world sleeping and waking again, to be
+   * worth persisting at all. Null the same way a guest's home has none: with
+   * no key to recognise them by next time, nobody can dig this one back up.
+   */
+  readonly ownerPlayerKey: string | null;
+  readonly x: number;
+  readonly z: number;
+  readonly items: readonly { readonly item: ItemId; readonly count: number }[];
+}
+
+/**
+ * A `BuriedCache` as the wire says it: the owner's current network id in
+ * place of their stable key, resolved fresh every time this is sent, since a
+ * reconnect changes it, and no contents - nothing needs to say what is in
+ * one, only that it is there and whose. Null while the owner is not
+ * connected - nobody needs a hint lit up for a cache with nobody to dig it.
+ */
+export interface BuriedCacheView {
+  readonly id: number;
+  readonly ownerNetId: number | null;
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * Word that a player's own buried cache changed - a knockout burying
+ * something, or digging it back up - for that player alone. Everybody else
+ * hears about the cache itself appearing or disappearing from the next
+ * `buriedCachesList`, the same way a built prop needs no message of its own
+ * beyond that list.
+ */
+export interface CacheEvent {
+  readonly netId: number;
+  readonly kind: 'buried' | 'dugUp';
+}
+
+/**
+ * `CacheEvent` plus what the game server needs to persist it - the full
+ * cache for a fresh burial, or just the id to delete for a dig-up - which
+ * never goes to a client and so never needs to be a `CacheEvent` itself.
+ */
+export type CacheChange =
+  | { readonly netId: number; readonly kind: 'buried'; readonly cache: BuriedCache }
+  | { readonly netId: number; readonly kind: 'dugUp'; readonly cacheId: number };
 
 /** A tree's state, as it goes into and comes out of storage. */
 export interface PersistedTree {
@@ -487,6 +539,10 @@ export class WorldSimulation {
   private readonly buildEvents: BuildEvent[] = [];
   /** Built-prop id -> whoever it belongs to, for anything capped per player. */
   private readonly ownedBuiltProps = new Map<number, string>();
+  /** Everything currently buried, waiting to be dug back up. */
+  private readonly buriedCaches: BuriedCache[] = [];
+  private nextBuriedCacheId = 1;
+  private readonly cacheEvents: CacheChange[] = [];
   /**
    * The props as they stand right now.
    *
@@ -803,12 +859,15 @@ export class WorldSimulation {
         // they started, and only the server ever decides what happens.
         if (wantsToInteract) {
           // The same button reaches for what is at your feet first, then for
-          // a patch of sticks, and only failing both reaches into your own
-          // pack instead.
+          // a patch of sticks, then for a cache of your own buried nearby,
+          // and only failing all three reaches into your own pack instead.
           const pickedUp = this.tryPickup(runtime, scratch.position);
           if (!pickedUp) {
             const gathered = this.tryGather(runtime, scratch.position);
-            if (!gathered) this.tryEat(runtime);
+            if (!gathered) {
+              const dugUp = this.tryDigUpCache(runtime, scratch.position);
+              if (!dugUp) this.tryEat(runtime);
+            }
           }
         }
 
@@ -1075,6 +1134,26 @@ export class WorldSimulation {
     return true;
   }
 
+  /**
+   * Dig up this player's own buried cache, if one is in reach. Unlike a
+   * pickup a cache belongs to exactly one player, so being close enough is
+   * not by itself enough - it also has to be theirs. Returns whether it
+   * happened.
+   */
+  private tryDigUpCache(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    const cache = nearestBuriedCache(
+      position,
+      this.buriedCaches,
+      (candidate) => runtime.playerKey !== null && candidate.ownerPlayerKey === runtime.playerKey,
+    );
+    if (cache === null) return false;
+
+    for (const entry of cache.items) addItem(runtime.inventory, entry.item, entry.count);
+    this.buriedCaches.splice(this.buriedCaches.indexOf(cache), 1);
+    this.cacheEvents.push({ netId: runtime.netId, kind: 'dugUp', cacheId: cache.id });
+    return true;
+  }
+
   /** Eat something out of the pack, if there is any food in it that would actually help. */
   private tryEat(runtime: PlayerRuntime): void {
     const item = foodToEat(runtime.inventory, runtime.hunger);
@@ -1221,6 +1300,23 @@ export class WorldSimulation {
     runtime.health = knockedOut ? HEALTH_MAX : remaining;
 
     if (knockedOut) {
+      // Read before placePlayer moves them - this is where it stays buried.
+      const position = runtime.entity.get(Position);
+      if (position !== undefined) {
+        const buried = buryHalf(runtime.inventory);
+        if (buried.length > 0) {
+          const cache: BuriedCache = {
+            id: this.nextBuriedCacheId++,
+            ownerPlayerKey: runtime.playerKey,
+            x: position.x,
+            z: position.z,
+            items: buried,
+          };
+          this.buriedCaches.push(cache);
+          this.cacheEvents.push({ netId: runtime.netId, kind: 'buried', cache });
+        }
+      }
+
       const wake = this.wakePosition(runtime.playerKey);
       // Whichever way they already happened to be facing - a knockout has no
       // reason to also spin them around.
@@ -1587,6 +1683,41 @@ export class WorldSimulation {
   /** Hand over every build placed since this was last asked. */
   drainBuildEvents(): BuildEvent[] {
     return this.buildEvents.splice(0);
+  }
+
+  /**
+   * Everything currently buried, for sending to a client or saving to
+   * storage, with each owner's network id resolved fresh right now.
+   */
+  buriedCachesList(): readonly BuriedCacheView[] {
+    return this.buriedCaches.map((cache) => ({
+      id: cache.id,
+      ownerNetId: this.netIdForPlayerKey(cache.ownerPlayerKey),
+      x: cache.x,
+      z: cache.z,
+    }));
+  }
+
+  /** Put buried caches back as they were after the world wakes from storage. */
+  restoreBuriedCaches(caches: Iterable<BuriedCache>): void {
+    for (const cache of caches) {
+      this.buriedCaches.push(cache);
+      this.nextBuriedCacheId = Math.max(this.nextBuriedCacheId, cache.id + 1);
+    }
+  }
+
+  /** The network id of whoever is connected under this stable key right now, or null. */
+  private netIdForPlayerKey(playerKey: string | null): number | null {
+    if (playerKey === null) return null;
+    for (const runtime of this.players.values()) {
+      if (runtime.playerKey === playerKey) return runtime.netId;
+    }
+    return null;
+  }
+
+  /** Hand over every change to anybody's own buried cache since this was last asked. */
+  drainCacheEvents(): CacheChange[] {
+    return this.cacheEvents.splice(0);
   }
 
   /** Hand over every swing that landed since this was last asked. */

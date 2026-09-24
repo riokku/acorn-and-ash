@@ -29,6 +29,7 @@ import {
   dayProgress,
   gatherSpotInReach,
   isNight,
+  nearestBuriedCache,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
@@ -41,6 +42,8 @@ import {
   type BuildableKindId,
   type BuildBlocker,
   type BuiltProp,
+  type BuriedCacheView,
+  type CacheEvent,
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
@@ -63,6 +66,7 @@ import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
+import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
 import { createCabin, type Cabin } from './scene/cabin';
 import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
@@ -167,6 +171,8 @@ export interface GameDebug {
   buildMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
+  /** Every cache currently buried, wherever this browser last heard it was. */
+  buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -215,6 +221,10 @@ export class Game {
   private readonly critters = new Map<number, Critter | Raccoon>();
   private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
   private builtProps: readonly BuiltProp[] = [];
+  private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
+  private buriedCaches: readonly BuriedCacheView[] = [];
+  /** Whether a cache of our own is close enough right now to dig up. */
+  private nearBuriedCache = false;
   private canBuild = false;
   private buildMenuOpen = false;
   private readonly scratch: Vec3 = vec3();
@@ -262,6 +272,7 @@ export class Game {
   private healthNews: { text: string; until: number } | null = null;
   private craftingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
+  private cacheNews: { text: string; until: number } | null = null;
   /**
    * Read purely from our own held key, not anything the server has
    * confirmed - the same as `aimedTree`/`aimedAnimal` are only ever a hint,
@@ -368,6 +379,7 @@ export class Game {
       canBuild: () => this.canBuild,
       buildMenuOpen: () => this.buildMenuOpen,
       builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
+      buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -416,6 +428,8 @@ export class Game {
     this.critters.clear();
     for (const built of this.builtMeshes.values()) built.dispose();
     this.builtMeshes.clear();
+    for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
+    this.buriedCacheMeshes.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -531,6 +545,15 @@ export class Game {
         this.applyBuiltProps();
         break;
       }
+      case 'buriedCaches': {
+        this.buriedCaches = message.caches;
+        this.applyBuriedCaches();
+        break;
+      }
+      case 'cache': {
+        this.hearAboutCache(message.event);
+        break;
+      }
       case 'rejected': {
         this.connectionState = 'rejected';
         this.options.hud.publish({ connection: 'rejected' });
@@ -636,6 +659,27 @@ export class Game {
 
   private currentCraftingNews(now = performance.now()): string | null {
     const news = this.craftingNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /**
+   * Only ever about us: nobody else has any reason to know what we lost or
+   * found. A burial lands the same tick as the knockout itself, so its own
+   * toast usually loses out to "Knocked out!" - the dig-up is the one this
+   * mostly exists for, since nothing else says that happened.
+   */
+  private hearAboutCache(event: CacheEvent): void {
+    const now = performance.now();
+    const text =
+      event.kind === 'buried'
+        ? 'Knocked out! Some of what you carried is buried where you fell.'
+        : 'You dug up what you buried.';
+    this.cacheNews = { text, until: now + NEWS_MS };
+    this.options.hud.publish({ cacheNews: this.currentCacheNews() });
+  }
+
+  private currentCacheNews(now = performance.now()): string | null {
+    const news = this.cacheNews;
     return news !== null && now < news.until ? news.text : null;
   }
 
@@ -785,6 +829,27 @@ export class Game {
       built.group.position.set(prop.x, 0, prop.z);
       this.scene.add(built.group);
       this.builtMeshes.set(prop.id, built);
+    }
+  }
+
+  /** Put every buried cache's mound where the server says it is, the same reconciling way as `applyBuiltProps`. */
+  private applyBuriedCaches(): void {
+    if (this.clearingScene === null) return;
+    const present = new Set(this.buriedCaches.map((cache) => cache.id));
+
+    for (const [id, mound] of this.buriedCacheMeshes) {
+      if (present.has(id)) continue;
+      this.scene.remove(mound.group);
+      mound.dispose();
+      this.buriedCacheMeshes.delete(id);
+    }
+
+    for (const cache of this.buriedCaches) {
+      if (this.buriedCacheMeshes.has(cache.id)) continue;
+      const mound = createBuriedCacheMound();
+      mound.group.position.set(cache.x, 0, cache.z);
+      this.scene.add(mound.group);
+      this.buriedCacheMeshes.set(cache.id, mound);
     }
   }
 
@@ -961,6 +1026,15 @@ export class Game {
         ? null
         : (gatherSpotInReach(player.motion.position, this.clearing.gatherSpots)?.item ?? null);
 
+    // Only a hint here too: the server decides whether it is really this
+    // player's to dig up.
+    this.nearBuriedCache =
+      nearestBuriedCache(
+        player.motion.position,
+        this.buriedCaches,
+        (cache) => cache.ownerNetId === this.selfNetId,
+      ) !== null;
+
     const target =
       this.clearing === null
         ? null
@@ -1125,6 +1199,7 @@ export class Game {
       carrying: this.carrying,
       nearbyItem: this.nearbyItem,
       nearGatherSpot: this.nearGatherSpot,
+      nearBuriedCache: this.nearBuriedCache,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,
@@ -1139,6 +1214,7 @@ export class Game {
       charging: this.currentlyCharging(now),
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
+      cacheNews: this.currentCacheNews(now),
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
     });
   }

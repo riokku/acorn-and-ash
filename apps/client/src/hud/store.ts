@@ -26,6 +26,8 @@ export interface HudState {
   readonly nearbyItem: ItemId | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
   readonly nearGatherSpot: ItemId | null;
+  /** Whether a cache of our own is close enough right now to dig up. */
+  readonly nearBuriedCache: boolean;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
@@ -53,6 +55,8 @@ export interface HudState {
   readonly craftingNews: string | null;
   /** What we last caught, while it is still worth showing. */
   readonly huntingNews: string | null;
+  /** What just happened to a buried cache of ours, while it is still worth showing. */
+  readonly cacheNews: string | null;
   /** Whether it is currently night out. */
   readonly isNight: boolean;
 }
@@ -73,6 +77,7 @@ const INITIAL: HudState = {
   carrying: [],
   nearbyItem: null,
   nearGatherSpot: null,
+  nearBuriedCache: false,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,
@@ -87,6 +92,7 @@ const INITIAL: HudState = {
   charging: false,
   craftingNews: null,
   huntingNews: null,
+  cacheNews: null,
   isNight: false,
 };
 

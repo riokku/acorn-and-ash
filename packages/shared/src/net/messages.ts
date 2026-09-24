@@ -4,6 +4,8 @@ import type { PlayerInput } from '../sim/player';
 import type {
   AnimalCaught,
   BuiltProp,
+  BuriedCacheView,
+  CacheEvent,
   CraftedEvent,
   FishingEvent,
   HealthEvent,
@@ -38,6 +40,8 @@ export const ServerMessageType = {
   BuiltProps: 0x1d,
   ThreatHit: 0x1e,
   Health: 0x1f,
+  BuriedCaches: 0x20,
+  Cache: 0x21,
 } as const;
 
 export const RejectReason = {
@@ -243,6 +247,32 @@ export interface HealthMessage {
   readonly event: HealthEvent;
 }
 
+/**
+ * Every cache currently buried anywhere in the world.
+ *
+ * Sent whole, the same as built props: cheap while there are only ever a
+ * handful, and simplest to keep in sync. Sent on arrival, and again whenever
+ * one is buried or dug back up. `ownerNetId` is resolved fresh each time -
+ * null while its owner is not connected to hint at.
+ */
+export interface BuriedCachesMessage {
+  readonly type: 'buriedCaches';
+  readonly caches: readonly BuriedCacheView[];
+}
+
+/**
+ * Word that this player's own buried cache changed - one just appeared from
+ * a knockout, or they just dug one up - for a HUD toast.
+ *
+ * Only that player is ever told: like crafting, nobody else has any reason
+ * to know what somebody else lost or found. The cache itself appearing or
+ * disappearing is already plain to everybody from the next `BuriedCaches`.
+ */
+export interface CacheMessage {
+  readonly type: 'cache';
+  readonly event: CacheEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -259,4 +289,6 @@ export type ServerMessage =
   | CaughtMessage
   | BuiltPropsMessage
   | ThreatHitMessage
-  | HealthMessage;
+  | HealthMessage
+  | BuriedCachesMessage
+  | CacheMessage;

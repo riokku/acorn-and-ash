@@ -1395,4 +1395,69 @@ describe('threats', () => {
     expect(second.openingHealth()?.health).toBeLessThan(HEALTH_MAX);
     second.close();
   }, 30_000);
+
+  it('buries something on a real knockout, and lets it be dug back up through real storage', async () => {
+    const raccoonDen = ANIMAL_DENS.find((entry) => entry.id === 1005);
+    if (raccoonDen === undefined) {
+      throw new Error('the masked raccoon den is gone from the data table');
+    }
+
+    const stickPatch = STICK_PATCHES[0];
+    if (stickPatch === undefined) throw new Error('no stick patch to test against');
+
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'gets-buried');
+    // Something worth losing - an empty pack has nothing a knockout can
+    // bury, and burying half of one stick would still be none.
+    await walkWithinReach(first, stickPatch);
+    const hasTwoSticks = (): boolean =>
+      (first.inventory().find((entry) => entry.item === 'stick')?.count ?? 0) >= 2;
+    for (let step = 0; step < 60 && !hasTwoSticks(); step++) {
+      first.walk(0, 0, 0, 4, PlayerButton.Interact);
+      await sleep(120);
+    }
+    if (!hasTwoSticks()) throw new Error('never gathered enough sticks');
+
+    await walkWithinReach(first, raccoonDen);
+
+    // Four hits at twenty-five damage each empties a hundred health - a
+    // real fight, not a shortcut, the same as the reconnect test above.
+    await waitFor(
+      'a real knockout',
+      () => first.health().some((event) => event.knockedOut),
+      30_000,
+    );
+    await waitFor('the cache to appear', () => first.buriedCaches().length > 0, 5_000);
+    const cache = first.buriedCaches()[0];
+    expect(cache).toBeDefined();
+    if (cache === undefined) return;
+    expect(cache.ownerNetId).toBe(first.welcome().netId);
+
+    first.close();
+    await sleep(300);
+
+    // The mound survives a reconnect - it comes straight from storage, not
+    // the in-memory session that actually buried it.
+    const second = await TestClient.connect(worldId, 'gets-buried');
+    await waitFor('the opening buried caches', () => second.countOfMessages('buriedCaches') > 0);
+    const reopened = second.openingBuriedCaches();
+    expect(reopened).toEqual([{ ...cache, ownerNetId: second.welcome().netId }]);
+
+    // Walk back to where it is and dig it up.
+    await walkWithinReach(second, cache);
+    second.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the dig-up to register', () =>
+      second.cacheNews().some((event) => event.kind === 'dugUp'),
+    );
+    await waitFor('the mound to disappear', () => second.buriedCaches().length === 0);
+
+    second.close();
+    await sleep(300);
+
+    // Gone from storage too, not only this session's memory.
+    const third = await TestClient.connect(worldId, 'gets-buried');
+    await waitFor('the opening buried caches', () => third.countOfMessages('buriedCaches') > 0);
+    expect(third.openingBuriedCaches()).toEqual([]);
+    third.close();
+  }, 60_000);
 });

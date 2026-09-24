@@ -22,6 +22,8 @@ import type { PlayerInput } from '../sim/player';
 import type {
   AnimalCaught,
   BuiltProp,
+  BuriedCacheView,
+  CacheEvent,
   CraftedEvent,
   FishingEvent,
   HealthEvent,
@@ -67,6 +69,8 @@ export const MAX_TAKEN_PICKUPS = 255;
 export const MAX_CHANGED_TREES = 255;
 /** Handful of these for now; a one-byte count leaves plenty of room to grow. */
 export const MAX_BUILT_PROPS = 255;
+/** Only ever one per knockout, so this ceiling is not expected to matter in practice. */
+export const MAX_BURIED_CACHES = 255;
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
@@ -75,6 +79,10 @@ const BYTES_PER_TREE_STATE = 4;
 const TREE_FELLED_FLAG = 1;
 /** id(2) + kind(1) + x(2) + z(2) */
 const BYTES_PER_BUILT_PROP = 7;
+/** id(2) + ownerNetId(2) + x(2) + z(2) */
+const BYTES_PER_BURIED_CACHE = 8;
+/** A network id no real connection ever has, standing in for "not connected right now." */
+const NO_OWNER = 0xffff;
 
 /** type(1) + netId(2) + what happened(1) + two numbers that depend on it(2 each) */
 const FISHING_MESSAGE_BYTES = 8;
@@ -96,6 +104,8 @@ const HUNGER_MESSAGE_BYTES = 5;
 const NO_ITEM = 0xff;
 /** type(1) + netId(2) + health(1) + knocked out or not(1) */
 const HEALTH_MESSAGE_BYTES = 5;
+/** type(1) + netId(2) + buried or dug up(1) */
+const CACHE_MESSAGE_BYTES = 4;
 
 /** type(1) + which item to make(1) */
 const CRAFT_MESSAGE_BYTES = 2;
@@ -403,6 +413,36 @@ export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
   return buffer;
 }
 
+/**
+ * Everything currently buried, sent whole - the same way built props are.
+ *
+ * What each one holds never goes over the wire: nothing needs to say what is
+ * in a cache, only that it is there and whose.
+ */
+export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuffer {
+  const count = Math.min(caches.length, MAX_BURIED_CACHES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_BURIED_CACHE);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.BuriedCaches);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const cache = caches[i];
+    if (cache === undefined) break;
+    view.setUint16(offset, cache.id & 0xffff, true);
+    view.setUint16(
+      offset + 2,
+      cache.ownerNetId === null ? NO_OWNER : cache.ownerNetId & 0xffff,
+      true,
+    );
+    view.setInt16(offset + 4, clamp(quantisePosition(cache.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(offset + 6, clamp(quantisePosition(cache.z), INT16_MIN, INT16_MAX), true);
+    offset += BYTES_PER_BURIED_CACHE;
+  }
+  return buffer;
+}
+
 export function encodeTreeHit(treeId: number, swingsLeft: number): ArrayBuffer {
   const buffer = new ArrayBuffer(4);
   const view = new DataView(buffer);
@@ -575,6 +615,25 @@ function decodeHealth(view: DataView): HealthEvent {
   };
 }
 
+const CACHE_FLAG_DUG_UP = 1 << 0;
+
+/** Word that a player's own buried cache changed, in four bytes. Only they are ever sent it. */
+export function encodeCache(event: CacheEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(CACHE_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Cache);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, event.kind === 'dugUp' ? CACHE_FLAG_DUG_UP : 0);
+  return buffer;
+}
+
+function decodeCache(view: DataView): CacheEvent {
+  return {
+    netId: view.getUint16(1, true),
+    kind: (view.getUint8(3) & CACHE_FLAG_DUG_UP) !== 0 ? 'dugUp' : 'buried',
+  };
+}
+
 export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   const buffer = new ArrayBuffer(2);
   const view = new DataView(buffer);
@@ -706,6 +765,24 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       return { type: 'builtProps', props };
     }
+    case ServerMessageType.BuriedCaches: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_BURIED_CACHE) return null;
+      const caches: BuriedCacheView[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        const ownerNetId = view.getUint16(offset + 2, true);
+        caches.push({
+          id: view.getUint16(offset, true),
+          ownerNetId: ownerNetId === NO_OWNER ? null : ownerNetId,
+          x: dequantisePosition(view.getInt16(offset + 4, true)),
+          z: dequantisePosition(view.getInt16(offset + 6, true)),
+        });
+        offset += BYTES_PER_BURIED_CACHE;
+      }
+      return { type: 'buriedCaches', caches };
+    }
     case ServerMessageType.TreeHit: {
       if (data.byteLength !== 4) return null;
       return {
@@ -740,6 +817,10 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.Health: {
       if (data.byteLength !== HEALTH_MESSAGE_BYTES) return null;
       return { type: 'health', event: decodeHealth(view) };
+    }
+    case ServerMessageType.Cache: {
+      if (data.byteLength !== CACHE_MESSAGE_BYTES) return null;
+      return { type: 'cache', event: decodeCache(view) };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

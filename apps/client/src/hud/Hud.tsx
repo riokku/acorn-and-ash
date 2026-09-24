@@ -62,12 +62,14 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
       state.pointerLocked &&
       (state.fishingNews !== null ||
         state.healthNews !== null ||
+        state.cacheNews !== null ||
         state.hungerNews !== null ||
         state.craftingNews !== null ||
         state.huntingNews !== null) ? (
         <p className="hud-news">
           {state.fishingNews ??
             state.healthNews ??
+            state.cacheNews ??
             state.hungerNews ??
             state.craftingNews ??
             state.huntingNews}
@@ -222,6 +224,7 @@ export function hint(state: HudState): string {
   if (state.nearGatherSpot !== null) {
     return `Press E to gather ${ITEM_KINDS[state.nearGatherSpot].pluralName.toLowerCase()}`;
   }
+  if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   // A tree or animal only offers a hint once there is an axe to swing: without
   // one the server ignores the click outright (trySwing's own first check), so
   // hinting at it here would send you to click on something that does nothing.
