@@ -10,6 +10,7 @@ import {
   HEALTH_MAX,
   HUNGER_MAX,
   INTEREST_RADIUS,
+  MAX_PLAYERS_PER_WORLD,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
   PLAYER_RADIUS,
@@ -273,6 +274,51 @@ describe('the world simulation', () => {
     expect(playerIdsSeenBy(1)).toEqual([1]);
     // A player always sees themselves, however far out they are.
     expect(playerIdsSeenBy(2)).toEqual([2]);
+  });
+
+  it('keeps the interest radius correct with a full, 50-player world at varying distances', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+
+    const playerIdsSeenBy = (netId: number): number[] =>
+      sim
+        .snapshotFor(netId)
+        .filter((entity) => (entity.flags & SnapshotFlag.Animal) === 0)
+        .map((entity) => entity.netId);
+
+    // Fill the rest of the world up to capacity, alternating players placed
+    // well inside the radius and well outside it, at a spread of angles and
+    // distances rather than one fixed offset - this is what "at real scale"
+    // is meant to rule out: a cutoff that only happens to work for a couple
+    // of hand-placed points.
+    const nearIds: number[] = [];
+    const farIds: number[] = [];
+    for (let i = 0, netId = 2; netId <= MAX_PLAYERS_PER_WORLD; i++, netId++) {
+      const isNear = i % 2 === 0;
+      const distance = isNear ? 5 + ((i * 3) % 90) : INTEREST_RADIUS + 5 + ((i * 17) % 400);
+      const angle = i * 0.9;
+      sim.addPlayer(netId);
+      sim.placePlayer(
+        netId,
+        { x: Math.cos(angle) * distance, y: 0, z: Math.sin(angle) * distance },
+        0,
+      );
+      (isNear ? nearIds : farIds).push(netId);
+    }
+    expect(1 + nearIds.length + farIds.length).toBe(MAX_PLAYERS_PER_WORLD);
+
+    const byId = (a: number, b: number): number => a - b;
+    const expectedForViewer = [1, ...nearIds].sort(byId);
+    expect(playerIdsSeenBy(1).sort(byId)).toEqual(expectedForViewer);
+
+    // The cutoff works both ways: someone far from the viewer doesn't see the
+    // viewer either, even once the world is full and busy.
+    const [aFarPlayer] = farIds;
+    if (aFarPlayer === undefined) throw new Error('expected at least one far player');
+    const seenByFarPlayer = playerIdsSeenBy(aFarPlayer);
+    expect(seenByFarPlayer).toContain(aFarPlayer);
+    expect(seenByFarPlayer).not.toContain(1);
   });
 
   it('gives the same result twice from the same inputs', () => {
