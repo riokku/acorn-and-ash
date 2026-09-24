@@ -7,7 +7,7 @@ cabin you can upgrade and decorate.
 The game is online-only. Every world runs on the server.
 
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
-> real birch and oak trees, placeholder pine trees, rocks and a pond,
+> real birch, oak and pine trees, real rocks and a pond,
 > surrounded by generated wilderness you can walk out into, a capsule you
 > walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the

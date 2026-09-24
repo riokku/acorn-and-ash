@@ -64,7 +64,7 @@ import { LocalPlayer } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
-import { preloadTreeModels } from './scene/tree-models';
+import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
@@ -308,7 +308,7 @@ export class Game {
     installBvhRaycasting();
     // Kicked off now rather than in enterWorld, so they have the whole time
     // it takes to set up the renderer and reach the server to finish loading.
-    void preloadTreeModels();
+    void preloadPropModels();
     void preloadFlowerModel();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
@@ -752,7 +752,7 @@ export class Game {
     // entered before the fetch kicked off in start() has finished. A flower
     // bed can be built well after this, but never before, so loading it here
     // covers every place the game ever draws a flower.
-    await Promise.all([preloadTreeModels(), preloadFlowerModel()]);
+    await Promise.all([preloadPropModels(), preloadFlowerModel()]);
     if (this.clearingScene !== null) return;
 
     const clearing = buildTestClearing(seed);
