@@ -20,6 +20,10 @@ const NUDGE_RATE = 4;
  * to tell a deliberate look upwards from the wobble of a click.
  */
 const NUDGE_CANCEL_PITCH = 0.02;
+/** How fast a shake settles back to nothing, in strength per second. */
+const SHAKE_DECAY_RATE = 9;
+/** How far a shake at full strength can nudge the camera, in meters. */
+const SHAKE_MAX_OFFSET = 0.12;
 
 export interface CameraLook {
   /** Which way the camera is pointing. Movement is relative to this. */
@@ -40,6 +44,8 @@ export class FollowCamera {
   private currentDistance = RESTING_DISTANCE;
   /** A pitch the game has asked the camera to ease towards, until the mouse moves. */
   private pitchNudge: number | null = null;
+  /** 0 to 1: how hard the camera is currently shaking, decaying back to 0. */
+  private shakeStrength = 0;
   private readonly target = new THREE.Vector3();
   private readonly desired = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
@@ -67,6 +73,14 @@ export class FollowCamera {
   lookDownTo(pitch: number): void {
     if (this.look.pitch >= pitch) return;
     this.pitchNudge = clamp(pitch, MIN_PITCH, MAX_PITCH);
+  }
+
+  /**
+   * A brief kick, for a swing or a hit landing. Stacks up to full strength
+   * rather than resetting, so a flurry of hits reads as more than one would.
+   */
+  shake(strength: number): void {
+    this.shakeStrength = Math.min(1, this.shakeStrength + strength);
   }
 
   /** Turn the camera in response to the mouse. */
@@ -112,6 +126,13 @@ export class FollowCamera {
     this.desired.copy(this.direction).multiplyScalar(this.currentDistance).add(this.target);
     this.camera.position.copy(this.desired);
     this.camera.lookAt(this.target);
+
+    if (this.shakeStrength > 0) {
+      const offset = this.shakeStrength * SHAKE_MAX_OFFSET;
+      this.camera.position.x += (Math.random() * 2 - 1) * offset;
+      this.camera.position.y += (Math.random() * 2 - 1) * offset;
+      this.shakeStrength = Math.max(0, this.shakeStrength - SHAKE_DECAY_RATE * deltaSeconds);
+    }
   }
 
   /** How far the camera can go before it hits something, across every blocker mesh. */
