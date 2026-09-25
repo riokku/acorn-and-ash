@@ -77,14 +77,23 @@ const HAND_BONE_NAME = 'handslotr';
  * leaving the forward and sideways components flipped from the original,
  * which is the actual fix - confirmed this time by reading the held axe's
  * real world Y position (comfortably above both the hand and the ground)
- * alongside the angle, not the angle alone. `HELD_AXE_REST_X` adds the
- * forward lean asked for on top of that: the axis a first attempt wrongly
- * used for the upright tilt, but which does move the axe noticeably once
- * combined with the Z turn instead of on its own - chosen positive because
- * that is the direction that reads as more forward relative to the
- * character's own facing, measured the same way as the Z value.
+ * alongside the angle, not the angle alone.
+ *
+ * `HELD_AXE_REST_X` steers which way, of everywhere on the resulting cone
+ * of directions ~30 degrees off vertical, it actually leans - not a small
+ * tilt in isolation the way "20 degrees forward" first suggested, since X
+ * here interacts with the Y and Z already in place rather than adding a
+ * separate small tilt on top of them. With Y and Z fixed, sweeping X alone
+ * traces that whole cone at an almost exactly constant ~29.5 degrees off
+ * vertical while the forward/sideways split changes completely, including
+ * through the still-too-far-backward lean the first value gave - so this
+ * value was found by sampling that sweep directly against a real
+ * screenshot Chris sent, and reading off the point that lands furthest
+ * toward the character's own front with the least sideways drift, rather
+ * than trusting what a plain 20-degree offset from the previous value
+ * would visually mean.
  */
-const HELD_AXE_REST_X = 0.35;
+const HELD_AXE_REST_X = 2.8;
 const HELD_AXE_REST_Y = Math.PI;
 const HELD_AXE_REST_Z = 1.05 + Math.PI;
 const HELD_AXE_ROTATION = new THREE.Euler(HELD_AXE_REST_X, HELD_AXE_REST_Y, HELD_AXE_REST_Z);

@@ -208,3 +208,20 @@ a small protocol addition this pass didn't make.
   still not something this pass could confirm without a render - only that
   the numbers move the way Chris described them, and that the blade no
   longer dips below the ground getting there.
+- That render arrived the next round: Chris sent an actual screenshot,
+  confirming the blade now faced the right way but still leaned too far
+  backward. With a real image to check candidates against instead of only
+  angle and direction numbers, sweeping `HELD_AXE_REST_X` through a full
+  circle (holding Y and Z fixed) showed it does not add a small independent
+  tilt the way "20 degrees forward" first suggested - once Y and Z are
+  already turned, X instead steers which way, of everywhere on the cone of
+  directions the earlier fix put ~30 degrees off vertical, the grip
+  actually leans, tracing that whole cone at an almost constant angle while
+  the forward/sideways split changes completely. `HELD_AXE_REST_X = 2.8`
+  is the point on that circle read directly off the sweep: strongly
+  forward, negligible sideways drift, the same ~30 degrees off vertical
+  throughout. The swing's own arc changed shape as a side effect - it now
+  winds backward before returning to rest rather than swinging forward past
+  it - but was confirmed to still stay clear of the ground the whole way
+  through, and nothing about its direction was raised as a problem this
+  round.
