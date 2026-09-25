@@ -174,3 +174,22 @@ a small protocol addition this pass didn't make.
   `ThreatHit` can also fire with no swing behind it at all, for a threat's
   own arrival or respawn, which needs its own look before the same
   treatment applies there.
+- The 30 degree angle was right, but the blade pointed the wrong way - Chris
+  could see it was behind the player once the axe was actually visible, and
+  asked for a half turn plus a further 20 degrees forward. Which end of the
+  model is the blade was checked directly this time rather than assumed:
+  the axe's own vertices cluster into a wide, blade-shaped mass at the high
+  end of its local Y and a narrow handle shaft down to the low end, the
+  same file `clearing.ts` already draws standing blade-up as a pickup.
+  Adding `Math.PI` to the same Z axis the grip already turns on points the
+  blade the other way while keeping the same distance off vertical, since
+  negating every component of a direction (what a half turn round a single
+  axis does to a vector not aligned with it) does not change the angle
+  between it and straight up. The further 20 degrees of forward lean uses
+  `HELD_AXE_REST_X` - the axis a first attempt wrongly reached for to
+  control the upright amount, which does move the axe once a Z turn is
+  already in the mix, chosen positive because that direction measured as
+  more forward relative to the character's own facing. Which literal
+  compass direction "forward" turns out to be on screen is, like the
+  swing's own direction, not something this pass could confirm without a
+  render - only that the numbers move the way Chris described them.
