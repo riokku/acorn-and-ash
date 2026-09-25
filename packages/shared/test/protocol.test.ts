@@ -639,8 +639,8 @@ describe('telling everybody what has been built', () => {
 
   it('carries every campfire, with its id and where it stands', () => {
     const props: BuiltProp[] = [
-      { id: 1, kind: 'campfire', x: 4.2, z: -6.75 },
-      { id: 2, kind: 'campfire', x: -30, z: 12.5 },
+      { id: 1, kind: 'campfire', x: 4.2, z: -6.75, lit: false },
+      { id: 2, kind: 'campfire', x: -30, z: 12.5, lit: false },
     ];
     const decoded = roundTrip(props);
     expect(decoded).toHaveLength(2);
@@ -651,23 +651,33 @@ describe('telling everybody what has been built', () => {
     expect(decoded?.[1]).toEqual(expect.objectContaining({ id: 2, kind: 'campfire' }));
   });
 
+  it('carries whether a campfire is lit', () => {
+    const props: BuiltProp[] = [
+      { id: 1, kind: 'campfire', x: 0, z: 0, lit: true },
+      { id: 2, kind: 'campfire', x: 1, z: 1, lit: false },
+    ];
+    const decoded = roundTrip(props);
+    expect(decoded?.[0]?.lit).toBe(true);
+    expect(decoded?.[1]?.lit).toBe(false);
+  });
+
   it('fits an empty list in two bytes', () => {
     expect(encodeBuiltProps([]).byteLength).toBe(2);
   });
 
-  it('costs seven bytes a prop', () => {
-    const props: BuiltProp[] = [{ id: 1, kind: 'campfire', x: 0, z: 0 }];
-    expect(encodeBuiltProps(props).byteLength).toBe(9);
+  it('costs eight bytes a prop', () => {
+    const props: BuiltProp[] = [{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }];
+    expect(encodeBuiltProps(props).byteLength).toBe(10);
   });
 
   it('refuses one that has been cut short', () => {
-    const encoded = encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0 }]);
+    const encoded = encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }]);
     expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
   });
 
   it('refuses a kind this build has never heard of', () => {
     const encoded = new Uint8Array(
-      encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0 }]).slice(0),
+      encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }]).slice(0),
     );
     encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
@@ -682,6 +692,7 @@ describe('telling everybody what has been built', () => {
       kind: 'campfire',
       x: 0,
       z: 0,
+      lit: false,
     }));
     const decoded = roundTrip(props);
     expect(decoded).toHaveLength(MAX_BUILT_PROPS);

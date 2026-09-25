@@ -21,6 +21,7 @@ const BASE_STATE: HudState = {
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
+  nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,
@@ -111,6 +112,21 @@ describe('the hint along the bottom', () => {
   it('reaches for a pickup or a patch before a buried cache, the same button', () => {
     const state: HudState = { ...BASE_STATE, nearBuriedCache: true, nearGatherSpot: 'stick' };
     expect(hint(state)).toBe('Press E to gather sticks');
+  });
+
+  it('offers to light an unlit campfire within reach', () => {
+    const state: HudState = { ...BASE_STATE, nearCampfire: 'unlit' };
+    expect(hint(state)).toBe('Press E to light the campfire');
+  });
+
+  it('offers to put out a lit campfire within reach', () => {
+    const state: HudState = { ...BASE_STATE, nearCampfire: 'lit' };
+    expect(hint(state)).toBe('Press E to put out the campfire');
+  });
+
+  it('reaches for a buried cache of your own before a campfire, the same button', () => {
+    const state: HudState = { ...BASE_STATE, nearBuriedCache: true, nearCampfire: 'unlit' };
+    expect(hint(state)).toBe('Press E to dig up your buried stash');
   });
 
   it('offers to catch prey with no mention of hits, since one swing is always enough', () => {

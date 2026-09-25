@@ -77,8 +77,10 @@ const BYTES_PER_TAKEN_PICKUP = 2;
 /** treeId(2) + generation(1) + flags(1) */
 const BYTES_PER_TREE_STATE = 4;
 const TREE_FELLED_FLAG = 1;
-/** id(2) + kind(1) + x(2) + z(2) */
-const BYTES_PER_BUILT_PROP = 7;
+/** id(2) + kind(1) + x(2) + z(2) + flags(1) */
+const BYTES_PER_BUILT_PROP = 8;
+/** Only a campfire ever sets this, but the bit costs nothing on anything else. */
+const BUILT_PROP_LIT_FLAG = 1;
 /** id(2) + ownerNetId(2) + x(2) + z(2) */
 const BYTES_PER_BURIED_CACHE = 8;
 /** A network id no real connection ever has, standing in for "not connected right now." */
@@ -416,6 +418,7 @@ export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
     view.setUint8(offset + 2, buildableKindIndex(prop.kind));
     view.setInt16(offset + 3, clamp(quantisePosition(prop.x), INT16_MIN, INT16_MAX), true);
     view.setInt16(offset + 5, clamp(quantisePosition(prop.z), INT16_MIN, INT16_MAX), true);
+    view.setUint8(offset + 7, prop.lit ? BUILT_PROP_LIT_FLAG : 0);
     offset += BYTES_PER_BUILT_PROP;
   }
   return buffer;
@@ -774,6 +777,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           kind,
           x: dequantisePosition(view.getInt16(offset + 3, true)),
           z: dequantisePosition(view.getInt16(offset + 5, true)),
+          lit: (view.getUint8(offset + 7) & BUILT_PROP_LIT_FLAG) !== 0,
         });
         offset += BYTES_PER_BUILT_PROP;
       }

@@ -30,6 +30,7 @@ import {
   gatherSpotInReach,
   isNight,
   nearestBuriedCache,
+  nearestCampfire,
   pickupInReach,
   replaceCollider,
   stumpColliderFor,
@@ -66,6 +67,7 @@ import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
+import { preloadCampfireModels } from './scene/campfire-models';
 import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
@@ -177,7 +179,7 @@ export interface GameDebug {
   /** Whether the build menu (opened with B) is currently showing. */
   buildMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
-  builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
+  builtProps(): Array<{ id: number; kind: string; x: number; z: number; lit: boolean }>;
   /** Every cache currently buried, wherever this browser last heard it was. */
   buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
   /**
@@ -232,6 +234,8 @@ export class Game {
   private buriedCaches: readonly BuriedCacheView[] = [];
   /** Whether a cache of our own is close enough right now to dig up. */
   private nearBuriedCache = false;
+  /** Whether a campfire is close enough right now to light or put out, and which. */
+  private nearCampfire: 'lit' | 'unlit' | null = null;
   private canBuild = false;
   private buildMenuOpen = false;
   private readonly scratch: Vec3 = vec3();
@@ -315,6 +319,7 @@ export class Game {
     // it takes to set up the renderer and reach the server to finish loading.
     void preloadPropModels();
     void preloadFlowerModel();
+    void preloadCampfireModels();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -768,7 +773,7 @@ export class Game {
     // entered before the fetch kicked off in start() has finished. A flower
     // bed can be built well after this, but never before, so loading it here
     // covers every place the game ever draws a flower.
-    await Promise.all([preloadPropModels(), preloadFlowerModel()]);
+    await Promise.all([preloadPropModels(), preloadFlowerModel(), preloadCampfireModels()]);
     if (this.clearingScene !== null) return;
 
     const clearing = buildTestClearing(seed);
@@ -853,8 +858,18 @@ export class Game {
     }
 
     for (const prop of this.builtProps) {
-      if (this.builtMeshes.has(prop.id)) continue;
+      const existing = this.builtMeshes.get(prop.id);
+      if (existing !== undefined) {
+        // The whole list is resent whenever anything changes, including a
+        // campfire lighting up or going out, so an existing mesh needs to
+        // hear about it too, not just a freshly created one.
+        if ('setLit' in existing) existing.setLit(prop.lit);
+        continue;
+      }
       const built = createBuiltMesh(prop.kind);
+      // Reflects whatever the server already thinks, not always unlit - a
+      // client that joins mid-burn should see the fire going from the start.
+      if ('setLit' in built) built.setLit(prop.lit);
       built.group.position.set(prop.x, 0, prop.z);
       this.scene.add(built.group);
       this.builtMeshes.set(prop.id, built);
@@ -960,6 +975,11 @@ export class Game {
     this.updateRemoteAnimals(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
     this.daylight?.update(dayProgress(this.estimatedServerTimeMs()));
+    // Only campfires animate right now; the `in` check skips the other
+    // buildable kinds sharing this map without giving them all a no-op method.
+    for (const built of this.builtMeshes.values()) {
+      if ('update' in built) built.update(deltaSeconds);
+    }
 
     setup.renderer.render(this.scene, camera.camera);
     this.updateHud(now, deltaSeconds);
@@ -1063,6 +1083,11 @@ export class Game {
         this.buriedCaches,
         (cache) => cache.ownerNetId === this.selfNetId,
       ) !== null;
+
+    // Same idea, only a hint: the server is the one that actually decides
+    // whether a press lights it, puts it out, or does nothing at all.
+    const nearbyCampfire = nearestCampfire(player.motion.position, this.builtProps);
+    this.nearCampfire = nearbyCampfire === null ? null : nearbyCampfire.lit ? 'lit' : 'unlit';
 
     const target =
       this.clearing === null
@@ -1229,6 +1254,7 @@ export class Game {
       nearbyItem: this.nearbyItem,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
+      nearCampfire: this.nearCampfire,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,

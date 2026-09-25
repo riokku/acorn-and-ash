@@ -28,6 +28,8 @@ export interface HudState {
   readonly nearGatherSpot: ItemId | null;
   /** Whether a cache of our own is close enough right now to dig up. */
   readonly nearBuriedCache: boolean;
+  /** Whether a campfire is close enough right now to light or put out, and which. */
+  readonly nearCampfire: 'lit' | 'unlit' | null;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
@@ -78,6 +80,7 @@ const INITIAL: HudState = {
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
+  nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,
   canBuild: false,

@@ -8,7 +8,8 @@
  * same check to draw the hint.
  */
 
-import { BUILD_DISTANCE, CLEARING_TREE_LINE_INNER } from '../constants';
+import { BUILD_DISTANCE, CLEARING_TREE_LINE_INNER, PICKUP_REACH } from '../constants';
+import type { BuildableKindId } from '../data/buildables';
 import type { Vec3 } from '../math/vec3';
 import { overlapsWater, type WaterCircle } from '../world/water';
 
@@ -47,4 +48,39 @@ export function buildSpotFor(
     if (Math.hypot(blocker.x - x, blocker.z - z) < reach) return null;
   }
   return { x, z };
+}
+
+/** A built prop, as far as finding the nearest campfire to light or put out needs to know. */
+export interface CampfireSpot {
+  readonly id: number;
+  readonly kind: BuildableKindId;
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * The nearest campfire this player could light or put out, or null.
+ *
+ * Anyone can toggle any campfire - unlike a buried cache, nothing here is
+ * owned - so there is no `isMine`-style filter to pass in.
+ */
+export function nearestCampfire<T extends CampfireSpot>(
+  position: Readonly<Vec3>,
+  builtProps: readonly T[],
+): T | null {
+  let best: T | null = null;
+  let bestDistanceSquared = PICKUP_REACH * PICKUP_REACH;
+
+  for (const prop of builtProps) {
+    if (prop.kind !== 'campfire') continue;
+    const dx = prop.x - position.x;
+    const dz = prop.z - position.z;
+    const distanceSquared = dx * dx + dz * dz;
+    if (distanceSquared <= bestDistanceSquared) {
+      best = prop;
+      bestDistanceSquared = distanceSquared;
+    }
+  }
+
+  return best;
 }

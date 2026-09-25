@@ -127,6 +127,14 @@ export const PICKUP_REACH = 2;
 export const BUILD_DISTANCE = 2.6;
 
 /**
+ * Campfires.
+ *
+ * Atmosphere only for now - no warmth stat, no fuel cost to light one. It
+ * burns down on its own; a player can also put it out early by hand.
+ */
+export const CAMPFIRE_BURN_SECONDS = 10 * 60;
+
+/**
  * Chopping.
  *
  * Reach is measured to the trunk's surface rather than its middle, so a fat oak

@@ -33,6 +33,7 @@ import {
   inputsToConsume,
   WorldSimulation,
   SnapshotFlag,
+  type BuiltProp,
   type BuriedCache,
   type PersistedPlayer,
 } from '../src/sim/world-sim';
@@ -2013,7 +2014,9 @@ describe('building', () => {
     expect(built).toHaveLength(1);
 
     const restored = createWorld();
-    restored.restoreBuiltProps(built.map((prop) => ({ ...prop, ownerKey: null })));
+    restored.restoreBuiltProps(
+      built.map((prop) => ({ ...prop, ownerKey: null, litUntilMs: null })),
+    );
     expect(restored.builtPropsList()).toEqual(built);
 
     // A fresh build in the restored world gets its own id, never one already
@@ -2097,7 +2100,9 @@ describe('building', () => {
       expect(home).toBeDefined();
 
       const back = createWorld();
-      back.restoreBuiltProps(sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris' })));
+      back.restoreBuiltProps(
+        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+      );
       back.addPlayer(9, undefined, 'chris');
       const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
       expect(position).toBeDefined();
@@ -2115,7 +2120,9 @@ describe('building', () => {
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       const fresh = createWorld();
-      fresh.restoreBuiltProps(sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris' })));
+      fresh.restoreBuiltProps(
+        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+      );
       // A different key: this player owns nothing here, home or otherwise.
       fresh.addPlayer(2, undefined, 'somebody-else');
       const position = fresh.snapshotFor(2).find((entity) => entity.netId === 2);
@@ -2214,6 +2221,123 @@ describe('building', () => {
       sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'flowerBed', seq);
       expect(sim.drainBuildEvents()).toHaveLength(1);
+    });
+  });
+
+  describe('lighting a campfire', () => {
+    /** Build one, then stand right on top of it - well within interact reach. */
+    function buildAndStandNextToIt(sim: WorldSimulation, netId: number): BuiltProp {
+      sim.addPlayer(netId, withLogs(netId));
+      sim.placePlayer(netId, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, netId, 'campfire', 1);
+      const built = sim.drainBuildEvents()[0]?.prop;
+      if (built === undefined) throw new Error('test setup failed to build a campfire');
+      sim.placePlayer(netId, { x: built.x, y: 0, z: built.z }, FACE_OUT);
+      return built;
+    }
+
+    it('lights an unlit campfire in reach, at no cost', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      // Atmosphere only, per the design: nothing was spent to light it.
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    });
+
+    it('puts a lit campfire back out on a second, separate press', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+
+      // Released, then pressed again - a fresh edge, not the same held button.
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+    });
+
+    it('holding the button down toggles it once, not every tick it stays held', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+
+      for (let seq = 2; seq < 12; seq++) {
+        sim.queueInput(1, createInput(seq, 0, 0, FACE_OUT, PlayerButton.Interact));
+        sim.step(tickClock());
+      }
+
+      // If holding it flickered the state on every tick, ten ticks (an even
+      // count) would land back on unlit rather than staying lit.
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+    });
+
+    it('does nothing to a campfire out of reach', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withLogs(1));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'campfire', 1);
+      // Still exactly where building leaves you: past PICKUP_REACH from the
+      // campfire itself, which lands BUILD_DISTANCE away.
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+    });
+
+    it('burns out on its own after CAMPFIRE_BURN_SECONDS', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      const propId = sim.builtPropsList()[0]!.id;
+      const litUntilMs = sim.campfireLitUntilMsFor(propId);
+      expect(litUntilMs).not.toBeNull();
+      if (litUntilMs === null) return;
+
+      // Draining the toggle event itself first, the way a real tick would
+      // right after it happens - what is left to check below is only the
+      // auto-extinguish, on an otherwise-empty event queue.
+      expect(sim.extinguishBurnedOutCampfires(tickClock())).toEqual([{ propId, lit: true }]);
+
+      expect(sim.extinguishBurnedOutCampfires(litUntilMs - 1)).toEqual([]);
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+
+      expect(sim.extinguishBurnedOutCampfires(litUntilMs)).toEqual([{ propId, lit: false }]);
+      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(sim.campfireLitUntilMsFor(propId)).toBeNull();
+    });
+
+    it('restores a lit campfire from storage, and catches up if it should already be out', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      const built = sim.builtPropsList()[0];
+      const litUntilMs = built === undefined ? null : sim.campfireLitUntilMsFor(built.id);
+      expect(built).toBeDefined();
+      expect(litUntilMs).not.toBeNull();
+      if (built === undefined || litUntilMs === null) return;
+
+      const restored = createWorld();
+      restored.restoreBuiltProps([{ ...built, ownerKey: null, litUntilMs }]);
+      expect(restored.builtPropsList()[0]?.lit).toBe(true);
+
+      // Woken long after it should have burned out - the same real-time
+      // catch-up regrowth gets when a world wakes from storage.
+      expect(restored.extinguishBurnedOutCampfires(litUntilMs + 1)).toEqual([
+        { propId: built.id, lit: false },
+      ]);
+      expect(restored.builtPropsList()[0]?.lit).toBe(false);
     });
   });
 });
