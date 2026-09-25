@@ -67,7 +67,9 @@ function measure(playerCount: number, worldAgeCount = 0): Result {
       Array.from({ length: worldAgeCount }, (_, i) => ({
         id: i + 1,
         kind: 'campfire' as const,
+        lit: false,
         ownerKey: null,
+        litUntilMs: null,
         ...scatteredPosition(i),
       })),
     );

@@ -2,6 +2,7 @@ import { createWorld, type Entity, type World } from 'koota';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  CAMPFIRE_BURN_SECONDS,
   CHARGE_SECONDS,
   DODGE_COOLDOWN_TICKS,
   DODGE_DISTANCE,
@@ -84,7 +85,7 @@ import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import { animalInReach, type CatchCandidate } from './hunting';
-import { buildSpotFor, type BuildBlocker } from './building';
+import { buildSpotFor, nearestCampfire, type BuildBlocker } from './building';
 import {
   CAST_COOLDOWN_TICKS,
   readCastInput,
@@ -256,6 +257,23 @@ export interface BuiltProp {
   readonly kind: BuildableKindId;
   readonly x: number;
   readonly z: number;
+  /**
+   * Only meaningful for a campfire - always false for every other kind.
+   * Atmosphere only: it burns down on its own after `CAMPFIRE_BURN_SECONDS`,
+   * or a player can put it out early by hand. Mutable, unlike the fields
+   * above: a campfire's identity never changes once built, but this does.
+   */
+  lit: boolean;
+}
+
+/**
+ * Word that a campfire was lit or put out, whether by a player's hand or by
+ * burning down on its own - for deciding whether to broadcast the built-prop
+ * list again and persist the change, the same reason a build event exists.
+ */
+export interface CampfireLitEvent {
+  readonly propId: number;
+  readonly lit: boolean;
 }
 
 /**
@@ -426,6 +444,14 @@ interface PlayerRuntime {
    */
   swingWasHeld: boolean;
   /**
+   * Whether interact was down in the last input - same idea as `swingWasHeld`.
+   * Picking up, gathering and digging up a cache are all happy with a held
+   * button (they are self-limiting: there is nothing left to find on the next
+   * tick), but lighting or putting out a campfire is a toggle, so it needs an
+   * actual fresh press or holding the button would flicker it on and off.
+   */
+  interactWasHeld: boolean;
+  /**
    * What to build on the next tick, chosen from the client's build menu, or
    * null when nothing is waiting. A discrete request rather than a held
    * button - like crafting, it is settled the moment it arrives - so there is
@@ -539,6 +565,9 @@ export class WorldSimulation {
   private readonly builtPropsById = new Map<number, BuiltProp>();
   private nextBuiltPropId = 1;
   private readonly buildEvents: BuildEvent[] = [];
+  /** When each currently-lit campfire should go out on its own, by prop id. Absent while unlit. */
+  private readonly campfireLitUntilMs = new Map<number, number>();
+  private readonly campfireLitEvents: CampfireLitEvent[] = [];
   /** Built-prop id -> whoever it belongs to, for anything capped per player. */
   private readonly ownedBuiltProps = new Map<number, string>();
   /** Everything currently buried, waiting to be dug back up. */
@@ -683,6 +712,7 @@ export class WorldSimulation {
       inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
       swingCooldownTicks: 0,
       swingWasHeld: false,
+      interactWasHeld: false,
       pendingBuild: null,
       cast: null,
       lastProcessedSeq: 0,
@@ -779,6 +809,7 @@ export class WorldSimulation {
         scratch.grounded = grounded.value;
 
         let wantsToInteract = false;
+        let wantsToToggleCampfire = false;
         let wantsToSwing = false;
         let wantsToCast = false;
         let wantsToDodge = false;
@@ -826,7 +857,10 @@ export class WorldSimulation {
             stepPlayer(scratch, effectiveInput, TICK_SECONDS, this.collision);
 
             if (!runtime.charging) {
-              if (isHeld(input, PlayerButton.Interact)) wantsToInteract = true;
+              const interactHeld = isHeld(input, PlayerButton.Interact);
+              if (interactHeld) wantsToInteract = true;
+              if (interactHeld && !runtime.interactWasHeld) wantsToToggleCampfire = true;
+              runtime.interactWasHeld = interactHeld;
               const swingHeld = isHeld(input, PlayerButton.Swing);
               const clicked = swingHeld && !runtime.swingWasHeld;
               runtime.swingWasHeld = swingHeld;
@@ -862,13 +896,25 @@ export class WorldSimulation {
         if (wantsToInteract) {
           // The same button reaches for what is at your feet first, then for
           // a patch of sticks, then for a cache of your own buried nearby,
-          // and only failing all three reaches into your own pack instead.
+          // then a nearby campfire to light or put out, and only failing all
+          // four reaches into your own pack instead.
           const pickedUp = this.tryPickup(runtime, scratch.position);
           if (!pickedUp) {
             const gathered = this.tryGather(runtime, scratch.position);
             if (!gathered) {
               const dugUp = this.tryDigUpCache(runtime, scratch.position);
-              if (!dugUp) this.tryEat(runtime);
+              if (!dugUp) {
+                // A campfire in reach always claims the button, whether or not
+                // this tick is the fresh press that actually toggles it -
+                // otherwise holding the button down to "keep warm" would fall
+                // through and eat from the pack on every tick after the first.
+                const nearCampfire = this.tryToggleCampfire(
+                  scratch.position,
+                  this.nowMs,
+                  wantsToToggleCampfire,
+                );
+                if (!nearCampfire) this.tryEat(runtime);
+              }
             }
           }
         }
@@ -1156,6 +1202,59 @@ export class WorldSimulation {
     return true;
   }
 
+  /**
+   * Light or put out the nearest campfire in reach.
+   *
+   * Returns whether a campfire was found at all, regardless of `isFreshPress`
+   * - a campfire in reach always claims the interact button, so the caller
+   * knows not to fall through to eating. It only actually flips lit state
+   * when `isFreshPress` is true, so holding the button down toggles it once
+   * rather than flickering it every tick.
+   */
+  private tryToggleCampfire(
+    position: Readonly<Vec3>,
+    nowMs: number,
+    isFreshPress: boolean,
+  ): boolean {
+    const campfire = nearestCampfire(position, this.builtProps);
+    if (campfire === null) return false;
+    if (!isFreshPress) return true;
+
+    campfire.lit = !campfire.lit;
+    if (campfire.lit) {
+      this.campfireLitUntilMs.set(campfire.id, nowMs + CAMPFIRE_BURN_SECONDS * 1000);
+    } else {
+      this.campfireLitUntilMs.delete(campfire.id);
+    }
+    this.campfireLitEvents.push({ propId: campfire.id, lit: campfire.lit });
+    return true;
+  }
+
+  /**
+   * Put out every campfire whose time is up.
+   *
+   * Called with real time, the same reason `regrowTrees` is: a world with
+   * nobody in it does not tick, so on waking, anything that should have
+   * burned out while nobody was here goes out at once.
+   */
+  extinguishBurnedOutCampfires(nowMs: number): CampfireLitEvent[] {
+    for (const [propId, dueAt] of this.campfireLitUntilMs) {
+      if (nowMs < dueAt) continue;
+      const campfire = this.builtPropsById.get(propId);
+      if (campfire === undefined) continue;
+
+      campfire.lit = false;
+      this.campfireLitUntilMs.delete(propId);
+      this.campfireLitEvents.push({ propId, lit: false });
+    }
+    return this.campfireLitEvents.splice(0);
+  }
+
+  /** When this campfire should go out on its own, or null while it isn't lit. Used for persistence. */
+  campfireLitUntilMsFor(propId: number): number | null {
+    return this.campfireLitUntilMs.get(propId) ?? null;
+  }
+
   /** Eat something out of the pack, if there is any food in it that would actually help. */
   private tryEat(runtime: PlayerRuntime): void {
     const item = foodToEat(runtime.inventory, runtime.hunger);
@@ -1429,7 +1528,7 @@ export class WorldSimulation {
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
 
-    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z };
+    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z, lit: false };
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
@@ -1674,13 +1773,25 @@ export class WorldSimulation {
     return [...this.builtProps];
   }
 
-  /** Put built props back as they were after the world wakes from storage. */
-  restoreBuiltProps(props: Iterable<BuiltProp & { readonly ownerKey: string | null }>): void {
-    for (const { ownerKey, ...prop } of props) {
+  /**
+   * Put built props back as they were after the world wakes from storage.
+   *
+   * `litUntilMs` travels separately from `lit` itself, the same reason
+   * `ownerKey` travels separately from the rest of `BuiltProp` - it is
+   * server-only bookkeeping that a client has no business seeing. Null for
+   * anything that was not lit when it was saved.
+   */
+  restoreBuiltProps(
+    props: Iterable<
+      BuiltProp & { readonly ownerKey: string | null; readonly litUntilMs: number | null }
+    >,
+  ): void {
+    for (const { ownerKey, litUntilMs, ...prop } of props) {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
+      if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);
     }
   }
 

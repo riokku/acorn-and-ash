@@ -7,6 +7,18 @@ export interface ModelPart {
   readonly material: THREE.Material;
 }
 
+/** A loaded-once template; instantiate a playable copy with `instantiateAnimatedModel`. */
+export interface AnimatedModel {
+  readonly root: THREE.Group;
+  readonly clips: readonly THREE.AnimationClip[];
+}
+
+export interface AnimatedModelInstance {
+  readonly root: THREE.Group;
+  readonly mixer: THREE.AnimationMixer;
+  readonly actions: readonly THREE.AnimationAction[];
+}
+
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -38,4 +50,30 @@ export async function loadScaledModel(url: string, targetHeight: number): Promis
     if (material !== undefined) parts.push({ geometry, material });
   });
   return parts;
+}
+
+/**
+ * Loads a glTF/glb that carries its own animation clips and keeps its live
+ * node hierarchy intact, unlike `loadScaledModel`: baking each mesh's world
+ * transform into flattened geometry (as that does) would destroy the very
+ * per-node transforms an `AnimationMixer` needs to play keyframes back.
+ * Assumes the model was authored at the scale it should appear in the game.
+ *
+ * This loads one shared template. Every place that wants to actually show
+ * and play it (e.g. one burning campfire among several) needs its own copy
+ * of the node hierarchy - a `THREE.Object3D` can only sit in one place in
+ * the scene at a time - so call `instantiateAnimatedModel` on the result for
+ * each instance rather than adding `root` to the scene directly.
+ */
+export async function loadAnimatedModel(url: string): Promise<AnimatedModel> {
+  const gltf = await loader.loadAsync(url);
+  return { root: gltf.scene, clips: gltf.animations };
+}
+
+/** A playable, independently-animatable copy of a template loaded by `loadAnimatedModel`. */
+export function instantiateAnimatedModel(template: AnimatedModel): AnimatedModelInstance {
+  const root = template.root.clone(true);
+  const mixer = new THREE.AnimationMixer(root);
+  const actions = template.clips.map((clip) => mixer.clipAction(clip));
+  return { root, mixer, actions };
 }

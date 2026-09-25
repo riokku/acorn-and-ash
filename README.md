@@ -32,25 +32,28 @@ The game is online-only. Every world runs on the server.
 > brightening and dimming the same way for everyone in the world at once -
 > nothing plays differently by night yet, but it's there to watch. Chopping,
 > landing a hit and taking one all have a bit of weight to them now - a small
-> camera kick and a sound - and a calm tune plays once you're in. See
+> camera kick and a sound - and a calm tune plays once you're in. The
+> campfire has real art now, and you can light it - press `E` next to one -
+> for a genuinely animated fire that flickers for a while and either burns
+> down on its own or goes out early if you put it out by hand. See
 > [the roadmap](#roadmap).
 
 ## Controls
 
-| Key                               | Does                                           |
-| --------------------------------- | ---------------------------------------------- |
-| `W` `A` `S` `D` or the arrow keys | Walk                                           |
-| `Shift` (held)                    | Sprint                                         |
-| `Space`                           | Jump                                           |
-| `E`                               | Pick up, gather, dig up a cache, eat           |
-| `1` / `2`                         | Craft an axe / fishing rod                     |
-| `B`                               | Open the build menu                            |
-| `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern |
-| Left mouse                        | Chop, cast, hook, fight off                    |
-| Right mouse (held)                | Charge a heavy attack                          |
-| Left `Ctrl`                       | Dodge                                          |
-| Mouse                             | Look around                                    |
-| `Esc`                             | Let go of the mouse                            |
+| Key                               | Does                                                           |
+| --------------------------------- | -------------------------------------------------------------- |
+| `W` `A` `S` `D` or the arrow keys | Walk                                                           |
+| `Shift` (held)                    | Sprint                                                         |
+| `Space`                           | Jump                                                           |
+| `E`                               | Pick up, gather, dig up a cache, light/put out a campfire, eat |
+| `1` / `2`                         | Craft an axe / fishing rod                                     |
+| `B`                               | Open the build menu                                            |
+| `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern                 |
+| Left mouse                        | Chop, cast, hook, fight off                                    |
+| Right mouse (held)                | Charge a heavy attack                                          |
+| Left `Ctrl`                       | Dodge                                                          |
+| Mouse                             | Look around                                                    |
+| `Esc`                             | Let go of the mouse                                            |
 
 There is nothing to land on yet, so a jump is a hop in place.
 
@@ -193,8 +196,10 @@ Press `B` to open a small menu of what you can place just in front of you,
 anywhere in the clearing, then a number to pick one:
 
 - **Campfire** - four logs, exactly what felling the landmark oak by the axe
-  stump pays out. A placeholder pile of logs, for now, that does nothing yet
-  beyond standing there.
+  stump pays out. Real modeled art, and you can light it: press `E` once
+  you're standing next to it for a genuinely animated fire, atmosphere only
+  for now. It burns for a while and goes out on its own, or put it out early
+  by pressing `E` again.
 - **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
   per player: once you have built yours, that is where you start next time,
   instead of the open clearing. A placeholder box with a peaked roof for now
@@ -210,9 +215,11 @@ your pack can afford whatever you have picked. What each one costs lives in
 See [decision 0020](docs/decisions/0020-a-campfire-you-can-build.md) for the
 campfire and placement itself,
 [decision 0022](docs/decisions/0022-a-cabin-of-your-own.md) for the cabin,
-ownership and the spawn-at-home rule, and
+ownership and the spawn-at-home rule,
 [decision 0023](docs/decisions/0023-decorating-the-garden.md) for the flower
-bed, the lantern and the per-kind build cap.
+bed, the lantern and the per-kind build cap, and
+[decision 0033](docs/decisions/0033-a-campfire-you-can-light.md) for the
+campfire's real art, its animated fire and lighting it.
 
 ## Running it locally
 

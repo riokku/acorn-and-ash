@@ -250,6 +250,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceHealth(simulation);
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
+    this.announceCampfireLighting(simulation, startedAt);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -535,6 +536,22 @@ export class World extends DurableObject<WorldEnv> {
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);
   }
 
+  /**
+   * Tell everybody about a campfire lighting up or going out, whether a
+   * player did it or it just burned down - checked every tick for the same
+   * reason `announceRegrowth` is: the important run is the first one after a
+   * world wakes, when anything that should already have gone out does.
+   */
+  private announceCampfireLighting(simulation: WorldSimulation, nowMs: number): void {
+    const events = simulation.extinguishBurnedOutCampfires(nowMs);
+    if (events.length === 0) return;
+
+    this.broadcast(encodeBuiltProps(simulation.builtPropsList()));
+    for (const event of events) {
+      this.writeCampfireLitState(event.propId, simulation.campfireLitUntilMsFor(event.propId));
+    }
+  }
+
   private broadcastSnapshots(simulation: WorldSimulation): void {
     const serverTimeMs = this.worldTimeMs();
     for (const ws of this.ctx.getWebSockets()) {
@@ -628,6 +645,7 @@ export class World extends DurableObject<WorldEnv> {
     // an hour later would be shown the stump they left and then watch it turn
     // into a tree a tick afterwards.
     this.announceRegrowth(simulation, Date.now());
+    this.announceCampfireLighting(simulation, Date.now());
     if (simulation.playerCount > 0) this.startTicking();
     return simulation;
   }
@@ -770,6 +788,10 @@ export class World extends DurableObject<WorldEnv> {
     // Nothing built before homes existed had an owner - null leaves it exactly
     // as communal as it always was.
     this.addColumn('built_props', 'owner_key', 'TEXT');
+    // Only a campfire ever sets this: when it should go out on its own. Null
+    // means unlit - true of everything built before this existed, which is
+    // exactly right, and of every non-campfire kind, forever.
+    this.addColumn('built_props', 'lit_until_ms', 'INTEGER');
     // What a knockout buries, until it is dug back up - unlike built props,
     // this one is deleted once its reason for existing is gone.
     sql.exec(`CREATE TABLE IF NOT EXISTS buried_caches (
@@ -899,8 +921,14 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private loadBuiltProps(): (BuiltProp & { readonly ownerKey: string | null })[] {
-    const props: (BuiltProp & { readonly ownerKey: string | null })[] = [];
+  private loadBuiltProps(): (BuiltProp & {
+    readonly ownerKey: string | null;
+    readonly litUntilMs: number | null;
+  })[] {
+    const props: (BuiltProp & {
+      readonly ownerKey: string | null;
+      readonly litUntilMs: number | null;
+    })[] = [];
     const rows = this.ctx.storage.sql
       .exec<{
         id: number;
@@ -908,19 +936,36 @@ export class World extends DurableObject<WorldEnv> {
         x: number;
         z: number;
         owner_key: string | null;
-      }>('SELECT id, kind_index, x, z, owner_key FROM built_props')
+        lit_until_ms: number | null;
+      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms FROM built_props')
       .toArray();
     for (const row of rows) {
       const kind = buildableKindFromIndex(row.kind_index);
       // A row written by a newer build that knew about a kind this one does
       // not. Skipping it is better than refusing to let anybody in.
       if (kind === null) continue;
-      props.push({ id: row.id, kind, x: row.x, z: row.z, ownerKey: row.owner_key });
+      props.push({
+        id: row.id,
+        kind,
+        x: row.x,
+        z: row.z,
+        // Restored as lit even if this moment has already passed - the same
+        // way a felled tree is restored as felled regardless of whether it is
+        // due back - and corrected within the first tick after waking by
+        // `extinguishBurnedOutCampfires`.
+        lit: row.lit_until_ms !== null,
+        ownerKey: row.owner_key,
+        litUntilMs: row.lit_until_ms,
+      });
     }
     return props;
   }
 
-  /** Built props are never updated once placed, so this is always a fresh insert. */
+  /**
+   * A campfire's identity (kind, x, z) is never updated once placed, so this
+   * is always a fresh insert - whether it is currently lit is a separate,
+   * mutable fact, updated afterwards by `writeCampfireLitState`.
+   */
   private writeBuiltProp(prop: BuiltProp, ownerKey: string | null): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO built_props (id, kind_index, x, z, built_at_ms, owner_key) VALUES (?, ?, ?, ?, ?, ?) ' +
@@ -931,6 +976,14 @@ export class World extends DurableObject<WorldEnv> {
       prop.z,
       Date.now(),
       ownerKey,
+    );
+  }
+
+  private writeCampfireLitState(propId: number, litUntilMs: number | null): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE built_props SET lit_until_ms = ? WHERE id = ?',
+      litUntilMs,
+      propId,
     );
   }
 

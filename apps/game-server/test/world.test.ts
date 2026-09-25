@@ -1216,6 +1216,63 @@ describe('building', () => {
     second.close();
   }, 30_000);
 
+  /**
+   * A campfire lands `BUILD_DISTANCE` away, outside interact reach, so
+   * lighting it needs one more short walk first.
+   */
+  async function walkOntoCampfire(
+    client: TestClient,
+    campfire: { x: number; z: number },
+  ): Promise<void> {
+    const netId = client.welcome().netId;
+    for (let step = 0; step < 20; step++) {
+      const here = client.positionOf(netId);
+      if (here === undefined) return;
+      if (Math.hypot(here.x - campfire.x, here.z - campfire.z) < PICKUP_REACH - 0.5) return;
+      const yaw = Math.atan2(-(campfire.x - here.x), -(campfire.z - here.z));
+      client.walk(0, 1, yaw, 4);
+      await sleep(110);
+    }
+    throw new Error('never reached the campfire');
+  }
+
+  it('lights a campfire once you are close enough to it', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-lighter');
+    await getLogsForACampfire(client);
+    await walkToOpenGround(client);
+    await buildCampfire(client);
+    const built = client.builtProps()[0];
+    expect(built?.lit).toBe(false);
+    if (built === undefined) return;
+
+    await walkOntoCampfire(client, built);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the campfire to light', () => client.builtProps()[0]?.lit === true);
+    client.close();
+  }, 30_000);
+
+  it('leaves a lit campfire lit after logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'comes-back-to-a-lit-fire');
+    await getLogsForACampfire(first);
+    await walkToOpenGround(first);
+    await buildCampfire(first);
+    const built = first.builtProps()[0];
+    expect(built).toBeDefined();
+    if (built === undefined) return;
+
+    await walkOntoCampfire(first, built);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the campfire to light', () => first.builtProps()[0]?.lit === true);
+    first.close();
+    await sleep(300);
+
+    const second = await TestClient.connect(worldId, 'comes-back-to-a-lit-fire');
+    await waitFor('the opening built props', () => second.countOfMessages('builtProps') > 0);
+    expect(second.openingBuiltProps()[0]?.lit).toBe(true);
+    second.close();
+  }, 30_000);
+
   /** The oak plus every other hand-placed tree near it: enough logs for a cabin. */
   function treesNearTheOak(seed: number) {
     const props = buildTestClearing(seed).props;

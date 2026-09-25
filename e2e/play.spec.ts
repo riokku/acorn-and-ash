@@ -20,7 +20,7 @@ declare global {
       aimedAnimal(): { name: string; hitsLeft?: number } | null;
       canBuild(): boolean;
       buildMenuOpen(): boolean;
-      builtProps(): Array<{ id: number; kind: string; x: number; z: number }>;
+      builtProps(): Array<{ id: number; kind: string; x: number; z: number; lit: boolean }>;
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       canCast(): boolean;
@@ -265,6 +265,29 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
     await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
     await page.keyboard.up('KeyW');
     // Let them come to a stop before looking again.
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`Never got within reach of ${x}, ${z}`);
+}
+
+/**
+ * Walk to an exact spot until close enough for the interact key, for
+ * something with no debug flag of its own to say "this is nearby" - unlike
+ * `walkWithinReachOf`, which watches `nearbyItem()` for a pickup.
+ */
+async function walkOntoSpot(page: Page, x: number, z: number): Promise<void> {
+  for (let step = 0; step < 80; step++) {
+    const here = await page.evaluate(() => window.acornDebug?.localPosition());
+    const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
+    if (gap < 1.5) return;
+    await page.evaluate(
+      ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
+      [x, z],
+    );
+
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
+    await page.keyboard.up('KeyW');
     await page.waitForTimeout(200);
   }
   throw new Error(`Never got within reach of ${x}, ${z}`);
@@ -1112,6 +1135,72 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(errors).toEqual([]);
 
   await context.close();
+});
+
+test('you can light a campfire and put it out again', async ({ page }) => {
+  // Fetching the axe and felling the oak is the same real cost the building
+  // test pays, since a campfire needs it either way.
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=light-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
+  const oak = trees.find((tree) => tree.kind === 'oak');
+  if (oak === undefined) throw new Error('no oak in the clearing');
+  await walkWithinReachOfTree(page, oak);
+  await chopUntilFelled(page, oak);
+
+  await walkToward(page, spawnSpot);
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+    [spawnSpot.x, spawnSpot.z],
+  );
+  await buildFacing(page, spawnSpot, 'Digit1');
+
+  const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
+  const campfire = built[0];
+  expect(campfire?.kind).toBe('campfire');
+  expect(campfire?.lit).toBe(false);
+  if (campfire === undefined) throw new Error('no campfire was built');
+
+  // Built BUILD_DISTANCE away, past interact reach - one more short walk.
+  await walkOntoSpot(page, campfire.x, campfire.z);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to light the campfire');
+
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.builtProps() ?? []))[0]?.lit)
+    .toBe(true);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to put out the campfire');
+
+  // Put out by hand, well before the ten minutes it would otherwise take -
+  // that timing lives in a fast, non-browser test instead of a real wait here.
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => (await page.evaluate(() => window.acornDebug?.builtProps() ?? []))[0]?.lit)
+    .toBe(false);
+  await expect(page.locator('.hud-hint')).toContainText('Press E to light the campfire');
+
+  expect(errors).toEqual([]);
 });
 
 test('you can gather flowers and plant something pretty for the garden', async ({ page }) => {
