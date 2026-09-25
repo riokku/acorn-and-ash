@@ -18,6 +18,7 @@ import {
   SPAWN_POSITION,
   SPRINT_REPORTING_SPEED,
   SnapshotFlag,
+  TINT_COLORS,
   animalInReach,
   buildSpotFor,
   buildTestClearing,
@@ -54,6 +55,7 @@ import {
   type HungerEvent,
   type ItemId,
   type PlacedProp,
+  type RosterEntry,
   type ServerMessage,
   type SnapshotEntity,
   type Vec3,
@@ -92,6 +94,7 @@ import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
+import type { PlayerIdentity } from './home/identity';
 
 const MOUSE_SENSITIVITY = 0.0023;
 /** How often the HUD is refreshed. Every frame would be wasted work. */
@@ -227,6 +230,7 @@ export interface GameDebug {
 export interface GameOptions {
   readonly canvas: HTMLCanvasElement;
   readonly hud: HudStore;
+  readonly identity: PlayerIdentity;
   readonly worldId: string;
   readonly serverUrlOverride?: string;
   readonly forceWebGL: boolean;
@@ -238,6 +242,8 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
+  /** What the server's Roster says about everybody currently connected. */
+  private readonly roster = new Map<number, RosterEntry>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter | Raccoon | Fox>();
   private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
@@ -347,7 +353,11 @@ export class Game {
       this.options.hud.publish({ pointerLocked: locked }),
     );
 
-    this.options.hud.publish({ backend: setup.backend, forcedFallback: setup.forcedFallback });
+    this.options.hud.publish({
+      backend: setup.backend,
+      forcedFallback: setup.forcedFallback,
+      playerName: this.options.identity.name,
+    });
     window.addEventListener('resize', this.handleResize);
 
     this.offlineFallbackAt = performance.now() + OFFLINE_FALLBACK_MS;
@@ -492,7 +502,17 @@ export class Game {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
         this.syncServerClock(message.serverTimeMs);
+        // Every fresh connection is a clean slate on the server - this has to
+        // be resent on every reconnect, not only the first one.
+        const { name, character, color } = this.options.identity;
+        this.connection?.sendHello(name, character, color);
         void this.enterWorld(message.seed);
+        break;
+      }
+      case 'roster': {
+        this.roster.clear();
+        for (const entry of message.players) this.roster.set(entry.netId, entry);
+        this.applyRoster();
         break;
       }
       case 'snapshot': {
@@ -824,7 +844,8 @@ export class Game {
     this.applyTreeStates();
     this.applyBuiltProps();
 
-    this.localCharacter = createCharacter(colorForPlayer(this.selfNetId || 1));
+    this.localCharacter = createCharacter(TINT_COLORS[this.options.identity.color].hex);
+    this.localCharacter.setName(this.options.identity.name);
     this.scene.add(this.localCharacter.group);
 
     this.options.hud.publish({ ready: true });
@@ -934,10 +955,33 @@ export class Game {
     const existing = this.remoteCharacters.get(netId);
     if (existing !== undefined) return existing;
 
-    const character = createCharacter(colorForPlayer(netId));
+    const entry = this.roster.get(netId);
+    const character = createCharacter(this.colorFor(netId, entry));
+    character.setName(entry?.name ?? null);
     this.scene.add(character.group);
     this.remoteCharacters.set(netId, character);
     return character;
+  }
+
+  /**
+   * A remote player's chosen tint once the roster says what it is, or the
+   * same netId-derived colour as before while we are still waiting to hear.
+   */
+  private colorFor(netId: number, entry: RosterEntry | undefined): THREE.ColorRepresentation {
+    return entry === undefined ? colorForPlayer(netId) : TINT_COLORS[entry.color].hex;
+  }
+
+  /**
+   * Re-colour and re-label every remote character already on screen once the
+   * roster changes - a Hello can arrive after the snapshot that first drew
+   * somebody, not only before it.
+   */
+  private applyRoster(): void {
+    for (const [netId, character] of this.remoteCharacters) {
+      const entry = this.roster.get(netId);
+      character.setColor(this.colorFor(netId, entry));
+      character.setName(entry?.name ?? null);
+    }
   }
 
   private removeCritter(animalId: number): void {

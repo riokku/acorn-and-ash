@@ -26,6 +26,7 @@ export * from './data/fish';
 export * from './data/recipes';
 export * from './data/animals';
 export * from './data/buildables';
+export * from './data/characters';
 
 export * from './collision/capsule';
 
@@ -46,6 +47,7 @@ export * from './sim/day-night';
 export * from './sim/burying';
 export * from './sim/animals';
 export * from './sim/world-sim';
+export * from './sim/identity';
 
 export * from './net/messages';
 export * from './net/protocol';

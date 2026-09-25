@@ -40,8 +40,10 @@ The game is online-only. Every world runs on the server.
 > alongside the rabbits and the raccoon - it flees you exactly like a
 > rabbit, but sometimes hunts one down itself, and you can catch it the
 > same way you catch any other prey. Every player now walks, runs and jumps
-> as a real animated character - Knight, standing in for everyone until a
-> picker menu exists to choose between the pack's six. See
+> as a real animated character, and a Home screen now asks who you are
+> before you step into the clearing - a name, a tint, and a character (only
+> Knight has real art yet, so it's the only one of the pack's six you can
+> actually pick). Everybody else sees your name and colour too. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -74,11 +76,15 @@ which fish bite and how often lives in
 
 ### Your character
 
-Every player is drawn as Knight, one of six characters from a free pack,
+Before the clearing loads, a Home screen asks who you are: a name, a
+character and a tint. Knight - one of six characters from a free pack,
 walking, running and jumping for real rather than sliding around as a
-placeholder capsule. There's no way to choose a different one yet - that's
-its own future piece of work - so everybody looks like the same tinted
-Knight for now.
+placeholder capsule - is the only one with real art so far, so it's the only
+one you can actually pick; the other five show up locked, "coming soon."
+Your name and tint travel to the server and out to everybody else in the
+clearing, with a small name tag floating over your head the same way it does
+over anyone else's. Picked once, remembered the next time you visit. See
+[decision 0037](docs/decisions/0037-choosing-a-name-and-a-character.md).
 
 Carrying an axe now actually shows it in your hand, not just as a line in
 the side panel - it's parented straight onto the character's own hand, so

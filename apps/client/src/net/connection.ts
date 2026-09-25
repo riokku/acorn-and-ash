@@ -4,12 +4,15 @@ import {
   decodeServerMessage,
   encodeBuild,
   encodeCraft,
+  encodeHello,
   encodeInputBundle,
   encodePing,
   type BuildableKindId,
+  type CharacterId,
   type ItemId,
   type PlayerInput,
   type ServerMessage,
+  type TintColorId,
 } from '@acorn/shared';
 
 export type ConnectionState = 'connecting' | 'connected' | 'offline' | 'rejected';
@@ -110,6 +113,17 @@ export class WorldConnection {
   sendBuild(kind: BuildableKindId): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeBuild(kind));
+  }
+
+  /**
+   * Introduce yourself: the name, character and tint picked on the Home
+   * screen. Sent once right after a `welcome`, and again on every
+   * reconnect - each one is a fresh connection on the server, with nothing
+   * remembered about this player until they say so again.
+   */
+  sendHello(name: string, character: CharacterId, color: TintColorId): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeHello(name, character, color));
   }
 
   close(): void {

@@ -53,7 +53,9 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
       {state.ready && !state.pointerLocked ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
           <h1>Acorn &amp; Ash</h1>
-          <p>Click to play</p>
+          <p>
+            {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
+          </p>
           <p>WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go</p>
         </div>
       ) : null}

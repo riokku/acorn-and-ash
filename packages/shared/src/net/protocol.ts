@@ -9,13 +9,21 @@
  * 20:1: one message carrying three inputs costs a twentieth of three messages.
  */
 
-import { MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
+import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import {
   buildableKindFromIndex,
   buildableKindIndex,
   type BuildableKindId,
 } from '../data/buildables';
+import {
+  characterFromIndex,
+  characterIndex,
+  tintColorFromIndex,
+  tintColorIndex,
+  type CharacterId,
+  type TintColorId,
+} from '../data/characters';
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
@@ -37,6 +45,7 @@ import {
   ServerMessageType,
   type ClientMessage,
   type RejectReasonCode,
+  type RosterEntry,
   type ServerMessage,
   type TreeState,
 } from './messages';
@@ -71,6 +80,23 @@ export const MAX_CHANGED_TREES = 255;
 export const MAX_BUILT_PROPS = 255;
 /** Only ever one per knockout, so this ceiling is not expected to matter in practice. */
 export const MAX_BURIED_CACHES = 255;
+/** A world never holds more players than this, so the roster never needs to either. */
+export const MAX_ROSTER_ENTRIES = MAX_PLAYERS_PER_WORLD;
+/**
+ * A name is capped at MAX_PLAYER_NAME_LENGTH *characters* on the Home screen,
+ * but travels as UTF-8 bytes here - generous enough for that many characters
+ * even if every one of them needs the full four bytes, while still comfortably
+ * fitting the one-byte length prefix below.
+ */
+export const MAX_NAME_BYTES = 80;
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+/** UTF-8 bytes for a name, never longer than `MAX_NAME_BYTES`. */
+function encodeName(name: string): Uint8Array {
+  return textEncoder.encode(name).slice(0, MAX_NAME_BYTES);
+}
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
@@ -214,6 +240,23 @@ export function encodeBuild(kind: BuildableKindId): ArrayBuffer {
 }
 
 /**
+ * Introduce yourself: the name, character and tint picked on the Home screen.
+ *
+ * type(1) + character(1) + color(1) + nameLength(1) + name bytes.
+ */
+export function encodeHello(name: string, character: CharacterId, color: TintColorId): ArrayBuffer {
+  const nameBytes = encodeName(name);
+  const buffer = new ArrayBuffer(4 + nameBytes.length);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Hello);
+  view.setUint8(1, characterIndex(character));
+  view.setUint8(2, tintColorIndex(color));
+  view.setUint8(3, nameBytes.length);
+  new Uint8Array(buffer, 4).set(nameBytes);
+  return buffer;
+}
+
+/**
  * Read a message from a client.
  *
  * Returns `null` for anything malformed. The server never trusts the contents:
@@ -263,6 +306,17 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     const kind = buildableKindFromIndex(view.getUint8(1));
     if (kind === null) return null;
     return { type: 'build', kind };
+  }
+
+  if (type === ClientMessageType.Hello) {
+    if (data.byteLength < 4) return null;
+    const character = characterFromIndex(view.getUint8(1));
+    const color = tintColorFromIndex(view.getUint8(2));
+    const nameLength = view.getUint8(3);
+    if (character === null || color === null) return null;
+    if (data.byteLength !== 4 + nameLength) return null;
+    const name = textDecoder.decode(new Uint8Array(data, 4, nameLength));
+    return { type: 'hello', name, character, color };
   }
 
   return null;
@@ -456,6 +510,42 @@ export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuf
     view.setInt16(offset + 4, clamp(quantisePosition(cache.x), INT16_MIN, INT16_MAX), true);
     view.setInt16(offset + 6, clamp(quantisePosition(cache.z), INT16_MIN, INT16_MAX), true);
     offset += BYTES_PER_BURIED_CACHE;
+  }
+  return buffer;
+}
+
+/**
+ * Who everybody currently connected says they are, the same reconciling way
+ * as built props and buried caches - sent whole rather than as a diff.
+ *
+ * Each entry is variable length (the name), so this cannot use a fixed
+ * per-entry byte count the way most of these lists do; it is sized in two
+ * passes instead, encoding every name once before knowing the buffer's
+ * total length.
+ */
+export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
+  const clipped = players.slice(0, MAX_ROSTER_ENTRIES);
+  const names = clipped.map((player) => encodeName(player.name));
+
+  let total = 2;
+  for (const name of names) total += 5 + name.length;
+
+  const buffer = new ArrayBuffer(total);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Roster);
+  view.setUint8(1, clipped.length);
+
+  let offset = 2;
+  for (let i = 0; i < clipped.length; i++) {
+    const player = clipped[i];
+    const name = names[i];
+    if (player === undefined || name === undefined) break;
+    view.setUint16(offset, player.netId & 0xffff, true);
+    view.setUint8(offset + 2, characterIndex(player.character));
+    view.setUint8(offset + 3, tintColorIndex(player.color));
+    view.setUint8(offset + 4, name.length);
+    new Uint8Array(buffer, offset + 5, name.length).set(name);
+    offset += 5 + name.length;
   }
   return buffer;
 }
@@ -841,6 +931,26 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.Cache: {
       if (data.byteLength !== CACHE_MESSAGE_BYTES) return null;
       return { type: 'cache', event: decodeCache(view) };
+    }
+    case ServerMessageType.Roster: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      const players: RosterEntry[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        if (offset + 5 > data.byteLength) return null;
+        const netId = view.getUint16(offset, true);
+        const character = characterFromIndex(view.getUint8(offset + 2));
+        const color = tintColorFromIndex(view.getUint8(offset + 3));
+        const nameLength = view.getUint8(offset + 4);
+        if (character === null || color === null) return null;
+        if (offset + 5 + nameLength > data.byteLength) return null;
+        const name = textDecoder.decode(new Uint8Array(data, offset + 5, nameLength));
+        players.push({ netId, name, character, color });
+        offset += 5 + nameLength;
+      }
+      if (offset !== data.byteLength) return null;
+      return { type: 'roster', players };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

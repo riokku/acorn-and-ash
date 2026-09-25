@@ -18,7 +18,9 @@ import {
   encodeCrafted,
   encodeFishing,
   encodeHealth,
+  encodeHello,
   encodeHunger,
+  encodeRoster,
   encodeThreatHit,
   encodeTreeHit,
   encodeTreeStates,
@@ -32,8 +34,10 @@ import {
   MAX_INPUTS_PER_BUNDLE,
   MAX_BUILT_PROPS,
   MAX_BURIED_CACHES,
+  MAX_ROSTER_ENTRIES,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
+import type { RosterEntry } from '../src/net/messages';
 import type {
   AnimalCaught,
   BuiltProp,
@@ -782,5 +786,95 @@ describe("word that a player's own cache changed", () => {
   it('refuses one that has been cut short', () => {
     const encoded = encodeCache({ netId: 1, kind: 'buried' });
     expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
+  });
+});
+
+describe('introducing yourself', () => {
+  it('survives a round trip', () => {
+    const decoded = decodeClientMessage(encodeHello('Acorn', 'knight', 'amber'));
+    expect(decoded).toEqual({ type: 'hello', name: 'Acorn', character: 'knight', color: 'amber' });
+  });
+
+  it('carries a name with real unicode in it', () => {
+    const decoded = decodeClientMessage(encodeHello('Amélie 🌲', 'knight', 'moss'));
+    expect(decoded).toEqual({
+      type: 'hello',
+      name: 'Amélie 🌲',
+      character: 'knight',
+      color: 'moss',
+    });
+  });
+
+  it('carries an empty name rather than refusing it - the server decides if that is allowed', () => {
+    expect(decodeClientMessage(encodeHello('', 'knight', 'amber'))).toEqual({
+      type: 'hello',
+      name: '',
+      character: 'knight',
+      color: 'amber',
+    });
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeHello('Acorn', 'knight', 'amber');
+    expect(decodeClientMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+
+  it('refuses a character or colour this build has never heard of', () => {
+    const badCharacter = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
+    badCharacter[1] = 200;
+    expect(decodeClientMessage(badCharacter.buffer)).toBeNull();
+
+    const badColor = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
+    badColor[2] = 200;
+    expect(decodeClientMessage(badColor.buffer)).toBeNull();
+  });
+});
+
+describe('telling everybody who is who', () => {
+  const roundTrip = (players: readonly RosterEntry[]): readonly RosterEntry[] | null => {
+    const decoded = decodeServerMessage(encodeRoster(players));
+    return decoded?.type === 'roster' ? decoded.players : null;
+  };
+
+  it('carries an empty world', () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it('carries a name, character and tint for each connected player', () => {
+    const players: RosterEntry[] = [
+      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber' },
+      { netId: 2, name: 'Ash', character: 'knight', color: 'teal' },
+    ];
+    expect(roundTrip(players)).toEqual(players);
+  });
+
+  it('fits an empty list in two bytes', () => {
+    expect(encodeRoster([]).byteLength).toBe(2);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeRoster([
+      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber' },
+    ]);
+    expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+
+  it('refuses a character or colour this build has never heard of', () => {
+    const encoded = new Uint8Array(
+      encodeRoster([{ netId: 1, name: 'Acorn', character: 'knight', color: 'amber' }]).slice(0),
+    );
+    // header(2) + netId(2) + character(1) puts the colour byte at index 5.
+    encoded[5] = 200;
+    expect(decodeServerMessage(encoded.buffer)).toBeNull();
+  });
+
+  it('never carries more than a world can hold', () => {
+    const players: RosterEntry[] = Array.from({ length: MAX_ROSTER_ENTRIES + 5 }, (_, i) => ({
+      netId: i + 1,
+      name: `Player ${i}`,
+      character: 'knight',
+      color: 'amber',
+    }));
+    expect(roundTrip(players)).toHaveLength(MAX_ROSTER_ENTRIES);
   });
 });
