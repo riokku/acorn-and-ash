@@ -1093,6 +1093,7 @@ export class Game {
         !player.motion.grounded,
       ),
     );
+    character.setHoldingAxe(this.isCarrying('axe'));
     character.update(deltaSeconds);
 
     camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);

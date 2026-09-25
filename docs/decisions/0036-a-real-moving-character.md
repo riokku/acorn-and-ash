@@ -66,6 +66,22 @@ a slightly muddier tint. Each character instance clones Knight's one shared
 material before tinting it, so one player's colour never bleeds into
 another's.
 
+**Knight renders 40% smaller than the pack's own scale**, per Chris's
+playtest note that the model read as too large. A flat multiplier on the
+whole model, nothing to do with the collision capsule or any gameplay
+number - purely how big the art draws.
+
+**The axe you're carrying is now visibly held, not just a HUD line.** It
+parents the exact same model the axe pickup already uses onto the pack's
+own hand-socket bone (`handslot.r`) - a real node in the skeleton - so it
+moves and rotates with the arm through every animation already built, with
+no per-frame code of its own needed. Scaled up to cancel the character's
+own 40% shrink, since it's the same physical axe as the one lying in the
+stump and shouldn't shrink just because the person holding it did. Shown
+only for the local player: the wire snapshot has never carried what anyone
+else is carrying, only your own, so a remote player's held axe would need
+a small protocol addition this pass didn't make.
+
 ## Consequences
 
 - Every player looks like the same Knight, palette aside, until the picker
@@ -96,3 +112,13 @@ another's.
   overwrites every frame with the live facing direction. The same fix will
   be needed for any of the other five characters converted later, since
   they share Knight's exact rig.
+- The held axe's grip - exactly how it sits and angles in the hand - is a
+  first guess (`HELD_AXE_ROTATION`/`HELD_AXE_OFFSET` in `character.ts`),
+  not something measured against a render: the same sandbox slowness noted
+  above got in the way of confirming it visually before shipping. The scale
+  change and the facing fix, by contrast, were both visually confirmed live
+  - the same screenshot that showed a smaller character also happened to
+  show it correctly facing away from the camera.
+- Only the axe attaches to a hand for now - the rod, and anything else
+  carryable, still show only as a HUD line. The same bone-attachment
+  approach applies directly whenever one of those gets the same treatment.
