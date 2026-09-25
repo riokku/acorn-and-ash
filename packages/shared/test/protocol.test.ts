@@ -334,27 +334,34 @@ describe('telling players how the trees stand', () => {
 
 describe('telling players a swing landed', () => {
   it('survives a round trip', () => {
-    expect(decodeServerMessage(encodeTreeHit(42, 3))).toEqual({
+    expect(decodeServerMessage(encodeTreeHit(42, 3, 7))).toEqual({
       type: 'treeHit',
       treeId: 42,
       swingsLeft: 3,
+      netId: 7,
     });
   });
 
   it('says zero swings left for the one that felled it', () => {
-    expect(decodeServerMessage(encodeTreeHit(42, 0))).toEqual({
+    expect(decodeServerMessage(encodeTreeHit(42, 0, 7))).toEqual({
       type: 'treeHit',
       treeId: 42,
       swingsLeft: 0,
+      netId: 7,
     });
   });
 
+  it('says whose swing it was, so only the swinger plays their axe swinging back', () => {
+    expect(decodeServerMessage(encodeTreeHit(42, 3, 7))).toMatchObject({ netId: 7 });
+    expect(decodeServerMessage(encodeTreeHit(42, 3, 9))).toMatchObject({ netId: 9 });
+  });
+
   it('is tiny, because one goes out for every swing anybody takes', () => {
-    expect(encodeTreeHit(42, 3).byteLength).toBeLessThanOrEqual(4);
+    expect(encodeTreeHit(42, 3, 7).byteLength).toBeLessThanOrEqual(6);
   });
 
   it('refuses a message of the wrong length', () => {
-    const encoded = encodeTreeHit(42, 3);
+    const encoded = encodeTreeHit(42, 3, 7);
     expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
   });
 });

@@ -570,6 +570,8 @@ describe('chopping a tree down', () => {
     expect(hits.map((hit) => hit.swingsLeft)).toEqual(
       Array.from({ length: swings }, (_, i) => swings - 1 - i),
     );
+    // Whose swing it was, so only the chopper's own client plays its axe swinging back.
+    expect(hits.every((hit) => hit.netId === client.welcome().netId)).toBe(true);
 
     await waitFor('the logs', () => client.inventory().some((entry) => entry.item === 'log'));
     expect(client.inventory()).toEqual([
@@ -622,6 +624,9 @@ describe('chopping a tree down', () => {
 
     await waitFor('the watcher to see it fall', () => watcher.felledTrees().includes(oak.id));
     expect(watcher.treeHits().length).toBeGreaterThan(0);
+    // The watcher can tell it was the chopper's swing, not its own - what lets
+    // its client leave its own axe at rest instead of swinging along.
+    expect(watcher.treeHits().every((hit) => hit.netId === chopper.welcome().netId)).toBe(true);
     // Watching somebody chop does not fill your own pack.
     expect(watcher.inventory()).toEqual([]);
     chopper.close();

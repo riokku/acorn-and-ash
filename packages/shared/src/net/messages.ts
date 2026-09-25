@@ -160,11 +160,19 @@ export interface TreeStatesMessage {
   readonly trees: readonly TreeState[];
 }
 
-/** A swing landed. `swingsLeft` of zero means that was the one that felled it. */
+/**
+ * A swing landed. `swingsLeft` of zero means that was the one that felled it.
+ *
+ * Told to everybody nearby, same as a `ThreatHit` - but `netId` says whose
+ * swing it was, so only the swinger's own client plays a swing of its own
+ * axe back for it, rather than every nearby player's axe swinging in sync
+ * with a stranger's chop.
+ */
 export interface TreeHitMessage {
   readonly type: 'treeHit';
   readonly treeId: number;
   readonly swingsLeft: number;
+  readonly netId: number;
 }
 
 /**

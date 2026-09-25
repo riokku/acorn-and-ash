@@ -550,6 +550,9 @@ export class Game {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
         this.camera?.shake(HIT_LANDED_SHAKE);
         playTreeHit();
+        // Everybody nearby hears the same chop; only play it back on our own
+        // character when it was actually our swing that landed.
+        if (message.netId === this.selfNetId) this.localCharacter?.swingAxe();
         break;
       }
       case 'threatHit': {

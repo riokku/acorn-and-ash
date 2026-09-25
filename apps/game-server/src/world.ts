@@ -329,7 +329,7 @@ export class World extends DurableObject<WorldEnv> {
     const choppers = new Set<number>();
     let anythingFell = false;
     for (const event of events) {
-      this.broadcast(encodeTreeHit(event.treeId, event.swingsLeft));
+      this.broadcast(encodeTreeHit(event.treeId, event.swingsLeft, event.netId));
       if (event.swingsLeft === 0) anythingFell = true;
       if (event.logsGained > 0) choppers.add(event.netId);
     }
