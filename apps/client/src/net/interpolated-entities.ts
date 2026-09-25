@@ -1,4 +1,9 @@
-import { INTERPOLATION_DELAY_SECONDS, lerpAngle, SnapshotFlag, type SnapshotEntity } from '@acorn/shared';
+import {
+  INTERPOLATION_DELAY_SECONDS,
+  lerpAngle,
+  SnapshotFlag,
+  type SnapshotEntity,
+} from '@acorn/shared';
 
 /** One remembered position for an entity, with the server time it applied at. */
 interface Sample {
