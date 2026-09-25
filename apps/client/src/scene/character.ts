@@ -56,19 +56,30 @@ const MODEL_SCALE = 0.6;
 const HAND_BONE_NAME = 'handslotr';
 
 /**
- * The carried grip. The first guess rotated the hand-slot's local X axis,
- * which - per its own rest orientation on the rig - barely tilts the axe at
- * all; measured live against the real, playing idle animation (not just the
- * bind pose, which the idle clip moves well away from), rotating that same
- * range on X held the axe almost exactly horizontal throughout. Z is the
- * axis that actually swings it toward upright: this value was found by
- * sampling the live angle between the axe's handle and straight up in a
- * running browser at a handful of Z values and reading off the one that
- * landed on the ~30 degrees Chris asked for, rather than by guessing and
- * shipping blind the way the very first attempt did.
+ * The carried grip. Z is the axis that swings the axe between lying flat and
+ * standing upright - found by sampling the live angle between the axe's
+ * handle and straight up in a running browser at a handful of Z values, and
+ * confirmed against the axe model's own geometry (the wide blade-shaped
+ * vertices cluster at the high end of local Y, the handle shaft down to the
+ * low end) so "upright" and "which end is the blade" are both grounded in
+ * measurement rather than assumption.
+ *
+ * The 30 degree angle that first measurement landed on put the axe the
+ * right amount off vertical, but with the blade pointing the wrong way -
+ * Chris could see it was backwards once it was actually visible. Adding a
+ * further half turn (`Math.PI`) on the same Z axis points the blade the
+ * other way while keeping the same upright amount, since a rotation and its
+ * every-other-component-negated opposite land the same distance off
+ * vertical. `HELD_AXE_REST_X` adds the forward lean asked for on top of
+ * that: the axis a first attempt wrongly used for the upright tilt, but
+ * which does move the axe noticeably once combined with the Z turn instead
+ * of on its own - chosen positive because that is the direction that reads
+ * as more forward relative to the character's own facing, measured the same
+ * way as the Z value.
  */
-const HELD_AXE_REST_Z = 1.05;
-const HELD_AXE_ROTATION = new THREE.Euler(0, 0, HELD_AXE_REST_Z);
+const HELD_AXE_REST_X = 0.35;
+const HELD_AXE_REST_Z = 1.05 + Math.PI;
+const HELD_AXE_ROTATION = new THREE.Euler(HELD_AXE_REST_X, 0, HELD_AXE_REST_Z);
 const HELD_AXE_OFFSET = new THREE.Vector3(0, -0.12, 0);
 
 /**
