@@ -50,13 +50,24 @@ function createAnimatedCharacter(
   color: THREE.ColorRepresentation,
 ): Character {
   const instance = instantiateAnimatedModel(template);
-  const group = instance.root;
+  const model = instance.root;
+
+  // Knight's own rig faces the pack's +Z, but this game's convention is
+  // yaw 0 = facing -Z (see the placeholder capsule's snout, which is built
+  // to that convention directly) - a bare 180 degree mismatch, which is
+  // exactly what made it look like it was walking backwards. Corrected on
+  // an inner wrapper, not `group` itself: the outer group's own rotation.y
+  // is overwritten every frame with the live facing direction, which would
+  // instantly undo a correction applied there instead.
+  model.rotation.y = Math.PI;
+  const group = new THREE.Group();
+  group.add(model);
 
   // Materials are shared with the template by default - cloned per instance
   // so tinting one player's colour in below never bleeds into another's.
   const materials: THREE.MeshStandardMaterial[] = [];
   const cloned = new Map<THREE.Material, THREE.MeshStandardMaterial>();
-  group.traverse((child) => {
+  model.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     child.castShadow = true;
     child.receiveShadow = true;

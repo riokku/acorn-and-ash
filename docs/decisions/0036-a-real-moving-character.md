@@ -86,3 +86,13 @@ another's.
   exceptions across several runs, but a screen recording of it visibly
   stepping through all four poses was not something this pass could pin
   down before deciding it was not worth chasing further.
+- That verification gap is exactly where a real bug was hiding: Chris found
+  in actual play that the character walked facing backwards. Knight's own
+  rig faces the pack's +Z; this game's convention is yaw 0 = facing -Z (see
+  the placeholder capsule's snout, built to that convention directly) - an
+  exact 180 degree mismatch, invisible to typecheck, unit tests or a build,
+  since none of them render a frame. Fixed by rotating the model on an
+  inner wrapper rather than the outer group whose `rotation.y` the game
+  overwrites every frame with the live facing direction. The same fix will
+  be needed for any of the other five characters converted later, since
+  they share Knight's exact rig.
