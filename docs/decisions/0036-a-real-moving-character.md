@@ -180,16 +180,31 @@ a small protocol addition this pass didn't make.
   model is the blade was checked directly this time rather than assumed:
   the axe's own vertices cluster into a wide, blade-shaped mass at the high
   end of its local Y and a narrow handle shaft down to the low end, the
-  same file `clearing.ts` already draws standing blade-up as a pickup.
-  Adding `Math.PI` to the same Z axis the grip already turns on points the
-  blade the other way while keeping the same distance off vertical, since
-  negating every component of a direction (what a half turn round a single
-  axis does to a vector not aligned with it) does not change the angle
-  between it and straight up. The further 20 degrees of forward lean uses
-  `HELD_AXE_REST_X` - the axis a first attempt wrongly reached for to
+  same file `clearing.ts` already draws standing blade-up as a pickup. The
+  attempt at the half turn - adding `Math.PI` to the same Z axis the grip
+  leans on - was wrong: negating every component of a direction does not
+  land the same distance off vertical, it lands close to the *supplementary*
+  angle, on the far side of horizontal from where it started. Since the
+  grip was already close to vertical (30 degrees off it), its negation
+  landed close to vertical too, just pointing down instead of up - a bug
+  caught only once Chris reported the axe now hanging into the ground,
+  which is exactly what a handle pointing 150 degrees off vertical (30
+  degrees off straight *down*) does. The further 20 degrees of forward lean
+  used `HELD_AXE_REST_X`, the axis a first attempt wrongly reached for to
   control the upright amount, which does move the axe once a Z turn is
-  already in the mix, chosen positive because that direction measured as
-  more forward relative to the character's own facing. Which literal
-  compass direction "forward" turns out to be on screen is, like the
-  swing's own direction, not something this pass could confirm without a
-  render - only that the numbers move the way Chris described them.
+  already in the mix - chosen positive because that direction measured as
+  more forward relative to the character's own facing.
+- Fixing the hanging-into-the-ground bug also fixed the still-backwards
+  blade, once the actual mechanics were worked out properly: a further
+  `Math.PI` on Y, on top of the already-turned Z, puts the vertical
+  component back where it was (the same ~30 degrees off straight up
+  returns) while leaving the forward and sideways components flipped from
+  the original ungrafted grip - the combination that was actually wanted
+  the first time. Confirmed this time by reading the axe's real world Y
+  position alongside the angle, for both the resting grip and several
+  points through the swing, rather than trusting the angle number alone
+  the way the previous attempt had. Which literal compass direction
+  "forward" turns out to be on screen is, like the swing's own direction,
+  still not something this pass could confirm without a render - only that
+  the numbers move the way Chris described them, and that the blade no
+  longer dips below the ground getting there.
