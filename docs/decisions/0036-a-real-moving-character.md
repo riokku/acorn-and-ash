@@ -139,3 +139,38 @@ a small protocol addition this pass didn't make.
   by the static Blender/glTF inspection that had first suggested the name
   was fine, which was true of the file but not of what the loader does with
   it.
+- Once visible, the grip itself was wrong: Chris described it sticking
+  straight out to the side, and asked for something closer to upright, plus
+  an actual swing landing on the tree. The first attempt's rotation was on
+  the hand-slot bone's local X axis, which turned out to barely move the
+  handle at all - measuring the live angle between the handle and straight
+  up (in a running browser, sampled at several rotation values on each axis
+  in turn) showed X changing that angle by only a few degrees across its
+  whole useful range, while the same sweep on Z ran cleanly from 33 to 148
+  degrees. That measurement is also what caught something the Blender-side
+  numbers alone would have missed: the idle animation moves the arm well
+  away from the rig's bind pose, so a bind-pose-only calculation of the hand
+  bone's rest rotation would not have matched what actually renders.
+  `HELD_AXE_REST_Z` (1.05 radians) was picked directly off that curve for
+  landing on the ~30 degrees asked for, rather than guessed and shipped
+  blind the way the first attempt was.
+- The swing sweeps the same Z axis by a further 1.3 radians and back, on a
+  quarter-second sine arc, confirmed by stepping the character's own
+  `update()` with fixed time slices rather than waiting on real frames -
+  this sandbox's rendering is slow and uneven enough that polling on a
+  timer caught almost nothing happening between samples, even though the
+  swing was, underneath, always running correctly. Which real-world
+  direction that arc reads as - a forward chop rather than something
+  backwards-looking - has no equivalent number to sample for and so is not
+  confirmed, unlike the rest angle.
+- The swing needed knowing whose chop it was: everyone nearby is already
+  told the same `treeHit` message a chop produces, with no swinger identity
+  on it, so playing a swing back on every `treeHit` would have made a
+  player's own axe swing along with a stranger's chop too. `TreeHitMessage`
+  now carries `netId`, taken from the server's own chop event (it already
+  knew whose swing it was, `world.ts` just was not sending it), so the
+  client can play the animation only when it was its own player's swing
+  that connected. Scoped to trees only: a raccoon fight's equivalent
+  `ThreatHit` can also fire with no swing behind it at all, for a threat's
+  own arrival or respawn, which needs its own look before the same
+  treatment applies there.

@@ -82,9 +82,10 @@ Knight for now.
 
 Carrying an axe now actually shows it in your hand, not just as a line in
 the side panel - it's parented straight onto the character's own hand, so
-it moves and swings with the arm through every animation. Only your own
-axe shows this way for now, since the server has never told you what
-anyone else is carrying. See
+it moves with the arm through every animation, held at a natural, mostly
+upright angle. Landing a chop swings it at the tree. Only your own axe
+shows this way for now, since the server has never told you what anyone
+else is carrying. See
 [decision 0036](docs/decisions/0036-a-real-moving-character.md).
 
 ### The wilderness

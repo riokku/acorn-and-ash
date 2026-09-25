@@ -460,12 +460,13 @@ export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuf
   return buffer;
 }
 
-export function encodeTreeHit(treeId: number, swingsLeft: number): ArrayBuffer {
-  const buffer = new ArrayBuffer(4);
+export function encodeTreeHit(treeId: number, swingsLeft: number, netId: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(6);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.TreeHit);
   view.setUint16(1, treeId & 0xffff, true);
   view.setUint8(3, clamp(Math.round(swingsLeft), 0, 255));
+  view.setUint16(4, netId & 0xffff, true);
   return buffer;
 }
 
@@ -802,11 +803,12 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       return { type: 'buriedCaches', caches };
     }
     case ServerMessageType.TreeHit: {
-      if (data.byteLength !== 4) return null;
+      if (data.byteLength !== 6) return null;
       return {
         type: 'treeHit',
         treeId: view.getUint16(1, true),
         swingsLeft: view.getUint8(3),
+        netId: view.getUint16(4, true),
       };
     }
     case ServerMessageType.Fishing: {

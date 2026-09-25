@@ -24,7 +24,9 @@ export interface Character {
   setAnimationState(state: CharacterAnimState): void;
   /** Shows or hides the axe carried in this character's right hand. A no-op on the placeholder. */
   setHoldingAxe(holding: boolean): void;
-  /** Advances the animation mixer. A no-op on the placeholder. */
+  /** Plays a one-shot swing of the held axe, timed to a chop landing. A no-op on the placeholder. */
+  swingAxe(): void;
+  /** Advances the animation mixer and any swing in progress. A no-op on the placeholder. */
   update(deltaSeconds: number): void;
   dispose(): void;
 }
@@ -54,15 +56,37 @@ const MODEL_SCALE = 0.6;
 const HAND_BONE_NAME = 'handslotr';
 
 /**
- * A first attempt at a carried grip, not a measured one: rotate the axe
- * (grounded and upright when it's a pickup) so its handle lies back along
- * the hand rather than sticking straight out, and shift it slightly so the
- * grip - not the butt of the handle the pickup's own origin sits at - is
- * what actually lines up with the hand bone. Tune from how it actually
- * looks once someone can see it, the same way the facing direction did.
+ * The carried grip. The first guess rotated the hand-slot's local X axis,
+ * which - per its own rest orientation on the rig - barely tilts the axe at
+ * all; measured live against the real, playing idle animation (not just the
+ * bind pose, which the idle clip moves well away from), rotating that same
+ * range on X held the axe almost exactly horizontal throughout. Z is the
+ * axis that actually swings it toward upright: this value was found by
+ * sampling the live angle between the axe's handle and straight up in a
+ * running browser at a handful of Z values and reading off the one that
+ * landed on the ~30 degrees Chris asked for, rather than by guessing and
+ * shipping blind the way the very first attempt did.
  */
-const HELD_AXE_ROTATION = new THREE.Euler(Math.PI / 2, 0, 0);
+const HELD_AXE_REST_Z = 1.05;
+const HELD_AXE_ROTATION = new THREE.Euler(0, 0, HELD_AXE_REST_Z);
 const HELD_AXE_OFFSET = new THREE.Vector3(0, -0.12, 0);
+
+/**
+ * A swing with no attack clip to drive it yet: the axe alone sweeps around
+ * the same Z axis its resting grip leans on, through vertical and out the
+ * other side, then back to rest. `game.ts` calls this when the server
+ * confirms a chop landed (`treeHit`) rather than the moment the swing button
+ * is pressed, so it never plays for a swing that connected with nothing, and
+ * only for a swing that was actually this player's own. Which way that arc
+ * reads on screen (a forward chop versus something backwards-looking) is not
+ * confirmed - the same visual gap the grip angle had before real numbers
+ * replaced the guess, but there is no equivalent number to sample for "which
+ * direction looks like chopping". The arm itself stays in whatever
+ * locomotion pose it was already in - a real swinging arm needs a clip from
+ * the pack this project doesn't have converted yet (see decision 0036).
+ */
+const SWING_DURATION_SECONDS = 0.25;
+const SWING_SWEEP_RADIANS = 1.3;
 
 const CAPSULE_LENGTH = PLAYER_HEIGHT - PLAYER_RADIUS * 2;
 
@@ -149,6 +173,10 @@ function createAnimatedCharacter(
   let current = actionByState.get('idle');
   current?.play();
 
+  // Seconds into the current swing, or null when the axe is at rest - not a
+  // boolean, since the sweep below needs to know how far into it to be.
+  let swingElapsed: number | null = null;
+
   return {
     group,
     setColor: (next) => {
@@ -164,7 +192,24 @@ function createAnimatedCharacter(
     setHoldingAxe: (holding) => {
       if (heldAxe !== undefined) heldAxe.visible = holding;
     },
-    update: (deltaSeconds) => instance.mixer.update(deltaSeconds),
+    swingAxe: () => {
+      if (heldAxe !== undefined) swingElapsed = 0;
+    },
+    update: (deltaSeconds) => {
+      instance.mixer.update(deltaSeconds);
+      if (heldAxe === undefined || swingElapsed === null) return;
+      swingElapsed += deltaSeconds;
+      if (swingElapsed >= SWING_DURATION_SECONDS) {
+        swingElapsed = null;
+        heldAxe.rotation.copy(HELD_AXE_ROTATION);
+        return;
+      }
+      // Out and back on the same half-cycle of a sine wave, so it starts and
+      // ends exactly at rest with no pop on either end.
+      const progress = swingElapsed / SWING_DURATION_SECONDS;
+      const sweep = Math.sin(progress * Math.PI) * SWING_SWEEP_RADIANS;
+      heldAxe.rotation.set(HELD_AXE_ROTATION.x, HELD_AXE_ROTATION.y, HELD_AXE_REST_Z + sweep);
+    },
     dispose: () => {
       instance.mixer.stopAllAction();
       for (const material of materials) material.dispose();
@@ -202,6 +247,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     setColor: (next) => material.color.set(next),
     setAnimationState: () => {},
     setHoldingAxe: () => {},
+    swingAxe: () => {},
     update: () => {},
     dispose: () => {
       body.geometry.dispose();
