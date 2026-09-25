@@ -118,7 +118,7 @@ a small protocol addition this pass didn't make.
   above got in the way of confirming it visually before shipping. The scale
   change and the facing fix, by contrast, were both visually confirmed live
   - the same screenshot that showed a smaller character also happened to
-  show it correctly facing away from the camera.
+    show it correctly facing away from the camera.
 - Only the axe attaches to a hand for now - the rod, and anything else
   carryable, still show only as a HUD line. The same bone-attachment
   approach applies directly whenever one of those gets the same treatment.
@@ -183,13 +183,13 @@ a small protocol addition this pass didn't make.
   same file `clearing.ts` already draws standing blade-up as a pickup. The
   attempt at the half turn - adding `Math.PI` to the same Z axis the grip
   leans on - was wrong: negating every component of a direction does not
-  land the same distance off vertical, it lands close to the *supplementary*
+  land the same distance off vertical, it lands close to the _supplementary_
   angle, on the far side of horizontal from where it started. Since the
   grip was already close to vertical (30 degrees off it), its negation
   landed close to vertical too, just pointing down instead of up - a bug
   caught only once Chris reported the axe now hanging into the ground,
   which is exactly what a handle pointing 150 degrees off vertical (30
-  degrees off straight *down*) does. The further 20 degrees of forward lean
+  degrees off straight _down_) does. The further 20 degrees of forward lean
   used `HELD_AXE_REST_X`, the axis a first attempt wrongly reached for to
   control the upright amount, which does move the axe once a Z turn is
   already in the mix - chosen positive because that direction measured as

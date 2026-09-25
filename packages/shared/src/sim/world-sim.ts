@@ -1154,7 +1154,10 @@ export class WorldSimulation {
   }
 
   /** The nearest live animal that hunts this kind, or null - so prey knows to flee it, the same as a player. */
-  private nearestPredatorRuntime(preyKind: AnimalKindId, from: Readonly<Vec3>): AnimalRuntime | null {
+  private nearestPredatorRuntime(
+    preyKind: AnimalKindId,
+    from: Readonly<Vec3>,
+  ): AnimalRuntime | null {
     let best: AnimalRuntime | null = null;
     let bestDistance = Infinity;
     for (const runtime of this.animals.values()) {

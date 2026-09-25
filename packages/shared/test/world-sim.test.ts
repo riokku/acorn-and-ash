@@ -1335,7 +1335,9 @@ describe('a fox that hunts rabbits', () => {
 
     const stillThere = sim
       .snapshotFor(1)
-      .some((entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+      .some(
+        (entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0,
+      );
     expect(stillThere).toBe(false);
   });
 
@@ -1350,7 +1352,9 @@ describe('a fox that hunts rabbits', () => {
 
     const stillThere = sim
       .snapshotFor(1)
-      .some((entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+      .some(
+        (entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0,
+      );
     expect(stillThere).toBe(true);
   });
 
