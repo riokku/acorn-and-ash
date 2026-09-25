@@ -78,7 +78,13 @@ Every player is drawn as Knight, one of six characters from a free pack,
 walking, running and jumping for real rather than sliding around as a
 placeholder capsule. There's no way to choose a different one yet - that's
 its own future piece of work - so everybody looks like the same tinted
-Knight for now. See
+Knight for now.
+
+Carrying an axe now actually shows it in your hand, not just as a line in
+the side panel - it's parented straight onto the character's own hand, so
+it moves and swings with the arm through every animation. Only your own
+axe shows this way for now, since the server has never told you what
+anyone else is carrying. See
 [decision 0036](docs/decisions/0036-a-real-moving-character.md).
 
 ### The wilderness
