@@ -13,6 +13,7 @@ import {
 } from '@acorn/shared';
 
 import { flowerModelParts } from './flower-models';
+import { itemModelParts } from './item-models';
 import { createPond } from './pond';
 import {
   HIDDEN_INSTANCE,
@@ -217,11 +218,28 @@ function createPickup(
  * A fishing rod left on the bank: a long pole propped up off the grass, with
  * its red and white float hanging from the tip so it reads as a rod and not
  * as a stick.
+ *
+ * The real model replaces the whole placeholder pole-and-float shape, not
+ * just the pole, since it already reads clearly as a rod on its own.
  */
 function createRodPickup(
   pickup: PlacedPickup,
   disposables: Array<{ dispose(): void }>,
 ): THREE.Object3D {
+  const realParts = itemModelParts('rod');
+  if (realParts !== undefined) {
+    const group = new THREE.Group();
+    for (const part of realParts) {
+      const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.castShadow = true;
+      group.add(mesh);
+    }
+    // Leaning east, out over the water, the same lazy angle as the placeholder.
+    group.rotation.z = -1.05;
+    group.position.set(pickup.x, pickup.y + 0.05, pickup.z);
+    return group;
+  }
+
   const group = new THREE.Group();
 
   const poleGeometry = new THREE.CylinderGeometry(0.018, 0.03, 1.7, 6);
@@ -259,15 +277,28 @@ function createRodPickup(
 }
 
 /**
- * An axe standing in a stump, as two placeholder blocks.
+ * An axe standing in a stump.
  *
- * It is tilted and pale against the dark stump so you can pick it out from
- * across the clearing, which is the whole point of it being there.
+ * Tilted at an angle so you can pick it out from across the clearing, which
+ * is the whole point of it being there - real model or placeholder alike.
  */
 function createAxePickup(
   pickup: PlacedPickup,
   disposables: Array<{ dispose(): void }>,
 ): THREE.Object3D {
+  const realParts = itemModelParts('axe');
+  if (realParts !== undefined) {
+    const group = new THREE.Group();
+    for (const part of realParts) {
+      const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.castShadow = true;
+      group.add(mesh);
+    }
+    group.position.set(pickup.x, pickup.y, pickup.z);
+    group.rotation.set(0.38, 0.9, 0.1);
+    return group;
+  }
+
   const group = new THREE.Group();
   const kind = ITEM_KINDS[pickup.item];
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { INTERPOLATION_DELAY_SECONDS, type SnapshotEntity } from '@acorn/shared';
+import { INTERPOLATION_DELAY_SECONDS, SnapshotFlag, type SnapshotEntity } from '@acorn/shared';
 
 import { InterpolatedEntities } from '../src/net/interpolated-entities';
 
@@ -84,6 +84,18 @@ describe('tracking where other entities are, between snapshots', () => {
     players.ingest(1100, [entity(2, 0, 0, 0, 0)], 1);
     players.advance(1);
     expect(players.poseOf(2)?.moving).toBe(false);
+  });
+
+  it('reports whether a player is sprinting or airborne, the same way', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [entity(2, 0, 0, 0, SnapshotFlag.Sprinting)], 1);
+    expect(players.poseOf(2)?.sprinting).toBe(true);
+    expect(players.poseOf(2)?.airborne).toBe(false);
+
+    players.ingest(1100, [entity(2, 0, 0, 0, SnapshotFlag.Airborne)], 1);
+    players.advance(1);
+    expect(players.poseOf(2)?.sprinting).toBe(false);
+    expect(players.poseOf(2)?.airborne).toBe(true);
   });
 
   it('does not grow forever while a player walks about', () => {

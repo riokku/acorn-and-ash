@@ -293,6 +293,8 @@ export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
  * turning it down for previews, unlike a tree's half hour.
  */
 export const ANIMAL_RESPAWN_SECONDS = 60;
+/** Close enough for a hunter to actually catch whatever it has been chasing. */
+export const PREDATOR_CATCH_RADIUS = 1;
 
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;

@@ -8,8 +8,8 @@ The game is online-only. Every world runs on the server.
 
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
 > real birch, oak and pine trees, real rocks and a pond,
-> surrounded by generated wilderness you can walk out into, a capsule you
-> walk, sprint and jump around, a
+> surrounded by generated wilderness you can walk out into, a real animated
+> character you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Find the
 > axe standing in a stump and chop trees down; they grow back while you are
 > away. Find the rod on the bank of the pond and catch fish. Gather sticks by
@@ -35,7 +35,13 @@ The game is online-only. Every world runs on the server.
 > camera kick and a sound - and a calm tune plays once you're in. The
 > campfire has real art now, and you can light it - press `E` next to one -
 > for a genuinely animated fire that flickers for a while and either burns
-> down on its own or goes out early if you put it out by hand. See
+> down on its own or goes out early if you put it out by hand. The axe and
+> fishing rod are real modeled art now too. A fox roams the wilderness
+> alongside the rabbits and the raccoon - it flees you exactly like a
+> rabbit, but sometimes hunts one down itself, and you can catch it the
+> same way you catch any other prey. Every player now walks, runs and jumps
+> as a real animated character - Knight, standing in for everyone until a
+> picker menu exists to choose between the pack's six. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -65,6 +71,15 @@ each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
 which fish bite and how often lives in
 [`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts).
+
+### Your character
+
+Every player is drawn as Knight, one of six characters from a free pack,
+walking, running and jumping for real rather than sliding around as a
+placeholder capsule. There's no way to choose a different one yet - that's
+its own future piece of work - so everybody looks like the same tinted
+Knight for now. See
+[decision 0036](docs/decisions/0036-a-real-moving-character.md).
 
 ### The wilderness
 
@@ -98,6 +113,15 @@ reach of it - and it pays out meat, which restores more hunger than a fish
 since a catch takes an actual chase. A caught rabbit is back at its den,
 ready to catch again, a minute later. See
 [decision 0019](docs/decisions/0019-catching-wildlife.md).
+
+A fox lives out there too, with real modeled art rather than a placeholder
+shape. To you, it is just another rabbit: it flees the moment you get close
+and pays out meat the same way if you catch it. Left alone, though, it
+roams wider than a rabbit does and sometimes chases one down itself - if it
+catches one, that rabbit is gone until it respawns at its den, same as if
+you had caught it yourself. A fox spooked by you mid-chase drops the hunt
+and flees like any other prey. See
+[decision 0035](docs/decisions/0035-a-fox-that-hunts-rabbits.md).
 
 ### Danger
 

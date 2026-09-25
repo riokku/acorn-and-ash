@@ -1,4 +1,4 @@
-import { INTERPOLATION_DELAY_SECONDS, lerpAngle, type SnapshotEntity } from '@acorn/shared';
+import { INTERPOLATION_DELAY_SECONDS, lerpAngle, SnapshotFlag, type SnapshotEntity } from '@acorn/shared';
 
 /** One remembered position for an entity, with the server time it applied at. */
 interface Sample {
@@ -8,6 +8,9 @@ interface Sample {
   readonly z: number;
   readonly yaw: number;
   readonly moving: boolean;
+  /** Always false for wildlife - only a player's own snapshot entry ever sets these bits. */
+  readonly sprinting: boolean;
+  readonly airborne: boolean;
 }
 
 export interface RemotePose {
@@ -16,6 +19,8 @@ export interface RemotePose {
   readonly z: number;
   readonly yaw: number;
   readonly moving: boolean;
+  readonly sprinting: boolean;
+  readonly airborne: boolean;
 }
 
 /** Older samples than this are no use to anybody. */
@@ -59,7 +64,9 @@ export class InterpolatedEntities {
         y: entity.y,
         z: entity.z,
         yaw: entity.yaw,
-        moving: (entity.flags & 1) !== 0,
+        moving: (entity.flags & SnapshotFlag.Moving) !== 0,
+        sprinting: (entity.flags & SnapshotFlag.Sprinting) !== 0,
+        airborne: (entity.flags & SnapshotFlag.Airborne) !== 0,
       });
       while (samples.length > 2 && (samples[0]?.timeMs ?? 0) < serverTimeMs - HISTORY_MS) {
         samples.shift();
@@ -124,6 +131,8 @@ export class InterpolatedEntities {
           z: before.z + (after.z - before.z) * alpha,
           yaw: lerpAngle(before.yaw, after.yaw, alpha),
           moving: after.moving,
+          sprinting: after.sprinting,
+          airborne: after.airborne,
         };
       }
     }
@@ -132,5 +141,13 @@ export class InterpolatedEntities {
 }
 
 function toPose(sample: Sample): RemotePose {
-  return { x: sample.x, y: sample.y, z: sample.z, yaw: sample.yaw, moving: sample.moving };
+  return {
+    x: sample.x,
+    y: sample.y,
+    z: sample.z,
+    yaw: sample.yaw,
+    moving: sample.moving,
+    sprinting: sample.sprinting,
+    airborne: sample.airborne,
+  };
 }

@@ -14,10 +14,12 @@ import {
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
   PLAYER_RADIUS,
+  PREDATOR_CATCH_RADIUS,
   SPAWN_POSITION,
   SWING_COOLDOWN_TICKS,
   TICK_HZ,
   TICK_MILLISECONDS,
+  TICK_SECONDS,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
 import { ANIMAL_KINDS } from '../src/data/animals';
@@ -1278,6 +1280,93 @@ describe('wildlife', () => {
       .snapshotFor(1)
       .filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
     expect(animals).toEqual([]);
+  });
+});
+
+describe('a fox that hunts rabbits', () => {
+  const foxDen = ANIMAL_DENS.find((entry) => entry.id === 1007);
+  if (foxDen === undefined) throw new Error('den 1007 is gone from the data table');
+  const rabbitDen = ANIMAL_DENS.find((entry) => entry.id === 1001);
+  if (rabbitDen === undefined) throw new Error('den 1001 is gone from the data table');
+
+  /** An animal entity out of a snapshot, or throws: every test here expects one. */
+  function animalEntity(sim: WorldSimulation, viewerNetId: number, animalId: number) {
+    const found = sim
+      .snapshotFor(viewerNetId)
+      .find((entity) => entity.netId === animalId && (entity.flags & SnapshotFlag.Animal) !== 0);
+    if (found === undefined) throw new Error(`Animal ${animalId} was not in the snapshot`);
+    return found;
+  }
+
+  /**
+   * Add a player close enough to keep the pair in its snapshot, well past
+   * both animals' alert radii so it never itself becomes the thing either
+   * one reacts to.
+   */
+  function watchFromAfar(sim: WorldSimulation): void {
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: 0, y: 0, z: 50 }, 0);
+  }
+
+  it('closes in once a rabbit wanders within its detection radius', () => {
+    const sim = createWorld();
+    watchFromAfar(sim);
+    sim.placeAnimal(foxDen.id, { x: 0, y: 0, z: 0 });
+    sim.placeAnimal(rabbitDen.id, { x: 0, y: 0, z: 8 });
+
+    const distanceApart = (): number => {
+      const fox = animalEntity(sim, 1, foxDen.id);
+      const rabbit = animalEntity(sim, 1, rabbitDen.id);
+      return Math.hypot(fox.x - rabbit.x, fox.z - rabbit.z);
+    };
+
+    const before = distanceApart();
+    for (let i = 0; i < 10; i++) sim.step(tickClock());
+    expect(distanceApart()).toBeLessThan(before);
+  });
+
+  it('catches the rabbit once it closes the distance, the same way a knockout catch works', () => {
+    const sim = createWorld();
+    watchFromAfar(sim);
+    sim.placeAnimal(foxDen.id, { x: 0, y: 0, z: 0 });
+    sim.placeAnimal(rabbitDen.id, { x: 0, y: 0, z: PREDATOR_CATCH_RADIUS / 2 });
+
+    sim.step(tickClock());
+
+    const stillThere = sim
+      .snapshotFor(1)
+      .some((entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(stillThere).toBe(false);
+  });
+
+  it('still flees a nearby player instead of finishing a chase already in reach', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: 0, y: 0, z: 3 }, 0);
+    sim.placeAnimal(foxDen.id, { x: 0, y: 0, z: 0 });
+    sim.placeAnimal(rabbitDen.id, { x: 0, y: 0, z: PREDATOR_CATCH_RADIUS / 2 });
+
+    sim.step(tickClock());
+
+    const stillThere = sim
+      .snapshotFor(1)
+      .some((entity) => entity.netId === rabbitDen.id && (entity.flags & SnapshotFlag.Animal) !== 0);
+    expect(stillThere).toBe(true);
+  });
+
+  it('a rabbit bolts from a nearby fox the same way it bolts from a player', () => {
+    const sim = createWorld();
+    watchFromAfar(sim);
+    sim.placeAnimal(foxDen.id, { x: 0, y: 0, z: 0 });
+    sim.placeAnimal(rabbitDen.id, { x: 0, y: 0, z: 5 });
+
+    sim.step(tickClock());
+
+    const rabbit = animalEntity(sim, 1, rabbitDen.id);
+    // Fleeing carries it dead away from the fox at fleeSpeed (6 m/s) in a
+    // single tick - many times what its own calm wander (1.1 m/s) could ever
+    // cover, and wander is not even guaranteed to head this direction.
+    expect(rabbit.z).toBeGreaterThan(5 + ANIMAL_KINDS.rabbit.wanderSpeed * TICK_SECONDS * 2);
   });
 });
 
