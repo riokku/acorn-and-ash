@@ -17,6 +17,7 @@ import {
   MAX_TREE_GENERATION,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
+  PREDATOR_CATCH_RADIUS,
   REGROW_MIN_SECONDS,
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
@@ -1014,13 +1015,25 @@ export class WorldSimulation {
           return;
         }
 
-        runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, kind);
+        // A fox hunting a rabbit is exactly as alarming to that rabbit as a
+        // player would be, so fleeing weighs whichever of the two is nearer.
+        const nearestPredator = this.nearestPredatorRuntime(runtime.kind, position);
+        const predatorPosition = nearestPredator?.entity.get(Position) ?? null;
+        const predatorDistance =
+          predatorPosition === null ? Infinity : horizontalDistance(position, predatorPosition);
+        const fleeFromPlayer = nearestDistance <= predatorDistance;
+        const alarmDistance = Math.min(nearestDistance, predatorDistance);
+        const alarmPosition = fleeFromPlayer ? nearestPosition : predatorPosition;
+
+        runtime.engaged = shouldFlee(runtime.engaged, alarmDistance, kind);
 
         let direction: Direction2D;
         let speed: number;
-        if (runtime.engaged && nearestPosition !== null) {
-          direction = fleeDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
+        if (runtime.engaged && alarmPosition !== null) {
+          direction = fleeDirection(position.x, position.z, alarmPosition.x, alarmPosition.z);
           speed = kind.fleeSpeed ?? 0;
+        } else if (kind.preysOn !== undefined) {
+          ({ direction, speed } = this.stepHunt(runtime, kind, position));
         } else {
           direction = this.wanderStep(runtime, kind, position);
           speed = kind.wanderSpeed;
@@ -1138,6 +1151,81 @@ export class WorldSimulation {
       }
     }
     return best;
+  }
+
+  /** The nearest live animal that hunts this kind, or null - so prey knows to flee it, the same as a player. */
+  private nearestPredatorRuntime(preyKind: AnimalKindId, from: Readonly<Vec3>): AnimalRuntime | null {
+    let best: AnimalRuntime | null = null;
+    let bestDistance = Infinity;
+    for (const runtime of this.animals.values()) {
+      if (runtime.caught) continue;
+      // Widened the same way `stepAnimals` does: an optional field like
+      // `preysOn` reads the same regardless of which kind this happens to be.
+      const candidateKind: AnimalKind = ANIMAL_KINDS[runtime.kind];
+      if (!(candidateKind.preysOn ?? []).includes(preyKind)) continue;
+      const position = runtime.entity.get(Position);
+      if (position === undefined) continue;
+      const distance = horizontalDistance(from, position);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = runtime;
+      }
+    }
+    return best;
+  }
+
+  /** The nearest live animal of a hunted kind, or null in reach of nothing worth chasing. */
+  private nearestPreyRuntime(
+    preyKinds: readonly AnimalKindId[],
+    from: Readonly<Vec3>,
+  ): AnimalRuntime | null {
+    let best: AnimalRuntime | null = null;
+    let bestDistance = Infinity;
+    for (const runtime of this.animals.values()) {
+      if (runtime.caught) continue;
+      if (!preyKinds.includes(runtime.kind)) continue;
+      const position = runtime.entity.get(Position);
+      if (position === undefined) continue;
+      const distance = horizontalDistance(from, position);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = runtime;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * A calm hunter's tick: chase the nearest thing it preys on once one comes
+   * within `preyDetectionRadius`, catching it exactly the way a knockout
+   * catch works once close enough - gone until it respawns at its own den.
+   * Ambles like anything else calm when nothing is worth chasing.
+   */
+  private stepHunt(
+    runtime: AnimalRuntime,
+    kind: AnimalKind,
+    position: Readonly<Vec3>,
+  ): { direction: Direction2D; speed: number } {
+    const preyKinds = kind.preysOn ?? [];
+    const prey = this.nearestPreyRuntime(preyKinds, position);
+    const preyPosition = prey?.entity.get(Position) ?? null;
+    const preyDistance =
+      preyPosition === null ? Infinity : horizontalDistance(position, preyPosition);
+
+    if (prey === null || preyPosition === null || preyDistance > (kind.preyDetectionRadius ?? 0)) {
+      return { direction: this.wanderStep(runtime, kind, position), speed: kind.wanderSpeed };
+    }
+
+    if (preyDistance <= PREDATOR_CATCH_RADIUS) {
+      prey.caught = true;
+      prey.respawnAtMs = this.nowMs + ANIMAL_RESPAWN_SECONDS * 1000;
+      return { direction: { x: 0, z: 0 }, speed: 0 };
+    }
+
+    return {
+      direction: towardDirection(position.x, position.z, preyPosition.x, preyPosition.z),
+      speed: kind.preyChaseSpeed ?? kind.wanderSpeed,
+    };
   }
 
   /**
@@ -1960,6 +2048,22 @@ export class WorldSimulation {
     runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
     runtime.entity.set(Facing, { yaw: facingYaw });
     runtime.entity.set(AimYaw, { yaw: facingYaw });
+  }
+
+  /**
+   * Move an animal straight to a spot, ignoring its den and leash.
+   *
+   * Nothing in normal play ever teleports wildlife - a real fox and a real
+   * rabbit only meet by both wandering there on their own, which the real den
+   * layout is spaced out precisely so is a rare "sometimes", not a given.
+   * Used by tests, the same reason `placePlayer` exists for something a
+   * gameplay path also needs.
+   */
+  placeAnimal(animalId: number, position: Readonly<Vec3>): void {
+    const runtime = this.animals.get(animalId);
+    if (runtime === undefined) return;
+    runtime.entity.set(Position, { x: position.x, y: position.y, z: position.z });
+    runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
   }
 
   /** Everything worth writing to storage. */

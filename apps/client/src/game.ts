@@ -68,6 +68,7 @@ import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
+import { preloadItemModels } from './scene/item-models';
 import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
 import { colorForPlayer, createCharacter, type Character } from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
@@ -77,6 +78,8 @@ import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
 import { createCritter, type Critter } from './scene/critter';
 import { createRaccoon, type Raccoon } from './scene/raccoon';
+import { createFox, type Fox } from './scene/fox';
+import { preloadFoxModel } from './scene/fox-model';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
@@ -131,12 +134,14 @@ function createBuiltMesh(kind: BuildableKindId): Campfire | Cabin | FlowerBed | 
 }
 
 /** The placeholder model for whichever kind of wildlife this happens to be. */
-function createCritterFor(kind: AnimalKindId): Critter | Raccoon {
+function createCritterFor(kind: AnimalKindId): Critter | Raccoon | Fox {
   switch (kind) {
     case 'rabbit':
       return createCritter();
     case 'maskedRaccoon':
       return createRaccoon();
+    case 'fox':
+      return createFox();
   }
 }
 
@@ -227,7 +232,7 @@ export class Game {
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
   private readonly remoteAnimals = new InterpolatedEntities();
-  private readonly critters = new Map<number, Critter | Raccoon>();
+  private readonly critters = new Map<number, Critter | Raccoon | Fox>();
   private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
   private builtProps: readonly BuiltProp[] = [];
   private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
@@ -320,6 +325,8 @@ export class Game {
     void preloadPropModels();
     void preloadFlowerModel();
     void preloadCampfireModels();
+    void preloadItemModels();
+    void preloadFoxModel();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -773,7 +780,13 @@ export class Game {
     // entered before the fetch kicked off in start() has finished. A flower
     // bed can be built well after this, but never before, so loading it here
     // covers every place the game ever draws a flower.
-    await Promise.all([preloadPropModels(), preloadFlowerModel(), preloadCampfireModels()]);
+    await Promise.all([
+      preloadPropModels(),
+      preloadFlowerModel(),
+      preloadCampfireModels(),
+      preloadItemModels(),
+      preloadFoxModel(),
+    ]);
     if (this.clearingScene !== null) return;
 
     const clearing = buildTestClearing(seed);
@@ -923,7 +936,7 @@ export class Game {
     this.critters.delete(animalId);
   }
 
-  private critterFor(animalId: number): Critter | Raccoon {
+  private critterFor(animalId: number): Critter | Raccoon | Fox {
     const existing = this.critters.get(animalId);
     if (existing !== undefined) return existing;
 

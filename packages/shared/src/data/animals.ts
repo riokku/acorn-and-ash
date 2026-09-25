@@ -10,7 +10,7 @@
 import { CHOP_REACH, PLAYER_SPRINT_SPEED, PLAYER_WALK_SPEED } from '../constants';
 import type { ItemId } from './items';
 
-export type AnimalKindId = 'rabbit' | 'maskedRaccoon';
+export type AnimalKindId = 'rabbit' | 'maskedRaccoon' | 'fox';
 
 /**
  * How a threat fights, once it has closed in. Present only on a kind that
@@ -55,6 +55,17 @@ export interface AnimalKind {
   readonly catchItem?: ItemId;
   /** Present on something dangerous. Absent on prey, which only ever flees. */
   readonly threat?: ThreatBehavior;
+  /**
+   * Kinds this one hunts down on its own, chasing one to catch it the same
+   * way a knockout catch works - gone until `ANIMAL_RESPAWN_SECONDS` is up.
+   * Fleeing the player still comes first: a fox spooked by a player mid-chase
+   * runs like any other prey rather than finishing the catch.
+   */
+  readonly preysOn?: readonly AnimalKindId[];
+  /** How far away a hunter notices something worth chasing. Meaningless without `preysOn`. */
+  readonly preyDetectionRadius?: number;
+  /** How fast it closes in once it has noticed prey, in m/s. Meaningless without `preysOn`. */
+  readonly preyChaseSpeed?: number;
   /** Triangle budget for the art that eventually replaces the placeholder. */
   readonly triangleBudget: number;
   /** Placeholder colour, as 0xRRGGBB. */
@@ -94,5 +105,25 @@ export const ANIMAL_KINDS = {
       damage: 25,
       hitsToDefeat: 3,
     },
+  },
+  fox: {
+    id: 'fox',
+    displayName: 'Fox',
+    // Flees the player exactly like a rabbit - no threat to people, only prey.
+    wanderSpeed: 1.3,
+    fleeSpeed: 6.5,
+    alertRadius: 8,
+    safeRadius: 12,
+    // Wider than a rabbit's: it has to actually roam to find one to chase,
+    // rather than a hunt that is guaranteed the moment it wakes up.
+    leashRadius: 16,
+    catchItem: 'meat',
+    preysOn: ['rabbit'],
+    preyDetectionRadius: 10,
+    // Faster than a rabbit's fleeSpeed (6), so a chase can actually end in a
+    // catch, but not by so much that "sometimes" becomes "always".
+    preyChaseSpeed: 6.8,
+    triangleBudget: 5000,
+    placeholderColor: 0xc9622a,
   },
 } as const satisfies Record<AnimalKindId, AnimalKind>;

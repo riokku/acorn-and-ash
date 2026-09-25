@@ -35,7 +35,11 @@ The game is online-only. Every world runs on the server.
 > camera kick and a sound - and a calm tune plays once you're in. The
 > campfire has real art now, and you can light it - press `E` next to one -
 > for a genuinely animated fire that flickers for a while and either burns
-> down on its own or goes out early if you put it out by hand. See
+> down on its own or goes out early if you put it out by hand. The axe and
+> fishing rod are real modeled art now too. A fox roams the wilderness
+> alongside the rabbits and the raccoon - it flees you exactly like a
+> rabbit, but sometimes hunts one down itself, and you can catch it the
+> same way you catch any other prey. See
 > [the roadmap](#roadmap).
 
 ## Controls
@@ -98,6 +102,15 @@ reach of it - and it pays out meat, which restores more hunger than a fish
 since a catch takes an actual chase. A caught rabbit is back at its den,
 ready to catch again, a minute later. See
 [decision 0019](docs/decisions/0019-catching-wildlife.md).
+
+A fox lives out there too, with real modeled art rather than a placeholder
+shape. To you, it is just another rabbit: it flees the moment you get close
+and pays out meat the same way if you catch it. Left alone, though, it
+roams wider than a rabbit does and sometimes chases one down itself - if it
+catches one, that rabbit is gone until it respawns at its den, same as if
+you had caught it yourself. A fox spooked by you mid-chase drops the hunt
+and flees like any other prey. See
+[decision 0035](docs/decisions/0035-a-fox-that-hunts-rabbits.md).
 
 ### Danger
 

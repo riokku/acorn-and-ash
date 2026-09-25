@@ -24,4 +24,8 @@ export const ANIMAL_DENS: readonly AnimalDen[] = [
   { id: 1004, kind: 'rabbit', x: 12, z: 58 },
   { id: 1005, kind: 'maskedRaccoon', x: -30, z: 40 },
   { id: 1006, kind: 'maskedRaccoon', x: 35, z: -40 },
+  // Roughly between the two nearest rabbit dens, but still forty-odd metres
+  // from either - well past its own leashRadius (16). A chase only happens
+  // if wandering happens to carry them together; see decision 0035.
+  { id: 1007, kind: 'fox', x: 22, z: -18 },
 ];

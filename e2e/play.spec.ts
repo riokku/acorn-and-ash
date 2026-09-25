@@ -913,6 +913,67 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
   expect(errors).toEqual([]);
 });
 
+test('you can find a fox and catch it, the same way you catch a rabbit', async ({ page }) => {
+  // Wildlife lives well past the tree line, so this walks a lot further than
+  // the axe or the pond do.
+  test.setTimeout(600_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=fox-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  // Fetch the axe first: no axe, no catching, the same rule as chopping.
+  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  if (axe === undefined) throw new Error('no axe in the clearing');
+  await walkWithinReachOf(page, axe.x, axe.z);
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+  const fox = animals.find((entry) => entry.kind === 'fox');
+  if (fox === undefined) throw new Error('no fox in the wilderness');
+
+  // The same helpers the rabbit hunt uses: neither cares which kind of
+  // wildlife it is, only where it is and whether a swing would land. A fox
+  // is prey to the player exactly like a rabbit - it is only a predator to
+  // a rabbit (decision 0035), which this test does not touch.
+  await walkWithinReachOfAnimal(page, fox.id);
+  // Usually the catch hint, but a walk this long can run the hunger meter
+  // out first on a slow machine (it empties in three minutes here, not the
+  // real twenty) - hungry beats everything else on purpose, so either is the
+  // hint doing its job correctly.
+  await expect(page.locator('.hud-hint')).toContainText(
+    /Left click to catch the fox|You're hungry/,
+  );
+
+  await catchUntilCaught(page, fox.id);
+
+  // It is gone, and the meat is ours - a fox pays out exactly like a rabbit.
+  expect(
+    (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
+      (entry) => entry.id === fox.id,
+    ),
+  ).toBe(false);
+  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
+  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
+    .toBe('You caught some meat!');
+
+  // Nothing thrown while walking out, swinging or drawing the wildlife.
+  expect(errors).toEqual([]);
+});
+
 test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   // Wildlife lives well past the tree line, the same reason the rabbit hunt does.
   test.setTimeout(600_000);
