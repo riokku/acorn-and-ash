@@ -42,7 +42,27 @@ async function hudValue(page: Page, label: string): Promise<string> {
   return (await row.locator('span').nth(1).innerText()).trim();
 }
 
+/**
+ * Type a name and press play on the Home screen, if it is currently showing.
+ *
+ * Every test that used to open straight into the game now lands here first,
+ * so this is the one place that change had to be taught to the whole suite -
+ * see the dedicated tests further down for the Home screen itself.
+ */
+async function passThroughHomeIfShown(page: Page): Promise<void> {
+  const nameInput = page.locator('#home-name');
+  const shown = await nameInput
+    .waitFor({ state: 'visible', timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!shown) return;
+
+  await nameInput.fill('Playtester');
+  await page.locator('.home-play').click();
+}
+
 async function waitForConnected(page: Page): Promise<void> {
+  await passThroughHomeIfShown(page);
   await expect(page.locator('.hud-row', { hasText: 'Server' }).first()).toContainText('Connected');
 }
 
@@ -57,6 +77,41 @@ function positionOf(text: string): { x: number; z: number } {
   const [x, z] = text.split(',').map((part) => Number(part.trim()));
   return { x: x ?? 0, z: z ?? 0 };
 }
+
+test.describe('the Home screen', () => {
+  test('shows a name field and a character picker, with only Knight unlocked', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#home-name')).toBeVisible();
+
+    const characters = page.locator('.home-character');
+    await expect(characters).toHaveCount(6);
+    await expect(characters.filter({ hasText: 'Knight' })).toBeEnabled();
+    await expect(characters.filter({ hasText: 'Coming soon' })).toHaveCount(5);
+  });
+
+  test('will not let you in without typing a real name', async ({ page }) => {
+    await page.goto('/');
+    const playButton = page.locator('.home-play');
+
+    await expect(playButton).toBeDisabled();
+    await page.locator('#home-name').fill('A');
+    await expect(playButton).toBeDisabled();
+
+    await page.locator('#home-name').fill('Acorn');
+    await expect(playButton).toBeEnabled();
+  });
+
+  test('carries the chosen name into the game', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#home-name').fill('Chestnut');
+    await page.locator('.home-play').click();
+
+    await expect(page.locator('.hud-row', { hasText: 'Server' }).first()).toContainText(
+      'Connected',
+    );
+    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Chestnut');
+  });
+});
 
 test('the game loads, connects and draws the clearing', async ({ page }) => {
   const errors: string[] = [];

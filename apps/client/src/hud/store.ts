@@ -12,6 +12,8 @@ export interface HudState {
   readonly connectionDetail: string;
   readonly backend: RenderBackend;
   readonly forcedFallback: boolean;
+  /** Chosen on the Home screen before the game ever connects. */
+  readonly playerName: string;
   readonly fps: number;
   readonly pingMs: number;
   readonly playersOnline: number;
@@ -68,6 +70,7 @@ const INITIAL: HudState = {
   connectionDetail: '',
   backend: 'unknown',
   forcedFallback: false,
+  playerName: '',
   fps: 0,
   pingMs: 0,
   playersOnline: 0,

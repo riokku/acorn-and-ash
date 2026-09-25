@@ -9,6 +9,7 @@ const BASE_STATE: HudState = {
   connectionDetail: '',
   backend: 'WebGPU',
   forcedFallback: false,
+  playerName: 'Acorn',
   fps: 60,
   pingMs: 50,
   playersOnline: 1,

@@ -1,4 +1,5 @@
 import type { BuildableKindId } from '../data/buildables';
+import type { CharacterId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type {
@@ -20,6 +21,7 @@ export const ClientMessageType = {
   Ping: 0x02,
   Craft: 0x03,
   Build: 0x04,
+  Hello: 0x05,
 } as const;
 
 /** What the server says back. */
@@ -42,6 +44,7 @@ export const ServerMessageType = {
   Health: 0x1f,
   BuriedCaches: 0x20,
   Cache: 0x21,
+  Roster: 0x22,
 } as const;
 
 export const RejectReason = {
@@ -85,7 +88,23 @@ export interface BuildMessage {
   readonly kind: BuildableKindId;
 }
 
-export type ClientMessage = InputBundleMessage | PingMessage | CraftMessage | BuildMessage;
+/**
+ * Introduce yourself: the name, character and tint picked on the Home screen.
+ *
+ * Sent once, right after `Welcome` - not bundled with it, so a slow Home
+ * screen submit never holds up the very first snapshot. Nothing about a
+ * player's own movement or the world waits on this; it only ever changes how
+ * that player is labelled and coloured for everybody else.
+ */
+export interface HelloMessage {
+  readonly type: 'hello';
+  readonly name: string;
+  readonly character: CharacterId;
+  readonly color: TintColorId;
+}
+
+export type ClientMessage =
+  InputBundleMessage | PingMessage | CraftMessage | BuildMessage | HelloMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';
@@ -281,6 +300,29 @@ export interface CacheMessage {
   readonly event: CacheEvent;
 }
 
+/** Who one connected player says they are. */
+export interface RosterEntry {
+  readonly netId: number;
+  readonly name: string;
+  readonly character: CharacterId;
+  readonly color: TintColorId;
+}
+
+/**
+ * Who everybody currently connected says they are.
+ *
+ * Sent whole, the same way built props and buried caches are: cheap while a
+ * world holds at most `MAX_PLAYERS_PER_WORLD` players, and simplest to keep
+ * in sync. Sent to a newly connecting player covering whoever has already
+ * introduced themselves, and again to everybody whenever that changes. A
+ * netId with nothing here yet just has not sent its own `Hello` - drawn
+ * without a name or a chosen tint until it does.
+ */
+export interface RosterMessage {
+  readonly type: 'roster';
+  readonly players: readonly RosterEntry[];
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -299,4 +341,5 @@ export type ServerMessage =
   | ThreatHitMessage
   | HealthMessage
   | BuriedCachesMessage
-  | CacheMessage;
+  | CacheMessage
+  | RosterMessage;

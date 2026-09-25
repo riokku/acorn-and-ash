@@ -6,6 +6,7 @@ import { instantiateAnimatedModel, type AnimatedModel } from './model-loading';
 import { characterModelTemplate } from './character-model';
 import { itemModelParts } from './item-models';
 import { pickAnimationState, type CharacterAnimState } from './character-animation';
+import { createNameplate, type Nameplate } from './nameplate';
 
 export { pickAnimationState, type CharacterAnimState };
 
@@ -20,6 +21,8 @@ export { pickAnimationState, type CharacterAnimState };
 export interface Character {
   readonly group: THREE.Group;
   setColor(color: THREE.ColorRepresentation): void;
+  /** Shows a floating name label above the character's head, or hides it for null. */
+  setName(name: string | null): void;
   /** Which of the four named clips should be playing right now. A no-op on the placeholder. */
   setAnimationState(state: CharacterAnimState): void;
   /** Shows or hides the axe carried in this character's right hand. A no-op on the placeholder. */
@@ -118,6 +121,37 @@ const SWING_SWEEP_RADIANS = 1.3;
 
 const CAPSULE_LENGTH = PLAYER_HEIGHT - PLAYER_RADIUS * 2;
 
+/**
+ * How far above the top of the collision capsule a nameplate floats.
+ *
+ * Independent of `MODEL_SCALE`: the capsule height is a gameplay number, not
+ * an art one, so this reads the same whether or not the model above it is
+ * the animated Knight or the placeholder capsule.
+ */
+const NAMEPLATE_Y_OFFSET = 0.32;
+
+/** Lazily creates and owns a character's nameplate, shared by both variants below. */
+function attachNameplate(group: THREE.Group): Pick<Character, 'setName'> & { dispose(): void } {
+  let nameplate: Nameplate | null = null;
+
+  return {
+    setName: (name) => {
+      if (name === null) {
+        if (nameplate !== null) nameplate.sprite.visible = false;
+        return;
+      }
+      if (nameplate === null) {
+        nameplate = createNameplate(name);
+        nameplate.sprite.position.set(0, PLAYER_HEIGHT + NAMEPLATE_Y_OFFSET, 0);
+        group.add(nameplate.sprite);
+      }
+      nameplate.sprite.visible = true;
+      nameplate.setText(name);
+    },
+    dispose: () => nameplate?.dispose(),
+  };
+}
+
 export function createCharacter(color: THREE.ColorRepresentation): Character {
   const template = characterModelTemplate();
   if (template !== undefined) return createAnimatedCharacter(template, color);
@@ -204,12 +238,14 @@ function createAnimatedCharacter(
   // Seconds into the current swing, or null when the axe is at rest - not a
   // boolean, since the sweep below needs to know how far into it to be.
   let swingElapsed: number | null = null;
+  const nameplate = attachNameplate(group);
 
   return {
     group,
     setColor: (next) => {
       for (const material of materials) material.color.set(next);
     },
+    setName: nameplate.setName,
     setAnimationState: (state) => {
       const next = actionByState.get(state);
       if (next === undefined || next === current) return;
@@ -243,6 +279,7 @@ function createAnimatedCharacter(
       for (const material of materials) material.dispose();
       // Geometry (and the template root it was cloned from) is shared across
       // every character instance, so only the per-instance materials are ours.
+      nameplate.dispose();
     },
   };
 }
@@ -270,9 +307,12 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
   snout.castShadow = true;
   group.add(snout);
 
+  const nameplate = attachNameplate(group);
+
   return {
     group,
     setColor: (next) => material.color.set(next),
+    setName: nameplate.setName,
     setAnimationState: () => {},
     setHoldingAxe: () => {},
     swingAxe: () => {},
@@ -282,6 +322,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
       snout.geometry.dispose();
       material.dispose();
       snoutMaterial.dispose();
+      nameplate.dispose();
     },
   };
 }

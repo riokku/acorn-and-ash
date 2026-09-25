@@ -1,8 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
 
 import {
+  CHARACTER_KINDS,
+  DEFAULT_CHARACTER,
+  DEFAULT_TINT_COLOR,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
+  HUNGER_MAX,
   MAX_PLAYERS_PER_WORLD,
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
@@ -12,6 +16,8 @@ import {
   WorldSimulation,
   buildableKindFromIndex,
   buildableKindIndex,
+  characterFromIndex,
+  characterIndex,
   decodeClientMessage,
   encodeInventory,
   encodePickupsTaken,
@@ -26,20 +32,29 @@ import {
   encodeHealth,
   encodeHunger,
   encodeRejected,
+  encodeRoster,
   encodeSnapshot,
   encodeThreatHit,
   encodeTreeHit,
   encodeTreeStates,
   encodeWelcome,
   inventoryEntries,
+  isValidPlayerName,
   itemFromIndex,
   itemIndex,
+  sanitizePlayerName,
+  SPAWN_POSITION,
+  tintColorFromIndex,
+  tintColorIndex,
   type BuiltProp,
   type BuriedCache,
+  type CharacterId,
   type ItemId,
   type PersistedPlayer,
   type PersistedTree,
+  type RosterEntry,
   type SnapshotEntity,
+  type TintColorId,
 } from '@acorn/shared';
 
 import type { WorldEnv } from './env';
@@ -49,6 +64,10 @@ interface ConnectionAttachment {
   readonly netId: number;
   /** Identifies the player between visits. Phase 1 replaces this with a real account. */
   readonly playerKey: string | null;
+  /** Null until this connection's own `Hello` arrives. */
+  readonly name: string | null;
+  readonly characterIndex: number;
+  readonly colorIndex: number;
 }
 
 /** A player key is supplied by the client, so it is checked before it is trusted. */
@@ -112,10 +131,21 @@ export class World extends DurableObject<WorldEnv> {
     const netId = this.claimNetId();
     const { 0: client, 1: server } = new WebSocketPair();
 
+    // A returning player's own name and tint, so they need not wait for a
+    // fresh Hello to be counted among "who else is here" by the next player
+    // to join right behind them.
+    const identity = playerKey ? this.loadPlayerIdentity(playerKey) : undefined;
+
     // Hibernatable sockets: the runtime can put this object to sleep and wake it
     // when a message arrives, instead of us holding it open.
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ netId, playerKey } satisfies ConnectionAttachment);
+    server.serializeAttachment({
+      netId,
+      playerKey,
+      name: identity?.name ?? null,
+      characterIndex: identity?.characterIndex ?? characterIndex(DEFAULT_CHARACTER),
+      colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
+    } satisfies ConnectionAttachment);
 
     simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
@@ -129,6 +159,9 @@ export class World extends DurableObject<WorldEnv> {
     server.send(
       encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
     );
+    // Who else is already here. This player's own Hello, sent right after
+    // Welcome, is what tells everybody else about them in turn.
+    server.send(encodeRoster(this.currentRoster()));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -171,6 +204,10 @@ export class World extends DurableObject<WorldEnv> {
       // way they are facing, so it waits for the next tick rather than
       // settling immediately - the tick loop already has both to hand.
       simulation.requestBuild(attachment.netId, decoded.kind);
+      return;
+    }
+    if (decoded.type === 'hello') {
+      this.handleHello(ws, attachment, decoded.name, decoded.character, decoded.color);
       return;
     }
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
@@ -572,6 +609,60 @@ export class World extends DurableObject<WorldEnv> {
     }
   }
 
+  /**
+   * A player introduced themselves: sanitise what they said, refuse a
+   * character that is not available yet regardless of what the client
+   * asked for, remember it for next time, and let everybody know.
+   */
+  private handleHello(
+    ws: WebSocket,
+    attachment: ConnectionAttachment,
+    rawName: string,
+    requestedCharacter: CharacterId,
+    color: TintColorId,
+  ): void {
+    const name = sanitizePlayerName(rawName);
+    if (!isValidPlayerName(name)) return;
+
+    const character = CHARACTER_KINDS[requestedCharacter].available
+      ? requestedCharacter
+      : DEFAULT_CHARACTER;
+
+    const updated: ConnectionAttachment = {
+      ...attachment,
+      name,
+      characterIndex: characterIndex(character),
+      colorIndex: tintColorIndex(color),
+    };
+    ws.serializeAttachment(updated);
+
+    if (attachment.playerKey !== null) {
+      this.writePlayerIdentity(
+        attachment.playerKey,
+        name,
+        updated.characterIndex,
+        updated.colorIndex,
+      );
+    }
+    this.broadcast(encodeRoster(this.currentRoster()));
+  }
+
+  /** Who everybody currently connected says they are, straight from each socket's own attachment. */
+  private currentRoster(): RosterEntry[] {
+    const entries: RosterEntry[] = [];
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null || attachment.name === null) continue;
+      entries.push({
+        netId: attachment.netId,
+        name: attachment.name,
+        character: characterFromIndex(attachment.characterIndex) ?? DEFAULT_CHARACTER,
+        color: tintColorFromIndex(attachment.colorIndex) ?? DEFAULT_TINT_COLOR,
+      });
+    }
+    return entries;
+  }
+
   private broadcast(payload: ArrayBuffer, except?: WebSocket): void {
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
@@ -771,6 +862,11 @@ export class World extends DurableObject<WorldEnv> {
     // Likewise health, added when knockout shipped: nobody was ever hurt
     // before that, so full is the only sensible default here too.
     this.addColumn('players', 'health', 'REAL NOT NULL DEFAULT 100');
+    // Null until a player's first Hello. Nobody had a name before the Home
+    // screen existed, so leaving it unset is exactly right for them too.
+    this.addColumn('players', 'name', 'TEXT');
+    this.addColumn('players', 'character_index', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('players', 'color_index', 'INTEGER NOT NULL DEFAULT 0');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -865,6 +961,22 @@ export class World extends DurableObject<WorldEnv> {
       hunger: row.hunger,
       health: row.health,
     };
+  }
+
+  /** A returning player's last-known name and tint, if they ever sent a Hello. */
+  private loadPlayerIdentity(
+    playerKey: string,
+  ): { name: string; characterIndex: number; colorIndex: number } | undefined {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        name: string | null;
+        character_index: number;
+        color_index: number;
+      }>('SELECT name, character_index, color_index FROM players WHERE player_key = ?', playerKey)
+      .toArray();
+    const row = rows[0];
+    if (row === undefined || row.name === null) return undefined;
+    return { name: row.name, characterIndex: row.character_index, colorIndex: row.color_index };
   }
 
   private loadPlayerItems(playerKey: string): { item: ItemId; count: number }[] {
@@ -1099,6 +1211,43 @@ export class World extends DurableObject<WorldEnv> {
       facingYaw,
       hunger,
       health,
+      Date.now(),
+    );
+  }
+
+  /**
+   * Remember a player's name, character and tint for next time.
+   *
+   * Separate from `writePlayer`: a Hello can arrive before this player's
+   * position has ever been saved, for a brand new `player_key`, so a fresh
+   * row here seeds sensible placeholders for the columns it does not touch
+   * (the same spawn point and full meters a genuinely new player starts
+   * with) rather than leaving them NULL. `ON CONFLICT` then updates only the
+   * three identity columns, exactly as it does for `writePlayer`'s own
+   * columns, so this never clobbers a real saved position.
+   */
+  private writePlayerIdentity(
+    playerKey: string,
+    name: string,
+    characterIndex: number,
+    colorIndex: number,
+  ): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO players ' +
+        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+        'name = excluded.name, character_index = excluded.character_index, ' +
+        'color_index = excluded.color_index, updated_at = excluded.updated_at',
+      playerKey,
+      SPAWN_POSITION.x,
+      SPAWN_POSITION.y,
+      SPAWN_POSITION.z,
+      0,
+      HUNGER_MAX,
+      HEALTH_MAX,
+      name,
+      characterIndex,
+      colorIndex,
       Date.now(),
     );
   }

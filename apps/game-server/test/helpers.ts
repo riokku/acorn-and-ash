@@ -4,6 +4,7 @@ import {
   decodeServerMessage,
   encodeBuild,
   encodeCraft,
+  encodeHello,
   encodeInputBundle,
   encodePing,
   createInput,
@@ -12,6 +13,7 @@ import {
   type BuiltPropsMessage,
   type BuriedCachesMessage,
   type CacheEvent,
+  type CharacterId,
   type CraftedEvent,
   type FishingEvent,
   type HealthEvent,
@@ -19,7 +21,9 @@ import {
   type InventoryMessage,
   type ItemId,
   type PickupsTakenMessage,
+  type RosterMessage,
   type ThreatHitMessage,
+  type TintColorId,
   type TreeHitMessage,
   type TreeStatesMessage,
   type ServerMessage,
@@ -78,6 +82,10 @@ export class TestClient {
 
   build(kind: BuildableKindId): void {
     this.socket.send(encodeBuild(kind));
+  }
+
+  hello(name: string, character: CharacterId = 'knight', color: TintColorId = 'amber'): void {
+    this.socket.send(encodeHello(name, character, color));
   }
 
   sendRaw(payload: ArrayBuffer | string): void {
@@ -218,6 +226,19 @@ export class TestClient {
   /** Every swing the server has told us about. */
   treeHits(): TreeHitMessage[] {
     return this.received.filter((entry) => entry.type === 'treeHit');
+  }
+
+  /** The newest word on who is who. */
+  roster(): RosterMessage['players'] {
+    const messages = this.received.filter((entry) => entry.type === 'roster');
+    return messages[messages.length - 1]?.players ?? [];
+  }
+
+  /** The first word on who is who, sent the moment you join. */
+  openingRoster(): RosterMessage['players'] {
+    const message = this.received.find((entry) => entry.type === 'roster');
+    if (message === undefined) throw new Error('Never received the opening roster');
+    return message.players;
   }
 
   countOfMessages(type: ServerMessage['type']): number {

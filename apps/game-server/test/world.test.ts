@@ -240,6 +240,95 @@ describe('remembering where a player was', () => {
   });
 });
 
+describe('introducing yourself', () => {
+  it('starts everybody off with an empty roster to introduce themselves into', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('the opening roster', () => client.countOfMessages('roster') > 0);
+    expect(client.openingRoster()).toEqual([]);
+    client.close();
+  });
+
+  it('adds a player to their own roster once they say hello', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a welcome', () => client.received.length > 0);
+    const netId = client.welcome().netId;
+
+    client.hello('Acorn', 'knight', 'moss');
+    await waitFor('the roster to include them', () => client.roster().length > 0);
+
+    expect(client.roster()).toEqual([{ netId, name: 'Acorn', character: 'knight', color: 'moss' }]);
+    client.close();
+  });
+
+  it('tells a second player who is already here, and hears back who they are too', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId);
+    await waitFor('a welcome', () => first.received.length > 0);
+    first.hello('Acorn', 'knight', 'amber');
+    await waitFor('their own roster entry', () => first.roster().length > 0);
+
+    const second = await TestClient.connect(worldId);
+    await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
+    expect(second.openingRoster()).toEqual([
+      { netId: first.welcome().netId, name: 'Acorn', character: 'knight', color: 'amber' },
+    ]);
+
+    second.hello('Ash', 'knight', 'teal');
+    await waitFor('the first player to hear about the second', () => first.roster().length >= 2);
+    expect(first.roster()).toEqual(
+      expect.arrayContaining([
+        { netId: first.welcome().netId, name: 'Acorn', character: 'knight', color: 'amber' },
+        { netId: second.welcome().netId, name: 'Ash', character: 'knight', color: 'teal' },
+      ]),
+    );
+    first.close();
+    second.close();
+  });
+
+  it('locks a character that is not available yet, whatever the client asks for', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a welcome', () => client.received.length > 0);
+
+    client.hello('Merlin', 'mage', 'plum');
+    await waitFor('the roster to include them', () => client.roster().length > 0);
+
+    // Mage is not available yet (see packages/shared/src/data/characters.ts),
+    // so the server keeps them as Knight regardless of what was asked for.
+    expect(client.roster()[0]?.character).toBe('knight');
+    client.close();
+  });
+
+  it('says nothing rather than accept a name that is too short', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('a welcome', () => client.received.length > 0);
+
+    client.hello('A', 'knight', 'amber');
+    await sleep(200);
+
+    expect(client.roster()).toEqual([]);
+    client.close();
+  });
+
+  it('remembers a name and tint across logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'remembers-who-they-are';
+
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    first.hello('Acorn', 'knight', 'clay');
+    await waitFor('the roster to include them', () => first.roster().length > 0);
+    first.close();
+    await sleep(200);
+
+    const second = await TestClient.connect(worldId, playerKey);
+    await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
+    expect(second.openingRoster()).toEqual([
+      { netId: second.welcome().netId, name: 'Acorn', character: 'knight', color: 'clay' },
+    ]);
+    second.close();
+  });
+});
+
 describe('the tick loop', () => {
   it('reports that it is running while somebody is connected', async () => {
     const worldId = nextWorldId();
