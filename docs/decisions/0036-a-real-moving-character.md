@@ -122,3 +122,20 @@ a small protocol addition this pass didn't make.
 - Only the axe attaches to a hand for now - the rod, and anything else
   carryable, still show only as a HUD line. The same bone-attachment
   approach applies directly whenever one of those gets the same treatment.
+- The held axe never actually appeared: Chris picked one up and could chop
+  with it, but nothing showed in the character's hand. The lookup was
+  searching for a bone literally named `handslot.r`, matching the source
+  file - but Three.js's `GLTFLoader` strips dots from every node name it
+  loads, since `PropertyBinding` reserves `.` as the separator between a
+  node's name and an animated property in a track path (`someBone.position`,
+  for instance). The live name is `handslotr`. Every other bone was renamed
+  the same way and kept working regardless, since nothing else in this
+  client looked one up by name - clips reference bones by the same
+  (consistently sanitized) name on both sides, so animation playback was
+  never affected, only this one direct `getObjectByName` call. Confirmed
+  fixed by inspecting the actual live scene graph in a real browser -
+  `handslotr` resolves, the axe group attaches with its three parts, and it
+  correctly starts hidden until `setHoldingAxe(true)` is called - rather than
+  by the static Blender/glTF inspection that had first suggested the name
+  was fine, which was true of the file but not of what the loader does with
+  it.

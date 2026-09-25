@@ -42,8 +42,16 @@ const CROSSFADE_SECONDS = 0.15;
 /** Knight rendered noticeably too large at the pack's own native scale. */
 const MODEL_SCALE = 0.6;
 
-/** Where a held item is parented - the pack's own socket bone for the right hand. */
-const HAND_BONE_NAME = 'handslot.r';
+/**
+ * Where a held item is parented - the pack's own socket bone for the right
+ * hand, named `handslot.r` in the source file. Three.js's GLTFLoader strips
+ * dots from every bone name on load (`PropertyBinding` reserves `.` as the
+ * separator between a node name and an animated property in a track path),
+ * so the live name is `handslotr`, not the file's own `handslot.r` - the rest
+ * of the rig is renamed the same way, which is invisible for bones only ever
+ * addressed by an animation clip, but broke this direct lookup by name.
+ */
+const HAND_BONE_NAME = 'handslotr';
 
 /**
  * A first attempt at a carried grip, not a measured one: rotate the axe
