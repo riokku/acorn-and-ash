@@ -2,19 +2,113 @@ import * as THREE from 'three/webgpu';
 
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '@acorn/shared';
 
+import { instantiateAnimatedModel, type AnimatedModel } from './model-loading';
+import { characterModelTemplate } from './character-model';
+import { pickAnimationState, type CharacterAnimState } from './character-animation';
+
+export { pickAnimationState, type CharacterAnimState };
+
 /**
- * A placeholder character: a capsule with a snout so you can tell which way it
- * is facing. Art replaces this once moving around is fun.
+ * A character: real modeled art once it has loaded (see character-model.ts),
+ * or a capsule with a snout so you can tell which way it is facing until
+ * then, the same fallback every other placeholder gets before its art
+ * arrives. Every player currently draws the same one model - Knight, the
+ * first of the pack's six - since there is no picker yet to choose between
+ * them.
  */
 export interface Character {
   readonly group: THREE.Group;
   setColor(color: THREE.ColorRepresentation): void;
+  /** Which of the four named clips should be playing right now. A no-op on the placeholder. */
+  setAnimationState(state: CharacterAnimState): void;
+  /** Advances the animation mixer. A no-op on the placeholder. */
+  update(deltaSeconds: number): void;
   dispose(): void;
 }
+
+const CLIP_NAME_BY_STATE: Record<CharacterAnimState, string> = {
+  idle: 'Idle_A_Rig_Medium',
+  walk: 'Walking_A_Rig_Medium',
+  run: 'Running_A_Rig_Medium',
+  jump: 'Jump_Idle_Rig_Medium',
+};
+
+/** Fade time between two clips - quick enough to feel responsive, soft enough not to pop. */
+const CROSSFADE_SECONDS = 0.15;
 
 const CAPSULE_LENGTH = PLAYER_HEIGHT - PLAYER_RADIUS * 2;
 
 export function createCharacter(color: THREE.ColorRepresentation): Character {
+  const template = characterModelTemplate();
+  if (template !== undefined) return createAnimatedCharacter(template, color);
+  return createPlaceholderCharacter(color);
+}
+
+/** The real, rigged character: crossfades between its four named clips as `setAnimationState` asks. */
+function createAnimatedCharacter(
+  template: AnimatedModel,
+  color: THREE.ColorRepresentation,
+): Character {
+  const instance = instantiateAnimatedModel(template);
+  const group = instance.root;
+
+  // Materials are shared with the template by default - cloned per instance
+  // so tinting one player's colour in below never bleeds into another's.
+  const materials: THREE.MeshStandardMaterial[] = [];
+  const cloned = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.castShadow = true;
+    child.receiveShadow = true;
+    const original = Array.isArray(child.material) ? child.material[0] : child.material;
+    if (!(original instanceof THREE.MeshStandardMaterial)) return;
+    let next = cloned.get(original);
+    if (next === undefined) {
+      // Material.clone()'s return type isn't narrowed to the subclass it's
+      // called on, but at runtime it always is one - `original` was already
+      // confirmed to be a MeshStandardMaterial above.
+      next = original.clone() as THREE.MeshStandardMaterial;
+      cloned.set(original, next);
+      materials.push(next);
+    }
+    child.material = next;
+  });
+  for (const material of materials) material.color.set(color);
+
+  const actionByState = new Map<CharacterAnimState, THREE.AnimationAction>();
+  for (const action of instance.actions) {
+    const state = (Object.keys(CLIP_NAME_BY_STATE) as CharacterAnimState[]).find(
+      (candidate) => CLIP_NAME_BY_STATE[candidate] === action.getClip().name,
+    );
+    if (state !== undefined) actionByState.set(state, action);
+  }
+
+  let current = actionByState.get('idle');
+  current?.play();
+
+  return {
+    group,
+    setColor: (next) => {
+      for (const material of materials) material.color.set(next);
+    },
+    setAnimationState: (state) => {
+      const next = actionByState.get(state);
+      if (next === undefined || next === current) return;
+      next.reset().fadeIn(CROSSFADE_SECONDS).play();
+      current?.fadeOut(CROSSFADE_SECONDS);
+      current = next;
+    },
+    update: (deltaSeconds) => instance.mixer.update(deltaSeconds),
+    dispose: () => {
+      instance.mixer.stopAllAction();
+      for (const material of materials) material.dispose();
+      // Geometry (and the template root it was cloned from) is shared across
+      // every character instance, so only the per-instance materials are ours.
+    },
+  };
+}
+
+function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character {
   const group = new THREE.Group();
 
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
@@ -40,6 +134,8 @@ export function createCharacter(color: THREE.ColorRepresentation): Character {
   return {
     group,
     setColor: (next) => material.color.set(next),
+    setAnimationState: () => {},
+    update: () => {},
     dispose: () => {
       body.geometry.dispose();
       snout.geometry.dispose();

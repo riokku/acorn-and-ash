@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 export interface ModelPart {
   readonly geometry: THREE.BufferGeometry;
@@ -70,9 +71,16 @@ export async function loadAnimatedModel(url: string): Promise<AnimatedModel> {
   return { root: gltf.scene, clips: gltf.animations };
 }
 
-/** A playable, independently-animatable copy of a template loaded by `loadAnimatedModel`. */
+/**
+ * A playable, independently-animatable copy of a template loaded by
+ * `loadAnimatedModel`. Uses `SkeletonUtils.clone` rather than the plain
+ * `Object3D.clone`: a skinned mesh's bones need re-binding to the cloned
+ * hierarchy, which the built-in clone does not do, so every instance past
+ * the first would share (and fight over) the original's skeleton. Correct
+ * for a non-skinned hierarchy too, so this is safe for anything this loads.
+ */
 export function instantiateAnimatedModel(template: AnimatedModel): AnimatedModelInstance {
-  const root = template.root.clone(true);
+  const root = cloneSkeleton(template.root) as THREE.Group;
   const mixer = new THREE.AnimationMixer(root);
   const actions = template.clips.map((clip) => mixer.clipAction(clip));
   return { root, mixer, actions };

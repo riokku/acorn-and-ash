@@ -16,6 +16,7 @@ import {
   PlayerButton,
   RECIPE_ITEMS,
   SPAWN_POSITION,
+  SPRINT_REPORTING_SPEED,
   SnapshotFlag,
   animalInReach,
   buildSpotFor,
@@ -69,8 +70,14 @@ import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
 import { preloadItemModels } from './scene/item-models';
+import { preloadCharacterModel } from './scene/character-model';
 import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
-import { colorForPlayer, createCharacter, type Character } from './scene/character';
+import {
+  colorForPlayer,
+  createCharacter,
+  pickAnimationState,
+  type Character,
+} from './scene/character';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
 import { createCabin, type Cabin } from './scene/cabin';
@@ -327,6 +334,7 @@ export class Game {
     void preloadCampfireModels();
     void preloadItemModels();
     void preloadFoxModel();
+    void preloadCharacterModel();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -786,6 +794,7 @@ export class Game {
       preloadCampfireModels(),
       preloadItemModels(),
       preloadFoxModel(),
+      preloadCharacterModel(),
     ]);
     if (this.clearingScene !== null) return;
 
@@ -1072,6 +1081,20 @@ export class Game {
     character.group.rotation.y =
       this.facingWhileFishing(this.selfNetId, position) ?? player.renderYaw();
 
+    // The same thresholds the server judges everyone else's snapshot by (see
+    // SnapshotFlag), so the local player's own animation reads the same way
+    // it would to someone watching them from across the clearing.
+    const velocity = player.motion.velocity;
+    const speedSquared = velocity.x * velocity.x + velocity.z * velocity.z;
+    character.setAnimationState(
+      pickAnimationState(
+        speedSquared > 0.04,
+        speedSquared > SPRINT_REPORTING_SPEED * SPRINT_REPORTING_SPEED,
+        !player.motion.grounded,
+      ),
+    );
+    character.update(deltaSeconds);
+
     camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);
 
     // Only a hint. The server decides who actually gets it.
@@ -1229,6 +1252,8 @@ export class Game {
       const character = this.characterFor(netId);
       character.group.position.set(pose.x, pose.y, pose.z);
       character.group.rotation.y = this.facingWhileFishing(netId, pose) ?? pose.yaw;
+      character.setAnimationState(pickAnimationState(pose.moving, pose.sprinting, pose.airborne));
+      character.update(deltaSeconds);
     }
   }
 
