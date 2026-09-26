@@ -1,10 +1,11 @@
 /**
  * The character table.
  *
- * Every player picks one on the Home screen. Only Knight has real animated art
- * today - the pack's other five are converted one at a time (see decision
- * 0036), so they are named here and shown in the picker, but `available` keeps
- * them locked until their own art lands.
+ * Every player picks one on the Home screen. All six of the pack's characters
+ * now have real animated art (see decision 0036 and decision 0044), so
+ * `available` is true across the board - kept on each row rather than
+ * removed, since it is exactly how the picker will lock a future seventh
+ * character the same way it locked these five at first.
  */
 
 export type CharacterId = 'knight' | 'barbarian' | 'mage' | 'ranger' | 'rogue' | 'rogueHooded';
@@ -17,11 +18,11 @@ export interface CharacterKind {
 
 export const CHARACTER_KINDS = {
   knight: { id: 'knight', displayName: 'Knight', available: true },
-  barbarian: { id: 'barbarian', displayName: 'Barbarian', available: false },
-  mage: { id: 'mage', displayName: 'Mage', available: false },
-  ranger: { id: 'ranger', displayName: 'Ranger', available: false },
-  rogue: { id: 'rogue', displayName: 'Rogue', available: false },
-  rogueHooded: { id: 'rogueHooded', displayName: 'Rogue Hooded', available: false },
+  barbarian: { id: 'barbarian', displayName: 'Barbarian', available: true },
+  mage: { id: 'mage', displayName: 'Mage', available: true },
+  ranger: { id: 'ranger', displayName: 'Ranger', available: true },
+  rogue: { id: 'rogue', displayName: 'Rogue', available: true },
+  rogueHooded: { id: 'rogueHooded', displayName: 'Rogue Hooded', available: true },
 } as const satisfies Record<CharacterId, CharacterKind>;
 
 /**

@@ -287,16 +287,21 @@ describe('introducing yourself', () => {
     second.close();
   });
 
-  it('locks a character that is not available yet, whatever the client asks for', async () => {
+  it('honors any character the client asks for, now that all six are unlocked', async () => {
     const client = await TestClient.connect(nextWorldId());
     await waitFor('a welcome', () => client.received.length > 0);
 
+    // Mage used to be the example of a locked character this same test held
+    // players to Knight for (see decision 0044) - every character in
+    // packages/shared/src/data/characters.ts is available today, so there is
+    // no real id left to test the "not available yet" side of that gate
+    // with. The gate itself (handleHello's `.available ? requested :
+    // DEFAULT_CHARACTER` ternary) stays in the code, ready for whenever a
+    // future seventh character ships locked the same way these five once
+    // were.
     client.hello('Merlin', 'mage', 'plum');
     await waitFor('the roster to include them', () => client.roster().length > 0);
-
-    // Mage is not available yet (see packages/shared/src/data/characters.ts),
-    // so the server keeps them as Knight regardless of what was asked for.
-    expect(client.roster()[0]?.character).toBe('knight');
+    expect(client.roster()[0]?.character).toBe('mage');
     client.close();
   });
 

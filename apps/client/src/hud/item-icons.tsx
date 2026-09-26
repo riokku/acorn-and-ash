@@ -1,16 +1,19 @@
-import type { ItemId } from '@acorn/shared';
+import type { BuildableKindId, ItemId } from '@acorn/shared';
+
+/** Every item or buildable kind this module can draw a shape for. */
+type IconId = ItemId | BuildableKindId;
 
 /**
- * A small flat shape per item, in a shared 24x24 box, built from the same
- * "two or three simple primitives" idiom every placeholder in this game
- * already uses (a stem and a sphere for a flower, a handle and a blade for
- * an axe) - nobody has real icon art yet, so these stand in for it. Every
- * shape is a single flat fill, set by the caller (normally the item's own
- * `placeholderColor`), so a slot still reads by colour at a glance the same
- * way it always has, just as a recognisable outline now instead of a plain
- * square.
+ * A small flat shape per item or buildable kind, in a shared 24x24 box, built
+ * from the same "two or three simple primitives" idiom every placeholder in
+ * this game already uses (a stem and a sphere for a flower, a handle and a
+ * blade for an axe) - nobody has real icon art yet, so these stand in for it.
+ * Every shape is a single flat fill, set by the caller (normally the thing's
+ * own `placeholderColor`), so a slot still reads by colour at a glance the
+ * same way it always has, just as a recognisable outline now instead of a
+ * plain square.
  */
-const ICON_SHAPES: Record<ItemId, React.JSX.Element> = {
+const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   axe: (
     <g transform="rotate(32 12 12)">
       <rect x="10.5" y="6" width="3" height="16" rx="1.5" />
@@ -61,6 +64,23 @@ const ICON_SHAPES: Record<ItemId, React.JSX.Element> = {
       <rect x="6" y="6" width="12" height="5" rx="2" />
     </>
   ),
+  campfire: <polygon points="12,2 15,9 18,8 15,15 17,20 12,23 7,20 9,15 6,8 9,9" />,
+  cabin: <polygon points="12,3 21,10 21,21 3,21 3,10" />,
+  flowerBed: (
+    <>
+      <rect x="4" y="14" width="16" height="6" rx="1.5" />
+      <circle cx="8" cy="11" r="3" />
+      <circle cx="12" cy="9" r="3" />
+      <circle cx="16" cy="11" r="3" />
+    </>
+  ),
+  lantern: (
+    <>
+      <rect x="7" y="9" width="10" height="12" rx="2" />
+      <rect x="10" y="4" width="4" height="5" rx="1" />
+      <rect x="6" y="13" width="12" height="1.5" />
+    </>
+  ),
 };
 
 /** Body and tail, the one shape shared by every fish - only the fill colour tells them apart. */
@@ -73,6 +93,22 @@ function fish(): React.JSX.Element {
   );
 }
 
+function GameIcon({
+  id,
+  color,
+  className,
+}: {
+  id: IconId;
+  color: string;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+      {ICON_SHAPES[id]}
+    </svg>
+  );
+}
+
 export function ItemIcon({
   item,
   color,
@@ -82,9 +118,17 @@ export function ItemIcon({
   color: string;
   className?: string;
 }): React.JSX.Element {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-      {ICON_SHAPES[item]}
-    </svg>
-  );
+  return <GameIcon id={item} color={color} className={className} />;
+}
+
+export function BuildableIcon({
+  kind,
+  color,
+  className,
+}: {
+  kind: BuildableKindId;
+  color: string;
+  className?: string;
+}): React.JSX.Element {
+  return <GameIcon id={kind} color={color} className={className} />;
 }

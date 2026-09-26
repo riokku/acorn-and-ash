@@ -47,10 +47,9 @@ The game is online-only. Every world runs on the server.
 > rabbit, but sometimes hunts one down itself, and you can catch it the
 > same way you catch any other prey. Every player now walks, runs and jumps
 > as a real animated character, and a Home screen now asks who you are
-> before you step into the clearing - a name, a tint, and a character (only
-> Knight has real art yet, so it's the only one of the pack's six you can
-> actually pick). Everybody else sees your name and colour too. See
-> [the roadmap](#roadmap).
+> before you step into the clearing - a name, a tint, and a character, all
+> six of the pack's now real and pickable. Everybody else sees your name,
+> colour and character too. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -87,19 +86,24 @@ which fish bite and how often lives in
 A hotbar along the bottom of the screen shows what's in your pack, six slots
 at a time - wire order, so it needs nothing new picked or arranged. Press its
 number to equip whatever is shown there - shown in your hand from then on,
-for anyone nearby to see - eating it too, right away, if it's food.
+for anyone nearby to see - eating it too, right away, if it's food. Styled as
+a row of wax-seal circles on a parchment strip, the same warm look the craft
+and build menus and the Home screen all now share. See
+[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
 
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a
-character and a tint. Knight - one of six characters from a free pack,
-walking, running and jumping for real rather than sliding around as a
-placeholder capsule - is the only one with real art so far, so it's the only
-one you can actually pick; the other five show up locked, "coming soon."
-Your name and tint travel to the server and out to everybody else in the
-clearing, with a small name tag floating over your head the same way it does
-over anyone else's. Picked once, remembered the next time you visit. See
-[decision 0037](docs/decisions/0037-choosing-a-name-and-a-character.md).
+character and a tint. All six characters from a free pack - Knight,
+Barbarian, Mage, Ranger, Rogue and Rogue Hooded - now have real art and can
+be picked, each walking, running and jumping for real rather than sliding
+around as a placeholder capsule. Your name, tint and character travel to
+the server and out to everybody else in the clearing, with a small name tag
+floating over your head the same way it does over anyone else's. Picked
+once, remembered the next time you visit. See
+[decision 0037](docs/decisions/0037-choosing-a-name-and-a-character.md),
+[decision 0036](docs/decisions/0036-a-real-moving-character.md) and
+[decision 0044](docs/decisions/0044-the-rest-of-the-adventurers.md).
 
 Whatever hotbar slot you last pressed shows in your hand - the axe, the rod,
 or whatever fish or meat you picked - parented straight onto the character's
@@ -214,13 +218,16 @@ your own. Flower patches work exactly the same way; what flowers are for
 lives in [Building](#building) below.
 
 Press `C` to open the craft menu, then `1` to make an axe out of three sticks,
-or `2` to make a fishing rod out of two logs - the side panel lists both
-recipes and lights one up once your pack can afford it, and `C` again closes
-it. Finding the axe in the stump and the rod on the bank still work exactly
-as before; crafting is another way to get one, and still needs a bag the
-same as anything else does. See
-[decision 0017](docs/decisions/0017-crafting.md) and
-[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
+or `2` to make a fishing rod out of two logs - a parchment page of recipes
+opens with the ingredients each one needs and marks the ones you can afford
+right now, and `C` again closes it. Building (`B`) opens the same kind of
+page, for campfires, cabins, flower beds and lanterns instead. Finding the
+axe in the stump and the rod on the bank still work exactly as before;
+crafting is another way to get one, and still needs a bag the same as
+anything else does. See
+[decision 0017](docs/decisions/0017-crafting.md),
+[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md) and
+[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
 
 ### Hunger
 

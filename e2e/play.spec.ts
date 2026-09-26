@@ -81,14 +81,16 @@ function positionOf(text: string): { x: number; z: number } {
 }
 
 test.describe('the Home screen', () => {
-  test('shows a name field and a character picker, with only Knight unlocked', async ({ page }) => {
+  test('shows a name field and a character picker, all six unlocked', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#home-name')).toBeVisible();
 
     const characters = page.locator('.home-character');
     await expect(characters).toHaveCount(6);
-    await expect(characters.filter({ hasText: 'Knight' })).toBeEnabled();
-    await expect(characters.filter({ hasText: 'Coming soon' })).toHaveCount(5);
+    for (const character of await characters.all()) {
+      await expect(character).toBeEnabled();
+    }
+    await expect(page.locator('.home-character-soon')).toHaveCount(0);
   });
 
   test('will not let you in without typing a real name', async ({ page }) => {

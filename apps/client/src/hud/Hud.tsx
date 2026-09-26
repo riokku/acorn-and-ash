@@ -18,7 +18,7 @@ import {
 } from '@acorn/shared';
 
 import type { HudStore, HudState } from './store';
-import { ItemIcon } from './item-icons';
+import { BuildableIcon, ItemIcon } from './item-icons';
 
 interface HudProps {
   readonly store: HudStore;
@@ -46,9 +46,22 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         <Row label="Time" value={timeOfDay(state)} />
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Health" value={<Health state={state} />} />
-        {state.craftMenuOpen ? <Row label="Craft" value={<Crafting state={state} />} /> : null}
-        {state.buildMenuOpen ? <Row label="Build" value={<Building state={state} />} /> : null}
       </div>
+
+      {state.craftMenuOpen ? (
+        <JournalPanel
+          title="Things I can make"
+          entries={craftEntries(state)}
+          closeHint="Pick one below, or C to close"
+        />
+      ) : null}
+      {state.buildMenuOpen ? (
+        <JournalPanel
+          title="Things I can build"
+          entries={buildEntries(state)}
+          closeHint="Pick one below, or B to close"
+        />
+      ) : null}
 
       {state.ready && state.pointerLocked ? <Hotbar state={state} /> : null}
 
@@ -145,56 +158,117 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
   );
 }
 
-/** Every recipe, with its hotkey and cost, lit up green once it could be made right now. */
-function Crafting({ state }: { state: HudState }): React.JSX.Element {
+/** One row of the craft or build journal panel: what pressing its number makes, and from what. */
+interface RecipeEntry {
+  readonly index: number;
+  readonly icon: React.ReactNode;
+  readonly displayName: string;
+  readonly costs: Recipe['costs'];
+  readonly ready: boolean;
+}
+
+/** Every recipe this player could pick, in menu order. */
+function craftEntries(state: HudState): RecipeEntry[] {
   const inventory = inventoryFromEntries(state.carrying);
-  return (
-    <>
-      {RECIPE_ITEMS.map((item, index) => {
-        const recipe = recipeFor(item);
-        if (recipe === null) return null;
-        const ready = roomFor(inventory, item) > 0 && canAfford(inventory, recipe);
-        return (
-          <span key={item} className={ready ? 'hud-status-good' : undefined}>
-            {index > 0 ? ' · ' : ''}[{index + 1}] {ITEM_KINDS[item].displayName} (
-            {costLabel(recipe)})
-          </span>
-        );
-      })}
-    </>
-  );
+  return RECIPE_ITEMS.flatMap((item, index) => {
+    const recipe = recipeFor(item);
+    if (recipe === null) return [];
+    const kind = ITEM_KINDS[item];
+    return [
+      {
+        index: index + 1,
+        icon: (
+          <ItemIcon
+            item={item}
+            color={colorOf(kind.placeholderColor)}
+            className="hud-journal-stamp-icon"
+          />
+        ),
+        displayName: kind.displayName,
+        costs: recipe.costs,
+        ready: roomFor(inventory, item) > 0 && canAfford(inventory, recipe),
+      },
+    ];
+  });
+}
+
+/** Every buildable kind this player could pick, in menu order. */
+function buildEntries(state: HudState): RecipeEntry[] {
+  const inventory = inventoryFromEntries(state.carrying);
+  return BUILDABLE_KIND_ORDER.map((kind, index) => {
+    const buildable = BUILDABLE_KINDS[kind];
+    return {
+      index: index + 1,
+      icon: (
+        <BuildableIcon
+          kind={kind}
+          color={colorOf(buildable.placeholderColor)}
+          className="hud-journal-stamp-icon"
+        />
+      ),
+      displayName: buildable.displayName,
+      costs: buildable.costs,
+      ready: canAfford(inventory, buildable),
+    };
+  });
 }
 
 /**
- * Every buildable kind, with its menu number and cost, lit up green once it
- * could be placed right where you are standing.
+ * The craft (C) and build (B) menus, both drawn as a page from the same
+ * journal: a stamped icon, a name, its ingredients (each with its own small
+ * icon), and a Ready/Need more mark - replacing the plain-text list that
+ * used to live inside the debug stats panel.
  */
-function Building({ state }: { state: HudState }): React.JSX.Element {
-  const inventory = inventoryFromEntries(state.carrying);
+function JournalPanel({
+  title,
+  entries,
+  closeHint,
+}: {
+  title: string;
+  entries: readonly RecipeEntry[];
+  closeHint: string;
+}): React.JSX.Element {
   return (
-    <>
-      {BUILDABLE_KIND_ORDER.map((kind, index) => {
-        const buildable = BUILDABLE_KINDS[kind];
-        const ready = canAfford(inventory, buildable);
-        return (
-          <span key={kind} className={ready ? 'hud-status-good' : undefined}>
-            {index > 0 ? ' · ' : ''}[{index + 1}] {buildable.displayName} ({costLabel(buildable)})
+    <div className="hud-journal">
+      <div className="hud-journal-header">
+        <span className="hud-journal-title">{title}</span>
+        <span className="hud-journal-closehint">{closeHint}</span>
+      </div>
+      {entries.map((entry) => (
+        <div className="hud-journal-entry" key={entry.index}>
+          <div className="hud-journal-stamp">{entry.icon}</div>
+          <div className="hud-journal-entry-main">
+            <div className="hud-journal-entry-name">
+              {entry.index} · {entry.displayName}
+            </div>
+            <div className="hud-journal-ingredients">
+              {entry.costs.map((cost) => {
+                const costKind = ITEM_KINDS[cost.item];
+                const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
+                return (
+                  <span className="hud-journal-ingredient" key={cost.item}>
+                    <ItemIcon
+                      item={cost.item}
+                      color="#7a6a4d"
+                      className="hud-journal-ingredient-icon"
+                    />
+                    {cost.amount} {name.toLowerCase()}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          <span
+            className={
+              entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
+            }
+          >
+            {entry.ready ? 'Ready' : 'Need more'}
           </span>
-        );
-      })}
-    </>
+        </div>
+      ))}
+    </div>
   );
-}
-
-/** "3 sticks", "2 logs" - however many costs a recipe or buildable has. */
-function costLabel(recipe: { readonly costs: Recipe['costs'] }): string {
-  return recipe.costs
-    .map((cost) => {
-      const kind = ITEM_KINDS[cost.item];
-      const name = cost.amount === 1 ? kind.displayName : kind.pluralName;
-      return `${cost.amount} ${name.toLowerCase()}`;
-    })
-    .join(', ');
 }
 
 /**
@@ -278,27 +352,13 @@ function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
   return `Left click to fight off the ${name} · ${hits}`;
 }
 
-/** "1 for a campfire, 2 for a cabin" - built from the same order the menu uses. */
+/** The journal panel itself now shows every choice by name, so this stays short. */
 function buildMenuHint(): string {
-  const choices = BUILDABLE_KIND_ORDER.map(
-    (kind, index) => `${index + 1} for ${withArticle(BUILDABLE_KINDS[kind].displayName)}`,
-  ).join(', ');
-  return `Press ${choices} - or B to cancel`;
+  return 'Pick one below, or B to close';
 }
 
-/** "1 for an axe, 2 for a fishing rod" - built from the same order the menu uses. */
 function craftMenuHint(): string {
-  const choices = RECIPE_ITEMS.map((item, index) => {
-    const recipe = recipeFor(item);
-    return recipe === null ? null : `${index + 1} for ${withArticle(ITEM_KINDS[item].displayName)}`;
-  }).filter((choice) => choice !== null);
-  return `Press ${choices.join(', ')} - or C to cancel`;
-}
-
-/** "a fishing rod", but "an axe" - names read oddly with the wrong one. */
-function withArticle(name: string): string {
-  const lower = name.toLowerCase();
-  return /^[aeiou]/.test(lower) ? `an ${lower}` : `a ${lower}`;
+  return 'Pick one below, or C to close';
 }
 
 const HOTBAR_SIZE = 6;
