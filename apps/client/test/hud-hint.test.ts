@@ -92,9 +92,7 @@ describe('the hint along the bottom', () => {
       aimedTree: { name: 'Oak', swingsLeft: 3 },
       carrying: [{ item: 'axe', count: 1 }],
     };
-    expect(hint(state)).toBe(
-      'Press 1 for a campfire, 2 for a cabin, 3 for a flower bed, 4 for a lantern - or B to cancel',
-    );
+    expect(hint(state)).toBe('Pick one below, or B to close');
   });
 
   it('walks you through the craft menu once it is open, ahead of everything else', () => {
@@ -104,8 +102,7 @@ describe('the hint along the bottom', () => {
       aimedTree: { name: 'Oak', swingsLeft: 3 },
       carrying: [{ item: 'axe', count: 1 }],
     };
-    // "an axe", not "a axe" - the recipe list has to get the grammar right too.
-    expect(hint(state)).toBe('Press 1 for an axe, 2 for a fishing rod - or C to cancel');
+    expect(hint(state)).toBe('Pick one below, or C to close');
   });
 
   it('names sticks when a stick patch is the one within reach', () => {

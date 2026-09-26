@@ -87,7 +87,10 @@ which fish bite and how often lives in
 A hotbar along the bottom of the screen shows what's in your pack, six slots
 at a time - wire order, so it needs nothing new picked or arranged. Press its
 number to equip whatever is shown there - shown in your hand from then on,
-for anyone nearby to see - eating it too, right away, if it's food.
+for anyone nearby to see - eating it too, right away, if it's food. Styled as
+a row of wax-seal circles on a parchment strip, the same warm look the craft
+and build menus and the Home screen all now share. See
+[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
 
 ### Your character
 
@@ -214,13 +217,16 @@ your own. Flower patches work exactly the same way; what flowers are for
 lives in [Building](#building) below.
 
 Press `C` to open the craft menu, then `1` to make an axe out of three sticks,
-or `2` to make a fishing rod out of two logs - the side panel lists both
-recipes and lights one up once your pack can afford it, and `C` again closes
-it. Finding the axe in the stump and the rod on the bank still work exactly
-as before; crafting is another way to get one, and still needs a bag the
-same as anything else does. See
-[decision 0017](docs/decisions/0017-crafting.md) and
-[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
+or `2` to make a fishing rod out of two logs - a parchment page of recipes
+opens with the ingredients each one needs and marks the ones you can afford
+right now, and `C` again closes it. Building (`B`) opens the same kind of
+page, for campfires, cabins, flower beds and lanterns instead. Finding the
+axe in the stump and the rod on the bank still work exactly as before;
+crafting is another way to get one, and still needs a bag the same as
+anything else does. See
+[decision 0017](docs/decisions/0017-crafting.md),
+[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md) and
+[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
 
 ### Hunger
 

@@ -6,6 +6,14 @@
   --good: #9ed17a;
   --warn: #e8c46a;
   --bad: #e58a7b;
+  /* The warm "field journal" palette - the hotbar and the craft/build panel
+     only, sharing the same tokens the Home screen's own sunlit-grove look
+     already uses, so the two feel like one material rather than two. */
+  --parchment: #fbf3df;
+  --parchment-dim: #f3e6c6;
+  --ink-warm: #2f2210;
+  --ink-warm-dim: #7a6a4d;
+  --accent-warm: #c1794a;
   color-scheme: dark;
 }
 
@@ -125,47 +133,68 @@ body {
   white-space: nowrap;
 }
 
-/* The row of item slots along the very bottom - 1 through 6, left to right. */
+/*
+ * The row of item slots along the very bottom - 1 through 6, left to right.
+ * Wax-seal circles on a parchment strip: the same warm material the Home
+ * screen and the craft/build journal panel both use, so what you carry and
+ * what you can make read as one system rather than two.
+ */
 .hotbar {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(251, 243, 223, 0.92);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
 }
 
 .hotbar-slot {
   position: relative;
   width: 52px;
   height: 52px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--panel-edge);
-  border-radius: 10px;
-  background: var(--panel);
-  backdrop-filter: blur(6px);
+  background: #fffaf0;
+  border: 2px solid rgba(58, 42, 20, 0.14);
 }
 
 /* A tool or something to eat - pressing this slot's key does something. */
 .hotbar-slot-usable {
-  border-color: var(--good);
+  border-color: var(--accent-warm);
 }
 
 /* What's actually shown in this player's hand right now. */
 .hotbar-slot-equipped {
-  border-color: var(--ink);
-  box-shadow: 0 0 8px 1px rgba(243, 239, 228, 0.45);
+  border-color: var(--accent-warm);
+  box-shadow: 0 0 0 3px rgba(193, 121, 74, 0.28);
 }
 
 .hotbar-slot-key {
   position: absolute;
-  top: 3px;
-  left: 6px;
-  font-size: 11px;
-  color: var(--ink-dim);
+  top: -6px;
+  left: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(58, 42, 20, 0.35);
+  color: var(--parchment);
+  font-size: 10px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.hotbar-slot-usable .hotbar-slot-key,
+.hotbar-slot-equipped .hotbar-slot-key {
+  background: var(--accent-warm);
 }
 
 .hotbar-slot-icon {
@@ -175,11 +204,131 @@ body {
 
 .hotbar-slot-count {
   position: absolute;
-  bottom: 2px;
-  right: 5px;
-  font-size: 11px;
-  font-weight: 600;
+  bottom: -4px;
+  right: -2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--parchment);
+  color: var(--ink-warm);
+  font-size: 10px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The craft/build panel: a page from a naturalist's journal, replacing the
+ * plain text list that used to live inside the debug stats panel. Shared by
+ * both Craft (C) and Build (B) - which one is open decides the title and
+ * entries, never the styling.
+ */
+.hud-journal {
+  position: absolute;
+  left: 50%;
+  bottom: 150px;
+  transform: translateX(-50%);
+  width: 420px;
+  padding: 18px 20px;
+  border-radius: 4px 16px 4px 16px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 18px 34px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(58, 42, 20, 0.12);
+  color: var(--ink-warm);
+}
+
+.hud-journal-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.hud-journal-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.hud-journal-closehint {
+  font-size: 11px;
+  color: var(--ink-warm-dim);
+  white-space: nowrap;
+}
+
+.hud-journal-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed rgba(58, 42, 20, 0.22);
+}
+
+.hud-journal-entry:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.hud-journal-stamp {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(193, 121, 74, 0.12);
+  border: 2px solid rgba(193, 121, 74, 0.5);
+  flex-shrink: 0;
+}
+
+.hud-journal-stamp-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.hud-journal-entry-main {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.hud-journal-entry-name {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.hud-journal-ingredients {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hud-journal-ingredient {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--ink-warm-dim);
+}
+
+.hud-journal-ingredient-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.hud-journal-status {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(122, 106, 77, 0.16);
+  color: var(--ink-warm-dim);
+  font-size: 11px;
+}
+
+.hud-journal-status-ready {
+  background: var(--accent-warm);
+  color: #fffaf0;
+  font-weight: 600;
 }
 
 .hud-curtain {
