@@ -12,6 +12,7 @@ import {
   encodeBuild,
   encodeCraft,
   encodeUseItem,
+  encodeEquipped,
   encodeBuiltProps,
   encodeBuriedCaches,
   encodeCache,
@@ -36,9 +37,10 @@ import {
   MAX_BUILT_PROPS,
   MAX_BURIED_CACHES,
   MAX_ROSTER_ENTRIES,
+  MAX_EQUIPPED_ENTRIES,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
-import type { RosterEntry } from '../src/net/messages';
+import type { EquippedEntry, RosterEntry } from '../src/net/messages';
 import type {
   AnimalCaught,
   BuiltProp,
@@ -899,5 +901,49 @@ describe('telling everybody who is who', () => {
       color: 'amber',
     }));
     expect(roundTrip(players)).toHaveLength(MAX_ROSTER_ENTRIES);
+  });
+});
+
+describe('telling everybody what everybody has equipped', () => {
+  const roundTrip = (players: readonly EquippedEntry[]): readonly EquippedEntry[] | null => {
+    const decoded = decodeServerMessage(encodeEquipped(players));
+    return decoded?.type === 'equipped' ? decoded.players : null;
+  };
+
+  it('carries an empty world', () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it('carries what each connected player has equipped, including nothing at all', () => {
+    const players: EquippedEntry[] = [
+      { netId: 1, item: 'axe' },
+      { netId: 2, item: null },
+    ];
+    expect(roundTrip(players)).toEqual(players);
+  });
+
+  it('is a fixed three bytes per entry', () => {
+    expect(encodeEquipped([{ netId: 1, item: 'axe' }]).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeEquipped([{ netId: 1, item: 'axe' }]);
+    expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
+  });
+
+  it('reads an item this build has never heard of as nothing equipped', () => {
+    const encoded = new Uint8Array(encodeEquipped([{ netId: 1, item: 'axe' }]).slice(0));
+    // header(2) + netId(2) puts the item byte at index 4.
+    encoded[4] = 200;
+    const decoded = decodeServerMessage(encoded.buffer);
+    expect(decoded).toEqual({ type: 'equipped', players: [{ netId: 1, item: null }] });
+  });
+
+  it('never carries more than a world can hold', () => {
+    const players: EquippedEntry[] = Array.from({ length: MAX_EQUIPPED_ENTRIES + 5 }, (_, i) => ({
+      netId: i + 1,
+      item: null,
+    }));
+    expect(roundTrip(players)).toHaveLength(MAX_EQUIPPED_ENTRIES);
   });
 });

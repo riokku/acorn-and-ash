@@ -48,7 +48,7 @@ import {
 } from '../data/animals';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import { colliderFootprintRadius } from '../world/colliders';
-import { isFood, type ItemId } from '../data/items';
+import { isFood, ITEM_KINDS, TOOL_ITEMS, type ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
 import { horizontalDistance, type Vec3 } from '../math/vec3';
 import {
@@ -184,6 +184,14 @@ export interface PersistedPlayer {
    * would have needed to change for.
    */
   readonly health?: number;
+  /**
+   * Optional, the same reason `health` is: added after saves already
+   * existed. Re-validated against `items` on load rather than trusted
+   * outright, so a save from before an item existed - or one missing
+   * whatever this named, however that happened - never crashes, it just
+   * falls back to the same default a brand new player gets.
+   */
+  readonly equippedItem?: ItemId | null;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -374,6 +382,21 @@ function nextGeneration(generation: number): number {
 }
 
 /**
+ * What a player should start out holding.
+ *
+ * A save's own choice wins if they still actually have it - re-validated
+ * rather than trusted, the same reason a saved pack is re-clamped to its
+ * current limit on load. Failing that, the first tool this pack holds, so
+ * returning to a world with an axe already found still shows it in hand
+ * without anybody having to press anything. Never a food item: nothing
+ * should default to already holding up a fish.
+ */
+function initialEquippedItem(inventory: Inventory, requested: ItemId | null): ItemId | null {
+  if (requested !== null && hasItem(inventory, requested)) return requested;
+  return TOOL_ITEMS.find((item) => hasItem(inventory, item)) ?? null;
+}
+
+/**
  * Something that happened at the water, for everybody to see.
  *
  * Everyone is told, not only the one fishing, so a float bobbing in the pond is
@@ -481,6 +504,13 @@ interface PlayerRuntime {
   charging: boolean;
   /** When a charge in progress resolves, in real time. Meaningless unless `charging`. */
   chargeReadyAtMs: number;
+  /**
+   * What this player last chose to hold, or null if they never have. Read
+   * through `equippedItemOf`, never directly - the pack can empty this out
+   * from under them (eating the last of it, a knockout burying it) without
+   * anything here clearing the field itself.
+   */
+  equippedItem: ItemId | null;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -560,6 +590,8 @@ export class WorldSimulation {
   private readonly craftEvents: CraftedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
+  /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
+  private readonly equipEvents: number[] = [];
   /** Everything anybody has ever built. Nothing is ever removed from it yet. */
   private readonly builtProps: BuiltProp[] = [];
   /** Same props, by id - campfires have no cap, so looking one up by id must not mean scanning all of them. */
@@ -705,12 +737,13 @@ export class WorldSimulation {
     );
 
     const hunger = saved?.hunger ?? HUNGER_MAX;
+    const inventory = saved ? inventoryFromEntries(saved.items) : createInventory();
     this.players.set(netId, {
       netId,
       playerKey,
       entity,
       queue: [],
-      inventory: saved ? inventoryFromEntries(saved.items) : createInventory(),
+      inventory,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -727,6 +760,7 @@ export class WorldSimulation {
       invulnerableUntilMs: 0,
       charging: false,
       chargeReadyAtMs: 0,
+      equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
     });
   }
 
@@ -2010,24 +2044,70 @@ export class WorldSimulation {
   }
 
   /**
-   * Eat one specific food item right now, from the hotbar.
+   * Select one item from the pack as this player's equipped item - what
+   * shows in their hand, and what everyone nearby is now told they are
+   * holding - and, if it is food, eat it on the spot too.
    *
-   * Unlike the interact button's own fallback to eating, this does not wait
-   * for the pack to be a last resort, and it eats exactly the item asked for
-   * rather than whichever common fish comes first. Still refuses a full
-   * meter or an item not actually in the pack, the same reasons `tryEat`
-   * already stands down for - eating is not worth losing food to either way.
-   * Not tied to reach or the tick loop, the same as crafting: settled the
-   * moment it arrives. Returns whether anything happened.
+   * Unlike the interact button's own fallback to eating, eating this way
+   * does not wait for the pack to be a last resort, and eats exactly the
+   * item asked for rather than whichever common fish comes first. Only
+   * food actually gets eaten; equipping a tool just shows it held, the same
+   * as picking one up already did before this existed. Refuses outright for
+   * anything not marked `equippable` (materials, the bag) or not actually
+   * in the pack. Not tied to reach or the tick loop, the same as crafting:
+   * settled the moment it arrives. Returns whether anything actually
+   * changed - equipping, eating, or both.
    */
   useItem(netId: number, item: ItemId): boolean {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return false;
-    if (runtime.hunger >= HUNGER_MAX) return false;
-    if (!isFood(item) || !hasItem(runtime.inventory, item)) return false;
+    if (!ITEM_KINDS[item].equippable || !hasItem(runtime.inventory, item)) return false;
 
-    this.eatItem(runtime, item);
-    return true;
+    let changed = false;
+    if (runtime.equippedItem !== item) {
+      runtime.equippedItem = item;
+      this.equipEvents.push(netId);
+      changed = true;
+    }
+    if (isFood(item) && runtime.hunger < HUNGER_MAX) {
+      this.eatItem(runtime, item);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * What this player currently has equipped, or null.
+   *
+   * Re-checked against the pack every time rather than trusted from
+   * whenever it was last set: eating the last of an equipped food, or a
+   * knockout burying it away, empties a hand out from under a player with
+   * nothing here having to notice and clear the field itself.
+   */
+  equippedItemOf(netId: number): ItemId | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return null;
+    return runtime.equippedItem !== null && hasItem(runtime.inventory, runtime.equippedItem)
+      ? runtime.equippedItem
+      : null;
+  }
+
+  /**
+   * What every connected player currently has equipped, for the whole-list
+   * broadcast - the same "cheap while there are only ever a few dozen,
+   * simplest to keep in sync" shape `Roster` and `BuiltProps` already use.
+   */
+  equippedList(): Array<{ netId: number; item: ItemId | null }> {
+    return [...this.players.keys()].map((netId) => ({ netId, item: this.equippedItemOf(netId) }));
+  }
+
+  /**
+   * Who changed what they have equipped since this was last asked - a
+   * signal that the whole list is worth resending, not a diff of who
+   * changed to what.
+   */
+  drainEquipEvents(): number[] {
+    return this.equipEvents.splice(0);
   }
 
   /** Who gathered a stick since this was last asked, so their pack can be sent. */
@@ -2109,6 +2189,7 @@ export class WorldSimulation {
         items: inventoryEntries(runtime.inventory),
         hunger: runtime.hunger,
         health: runtime.health,
+        equippedItem: runtime.equippedItem,
       });
     }
     return saved;

@@ -16,6 +16,7 @@ import {
   type CacheEvent,
   type CharacterId,
   type CraftedEvent,
+  type EquippedMessage,
   type FishingEvent,
   type HealthEvent,
   type HungerEvent,
@@ -243,6 +244,19 @@ export class TestClient {
   openingRoster(): RosterMessage['players'] {
     const message = this.received.find((entry) => entry.type === 'roster');
     if (message === undefined) throw new Error('Never received the opening roster');
+    return message.players;
+  }
+
+  /** The newest word on what everybody currently has equipped. */
+  equipped(): EquippedMessage['players'] {
+    const messages = this.received.filter((entry) => entry.type === 'equipped');
+    return messages[messages.length - 1]?.players ?? [];
+  }
+
+  /** The first word on what everybody has equipped, sent the moment you join. */
+  openingEquipped(): EquippedMessage['players'] {
+    const message = this.received.find((entry) => entry.type === 'equipped');
+    if (message === undefined) throw new Error('Never received the opening equipped list');
     return message.players;
   }
 

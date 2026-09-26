@@ -30,7 +30,6 @@ import {
   createWildernessTerrain,
   dayProgress,
   gatherSpotInReach,
-  isFood,
   isNight,
   nearestBuriedCache,
   nearestCampfire,
@@ -166,10 +165,14 @@ export interface GameDebug {
   selfNetId(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+  /** What the Equipped list says one particular connected player has in hand, if anything. */
+  remoteEquippedItem(netId: number): string | null;
   /** Every animal currently in view, wherever this browser last heard it was. */
   animals(): Array<{ id: number; kind: string; x: number; y: number; z: number }>;
   /** What the server says we carry. */
   carrying(): Array<{ item: string; count: number }>;
+  /** What the server's Equipped list says we currently have in hand, if anything. */
+  equippedItem(): string | null;
   /** Which pickups the server says are gone. */
   takenPickups(): number[];
   /** Everything the clearing has lying about to be found. */
@@ -247,6 +250,8 @@ export class Game {
   private readonly remoteCharacters = new Map<number, Character>();
   /** What the server's Roster says about everybody currently connected. */
   private readonly roster = new Map<number, RosterEntry>();
+  /** What the server's Equipped list says everybody currently has in hand, including ourselves. */
+  private readonly equipped = new Map<number, ItemId | null>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter | Raccoon | Fox>();
   private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
@@ -394,6 +399,7 @@ export class Game {
           const pose = this.remotePlayers.poseOf(netId);
           return { netId, x: pose?.x ?? 0, y: pose?.y ?? 0, z: pose?.z ?? 0 };
         }),
+      remoteEquippedItem: (netId) => this.equipped.get(netId) ?? null,
       animals: () =>
         this.remoteAnimals.netIds().map((id) => {
           const pose = this.remoteAnimals.poseOf(id);
@@ -406,6 +412,7 @@ export class Game {
           };
         }),
       carrying: () => this.carrying.map((entry) => ({ ...entry })),
+      equippedItem: () => this.equipped.get(this.selfNetId) ?? null,
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
       nearGatherSpot: () => this.nearGatherSpot,
@@ -518,6 +525,12 @@ export class Game {
         this.roster.clear();
         for (const entry of message.players) this.roster.set(entry.netId, entry);
         this.applyRoster();
+        break;
+      }
+      case 'equipped': {
+        this.equipped.clear();
+        for (const entry of message.players) this.equipped.set(entry.netId, entry.item);
+        this.applyEquipped();
         break;
       }
       case 'snapshot': {
@@ -963,6 +976,7 @@ export class Game {
     const entry = this.roster.get(netId);
     const character = createCharacter(this.colorFor(netId, entry));
     character.setName(entry?.name ?? null);
+    character.setEquippedItem(this.equipped.get(netId) ?? null);
     this.scene.add(character.group);
     this.remoteCharacters.set(netId, character);
     return character;
@@ -986,6 +1000,17 @@ export class Game {
       const entry = this.roster.get(netId);
       character.setColor(this.colorFor(netId, entry));
       character.setName(entry?.name ?? null);
+    }
+  }
+
+  /**
+   * Show every remote character holding whatever the Equipped list now says
+   * it does. The local player's own hand is set every frame instead, from
+   * the same map, alongside its own animation state - see `updateLocalPlayer`.
+   */
+  private applyEquipped(): void {
+    for (const [netId, character] of this.remoteCharacters) {
+      character.setEquippedItem(this.equipped.get(netId) ?? null);
     }
   }
 
@@ -1104,15 +1129,17 @@ export class Game {
   }
 
   /**
-   * Turn a hotbar slot picked this frame into a request to use whatever item
-   * is shown there, if using it would do anything - only food does, for now.
-   * Only reached once neither menu is open, so this never fires alongside a
-   * craft or a build off the very same key.
+   * Turn a hotbar slot picked this frame into a request to equip whatever
+   * item is shown there - eating it too, if it is food, exactly as the
+   * server's own `useItem` does. Only reached once neither menu is open, so
+   * this never fires alongside a craft or a build off the very same key.
    */
   private handleHotbarInput(controls: Controls): void {
     for (const index of controls.takeHotbarTaps()) {
       const entry = this.carrying[index];
-      if (entry !== undefined && isFood(entry.item)) this.connection?.sendUseItem(entry.item);
+      if (entry !== undefined && ITEM_KINDS[entry.item].equippable) {
+        this.connection?.sendUseItem(entry.item);
+      }
     }
   }
 
@@ -1177,7 +1204,7 @@ export class Game {
         !player.motion.grounded,
       ),
     );
-    character.setHoldingAxe(this.isCarrying('axe'));
+    character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.update(deltaSeconds);
 
     camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);
@@ -1374,6 +1401,7 @@ export class Game {
       position: player === null ? { x: 0, y: 0, z: 0 } : { ...player.motion.position },
       correctionCm: (player?.stats.lastCorrection ?? 0) * 100,
       carrying: this.carrying,
+      equippedItem: this.equipped.get(this.selfNetId) ?? null,
       nearbyItem: this.nearbyItem,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,

@@ -26,6 +26,15 @@ export interface ItemKind {
   readonly restoresHunger?: number;
   /** Whether a knockout leaves this alone rather than burying half of it. */
   readonly keepOnKnockout: boolean;
+  /**
+   * Whether this can be the item shown in a player's hand.
+   *
+   * A tool or something you'd eat makes sense held up; a pile of logs or a
+   * bag on your back does not, so this is its own flag rather than inferred
+   * from `keepOnKnockout` (true for the bag too, for an unrelated reason) or
+   * from being food alone.
+   */
+  readonly equippable: boolean;
 }
 
 export const ITEM_KINDS = {
@@ -37,6 +46,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0x9a7b4f,
     restoresHunger: undefined,
     keepOnKnockout: true,
+    equippable: true,
   },
   log: {
     id: 'log',
@@ -46,6 +56,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0x8c6239,
     restoresHunger: undefined,
     keepOnKnockout: false,
+    equippable: false,
   },
   rod: {
     id: 'rod',
@@ -55,6 +66,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0xb89a5e,
     restoresHunger: undefined,
     keepOnKnockout: true,
+    equippable: true,
   },
   perch: {
     id: 'perch',
@@ -64,6 +76,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0x8fa35a,
     restoresHunger: 40,
     keepOnKnockout: false,
+    equippable: true,
   },
   trout: {
     id: 'trout',
@@ -73,6 +86,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0xc98f86,
     restoresHunger: 40,
     keepOnKnockout: false,
+    equippable: true,
   },
   goldenCarp: {
     id: 'goldenCarp',
@@ -82,6 +96,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0xe8b53a,
     restoresHunger: 40,
     keepOnKnockout: false,
+    equippable: true,
   },
   stick: {
     id: 'stick',
@@ -91,6 +106,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0xb5895a,
     restoresHunger: undefined,
     keepOnKnockout: false,
+    equippable: false,
   },
   meat: {
     id: 'meat',
@@ -102,6 +118,7 @@ export const ITEM_KINDS = {
     // the right moment, so it is worth a little more than one.
     restoresHunger: 50,
     keepOnKnockout: false,
+    equippable: true,
   },
   flower: {
     id: 'flower',
@@ -111,6 +128,7 @@ export const ITEM_KINDS = {
     placeholderColor: 0xdd5fa8,
     restoresHunger: undefined,
     keepOnKnockout: false,
+    equippable: false,
   },
   bag: {
     id: 'bag',
@@ -121,6 +139,7 @@ export const ITEM_KINDS = {
     restoresHunger: undefined,
     // Never lose the one thing everything else you carry depends on.
     keepOnKnockout: true,
+    equippable: false,
   },
 } as const satisfies Record<ItemId, ItemKind>;
 
@@ -160,3 +179,9 @@ export function isFood(item: ItemId): boolean {
 
 /** Every item that can be eaten, in the wire order. Common fish go first. */
 export const FOOD_ITEMS: readonly ItemId[] = ITEM_ORDER.filter(isFood);
+
+/**
+ * Tools, in the order a fresh equip should default to - the axe first, since
+ * chopping is the more common reason to have a hand free at all.
+ */
+export const TOOL_ITEMS: readonly ItemId[] = ['axe', 'rod'];

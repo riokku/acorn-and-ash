@@ -148,9 +148,15 @@ body {
   backdrop-filter: blur(6px);
 }
 
-/* Food, right now - pressing this slot's key does something. */
+/* A tool or something to eat - pressing this slot's key does something. */
 .hotbar-slot-usable {
   border-color: var(--good);
+}
+
+/* What's actually shown in this player's hand right now. */
+.hotbar-slot-equipped {
+  border-color: var(--ink);
+  box-shadow: 0 0 8px 1px rgba(243, 239, 228, 0.45);
 }
 
 .hotbar-slot-key {

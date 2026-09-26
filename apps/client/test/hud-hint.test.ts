@@ -19,6 +19,7 @@ const BASE_STATE: HudState = {
   pointerLocked: true,
   ready: true,
   carrying: [],
+  equippedItem: null,
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,

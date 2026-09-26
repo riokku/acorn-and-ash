@@ -257,9 +257,11 @@ export function hint(state: HudState): string {
 function hungerHint(state: HudState): string {
   const hasFood = state.carrying.some((entry) => isFood(entry.item) && entry.count > 0);
   if (state.hunger <= 0) {
-    return hasFood ? "You're hungry. Press E to eat" : "You're hungry. Go catch something to eat";
+    return hasFood
+      ? "You're hungry. Press its hotbar number to eat"
+      : "You're hungry. Go catch something to eat";
   }
-  return hasFood ? 'Press E to eat · getting hungry' : 'Getting hungry';
+  return hasFood ? 'Press its hotbar number to eat · getting hungry' : 'Getting hungry';
 }
 
 function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
@@ -311,7 +313,12 @@ function Hotbar({ state }: { state: HudState }): React.JSX.Element {
   return (
     <div className="hotbar">
       {slots.map((entry, index) => (
-        <HotbarSlot key={index} slotNumber={index + 1} entry={entry} />
+        <HotbarSlot
+          key={index}
+          slotNumber={index + 1}
+          entry={entry}
+          equipped={entry !== null && entry.item === state.equippedItem}
+        />
       ))}
     </div>
   );
@@ -320,17 +327,19 @@ function Hotbar({ state }: { state: HudState }): React.JSX.Element {
 function HotbarSlot({
   slotNumber,
   entry,
+  equipped,
 }: {
   slotNumber: number;
   entry: HudState['carrying'][number] | null;
+  equipped: boolean;
 }): React.JSX.Element {
   const kind = entry === null ? null : ITEM_KINDS[entry.item];
-  const usable = kind !== null && isFood(kind.id);
+  const usable = kind !== null && kind.equippable;
+  const classes = ['hotbar-slot'];
+  if (usable) classes.push('hotbar-slot-usable');
+  if (equipped) classes.push('hotbar-slot-equipped');
   return (
-    <div
-      className={usable ? 'hotbar-slot hotbar-slot-usable' : 'hotbar-slot'}
-      title={kind?.displayName}
-    >
+    <div className={classes.join(' ')} title={kind?.displayName}>
       <span className="hotbar-slot-key">{slotNumber}</span>
       {kind !== null ? (
         <span
