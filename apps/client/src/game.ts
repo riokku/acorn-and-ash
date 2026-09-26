@@ -98,7 +98,8 @@ import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
 import type { PlayerIdentity } from './home/identity';
 
-const MOUSE_SENSITIVITY = 0.0023;
+/** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
+const BASE_MOUSE_SENSITIVITY = 0.0023;
 /** How often the HUD is refreshed. Every frame would be wasted work. */
 const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
@@ -242,11 +243,15 @@ export interface GameOptions {
   readonly worldId: string;
   readonly serverUrlOverride?: string;
   readonly forceWebGL: boolean;
+  /** A multiplier on `BASE_MOUSE_SENSITIVITY`, from the Settings menu. */
+  readonly lookSensitivity: number;
 }
 
 /** Everything that makes up a running game. */
 export class Game {
   private readonly options: GameOptions;
+  /** Live-adjustable from the Settings menu - see `setLookSensitivity`. */
+  private lookSensitivity: number;
   private readonly scene = new THREE.Scene();
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
@@ -340,6 +345,7 @@ export class Game {
 
   constructor(options: GameOptions) {
     this.options = options;
+    this.lookSensitivity = options.lookSensitivity;
   }
 
   async start(): Promise<void> {
@@ -384,6 +390,11 @@ export class Game {
     // Tied to this real click rather than page load: autoplay policy blocks
     // audio started without one.
     startAmbientMusic();
+  }
+
+  /** Called from the Settings menu's sensitivity slider - takes effect on the very next frame. */
+  setLookSensitivity(multiplier: number): void {
+    this.lookSensitivity = multiplier;
   }
 
   /**
@@ -1063,7 +1074,9 @@ export class Game {
     this.lastFrameMs = now;
 
     const mouse = controls.takeMouseDelta();
-    if (mouse.x !== 0 || mouse.y !== 0) camera.turn(mouse.x, mouse.y, MOUSE_SENSITIVITY);
+    if (mouse.x !== 0 || mouse.y !== 0) {
+      camera.turn(mouse.x, mouse.y, BASE_MOUSE_SENSITIVITY * this.lookSensitivity);
+    }
 
     // Read ahead of anything below that might forget taps for a produced
     // movement tick, so a hotbar, craft or build key pressed this frame is
@@ -1188,9 +1201,10 @@ export class Game {
       (this.controls?.buttons() ?? 0) | (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
 
     // A fresh press starts the same local timer the server's own charge
-    // runs on - only worth starting if a swing would even do anything.
+    // runs on - only worth starting if a swing would even do anything, which
+    // needs the axe active, not merely carried.
     const chargeHeld = (buttons & PlayerButton.Charge) !== 0;
-    if (chargeHeld && !this.chargeWasHeld && this.isCarrying('axe')) {
+    if (chargeHeld && !this.chargeWasHeld && this.isEquipped('axe')) {
       this.chargingUntil = performance.now() + CHARGE_SECONDS * 1000;
     }
     this.chargeWasHeld = chargeHeld;
@@ -1294,15 +1308,15 @@ export class Game {
           })();
 
     // The same rule the server uses: a tree or an animal you could swing at
-    // gets the click first, and otherwise a rod and some water in front of
-    // you make a cast.
+    // gets the click first, and otherwise an active rod and some water in
+    // front of you make a cast. Both need the tool active, not just carried.
     const axeHasSomethingToHit =
-      (target !== null || animalTarget !== null) && this.isCarrying('axe');
+      (target !== null || animalTarget !== null) && this.isEquipped('axe');
     this.canCast =
       this.fishingPhase === null &&
       performance.now() >= this.castReadyAt &&
       !axeHasSomethingToHit &&
-      this.isCarrying('rod') &&
+      this.isEquipped('rod') &&
       this.clearing !== null &&
       castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
 
@@ -1364,8 +1378,14 @@ export class Game {
     return Math.atan2(-(float.x - at.x), -(float.z - at.z));
   }
 
-  private isCarrying(item: ItemId): boolean {
-    return this.carrying.some((entry) => entry.item === item && entry.count > 0);
+  /**
+   * Whether this item is the one currently active - not just somewhere in
+   * the pack. The server gates chopping, casting and eating on exactly this,
+   * so hints and local prediction have to agree, or a hint would promise an
+   * action the server then refuses.
+   */
+  private isEquipped(item: ItemId): boolean {
+    return this.equipped.get(this.selfNetId) === item;
   }
 
   private updateRemotePlayers(deltaSeconds: number): void {

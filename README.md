@@ -19,7 +19,9 @@ The game is online-only. Every world runs on the server.
 > at a time - a small icon apiece now, rather than a plain colour swatch -
 > press a number to equip whatever is in that slot, eating it too
 > if it's food. Whatever you have equipped shows in your character's hand,
-> for everyone nearby to see, not just you. You get hungry the longer you
+> for everyone nearby to see, not just you - and nothing else works: you
+> cannot chop, fish or eat a fish unless it's the one currently equipped.
+> You get hungry the longer you
 > play, and eating a fish tops you back up. Rabbits live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
 > that fells a tree and it pays out meat, worth even more than a fish. Chop
@@ -109,14 +111,18 @@ Whatever hotbar slot you last pressed shows in your hand - the axe, the rod,
 or whatever fish or meat you picked - parented straight onto the character's
 own hand, so it moves with the arm through every animation. Not automatic:
 finding a tool or catching a fish does not equip it on its own, only
-pressing its slot does. Landing a chop swings the axe at the tree, if the
-axe happens to be the one currently shown. Everyone nearby sees it too, not
-just you - the server tells every connected player what everyone else has
-equipped, the same way it already tells them each other's names. See
+pressing its slot does - and nothing works with it until you have. A left
+click only chops or fights off whatever you're aimed at once the axe is the
+one shown in your hand; a cast needs the rod shown the same way. Carrying a
+tool you haven't equipped does nothing for you. Everyone nearby sees it too,
+not just you - the server tells every connected player what everyone else
+has equipped, the same way it already tells them each other's names. See
 [decision 0036](docs/decisions/0036-a-real-moving-character.md) for the
-held axe's own first appearance, and
+held axe's own first appearance,
 [decision 0041](docs/decisions/0041-showing-what-you-have-equipped.md) for
-making it a real, shared choice covering every tool and food item.
+making it a real, shared choice covering every tool and food item, and
+[decision 0045](docs/decisions/0045-an-item-has-to-be-active-to-use-it.md)
+for making it something you need, not just something you can see.
 
 ### The wilderness
 
@@ -232,10 +238,13 @@ anything else does. See
 ### Hunger
 
 You get hungrier the longer you play. Press `E` and, if there is nothing at
-your feet to pick up, you will eat a fish out of your pack instead, common
-ones first. Running out is a nudge, not a penalty: the HUD says so and the
-hint turns urgent, but nothing worse happens yet. See
-[decision 0016](docs/decisions/0016-hunger-and-eating.md).
+your feet to pick up, you will eat whatever fish or meat you currently have
+equipped - shown in your hand. Carrying other food that isn't equipped does
+not help; press its own hotbar number instead, which equips and eats it in
+the same press. Running out is a nudge, not a penalty: the HUD says so and
+the hint turns urgent, but nothing worse happens yet. See
+[decision 0016](docs/decisions/0016-hunger-and-eating.md) and
+[decision 0045](docs/decisions/0045-an-item-has-to-be-active-to-use-it.md).
 
 A full meter takes twenty minutes to run out for real. `local` runs and
 preview links use three minutes instead, set by `WORLD_HUNGER_EMPTY_SECONDS`

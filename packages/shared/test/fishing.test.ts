@@ -327,8 +327,12 @@ function createWorld(): WorldSimulation {
   return sim;
 }
 
-function carrying(netId: number, items: Array<{ item: ItemId; count: number }>): PersistedPlayer {
-  return { netId, x: 0, y: 0, z: 0, facingYaw: 0, items, hunger: HUNGER_MAX };
+function carrying(
+  netId: number,
+  items: Array<{ item: ItemId; count: number }>,
+  equippedItem: ItemId | null = null,
+): PersistedPlayer {
+  return { netId, x: 0, y: 0, z: 0, facingYaw: 0, items, hunger: HUNGER_MAX, equippedItem };
 }
 
 /** One tick of standing still, looking one way, with the button up or down. */
@@ -351,9 +355,10 @@ function atTheWater(
     { item: 'bag', count: 1 },
     { item: 'rod', count: 1 },
   ],
+  equippedItem: ItemId | null = 'rod',
 ) {
   const sim = createWorld();
-  sim.addPlayer(1, carrying(1, items));
+  sim.addPlayer(1, carrying(1, items, equippedItem));
   sim.placePlayer(1, onTheBank, EAST);
   let seq = 1;
   const events: FishingEvent[] = [];
@@ -396,6 +401,22 @@ describe('fishing in the world', () => {
 
   it('does nothing without a rod', () => {
     const { sim, events, click } = atTheWater([]);
+    click();
+    expect(events).toEqual([]);
+    expect(sim.castOf(1)).toBeNull();
+  });
+
+  it('does nothing with a rod in the pack that is not the active item', () => {
+    // Carrying the rod is not enough - the axe has to not be the active item
+    // instead for a cast to happen. Here nothing at all is active.
+    const { sim, events, click } = atTheWater(
+      [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+        { item: 'rod', count: 1 },
+      ],
+      'axe',
+    );
     click();
     expect(events).toEqual([]);
     expect(sim.castOf(1)).toBeNull();

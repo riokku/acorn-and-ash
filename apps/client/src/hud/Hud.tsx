@@ -19,13 +19,22 @@ import {
 
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
+import { SettingsMenu } from '../preferences/SettingsMenu';
+import type { Preferences } from '../preferences/preferences';
 
 interface HudProps {
   readonly store: HudStore;
   readonly onPlay: () => void;
+  readonly initialPreferences: Preferences;
+  readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
-export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
+export function Hud({
+  store,
+  onPlay,
+  initialPreferences,
+  onSettingsChange,
+}: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   return (
@@ -67,6 +76,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
 
       {state.ready && !state.pointerLocked ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
+          <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
           <p>
             {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
@@ -313,12 +323,13 @@ export function hint(state: HudState): string {
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
   if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
-  // A tree or animal only offers a hint once there is an axe to swing: without
-  // one the server ignores the click outright (trySwing's own first check), so
-  // hinting at it here would send you to click on something that does nothing.
-  const hasAxe = state.carrying.some((entry) => entry.item === 'axe');
-  if (state.aimedTree !== null && hasAxe) return chopHint(state.aimedTree);
-  if (state.aimedAnimal !== null && hasAxe) return catchHint(state.aimedAnimal);
+  // A tree or animal only offers a hint once the axe is the active item:
+  // without that the server ignores the click outright (trySwing's own first
+  // check), so hinting at it here would send you to click on something that
+  // does nothing. Carrying the axe is not enough - it has to be equipped.
+  const axeActive = state.equippedItem === 'axe';
+  if (state.aimedTree !== null && axeActive) return chopHint(state.aimedTree);
+  if (state.aimedAnimal !== null && axeActive) return catchHint(state.aimedAnimal);
   if (state.canCast) return 'Left click to cast';
   if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
@@ -330,12 +341,19 @@ export function hint(state: HudState): string {
 }
 
 function hungerHint(state: HudState): string {
-  const hasFood = state.carrying.some((entry) => isFood(entry.item) && entry.count > 0);
+  // E only eats whatever is already active - press its hotbar number first
+  // to make some other food the active one, the same as a swing needs the
+  // axe active and a cast needs the rod active.
+  const activeFood = state.equippedItem !== null && isFood(state.equippedItem);
+  const hasFood =
+    activeFood || state.carrying.some((entry) => isFood(entry.item) && entry.count > 0);
   if (state.hunger <= 0) {
+    if (activeFood) return "You're hungry. Press E to eat";
     return hasFood
       ? "You're hungry. Press its hotbar number to eat"
       : "You're hungry. Go catch something to eat";
   }
+  if (activeFood) return 'Press E to eat · getting hungry';
   return hasFood ? 'Press its hotbar number to eat · getting hungry' : 'Getting hungry';
 }
 

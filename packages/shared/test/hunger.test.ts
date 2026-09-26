@@ -18,31 +18,45 @@ describe('draining', () => {
 
 describe('choosing what to eat', () => {
   it('eats nothing from an empty pack', () => {
-    expect(foodToEat(createInventory(), 0)).toBeNull();
+    expect(foodToEat(createInventory(), 0, null)).toBeNull();
   });
 
-  it('will not eat a tool', () => {
+  it('will not eat a tool, even an equipped one', () => {
     const inventory = createInventory();
     addItem(inventory, 'bag');
     addItem(inventory, 'axe');
     addItem(inventory, 'rod');
-    expect(foodToEat(inventory, 0)).toBeNull();
+    expect(foodToEat(inventory, 0, 'axe')).toBeNull();
   });
 
-  it('reaches for the common fish first', () => {
+  it('does nothing with nothing active, even while carrying food', () => {
+    const inventory = createInventory();
+    addItem(inventory, 'bag');
+    addItem(inventory, 'perch');
+    expect(foodToEat(inventory, 0, null)).toBeNull();
+  });
+
+  it('eats the active fish, not some other one also being carried', () => {
     const inventory = createInventory();
     addItem(inventory, 'bag');
     addItem(inventory, 'goldenCarp');
     addItem(inventory, 'perch');
     addItem(inventory, 'trout');
-    expect(foodToEat(inventory, 0)).toBe('perch');
+    expect(foodToEat(inventory, 0, 'trout')).toBe('trout');
+  });
+
+  it('does nothing once the active fish has all been eaten already', () => {
+    const inventory = createInventory();
+    addItem(inventory, 'bag');
+    addItem(inventory, 'trout');
+    expect(foodToEat(inventory, 0, 'perch')).toBeNull();
   });
 
   it('does nothing once the meter is already full', () => {
     const inventory = createInventory();
     addItem(inventory, 'bag');
     addItem(inventory, 'perch');
-    expect(foodToEat(inventory, HUNGER_MAX)).toBeNull();
+    expect(foodToEat(inventory, HUNGER_MAX, 'perch')).toBeNull();
   });
 });
 
