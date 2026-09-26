@@ -6,6 +6,8 @@ import { HudStore } from './hud/store';
 import { mountHud } from './hud/mount';
 import { mountHome } from './home/mount';
 import { readIdentity, writeIdentity } from './home/identity';
+import { readPreferences, writePreferences, type Preferences } from './preferences/preferences';
+import { setMusicVolume, setSfxVolume } from './audio/sound';
 import type { PlayerIdentity } from './home/identity';
 
 const canvas = document.getElementById('scene');
@@ -19,6 +21,25 @@ if (!(canvas instanceof HTMLCanvasElement) || hudContainer === null || homeConta
 const settings = readSettings(window.location.search);
 const hud = new HudStore();
 
+/**
+ * Saves a choice from the Settings menu and applies its audio side straight
+ * away. The one place both of those happen - the Settings menu itself only
+ * reports what changed, the same way `Home` only reports the identity it
+ * collected rather than writing it to storage itself.
+ */
+const applyPreferences = (preferences: Preferences): void => {
+  writePreferences(window.localStorage, preferences);
+  setMusicVolume(preferences.musicVolume);
+  setSfxVolume(preferences.sfxVolume);
+};
+
+// Applied up front so the tuned defaults - or whatever was chosen last time -
+// are in effect before any sound plays, whether or not the Settings menu is
+// ever opened.
+const startingPreferences = readPreferences(window.localStorage);
+setMusicVolume(startingPreferences.musicVolume);
+setSfxVolume(startingPreferences.sfxVolume);
+
 // A read-only hook for the smoke tests and for poking at a live game while
 // playtesting. It exposes nothing the server would ever trust.
 declare global {
@@ -30,6 +51,10 @@ declare global {
 const enterWorld = (identity: PlayerIdentity): void => {
   writeIdentity(window.localStorage, identity);
 
+  // Read fresh rather than reusing startingPreferences: the Home screen's own
+  // Settings menu can have changed this after the page first loaded.
+  const preferencesNow = readPreferences(window.localStorage);
+
   const game = new Game({
     canvas,
     hud,
@@ -37,9 +62,21 @@ const enterWorld = (identity: PlayerIdentity): void => {
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
     ...(settings.serverUrl === undefined ? {} : { serverUrlOverride: settings.serverUrl }),
     forceWebGL: settings.forceWebGL,
+    lookSensitivity: preferencesNow.lookSensitivity,
   });
 
-  mountHud(hudContainer, hud, () => game.requestPointerLock());
+  mountHud(
+    hudContainer,
+    hud,
+    () => game.requestPointerLock(),
+    preferencesNow,
+    (preferences) => {
+      applyPreferences(preferences);
+      // Sensitivity has nowhere else to apply to - unlike volume, which the
+      // audio module already picks up live on its own.
+      game.setLookSensitivity(preferences.lookSensitivity);
+    },
+  );
   window.acornDebug = game.debug();
 
   game.start().catch((error: unknown) => {
@@ -48,7 +85,13 @@ const enterWorld = (identity: PlayerIdentity): void => {
   });
 };
 
-const unmountHome = mountHome(homeContainer, readIdentity(window.localStorage), (identity) => {
-  unmountHome();
-  enterWorld(identity);
-});
+const unmountHome = mountHome(
+  homeContainer,
+  readIdentity(window.localStorage),
+  (identity) => {
+    unmountHome();
+    enterWorld(identity);
+  },
+  startingPreferences,
+  applyPreferences,
+);

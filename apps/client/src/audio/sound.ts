@@ -30,6 +30,13 @@ const DAMAGE_VOLUME = 0.75;
 const MUSIC_VOLUME = 0.35;
 
 let music: HTMLAudioElement | null = null;
+/**
+ * Multipliers on the tuned levels above, from the Settings menu's sliders. 1
+ * (the default) leaves the tuned levels exactly as they were before the
+ * Settings menu existed.
+ */
+let musicVolumeScale = 1;
+let sfxVolumeScale = 1;
 
 /**
  * Starts the background loop, once. Call this from a real click or key
@@ -40,12 +47,23 @@ export function startAmbientMusic(): void {
   if (music !== null) return;
   music = new Audio(ambientLoopUrl);
   music.loop = true;
-  music.volume = MUSIC_VOLUME;
+  music.volume = MUSIC_VOLUME * musicVolumeScale;
   // Blocked autoplay throws here in some browsers; the game plays fine
   // without music, so this is worth logging but never worth failing over.
   void music.play().catch((error: unknown) => {
     console.error('Could not start the background music.', error);
   });
+}
+
+/** From the Settings menu. Takes effect immediately, even if the loop is already playing. */
+export function setMusicVolume(scale: number): void {
+  musicVolumeScale = scale;
+  if (music !== null) music.volume = MUSIC_VOLUME * musicVolumeScale;
+}
+
+/** From the Settings menu. Applies to every sound effect played from here on. */
+export function setSfxVolume(scale: number): void {
+  sfxVolumeScale = scale;
 }
 
 export function playTreeHit(): void {
@@ -65,7 +83,7 @@ function playRandom(urls: readonly string[], volume: number): void {
   const url = urls[Math.floor(Math.random() * urls.length)];
   if (url === undefined) return;
   const clip = new Audio(url);
-  clip.volume = volume;
+  clip.volume = volume * sfxVolumeScale;
   void clip.play().catch((error: unknown) => {
     console.error('Could not play a sound effect.', error);
   });

@@ -357,6 +357,134 @@ body {
 }
 
 /*
+ * The Settings menu: a gear button that opens a panel of sliders. Shared by
+ * the Home screen and the in-game curtain, so it is styled once here rather
+ * than twice - the dark HUD look by default, re-tinted to the warm Home
+ * screen palette by the `.home-screen` override just below.
+ */
+.settings-button {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  transition: transform 0.15s ease;
+}
+
+.settings-button:hover {
+  transform: rotate(20deg);
+}
+
+.home-screen .settings-button {
+  background: rgba(255, 252, 242, 0.75);
+  border-color: rgba(58, 42, 20, 0.18);
+  color: var(--home-ink);
+}
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(16, 20, 16, 0.6);
+  pointer-events: auto;
+  cursor: default;
+}
+
+.settings-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 22px 24px;
+  border-radius: 4px 16px 4px 16px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 18px 34px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(58, 42, 20, 0.12);
+  color: var(--ink-warm);
+  text-align: left;
+  cursor: default;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.settings-close {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(58, 42, 20, 0.1);
+  color: var(--ink-warm);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-close:hover {
+  background: rgba(58, 42, 20, 0.18);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed rgba(58, 42, 20, 0.22);
+  cursor: default;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-row-label {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent-warm);
+}
+
+.settings-row-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-warm-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
  * The Home screen: shown before the game connects, so a player can pick a
  * name, a character and a tint. Styled as a sunlit clearing in the forest -
  * the direction Chris picked over the alternative dusk/firelight mockup -

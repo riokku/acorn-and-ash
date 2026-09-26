@@ -117,6 +117,52 @@ test.describe('the Home screen', () => {
   });
 });
 
+test.describe('the Settings menu', () => {
+  test('adjusts volume and sensitivity from the Home screen, and remembers the choice', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('#home-name')).toBeVisible();
+
+    await page.locator('.settings-button').click();
+    const card = page.locator('.settings-card');
+    await expect(card).toContainText('Music volume');
+    await expect(card).toContainText('Sound effects volume');
+    await expect(card).toContainText('Mouse sensitivity');
+
+    // The Home key jumps a range input straight to its minimum - a reliable
+    // way to change one without depending on drag gestures.
+    const musicRow = card.locator('.settings-row', { hasText: 'Music volume' });
+    await musicRow.locator('input[type="range"]').press('Home');
+    await expect(musicRow.locator('.settings-row-value')).toHaveText('0%');
+
+    await page.locator('.settings-close').click();
+    await expect(card).toBeHidden();
+
+    // Reloading is a fresh page load - the choice only really persisted if it
+    // reads back from storage rather than whatever the defaults would be.
+    await page.reload();
+    const stored = await page.evaluate(() => localStorage.getItem('acorn.preferences'));
+    expect(stored).not.toBeNull();
+    expect(JSON.parse(stored ?? '{}').musicVolume).toBe(0);
+  });
+
+  test('is reachable once inside the world too, from the paused curtain', async ({ page }) => {
+    await page.goto('/');
+    await waitForConnected(page);
+    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-curtain')).toBeHidden();
+
+    // The same thing pressing Esc does in a real browser: releases the mouse
+    // and brings the curtain, gear included, back.
+    await page.evaluate(() => document.exitPointerLock());
+    await expect(page.locator('.hud-curtain')).toBeVisible();
+
+    await page.locator('.settings-button').click();
+    await expect(page.locator('.settings-card')).toContainText('Mouse sensitivity');
+  });
+});
+
 test('the game loads, connects and draws the clearing', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

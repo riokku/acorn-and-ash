@@ -98,7 +98,8 @@ import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
 import type { PlayerIdentity } from './home/identity';
 
-const MOUSE_SENSITIVITY = 0.0023;
+/** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
+const BASE_MOUSE_SENSITIVITY = 0.0023;
 /** How often the HUD is refreshed. Every frame would be wasted work. */
 const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
@@ -242,11 +243,15 @@ export interface GameOptions {
   readonly worldId: string;
   readonly serverUrlOverride?: string;
   readonly forceWebGL: boolean;
+  /** A multiplier on `BASE_MOUSE_SENSITIVITY`, from the Settings menu. */
+  readonly lookSensitivity: number;
 }
 
 /** Everything that makes up a running game. */
 export class Game {
   private readonly options: GameOptions;
+  /** Live-adjustable from the Settings menu - see `setLookSensitivity`. */
+  private lookSensitivity: number;
   private readonly scene = new THREE.Scene();
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
@@ -340,6 +345,7 @@ export class Game {
 
   constructor(options: GameOptions) {
     this.options = options;
+    this.lookSensitivity = options.lookSensitivity;
   }
 
   async start(): Promise<void> {
@@ -384,6 +390,11 @@ export class Game {
     // Tied to this real click rather than page load: autoplay policy blocks
     // audio started without one.
     startAmbientMusic();
+  }
+
+  /** Called from the Settings menu's sensitivity slider - takes effect on the very next frame. */
+  setLookSensitivity(multiplier: number): void {
+    this.lookSensitivity = multiplier;
   }
 
   /**
@@ -1063,7 +1074,9 @@ export class Game {
     this.lastFrameMs = now;
 
     const mouse = controls.takeMouseDelta();
-    if (mouse.x !== 0 || mouse.y !== 0) camera.turn(mouse.x, mouse.y, MOUSE_SENSITIVITY);
+    if (mouse.x !== 0 || mouse.y !== 0) {
+      camera.turn(mouse.x, mouse.y, BASE_MOUSE_SENSITIVITY * this.lookSensitivity);
+    }
 
     // Read ahead of anything below that might forget taps for a produced
     // movement tick, so a hotbar, craft or build key pressed this frame is

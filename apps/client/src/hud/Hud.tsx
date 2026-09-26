@@ -19,13 +19,22 @@ import {
 
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
+import { SettingsMenu } from '../preferences/SettingsMenu';
+import type { Preferences } from '../preferences/preferences';
 
 interface HudProps {
   readonly store: HudStore;
   readonly onPlay: () => void;
+  readonly initialPreferences: Preferences;
+  readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
-export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
+export function Hud({
+  store,
+  onPlay,
+  initialPreferences,
+  onSettingsChange,
+}: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   return (
@@ -67,6 +76,7 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
 
       {state.ready && !state.pointerLocked ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
+          <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
           <p>
             {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}

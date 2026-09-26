@@ -32,7 +32,7 @@ catching an animal - a threat included) needs the axe active, not merely
 carried. The right-click charge only starts under the same condition.
 `tryCast` needs the rod active; the existing "a tree you could chop comes
 first" tie-break, which used to defer to a tree whenever an axe was
-anywhere in the pack, now only defers when the axe is the *active* item -
+anywhere in the pack, now only defers when the axe is the _active_ item -
 otherwise a player with the rod active and an unused axe in their pack
 would find casting silently refused near a tree, for a reason 0041 never
 intended and the new rule does not want either.
@@ -50,7 +50,7 @@ itself.
 **`useItem` - the hotbar press itself - needed no change.** It already
 equips before it eats, so pressing a food's slot both makes it active and
 eats it in the same press, satisfying the new rule inherently. That
-remains the *only* way to make a food item active without eating it on the
+remains the _only_ way to make a food item active without eating it on the
 same press, unless hunger is already full - there is no separate "just
 equip, don't eat" gesture, the same as 0040 chose.
 

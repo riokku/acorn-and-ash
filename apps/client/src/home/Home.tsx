@@ -13,10 +13,14 @@ import {
 } from '@acorn/shared';
 
 import type { PlayerIdentity } from './identity';
+import { SettingsMenu } from '../preferences/SettingsMenu';
+import type { Preferences } from '../preferences/preferences';
 
 interface HomeProps {
   readonly initial: PlayerIdentity;
   readonly onPlay: (identity: PlayerIdentity) => void;
+  readonly initialPreferences: Preferences;
+  readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
 /**
@@ -26,7 +30,12 @@ interface HomeProps {
  * and 0044) - the lock/"Coming soon" styling below stays in place for
  * whenever a future character joins the roster the same way these five did.
  */
-export function Home({ initial, onPlay }: HomeProps): React.JSX.Element {
+export function Home({
+  initial,
+  onPlay,
+  initialPreferences,
+  onSettingsChange,
+}: HomeProps): React.JSX.Element {
   const [name, setName] = useState(initial.name);
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
@@ -43,6 +52,7 @@ export function Home({ initial, onPlay }: HomeProps): React.JSX.Element {
   return (
     <form className="home-screen" onSubmit={handleSubmit}>
       <ForestBackdrop />
+      <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
       <div className="home-card">
         <p className="home-kicker">Cozy wilderness survival</p>
         <h1 className="home-title">Acorn &amp; Ash</h1>
