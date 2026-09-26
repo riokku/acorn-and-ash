@@ -7,14 +7,16 @@ import { PICKUP_REACH } from '../src/constants';
 describe('buryHalf', () => {
   it('takes half of a stack, rounded down, leaving the player the larger share', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'log', 7);
     const buried = buryHalf(inventory);
     expect(buried).toEqual([{ item: 'log', count: 3 }]);
     expect(inventory.log).toBe(4);
   });
 
-  it('never touches tools', () => {
+  it('never touches tools, the bag included', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'axe');
     addItem(inventory, 'rod');
     addItem(inventory, 'log', 4);
@@ -22,10 +24,12 @@ describe('buryHalf', () => {
     expect(buried).toEqual([{ item: 'log', count: 2 }]);
     expect(inventory.axe).toBe(1);
     expect(inventory.rod).toBe(1);
+    expect(inventory.bag).toBe(1);
   });
 
   it('buries nothing from a stack of one, or an empty pack', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'stick', 1);
     expect(buryHalf(inventory)).toEqual([]);
     expect(inventory.stick).toBe(1);
@@ -34,6 +38,7 @@ describe('buryHalf', () => {
 
   it('covers every non-tool kind being carried at once', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'log', 4);
     addItem(inventory, 'meat', 2);
     const buried = buryHalf(inventory);

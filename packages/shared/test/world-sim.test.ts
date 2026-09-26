@@ -30,7 +30,14 @@ import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { addItem, countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
-import { AXE_PICKUP_ID, AXE_STUMP, FLOWER_PATCHES, STICK_PATCHES } from '../src/world/clearing';
+import {
+  AXE_PICKUP_ID,
+  AXE_STUMP,
+  BAG_PICKUP_ID,
+  BAG_SPOT,
+  FLOWER_PATCHES,
+  STICK_PATCHES,
+} from '../src/world/clearing';
 import {
   inputsToConsume,
   WorldSimulation,
@@ -428,7 +435,54 @@ describe('dodging', () => {
   });
 });
 
+describe('finding the bag', () => {
+  /** Put a player next to it and hold the interact button for one tick. */
+  function reachForTheBag(sim: WorldSimulation, netId: number, seq = 1): void {
+    sim.placePlayer(netId, { x: BAG_SPOT.x + 1, y: 0, z: BAG_SPOT.z }, 0);
+    sim.queueInput(netId, createInput(seq, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+  }
+
+  it('hands over the bag to a player who reaches for it', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    reachForTheBag(sim, 1);
+
+    expect(countOf(sim.inventoryOf(1), 'bag')).toBe(1);
+    expect(sim.takenPickupIds()).toEqual([BAG_PICKUP_ID]);
+    expect(sim.drainPickupEvents()).toEqual([{ netId: 1, pickupId: BAG_PICKUP_ID, item: 'bag' }]);
+  });
+
+  it('is the one thing a brand new player can pick up before anything else opens up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    expect(sim.inventoryOf(1)).toEqual({});
+
+    reachForTheBag(sim, 1);
+    expect(countOf(sim.inventoryOf(1), 'bag')).toBe(1);
+
+    // And now the axe - found the same way - goes in the pack too.
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.queueInput(1, createInput(2, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+  });
+});
+
 describe('picking the axe up', () => {
+  /** A player who has already found their bag - nothing else can be picked up without one. */
+  function withBag(netId: number): PersistedPlayer {
+    return {
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'bag', count: 1 }],
+      hunger: HUNGER_MAX,
+    };
+  }
+
   /** Put a player next to the stump and hold the interact button for one tick. */
   function reachForTheAxe(sim: WorldSimulation, netId: number, seq = 1): void {
     sim.placePlayer(netId, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
@@ -438,7 +492,7 @@ describe('picking the axe up', () => {
 
   it('does nothing while the player is somewhere else', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     drive(sim, 1, 0, 0, 1, 1, PlayerButton.Interact);
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
     expect(sim.takenPickupIds()).toEqual([]);
@@ -446,7 +500,7 @@ describe('picking the axe up', () => {
 
   it('does nothing while the player stands there without asking', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
     expect(sim.reachablePickup(1)?.id).toBe(AXE_PICKUP_ID);
 
@@ -454,9 +508,18 @@ describe('picking the axe up', () => {
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
   });
 
-  it('hands over the axe to a player who reaches for it', () => {
+  it('will not hand over the axe to a player with no bag yet', () => {
     const sim = createWorld();
     sim.addPlayer(1);
+    reachForTheAxe(sim, 1);
+
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+    expect(sim.takenPickupIds()).toEqual([]);
+  });
+
+  it('hands over the axe to a player who reaches for it', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withBag(1));
     reachForTheAxe(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
@@ -466,7 +529,7 @@ describe('picking the axe up', () => {
 
   it('reports each pickup exactly once', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     reachForTheAxe(sim, 1);
     expect(sim.drainPickupEvents()).toHaveLength(1);
     // Draining twice must not replay it.
@@ -475,8 +538,8 @@ describe('picking the axe up', () => {
 
   it('gives it to one player, not to both', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
-    sim.addPlayer(2);
+    sim.addPlayer(1, withBag(1));
+    sim.addPlayer(2, withBag(2));
     sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
     sim.placePlayer(2, { x: AXE_STUMP.x - 1, y: 0, z: AXE_STUMP.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
@@ -491,7 +554,7 @@ describe('picking the axe up', () => {
 
   it('will not hand out the same axe twice, however long you hold the button', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
     for (let i = 1; i <= 30; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Interact));
@@ -504,11 +567,14 @@ describe('picking the axe up', () => {
 
   it('keeps the axe when the player logs out and comes back', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     reachForTheAxe(sim, 1);
 
     const saved = sim.persistablePlayers()[0];
-    expect(saved?.items).toEqual([{ item: 'axe', count: 1 }]);
+    expect(saved?.items).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     sim.removePlayer(1);
 
     const later = createWorld();
@@ -544,7 +610,10 @@ describe('hunger', () => {
       y: 0,
       z: 0,
       facingYaw: 0,
-      items: [{ item: 'perch', count }],
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'perch', count },
+      ],
       hunger,
     };
   }
@@ -628,18 +697,40 @@ describe('gathering sticks', () => {
   const spot = STICK_PATCHES[0];
   if (spot === undefined) throw new Error('no stick patch to test against');
 
+  /** A player who has already found their bag - nothing can be gathered without one. */
+  function withBag(netId: number): PersistedPlayer {
+    return {
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'bag', count: 1 }],
+      hunger: HUNGER_MAX,
+    };
+  }
+
   it('gathers one when a patch is in reach', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
     expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
   });
 
-  it('does nothing far from every patch', () => {
+  it('does nothing at all without a bag yet', () => {
     const sim = createWorld();
     sim.addPlayer(1);
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+  });
+
+  it('does nothing far from every patch', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withBag(1));
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
     expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
@@ -647,8 +738,8 @@ describe('gathering sticks', () => {
 
   it('is never used up: two players can draw from the same patch at once', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
-    sim.addPlayer(2);
+    sim.addPlayer(1, withBag(1));
+    sim.addPlayer(2, withBag(2));
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.placePlayer(2, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
@@ -660,7 +751,7 @@ describe('gathering sticks', () => {
 
   it('will not gather faster than the cooldown allows', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, withBag(1));
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
 
     // Hold the button down for one cooldown's worth of ticks, the same as a
@@ -680,7 +771,10 @@ describe('gathering sticks', () => {
       y: 0,
       z: 0,
       facingYaw: 0,
-      items: [{ item: 'perch', count: 1 }],
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'perch', count: 1 },
+      ],
       hunger: 50,
     });
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
@@ -701,6 +795,7 @@ describe('gathering sticks', () => {
       z: 0,
       facingYaw: 0,
       items: [
+        { item: 'bag', count: 1 },
         { item: 'stick', count: ITEM_KINDS.stick.maxCarry },
         { item: 'perch', count: 1 },
       ],
@@ -721,7 +816,15 @@ describe('gathering flowers', () => {
 
   it('gathers a flower, not a stick, at a flower patch', () => {
     const sim = createWorld();
-    sim.addPlayer(1);
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'bag', count: 1 }],
+      hunger: HUNGER_MAX,
+    });
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
@@ -737,7 +840,10 @@ describe('crafting', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'stick', count }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'stick', count },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -765,6 +871,7 @@ describe('crafting', () => {
       z: 0,
       facingYaw: 0,
       items: [
+        { item: 'bag', count: 1 },
         { item: 'axe', count: 1 },
         { item: 'stick', count: 3 },
       ],
@@ -805,7 +912,10 @@ describe('chopping a tree down', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'axe', count: 1 }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -950,6 +1060,7 @@ describe('chopping a tree down', () => {
     sim.addPlayer(1, {
       ...withAxe(1),
       items: [
+        { item: 'bag', count: 1 },
         { item: 'axe', count: 1 },
         { item: 'log', count: 10 },
       ],
@@ -1018,7 +1129,10 @@ describe('trees growing back', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'axe', count: 1 }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -1381,7 +1495,10 @@ describe('catching wildlife', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'axe', count: 1 }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -1451,6 +1568,7 @@ describe('catching wildlife', () => {
     sim.addPlayer(1, {
       ...withAxe(1),
       items: [
+        { item: 'bag', count: 1 },
         { item: 'axe', count: 1 },
         { item: 'meat', count: ITEM_KINDS.meat.maxCarry },
       ],
@@ -1547,7 +1665,10 @@ describe('threats', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'axe', count: 1 }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -1710,7 +1831,10 @@ describe('threats', () => {
           y: 0,
           z: 0,
           facingYaw: 0,
-          items: [{ item: 'log', count: 10 }],
+          items: [
+            { item: 'bag', count: 1 },
+            { item: 'log', count: 10 },
+          ],
           hunger: HUNGER_MAX,
         },
         'chris',
@@ -1797,7 +1921,13 @@ describe('threats', () => {
           y: closeToDen.y,
           z: closeToDen.z,
           facingYaw: 0,
-          items: [{ item: 'log', count: 7 }],
+          // A bag, so digging the cache back up later has somewhere to put
+          // what it finds - burying itself never touches it, since it is a
+          // tool, but the dig-up is a pickup like any other.
+          items: [
+            { item: 'bag', count: 1 },
+            { item: 'log', count: 7 },
+          ],
           hunger: HUNGER_MAX,
         },
         'chris',
@@ -1893,7 +2023,10 @@ describe('a charged attack', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'axe', count: 1 }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
     hunger: HUNGER_MAX,
   });
 
@@ -2001,7 +2134,10 @@ describe('building', () => {
     y: 0,
     z: 0,
     facingYaw: 0,
-    items: [{ item: 'log', count }],
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'log', count },
+    ],
     hunger: HUNGER_MAX,
   });
   const FACE_OUT = 0;
@@ -2128,7 +2264,10 @@ describe('building', () => {
       y: 0,
       z: 0,
       facingYaw: 0,
-      items: [{ item: 'log', count: 10 }],
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'log', count: 10 },
+      ],
       hunger: HUNGER_MAX,
     });
 
@@ -2231,7 +2370,10 @@ describe('building', () => {
       y: 0,
       z: 0,
       facingYaw: 0,
-      items: [{ item: 'flower', count }],
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'flower', count },
+      ],
       hunger: HUNGER_MAX,
     });
 
@@ -2285,6 +2427,7 @@ describe('building', () => {
           z: 0,
           facingYaw: 0,
           items: [
+            { item: 'bag', count: 1 },
             { item: 'log', count: 10 },
             { item: 'flower', count: 6 },
           ],

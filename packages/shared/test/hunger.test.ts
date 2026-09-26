@@ -23,6 +23,7 @@ describe('choosing what to eat', () => {
 
   it('will not eat a tool', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'axe');
     addItem(inventory, 'rod');
     expect(foodToEat(inventory, 0)).toBeNull();
@@ -30,6 +31,7 @@ describe('choosing what to eat', () => {
 
   it('reaches for the common fish first', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'goldenCarp');
     addItem(inventory, 'perch');
     addItem(inventory, 'trout');
@@ -38,6 +40,7 @@ describe('choosing what to eat', () => {
 
   it('does nothing once the meter is already full', () => {
     const inventory = createInventory();
+    addItem(inventory, 'bag');
     addItem(inventory, 'perch');
     expect(foodToEat(inventory, HUNGER_MAX)).toBeNull();
   });

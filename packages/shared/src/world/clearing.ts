@@ -99,6 +99,18 @@ export const ROD_SPOT = { x: 5.6, z: -4.2 } as const;
 export const ROD_PICKUP_ID = 2;
 
 /**
+ * Where the bag is waiting: a few steps from the spawn point, so it is the
+ * very first thing anybody finds. Nothing else can be carried until it is.
+ *
+ * Kept clear of every other pickup and gather spot's own reach - close
+ * enough and the stick patch at (2.6, 1.8) would let a player scoop up the
+ * bag as a side effect of reaching for a stick, rather than finding it on
+ * its own.
+ */
+export const BAG_SPOT = { x: -2.5, z: 4 } as const;
+export const BAG_PICKUP_ID = 3;
+
+/**
  * Fallen branches you can gather sticks from. One near the spawn point, so it
  * is the very first thing a new player finds, and one further out by the axe
  * stump, so a second player who missed out on the axe still has a reason to
@@ -188,6 +200,7 @@ export function buildTestClearing(seed: number): Clearing {
       y: PROP_KINDS.stump.shape.height,
     },
     { id: ROD_PICKUP_ID, item: 'rod', x: ROD_SPOT.x, z: ROD_SPOT.z, y: 0 },
+    { id: BAG_PICKUP_ID, item: 'bag', x: BAG_SPOT.x, z: BAG_SPOT.z, y: 0 },
   ];
   const gatherSpots: GatherSpot[] = [
     ...STICK_PATCHES.map((spot) => ({ ...spot, item: 'stick' as const })),

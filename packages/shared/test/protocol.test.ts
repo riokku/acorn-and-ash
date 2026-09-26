@@ -11,6 +11,7 @@ import {
   encodePing,
   encodeBuild,
   encodeCraft,
+  encodeUseItem,
   encodeBuiltProps,
   encodeBuriedCaches,
   encodeCache,
@@ -539,6 +540,28 @@ describe('asking to craft something', () => {
 
   it('refuses an item this build has never heard of', () => {
     const encoded = new Uint8Array(encodeCraft('axe').slice(0));
+    encoded[1] = 200;
+    expect(decodeClientMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('asking to use an item from the hotbar', () => {
+  it('survives a round trip', () => {
+    const decoded = decodeClientMessage(encodeUseItem('perch'));
+    expect(decoded).toEqual({ type: 'useItem', item: 'perch' });
+  });
+
+  it('is two bytes: not worth batching with the input bundle', () => {
+    expect(encodeUseItem('perch').byteLength).toBe(2);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeUseItem('perch');
+    expect(decodeClientMessage(encoded.slice(0, 1))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeUseItem('perch').slice(0));
     encoded[1] = 200;
     expect(decodeClientMessage(encoded.buffer)).toBeNull();
   });

@@ -7,6 +7,7 @@ import {
   encodeHello,
   encodeInputBundle,
   encodePing,
+  encodeUseItem,
   createInput,
   type AnimalCaught,
   type BuildableKindId,
@@ -82,6 +83,10 @@ export class TestClient {
 
   build(kind: BuildableKindId): void {
     this.socket.send(encodeBuild(kind));
+  }
+
+  useItem(item: ItemId): void {
+    this.socket.send(encodeUseItem(item));
   }
 
   hello(name: string, character: CharacterId = 'knight', color: TintColorId = 'amber'): void {

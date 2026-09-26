@@ -7,6 +7,7 @@ import {
   encodeHello,
   encodeInputBundle,
   encodePing,
+  encodeUseItem,
   type BuildableKindId,
   type CharacterId,
   type ItemId,
@@ -113,6 +114,18 @@ export class WorldConnection {
   sendBuild(kind: BuildableKindId): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeBuild(kind));
+  }
+
+  /**
+   * Ask to use one item from the hotbar right now.
+   *
+   * Sent the moment its key is pressed, the same as crafting - not bundled
+   * with movement, since it is a rare, deliberate action rather than part of
+   * the steady stream the input bundle exists to batch up.
+   */
+  sendUseItem(item: ItemId): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeUseItem(item));
   }
 
   /**

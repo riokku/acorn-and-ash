@@ -48,7 +48,7 @@ import {
 } from '../data/animals';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import { colliderFootprintRadius } from '../world/colliders';
-import type { ItemId } from '../data/items';
+import { isFood, type ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
 import { horizontalDistance, type Vec3 } from '../math/vec3';
 import {
@@ -1350,7 +1350,10 @@ export class WorldSimulation {
   private tryEat(runtime: PlayerRuntime): void {
     const item = foodToEat(runtime.inventory, runtime.hunger);
     if (item === null) return;
+    this.eatItem(runtime, item);
+  }
 
+  private eatItem(runtime: PlayerRuntime, item: ItemId): void {
     removeItem(runtime.inventory, item);
     runtime.hunger = eat(runtime.hunger, item);
     this.queueHungerEvent(runtime, item);
@@ -2004,6 +2007,27 @@ export class WorldSimulation {
   /** Hand over every craft since this was last asked. */
   drainCraftEvents(): CraftedEvent[] {
     return this.craftEvents.splice(0);
+  }
+
+  /**
+   * Eat one specific food item right now, from the hotbar.
+   *
+   * Unlike the interact button's own fallback to eating, this does not wait
+   * for the pack to be a last resort, and it eats exactly the item asked for
+   * rather than whichever common fish comes first. Still refuses a full
+   * meter or an item not actually in the pack, the same reasons `tryEat`
+   * already stands down for - eating is not worth losing food to either way.
+   * Not tied to reach or the tick loop, the same as crafting: settled the
+   * moment it arrives. Returns whether anything happened.
+   */
+  useItem(netId: number, item: ItemId): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return false;
+    if (runtime.hunger >= HUNGER_MAX) return false;
+    if (!isFood(item) || !hasItem(runtime.inventory, item)) return false;
+
+    this.eatItem(runtime, item);
+    return true;
   }
 
   /** Who gathered a stick since this was last asked, so their pack can be sent. */

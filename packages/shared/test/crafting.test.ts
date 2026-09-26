@@ -32,12 +32,14 @@ describe('affording a recipe', () => {
 
   it('says yes once the pack has enough', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'stick', 3);
     expect(canAfford(pack, RECIPES.axe!)).toBe(true);
   });
 
   it('says no when short by even one', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'stick', 2);
     expect(canAfford(pack, RECIPES.axe!)).toBe(false);
   });
@@ -46,6 +48,7 @@ describe('affording a recipe', () => {
 describe('crafting', () => {
   it('spends the cost and hands over the result', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'stick', 3);
     expect(craft(pack, 'axe')).toBe(true);
     expect(countOf(pack, 'stick')).toBe(0);
@@ -54,14 +57,23 @@ describe('crafting', () => {
 
   it('does nothing without enough materials, and spends nothing either', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'stick', 2);
     expect(craft(pack, 'axe')).toBe(false);
     expect(countOf(pack, 'stick')).toBe(2);
     expect(countOf(pack, 'axe')).toBe(0);
   });
 
+  it('refuses a craft with no bag to put the result in, materials or not', () => {
+    const pack = createInventory();
+    pack.stick = 3;
+    expect(craft(pack, 'axe')).toBe(false);
+    expect(countOf(pack, 'stick')).toBe(3);
+  });
+
   it('refuses a craft the pack has no room for, and spends nothing', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'axe');
     addItem(pack, 'stick', 3);
     // Already carrying the one axe this pack can hold.
@@ -72,12 +84,14 @@ describe('crafting', () => {
 
   it('refuses an item that has no recipe at all', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'log', 10);
     expect(craft(pack, 'perch')).toBe(false);
   });
 
   it('makes a fishing rod out of logs', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'log', 2);
     expect(craft(pack, 'rod')).toBe(true);
     expect(countOf(pack, 'log')).toBe(0);
@@ -86,6 +100,7 @@ describe('crafting', () => {
 
   it('leaves other items in the pack untouched', () => {
     const pack = createInventory();
+    addItem(pack, 'bag');
     addItem(pack, 'stick', 5);
     addItem(pack, 'perch', 2);
     craft(pack, 'axe');

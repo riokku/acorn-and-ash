@@ -45,10 +45,11 @@ export function Hud({ store, onPlay }: HudProps): React.JSX.Element {
         <Row label="Time" value={timeOfDay(state)} />
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Health" value={<Health state={state} />} />
-        <Row label="Carrying" value={carrying(state)} />
-        <Row label="Craft" value={<Crafting state={state} />} />
-        <Row label="Build" value={<Building state={state} />} />
+        {state.craftMenuOpen ? <Row label="Craft" value={<Crafting state={state} />} /> : null}
+        {state.buildMenuOpen ? <Row label="Build" value={<Building state={state} />} /> : null}
       </div>
+
+      {state.ready && state.pointerLocked ? <Hotbar state={state} /> : null}
 
       {state.ready && !state.pointerLocked ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
@@ -214,12 +215,20 @@ export function hint(state: HudState): string {
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
-  // Asked for the menu, so resolving it beats whatever else is going on -
-  // it stays open until a pick closes it or B does.
+  // Asked for a menu, so resolving it beats whatever else is going on - it
+  // stays open until a pick closes it or its own key does. Only one is ever
+  // open at once, so the order between them here never actually matters.
   if (state.buildMenuOpen) return buildMenuHint();
+  if (state.craftMenuOpen) return craftMenuHint();
   // Rooted to the spot until it resolves, so there is nothing else to offer
-  // right now - the same reasoning the build menu gets, just shorter-lived.
+  // right now - the same reasoning a menu gets, just shorter-lived.
   if (state.charging) return 'Charging a heavy swing - rooted to the spot';
+  // Nothing can be carried without a bag, so this beats every hint below
+  // that would otherwise send you to press E for nothing.
+  const hasBag = state.carrying.some((entry) => entry.item === 'bag');
+  if (!hasBag && (state.nearbyItem !== null || state.nearGatherSpot !== null)) {
+    return "You'll need something to carry things in first";
+  }
   if (state.nearbyItem !== null) {
     return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
   }
@@ -239,7 +248,10 @@ export function hint(state: HudState): string {
   if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
-  return 'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go';
+  return (
+    'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go · ' +
+    'C to craft · B to build'
+  );
 }
 
 function hungerHint(state: HudState): string {
@@ -266,23 +278,76 @@ function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
 /** "1 for a campfire, 2 for a cabin" - built from the same order the menu uses. */
 function buildMenuHint(): string {
   const choices = BUILDABLE_KIND_ORDER.map(
-    (kind, index) => `${index + 1} for a ${BUILDABLE_KINDS[kind].displayName.toLowerCase()}`,
+    (kind, index) => `${index + 1} for ${withArticle(BUILDABLE_KINDS[kind].displayName)}`,
   ).join(', ');
   return `Press ${choices} - or B to cancel`;
 }
 
-/** What the pack holds, as one short line. */
-function carrying(state: HudState): string {
-  if (state.carrying.length === 0) return 'nothing yet';
-  return state.carrying
-    .map((entry) => {
-      const kind = ITEM_KINDS[entry.item];
-      // A tool you either have or do not; wood and fish are worth counting.
-      return kind.maxCarry === 1
-        ? kind.displayName
-        : `${kind.pluralName} ${entry.count}/${kind.maxCarry}`;
-    })
-    .join(' · ');
+/** "1 for an axe, 2 for a fishing rod" - built from the same order the menu uses. */
+function craftMenuHint(): string {
+  const choices = RECIPE_ITEMS.map((item, index) => {
+    const recipe = recipeFor(item);
+    return recipe === null ? null : `${index + 1} for ${withArticle(ITEM_KINDS[item].displayName)}`;
+  }).filter((choice) => choice !== null);
+  return `Press ${choices.join(', ')} - or C to cancel`;
+}
+
+/** "a fishing rod", but "an axe" - names read oddly with the wrong one. */
+function withArticle(name: string): string {
+  const lower = name.toLowerCase();
+  return /^[aeiou]/.test(lower) ? `an ${lower}` : `a ${lower}`;
+}
+
+const HOTBAR_SIZE = 6;
+
+/**
+ * The row of slots along the bottom: whatever you are carrying, in pack
+ * order, one slot per item kind up to six. Empty slots still show their
+ * number, so which key does what never depends on what you happen to be
+ * holding.
+ */
+function Hotbar({ state }: { state: HudState }): React.JSX.Element {
+  const slots = Array.from({ length: HOTBAR_SIZE }, (_, index) => state.carrying[index] ?? null);
+  return (
+    <div className="hotbar">
+      {slots.map((entry, index) => (
+        <HotbarSlot key={index} slotNumber={index + 1} entry={entry} />
+      ))}
+    </div>
+  );
+}
+
+function HotbarSlot({
+  slotNumber,
+  entry,
+}: {
+  slotNumber: number;
+  entry: HudState['carrying'][number] | null;
+}): React.JSX.Element {
+  const kind = entry === null ? null : ITEM_KINDS[entry.item];
+  const usable = kind !== null && isFood(kind.id);
+  return (
+    <div
+      className={usable ? 'hotbar-slot hotbar-slot-usable' : 'hotbar-slot'}
+      title={kind?.displayName}
+    >
+      <span className="hotbar-slot-key">{slotNumber}</span>
+      {kind !== null ? (
+        <span
+          className="hotbar-slot-icon"
+          style={{ backgroundColor: colorOf(kind.placeholderColor) }}
+        />
+      ) : null}
+      {kind !== null && entry !== null && kind.maxCarry > 1 ? (
+        <span className="hotbar-slot-count">{entry.count}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** A 0xRRGGBB placeholder colour, as a CSS colour string. */
+function colorOf(placeholderColor: number): string {
+  return `#${placeholderColor.toString(16).padStart(6, '0')}`;
 }
 
 function timeOfDay(state: HudState): string {

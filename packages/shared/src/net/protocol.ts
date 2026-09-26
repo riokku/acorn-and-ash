@@ -138,6 +138,8 @@ const CACHE_MESSAGE_BYTES = 4;
 /** type(1) + which item to make(1) */
 const CRAFT_MESSAGE_BYTES = 2;
 const BUILD_MESSAGE_BYTES = 2;
+/** type(1) + which item to use(1) */
+const USE_ITEM_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
 
@@ -239,6 +241,14 @@ export function encodeBuild(kind: BuildableKindId): ArrayBuffer {
   return buffer;
 }
 
+export function encodeUseItem(item: ItemId): ArrayBuffer {
+  const buffer = new ArrayBuffer(USE_ITEM_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.UseItem);
+  view.setUint8(1, itemIndex(item));
+  return buffer;
+}
+
 /**
  * Introduce yourself: the name, character and tint picked on the Home screen.
  *
@@ -306,6 +316,13 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     const kind = buildableKindFromIndex(view.getUint8(1));
     if (kind === null) return null;
     return { type: 'build', kind };
+  }
+
+  if (type === ClientMessageType.UseItem) {
+    if (data.byteLength !== USE_ITEM_MESSAGE_BYTES) return null;
+    const item = itemFromIndex(view.getUint8(1));
+    if (item === null) return null;
+    return { type: 'useItem', item };
   }
 
   if (type === ClientMessageType.Hello) {

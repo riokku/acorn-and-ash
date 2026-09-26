@@ -93,7 +93,7 @@ body {
 .hud-hint {
   position: absolute;
   left: 50%;
-  bottom: 28px;
+  bottom: 88px;
   transform: translateX(-50%);
   padding: 9px 16px;
   border: 1px solid var(--panel-edge);
@@ -115,7 +115,7 @@ body {
 .hud-news {
   position: absolute;
   left: 50%;
-  bottom: 74px;
+  bottom: 134px;
   transform: translateX(-50%);
   padding: 7px 14px;
   border-radius: 999px;
@@ -123,6 +123,58 @@ body {
   backdrop-filter: blur(6px);
   font-size: 14px;
   white-space: nowrap;
+}
+
+/* The row of item slots along the very bottom - 1 through 6, left to right. */
+.hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.hotbar-slot {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+}
+
+/* Food, right now - pressing this slot's key does something. */
+.hotbar-slot-usable {
+  border-color: var(--good);
+}
+
+.hotbar-slot-key {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.hotbar-slot-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.hotbar-slot-count {
+  position: absolute;
+  bottom: 2px;
+  right: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-curtain {

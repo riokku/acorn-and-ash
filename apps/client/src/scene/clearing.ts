@@ -211,7 +211,48 @@ function createPickup(
   disposables: Array<{ dispose(): void }>,
 ): THREE.Object3D {
   if (pickup.item === 'rod') return createRodPickup(pickup, disposables);
+  if (pickup.item === 'bag') return createBagPickup(pickup, disposables);
   return createAxePickup(pickup, disposables);
+}
+
+/**
+ * A small satchel sitting on the ground: a rounded body with a flap, tinted
+ * like canvas. The very first thing anybody finds, so it stays plain rather
+ * than competing with the axe or the rod for attention.
+ */
+function createBagPickup(
+  pickup: PlacedPickup,
+  disposables: Array<{ dispose(): void }>,
+): THREE.Object3D {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({
+    color: ITEM_KINDS.bag.placeholderColor,
+    roughness: 0.95,
+    flatShading: true,
+  });
+
+  const bodyGeometry = new THREE.BoxGeometry(0.34, 0.24, 0.16);
+  const body = new THREE.Mesh(bodyGeometry, material);
+  body.position.y = 0.12;
+  body.castShadow = true;
+
+  const flapGeometry = new THREE.BoxGeometry(0.36, 0.09, 0.19);
+  const flap = new THREE.Mesh(flapGeometry, material);
+  flap.position.set(0, 0.24, -0.01);
+  flap.castShadow = true;
+
+  group.add(body, flap);
+  group.position.set(pickup.x, pickup.y, pickup.z);
+  group.rotation.y = 0.4;
+
+  disposables.push({
+    dispose: () => {
+      bodyGeometry.dispose();
+      flapGeometry.dispose();
+      material.dispose();
+    },
+  });
+  return group;
 }
 
 /**

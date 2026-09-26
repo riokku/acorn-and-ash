@@ -22,6 +22,7 @@ export const ClientMessageType = {
   Craft: 0x03,
   Build: 0x04,
   Hello: 0x05,
+  UseItem: 0x06,
 } as const;
 
 /** What the server says back. */
@@ -89,6 +90,18 @@ export interface BuildMessage {
 }
 
 /**
+ * Use one item from the hotbar right now - eating it, if it is food.
+ *
+ * Like crafting, this is its own small message rather than a bit on the input
+ * bundle: it is not aimed at anything, so it needs neither reach nor facing,
+ * and is settled the moment the server reads it.
+ */
+export interface UseItemMessage {
+  readonly type: 'useItem';
+  readonly item: ItemId;
+}
+
+/**
  * Introduce yourself: the name, character and tint picked on the Home screen.
  *
  * Sent once, right after `Welcome` - not bundled with it, so a slow Home
@@ -104,7 +117,7 @@ export interface HelloMessage {
 }
 
 export type ClientMessage =
-  InputBundleMessage | PingMessage | CraftMessage | BuildMessage | HelloMessage;
+  InputBundleMessage | PingMessage | CraftMessage | BuildMessage | HelloMessage | UseItemMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';

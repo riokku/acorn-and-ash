@@ -10,11 +10,15 @@ The game is online-only. Every world runs on the server.
 > real birch, oak and pine trees, real rocks and a pond,
 > surrounded by generated wilderness you can walk out into, a real animated
 > character you walk, sprint and jump around, a
-> third-person camera, and a server that decides where everybody is. Find the
-> axe standing in a stump and chop trees down; they grow back while you are
-> away. Find the rod on the bank of the pond and catch fish. Gather sticks by
-> hand and craft your own axe or rod instead. You get hungry the longer you
-> play, and eating a fish tops you back up. Rabbits live out in the
+> third-person camera, and a server that decides where everybody is. Find a
+> bag near where you start before anything else - nothing can be carried
+> without one. Then find the axe standing in a stump and chop trees down;
+> they grow back while you are away. Find the rod on the bank of the pond
+> and catch fish. Gather sticks by hand and craft your own axe or rod
+> instead. A hotbar along the bottom shows what you're carrying, six slots
+> at a time - press a number to eat whatever food is in that slot. You get
+> hungry the longer you play, and eating a fish tops you back up. Rabbits
+> live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
 > that fells a tree and it pays out meat, worth even more than a fish. Chop
 > enough logs and you can build a campfire, or a cabin of your own - once you
@@ -54,9 +58,11 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held)                    | Sprint                                                         |
 | `Space`                           | Jump                                                           |
 | `E`                               | Pick up, gather, dig up a cache, light/put out a campfire, eat |
-| `1` / `2`                         | Craft an axe / fishing rod                                     |
+| `1`–`6`                           | Use the hotbar slot - eats whatever food is shown there        |
+| `C`                               | Open the craft menu                                            |
+| `1` / `2` (craft menu open)       | Craft an axe / fishing rod                                     |
 | `B`                               | Open the build menu                                            |
-| `1`–`4` (menu open)               | Build a campfire, cabin, flower bed or lantern                 |
+| `1`–`4` (build menu open)         | Build a campfire, cabin, flower bed or lantern                 |
 | Left mouse                        | Chop, cast, hook, fight off                                    |
 | Right mouse (held)                | Charge a heavy attack                                          |
 | Left `Ctrl`                       | Dodge                                                          |
@@ -65,14 +71,21 @@ The game is online-only. Every world runs on the server.
 
 There is nothing to land on yet, so a jump is a hop in place.
 
-You can carry one axe, one fishing rod, ten logs, ten sticks, ten flowers, ten
-meat and ten of each kind of fish. The limits, and how much hunger eating one
-restores, live in
-[`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts), what
-each tree costs in swings and pays in logs lives in
+Nothing can be carried at all until you find a bag - the very first thing to
+look for, a few steps from where you start. Once you have it, you can carry
+one axe, one fishing rod, ten logs, ten sticks, ten flowers, ten meat and ten
+of each kind of fish. The limits, and how much hunger eating one restores,
+live in [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts),
+what each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
 which fish bite and how often lives in
-[`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts).
+[`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts). See
+[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
+
+A hotbar along the bottom of the screen shows what's in your pack, six slots
+at a time - wire order, so it needs nothing new picked or arranged. Press its
+number to eat whatever food is shown there, right away, rather than waiting
+for `E` to fall back to it.
 
 ### Your character
 
@@ -193,11 +206,14 @@ somebody else already grabbed the world's one axe or rod: you can still get
 your own. Flower patches work exactly the same way; what flowers are for
 lives in [Building](#building) below.
 
-Press `1` to make an axe out of three sticks, or `2` to make a fishing rod out
-of two logs. The side panel lists both recipes and lights one up once your
-pack can afford it. Finding the axe in the stump and the rod on the bank still
-work exactly as before; crafting is another way to get one. See
-[decision 0017](docs/decisions/0017-crafting.md).
+Press `C` to open the craft menu, then `1` to make an axe out of three sticks,
+or `2` to make a fishing rod out of two logs - the side panel lists both
+recipes and lights one up once your pack can afford it, and `C` again closes
+it. Finding the axe in the stump and the rod on the bank still work exactly
+as before; crafting is another way to get one, and still needs a bag the
+same as anything else does. See
+[decision 0017](docs/decisions/0017-crafting.md) and
+[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
 
 ### Hunger
 
