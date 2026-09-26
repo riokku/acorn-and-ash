@@ -16,7 +16,8 @@ The game is online-only. Every world runs on the server.
 > they grow back while you are away. Find the rod on the bank of the pond
 > and catch fish. Gather sticks by hand and craft your own axe or rod
 > instead. A hotbar along the bottom shows what you're carrying, six slots
-> at a time - press a number to equip whatever is in that slot, eating it too
+> at a time - a small icon apiece now, rather than a plain colour swatch -
+> press a number to equip whatever is in that slot, eating it too
 > if it's food. Whatever you have equipped shows in your character's hand,
 > for everyone nearby to see, not just you. You get hungry the longer you
 > play, and eating a fish tops you back up. Rabbits live out in the
@@ -409,6 +410,19 @@ To stop it: Cloudflare dashboard → **Workers & Pages** → that Worker →
 **Settings** → **Build** → disconnect the Git repository. Our own deploys
 never use this feature, so disconnecting it is always safe and never affects
 the game.
+
+### Starting a world's players over
+
+Visiting `/api/worlds/<worldId>/reset-players?confirm=clear-everyone` clears
+every saved player's pack, hunger, health, position and name for that one
+world, and lets the one-time pickups (the axe, the bag, the rod) be found
+again - a clean slate for testing, not something reachable from inside the
+game itself. It leaves everything else about the world alone: built props,
+felled or regrown trees and buried caches are untouched. Refuses if anyone
+is currently connected to that world - close every tab in it first. For
+staging's default world, that's
+`https://acorn-ash-web-staging.chrisistinson.workers.dev/api/worlds/home-clearing/reset-players?confirm=clear-everyone`.
+See [decision 0042](docs/decisions/0042-hotbar-icons-and-a-way-to-reset-testing.md).
 
 ## Assets and licensing
 

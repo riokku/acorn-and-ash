@@ -18,6 +18,7 @@ import {
 } from '@acorn/shared';
 
 import type { HudStore, HudState } from './store';
+import { ItemIcon } from './item-icons';
 
 interface HudProps {
   readonly store: HudStore;
@@ -342,9 +343,10 @@ function HotbarSlot({
     <div className={classes.join(' ')} title={kind?.displayName}>
       <span className="hotbar-slot-key">{slotNumber}</span>
       {kind !== null ? (
-        <span
+        <ItemIcon
+          item={kind.id}
+          color={colorOf(kind.placeholderColor)}
           className="hotbar-slot-icon"
-          style={{ backgroundColor: colorOf(kind.placeholderColor) }}
         />
       ) : null}
       {kind !== null && entry !== null && kind.maxCarry > 1 ? (

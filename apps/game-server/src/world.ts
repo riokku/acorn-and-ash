@@ -112,6 +112,20 @@ export class World extends DurableObject<WorldEnv> {
       return Response.json(this.status());
     }
 
+    // Playtesting-only: wipes every saved player's pack, hunger, health and
+    // name, and lets the axe, bag and rod be found again. The confirm value
+    // is not real access control - a plain query string is not that - only a
+    // guard against firing from a stray link click or crawler prefetch.
+    if (url.pathname.endsWith('/reset-players')) {
+      if (url.searchParams.get('confirm') !== 'clear-everyone') {
+        return Response.json(
+          { ok: false, reason: 'Missing ?confirm=clear-everyone' },
+          { status: 400 },
+        );
+      }
+      return Response.json(this.resetPlayers());
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('This endpoint speaks WebSocket.', { status: 426 });
     }
@@ -1362,5 +1376,35 @@ export class World extends DurableObject<WorldEnv> {
       running: this.tickHandle !== null,
       slowTicks: this.slowTickCount,
     };
+  }
+
+  /**
+   * Wipe every saved player's pack, hunger, health, position and name back to
+   * nothing, and let the axe, bag and rod be found again - a clean slate for
+   * playtesting, not something a player ever triggers themselves. Refuses
+   * outright while anyone is connected: their still-live session would just
+   * write its own (unwiped) state back over this the moment they leave,
+   * undoing it without saying so.
+   *
+   * Deliberately narrower than "reset the world": built props, felled/regrown
+   * trees and buried caches are left exactly as they are, since none of those
+   * are "inventory" and wiping them would erase testing history nobody asked
+   * to lose.
+   */
+  resetPlayers(): { ok: true; clearedPlayers: number } | { ok: false; reason: string } {
+    if (this.simulation !== null) {
+      return {
+        ok: false,
+        reason: 'Somebody is still connected to this world - try again once everybody has left.',
+      };
+    }
+    const sql = this.ctx.storage.sql;
+    const clearedPlayers = sql
+      .exec<{ player_key: string }>('SELECT player_key FROM players')
+      .toArray().length;
+    sql.exec('DELETE FROM player_items');
+    sql.exec('DELETE FROM players');
+    sql.exec('DELETE FROM pickups_taken');
+    return { ok: true, clearedPlayers };
   }
 }
