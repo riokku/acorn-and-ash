@@ -6,9 +6,10 @@ import { canAfford, craft } from '../src/sim/crafting';
 import { addItem, countOf, createInventory } from '../src/sim/inventory';
 
 describe('the recipe table', () => {
-  it('lists a recipe for the axe and the fishing rod', () => {
+  it('lists a recipe for the axe, the fishing rod and the torch', () => {
     expect(RECIPE_ITEMS).toContain('axe');
     expect(RECIPE_ITEMS).toContain('rod');
+    expect(RECIPE_ITEMS).toContain('torch');
   });
 
   it('makes the axe out of sticks, gathered by hand, not logs', () => {
@@ -96,6 +97,15 @@ describe('crafting', () => {
     expect(craft(pack, 'rod')).toBe(true);
     expect(countOf(pack, 'log')).toBe(0);
     expect(countOf(pack, 'rod')).toBe(1);
+  });
+
+  it('makes a torch out of sticks, the same as the axe', () => {
+    const pack = createInventory();
+    addItem(pack, 'bag');
+    addItem(pack, 'stick', 2);
+    expect(craft(pack, 'torch')).toBe(true);
+    expect(countOf(pack, 'stick')).toBe(0);
+    expect(countOf(pack, 'torch')).toBe(1);
   });
 
   it('leaves other items in the pack untouched', () => {

@@ -6,7 +6,17 @@
  */
 
 export type ItemId =
-  'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat' | 'flower' | 'bag';
+  | 'axe'
+  | 'log'
+  | 'rod'
+  | 'perch'
+  | 'trout'
+  | 'goldenCarp'
+  | 'stick'
+  | 'meat'
+  | 'flower'
+  | 'bag'
+  | 'torch';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -141,6 +151,21 @@ export const ITEM_KINDS = {
     keepOnKnockout: true,
     equippable: false,
   },
+  torch: {
+    id: 'torch',
+    displayName: 'Torch',
+    pluralName: 'Torches',
+    // A permanent tool once made, the same as the axe and rod - no fuel to
+    // track, matching the campfire's own atmosphere-only fire (see decision
+    // 0033).
+    maxCarry: 1,
+    placeholderColor: 0x7a5230,
+    restoresHunger: undefined,
+    // As essential at night as the axe and rod are for gathering, so a
+    // knockout leaves it alone the same way.
+    keepOnKnockout: true,
+    equippable: true,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -160,6 +185,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'meat',
   'flower',
   'bag',
+  'torch',
 ];
 
 export function itemIndex(id: ItemId): number {

@@ -51,7 +51,11 @@ The game is online-only. Every world runs on the server.
 > as a real animated character, and a Home screen now asks who you are
 > before you step into the clearing - a name, a tint, and a character, all
 > six of the pack's now real and pickable. Everybody else sees your name,
-> colour and character too. See [the roadmap](#roadmap).
+> colour and character too. A lit campfire, a built lantern and a torch you
+> can now craft from a couple of sticks all cast real firelight of their
+> own now, flickering the way fire actually does rather than just glowing
+> in place - the first real reason to have one of the three going before
+> night falls. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -63,7 +67,7 @@ The game is online-only. Every world runs on the server.
 | `E`                               | Pick up, gather, dig up a cache, light/put out a campfire, eat |
 | `1`–`6`                           | Equip the hotbar slot - eats it too if it's food               |
 | `C`                               | Open the craft menu                                            |
-| `1` / `2` (craft menu open)       | Craft an axe / fishing rod                                     |
+| `1` / `2` / `3` (craft menu open) | Craft an axe / fishing rod / torch                             |
 | `B`                               | Open the build menu                                            |
 | `1`–`4` (build menu open)         | Build a campfire, cabin, flower bed or lantern                 |
 | Left mouse                        | Chop, cast, hook, fight off                                    |
@@ -140,9 +144,13 @@ A 20-minute day runs the whole time a world is awake, the sky and light
 brightening and dimming smoothly between noon and midnight. It's the
 server's own clock, so it never skips and it's the same moment for everyone
 in the world; the HUD's "Time" row says which half you're in right now.
-Nothing about how the game plays changes with it yet - that's deliberately
-saved for later. See
-[decision 0027](docs/decisions/0027-a-day-and-night-cycle.md).
+Nothing about how the game plays changes with it yet, other than actually
+being able to see - a lit campfire, a built lantern or a torch in hand are
+real light now, casting a warm, flickering glow on what's nearby rather than
+just looking lit, so it's worth having one of the three going before the sky
+gets dark. See [decision 0027](docs/decisions/0027-a-day-and-night-cycle.md)
+and [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for
+the firelight itself.
 
 ### Wildlife
 
@@ -224,16 +232,21 @@ your own. Flower patches work exactly the same way; what flowers are for
 lives in [Building](#building) below.
 
 Press `C` to open the craft menu, then `1` to make an axe out of three sticks,
-or `2` to make a fishing rod out of two logs - a parchment page of recipes
-opens with the ingredients each one needs and marks the ones you can afford
-right now, and `C` again closes it. Building (`B`) opens the same kind of
-page, for campfires, cabins, flower beds and lanterns instead. Finding the
-axe in the stump and the rod on the bank still work exactly as before;
-crafting is another way to get one, and still needs a bag the same as
-anything else does. See
+`2` to make a fishing rod out of two logs, or `3` to make a torch out of two
+more sticks - a parchment page of recipes opens with the ingredients each one
+needs and marks the ones you can afford right now, and `C` again closes it.
+Building (`B`) opens the same kind of page, for campfires, cabins, flower
+beds and lanterns instead. Finding the axe in the stump and the rod on the
+bank still work exactly as before; crafting is another way to get one, and
+still needs a bag the same as anything else does. The torch has no such
+shortcut - crafting is the only way to get one - and it equips and shows in
+your hand exactly like the axe and rod, casting real firelight for as long
+as it's the one you have equipped. See
 [decision 0017](docs/decisions/0017-crafting.md),
-[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md) and
-[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
+[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md),
+[decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md)
+and [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for
+the torch itself.
 
 ### Hunger
 
@@ -275,7 +288,8 @@ anywhere in the clearing, then a number to pick one:
   stump pays out. Real modeled art, and you can light it: press `E` once
   you're standing next to it for a genuinely animated fire, atmosphere only
   for now. It burns for a while and goes out on its own, or put it out early
-  by pressing `E` again.
+  by pressing `E` again. A lit fire casts real, flickering light on
+  everything nearby, not just a flame that looks lit.
 - **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
   per player: once you have built yours, that is where you start next time,
   instead of the open clearing. A placeholder box with a peaked roof for now
@@ -283,7 +297,10 @@ anywhere in the clearing, then a number to pick one:
 - **Flower bed** - six flowers, gathered by hand from a patch the same way
   as sticks. Capped at one per player.
 - **Lantern** - four flowers. Also capped at one per player, independently
-  of the flower bed - owning one never blocks the other.
+  of the flower bed - owning one never blocks the other. Always lit once
+  built, casting the same kind of real, flickering light as a campfire, just
+  smaller and closer - no switch, the same "atmosphere only" choice as the
+  campfire's own fire.
 
 The hint at the bottom tells you when the spot you're facing is clear and
 your pack can afford whatever you have picked. What each one costs lives in
@@ -293,9 +310,11 @@ campfire and placement itself,
 [decision 0022](docs/decisions/0022-a-cabin-of-your-own.md) for the cabin,
 ownership and the spawn-at-home rule,
 [decision 0023](docs/decisions/0023-decorating-the-garden.md) for the flower
-bed, the lantern and the per-kind build cap, and
+bed, the lantern and the per-kind build cap,
 [decision 0033](docs/decisions/0033-a-campfire-you-can-light.md) for the
-campfire's real art, its animated fire and lighting it.
+campfire's real art, its animated fire and lighting it, and
+[decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for the
+real light the campfire and lantern both cast now.
 
 ## Running it locally
 

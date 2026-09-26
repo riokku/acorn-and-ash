@@ -4,12 +4,15 @@ import { BUILDABLE_KINDS } from '@acorn/shared';
 
 import { campfireModelParts, flameModelTemplate } from './campfire-models';
 import { instantiateAnimatedModel } from './model-loading';
+import { createFlickerLight, type FlickerLight } from './fire-light';
 
 /**
  * A campfire: real logs-and-base art once it has loaded (see
  * campfire-models.ts), or a placeholder cylinder-and-logs shape until then.
  * Lighting it adds an animated flame on top, playing for as long as it's lit;
  * putting it out (by hand, or once it burns down) removes the flame again.
+ * A lit fire also casts real, flickering light on everything nearby - not
+ * just an animated flame that looks lit without lighting anything.
  */
 export interface Campfire {
   readonly group: THREE.Group;
@@ -23,6 +26,13 @@ const LOG_LENGTH = 0.62;
 const LOG_COUNT = 4;
 const BASE_RADIUS = 0.5;
 const BASE_HEIGHT = 0.05;
+
+/** Warm firelight - the biggest, brightest of the three (see also lantern.ts and character.ts). */
+const FIRE_LIGHT_COLOR = 0xff8c42;
+const FIRE_LIGHT_INTENSITY = 18;
+const FIRE_LIGHT_DISTANCE = 9;
+/** Roughly where the flame model's own fire actually is, above the logs. */
+const FIRE_LIGHT_HEIGHT = 0.35;
 
 export function createCampfire(): Campfire {
   const group = new THREE.Group();
@@ -70,6 +80,7 @@ export function createCampfire(): Campfire {
 
   let mixer: THREE.AnimationMixer | undefined;
   let flameGroup: THREE.Group | undefined;
+  let fireLight: FlickerLight | undefined;
   let lit = false;
 
   function setLit(nextLit: boolean): void {
@@ -77,6 +88,10 @@ export function createCampfire(): Campfire {
     lit = nextLit;
 
     if (lit) {
+      fireLight = createFlickerLight(FIRE_LIGHT_COLOR, FIRE_LIGHT_INTENSITY, FIRE_LIGHT_DISTANCE);
+      fireLight.light.position.set(0, FIRE_LIGHT_HEIGHT, 0);
+      group.add(fireLight.light);
+
       const template = flameModelTemplate();
       if (template === undefined) return; // No flame model loaded; stays a lit-less fire.
       const instance = instantiateAnimatedModel(template);
@@ -84,18 +99,27 @@ export function createCampfire(): Campfire {
       mixer = instance.mixer;
       for (const action of instance.actions) action.play();
       group.add(flameGroup);
-    } else if (flameGroup !== undefined) {
-      group.remove(flameGroup);
-      mixer?.stopAllAction();
-      flameGroup = undefined;
-      mixer = undefined;
+    } else {
+      if (fireLight !== undefined) {
+        group.remove(fireLight.light);
+        fireLight = undefined;
+      }
+      if (flameGroup !== undefined) {
+        group.remove(flameGroup);
+        mixer?.stopAllAction();
+        flameGroup = undefined;
+        mixer = undefined;
+      }
     }
   }
 
   return {
     group,
     setLit,
-    update: (deltaSeconds) => mixer?.update(deltaSeconds),
+    update: (deltaSeconds) => {
+      mixer?.update(deltaSeconds);
+      fireLight?.update(deltaSeconds);
+    },
     dispose: () => {
       for (const disposable of disposables) disposable.dispose();
       mixer?.stopAllAction();

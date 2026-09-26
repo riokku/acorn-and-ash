@@ -81,6 +81,12 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <rect x="6" y="13" width="12" height="1.5" />
     </>
   ),
+  torch: (
+    <g transform="rotate(15 12 12)">
+      <rect x="10.5" y="10" width="3" height="12" rx="1.2" />
+      <circle cx="12" cy="7" r="4.2" />
+    </g>
+  ),
 };
 
 /** Body and tail, the one shape shared by every fish - only the fill colour tells them apart. */
