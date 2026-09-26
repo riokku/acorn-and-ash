@@ -24,6 +24,8 @@ export interface HudState {
   readonly ready: boolean;
   /** What the server says this player is carrying. */
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
+  /** What the server's Equipped list says this player currently has in hand. */
+  readonly equippedItem: ItemId | null;
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
@@ -82,6 +84,7 @@ const INITIAL: HudState = {
   pointerLocked: false,
   ready: false,
   carrying: [],
+  equippedItem: null,
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,

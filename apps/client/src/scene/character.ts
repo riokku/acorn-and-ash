@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu';
 
-import { PLAYER_HEIGHT, PLAYER_RADIUS } from '@acorn/shared';
+import { ITEM_KINDS, ITEM_ORDER, PLAYER_HEIGHT, PLAYER_RADIUS, type ItemId } from '@acorn/shared';
 
-import { instantiateAnimatedModel, type AnimatedModel } from './model-loading';
+import { instantiateAnimatedModel, type AnimatedModel, type ModelPart } from './model-loading';
 import { characterModelTemplate } from './character-model';
 import { itemModelParts } from './item-models';
 import { pickAnimationState, type CharacterAnimState } from './character-animation';
@@ -25,14 +25,20 @@ export interface Character {
   setName(name: string | null): void;
   /** Which of the four named clips should be playing right now. A no-op on the placeholder. */
   setAnimationState(state: CharacterAnimState): void;
-  /** Shows or hides the axe carried in this character's right hand. A no-op on the placeholder. */
-  setHoldingAxe(holding: boolean): void;
   /** Plays a one-shot swing of the held axe, timed to a chop landing. A no-op on the placeholder. */
   swingAxe(): void;
+  /**
+   * Shows this item in the character's hand, replacing whatever was shown
+   * before - or shows nothing for null. A no-op on the placeholder.
+   */
+  setEquippedItem(item: ItemId | null): void;
   /** Advances the animation mixer and any swing in progress. A no-op on the placeholder. */
   update(deltaSeconds: number): void;
   dispose(): void;
 }
+
+/** Every item that can ever be shown in a hand, in the wire's own stable order. */
+const HELD_ITEM_IDS: readonly ItemId[] = ITEM_ORDER.filter((id) => ITEM_KINDS[id].equippable);
 
 const CLIP_NAME_BY_STATE: Record<CharacterAnimState, string> = {
   idle: 'Idle_A_Rig_Medium',
@@ -119,6 +125,107 @@ const HELD_AXE_OFFSET = new THREE.Vector3(0, -0.12, 0);
 const SWING_DURATION_SECONDS = 0.25;
 const SWING_SWEEP_RADIANS = 1.3;
 
+/**
+ * How a held item sits relative to the hand bone: `rotation`/`offset` place
+ * it, and everything is scaled by `1 / MODEL_SCALE` to cancel the character's
+ * own shrink, the same as the axe's group always was.
+ */
+interface HeldItemRest {
+  readonly rotation: THREE.Euler;
+  readonly offset: THREE.Vector3;
+}
+
+/**
+ * The rod shares the axe's own confirmed grip rather than a fresh guess: both
+ * are long, one-handed tools whose model sits with its base at the local
+ * origin (see `loadScaledModel`), gripped by that same base end. Nobody has
+ * sampled this one against a real screenshot yet the way the axe's numbers
+ * were - Chris can flag it from the PR preview if the rod's angle looks
+ * wrong and it'll get the same treatment.
+ */
+const TOOL_HELD_REST: HeldItemRest = { rotation: HELD_AXE_ROTATION, offset: HELD_AXE_OFFSET };
+
+/**
+ * Every food item shares one rest pose too: small enough, and round enough,
+ * that a fish or a cut of meat reads fine held at roughly the same angle -
+ * unlike an axe or a rod, there is no "wrong end" for a swing to expose.
+ */
+const FOOD_HELD_REST: HeldItemRest = {
+  rotation: new THREE.Euler(0.3, 0, 0.4),
+  offset: new THREE.Vector3(0, -0.05, 0.03),
+};
+
+const HELD_ITEM_REST: Partial<Record<ItemId, HeldItemRest>> = {
+  axe: TOOL_HELD_REST,
+  rod: TOOL_HELD_REST,
+  perch: FOOD_HELD_REST,
+  trout: FOOD_HELD_REST,
+  goldenCarp: FOOD_HELD_REST,
+  meat: FOOD_HELD_REST,
+};
+
+/**
+ * A fish placeholder: one shared body-and-tail shape, tinted per species -
+ * nobody has a real fish model yet, so this stands in for perch, trout and
+ * golden carp alike the same way a stem and a sphere stand in for a flower.
+ */
+const FISH_BODY_GEOMETRY = new THREE.SphereGeometry(0.08, 8, 6).scale(0.8, 0.6, 1.6);
+const FISH_TAIL_GEOMETRY = new THREE.ConeGeometry(0.07, 0.09, 4)
+  .rotateX(Math.PI / 2)
+  .scale(0.3, 1, 1)
+  .translate(0, 0, 0.16);
+
+function fishHeldParts(color: number): ModelPart[] {
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true });
+  return [
+    { geometry: FISH_BODY_GEOMETRY, material },
+    { geometry: FISH_TAIL_GEOMETRY, material },
+  ];
+}
+
+/** A meat placeholder: a rounded chunk with a bone end, the same "two simple shapes" idiom as the fish. */
+const MEAT_BODY_GEOMETRY = new THREE.IcosahedronGeometry(0.1, 0);
+const MEAT_BONE_GEOMETRY = new THREE.CylinderGeometry(0.02, 0.025, 0.14, 5).translate(0, -0.1, 0);
+const MEAT_BONE_COLOR = 0xe8ddc0;
+
+/**
+ * Every equippable item's held parts, built once at module scope and shared
+ * by every character instance - the same "geometry and material are nobody's
+ * to dispose per-instance" arrangement `itemModelParts` already gives the
+ * axe. `axe` and `rod` come from their real loaded models instead; both are
+ * looked up fresh each time a character is built rather than cached here,
+ * since a model that failed to load can still succeed on a later retry.
+ */
+const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
+  perch: fishHeldParts(ITEM_KINDS.perch.placeholderColor),
+  trout: fishHeldParts(ITEM_KINDS.trout.placeholderColor),
+  goldenCarp: fishHeldParts(ITEM_KINDS.goldenCarp.placeholderColor),
+  meat: [
+    {
+      geometry: MEAT_BODY_GEOMETRY,
+      material: new THREE.MeshStandardMaterial({
+        color: ITEM_KINDS.meat.placeholderColor,
+        roughness: 0.8,
+        flatShading: true,
+      }),
+    },
+    {
+      geometry: MEAT_BONE_GEOMETRY,
+      material: new THREE.MeshStandardMaterial({
+        color: MEAT_BONE_COLOR,
+        roughness: 0.6,
+        flatShading: true,
+      }),
+    },
+  ],
+};
+
+/** This item's parts to put in a hand, or undefined to leave that item showing nothing. */
+function heldItemParts(item: ItemId): ModelPart[] | undefined {
+  if (item === 'axe' || item === 'rod') return itemModelParts(item);
+  return FOOD_HELD_PARTS[item];
+}
+
 const CAPSULE_LENGTH = PLAYER_HEIGHT - PLAYER_RADIUS * 2;
 
 /**
@@ -201,28 +308,35 @@ function createAnimatedCharacter(
   });
   for (const material of materials) material.color.set(color);
 
-  // A held axe is its own group, parented straight onto the hand bone - a
-  // real Object3D in the skeleton - so it moves and rotates with the arm
-  // through every animation for free, with no per-frame code needed here.
-  // Scaled up to cancel MODEL_SCALE: parented this deep, it would otherwise
-  // shrink along with the character, even though it's the same physical axe
-  // as the one on the ground.
-  let heldAxe: THREE.Group | undefined;
+  // Every item that could ever be equipped gets its own group, parented
+  // straight onto the hand bone - a real Object3D in the skeleton - so
+  // whichever one is visible moves and rotates with the arm through every
+  // animation for free, with no per-frame code needed here. Scaled up to
+  // cancel MODEL_SCALE: parented this deep, it would otherwise shrink along
+  // with the character, even though it's the same physical item as the one
+  // on the ground. All start hidden; `setEquippedItem` shows at most one.
+  const heldItems = new Map<ItemId, THREE.Group>();
   const handBone = model.getObjectByName(HAND_BONE_NAME);
-  const axeParts = itemModelParts('axe');
-  if (handBone !== undefined && axeParts !== undefined) {
-    heldAxe = new THREE.Group();
-    for (const part of axeParts) {
-      const mesh = new THREE.Mesh(part.geometry, part.material);
-      mesh.castShadow = true;
-      heldAxe.add(mesh);
+  if (handBone !== undefined) {
+    for (const item of HELD_ITEM_IDS) {
+      const parts = heldItemParts(item);
+      const rest = HELD_ITEM_REST[item];
+      if (parts === undefined || rest === undefined) continue;
+      const held = new THREE.Group();
+      for (const part of parts) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = true;
+        held.add(mesh);
+      }
+      held.rotation.copy(rest.rotation);
+      held.position.copy(rest.offset);
+      held.scale.setScalar(1 / MODEL_SCALE);
+      held.visible = false;
+      handBone.add(held);
+      heldItems.set(item, held);
     }
-    heldAxe.rotation.copy(HELD_AXE_ROTATION);
-    heldAxe.position.copy(HELD_AXE_OFFSET);
-    heldAxe.scale.setScalar(1 / MODEL_SCALE);
-    heldAxe.visible = false;
-    handBone.add(heldAxe);
   }
+  const heldAxe = heldItems.get('axe');
 
   const actionByState = new Map<CharacterAnimState, THREE.AnimationAction>();
   for (const action of instance.actions) {
@@ -253,8 +367,8 @@ function createAnimatedCharacter(
       current?.fadeOut(CROSSFADE_SECONDS);
       current = next;
     },
-    setHoldingAxe: (holding) => {
-      if (heldAxe !== undefined) heldAxe.visible = holding;
+    setEquippedItem: (item) => {
+      for (const [id, held] of heldItems) held.visible = id === item;
     },
     swingAxe: () => {
       if (heldAxe !== undefined) swingElapsed = 0;
@@ -314,7 +428,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     setColor: (next) => material.color.set(next),
     setName: nameplate.setName,
     setAnimationState: () => {},
-    setHoldingAxe: () => {},
+    setEquippedItem: () => {},
     swingAxe: () => {},
     update: () => {},
     dispose: () => {

@@ -16,9 +16,11 @@ The game is online-only. Every world runs on the server.
 > they grow back while you are away. Find the rod on the bank of the pond
 > and catch fish. Gather sticks by hand and craft your own axe or rod
 > instead. A hotbar along the bottom shows what you're carrying, six slots
-> at a time - press a number to eat whatever food is in that slot. You get
-> hungry the longer you play, and eating a fish tops you back up. Rabbits
-> live out in the
+> at a time - a small icon apiece now, rather than a plain colour swatch -
+> press a number to equip whatever is in that slot, eating it too
+> if it's food. Whatever you have equipped shows in your character's hand,
+> for everyone nearby to see, not just you. You get hungry the longer you
+> play, and eating a fish tops you back up. Rabbits live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
 > that fells a tree and it pays out meat, worth even more than a fish. Chop
 > enough logs and you can build a campfire, or a cabin of your own - once you
@@ -58,7 +60,7 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held)                    | Sprint                                                         |
 | `Space`                           | Jump                                                           |
 | `E`                               | Pick up, gather, dig up a cache, light/put out a campfire, eat |
-| `1`–`6`                           | Use the hotbar slot - eats whatever food is shown there        |
+| `1`–`6`                           | Equip the hotbar slot - eats it too if it's food               |
 | `C`                               | Open the craft menu                                            |
 | `1` / `2` (craft menu open)       | Craft an axe / fishing rod                                     |
 | `B`                               | Open the build menu                                            |
@@ -84,8 +86,8 @@ which fish bite and how often lives in
 
 A hotbar along the bottom of the screen shows what's in your pack, six slots
 at a time - wire order, so it needs nothing new picked or arranged. Press its
-number to eat whatever food is shown there, right away, rather than waiting
-for `E` to fall back to it.
+number to equip whatever is shown there - shown in your hand from then on,
+for anyone nearby to see - eating it too, right away, if it's food.
 
 ### Your character
 
@@ -99,13 +101,18 @@ clearing, with a small name tag floating over your head the same way it does
 over anyone else's. Picked once, remembered the next time you visit. See
 [decision 0037](docs/decisions/0037-choosing-a-name-and-a-character.md).
 
-Carrying an axe now actually shows it in your hand, not just as a line in
-the side panel - it's parented straight onto the character's own hand, so
-it moves with the arm through every animation, held at a natural, mostly
-upright angle. Landing a chop swings it at the tree. Only your own axe
-shows this way for now, since the server has never told you what anyone
-else is carrying. See
-[decision 0036](docs/decisions/0036-a-real-moving-character.md).
+Whatever hotbar slot you last pressed shows in your hand - the axe, the rod,
+or whatever fish or meat you picked - parented straight onto the character's
+own hand, so it moves with the arm through every animation. Not automatic:
+finding a tool or catching a fish does not equip it on its own, only
+pressing its slot does. Landing a chop swings the axe at the tree, if the
+axe happens to be the one currently shown. Everyone nearby sees it too, not
+just you - the server tells every connected player what everyone else has
+equipped, the same way it already tells them each other's names. See
+[decision 0036](docs/decisions/0036-a-real-moving-character.md) for the
+held axe's own first appearance, and
+[decision 0041](docs/decisions/0041-showing-what-you-have-equipped.md) for
+making it a real, shared choice covering every tool and food item.
 
 ### The wilderness
 
@@ -403,6 +410,19 @@ To stop it: Cloudflare dashboard → **Workers & Pages** → that Worker →
 **Settings** → **Build** → disconnect the Git repository. Our own deploys
 never use this feature, so disconnecting it is always safe and never affects
 the game.
+
+### Starting a world's players over
+
+Visiting `/api/worlds/<worldId>/reset-players?confirm=clear-everyone` clears
+every saved player's pack, hunger, health, position and name for that one
+world, and lets the one-time pickups (the axe, the bag, the rod) be found
+again - a clean slate for testing, not something reachable from inside the
+game itself. It leaves everything else about the world alone: built props,
+felled or regrown trees and buried caches are untouched. Refuses if anyone
+is currently connected to that world - close every tab in it first. For
+staging's default world, that's
+`https://acorn-ash-web-staging.chrisistinson.workers.dev/api/worlds/home-clearing/reset-players?confirm=clear-everyone`.
+See [decision 0042](docs/decisions/0042-hotbar-icons-and-a-way-to-reset-testing.md).
 
 ## Assets and licensing
 

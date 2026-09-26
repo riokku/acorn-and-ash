@@ -24,7 +24,7 @@ import {
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
 import { ANIMAL_KINDS } from '../src/data/animals';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../src/data/buildables';
-import { ITEM_KINDS } from '../src/data/items';
+import { ITEM_KINDS, type ItemId } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { regrowDueAtMs } from '../src/sim/regrowth';
@@ -690,6 +690,187 @@ describe('hunger', () => {
     const later = createWorld();
     later.addPlayer(9, saved);
     expect(later.hungerOf(9)).toBe(before);
+  });
+});
+
+describe('equipping', () => {
+  function withItems(
+    netId: number,
+    items: Array<{ item: ItemId; count: number }>,
+    equippedItem: ItemId | null = null,
+    hunger = HUNGER_MAX,
+  ): PersistedPlayer {
+    return { netId, x: 0, y: 0, z: 0, facingYaw: 0, items, hunger, equippedItem };
+  }
+
+  it('equips a tool without eating anything or spending it', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'rod', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
+    // The axe is the default; switching to the rod is a genuine change.
+    expect(sim.useItem(1, 'rod')).toBe(true);
+
+    expect(sim.equippedItemOf(1)).toBe('rod');
+    expect(countOf(sim.inventoryOf(1), 'rod')).toBe(1);
+    expect(sim.hungerOf(1)).toBe(HUNGER_MAX);
+  });
+
+  it('still eats food the same as before, and equips it too', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [{ item: 'bag', count: 1 }, { item: 'perch', count: 2 }], null, 50),
+    );
+    expect(sim.useItem(1, 'perch')).toBe(true);
+
+    expect(sim.equippedItemOf(1)).toBe('perch');
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+    expect(sim.hungerOf(1)).toBe(90);
+  });
+
+  it('refuses to equip an item the pack does not actually hold', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withItems(1, [{ item: 'bag', count: 1 }]));
+    expect(sim.useItem(1, 'rod')).toBe(false);
+    expect(sim.equippedItemOf(1)).toBeNull();
+  });
+
+  it('refuses to equip a material - not marked equippable, however many you hold', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'log', count: 10 },
+      ]),
+    );
+    expect(sim.useItem(1, 'log')).toBe(false);
+    expect(sim.equippedItemOf(1)).toBeNull();
+  });
+
+  it('defaults to the axe on a fresh connect when nothing was saved', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }]));
+    expect(sim.equippedItemOf(1)).toBe('axe');
+  });
+
+  it('prefers the axe over the rod as the default when both are held', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'rod', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
+    expect(sim.equippedItemOf(1)).toBe('axe');
+  });
+
+  it('never defaults to a food item, even if that is all a save has', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'perch', count: 3 },
+      ]),
+    );
+    expect(sim.equippedItemOf(1)).toBeNull();
+  });
+
+  it("honors a save's own choice over the default, if still held", () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(
+        1,
+        [
+          { item: 'bag', count: 1 },
+          { item: 'rod', count: 1 },
+          { item: 'axe', count: 1 },
+        ],
+        'rod',
+      ),
+    );
+    expect(sim.equippedItemOf(1)).toBe('rod');
+  });
+
+  it('falls back to the default when a saved choice is no longer held', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }], 'rod'),
+    );
+    expect(sim.equippedItemOf(1)).toBe('axe');
+  });
+
+  it('empties out once the equipped food is eaten to nothing, with nothing extra to notice', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [{ item: 'bag', count: 1 }, { item: 'perch', count: 1 }], null, 50),
+    );
+    sim.useItem(1, 'perch');
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
+    expect(sim.equippedItemOf(1)).toBeNull();
+  });
+
+  it('lists what every connected player has equipped', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }]));
+    sim.addPlayer(2, withItems(2, [{ item: 'bag', count: 1 }]));
+    expect(sim.equippedList()).toEqual(
+      expect.arrayContaining([
+        { netId: 1, item: 'axe' },
+        { netId: 2, item: null },
+      ]),
+    );
+  });
+
+  it('reports an equip change exactly once, even pressed repeatedly', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'rod', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
+    // Starts equipped with the default axe already, so switching to the rod
+    // is the one genuine change - pressing it again after must not add a
+    // second entry for the same player.
+    sim.useItem(1, 'rod');
+    sim.useItem(1, 'rod');
+    expect(sim.drainEquipEvents()).toEqual([1]);
+    expect(sim.drainEquipEvents()).toEqual([]);
+  });
+
+  it('keeps the equipped choice across logging out and coming back', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'rod', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
+    sim.useItem(1, 'rod');
+    const saved = sim.persistablePlayers()[0];
+    if (saved === undefined) throw new Error('nothing was saved');
+    sim.removePlayer(1);
+
+    const later = createWorld();
+    later.addPlayer(9, saved);
+    expect(later.equippedItemOf(9)).toBe('rod');
   });
 });
 

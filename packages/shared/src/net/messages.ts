@@ -46,6 +46,7 @@ export const ServerMessageType = {
   BuriedCaches: 0x20,
   Cache: 0x21,
   Roster: 0x22,
+  Equipped: 0x23,
 } as const;
 
 export const RejectReason = {
@@ -90,7 +91,8 @@ export interface BuildMessage {
 }
 
 /**
- * Use one item from the hotbar right now - eating it, if it is food.
+ * Select one item from the hotbar as the one now equipped - shown in hand,
+ * and told to everybody nearby - eating it too if it is food.
  *
  * Like crafting, this is its own small message rather than a bit on the input
  * bundle: it is not aimed at anything, so it needs neither reach nor facing,
@@ -336,6 +338,26 @@ export interface RosterMessage {
   readonly players: readonly RosterEntry[];
 }
 
+/** What one connected player currently has equipped - shown in their hand. */
+export interface EquippedEntry {
+  readonly netId: number;
+  readonly item: ItemId | null;
+}
+
+/**
+ * What everybody currently connected has equipped, sent whole - the same
+ * "cheap while there are only ever a few dozen, simplest to keep in sync"
+ * shape `Roster` and `BuiltProps` already use. Sent to a newly connecting
+ * player covering whoever has already equipped something, and again to
+ * everybody whenever any one player's own choice changes - not a diff of
+ * who changed to what, since resending the whole small list costs nothing
+ * extra and needs no per-player bookkeeping to stay correct.
+ */
+export interface EquippedMessage {
+  readonly type: 'equipped';
+  readonly players: readonly EquippedEntry[];
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -355,4 +377,5 @@ export type ServerMessage =
   | HealthMessage
   | BuriedCachesMessage
   | CacheMessage
-  | RosterMessage;
+  | RosterMessage
+  | EquippedMessage;

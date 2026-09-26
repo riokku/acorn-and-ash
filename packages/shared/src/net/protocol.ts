@@ -44,6 +44,7 @@ import {
   RejectReason,
   ServerMessageType,
   type ClientMessage,
+  type EquippedEntry,
   type RejectReasonCode,
   type RosterEntry,
   type ServerMessage,
@@ -82,6 +83,8 @@ export const MAX_BUILT_PROPS = 255;
 export const MAX_BURIED_CACHES = 255;
 /** A world never holds more players than this, so the roster never needs to either. */
 export const MAX_ROSTER_ENTRIES = MAX_PLAYERS_PER_WORLD;
+/** One entry per connected player, the same ceiling `Roster` already has. */
+export const MAX_EQUIPPED_ENTRIES = MAX_PLAYERS_PER_WORLD;
 /**
  * A name is capped at MAX_PLAYER_NAME_LENGTH *characters* on the Home screen,
  * but travels as UTF-8 bytes here - generous enough for that many characters
@@ -567,6 +570,32 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
   return buffer;
 }
 
+/** netId(2) + what's equipped, or the "no item" sentinel(1) */
+const BYTES_PER_EQUIPPED_ENTRY = 3;
+
+/**
+ * What everybody currently connected has equipped, sent whole - a fixed
+ * per-entry size, unlike `Roster`, since there is no name string here to
+ * make one entry a different length from the next.
+ */
+export function encodeEquipped(players: readonly EquippedEntry[]): ArrayBuffer {
+  const count = Math.min(players.length, MAX_EQUIPPED_ENTRIES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_EQUIPPED_ENTRY);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Equipped);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const entry = players[i];
+    if (entry === undefined) break;
+    view.setUint16(offset, entry.netId & 0xffff, true);
+    view.setUint8(offset + 2, entry.item === null ? NO_ITEM : itemIndex(entry.item));
+    offset += BYTES_PER_EQUIPPED_ENTRY;
+  }
+  return buffer;
+}
+
 export function encodeTreeHit(treeId: number, swingsLeft: number, netId: number): ArrayBuffer {
   const buffer = new ArrayBuffer(6);
   const view = new DataView(buffer);
@@ -968,6 +997,23 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       if (offset !== data.byteLength) return null;
       return { type: 'roster', players };
+    }
+    case ServerMessageType.Equipped: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * BYTES_PER_EQUIPPED_ENTRY) return null;
+      const players: EquippedEntry[] = [];
+      let offset = 2;
+      for (let i = 0; i < count; i++) {
+        const netId = view.getUint16(offset, true);
+        const itemByte = view.getUint8(offset + 2);
+        // An item this build has never heard of reads as nothing equipped
+        // rather than failing the whole message - the same call `Hunger`
+        // already makes for an unrecognised "what was eaten".
+        players.push({ netId, item: itemByte === NO_ITEM ? null : itemFromIndex(itemByte) });
+        offset += BYTES_PER_EQUIPPED_ENTRY;
+      }
+      return { type: 'equipped', players };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

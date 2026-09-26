@@ -6,8 +6,10 @@ declare global {
       selfNetId(): number;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
+      remoteEquippedItem(netId: number): string | null;
       animals(): Array<{ id: number; kind: string; x: number; y: number; z: number }>;
       carrying(): Array<{ item: string; count: number }>;
+      equippedItem(): string | null;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
       gatherSpots(): Array<{ x: number; z: number; item: string }>;
@@ -452,6 +454,86 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   expect(await again.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
   await again.close();
   await context.close();
+});
+
+test('equipping the axe shows it in your hand, and a nearby player can tell', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const worldId = `equip-${Date.now()}`;
+  const equipper = await browser.newPage();
+  const watcher = await browser.newPage();
+
+  await equipper.goto(`/?world=${worldId}`);
+  await watcher.goto(`/?world=${worldId}`);
+  await waitForConnected(equipper);
+  await waitForConnected(watcher);
+
+  await equipper.bringToFront();
+  await equipper.locator('.hud-curtain').click();
+  expect(await equipper.evaluate(() => window.acornDebug?.equippedItem() ?? null)).toBeNull();
+
+  const pickups = await equipper.evaluate(() => window.acornDebug?.pickups() ?? []);
+  const bag = pickups.find((entry) => entry.item === 'bag');
+  const axe = pickups.find((entry) => entry.item === 'axe');
+  expect(bag).toBeDefined();
+  expect(axe).toBeDefined();
+  if (bag === undefined || axe === undefined) throw new Error('no bag or axe in the clearing');
+
+  // Nothing can be carried, the axe included, before the bag is found.
+  await walkWithinReachOf(equipper, bag.x, bag.z);
+  await equipper.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await equipper.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'bag',
+      ),
+    )
+    .toBe(true);
+
+  await walkWithinReachOf(equipper, axe.x, axe.z);
+  await equipper.keyboard.press('KeyE');
+  await expect
+    .poll(async () =>
+      (await equipper.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === 'axe',
+      ),
+    )
+    .toBe(true);
+
+  // Found, but not equipped yet - just carrying it is not enough to show it in hand.
+  expect(await equipper.evaluate(() => window.acornDebug?.equippedItem() ?? null)).toBeNull();
+
+  // The axe is whatever pack slot 1 sorts to, whichever one that is.
+  const slot =
+    (await equipper.evaluate(() => window.acornDebug?.carrying() ?? [])).findIndex(
+      (entry) => entry.item === 'axe',
+    ) + 1;
+  await equipper.keyboard.press(`Digit${slot}`);
+  await expect
+    .poll(async () => await equipper.evaluate(() => window.acornDebug?.equippedItem() ?? null))
+    .toBe('axe');
+
+  // A look at the equipper's own view, to check the held axe's grip by eye.
+  await equipper.screenshot({ path: 'test-results/equip-axe-self.png' });
+
+  // The watcher, elsewhere in the same world, is told the same thing.
+  const equipperNetId = await equipper.evaluate(() => window.acornDebug?.selfNetId());
+  await watcher.bringToFront();
+  await expect
+    .poll(async () =>
+      equipperNetId === undefined
+        ? null
+        : await watcher.evaluate(
+            (netId) => window.acornDebug?.remoteEquippedItem(netId) ?? null,
+            equipperNetId,
+          ),
+    )
+    .toBe('axe');
+  await watcher.screenshot({ path: 'test-results/equip-axe-watched.png' });
+
+  await equipper.close();
+  await watcher.close();
 });
 
 test('you can gather sticks and craft your own axe, without ever finding one', async ({ page }) => {

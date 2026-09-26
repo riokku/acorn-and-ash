@@ -31,6 +31,10 @@ app.get('/api/worlds/:worldId/status', (c) =>
   connectToWorld(c.req.raw, c.env, c.req.param('worldId')),
 );
 
+app.get('/api/worlds/:worldId/reset-players', (c) =>
+  connectToWorld(c.req.raw, c.env, c.req.param('worldId')),
+);
+
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
 // Everything else is the game client itself.

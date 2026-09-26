@@ -32,6 +32,7 @@ import {
   encodeHealth,
   encodeHunger,
   encodeRejected,
+  encodeEquipped,
   encodeRoster,
   encodeSnapshot,
   encodeThreatHit,
@@ -111,6 +112,20 @@ export class World extends DurableObject<WorldEnv> {
       return Response.json(this.status());
     }
 
+    // Playtesting-only: wipes every saved player's pack, hunger, health and
+    // name, and lets the axe, bag and rod be found again. The confirm value
+    // is not real access control - a plain query string is not that - only a
+    // guard against firing from a stray link click or crawler prefetch.
+    if (url.pathname.endsWith('/reset-players')) {
+      if (url.searchParams.get('confirm') !== 'clear-everyone') {
+        return Response.json(
+          { ok: false, reason: 'Missing ?confirm=clear-everyone' },
+          { status: 400 },
+        );
+      }
+      return Response.json(this.resetPlayers());
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('This endpoint speaks WebSocket.', { status: 426 });
     }
@@ -162,6 +177,7 @@ export class World extends DurableObject<WorldEnv> {
     // Who else is already here. This player's own Hello, sent right after
     // Welcome, is what tells everybody else about them in turn.
     server.send(encodeRoster(this.currentRoster()));
+    server.send(encodeEquipped(simulation.equippedList()));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -211,6 +227,7 @@ export class World extends DurableObject<WorldEnv> {
       // arrives rather than waiting for the next tick.
       simulation.useItem(attachment.netId, decoded.item);
       this.announceHunger(simulation);
+      this.announceEquipped(simulation);
       return;
     }
     if (decoded.type === 'hello') {
@@ -670,6 +687,17 @@ export class World extends DurableObject<WorldEnv> {
     return entries;
   }
 
+  /**
+   * Tell everybody what everybody currently has equipped, whole - the same
+   * "sent whole, on change" shape `Roster` already uses. Everybody's
+   * business, unlike hunger or health: what's in your hand is exactly as
+   * public as your own name tag.
+   */
+  private announceEquipped(simulation: WorldSimulation): void {
+    if (simulation.drainEquipEvents().length === 0) return;
+    this.broadcast(encodeEquipped(simulation.equippedList()));
+  }
+
   private broadcast(payload: ArrayBuffer, except?: WebSocket): void {
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
@@ -874,6 +902,10 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('players', 'name', 'TEXT');
     this.addColumn('players', 'character_index', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('players', 'color_index', 'INTEGER NOT NULL DEFAULT 0');
+    // Null for a player saved before this existed, or one who never chose
+    // anything - `initialEquippedItem` treats that exactly like a brand new
+    // player, falling back to the first tool they still have, if any.
+    this.addColumn('players', 'equipped_item_index', 'INTEGER');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -954,7 +986,11 @@ export class World extends DurableObject<WorldEnv> {
         facing_yaw: number;
         hunger: number;
         health: number;
-      }>('SELECT x, y, z, facing_yaw, hunger, health FROM players WHERE player_key = ?', playerKey)
+        equipped_item_index: number | null;
+      }>(
+        'SELECT x, y, z, facing_yaw, hunger, health, equipped_item_index FROM players WHERE player_key = ?',
+        playerKey,
+      )
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -967,6 +1003,7 @@ export class World extends DurableObject<WorldEnv> {
       items: this.loadPlayerItems(playerKey),
       hunger: row.hunger,
       health: row.health,
+      equippedItem: row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
     };
   }
 
@@ -1182,6 +1219,7 @@ export class World extends DurableObject<WorldEnv> {
     if (attachment.playerKey === null) return;
     const motion = simulation.readPlayer(attachment.netId);
     if (motion === undefined) return;
+    const equipped = simulation.equippedItemOf(attachment.netId);
     this.writePlayer(
       attachment.playerKey,
       motion.position.x,
@@ -1190,6 +1228,7 @@ export class World extends DurableObject<WorldEnv> {
       motion.facingYaw,
       simulation.hungerOf(attachment.netId),
       simulation.healthOf(attachment.netId),
+      equipped === null ? null : itemIndex(equipped),
     );
     this.writePlayerItems(
       attachment.playerKey,
@@ -1205,12 +1244,15 @@ export class World extends DurableObject<WorldEnv> {
     facingYaw: number,
     hunger: number,
     health: number,
+    equippedItemIndex: number | null,
   ): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO players (player_key, x, y, z, facing_yaw, hunger, health, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+      'INSERT INTO players ' +
+        '(player_key, x, y, z, facing_yaw, hunger, health, equipped_item_index, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
         'x = excluded.x, y = excluded.y, z = excluded.z, facing_yaw = excluded.facing_yaw, ' +
-        'hunger = excluded.hunger, health = excluded.health, updated_at = excluded.updated_at',
+        'hunger = excluded.hunger, health = excluded.health, ' +
+        'equipped_item_index = excluded.equipped_item_index, updated_at = excluded.updated_at',
       playerKey,
       x,
       y,
@@ -1218,6 +1260,7 @@ export class World extends DurableObject<WorldEnv> {
       facingYaw,
       hunger,
       health,
+      equippedItemIndex,
       Date.now(),
     );
   }
@@ -1311,6 +1354,7 @@ export class World extends DurableObject<WorldEnv> {
         // Optional on PersistedPlayer only so an old save without it still
         // loads - persistablePlayers() itself always sets it.
         player.health ?? HEALTH_MAX,
+        player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
     }
@@ -1332,5 +1376,35 @@ export class World extends DurableObject<WorldEnv> {
       running: this.tickHandle !== null,
       slowTicks: this.slowTickCount,
     };
+  }
+
+  /**
+   * Wipe every saved player's pack, hunger, health, position and name back to
+   * nothing, and let the axe, bag and rod be found again - a clean slate for
+   * playtesting, not something a player ever triggers themselves. Refuses
+   * outright while anyone is connected: their still-live session would just
+   * write its own (unwiped) state back over this the moment they leave,
+   * undoing it without saying so.
+   *
+   * Deliberately narrower than "reset the world": built props, felled/regrown
+   * trees and buried caches are left exactly as they are, since none of those
+   * are "inventory" and wiping them would erase testing history nobody asked
+   * to lose.
+   */
+  resetPlayers(): { ok: true; clearedPlayers: number } | { ok: false; reason: string } {
+    if (this.simulation !== null) {
+      return {
+        ok: false,
+        reason: 'Somebody is still connected to this world - try again once everybody has left.',
+      };
+    }
+    const sql = this.ctx.storage.sql;
+    const clearedPlayers = sql
+      .exec<{ player_key: string }>('SELECT player_key FROM players')
+      .toArray().length;
+    sql.exec('DELETE FROM player_items');
+    sql.exec('DELETE FROM players');
+    sql.exec('DELETE FROM pickups_taken');
+    return { ok: true, clearedPlayers };
   }
 }

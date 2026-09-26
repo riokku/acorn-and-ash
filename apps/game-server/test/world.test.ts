@@ -533,6 +533,75 @@ describe('finding the axe', () => {
   });
 });
 
+describe('equipping what you are carrying', () => {
+  it('starts a fresh player off with nothing equipped', async () => {
+    const client = await TestClient.connect(nextWorldId());
+    await waitFor('the opening equipped list', () => client.countOfMessages('equipped') > 0);
+    const netId = client.welcome().netId;
+
+    expect(client.openingEquipped()).toEqual([{ netId, item: null }]);
+    client.close();
+  });
+
+  it('equips the axe once asked, and tells a nearby player about it', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'equip-first');
+    await findTheBag(first);
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
+    const netId = first.welcome().netId;
+
+    const second = await TestClient.connect(worldId, 'equip-witness');
+    await waitFor('a welcome', () => second.received.length > 0);
+
+    first.useItem('axe');
+    await waitFor(
+      'the second player to see the axe equipped',
+      () => second.equipped().find((entry) => entry.netId === netId)?.item === 'axe',
+    );
+
+    expect(first.equipped()).toEqual(expect.arrayContaining([{ netId, item: 'axe' }]));
+    first.close();
+    second.close();
+  });
+
+  it('refuses to equip an item that was never picked up', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'never-found-a-rod');
+    await findTheBag(client);
+    const netId = client.welcome().netId;
+
+    client.useItem('rod');
+    await sleep(150);
+
+    expect(client.equipped().find((entry) => entry.netId === netId)?.item ?? null).toBeNull();
+    client.close();
+  });
+
+  it('keeps the equipped choice across logging out and coming back', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'equip-and-return';
+    const first = await TestClient.connect(worldId, playerKey);
+    await findTheBag(first);
+    await walkToTheAxe(first);
+    first.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
+    first.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      first.equipped().some((entry) => entry.item === 'axe'),
+    );
+    first.close();
+    await sleep(200);
+
+    const second = await TestClient.connect(worldId, playerKey);
+    await waitFor('the opening equipped list', () => second.countOfMessages('equipped') > 0);
+    const netId = second.welcome().netId;
+
+    expect(second.openingEquipped()).toEqual(expect.arrayContaining([{ netId, item: 'axe' }]));
+    second.close();
+  });
+});
+
 describe('a world that empties and fills again', () => {
   it('does not leave a ghost behind when the last player leaves', async () => {
     const worldId = nextWorldId();
