@@ -111,7 +111,7 @@ already rewriting the neighbouring `usable` check in the same function.
   is being written down rather than chased further, the same way 0028
   wrote down its own guest-key gap instead of engineering around it.
 - Chopping and casting still check the pack directly (`hasItem(inventory,
-  'axe')`/`'rod'`), exactly as before - equipping is cosmetic, not a new
+'axe')`/`'rod'`), exactly as before - equipping is cosmetic, not a new
   gate on what you can do. A player could show the rod in hand and still
   swing an axe at a tree from the same pack; the swing animation only
   actually shows if the axe happens to be the equipped, visible one, since

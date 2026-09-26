@@ -1003,7 +1003,8 @@ export class World extends DurableObject<WorldEnv> {
       items: this.loadPlayerItems(playerKey),
       hunger: row.hunger,
       health: row.health,
-      equippedItem: row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
+      equippedItem:
+        row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
     };
   }
 
