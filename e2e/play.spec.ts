@@ -643,6 +643,23 @@ async function chopUntilFelled(
   throw new Error(`tree ${tree.id} never came down`);
 }
 
+/**
+ * Press the hotbar key for whichever slot this item currently sorts to,
+ * making it the active item. Finding a tool is no longer enough to swing,
+ * cast or eat with it - it has to be made active first, the same as
+ * `equip(page, 'axe')` proves it visually in the dedicated equip test above.
+ */
+async function equip(page: Page, item: string): Promise<void> {
+  const slot =
+    (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).findIndex(
+      (entry) => entry.item === item,
+    ) + 1;
+  await page.keyboard.press(`Digit${slot}`);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.equippedItem() ?? null))
+    .toBe(item);
+}
+
 test('you can chop a tree down, and the stump is still there next time', async ({ browser }) => {
   test.setTimeout(240_000);
   // One context throughout, so coming back is the same player returning.
@@ -664,6 +681,7 @@ test('you can chop a tree down, and the stump is still there next time', async (
   await expect
     .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
     .toBeGreaterThan(0);
+  await equip(page, 'axe');
 
   // The big oak stands right beside the axe's stump.
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
@@ -717,6 +735,7 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   await expect
     .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
     .toBeGreaterThan(0);
+  await equip(page, 'axe');
 
   // The big oak takes several ordinary swings - one charged attack should
   // not need any of them.
@@ -762,6 +781,7 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   await expect
     .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
     .toBeGreaterThan(0);
+  await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
   const oak = trees.find((tree) => tree.kind === 'oak');
@@ -827,6 +847,7 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
       ),
     )
     .toBe(true);
+  await equip(page, 'rod');
 
   // Turn to the water, and the game offers a cast.
   const pond = await page.evaluate(() => window.acornDebug?.pond() ?? []);
@@ -1019,6 +1040,7 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
       ),
     )
     .toBe(true);
+  await equip(page, 'axe');
 
   const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
   const rabbit = animals[0];
@@ -1076,6 +1098,7 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
       ),
     )
     .toBe(true);
+  await equip(page, 'axe');
 
   const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
   const fox = animals.find((entry) => entry.kind === 'fox');
@@ -1136,6 +1159,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
       ),
     )
     .toBe(true);
+  await equip(page, 'axe');
 
   const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
   const raccoon = animals.find((entry) => entry.kind === 'maskedRaccoon');
@@ -1278,6 +1302,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
       ),
     )
     .toBe(true);
+  await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
   const oak = trees.find((tree) => tree.kind === 'oak');
@@ -1362,6 +1387,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
       ),
     )
     .toBe(true);
+  await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
   const oak = trees.find((tree) => tree.kind === 'oak');

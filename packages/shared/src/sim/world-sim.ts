@@ -877,7 +877,7 @@ export class WorldSimulation {
               runtime.cast === null &&
               runtime.swingCooldownTicks === 0 &&
               isHeld(input, PlayerButton.Charge) &&
-              hasItem(runtime.inventory, 'axe')
+              this.isActiveItem(runtime, 'axe')
             ) {
               runtime.charging = true;
               runtime.chargeReadyAtMs = this.nowMs + CHARGE_SECONDS * 1000;
@@ -1380,9 +1380,13 @@ export class WorldSimulation {
     return this.campfireLitUntilMs.get(propId) ?? null;
   }
 
-  /** Eat something out of the pack, if there is any food in it that would actually help. */
+  /**
+   * Eat whatever is active, if it is food, it is still held, and it would
+   * actually help. Carrying other food that is not the active item does
+   * nothing - see `isActiveItem`.
+   */
   private tryEat(runtime: PlayerRuntime): void {
-    const item = foodToEat(runtime.inventory, runtime.hunger);
+    const item = foodToEat(runtime.inventory, runtime.hunger, runtime.equippedItem);
     if (item === null) return;
     this.eatItem(runtime, item);
   }
@@ -1405,13 +1409,28 @@ export class WorldSimulation {
   }
 
   /**
+   * Whether this player can act with this item right now: it is not just
+   * somewhere in the pack, it is the one the hotbar has selected.
+   *
+   * Chopping, casting and eating all gate on this instead of `hasItem`
+   * alone, so having several tools in the pack never lets a click do more
+   * than one of them - whichever is active decides. Re-checks `hasItem` the
+   * same reason `equippedItemOf` does: eating the last of an equipped fish,
+   * or a knockout burying it away, empties a hand out on its own with
+   * nothing here having to notice and clear the field itself.
+   */
+  private isActiveItem(runtime: PlayerRuntime, item: ItemId): boolean {
+    return runtime.equippedItem === item && hasItem(runtime.inventory, item);
+  }
+
+  /**
    * Swing at whatever is in front of this player.
    *
-   * Nothing happens without an axe, without a tree or an animal in reach, or
-   * before the cooldown is up, so holding the button down chops at a steady
-   * rhythm rather than as fast as packets arrive. A tree in reach always
-   * wins over an animal behind it, the same way a tree already wins over a
-   * cast in `tryCast`.
+   * Nothing happens without the axe active, without a tree or an animal in
+   * reach, or before the cooldown is up, so holding the button down chops at
+   * a steady rhythm rather than as fast as packets arrive. A tree in reach
+   * always wins over an animal behind it, the same way a tree already wins
+   * over a cast in `tryCast`.
    *
    * `charged` is the payoff for a held-down, rooted-to-the-spot charge - see
    * where `charging` resolves in `step`: whatever it lands on goes down
@@ -1424,7 +1443,7 @@ export class WorldSimulation {
     charged: boolean,
   ): void {
     if (runtime.swingCooldownTicks > 0) return;
-    if (!hasItem(runtime.inventory, 'axe')) return;
+    if (!this.isActiveItem(runtime, 'axe')) return;
 
     const target = this.treeInReachOf(position, aimYaw);
     if (target !== null) {
@@ -1591,15 +1610,15 @@ export class WorldSimulation {
   }
 
   /**
-   * Cast a line, if this player has a rod and is facing water.
+   * Cast a line, if this player has the rod active and is facing water.
    *
-   * A tree you could chop comes first: with an axe in the pack and a trunk in
+   * A tree you could chop comes first: with the axe active and a trunk in
    * reach, the click was for the tree.
    */
   private tryCast(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
     if (runtime.swingCooldownTicks > 0) return;
-    if (!hasItem(runtime.inventory, 'rod')) return;
-    if (hasItem(runtime.inventory, 'axe') && this.treeInReachOf(position, aimYaw) !== null) return;
+    if (!this.isActiveItem(runtime, 'rod')) return;
+    if (this.isActiveItem(runtime, 'axe') && this.treeInReachOf(position, aimYaw) !== null) return;
 
     const spot = castLanding(position, aimYaw, this.clearing.water);
     if (spot === null) return;

@@ -44,10 +44,11 @@ const BASE_STATE: HudState = {
 };
 
 describe('the hint along the bottom', () => {
-  it('offers to chop a tree once there is an axe in hand', () => {
+  it('offers to chop a tree once the axe is equipped', () => {
     const state: HudState = {
       ...BASE_STATE,
       carrying: [{ item: 'axe', count: 1 }],
+      equippedItem: 'axe',
       aimedTree: { name: 'Oak', swingsLeft: 3 },
     };
     expect(hint(state)).toBe('Left click to chop the oak · 3 swings left');
@@ -71,6 +72,21 @@ describe('the hint along the bottom', () => {
       aimedAnimal: { name: 'Rabbit' },
     };
     expect(hint(state)).not.toContain('catch');
+  });
+
+  it('does not send you to chop a tree while carrying the axe but not holding it active', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [
+        { item: 'axe', count: 1 },
+        { item: 'rod', count: 1 },
+      ],
+      equippedItem: 'rod',
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+    };
+    // The axe is in the pack, but the rod is the active item, so a swing
+    // would do nothing server-side - see `isActiveItem` in world-sim.ts.
+    expect(hint(state)).not.toContain('chop');
   });
 
   it('offers to build once something is affordable and fits, without naming which', () => {
@@ -167,6 +183,7 @@ describe('the hint along the bottom', () => {
     const state: HudState = {
       ...BASE_STATE,
       carrying: [{ item: 'axe', count: 1 }],
+      equippedItem: 'axe',
       aimedAnimal: { name: 'Rabbit' },
     };
     expect(hint(state)).toBe('Left click to catch the rabbit');
@@ -176,6 +193,7 @@ describe('the hint along the bottom', () => {
     const state: HudState = {
       ...BASE_STATE,
       carrying: [{ item: 'axe', count: 1 }],
+      equippedItem: 'axe',
       aimedAnimal: { name: 'Masked raccoon', hitsLeft: 2 },
     };
     expect(hint(state)).toBe('Left click to fight off the masked raccoon · 2 hits left');
@@ -199,5 +217,32 @@ describe('the hint along the bottom', () => {
       aimedTree: { name: 'Oak', swingsLeft: 3 },
     };
     expect(hint(state)).toBe('Charging a heavy swing - rooted to the spot');
+  });
+});
+
+describe('the hunger hint', () => {
+  it('tells you to press E once the fish you are carrying is the active item', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      hunger: 0,
+      carrying: [{ item: 'perch', count: 2 }],
+      equippedItem: 'perch',
+    };
+    expect(hint(state)).toBe("You're hungry. Press E to eat");
+  });
+
+  it('sends you to the hotbar first when the food you are carrying is not active', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      hunger: 0,
+      carrying: [{ item: 'perch', count: 2 }],
+      equippedItem: 'axe',
+    };
+    expect(hint(state)).toBe("You're hungry. Press its hotbar number to eat");
+  });
+
+  it('sends you hunting when there is no food at all', () => {
+    const state: HudState = { ...BASE_STATE, hunger: 0, carrying: [] };
+    expect(hint(state)).toBe("You're hungry. Go catch something to eat");
   });
 });

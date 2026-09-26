@@ -1188,9 +1188,10 @@ export class Game {
       (this.controls?.buttons() ?? 0) | (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
 
     // A fresh press starts the same local timer the server's own charge
-    // runs on - only worth starting if a swing would even do anything.
+    // runs on - only worth starting if a swing would even do anything, which
+    // needs the axe active, not merely carried.
     const chargeHeld = (buttons & PlayerButton.Charge) !== 0;
-    if (chargeHeld && !this.chargeWasHeld && this.isCarrying('axe')) {
+    if (chargeHeld && !this.chargeWasHeld && this.isEquipped('axe')) {
       this.chargingUntil = performance.now() + CHARGE_SECONDS * 1000;
     }
     this.chargeWasHeld = chargeHeld;
@@ -1294,15 +1295,15 @@ export class Game {
           })();
 
     // The same rule the server uses: a tree or an animal you could swing at
-    // gets the click first, and otherwise a rod and some water in front of
-    // you make a cast.
+    // gets the click first, and otherwise an active rod and some water in
+    // front of you make a cast. Both need the tool active, not just carried.
     const axeHasSomethingToHit =
-      (target !== null || animalTarget !== null) && this.isCarrying('axe');
+      (target !== null || animalTarget !== null) && this.isEquipped('axe');
     this.canCast =
       this.fishingPhase === null &&
       performance.now() >= this.castReadyAt &&
       !axeHasSomethingToHit &&
-      this.isCarrying('rod') &&
+      this.isEquipped('rod') &&
       this.clearing !== null &&
       castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
 
@@ -1364,8 +1365,14 @@ export class Game {
     return Math.atan2(-(float.x - at.x), -(float.z - at.z));
   }
 
-  private isCarrying(item: ItemId): boolean {
-    return this.carrying.some((entry) => entry.item === item && entry.count > 0);
+  /**
+   * Whether this item is the one currently active - not just somewhere in
+   * the pack. The server gates chopping, casting and eating on exactly this,
+   * so hints and local prediction have to agree, or a hint would promise an
+   * action the server then refuses.
+   */
+  private isEquipped(item: ItemId): boolean {
+    return this.equipped.get(this.selfNetId) === item;
   }
 
   private updateRemotePlayers(deltaSeconds: number): void {

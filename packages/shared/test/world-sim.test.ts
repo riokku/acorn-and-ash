@@ -615,6 +615,9 @@ describe('hunger', () => {
         { item: 'perch', count },
       ],
       hunger,
+      // Eating through the interact fallback needs the fish active, the same
+      // as a swing needs the axe active - see `isActiveItem` in world-sim.ts.
+      equippedItem: 'perch',
     };
   }
 
@@ -643,6 +646,32 @@ describe('hunger', () => {
     sim.addPlayer(1);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
+    expect(sim.drainHungerEvents()).toEqual([]);
+  });
+
+  it('does nothing carrying a fish that is not the active item', () => {
+    const sim = createWorld();
+    // The axe is active, not the fish, so the interact fallback has nothing
+    // it is allowed to eat even though the pack has food in it.
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+        { item: 'perch', count: 2 },
+      ],
+      hunger: 50,
+      equippedItem: 'axe',
+    });
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(2);
+    expect(sim.hungerOf(1)).toBe(50);
     expect(sim.drainHungerEvents()).toEqual([]);
   });
 
@@ -1016,6 +1045,7 @@ describe('gathering sticks', () => {
         { item: 'perch', count: 1 },
       ],
       hunger: 50,
+      equippedItem: 'perch',
     });
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
@@ -1179,6 +1209,36 @@ describe('chopping a tree down', () => {
     expect(sim.felledTreeIds()).toEqual([]);
     expect(sim.drainChopEvents()).toEqual([]);
     expect(sim.swingsLeftOn(tree.id)).toBe(choppingRuleFor(PROP_KINDS.oak)?.swingsToFell);
+  });
+
+  it('does nothing with the axe in the pack but not the active item', () => {
+    const sim = createWorld();
+    // Carrying the axe is not enough on its own - the rod is what the
+    // hotbar last selected, so a swing has nothing to swing.
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+        { item: 'rod', count: 1 },
+      ],
+      hunger: HUNGER_MAX,
+      equippedItem: 'rod',
+    });
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    for (let i = 1; i <= 40; i++) {
+      sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+
+    expect(sim.felledTreeIds()).toEqual([]);
+    expect(sim.drainChopEvents()).toEqual([]);
   });
 
   it('takes the number of swings the tree is worth', () => {
@@ -1759,6 +1819,31 @@ describe('catching wildlife', () => {
     expect(countOf(sim.inventoryOf(1), 'meat')).toBe(1);
   });
 
+  it('does nothing with the axe in the pack but not the active item', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+        { item: 'rod', count: 1 },
+      ],
+      hunger: HUNGER_MAX,
+      equippedItem: 'rod',
+    });
+    standByDen(sim, 1);
+
+    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
+    sim.step(tickClock());
+
+    expect(sim.drainCatchEvents()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(0);
+  });
+
   it('never lets a tree hide behind a rabbit: a swing near a den has no tree to prefer', () => {
     // Wildlife dens sit well past the clearing's own tree line, and only
     // clearing trees are ever chopping targets (see decision 0015): the
@@ -2291,6 +2376,33 @@ describe('a charged attack', () => {
   it('never starts without an axe in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1);
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
+    sim.step(tickClock());
+    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+
+    expect(sim.felledTreeIds()).toEqual([]);
+    expect(sim.drainChopEvents()).toEqual([]);
+  });
+
+  it('never starts with the axe in the pack but not the active item', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+        { item: 'rod', count: 1 },
+      ],
+      hunger: HUNGER_MAX,
+      equippedItem: 'rod',
+    });
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
 

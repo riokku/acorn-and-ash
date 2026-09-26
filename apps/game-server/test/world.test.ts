@@ -801,6 +801,10 @@ describe('chopping a tree down', () => {
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+    client.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
@@ -834,6 +838,10 @@ describe('chopping a tree down', () => {
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
+    first.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      first.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(first.welcome().seed);
     await chopUntilFelled(first, oak, oak.id);
@@ -867,6 +875,10 @@ describe('chopping a tree down', () => {
     await walkToTheAxe(chopper);
     chopper.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => chopper.inventory().some((entry) => entry.item === 'axe'));
+    chopper.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      chopper.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(chopper.welcome().seed);
     await chopUntilFelled(chopper, oak, oak.id);
@@ -964,6 +976,10 @@ describe('trees growing back', () => {
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+    client.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
@@ -991,6 +1007,10 @@ describe('trees growing back', () => {
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
+    first.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      first.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(first.welcome().seed);
     await chopUntilFelled(first, oak, oak.id);
@@ -1031,6 +1051,10 @@ describe('fishing', () => {
     await walkWithinReach(client, ROD_SPOT);
     client.walk(0, 0, EAST, 3, PlayerButton.Interact);
     await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
+    client.useItem('rod');
+    await waitFor('the rod to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'rod'),
+    );
     // Let go of the button, so the first click to cast is a fresh one.
     client.walk(0, 0, EAST, 2);
     await sleep(150);
@@ -1133,6 +1157,10 @@ describe('hunger', () => {
     await walkWithinReach(client, ROD_SPOT);
     client.walk(0, 0, EAST, 3, PlayerButton.Interact);
     await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
+    client.useItem('rod');
+    await waitFor('the rod to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'rod'),
+    );
     // Let go of the button, so the first click to cast is a fresh one.
     client.walk(0, 0, EAST, 2);
     await sleep(150);
@@ -1177,7 +1205,7 @@ describe('hunger', () => {
     client.close();
   }, 15_000);
 
-  it('eats a fish when there is nothing else to reach for, and says which', async () => {
+  it('does not eat a fish through the interact fallback until it is the active item', async () => {
     const client = await TestClient.connect(nextWorldId(), 'the-eater');
     const item = await catchAFish(client);
     await waitFor('the fish in the pack', () =>
@@ -1185,13 +1213,16 @@ describe('hunger', () => {
     );
     const before = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
 
-    // The rod is already in hand and the axe is nowhere near the pond, so the
-    // same button that would pick something up reaches into the pack instead.
+    // The rod is still the active item from casting - carrying the fish is
+    // not enough on its own, the same rule a swing needs the axe active and
+    // a cast needs the rod active for. Nothing else claims the button here
+    // (no pickup, gather spot, cache or campfire), so this proves the
+    // fallback really does nothing rather than merely not being reached.
     client.walk(0, 0, EAST, 3, PlayerButton.Interact);
-    await waitFor('a meal', () => client.hunger().some((event) => event.ate === item));
+    await sleep(300);
 
-    const after = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
-    expect(after).toBe(before - 1);
+    expect(client.hunger().some((event) => event.ate === item)).toBe(false);
+    expect(client.inventory().find((entry) => entry.item === item)?.count ?? 0).toBe(before);
     client.close();
   }, 45_000);
 
@@ -1288,6 +1319,10 @@ describe('catching wildlife', () => {
       await walkToTheAxe(client);
       client.walk(0, 0, 0, 3, PlayerButton.Interact);
       await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+      client.useItem('axe');
+      await waitFor('the axe to be equipped', () =>
+        client.equipped().some((entry) => entry.item === 'axe'),
+      );
     }
     await waitFor('a snapshot with wildlife in it', () =>
       client.latestSnapshot().entities.some(isAnimal),
@@ -1387,6 +1422,10 @@ describe('building', () => {
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+    client.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
@@ -1585,6 +1624,10 @@ describe('building', () => {
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
+    client.useItem('axe');
+    await waitFor('the axe to be equipped', () =>
+      client.equipped().some((entry) => entry.item === 'axe'),
+    );
 
     for (const tree of treesNearTheOak(client.welcome().seed)) {
       await walkWithinReach(client, tree);

@@ -8,8 +8,8 @@
  */
 
 import { HUNGER_MAX } from '../constants';
-import { FOOD_ITEMS, ITEM_KINDS, type ItemId } from '../data/items';
-import { countOf, type Inventory } from './inventory';
+import { isFood, ITEM_KINDS, type ItemId } from '../data/items';
+import { hasItem, type Inventory } from './inventory';
 
 /** How many points a full meter loses per second, for a meter that empties in this many seconds. */
 export function hungerDrainPerSecond(emptyAfterSeconds: number): number {
@@ -23,17 +23,21 @@ export function drainHunger(hunger: number, deltaSeconds: number, drainPerSecond
 
 /**
  * Which food this player would eat if they pressed the button right now, or
- * null if they are already full or are not carrying anything to eat.
+ * null if they are already full, have nothing active, or have something
+ * active that is not food.
  *
- * Common fish go first, so a full pack of golden carp is not spent topping up
- * from a single point down.
+ * Only the active item - whatever the hotbar last selected - can be eaten
+ * this way, the same reason a swing needs the axe active and a cast needs
+ * the rod active: carrying a fish is not the same as having it in hand.
  */
-export function foodToEat(inventory: Inventory, hunger: number): ItemId | null {
+export function foodToEat(
+  inventory: Inventory,
+  hunger: number,
+  equippedItem: ItemId | null,
+): ItemId | null {
   if (hunger >= HUNGER_MAX) return null;
-  for (const item of FOOD_ITEMS) {
-    if (countOf(inventory, item) > 0) return item;
-  }
-  return null;
+  if (equippedItem === null || !isFood(equippedItem)) return null;
+  return hasItem(inventory, equippedItem) ? equippedItem : null;
 }
 
 /** Eating one restores this item's worth of hunger, capped at a full meter. */
