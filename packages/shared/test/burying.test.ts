@@ -14,17 +14,19 @@ describe('buryHalf', () => {
     expect(inventory.log).toBe(4);
   });
 
-  it('never touches tools, the bag included', () => {
+  it('never touches tools, the bag or a torch', () => {
     const inventory = createInventory();
     addItem(inventory, 'bag');
     addItem(inventory, 'axe');
     addItem(inventory, 'rod');
+    addItem(inventory, 'torch');
     addItem(inventory, 'log', 4);
     const buried = buryHalf(inventory);
     expect(buried).toEqual([{ item: 'log', count: 2 }]);
     expect(inventory.axe).toBe(1);
     expect(inventory.rod).toBe(1);
     expect(inventory.bag).toBe(1);
+    expect(inventory.torch).toBe(1);
   });
 
   it('buries nothing from a stack of one, or an empty pack', () => {

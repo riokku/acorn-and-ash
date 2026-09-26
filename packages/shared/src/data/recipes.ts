@@ -26,6 +26,9 @@ export const RECIPES: Partial<Record<ItemId, Recipe>> = {
   // By the time a second rod is worth making, chopping has already put logs
   // in the pack.
   rod: { result: 'rod', costs: [{ item: 'log', amount: 2 }] },
+  // Cheap and gathered by hand, same as the axe - nothing about needing
+  // light at night should be blocked behind a tool you don't have yet.
+  torch: { result: 'torch', costs: [{ item: 'stick', amount: 2 }] },
 };
 
 /** Every craftable item, in the wire order, so the HUD lists recipes the same for everybody. */

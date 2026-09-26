@@ -87,6 +87,8 @@ import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-ca
 import { createCabin, type Cabin } from './scene/cabin';
 import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
+import { createFence, type Fence } from './scene/fence';
+import { createGardenPath, type GardenPath } from './scene/garden-path';
 import { createCritter, type Critter } from './scene/critter';
 import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { createFox, type Fox } from './scene/fox';
@@ -133,7 +135,9 @@ function isAnimalEntity(entity: SnapshotEntity): boolean {
 }
 
 /** The placeholder model for whatever kind of thing somebody built. */
-function createBuiltMesh(kind: BuildableKindId): Campfire | Cabin | FlowerBed | Lantern {
+function createBuiltMesh(
+  kind: BuildableKindId,
+): Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath {
   switch (kind) {
     case 'campfire':
       return createCampfire();
@@ -143,6 +147,10 @@ function createBuiltMesh(kind: BuildableKindId): Campfire | Cabin | FlowerBed | 
       return createFlowerBed();
     case 'lantern':
       return createLantern();
+    case 'fence':
+      return createFence();
+    case 'gardenPath':
+      return createGardenPath();
   }
 }
 
@@ -261,7 +269,10 @@ export class Game {
   private readonly equipped = new Map<number, ItemId | null>();
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter | Raccoon | Fox>();
-  private readonly builtMeshes = new Map<number, Campfire | Cabin | FlowerBed | Lantern>();
+  private readonly builtMeshes = new Map<
+    number,
+    Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
+  >();
   private builtProps: readonly BuiltProp[] = [];
   private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
   private buriedCaches: readonly BuriedCacheView[] = [];

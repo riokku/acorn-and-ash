@@ -14,6 +14,7 @@ import { characterModelTemplate } from './character-model';
 import { itemModelParts } from './item-models';
 import { pickAnimationState, type CharacterAnimState } from './character-animation';
 import { createNameplate, type Nameplate } from './nameplate';
+import { createFlickerLight, type FlickerLight } from './fire-light';
 
 export { pickAnimationState, type CharacterAnimState };
 
@@ -164,11 +165,23 @@ const FOOD_HELD_REST: HeldItemRest = {
 const HELD_ITEM_REST: Partial<Record<ItemId, HeldItemRest>> = {
   axe: TOOL_HELD_REST,
   rod: TOOL_HELD_REST,
+  // Same grip as the axe and rod, as a starting guess - it's the same shape
+  // of thing, a long tool held by its base. Unconfirmed against a real
+  // screenshot the way the axe's own numbers were; flag it from a PR preview
+  // if the torch looks wrong in hand.
+  torch: TOOL_HELD_REST,
   perch: FOOD_HELD_REST,
   trout: FOOD_HELD_REST,
   goldenCarp: FOOD_HELD_REST,
   meat: FOOD_HELD_REST,
 };
+
+/** Warm torchlight - dimmer and closer than the campfire's (see fire-light.ts and campfire.ts). */
+const TORCH_LIGHT_COLOR = 0xffa25a;
+const TORCH_LIGHT_INTENSITY = 9;
+const TORCH_LIGHT_DISTANCE = 6;
+/** Near the top of the torch model, in its own local space (see TARGET_HEIGHTS.torch in item-models.ts). */
+const TORCH_FLAME_HEIGHT = 0.72;
 
 /**
  * A fish placeholder: one shared body-and-tail shape, tinted per species -
@@ -228,7 +241,7 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
 
 /** This item's parts to put in a hand, or undefined to leave that item showing nothing. */
 function heldItemParts(item: ItemId): ModelPart[] | undefined {
-  if (item === 'axe' || item === 'rod') return itemModelParts(item);
+  if (item === 'axe' || item === 'rod' || item === 'torch') return itemModelParts(item);
   return FOOD_HELD_PARTS[item];
 }
 
@@ -330,6 +343,11 @@ function createAnimatedCharacter(
   // with the character, even though it's the same physical item as the one
   // on the ground. All start hidden; `setEquippedItem` shows at most one.
   const heldItems = new Map<ItemId, THREE.Group>();
+  // Lives only while a torch is actually part of the rig - `held.visible`
+  // already hides its light along with the rest of the group whenever some
+  // other item is equipped instead (three.js skips an invisible object's
+  // children, lights included, when it gathers what to render).
+  let torchFlicker: FlickerLight | undefined;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
     for (const item of HELD_ITEM_IDS) {
@@ -346,6 +364,15 @@ function createAnimatedCharacter(
       held.position.copy(rest.offset);
       held.scale.setScalar(1 / MODEL_SCALE);
       held.visible = false;
+      if (item === 'torch') {
+        torchFlicker = createFlickerLight(
+          TORCH_LIGHT_COLOR,
+          TORCH_LIGHT_INTENSITY,
+          TORCH_LIGHT_DISTANCE,
+        );
+        torchFlicker.light.position.set(0, TORCH_FLAME_HEIGHT, 0);
+        held.add(torchFlicker.light);
+      }
       handBone.add(held);
       heldItems.set(item, held);
     }
@@ -389,6 +416,7 @@ function createAnimatedCharacter(
     },
     update: (deltaSeconds) => {
       instance.mixer.update(deltaSeconds);
+      torchFlicker?.update(deltaSeconds);
       if (heldAxe === undefined || swingElapsed === null) return;
       swingElapsed += deltaSeconds;
       if (swingElapsed >= SWING_DURATION_SECONDS) {

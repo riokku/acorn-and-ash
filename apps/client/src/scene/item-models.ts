@@ -2,25 +2,34 @@ import { loadScaledModel, type ModelPart } from './model-loading';
 
 import axeUrl from '@assets/items/axe.glb?url';
 import rodUrl from '@assets/items/rod.glb?url';
+import torchUrl from '@assets/items/wooden-torch.glb?url';
 
-/** As tall as the placeholder shape each one replaces. */
+/**
+ * As tall as the placeholder shape each one replaces - except `torch`, which
+ * has no placeholder to match: nothing carried it before, so this is a plain
+ * guess at a hand torch's real-world size. Chris can flag it from the PR
+ * preview if it looks too long or short, the same way the rod's held angle
+ * was left for a screenshot to confirm (see character.ts).
+ */
 const TARGET_HEIGHTS = {
   axe: 0.75,
   rod: 1.7,
+  torch: 0.8,
 } as const;
 
 const MODEL_URLS: Record<keyof typeof TARGET_HEIGHTS, string> = {
   axe: axeUrl,
   rod: rodUrl,
+  torch: torchUrl,
 };
 
 const modelParts = new Map<keyof typeof TARGET_HEIGHTS, ModelPart[]>();
 let preloadPromise: Promise<void> | null = null;
 
 /**
- * Fetches the real axe and rod models up front. Idempotent, so both the eager
- * kick-off at startup and the `await` before a world is built can call this
- * without loading twice.
+ * Fetches the real axe, rod and torch models up front. Idempotent, so both
+ * the eager kick-off at startup and the `await` before a world is built can
+ * call this without loading twice.
  */
 export function preloadItemModels(): Promise<void> {
   preloadPromise ??= loadAll();

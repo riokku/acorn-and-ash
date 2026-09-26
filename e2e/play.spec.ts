@@ -640,6 +640,57 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
   expect(errors).toEqual([]);
 });
 
+test('crafting a torch lets you equip it, lighting up in your hand', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=torch-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
+  const spot = spots.find((entry) => entry.item === 'stick');
+  expect(spot).toBeDefined();
+  if (spot === undefined) throw new Error('no stick patch in the clearing');
+
+  await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
+  // Only two needed, half what a first axe costs.
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('KeyE');
+    await page.waitForTimeout(600);
+  }
+  const sticks = await page.evaluate(
+    () => window.acornDebug?.carrying().find((entry) => entry.item === 'stick')?.count ?? 0,
+  );
+  expect(sticks).toBeGreaterThanOrEqual(2);
+
+  const craftRow = page.locator('.hud-row', { hasText: 'Craft' }).first();
+  await expect(craftRow).toContainText('Torch');
+  await expect(craftRow.locator('.hud-status-good')).toContainText('Torch');
+
+  // The third recipe, after the axe and the fishing rod.
+  await page.keyboard.press('Digit3');
+  await expect
+    .poll(
+      async () =>
+        (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).find(
+          (entry) => entry.item === 'torch',
+        )?.count ?? 0,
+    )
+    .toBe(1);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.craftingNews() ?? null))
+    .toBe('You made a torch.');
+
+  await equip(page, 'torch');
+  // A look at the held torch and the light it casts, by eye - the same
+  // reason the axe's own grip got a screenshot in the equip test above.
+  await page.screenshot({ path: 'test-results/equip-torch.png' });
+
+  expect(errors).toEqual([]);
+});
+
 /**
  * Swing at a tree until it comes down, in taps rather than one long hold.
  *
@@ -1371,9 +1422,11 @@ test('you can chop enough logs to build a campfire, and it is still there next t
 
   // Opening the menu with only four logs offers the campfire but not the
   // cabin (which costs ten) - picking the unaffordable one should do
-  // nothing and leave the menu's own key free for a moment later.
+  // nothing and leave the menu's own key free for a moment later. The
+  // journal panel itself lists every option now (decision 0043); the hint
+  // line beneath it just says how to close the menu.
   await page.keyboard.press('KeyB');
-  await expect(page.locator('.hud-hint')).toContainText('Press 1 for a campfire, 2 for a cabin');
+  await expect(page.locator('.hud-hint')).toContainText('Pick one below, or B to close');
   await page.keyboard.press('Digit2');
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
@@ -1463,6 +1516,9 @@ test('you can light a campfire and put it out again', async ({ page }) => {
     .poll(async () => (await page.evaluate(() => window.acornDebug?.builtProps() ?? []))[0]?.lit)
     .toBe(true);
   await expect(page.locator('.hud-hint')).toContainText('Press E to put out the campfire');
+  // A look at the fire's own light on the ground around it, by eye - the
+  // same reason the axe's grip got a screenshot in the equip test above.
+  await page.screenshot({ path: 'test-results/campfire-lit.png' });
 
   // Put out by hand, well before the ten minutes it would otherwise take -
   // that timing lives in a fast, non-browser test instead of a real wait here.
@@ -1516,11 +1572,13 @@ test('you can gather flowers and plant something pretty for the garden', async (
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
 
-  // All four buildables now show in the menu, in the same order every time.
+  // All six buildables now show in the journal panel, in the same order
+  // every time - the fence and the garden path stone (decision 0048)
+  // included, not just the original four.
   await page.keyboard.press('KeyB');
-  await expect(page.locator('.hud-hint')).toContainText(
-    'Press 1 for a campfire, 2 for a cabin, 3 for a flower bed, 4 for a lantern',
-  );
+  await expect(page.locator('.hud-journal-entry')).toHaveCount(6);
+  await expect(page.locator('.hud-journal')).toContainText('Fence');
+  await expect(page.locator('.hud-journal')).toContainText('Garden path');
   await page.keyboard.press('KeyB');
   await page.waitForTimeout(150);
 
@@ -1529,6 +1587,9 @@ test('you can gather flowers and plant something pretty for the garden', async (
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built).toHaveLength(1);
   expect(built[0]?.kind).toBe('lantern');
+  // A look at the lantern's own light, by eye - the same reason the lit
+  // campfire got a screenshot in the build test above.
+  await page.screenshot({ path: 'test-results/lantern-lit.png' });
 
   const spent = await page.evaluate(
     () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
