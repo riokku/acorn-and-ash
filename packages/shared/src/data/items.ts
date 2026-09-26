@@ -6,7 +6,7 @@
  */
 
 export type ItemId =
-  'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat' | 'flower';
+  'axe' | 'log' | 'rod' | 'perch' | 'trout' | 'goldenCarp' | 'stick' | 'meat' | 'flower' | 'bag';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -112,6 +112,16 @@ export const ITEM_KINDS = {
     restoresHunger: undefined,
     keepOnKnockout: false,
   },
+  bag: {
+    id: 'bag',
+    displayName: 'Bag',
+    pluralName: 'Bags',
+    maxCarry: 1,
+    placeholderColor: 0x5f6b45,
+    restoresHunger: undefined,
+    // Never lose the one thing everything else you carry depends on.
+    keepOnKnockout: true,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -130,6 +140,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'stick',
   'meat',
   'flower',
+  'bag',
 ];
 
 export function itemIndex(id: ItemId): number {

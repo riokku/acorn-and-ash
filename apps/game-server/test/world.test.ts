@@ -5,6 +5,8 @@ import {
   ANIMAL_DENS,
   ANIMAL_KINDS,
   AXE_PICKUP_ID,
+  BAG_PICKUP_ID,
+  BAG_SPOT,
   DEFAULT_WORLD_SEED,
   AXE_STUMP,
   CHOP_REACH,
@@ -411,7 +413,19 @@ async function walkToTheAxe(client: TestClient): Promise<void> {
   await walkWithinReach(client, AXE_STUMP);
 }
 
-describe('finding the axe', () => {
+/**
+ * Walk a fresh connection to the bag and pick it up.
+ *
+ * Nothing else can be carried before this, so almost every test that goes on
+ * to pick up, gather, chop, fish, hunt or eat something starts here first.
+ */
+async function findTheBag(client: TestClient): Promise<void> {
+  await walkWithinReach(client, BAG_SPOT);
+  client.walk(0, 0, 0, 3, PlayerButton.Interact);
+  await waitFor('the bag', () => client.inventory().some((entry) => entry.item === 'bag'));
+}
+
+describe('finding the bag', () => {
   it('tells a new player they have nothing and that nothing has been taken', async () => {
     const client = await TestClient.connect(nextWorldId(), 'fresh-player');
     await waitFor('the opening messages', () => client.countOfMessages('inventory') > 0);
@@ -421,63 +435,100 @@ describe('finding the axe', () => {
     client.close();
   });
 
+  it('hands over the bag when a player reaches for it', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'bag-finder');
+    await findTheBag(client);
+
+    expect(client.inventory()).toEqual([{ item: 'bag', count: 1 }]);
+    expect(client.takenPickups()).toEqual([BAG_PICKUP_ID]);
+    client.close();
+  });
+
+  it('is the one thing a bagless player can still pick up', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'nothing-yet');
+    await walkToTheAxe(client);
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await sleep(150);
+
+    // Standing right in the stump, holding the button down, still nothing -
+    // there is nowhere yet to put an axe.
+    expect(client.inventory()).toEqual([]);
+    expect(client.takenPickups()).toEqual([]);
+    client.close();
+  });
+});
+
+describe('finding the axe', () => {
   it('hands over the axe when a player reaches for it', async () => {
     const client = await TestClient.connect(nextWorldId(), 'axe-finder');
+    await findTheBag(client);
     await walkToTheAxe(client);
 
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => client.inventory().length > 0);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
 
-    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
-    expect(client.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    expect(client.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
+    expect([...client.takenPickups()].sort((a, b) => a - b)).toEqual(
+      [AXE_PICKUP_ID, BAG_PICKUP_ID].sort((a, b) => a - b),
+    );
     client.close();
   });
 
   it('still has the axe after logging out and coming back', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'returning-player');
+    await findTheBag(first);
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => first.inventory().length > 0);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
     first.close();
     await sleep(200);
 
     const second = await TestClient.connect(worldId, 'returning-player');
     await waitFor('the opening messages', () => second.countOfMessages('inventory') > 0);
 
-    expect(second.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(second.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     // And it is not sitting in the stump waiting to be found all over again.
-    expect(second.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    expect([...second.takenPickups()].sort((a, b) => a - b)).toEqual(
+      [AXE_PICKUP_ID, BAG_PICKUP_ID].sort((a, b) => a - b),
+    );
     second.close();
   });
 
   it('tells a second player the axe is already gone', async () => {
     const worldId = nextWorldId();
     const finder = await TestClient.connect(worldId, 'the-finder');
+    await findTheBag(finder);
     await walkToTheAxe(finder);
     finder.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => finder.inventory().length > 0);
+    await waitFor('the axe', () => finder.inventory().some((entry) => entry.item === 'axe'));
 
     const latecomer = await TestClient.connect(worldId, 'the-latecomer');
     await waitFor('the opening messages', () => latecomer.countOfMessages('inventory') > 0);
 
     expect(latecomer.inventory()).toEqual([]);
-    expect(latecomer.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    expect(latecomer.takenPickups()).toContain(AXE_PICKUP_ID);
     finder.close();
     latecomer.close();
   });
 
   it('does not hand out an axe to somebody standing in the middle of the clearing', async () => {
     const client = await TestClient.connect(nextWorldId(), 'nowhere-near');
-    await waitFor('the opening messages', () => client.countOfMessages('inventory') > 0);
+    await findTheBag(client);
 
     for (let i = 0; i < 6; i++) {
       client.walk(0, 0, 0, 4, PlayerButton.Interact);
       await sleep(80);
     }
 
-    expect(client.inventory()).toEqual([]);
-    expect(client.takenPickups()).toEqual([]);
+    expect(client.inventory()).toEqual([{ item: 'bag', count: 1 }]);
+    expect(client.takenPickups()).toEqual([BAG_PICKUP_ID]);
     client.close();
   });
 });
@@ -505,9 +556,10 @@ describe('a world that empties and fills again', () => {
   it('remembers the tick count and what was taken across the gap', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'the-finder');
+    await findTheBag(first);
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => first.inventory().length > 0);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
     const tickBefore = first.latestSnapshot().tick;
     first.close();
     await sleep(300);
@@ -515,7 +567,9 @@ describe('a world that empties and fills again', () => {
     const second = await TestClient.connect(worldId, 'somebody-else');
     await waitFor('some snapshots', () => second.snapshots().length >= 2);
 
-    expect(second.takenPickups()).toEqual([AXE_PICKUP_ID]);
+    expect([...second.takenPickups()].sort((a, b) => a - b)).toEqual(
+      [AXE_PICKUP_ID, BAG_PICKUP_ID].sort((a, b) => a - b),
+    );
     // The world picks up where it left off rather than starting over.
     expect(second.latestSnapshot().tick).toBeGreaterThanOrEqual(tickBefore);
     second.close();
@@ -545,37 +599,60 @@ describe('gathering and crafting', () => {
 
   it('gathers a stick from a patch of fallen branches, no tool needed', async () => {
     const client = await TestClient.connect(nextWorldId(), 'stick-gatherer');
+    await findTheBag(client);
     await walkWithinReach(client, stickPatch);
 
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('a stick', () => client.inventory().some((entry) => entry.item === 'stick'));
 
-    expect(client.inventory()).toEqual([{ item: 'stick', count: 1 }]);
+    expect(client.inventory()).toEqual([
+      { item: 'stick', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
+    client.close();
+  });
+
+  it('gathers nothing at all without a bag yet', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'bagless-gatherer');
+    await walkWithinReach(client, stickPatch);
+
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await sleep(150);
+
+    expect(client.inventory()).toEqual([]);
     client.close();
   });
 
   it('makes an axe once there are enough sticks, without ever finding one', async () => {
     const client = await TestClient.connect(nextWorldId(), 'stick-crafter');
+    await findTheBag(client);
     await walkWithinReach(client, stickPatch);
     await gatherSticks(client, sticksForAnAxe());
 
     client.craft('axe');
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
 
-    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(client.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     expect(client.crafted()).toEqual([{ netId: client.welcome().netId, item: 'axe' }]);
     client.close();
   });
 
   it('does nothing without enough materials, and spends nothing either', async () => {
     const client = await TestClient.connect(nextWorldId(), 'short-on-sticks');
+    await findTheBag(client);
     await walkWithinReach(client, stickPatch);
     await gatherSticks(client, 1);
 
     client.craft('axe');
     await sleep(150);
 
-    expect(client.inventory()).toEqual([{ item: 'stick', count: 1 }]);
+    expect(client.inventory()).toEqual([
+      { item: 'stick', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     expect(client.crafted()).toEqual([]);
     client.close();
   });
@@ -583,6 +660,7 @@ describe('gathering and crafting', () => {
   it('still has the crafted axe after logging out and coming back', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'returning-crafter');
+    await findTheBag(first);
     await walkWithinReach(first, stickPatch);
     await gatherSticks(first, sticksForAnAxe());
     first.craft('axe');
@@ -592,7 +670,10 @@ describe('gathering and crafting', () => {
 
     const second = await TestClient.connect(worldId, 'returning-crafter');
     await waitFor('the opening pack', () => second.countOfMessages('inventory') > 0);
-    expect(second.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(second.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     second.close();
   });
 });
@@ -642,9 +723,10 @@ describe('chopping a tree down', () => {
 
   it('fells the oak once you have the axe, and pays out logs', async () => {
     const client = await TestClient.connect(nextWorldId(), 'the-woodcutter');
+    await findTheBag(client);
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => client.inventory().length > 0);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
@@ -666,6 +748,7 @@ describe('chopping a tree down', () => {
     expect(client.inventory()).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: logs },
+      { item: 'bag', count: 1 },
     ]);
     client.close();
   });
@@ -673,9 +756,10 @@ describe('chopping a tree down', () => {
   it('leaves the stump there after logging out and coming back', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'comes-back');
+    await findTheBag(first);
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => first.inventory().length > 0);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
 
     const oak = theOak(first.welcome().seed);
     await chopUntilFelled(first, oak, oak.id);
@@ -691,6 +775,7 @@ describe('chopping a tree down', () => {
     expect(second.inventory()).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: choppingRuleFor(PROP_KINDS.oak)?.logs },
+      { item: 'bag', count: 1 },
     ]);
     second.close();
   });
@@ -704,9 +789,10 @@ describe('chopping a tree down', () => {
       () => chopper.received.length > 0 && watcher.received.length > 0,
     );
 
+    await findTheBag(chopper);
     await walkToTheAxe(chopper);
     chopper.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => chopper.inventory().length > 0);
+    await waitFor('the axe', () => chopper.inventory().some((entry) => entry.item === 'axe'));
 
     const oak = theOak(chopper.welcome().seed);
     await chopUntilFelled(chopper, oak, oak.id);
@@ -800,9 +886,10 @@ describe('trees growing back', () => {
 
   it('brings the tree back on its own, and says how many times it has', async () => {
     const client = await TestClient.connect(nextWorldId(), 'the-forester');
+    await findTheBag(client);
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => client.inventory().length > 0);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
@@ -826,9 +913,10 @@ describe('trees growing back', () => {
   it('counts the wait through a world that was asleep', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'chops-then-leaves');
+    await findTheBag(first);
     await walkToTheAxe(first);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => first.inventory().length > 0);
+    await waitFor('the axe', () => first.inventory().some((entry) => entry.item === 'axe'));
 
     const oak = theOak(first.welcome().seed);
     await chopUntilFelled(first, oak, oak.id);
@@ -865,6 +953,7 @@ describe('fishing', () => {
    * you slide along it instead of stopping.
    */
   async function readyToFish(client: TestClient): Promise<number> {
+    await findTheBag(client);
     await walkWithinReach(client, ROD_SPOT);
     client.walk(0, 0, EAST, 3, PlayerButton.Interact);
     await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
@@ -882,6 +971,7 @@ describe('fishing', () => {
 
   it('leaves a rod by the pond for somebody to find', async () => {
     const client = await TestClient.connect(nextWorldId(), 'rod-finder');
+    await findTheBag(client);
     await walkWithinReach(client, ROD_SPOT);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
@@ -939,7 +1029,9 @@ describe('fishing', () => {
     await waitFor('the line to come in', () =>
       client.fishing().some((event) => event.kind === 'tooSoon' && event.netId === netId),
     );
-    expect(client.inventory().some((entry) => entry.item !== 'rod')).toBe(false);
+    expect(client.inventory().some((entry) => entry.item !== 'rod' && entry.item !== 'bag')).toBe(
+      false,
+    );
     client.close();
   }, 45_000);
 
@@ -963,6 +1055,7 @@ describe('hunger', () => {
   const EAST = -Math.PI / 2;
 
   async function readyToFish(client: TestClient): Promise<void> {
+    await findTheBag(client);
     await walkWithinReach(client, ROD_SPOT);
     client.walk(0, 0, EAST, 3, PlayerButton.Interact);
     await waitFor('the rod', () => client.inventory().some((entry) => entry.item === 'rod'));
@@ -1028,6 +1121,33 @@ describe('hunger', () => {
     client.close();
   }, 45_000);
 
+  it('eats a specific item on demand from the hotbar, not just the interact fallback', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'the-hotbar-eater');
+    const item = await catchAFish(client);
+    await waitFor('the fish in the pack', () =>
+      client.inventory().some((entry) => entry.item === item),
+    );
+    const before = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
+
+    client.useItem(item);
+    await waitFor('a meal', () => client.hunger().some((event) => event.ate === item));
+
+    const after = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
+    expect(after).toBe(before - 1);
+    client.close();
+  }, 45_000);
+
+  it('does nothing asking to eat an item the pack has none of', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'nothing-to-eat');
+    await waitFor('a hunger reading', () => client.hunger().length > 0);
+
+    client.useItem('perch');
+    await sleep(150);
+
+    expect(client.hunger().some((event) => event.ate === 'perch')).toBe(false);
+    client.close();
+  });
+
   it('keeps hunger across logging out and coming back', async () => {
     // Waits for the meter to bottom out rather than comparing a reading taken
     // mid-drain: with hunger still moving, the moment between capturing "what
@@ -1090,6 +1210,7 @@ describe('catching wildlife', () => {
   ): Promise<{ client: TestClient; animalId: number }> {
     const client = await TestClient.connect(nextWorldId(), playerKey);
     if (withAxe) {
+      await findTheBag(client);
       await walkToTheAxe(client);
       client.walk(0, 0, 0, 3, PlayerButton.Interact);
       await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
@@ -1188,6 +1309,7 @@ describe('building', () => {
 
   /** Fell the landmark oak: exactly enough logs for one campfire, no more. */
   async function getLogsForACampfire(client: TestClient): Promise<void> {
+    await findTheBag(client);
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
@@ -1237,6 +1359,7 @@ describe('building', () => {
     expect(client.inventory()).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: 4 },
+      { item: 'bag', count: 1 },
     ]);
 
     await walkToOpenGround(client);
@@ -1245,7 +1368,10 @@ describe('building', () => {
     const props = client.builtProps();
     expect(props).toHaveLength(1);
     expect(props[0]?.kind).toBe('campfire');
-    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
+    expect(client.inventory()).toEqual([
+      { item: 'axe', count: 1 },
+      { item: 'bag', count: 1 },
+    ]);
     client.close();
   }, 30_000);
 
@@ -1381,6 +1507,7 @@ describe('building', () => {
 
   /** Fell four trees for ten logs - the most a pack can hold, and a cabin's cost. */
   async function getLogsForACabin(client: TestClient): Promise<void> {
+    await findTheBag(client);
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
@@ -1483,6 +1610,7 @@ describe('building', () => {
     const patch = FLOWER_PATCHES[0];
     if (patch === undefined) throw new Error('no flower patch to test against');
 
+    await findTheBag(owner);
     await walkWithinReach(owner, patch);
     await gatherFlowers(owner, 4);
     await walkToOpenGround(owner);
@@ -1559,7 +1687,10 @@ describe('threats', () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'gets-buried');
     // Something worth losing - an empty pack has nothing a knockout can
-    // bury, and burying half of one stick would still be none.
+    // bury, and burying half of one stick would still be none. A bag first,
+    // same as anything else worth carrying - and it survives the knockout
+    // itself, being a tool, so digging the cache back up later still works.
+    await findTheBag(first);
     await walkWithinReach(first, stickPatch);
     const hasTwoSticks = (): boolean =>
       (first.inventory().find((entry) => entry.item === 'stick')?.count ?? 0) >= 2;

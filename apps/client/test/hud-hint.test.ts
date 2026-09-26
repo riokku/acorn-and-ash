@@ -27,6 +27,7 @@ const BASE_STATE: HudState = {
   aimedAnimal: null,
   canBuild: false,
   buildMenuOpen: false,
+  craftMenuOpen: false,
   canCast: false,
   fishing: null,
   fishingNews: null,
@@ -95,14 +96,43 @@ describe('the hint along the bottom', () => {
     );
   });
 
+  it('walks you through the craft menu once it is open, ahead of everything else', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      craftMenuOpen: true,
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+      carrying: [{ item: 'axe', count: 1 }],
+    };
+    // "an axe", not "a axe" - the recipe list has to get the grammar right too.
+    expect(hint(state)).toBe('Press 1 for an axe, 2 for a fishing rod - or C to cancel');
+  });
+
   it('names sticks when a stick patch is the one within reach', () => {
-    const state: HudState = { ...BASE_STATE, nearGatherSpot: 'stick' };
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'bag', count: 1 }],
+      nearGatherSpot: 'stick',
+    };
     expect(hint(state)).toBe('Press E to gather sticks');
   });
 
   it('names flowers when a flower patch is the one within reach', () => {
-    const state: HudState = { ...BASE_STATE, nearGatherSpot: 'flower' };
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'bag', count: 1 }],
+      nearGatherSpot: 'flower',
+    };
     expect(hint(state)).toBe('Press E to gather flowers');
+  });
+
+  it('sends you to find a bag first, before naming what a patch would give', () => {
+    const state: HudState = { ...BASE_STATE, carrying: [], nearGatherSpot: 'stick' };
+    expect(hint(state)).toBe("You'll need something to carry things in first");
+  });
+
+  it('sends you to find a bag first, before naming a pickup within reach', () => {
+    const state: HudState = { ...BASE_STATE, carrying: [], nearbyItem: 'axe' };
+    expect(hint(state)).toBe("You'll need something to carry things in first");
   });
 
   it('offers to dig up a buried cache of your own within reach', () => {
@@ -111,7 +141,12 @@ describe('the hint along the bottom', () => {
   });
 
   it('reaches for a pickup or a patch before a buried cache, the same button', () => {
-    const state: HudState = { ...BASE_STATE, nearBuriedCache: true, nearGatherSpot: 'stick' };
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'bag', count: 1 }],
+      nearBuriedCache: true,
+      nearGatherSpot: 'stick',
+    };
     expect(hint(state)).toBe('Press E to gather sticks');
   });
 

@@ -346,7 +346,12 @@ function hold(
 }
 
 /** A player at the water's edge with a rod, and an input counter for them. */
-function atTheWater(items: Array<{ item: ItemId; count: number }> = [{ item: 'rod', count: 1 }]) {
+function atTheWater(
+  items: Array<{ item: ItemId; count: number }> = [
+    { item: 'bag', count: 1 },
+    { item: 'rod', count: 1 },
+  ],
+) {
   const sim = createWorld();
   sim.addPlayer(1, carrying(1, items));
   sim.placePlayer(1, onTheBank, EAST);
@@ -477,7 +482,11 @@ describe('fishing in the world', () => {
 
   it('throws the fish back when the pack has no room for it', () => {
     const full = POND_FISH.map((row) => ({ item: row.item, count: ITEM_KINDS[row.item].maxCarry }));
-    const { sim, events, click, waitFor } = atTheWater([{ item: 'rod', count: 1 }, ...full]);
+    const { sim, events, click, waitFor } = atTheWater([
+      { item: 'bag', count: 1 },
+      { item: 'rod', count: 1 },
+      ...full,
+    ]);
     click();
     waitFor('bite');
     click();
@@ -501,6 +510,7 @@ describe('fishing in the world', () => {
 
   it('casts with the axe in the pack too, when there is no tree to chop', () => {
     const { sim, click } = atTheWater([
+      { item: 'bag', count: 1 },
       { item: 'axe', count: 1 },
       { item: 'rod', count: 1 },
     ]);

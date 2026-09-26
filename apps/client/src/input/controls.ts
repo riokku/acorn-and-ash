@@ -18,8 +18,14 @@ const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
 const RIGHT_MOUSE = mouseCode(2);
 
-/** Hotkeys for crafting, in recipe order: 1 is the first recipe, 2 the second. */
+/**
+ * Hotkeys for crafting or building, in menu order: 1 is the first entry, 2 the
+ * second. Only live while that menu is open - the rest of the time these same
+ * keys are the hotbar's.
+ */
 const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'] as const;
+/** Hotkeys for the hotbar, one per slot. Only live while neither menu is open. */
+const HOTBAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
 
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
@@ -33,6 +39,7 @@ const GAME_KEYS = new Set([
   'ArrowRight',
   'Space',
   'KeyB',
+  'KeyC',
 ]);
 
 export class Controls {
@@ -149,6 +156,32 @@ export class Controls {
     const pressed = this.tapped.has('KeyB');
     this.tapped.delete('KeyB');
     return pressed;
+  }
+
+  /** Whether C was pressed since this was last asked, to toggle the craft menu. */
+  takeCraftMenuToggle(): boolean {
+    const pressed = this.tapped.has('KeyC');
+    this.tapped.delete('KeyC');
+    return pressed;
+  }
+
+  /**
+   * Which hotbar slots were picked since this was last asked, as indices into
+   * the slot order (0 for the first slot, 1 for the second, and so on).
+   *
+   * Read and cleared eagerly, the same reason `takeCraftTaps` is: using an
+   * item is not part of the fixed-step simulation, so there is no tick for it
+   * to ride along on.
+   */
+  takeHotbarTaps(): number[] {
+    const indices: number[] = [];
+    HOTBAR_KEYS.forEach((key, index) => {
+      if (this.tapped.has(key)) {
+        indices.push(index);
+        this.tapped.delete(key);
+      }
+    });
+    return indices;
   }
 
   /** How far the mouse has moved since this was last asked, then reset. */

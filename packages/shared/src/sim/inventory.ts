@@ -22,8 +22,14 @@ export function hasItem(inventory: Inventory, item: ItemId): boolean {
   return countOf(inventory, item) > 0;
 }
 
-/** How many more of this item would fit. */
+/**
+ * How many more of this item would fit.
+ *
+ * Nothing fits until a bag has been found - except the bag itself, which is
+ * how the first one is ever picked up at all.
+ */
 export function roomFor(inventory: Inventory, item: ItemId): number {
+  if (item !== 'bag' && !hasItem(inventory, 'bag')) return 0;
   return Math.max(0, ITEM_KINDS[item].maxCarry - countOf(inventory, item));
 }
 
@@ -31,14 +37,15 @@ export function roomFor(inventory: Inventory, item: ItemId): number {
  * Put items in, stopping at the carry limit.
  *
  * Returns how many actually went in, which is how the caller knows whether the
- * pack was full: a pickup that adds nothing must leave the world untouched.
+ * pack was full - or, before a bag is found, whether there was ever anywhere to
+ * put it - so a pickup or a gather that adds nothing must leave the world
+ * untouched.
  */
 export function addItem(inventory: Inventory, item: ItemId, amount = 1): number {
   if (amount <= 0) return 0;
-  const before = countOf(inventory, item);
-  const after = Math.min(ITEM_KINDS[item].maxCarry, before + amount);
-  inventory[item] = after;
-  return after - before;
+  const added = Math.min(roomFor(inventory, item), amount);
+  if (added > 0) inventory[item] = countOf(inventory, item) + added;
+  return added;
 }
 
 /** Take items out. Returns how many were actually there to take. */
@@ -62,10 +69,22 @@ export function inventoryEntries(inventory: Inventory): Array<{ item: ItemId; co
   return entries;
 }
 
+/**
+ * Rebuild a pack from its saved or sent entries.
+ *
+ * A direct restore, not a run of pickups, so it does not go through `addItem`:
+ * a save from before there was a bag to find keeps whatever it already had,
+ * the same way a save from before hunger existed starts full rather than
+ * empty. Only the per-kind limit is enforced, the same clamp a lowered limit
+ * already needs.
+ */
 export function inventoryFromEntries(
   entries: readonly { readonly item: ItemId; readonly count: number }[],
 ): Inventory {
   const inventory = createInventory();
-  for (const entry of entries) addItem(inventory, entry.item, entry.count);
+  for (const entry of entries) {
+    const clamped = Math.min(ITEM_KINDS[entry.item].maxCarry, Math.max(0, entry.count));
+    if (clamped > 0) inventory[entry.item] = clamped;
+  }
   return inventory;
 }

@@ -30,6 +30,7 @@ import {
   createWildernessTerrain,
   dayProgress,
   gatherSpotInReach,
+  isFood,
   isNight,
   nearestBuriedCache,
   nearestCampfire,
@@ -193,6 +194,8 @@ export interface GameDebug {
   canBuild(): boolean;
   /** Whether the build menu (opened with B) is currently showing. */
   buildMenuOpen(): boolean;
+  /** Whether the craft menu (opened with C) is currently showing. */
+  craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{ id: number; kind: string; x: number; z: number; lit: boolean }>;
   /** Every cache currently buried, wherever this browser last heard it was. */
@@ -256,6 +259,7 @@ export class Game {
   private nearCampfire: 'lit' | 'unlit' | null = null;
   private canBuild = false;
   private buildMenuOpen = false;
+  private craftMenuOpen = false;
   private readonly scratch: Vec3 = vec3();
 
   private setup: RendererSetup | null = null;
@@ -422,6 +426,7 @@ export class Game {
       aimedAnimal: () => (this.aimedAnimal === null ? null : { ...this.aimedAnimal }),
       canBuild: () => this.canBuild,
       buildMenuOpen: () => this.buildMenuOpen,
+      craftMenuOpen: () => this.craftMenuOpen,
       builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
       pickups: () =>
@@ -1022,12 +1027,14 @@ export class Game {
     if (mouse.x !== 0 || mouse.y !== 0) camera.turn(mouse.x, mouse.y, MOUSE_SENSITIVITY);
 
     // Read ahead of anything below that might forget taps for a produced
-    // movement tick, so a craft or build key pressed this frame is never
-    // swallowed by that blanket clear before this gets a look at it. The
-    // build menu takes the same digit keys over while it is open, so it
-    // reads first and craft only gets a turn once it is closed.
+    // movement tick, so a hotbar, craft or build key pressed this frame is
+    // never swallowed by that blanket clear before this gets a look at it.
+    // Whichever menu is open takes the same digit keys over; the hotbar only
+    // gets a turn once both are closed, so every digit key means one thing
+    // at a time.
     this.handleBuildMenuInput(controls);
-    if (!this.buildMenuOpen) this.handleCraftInput(controls);
+    this.handleCraftMenuInput(controls);
+    if (!this.buildMenuOpen && !this.craftMenuOpen) this.handleHotbarInput(controls);
 
     // If the server never answers, let the player walk about on their own rather
     // than staring at a loading screen.
@@ -1055,12 +1062,17 @@ export class Game {
   };
 
   /**
-   * B opens or closes the build menu. While it is open, a digit key picks
-   * from it and sends the request, the same moment a craft key would - the
-   * server still places it wherever this player currently stands and looks.
+   * B opens or closes the build menu, closing the craft menu if that was open
+   * instead - only one ever shows at once, so a digit key always means one
+   * thing. While it is open, a digit key picks from it and sends the
+   * request - the server still places it wherever this player currently
+   * stands and looks.
    */
   private handleBuildMenuInput(controls: Controls): void {
-    if (controls.takeBuildMenuToggle()) this.buildMenuOpen = !this.buildMenuOpen;
+    if (controls.takeBuildMenuToggle()) {
+      this.buildMenuOpen = !this.buildMenuOpen;
+      if (this.buildMenuOpen) this.craftMenuOpen = false;
+    }
     if (!this.buildMenuOpen) return;
     for (const index of controls.takeBuildTaps()) {
       const kind = BUILDABLE_KIND_ORDER[index];
@@ -1071,11 +1083,36 @@ export class Game {
     }
   }
 
-  /** Turn any craft hotkeys pressed this frame into requests to the server. */
-  private handleCraftInput(controls: Controls): void {
+  /**
+   * C opens or closes the craft menu, closing the build menu if that was
+   * open instead, the same reason opening the build menu closes this one.
+   * While it is open, a digit key sends a craft request - unlike the build
+   * menu this stays open afterwards, since crafting several things in a row
+   * is common and nothing about a craft needs a fresh aim the way a
+   * placement does.
+   */
+  private handleCraftMenuInput(controls: Controls): void {
+    if (controls.takeCraftMenuToggle()) {
+      this.craftMenuOpen = !this.craftMenuOpen;
+      if (this.craftMenuOpen) this.buildMenuOpen = false;
+    }
+    if (!this.craftMenuOpen) return;
     for (const index of controls.takeCraftTaps()) {
       const item = RECIPE_ITEMS[index];
       if (item !== undefined) this.connection?.sendCraft(item);
+    }
+  }
+
+  /**
+   * Turn a hotbar slot picked this frame into a request to use whatever item
+   * is shown there, if using it would do anything - only food does, for now.
+   * Only reached once neither menu is open, so this never fires alongside a
+   * craft or a build off the very same key.
+   */
+  private handleHotbarInput(controls: Controls): void {
+    for (const index of controls.takeHotbarTaps()) {
+      const entry = this.carrying[index];
+      if (entry !== undefined && isFood(entry.item)) this.connection?.sendUseItem(entry.item);
     }
   }
 
@@ -1345,6 +1382,7 @@ export class Game {
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,
       buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),

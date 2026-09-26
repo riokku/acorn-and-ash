@@ -206,6 +206,13 @@ export class World extends DurableObject<WorldEnv> {
       simulation.requestBuild(attachment.netId, decoded.kind);
       return;
     }
+    if (decoded.type === 'useItem') {
+      // Not aimed at anything, the same as crafting: settled the moment it
+      // arrives rather than waiting for the next tick.
+      simulation.useItem(attachment.netId, decoded.item);
+      this.announceHunger(simulation);
+      return;
+    }
     if (decoded.type === 'hello') {
       this.handleHello(ws, attachment, decoded.name, decoded.character, decoded.color);
       return;

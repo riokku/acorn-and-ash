@@ -40,6 +40,8 @@ export interface HudState {
   readonly canBuild: boolean;
   /** Whether the build menu (opened with B) is currently showing. */
   readonly buildMenuOpen: boolean;
+  /** Whether the craft menu (opened with C) is currently showing. */
+  readonly craftMenuOpen: boolean;
   /** Whether a click right now would cast a line. */
   readonly canCast: boolean;
   readonly fishing: FishingPhase;
@@ -88,6 +90,7 @@ const INITIAL: HudState = {
   aimedAnimal: null,
   canBuild: false,
   buildMenuOpen: false,
+  craftMenuOpen: false,
   canCast: false,
   fishing: null,
   fishingNews: null,
