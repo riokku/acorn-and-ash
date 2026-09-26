@@ -55,7 +55,10 @@ The game is online-only. Every world runs on the server.
 > can now craft from a couple of sticks all cast real firelight of their
 > own now, flickering the way fire actually does rather than just glowing
 > in place - the first real reason to have one of the three going before
-> night falls. See [the roadmap](#roadmap).
+> night falls. The build menu now offers a fence and a garden path stone
+> too, both cheap and uncapped so a whole line of either is one trip's
+> worth of gathering, not a single decoration like the flower bed or the
+> lantern. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -301,6 +304,12 @@ anywhere in the clearing, then a number to pick one:
   built, casting the same kind of real, flickering light as a campfire, just
   smaller and closer - no switch, the same "atmosphere only" choice as the
   campfire's own fire.
+- **Fence** - two logs a segment, and not capped: place as many as you can
+  afford, one at a time, to actually line a boundary. A placeholder post-and-
+  rail shape for now.
+- **Garden path** - two sticks a stone, gathered by hand the same way
+  flowers are. Not capped either, for the same reason a fence isn't - a
+  trail is only one stone if you can only ever place one.
 
 The hint at the bottom tells you when the spot you're facing is clear and
 your pack can afford whatever you have picked. What each one costs lives in
@@ -312,9 +321,11 @@ ownership and the spawn-at-home rule,
 [decision 0023](docs/decisions/0023-decorating-the-garden.md) for the flower
 bed, the lantern and the per-kind build cap,
 [decision 0033](docs/decisions/0033-a-campfire-you-can-light.md) for the
-campfire's real art, its animated fire and lighting it, and
+campfire's real art, its animated fire and lighting it,
 [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for the
-real light the campfire and lantern both cast now.
+real light the campfire and lantern both cast now, and
+[decision 0048](docs/decisions/0048-a-fence-and-a-garden-path.md) for the
+fence and the garden path stone.
 
 ## Running it locally
 

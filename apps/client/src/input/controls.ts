@@ -21,9 +21,11 @@ const RIGHT_MOUSE = mouseCode(2);
 /**
  * Hotkeys for crafting or building, in menu order: 1 is the first entry, 2 the
  * second. Only live while that menu is open - the rest of the time these same
- * keys are the hotbar's.
+ * keys are the hotbar's. Six, not four: the build menu has grown past
+ * campfire/cabin/flower bed/lantern to fence and garden path (see decision
+ * 0048), and crafting shares this same list rather than keys of its own.
  */
-const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'] as const;
+const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
 /** Hotkeys for the hotbar, one per slot. Only live while neither menu is open. */
 const HOTBAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
 

@@ -2788,6 +2788,72 @@ describe('building', () => {
     });
   });
 
+  describe('fences and garden paths', () => {
+    const withSticks = (netId: number, count = 2): PersistedPlayer => ({
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'stick', count },
+      ],
+      hunger: HUNGER_MAX,
+    });
+
+    it('a fence costs logs, a garden path costs sticks, and neither is capped or a home', () => {
+      expect(BUILDABLE_KINDS.fence.costs).toEqual([{ item: 'log', amount: 2 }]);
+      expect(BUILDABLE_KINDS.fence.capPerPlayer).toBe(false);
+      expect(BUILDABLE_KINDS.fence.isHome).toBe(false);
+      expect(BUILDABLE_KINDS.gardenPath.costs).toEqual([{ item: 'stick', amount: 2 }]);
+      expect(BUILDABLE_KINDS.gardenPath.capPerPlayer).toBe(false);
+      expect(BUILDABLE_KINDS.gardenPath.isHome).toBe(false);
+    });
+
+    it('lets the same player line up as many fence segments as they can afford', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withLogs(1, 6));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'fence', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      // A second fence, a different spot so its own footprint is not what
+      // would refuse this - proving the per-kind cap (personal decorations,
+      // above) simply does not apply here, not that there was nowhere to put it.
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'fence', seq);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(2);
+    });
+
+    it('lets the same player lay down more than one garden path stone', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withSticks(1, 4));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'gardenPath', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+
+      const seq = waitOutCooldown(sim, 1, 2);
+      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      requestAndStep(sim, 1, 'gardenPath', seq);
+      expect(sim.drainBuildEvents()).toHaveLength(1);
+      expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+    });
+
+    it('refuses a garden path stone without enough sticks, and spends nothing', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withSticks(1, 1));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+      requestAndStep(sim, 1, 'gardenPath', 1);
+
+      expect(sim.drainBuildEvents()).toEqual([]);
+      expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+    });
+  });
+
   describe('lighting a campfire', () => {
     /** Build one, then stand right on top of it - well within interact reach. */
     function buildAndStandNextToIt(sim: WorldSimulation, netId: number): BuiltProp {

@@ -8,7 +8,8 @@
 
 import type { RecipeCost } from './recipes';
 
-export type BuildableKindId = 'campfire' | 'cabin' | 'flowerBed' | 'lantern';
+export type BuildableKindId =
+  'campfire' | 'cabin' | 'flowerBed' | 'lantern' | 'fence' | 'gardenPath';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -81,6 +82,31 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 500,
     placeholderColor: 0x3a3226,
   },
+  fence: {
+    id: 'fence',
+    displayName: 'Fence',
+    // Cheap per segment on purpose: a single fence post decorates nothing on
+    // its own, so the real cost of a fence is however many of these a player
+    // places in a row, not this number.
+    costs: [{ item: 'log', amount: 2 }],
+    footprintRadius: 0.6,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 600,
+    placeholderColor: 0x9c7a52,
+  },
+  gardenPath: {
+    id: 'gardenPath',
+    displayName: 'Garden path',
+    // Sticks, the same no-tool-needed resource the flower bed's own flowers
+    // are - laying a trail of stones should not need an axe first.
+    costs: [{ item: 'stick', amount: 2 }],
+    footprintRadius: 0.25,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 150,
+    placeholderColor: 0x8f8a7d,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -89,6 +115,8 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'cabin',
   'flowerBed',
   'lantern',
+  'fence',
+  'gardenPath',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

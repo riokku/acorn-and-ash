@@ -81,6 +81,21 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <rect x="6" y="13" width="12" height="1.5" />
     </>
   ),
+  fence: (
+    <>
+      <rect x="3" y="4" width="2.5" height="17" rx="1" />
+      <rect x="18.5" y="4" width="2.5" height="17" rx="1" />
+      <rect x="2" y="8" width="20" height="2.2" rx="1" />
+      <rect x="2" y="15" width="20" height="2.2" rx="1" />
+    </>
+  ),
+  gardenPath: (
+    <>
+      <ellipse cx="7" cy="18" rx="4.5" ry="3" transform="rotate(-10 7 18)" />
+      <ellipse cx="14.5" cy="11.5" rx="4.5" ry="3" transform="rotate(8 14.5 11.5)" />
+      <ellipse cx="19" cy="5" rx="4" ry="2.6" transform="rotate(-6 19 5)" />
+    </>
+  ),
   torch: (
     <g transform="rotate(15 12 12)">
       <rect x="10.5" y="10" width="3" height="12" rx="1.2" />
