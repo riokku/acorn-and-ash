@@ -1,6 +1,13 @@
 import * as THREE from 'three/webgpu';
 
-import { ITEM_KINDS, ITEM_ORDER, PLAYER_HEIGHT, PLAYER_RADIUS, type ItemId } from '@acorn/shared';
+import {
+  ITEM_KINDS,
+  ITEM_ORDER,
+  PLAYER_HEIGHT,
+  PLAYER_RADIUS,
+  type CharacterId,
+  type ItemId,
+} from '@acorn/shared';
 
 import { instantiateAnimatedModel, type AnimatedModel, type ModelPart } from './model-loading';
 import { characterModelTemplate } from './character-model';
@@ -11,12 +18,11 @@ import { createNameplate, type Nameplate } from './nameplate';
 export { pickAnimationState, type CharacterAnimState };
 
 /**
- * A character: real modeled art once it has loaded (see character-model.ts),
- * or a capsule with a snout so you can tell which way it is facing until
- * then, the same fallback every other placeholder gets before its art
- * arrives. Every player currently draws the same one model - Knight, the
- * first of the pack's six - since there is no picker yet to choose between
- * them.
+ * A character: real modeled art once its own model has loaded (see
+ * character-model.ts), or a capsule with a snout so you can tell which way
+ * it is facing until then, the same fallback every other placeholder gets
+ * before its art arrives. Which of the pack's six a player draws is their
+ * own choice from the Home screen.
  */
 export interface Character {
   readonly group: THREE.Group;
@@ -259,8 +265,11 @@ function attachNameplate(group: THREE.Group): Pick<Character, 'setName'> & { dis
   };
 }
 
-export function createCharacter(color: THREE.ColorRepresentation): Character {
-  const template = characterModelTemplate();
+export function createCharacter(
+  character: CharacterId,
+  color: THREE.ColorRepresentation,
+): Character {
+  const template = characterModelTemplate(character);
   if (template !== undefined) return createAnimatedCharacter(template, color);
   return createPlaceholderCharacter(color);
 }
@@ -273,13 +282,18 @@ function createAnimatedCharacter(
   const instance = instantiateAnimatedModel(template);
   const model = instance.root;
 
-  // Knight's own rig faces the pack's +Z, but this game's convention is
-  // yaw 0 = facing -Z (see the placeholder capsule's snout, which is built
-  // to that convention directly) - a bare 180 degree mismatch, which is
-  // exactly what made it look like it was walking backwards. Corrected on
-  // an inner wrapper, not `group` itself: the outer group's own rotation.y
-  // is overwritten every frame with the live facing direction, which would
-  // instantly undo a correction applied there instead.
+  // Every character in the pack shares Knight's own rig, which faces the
+  // pack's +Z - but this game's convention is yaw 0 = facing -Z (see the
+  // placeholder capsule's snout, which is built to that convention
+  // directly) - a bare 180 degree mismatch, which is exactly what made
+  // Knight look like it was walking backwards (see decision 0036).
+  // Corrected on an inner wrapper, not `group` itself: the outer group's
+  // own rotation.y is overwritten every frame with the live facing
+  // direction, which would instantly undo a correction applied there
+  // instead. Applying it here rather than per-model keeps every character
+  // that ever gets converted correct for free, the same way this fixed it
+  // for all six the moment the other five had real models to test it
+  // against.
   model.rotation.y = Math.PI;
   model.scale.setScalar(MODEL_SCALE);
   const group = new THREE.Group();

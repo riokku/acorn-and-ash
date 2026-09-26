@@ -7,6 +7,7 @@ import {
   BUILDABLE_KIND_ORDER,
   CAST_COOLDOWN_SECONDS,
   CHARGE_SECONDS,
+  DEFAULT_CHARACTER,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -47,6 +48,7 @@ import {
   type BuiltProp,
   type BuriedCacheView,
   type CacheEvent,
+  type CharacterId,
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
@@ -72,7 +74,7 @@ import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
 import { preloadItemModels } from './scene/item-models';
-import { preloadCharacterModel } from './scene/character-model';
+import { preloadCharacterModels } from './scene/character-model';
 import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
 import {
   colorForPlayer,
@@ -349,7 +351,7 @@ export class Game {
     void preloadCampfireModels();
     void preloadItemModels();
     void preloadFoxModel();
-    void preloadCharacterModel();
+    void preloadCharacterModels();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -835,7 +837,7 @@ export class Game {
       preloadCampfireModels(),
       preloadItemModels(),
       preloadFoxModel(),
-      preloadCharacterModel(),
+      preloadCharacterModels(),
     ]);
     if (this.clearingScene !== null) return;
 
@@ -862,7 +864,10 @@ export class Game {
     this.applyTreeStates();
     this.applyBuiltProps();
 
-    this.localCharacter = createCharacter(TINT_COLORS[this.options.identity.color].hex);
+    this.localCharacter = createCharacter(
+      this.options.identity.character,
+      TINT_COLORS[this.options.identity.color].hex,
+    );
     this.localCharacter.setName(this.options.identity.name);
     this.scene.add(this.localCharacter.group);
 
@@ -974,7 +979,7 @@ export class Game {
     if (existing !== undefined) return existing;
 
     const entry = this.roster.get(netId);
-    const character = createCharacter(this.colorFor(netId, entry));
+    const character = createCharacter(this.characterKindFor(entry), this.colorFor(netId, entry));
     character.setName(entry?.name ?? null);
     character.setEquippedItem(this.equipped.get(netId) ?? null);
     this.scene.add(character.group);
@@ -988,6 +993,15 @@ export class Game {
    */
   private colorFor(netId: number, entry: RosterEntry | undefined): THREE.ColorRepresentation {
     return entry === undefined ? colorForPlayer(netId) : TINT_COLORS[entry.color].hex;
+  }
+
+  /**
+   * A remote player's chosen character once the roster says what it is, or
+   * the default while we are still waiting to hear - the same brief gap
+   * `colorFor` covers, just with nothing netId-derived to fall back on.
+   */
+  private characterKindFor(entry: RosterEntry | undefined): CharacterId {
+    return entry?.character ?? DEFAULT_CHARACTER;
   }
 
   /**

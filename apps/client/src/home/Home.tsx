@@ -22,9 +22,9 @@ interface HomeProps {
 /**
  * Shown before the game connects: pick a name, a character and a tint.
  *
- * Knight is the only character with real art today (see decision 0036); the
- * rest of the pack's roster is shown locked, so the picker already has the
- * shape it will need once they are converted.
+ * All six of the pack's characters have real art now (see decisions 0036
+ * and 0044) - the lock/"Coming soon" styling below stays in place for
+ * whenever a future character joins the roster the same way these five did.
  */
 export function Home({ initial, onPlay }: HomeProps): React.JSX.Element {
   const [name, setName] = useState(initial.name);
