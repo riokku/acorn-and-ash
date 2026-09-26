@@ -725,7 +725,15 @@ describe('equipping', () => {
     const sim = createWorld();
     sim.addPlayer(
       1,
-      withItems(1, [{ item: 'bag', count: 1 }, { item: 'perch', count: 2 }], null, 50),
+      withItems(
+        1,
+        [
+          { item: 'bag', count: 1 },
+          { item: 'perch', count: 2 },
+        ],
+        null,
+        50,
+      ),
     );
     expect(sim.useItem(1, 'perch')).toBe(true);
 
@@ -756,7 +764,13 @@ describe('equipping', () => {
 
   it('defaults to the axe on a fresh connect when nothing was saved', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }]));
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
     expect(sim.equippedItemOf(1)).toBe('axe');
   });
 
@@ -806,7 +820,14 @@ describe('equipping', () => {
     const sim = createWorld();
     sim.addPlayer(
       1,
-      withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }], 'rod'),
+      withItems(
+        1,
+        [
+          { item: 'bag', count: 1 },
+          { item: 'axe', count: 1 },
+        ],
+        'rod',
+      ),
     );
     expect(sim.equippedItemOf(1)).toBe('axe');
   });
@@ -815,7 +836,15 @@ describe('equipping', () => {
     const sim = createWorld();
     sim.addPlayer(
       1,
-      withItems(1, [{ item: 'bag', count: 1 }, { item: 'perch', count: 1 }], null, 50),
+      withItems(
+        1,
+        [
+          { item: 'bag', count: 1 },
+          { item: 'perch', count: 1 },
+        ],
+        null,
+        50,
+      ),
     );
     sim.useItem(1, 'perch');
     expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
@@ -824,7 +853,13 @@ describe('equipping', () => {
 
   it('lists what every connected player has equipped', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withItems(1, [{ item: 'bag', count: 1 }, { item: 'axe', count: 1 }]));
+    sim.addPlayer(
+      1,
+      withItems(1, [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+      ]),
+    );
     sim.addPlayer(2, withItems(2, [{ item: 'bag', count: 1 }]));
     expect(sim.equippedList()).toEqual(
       expect.arrayContaining([
