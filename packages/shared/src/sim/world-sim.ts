@@ -12,6 +12,7 @@ import {
   HUNGER_MAX,
   INPUT_BACKLOG_CATCHUP_THRESHOLD,
   INTEREST_RADIUS,
+  LIGHT_SAFETY_RADIUS,
   MAX_INPUTS_PER_TICK,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
@@ -66,11 +67,13 @@ import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
 import {
   fleeDirection,
   hasReachedTarget,
+  nightDetection,
   shouldFlee,
   towardDirection,
   wanderTarget,
   type Direction2D,
 } from './animals';
+import { dayProgress, isNight } from './day-night';
 import {
   addItem,
   hasItem,
@@ -1118,7 +1121,18 @@ export class WorldSimulation {
       runtime.attackState = 'none';
     }
 
-    runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, kind);
+    // Bolder in the dark, unless the nearest player is lit - see decision
+    // 0049. Only how far away it notices someone changes; the fight itself,
+    // once engaged, is identical at any hour.
+    const boldInTheDark =
+      isNight(dayProgress(this.nowMs)) &&
+      !(
+        nearestPlayer !== null &&
+        nearestPosition !== null &&
+        this.isPlayerLit(nearestPlayer, nearestPosition)
+      );
+    const detection = nightDetection(kind, boldInTheDark);
+    runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, detection);
 
     let direction: Direction2D;
     let speed: number;
@@ -1421,6 +1435,28 @@ export class WorldSimulation {
    */
   private isActiveItem(runtime: PlayerRuntime, item: ItemId): boolean {
     return runtime.equippedItem === item && hasItem(runtime.inventory, item);
+  }
+
+  /**
+   * Whether this player currently counts as lit: carrying a lit torch, or
+   * close enough to a lit campfire or a built lantern. Cancels a threat's
+   * own night bonus - see `NIGHT_ALERT_RADIUS_MULTIPLIER`.
+   *
+   * An unlit campfire does not count - only a lantern needs no check of its
+   * own, since it has no off state to begin with (decision 0047).
+   */
+  private isPlayerLit(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    if (this.equippedItemOf(runtime.netId) === 'torch') return true;
+
+    const reachSquared = LIGHT_SAFETY_RADIUS * LIGHT_SAFETY_RADIUS;
+    for (const prop of this.builtProps) {
+      if (prop.kind !== 'campfire' && prop.kind !== 'lantern') continue;
+      if (prop.kind === 'campfire' && !prop.lit) continue;
+      const dx = prop.x - position.x;
+      const dz = prop.z - position.z;
+      if (dx * dx + dz * dz <= reachSquared) return true;
+    }
+    return false;
   }
 
   /**

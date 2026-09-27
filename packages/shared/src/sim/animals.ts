@@ -10,7 +10,7 @@
  */
 
 import type { AnimalKind } from '../data/animals';
-import { ANIMAL_TARGET_REACHED_DISTANCE } from '../constants';
+import { ANIMAL_TARGET_REACHED_DISTANCE, NIGHT_ALERT_RADIUS_MULTIPLIER } from '../constants';
 import { createRng, hashSeed } from '../rng';
 import { TAU } from '../math/angles';
 
@@ -72,6 +72,26 @@ export function towardDirection(
   const distance = Math.hypot(dx, dz);
   if (distance < 1e-6) return { x: 0, z: 0 };
   return { x: dx / distance, z: dz / distance };
+}
+
+/**
+ * A threat's own noticing distance, scaled up when it should be bolder in
+ * the dark - unless a player is lit, which cancels the whole bonus.
+ *
+ * Kept pure and separate from `WorldSimulation`, the same reason every other
+ * decision in this file is: the scaling itself is unit-testable without
+ * spinning up a whole world. Deciding *whether* a given player is lit still
+ * needs the runtime's own inventory and built props, so that stays there.
+ */
+export function nightDetection(
+  kind: Pick<AnimalKind, 'alertRadius' | 'safeRadius'>,
+  boldInTheDark: boolean,
+): Pick<AnimalKind, 'alertRadius' | 'safeRadius'> {
+  if (!boldInTheDark) return kind;
+  return {
+    alertRadius: kind.alertRadius * NIGHT_ALERT_RADIUS_MULTIPLIER,
+    safeRadius: kind.safeRadius * NIGHT_ALERT_RADIUS_MULTIPLIER,
+  };
 }
 
 /** Close enough to a wander target to call it arrived and pick a new one. */

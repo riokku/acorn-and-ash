@@ -2,6 +2,7 @@ import { HEALTH_MAX, HUNGER_MAX, type ItemId } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
+import type { Compass } from './cache-compass';
 
 /** Our own line: none out, waiting for a bite, or a fish on right now. */
 export type FishingPhase = 'waiting' | 'biting' | null;
@@ -32,6 +33,13 @@ export interface HudState {
   readonly nearGatherSpot: ItemId | null;
   /** Whether a cache of our own is close enough right now to dig up. */
   readonly nearBuriedCache: boolean;
+  /**
+   * The way back to a buried cache of our own, whenever we have one and are
+   * not already standing next to it - null the rest of the time, including
+   * while `nearBuriedCache` is true, since the dig-up hint already covers
+   * that moment.
+   */
+  readonly ownCacheCompass: Compass | null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   readonly nearCampfire: 'lit' | 'unlit' | null;
   /** The tree a swing would land on, and how many more it needs. */
@@ -88,6 +96,7 @@ const INITIAL: HudState = {
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
+  ownCacheCompass: null,
   nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,

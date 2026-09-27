@@ -134,6 +134,36 @@ body {
 }
 
 /*
+ * A small compass toward a buried stash you haven't dug up yet - only shown
+ * once it is far enough away that the dig-up hint itself is not already
+ * telling you where to stand. The arrow rotates to point the way regardless
+ * of which way the camera is looking; the number is how far.
+ */
+.cache-compass {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cache-compass-arrow {
+  display: inline-block;
+  color: var(--warn);
+  transition: transform 0.15s ease;
+}
+
+/*
  * The row of item slots along the very bottom - 1 through 6, left to right.
  * Wax-seal circles on a parchment strip: the same warm material the Home
  * screen and the craft/build journal panel both use, so what you carry and

@@ -23,6 +23,7 @@ const BASE_STATE: HudState = {
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
+  ownCacheCompass: null,
   nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,
