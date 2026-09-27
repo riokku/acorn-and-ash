@@ -47,6 +47,7 @@ declare global {
       healthNews(): string | null;
       craftingNews(): string | null;
       huntingNews(): string | null;
+      mapState(): { painted: boolean; open: boolean; explored: number };
     };
   }
 }
@@ -211,6 +212,29 @@ test('the game loads, connects and draws the clearing', async ({ page }) => {
   // Something is actually being drawn.
   await expect.poll(async () => Number(await hudValue(page, 'FPS'))).toBeGreaterThan(0);
   expect(errors).toEqual([]);
+});
+
+test('the map fills in around you, and M opens it over the game', async ({ page }) => {
+  await page.goto('/');
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-curtain')).toBeHidden();
+
+  // The minimap is up, and the ground around the start is already marked seen.
+  await expect(page.getByTestId('minimap')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.acornDebug?.mapState().explored ?? 0))
+    .toBeGreaterThan(0);
+
+  await page.keyboard.press('KeyM');
+  await expect(page.getByTestId('world-map')).toBeVisible();
+  await expect(page.getByTestId('minimap')).toBeHidden();
+
+  // Escape puts the map away first, rather than pausing - see decision 0054.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('world-map')).toBeHidden();
+  await expect(page.locator('.hud-curtain')).toBeHidden();
+  await expect(page.getByTestId('minimap')).toBeVisible();
 });
 
 test('the WebGL 2 fallback works when WebGPU is refused', async ({ page }) => {

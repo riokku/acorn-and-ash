@@ -203,6 +203,13 @@ export class Controls {
     return pressed;
   }
 
+  /** Whether M was pressed since this was last asked, to open or put away the big map. */
+  takeMapToggle(): boolean {
+    const pressed = this.tapped.has('KeyM');
+    this.tapped.delete('KeyM');
+    return pressed;
+  }
+
   /** Whether I was pressed since this was last asked, to toggle the inventory panel. */
   takeInventoryToggle(): boolean {
     const pressed = this.tapped.has('KeyI');

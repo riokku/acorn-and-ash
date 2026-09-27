@@ -45,6 +45,9 @@ const BASE_STATE: HudState = {
   huntingNews: null,
   cacheNews: null,
   isNight: false,
+  mapOpen: false,
+  door: null,
+  home: null,
 };
 
 describe('the hint along the bottom', () => {
@@ -277,5 +280,29 @@ describe('the hunger hint', () => {
   it('sends you hunting when there is no food at all', () => {
     const state: HudState = { ...BASE_STATE, hunger: 0, carrying: [] };
     expect(hint(state)).toBe("You're hungry. Go catch something to eat");
+  });
+});
+
+describe('the hint at a door', () => {
+  it('invites you into your own home, or to visit an open one', () => {
+    expect(hint({ ...BASE_STATE, door: 'enter' })).toBe('Walk in, or press E, to go inside');
+    expect(hint({ ...BASE_STATE, door: 'visit' })).toBe('Walk in, or press E, to visit');
+  });
+
+  it('says so when somebody else has locked their door', () => {
+    expect(hint({ ...BASE_STATE, door: 'locked' })).toBe("The door's locked");
+  });
+
+  it('shows the way out, once you are by the door inside', () => {
+    expect(hint({ ...BASE_STATE, door: 'leave', home: { yours: true, locked: false } })).toBe(
+      'Walk out through the door to leave',
+    );
+  });
+
+  it('welcomes you home, or says you are visiting, the rest of the time inside', () => {
+    expect(hint({ ...BASE_STATE, home: { yours: true, locked: false } })).toMatch(
+      /^Home, sweet home/,
+    );
+    expect(hint({ ...BASE_STATE, home: { yours: false, locked: false } })).toMatch(/^Visiting/);
   });
 });

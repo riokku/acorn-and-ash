@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 import {
   BUILDABLE_KINDS,
@@ -22,10 +22,14 @@ import {
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
 import { InventoryPanel, InventoryToggleButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
+import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
+import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
+import { FogCache } from '../map/draw-map';
+import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
   readonly store: HudStore;
@@ -36,6 +40,11 @@ interface HudProps {
   readonly onHotbarSlotsChange: (next: HotbarPins) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
+  /** What the minimap and the big map draw - see decision 0054. */
+  readonly mapFeed: MapFeed;
+  readonly onToggleMap: () => void;
+  /** Lock or unlock our own front door - see decision 0055. */
+  readonly onSetDoorLock: (locked: boolean) => void;
 }
 
 export function Hud({
@@ -47,8 +56,13 @@ export function Hud({
   onHotbarSlotsChange,
   initialPreferences,
   onSettingsChange,
+  mapFeed,
+  onToggleMap,
+  onSetDoorLock,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  // One parchment layer for both maps, so it is only ever worked out once.
+  const [fog] = useState(() => new FogCache());
 
   return (
     <>
@@ -89,11 +103,18 @@ export function Hud({
         />
       ) : null}
 
-      {state.ready && state.playing && state.ownCacheCompass !== null ? (
+      {state.ready && state.playing && !state.mapOpen && state.home?.yours === true ? (
+        <DoorLock locked={state.home.locked} onSetDoorLock={onSetDoorLock} />
+      ) : null}
+
+      {state.ready && state.playing && !state.mapOpen && state.ownCacheCompass !== null ? (
         <CacheCompass compass={state.ownCacheCompass} />
       ) : null}
 
-      {state.ready && state.playing ? (
+      {state.ready && state.playing && !state.mapOpen ? (
+        <Minimap feed={mapFeed} fog={fog} onOpenMap={onToggleMap} />
+      ) : null}
+      {state.ready && state.playing && !state.mapOpen ? (
         <>
           <Hotbar state={state} onUseItem={onUseItem} onHotbarSlotsChange={onHotbarSlotsChange} />
           <InventoryToggleButton onToggle={onToggleInventory} />
@@ -116,14 +137,15 @@ export function Hud({
             {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
           </p>
           <p>
-            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · Esc
-            to pause
+            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · M
+            for the map · Esc to pause
           </p>
         </div>
       ) : null}
 
       {state.ready &&
       state.playing &&
+      !state.mapOpen &&
       (state.fishingNews !== null ||
         state.healthNews !== null ||
         state.cacheNews !== null ||
@@ -140,7 +162,7 @@ export function Hud({
         </p>
       ) : null}
 
-      {state.ready && state.playing ? (
+      {state.ready && state.playing && !state.mapOpen ? (
         <p
           className={
             state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
@@ -152,6 +174,11 @@ export function Hud({
         >
           {hint(state)}
         </p>
+      ) : null}
+
+      {/* Last, so the big map's page sits over everything else on screen. */}
+      {state.ready && state.playing && state.mapOpen ? (
+        <WorldMap feed={mapFeed} fog={fog} onClose={onToggleMap} />
       ) : null}
 
       {!state.ready ? (
@@ -204,6 +231,30 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
     <span className={className}>
       {Math.round(state.health)}/{HEALTH_MAX}
     </span>
+  );
+}
+
+/**
+ * Inside your own home (see decision 0055): whether the door is open to
+ * visitors, and a click to change that. Only ever shown to the owner.
+ */
+function DoorLock({
+  locked,
+  onSetDoorLock,
+}: {
+  readonly locked: boolean;
+  readonly onSetDoorLock: (locked: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <div className="door-lock">
+      <span className="door-lock-icon" aria-hidden="true">
+        {locked ? '🔒' : '🔓'}
+      </span>
+      <span>{locked ? 'Door locked to visitors' : 'Visitors welcome'}</span>
+      <button type="button" onClick={() => onSetDoorLock(!locked)} data-testid="door-lock">
+        {locked ? 'Unlock' : 'Lock'}
+      </button>
+    </div>
   );
 }
 
@@ -400,6 +451,11 @@ export function hint(state: HudState): string {
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
   if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
+  // Doors - see decision 0055.
+  if (state.door === 'enter') return 'Walk in, or press E, to go inside';
+  if (state.door === 'visit') return 'Walk in, or press E, to visit';
+  if (state.door === 'locked') return "The door's locked";
+  if (state.door === 'leave') return 'Walk out through the door to leave';
   // A tree or animal only offers a hint once the axe is the active item:
   // without that the server ignores the click outright (trySwing's own first
   // check), so hinting at it here would send you to click on something that
@@ -411,6 +467,11 @@ export function hint(state: HudState): string {
   if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
+  if (state.home !== null) {
+    return state.home.yours
+      ? 'Home, sweet home · the door out is behind you'
+      : 'Visiting · the door out is behind you';
+  }
   return (
     'WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · ' +
     'C to craft · B to build · I for your pack'

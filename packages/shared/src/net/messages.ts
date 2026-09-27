@@ -23,6 +23,7 @@ export const ClientMessageType = {
   Build: 0x04,
   Hello: 0x05,
   UseItem: 0x06,
+  SetDoorLock: 0x07,
 } as const;
 
 /** What the server says back. */
@@ -47,6 +48,8 @@ export const ServerMessageType = {
   Cache: 0x21,
   Roster: 0x22,
   Equipped: 0x23,
+  Explored: 0x24,
+  Space: 0x25,
 } as const;
 
 export const RejectReason = {
@@ -107,6 +110,15 @@ export interface UseItemMessage {
 }
 
 /**
+ * Lock or unlock your own front door to visitors (see decision 0055). Only
+ * ever your own: the server knows whose home is whose.
+ */
+export interface SetDoorLockMessage {
+  readonly type: 'setDoorLock';
+  readonly locked: boolean;
+}
+
+/**
  * Introduce yourself: the name, character and tint picked on the Home screen.
  *
  * Sent once, right after `Welcome` - not bundled with it, so a slow Home
@@ -122,7 +134,13 @@ export interface HelloMessage {
 }
 
 export type ClientMessage =
-  InputBundleMessage | PingMessage | CraftMessage | BuildMessage | HelloMessage | UseItemMessage;
+  | InputBundleMessage
+  | PingMessage
+  | CraftMessage
+  | BuildMessage
+  | HelloMessage
+  | UseItemMessage
+  | SetDoorLockMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';
@@ -371,6 +389,31 @@ export interface EquippedMessage {
   readonly players: readonly EquippedEntry[];
 }
 
+/**
+ * Which parts of the world this player has seen, whole (see decision 0054):
+ * one bit per `EXPLORE_CELL_SIZE` square, in `exploring.ts`'s order. Private
+ * to the one it belongs to.
+ */
+export interface ExploredMessage {
+  readonly type: 'explored';
+  readonly cells: Uint8Array;
+}
+
+/**
+ * You went in through a door or came back out (see decision 0055): which
+ * space you are now in - 0 for outdoors, or the built-prop id of the home
+ * you are inside - and exactly where, since a room has its own coordinates.
+ * Private to the one it happened to; everybody else just stops (or starts)
+ * seeing them.
+ */
+export interface SpaceMessage {
+  readonly type: 'space';
+  readonly space: number;
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -391,4 +434,6 @@ export type ServerMessage =
   | BuriedCachesMessage
   | CacheMessage
   | RosterMessage
-  | EquippedMessage;
+  | EquippedMessage
+  | ExploredMessage
+  | SpaceMessage;

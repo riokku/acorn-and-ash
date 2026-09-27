@@ -553,3 +553,137 @@ function hashCell(x: number, y: number): number {
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
+
+/**
+ * A patchwork quilt (see decision 0055): squares of soft cotton in warm
+ * reds, creams, sage and mustard, each with its own little print - dots,
+ * stripes, gingham, sprigs - and a line of running stitches round every one.
+ * Four squares across, so it tiles over a bed.
+ */
+export function paintQuilt(size = 256): Raster {
+  const raster = new Raster(size);
+  const squares = 4;
+  const fabrics: readonly Rgb[] = [
+    hex(0xb8483a),
+    hex(0xefe3c8),
+    hex(0x8fa679),
+    hex(0xd9a441),
+    hex(0x7d93a8),
+    hex(0xc97b5c),
+  ];
+  const patterns = ['plain', 'dots', 'stripes', 'gingham', 'sprig'] as const;
+  const random = seededRandom(13013);
+  const cells = Array.from({ length: squares * squares }, () => ({
+    fabric: pick(random, fabrics),
+    print: pick(random, fabrics),
+    pattern: patterns[Math.floor(random() * patterns.length)] ?? 'plain',
+  }));
+
+  raster.fill((u, v, out) => {
+    const column = Math.floor(u * squares);
+    const row = Math.floor(v * squares);
+    const cell = cells[(row % squares) * squares + (column % squares)];
+    const cu = u * squares - column;
+    const cv = v * squares - row;
+    let colour: Rgb = cell?.fabric ?? PLAIN_CREAM;
+    const print = cell?.print ?? PLAIN_CREAM;
+    switch (cell?.pattern) {
+      case 'dots': {
+        const dx = ((cu * 6) % 1) - 0.5;
+        const dy = ((cv * 6 + Math.floor(cu * 6) * 0.5) % 1) - 0.5;
+        colour = mixRgb(colour, print, 1 - smoothstep(0.12, 0.18, Math.hypot(dx, dy)));
+        break;
+      }
+      case 'stripes':
+        colour = mixRgb(
+          colour,
+          print,
+          smoothstep(0.45, 0.55, Math.sin(cu * Math.PI * 14) * 0.5 + 0.5) * 0.6,
+        );
+        break;
+      case 'gingham': {
+        const a = Math.floor(cu * 8) % 2;
+        const b = Math.floor(cv * 8) % 2;
+        colour = mixRgb(colour, print, (a + b) * 0.28);
+        break;
+      }
+      case 'sprig': {
+        const sprig = tileableCells(u * 24, v * 24, 24, 13014);
+        colour = mixRgb(colour, print, (1 - smoothstep(0.08, 0.16, sprig.nearest)) * 0.8);
+        break;
+      }
+      default:
+        break;
+    }
+    // Soft puffs where the quilting pulls the cotton in, and the weave.
+    const puff = Math.sin(cu * Math.PI) * Math.sin(cv * Math.PI);
+    colour = scaleRgb(colour, 0.82 + puff * 0.2);
+    colour = scaleRgb(colour, 0.96 + tileableNoise(u * 96, v * 96, 96, 13015) * 0.04);
+    // The seam between squares.
+    const seam = Math.min(cu, 1 - cu, cv, 1 - cv);
+    colour = scaleRgb(colour, 0.78 + smoothstep(0, 0.035, seam) * 0.22);
+    // Running stitches just inside each square.
+    const along = (cu + cv) * 40;
+    const stitchLine =
+      (Math.abs(cu - 0.07) < 0.008 ||
+        Math.abs(cu - 0.93) < 0.008 ||
+        Math.abs(cv - 0.07) < 0.008 ||
+        Math.abs(cv - 0.93) < 0.008) &&
+      along % 1 < 0.55;
+    if (stitchLine) colour = mixRgb(colour, PLAIN_CREAM, 0.7);
+    out[0] = colour[0];
+    out[1] = colour[1];
+    out[2] = colour[2];
+  });
+  return raster;
+}
+
+const PLAIN_CREAM = hex(0xf4ead3);
+
+/**
+ * A braided rag rug, round, seen from above (see decision 0055): rings of
+ * plaited fabric in faded reds, creams, blues and browns, one picture rather
+ * than a repeating tile - it is laid over an oval once, like a log end.
+ */
+export function paintRug(size = 256): Raster {
+  const raster = new Raster(size);
+  const braids: readonly Rgb[] = [
+    hex(0xa24a3c),
+    hex(0xe8d9b8),
+    hex(0x5f7a92),
+    hex(0x8a6a4a),
+    hex(0xc98f4f),
+    hex(0x7d8f6a),
+  ];
+  const random = seededRandom(14014);
+  const ringColours = Array.from({ length: 14 }, () => pick(random, braids));
+  raster.fill((u, v, out) => {
+    const dx = u - 0.5;
+    const dy = v - 0.5;
+    const radius = Math.hypot(dx, dy) * 2;
+    const angle = Math.atan2(dy, dx);
+    if (radius > 1) {
+      // Past the edge: the floor shows through - the mesh never draws here.
+      out[0] = 0;
+      out[1] = 0;
+      out[2] = 0;
+      return;
+    }
+    const rings = radius * ringColours.length;
+    const ring = Math.min(ringColours.length - 1, Math.floor(rings));
+    const across = rings - ring;
+    let colour = ringColours[ring] ?? PLAIN_CREAM;
+    // Each braid is a row of little plaits leaning one way, then the other.
+    const plaits = Math.max(6, Math.round((ring + 1) * 7));
+    const plait = (angle / (Math.PI * 2)) * plaits + (across > 0.5 ? 0.5 : 0);
+    const lean = Math.abs((((plait % 1) + 1) % 1) - 0.5) * 2;
+    colour = scaleRgb(colour, 0.78 + (1 - lean) * 0.22);
+    // Rounded, like a cord.
+    colour = scaleRgb(colour, 0.8 + Math.sin(across * Math.PI) * 0.25);
+    colour = scaleRgb(colour, 0.95 + tileableNoise(u * 64, v * 64, 64, 14015) * 0.05);
+    out[0] = colour[0];
+    out[1] = colour[1];
+    out[2] = colour[2];
+  });
+  return raster;
+}

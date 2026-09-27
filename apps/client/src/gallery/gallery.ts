@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 
-import { PROP_KINDS, type PlacedProp, type PropKindId, type WaterCircle } from '@acorn/shared';
+import {
+  PROP_KINDS,
+  dayBrightness,
+  type PlacedProp,
+  type PropKindId,
+  type WaterCircle,
+} from '@acorn/shared';
 
 import { createGroundShader } from '../art/ground-shading';
 import { createGroundMaterial } from '../art/materials';
@@ -17,13 +23,14 @@ import { createFox } from '../scene/fox';
 import { preloadFoxModel } from '../scene/fox-model';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
-import { addDaylight } from '../scene/lighting';
+import { createHomeInterior } from '../scene/home-interior';
+import { addDaylight, type DaylightRig } from '../scene/lighting';
 import { createSatchel, createStickPileModel } from '../scene/pickup-models';
 import { createPond } from '../scene/pond';
 import { preloadPropModels } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
-import { createRenderer } from '../scene/renderer';
+import { createRenderer, type RendererSetup } from '../scene/renderer';
 
 /**
  * The art gallery: every piece of the game's own art laid out in daylight on
@@ -119,6 +126,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const daylight = addDaylight(scene);
   daylight.update(Number.isFinite(time) ? time : 0.42);
 
+  // The inside of a home is its own place (see decision 0055), shown the
+  // way the game shows it: a dollhouse with the near walls cut away.
+  if (focus === 'home') {
+    showHomeInside(renderer, scene, daylight, params, time);
+    return;
+  }
+
   const scenery: PlacedProp[] = SCENERY.map((entry, index) => ({
     id: index + 1,
     kind: entry.kind,
@@ -189,6 +203,52 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     renderer.render(scene, camera);
     frames += 1;
     // For screenshots: say so once a few frames have settled.
+    if (frames === 8) document.body.dataset.galleryReady = 'true';
+  });
+}
+
+/** The room inside a home, looked into from above the cut-away front wall. */
+function showHomeInside(
+  renderer: RendererSetup['renderer'],
+  scene: THREE.Scene,
+  daylight: DaylightRig,
+  params: URLSearchParams,
+  time: number,
+): void {
+  daylight.setIndoors(true);
+  const inside = createHomeInterior();
+  scene.add(inside.group);
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 100);
+  const target = new THREE.Vector3(0, 0.7, -0.3);
+  let angle = Number(params.get('angle') ?? 0.25);
+  const distance = Number(params.get('distance') ?? 8.8);
+  const height = Number(params.get('height') ?? 6.2);
+  const spin = params.has('spin');
+  const resize = (): void => {
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  const daylightAmount = dayBrightness(Number.isFinite(time) ? time : 0.42);
+  let last = performance.now();
+  let frames = 0;
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const delta = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (spin) angle += delta * 0.25;
+    camera.position.set(
+      target.x + Math.sin(angle) * distance,
+      target.y + height,
+      target.z + Math.cos(angle) * distance,
+    );
+    camera.lookAt(target);
+    inside.cutAway(camera.position.x, camera.position.z);
+    inside.update(delta, daylightAmount);
+    renderer.render(scene, camera);
+    frames += 1;
     if (frames === 8) document.body.dataset.galleryReady = 'true';
   });
 }

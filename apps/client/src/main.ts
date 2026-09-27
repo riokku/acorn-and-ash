@@ -87,6 +87,9 @@ const enterWorld = (identity: PlayerIdentity): void => {
       // audio module already picks up live on its own.
       game.setLookSensitivity(preferences.lookSensitivity);
     },
+    game.mapFeed,
+    () => game.toggleMap(),
+    (locked) => game.setDoorLocked(locked),
   );
   window.acornDebug = game.debug();
 

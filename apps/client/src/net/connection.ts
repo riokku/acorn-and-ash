@@ -7,6 +7,7 @@ import {
   encodeHello,
   encodeInputBundle,
   encodePing,
+  encodeSetDoorLock,
   encodeUseItem,
   type BuildRequest,
   type CharacterId,
@@ -121,6 +122,12 @@ export class WorldConnection {
    * with movement, since it is a rare, deliberate action rather than part of
    * the steady stream the input bundle exists to batch up.
    */
+  /** Lock or unlock our own front door (see decision 0055). */
+  sendSetDoorLock(locked: boolean): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeSetDoorLock(locked));
+  }
+
   sendUseItem(item: ItemId): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeUseItem(item));

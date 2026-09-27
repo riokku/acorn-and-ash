@@ -8,6 +8,7 @@ import {
   encodeHello,
   encodeInputBundle,
   encodePing,
+  encodeSetDoorLock,
   encodeUseItem,
   createInput,
   type AnimalCaught,
@@ -18,6 +19,8 @@ import {
   type CharacterId,
   type CraftedEvent,
   type EquippedMessage,
+  type ExploredMessage,
+  type SpaceMessage,
   type FishingEvent,
   type HealthEvent,
   type HungerEvent,
@@ -277,6 +280,30 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'equipped');
     if (message === undefined) throw new Error('Never received the opening equipped list');
     return message.players;
+  }
+
+  /** Lock or unlock this player's own front door. */
+  setDoorLock(locked: boolean): void {
+    this.socket.send(encodeSetDoorLock(locked));
+  }
+
+  /** The newest word on which space this player is in: outdoors, or inside a home. */
+  latestSpace(): SpaceMessage | undefined {
+    const messages = this.received.filter((entry): entry is SpaceMessage => entry.type === 'space');
+    return messages[messages.length - 1];
+  }
+
+  /** The newest word on which parts of the world this player has seen. */
+  explored(): ExploredMessage['cells'] | undefined {
+    const messages = this.received.filter((entry) => entry.type === 'explored');
+    return messages[messages.length - 1]?.cells;
+  }
+
+  /** The map as it stood the moment this player joined. */
+  openingExplored(): ExploredMessage['cells'] {
+    const message = this.received.find((entry) => entry.type === 'explored');
+    if (message === undefined) throw new Error('Never received the opening explored map');
+    return message.cells;
   }
 
   countOfMessages(type: ServerMessage['type']): number {

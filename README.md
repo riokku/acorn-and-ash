@@ -99,6 +99,8 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held, fence picked)      | Place it freely instead of joining it onto another fence       |
 | `Esc` or right mouse tap          | Put the piece away                                             |
 | `I`, or the bag button            | Open or close your pack                                        |
+| `M`, or click the minimap         | Open or close the map                                          |
+| Walk into your door, or `E` there | Go inside your home, or back out                               |
 | Left mouse (click)                | Turn to face what you click, and chop, cast, hook or fight it  |
 | Left mouse (held)                 | Charge a heavy attack                                          |
 | Right mouse (held), then drag     | Turn the camera                                                |
@@ -186,6 +188,18 @@ the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+
+### The map
+
+A round minimap in the top right shows the land around you, turned so that
+whatever is ahead of the camera is at the top, with your home and your stash
+on it (pinned to its rim, pointing the way, once they're too far to show),
+other players nearby, and everything you've built. Press `M`, or click it,
+for the whole map: a field-journal page you can drag and zoom. It starts as
+blank parchment and fills in as you explore, and it remembers what you've
+seen from one visit to the next. It's painted from the world's own seed in
+the background, a second or so after you arrive. See
+[decision 0054](docs/decisions/0054-a-minimap-and-a-map-that-fills-in.md).
 
 ### Day and night
 
@@ -375,10 +389,9 @@ itself away once placed. See
   by pressing `E` again. A lit fire casts real, flickering light on
   everything nearby, not just a flame that looks lit.
 - **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
-  per player: once you have built yours, that is where you start next time,
-  instead of the open clearing. A little log cabin, with a shingled roof, a
-  stone chimney, a window glowing warm and a woodpile by the wall - walked
-  around, not into yet.
+  per player. A little log cabin, with a shingled roof, a stone chimney, a
+  window glowing warm and a woodpile by the wall - and you can go inside
+  (see below).
 - **Flower bed** - six flowers, gathered by hand from a patch the same way
   as sticks. Capped at one per player.
 - **Lantern** - four flowers. Also capped at one per player, independently
@@ -395,6 +408,21 @@ itself away once placed. See
 
 What each one costs lives in
 [`packages/shared/src/data/buildables.ts`](packages/shared/src/data/buildables.ts).
+
+### Your home
+
+Walk into your cabin's front door, or press `E` at it, and the screen fades
+into the room inside: bigger than the outside suggests, seen from above like
+a dollhouse with the near walls cut away. There's a bed, a stone hearth with
+a real fire, a table and chair by the window with an oil lamp, a shelf of
+books and jars, herbs drying from a beam and a braided rug. The fire and the
+lamp glow brighter at night. Walk back into the door to go out.
+
+Once you have a home, it's where you wake up: when you arrive, and after a
+knockout, you're beside your own bed. Inside your own home, a button at the
+top locks the door to visitors or opens it again. Anybody can visit an open
+home, and only ever sees whoever else is inside with them. See
+[decision 0055](docs/decisions/0055-going-inside-your-home.md).
 See [decision 0020](docs/decisions/0020-a-campfire-you-can-build.md) for the
 campfire and placement itself,
 [decision 0022](docs/decisions/0022-a-cabin-of-your-own.md) for the cabin,
@@ -445,7 +473,8 @@ The gallery needs no server and skips the Home screen. `?gallery=cabin` looks
 at one piece up close (also `fence`, `lantern`, `flowerBed`, `gardenPath`,
 `buriedCache`, `bag`, `sticks`, `rabbit`, `raccoon`, `fox`, `campfire`, and
 `pond`, `trees`, `rocks`, `stump`, `animals`, `ground`); add `&time=0.05` for
-night or `&spin` to turn slowly round.
+night or `&spin` to turn slowly round. `?gallery=home` shows the room inside
+a home, on its own.
 
 ## Commands
 

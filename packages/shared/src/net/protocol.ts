@@ -23,6 +23,7 @@ import {
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
+import { EXPLORED_BYTES } from '../sim/exploring';
 import type {
   AnimalCaught,
   BuildRequest,
@@ -110,6 +111,8 @@ const BYTES_PER_BUILT_PROP = 10;
 const BUILT_PROP_LIT_FLAG = 1;
 /** Set only on the copy of the list sent to whoever owns it. */
 const BUILT_PROP_YOURS_FLAG = 2;
+/** Only a home ever sets this: its owner has locked the door to visitors. */
+const BUILT_PROP_LOCKED_FLAG = 4;
 /** id(2) + ownerNetId(2) + x(2) + z(2) */
 const BYTES_PER_BURIED_CACHE = 8;
 /** A network id no real connection ever has, standing in for "not connected right now." */
@@ -249,6 +252,14 @@ export function encodeBuild(request: BuildRequest): ArrayBuffer {
   return buffer;
 }
 
+export function encodeSetDoorLock(locked: boolean): ArrayBuffer {
+  const buffer = new ArrayBuffer(2);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.SetDoorLock);
+  view.setUint8(1, locked ? 1 : 0);
+  return buffer;
+}
+
 export function encodeUseItem(item: ItemId): ArrayBuffer {
   const buffer = new ArrayBuffer(USE_ITEM_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -331,6 +342,11 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
       z: dequantisePosition(view.getInt16(4, true)),
       yaw: dequantiseAngle(view.getUint16(6, true)),
     };
+  }
+
+  if (type === ClientMessageType.SetDoorLock) {
+    if (data.byteLength !== 2) return null;
+    return { type: 'setDoorLock', locked: view.getUint8(1) !== 0 };
   }
 
   if (type === ClientMessageType.UseItem) {
@@ -510,7 +526,9 @@ export function encodeBuiltProps(
     view.setUint16(offset + 7, quantiseAngle(prop.yaw), true);
     view.setUint8(
       offset + 9,
-      (prop.lit ? BUILT_PROP_LIT_FLAG : 0) | (isYours(prop.id) ? BUILT_PROP_YOURS_FLAG : 0),
+      (prop.lit ? BUILT_PROP_LIT_FLAG : 0) |
+        (isYours(prop.id) ? BUILT_PROP_YOURS_FLAG : 0) |
+        (prop.locked === true ? BUILT_PROP_LOCKED_FLAG : 0),
     );
     offset += BYTES_PER_BUILT_PROP;
   }
@@ -612,6 +630,34 @@ export function encodeEquipped(players: readonly EquippedEntry[]): ArrayBuffer {
     view.setUint8(offset + 2, entry.item === null ? NO_ITEM : itemIndex(entry.item));
     offset += BYTES_PER_EQUIPPED_ENTRY;
   }
+  return buffer;
+}
+
+/** space(2) + x(2) + z(2) + yaw(2), after the type byte. */
+const SPACE_MESSAGE_BYTES = 9;
+
+/** You went through a door: which space you are in now, and where (see decision 0055). */
+export function encodeSpace(space: number, x: number, z: number, yaw: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(SPACE_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Space);
+  view.setUint16(1, space & 0xffff, true);
+  view.setInt16(3, quantisePosition(x), true);
+  view.setInt16(5, quantisePosition(z), true);
+  view.setUint16(7, quantiseAngle(yaw), true);
+  return buffer;
+}
+
+/**
+ * Which parts of the world one player has seen, whole (see decision 0054).
+ * Always the same size, so there is no count to send: the map's own shape
+ * is fixed by the world's.
+ */
+export function encodeExplored(cells: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(1 + EXPLORED_BYTES);
+  const bytes = new Uint8Array(buffer);
+  bytes[0] = ServerMessageType.Explored;
+  bytes.set(cells.subarray(0, EXPLORED_BYTES), 1);
   return buffer;
 }
 
@@ -937,6 +983,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           yaw: dequantiseAngle(view.getUint16(offset + 7, true)),
           lit: (flags & BUILT_PROP_LIT_FLAG) !== 0,
           yours: (flags & BUILT_PROP_YOURS_FLAG) !== 0,
+          locked: (flags & BUILT_PROP_LOCKED_FLAG) !== 0,
         });
         offset += BYTES_PER_BUILT_PROP;
       }
@@ -1036,6 +1083,20 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offset += BYTES_PER_EQUIPPED_ENTRY;
       }
       return { type: 'equipped', players };
+    }
+    case ServerMessageType.Space: {
+      if (data.byteLength !== SPACE_MESSAGE_BYTES) return null;
+      return {
+        type: 'space',
+        space: view.getUint16(1, true),
+        x: dequantisePosition(view.getInt16(3, true)),
+        z: dequantisePosition(view.getInt16(5, true)),
+        yaw: dequantiseAngle(view.getUint16(7, true)),
+      };
+    }
+    case ServerMessageType.Explored: {
+      if (data.byteLength !== 1 + EXPLORED_BYTES) return null;
+      return { type: 'explored', cells: new Uint8Array(data.slice(1)) };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;

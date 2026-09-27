@@ -62,7 +62,18 @@ import {
   type PlacedPickup,
   type PlacedProp,
 } from '../world/clearing';
-import { createWildernessTerrain, type Terrain } from '../world/terrain';
+import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
+import {
+  HOME_ENTRY,
+  HOME_ROOM,
+  HOME_WAKE_SPOT,
+  cabinCollider,
+  cabinDoorstep,
+  homeRoomColliders,
+  isEnteringDoorway,
+  isLeavingRoom,
+  type PlacedSpot,
+} from '../world/home';
 import { castLanding } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
@@ -76,6 +87,7 @@ import {
   type Direction2D,
 } from './animals';
 import { dayProgress, isNight } from './day-night';
+import { exploreCellAt, exploredMapFrom, revealAround } from './exploring';
 import {
   addItem,
   hasItem,
@@ -203,6 +215,12 @@ export interface PersistedPlayer {
    * falls back to the same default a brand new player gets.
    */
   readonly equippedItem?: ItemId | null;
+  /**
+   * Which parts of the world they have seen (see decision 0054). Optional,
+   * the same reason `health` is; a save without one, or one of the wrong
+   * size, starts a fresh map.
+   */
+  readonly explored?: Uint8Array | null;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -289,6 +307,31 @@ export interface BuiltProp {
    * above: a campfire's identity never changes once built, but this does.
    */
   lit: boolean;
+  /**
+   * Only meaningful for a home: whether its owner has locked the door to
+   * visitors (see decision 0055). Absent, like false, for anything built
+   * before doors could be locked, and for every other kind.
+   */
+  locked?: boolean;
+}
+
+/** Outdoors: where every player is unless they have gone inside a home. */
+export const OUTDOORS = 0;
+
+/** Once through a door, this many ticks before it will take you back: one push is one trip. */
+const DOOR_COOLDOWN_TICKS = 12;
+
+/**
+ * Somebody went in through a door or came back out of one (see decision
+ * 0055): where they now are, in whichever space they are now in - the world
+ * outside (`OUTDOORS`), or the inside of the home whose built-prop id this is.
+ */
+export interface SpaceChange {
+  readonly netId: number;
+  readonly space: number;
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
 }
 
 /**
@@ -539,6 +582,19 @@ interface PlayerRuntime {
    * anything here clearing the field itself.
    */
   equippedItem: ItemId | null;
+  /** Which parts of the world this player has seen - see `exploring.ts`. */
+  readonly explored: Uint8Array;
+  /** The square they were last in, so the map only needs looking at when they move into a new one. */
+  exploredCell: number | null;
+  /** Whether `explored` has grown since the player was last told. */
+  exploredChanged: boolean;
+  /**
+   * Where they are: `OUTDOORS`, or inside the home with this built-prop id,
+   * whose room has its own coordinates (see `world/home.ts`).
+   */
+  space: number;
+  /** Ticks before a door will take them through again, so one push is one trip. */
+  doorCooldownTicks: number;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -589,6 +645,15 @@ export class WorldSimulation {
    */
   readonly wilderness: Wilderness;
   readonly collision: CollisionWorld;
+  /**
+   * Inside a home. Every room is laid out the same, so one set of walls and
+   * furniture serves them all, in the room's own coordinates.
+   */
+  readonly roomCollision: CollisionWorld = createCollisionWorld(
+    createFlatTerrain(0),
+    homeRoomColliders(),
+    HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
+  );
   readonly regrowMinSeconds: number;
   readonly hungerDrainPerSecond: number;
 
@@ -635,6 +700,8 @@ export class WorldSimulation {
   private readonly buriedCaches: BuriedCache[] = [];
   private nextBuriedCacheId = 1;
   private readonly cacheEvents: CacheChange[] = [];
+  /** Who went in or out through a door since this was last asked. */
+  private readonly spaceChanges: SpaceChange[] = [];
   /**
    * The props as they stand right now.
    *
@@ -747,11 +814,16 @@ export class WorldSimulation {
     if (this.players.has(netId)) return;
 
     // A home beats both: wherever they physically stood before beats the
-    // shared clearing, but their own doorstep beats that too, every time.
-    const home = playerKey !== null ? this.homePositionFor(playerKey) : null;
+    // shared clearing, but waking up at home, by their own bed, beats that
+    // too, every time (see decision 0055).
+    const home = playerKey !== null ? this.homeOf(playerKey) : null;
     const spawn =
-      home ?? (saved ? { x: saved.x, y: saved.y, z: saved.z } : this.nextSpawnPosition());
-    const facingYaw = saved?.facingYaw ?? 0;
+      home !== null
+        ? { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z }
+        : saved
+          ? { x: saved.x, y: saved.y, z: saved.z }
+          : this.nextSpawnPosition();
+    const facingYaw = home !== null ? HOME_WAKE_SPOT.yaw : (saved?.facingYaw ?? 0);
 
     const entity = this.world.spawn(
       PlayerTag,
@@ -789,6 +861,13 @@ export class WorldSimulation {
       charging: false,
       chargeReadyAtMs: 0,
       equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
+      explored: exploredMapFrom(saved?.explored),
+      exploredCell: null,
+      // Always worth sending once on arrival, whether or not anything new
+      // gets seen: it is how a returning player's map comes back.
+      exploredChanged: true,
+      space: home?.id ?? OUTDOORS,
+      doorCooldownTicks: 0,
     });
   }
 
@@ -884,6 +963,14 @@ export class WorldSimulation {
         let dodgeMoveX = 0;
         let dodgeMoveZ = 0;
         let dodgeCameraYaw = 0;
+        // Which way the last input was walking, as a world direction: walking
+        // into a doorway is how you go through it (see decision 0055).
+        let walkX = 0;
+        let walkZ = 0;
+        // Inside a home only its own walls and furniture are there to bump
+        // into, and nothing out in the world is in reach.
+        const outdoors = runtime.space === OUTDOORS;
+        const collision = outdoors ? this.collision : this.roomCollision;
 
         // A line in the water keeps its own time: the fish bites when it bites,
         // and wandering off brings the line in, whether or not inputs arrived.
@@ -896,7 +983,7 @@ export class WorldSimulation {
             scratch,
             idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw),
             TICK_SECONDS,
-            this.collision,
+            collision,
           );
         } else {
           for (let i = 0; i < steps; i++) {
@@ -920,7 +1007,10 @@ export class WorldSimulation {
             const effectiveInput = runtime.charging
               ? { ...input, moveX: 0, moveZ: 0, buttons: 0 }
               : input;
-            stepPlayer(scratch, effectiveInput, TICK_SECONDS, this.collision);
+            stepPlayer(scratch, effectiveInput, TICK_SECONDS, collision);
+            const walk = worldMoveDirection(effectiveInput.moveX, effectiveInput.moveZ, input.yaw);
+            walkX = walk.x;
+            walkZ = walk.z;
 
             if (!runtime.charging) {
               const interactHeld = isHeld(input, PlayerButton.Interact);
@@ -958,9 +1048,26 @@ export class WorldSimulation {
           }
         }
 
+        // Going through a door comes first: a press at the doorway is for the
+        // door, and nothing else happens on the tick you go through one.
+        if (runtime.doorCooldownTicks > 0) runtime.doorCooldownTicks -= 1;
+        else if (this.tryDoor(runtime, scratch, walkX, walkZ, wantsToToggleCampfire)) {
+          wantsToInteract = false;
+          wantsToSwing = false;
+          wantsToCast = false;
+          wantsToDodge = false;
+          runtime.pendingBuild = null;
+          aim.yaw = scratch.facingYaw;
+          aimedYaw = scratch.facingYaw;
+        }
+
         // Reaching and swinging are judged where the player ended up, not where
-        // they started, and only the server ever decides what happens.
-        if (wantsToInteract) {
+        // they started, and only the server ever decides what happens. Inside
+        // a home, there is nothing out in the world in reach: only your own
+        // pack, to eat from.
+        if (wantsToInteract && runtime.space !== OUTDOORS) {
+          this.tryEat(runtime);
+        } else if (wantsToInteract) {
           // The same button reaches for what is at your feet first, then for
           // a patch of sticks, then for a cache of your own buried nearby,
           // then a nearby campfire to light or put out, and only failing all
@@ -988,7 +1095,23 @@ export class WorldSimulation {
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
         if (runtime.dodgeCooldownTicks > 0) runtime.dodgeCooldownTicks -= 1;
-        if (runtime.cast === null) {
+        if (runtime.space !== OUTDOORS) {
+          // Nothing to chop, catch, cast at or build on in here. A dodge is
+          // still a dodge, against the room's own walls.
+          runtime.charging = false;
+          runtime.pendingBuild = null;
+          if (wantsToDodge) {
+            this.tryDodge(
+              runtime,
+              scratch.position,
+              aimedYaw,
+              dodgeCameraYaw,
+              dodgeMoveX,
+              dodgeMoveZ,
+              this.roomCollision,
+            );
+          }
+        } else if (runtime.cast === null) {
           if (runtime.charging && this.nowMs >= runtime.chargeReadyAtMs) {
             runtime.charging = false;
             this.trySwing(runtime, scratch.position, aimedYaw, true);
@@ -1003,6 +1126,7 @@ export class WorldSimulation {
               dodgeCameraYaw,
               dodgeMoveX,
               dodgeMoveZ,
+              this.collision,
             );
           }
           if (runtime.pendingBuild !== null) {
@@ -1021,6 +1145,8 @@ export class WorldSimulation {
         facing.yaw = scratch.facingYaw;
         grounded.value = scratch.grounded;
         lastProcessed.seq = runtime.lastProcessedSeq;
+        // A room has its own coordinates, nowhere on the map.
+        if (runtime.space === OUTDOORS) this.exploreAround(runtime, position.x, position.z);
 
         // Catches the meter crossing a whole point on its own, if eating did
         // not already say something this tick.
@@ -1028,6 +1154,146 @@ export class WorldSimulation {
       });
 
     this.stepAnimals();
+  }
+
+  /**
+   * Take a player through a door, if they are walking into one or pressed
+   * interact right at it (see decision 0055): outside, in through the door
+   * of a home they may enter; inside, back out the way they came. Moves them
+   * in `motion` and says so, so the rest of this tick knows.
+   */
+  private tryDoor(
+    runtime: PlayerRuntime,
+    motion: PlayerMotion,
+    walkX: number,
+    walkZ: number,
+    freshInteract: boolean,
+  ): boolean {
+    const { position } = motion;
+    if (runtime.space !== OUTDOORS) {
+      if (!isLeavingRoom(position.x, position.z, walkX, walkZ, freshInteract)) return false;
+      const home = this.builtPropsById.get(runtime.space);
+      const out =
+        home === undefined
+          ? { ...this.nextSpawnPosition(), yaw: motion.facingYaw }
+          : cabinDoorstep(home);
+      this.moveBetweenSpaces(runtime, motion, OUTDOORS, out);
+      return true;
+    }
+
+    for (const home of this.builtProps) {
+      if (!BUILDABLE_KINDS[home.kind].isHome) continue;
+      if (!isEnteringDoorway(home, position.x, position.z, walkX, walkZ, freshInteract)) continue;
+      // A locked door only opens for its owner; everybody else just bumps
+      // into it, and their browser says whose it is.
+      if (home.locked === true && this.ownedBuiltProps.get(home.id) !== runtime.playerKey) {
+        return false;
+      }
+      this.moveBetweenSpaces(runtime, motion, home.id, HOME_ENTRY);
+      return true;
+    }
+    return false;
+  }
+
+  /** Put a player somewhere else entirely, in another space, and tell them. */
+  private moveBetweenSpaces(
+    runtime: PlayerRuntime,
+    motion: PlayerMotion,
+    space: number,
+    spot: PlacedSpot,
+  ): void {
+    runtime.space = space;
+    runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
+    // A line out comes in, a charge is let go: neither survives a doorway.
+    if (runtime.cast !== null) this.endCast(runtime, { outcome: 'walkedAway' });
+    runtime.charging = false;
+    motion.position.x = spot.x;
+    motion.position.z = spot.z;
+    motion.position.y = space === OUTDOORS ? this.collision.terrain.heightAt(spot.x, spot.z) : 0;
+    motion.velocity.x = 0;
+    motion.velocity.y = 0;
+    motion.velocity.z = 0;
+    motion.facingYaw = spot.yaw;
+    motion.grounded = true;
+    this.spaceChanges.push({ netId: runtime.netId, space, x: spot.x, z: spot.z, yaw: spot.yaw });
+  }
+
+  /** Where a player is: `OUTDOORS`, or the built-prop id of the home they are inside. */
+  spaceOf(netId: number): number {
+    return this.players.get(netId)?.space ?? OUTDOORS;
+  }
+
+  /** Hand over everybody who went through a door since this was last asked. */
+  drainSpaceChanges(): SpaceChange[] {
+    return this.spaceChanges.splice(0);
+  }
+
+  /**
+   * Lock or unlock this player's own front door (see decision 0055). Only
+   * ever their own: returns the home it changed, or null if they have none,
+   * or it was already that way.
+   */
+  setHomeLocked(netId: number, locked: boolean): BuiltProp | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined || runtime.playerKey === null) return null;
+    const home = this.homeOf(runtime.playerKey);
+    if (home === null || (home.locked === true) === locked) return null;
+    home.locked = locked;
+    return home;
+  }
+
+  /**
+   * Where a player would come back to, in the world outside: where they
+   * stand, or the doorstep of the home they are inside - a room's own
+   * coordinates mean nothing out in the world.
+   */
+  outdoorPositionOf(netId: number): (Vec3 & { readonly yaw: number }) | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return null;
+    const position = runtime.entity.get(Position);
+    const facing = runtime.entity.get(Facing);
+    if (position === undefined || facing === undefined) return null;
+    if (runtime.space === OUTDOORS) return { ...position, yaw: facing.yaw };
+    const home = this.builtPropsById.get(runtime.space);
+    const out = home === undefined ? this.nextSpawnPosition() : cabinDoorstep(home);
+    return {
+      x: out.x,
+      y: this.collision.terrain.heightAt(out.x, out.z),
+      z: out.z,
+      yaw: home === undefined ? facing.yaw : cabinDoorstep(home).yaw,
+    };
+  }
+
+  /**
+   * Mark what is around a player as seen, but only when they step into a new
+   * square: standing still, or wandering about inside one square, cannot
+   * reveal anything the last look did not.
+   */
+  private exploreAround(runtime: PlayerRuntime, x: number, z: number): void {
+    const cell = exploreCellAt(x, z);
+    if (cell === runtime.exploredCell) return;
+    runtime.exploredCell = cell;
+    if (revealAround(runtime.explored, x, z) > 0) runtime.exploredChanged = true;
+  }
+
+  /**
+   * Every player whose map has grown since they were last told, with that
+   * map, whole - it is small enough that sending all of it beats keeping
+   * track of which squares are new.
+   */
+  drainExploredChanges(): { readonly netId: number; readonly explored: Uint8Array }[] {
+    const changes: { netId: number; explored: Uint8Array }[] = [];
+    for (const runtime of this.players.values()) {
+      if (!runtime.exploredChanged) continue;
+      runtime.exploredChanged = false;
+      changes.push({ netId: runtime.netId, explored: runtime.explored });
+    }
+    return changes;
+  }
+
+  /** Which parts of the world this player has seen, or null for somebody not here. */
+  exploredMapOf(netId: number): Uint8Array | null {
+    return this.players.get(netId)?.explored ?? null;
   }
 
   /** Amble, react to the nearest player, or wait out a catch - whichever this tick calls for. */
@@ -1226,6 +1492,8 @@ export class WorldSimulation {
     let best: PlayerRuntime | null = null;
     let bestDistance = Infinity;
     for (const runtime of this.players.values()) {
+      // Somebody indoors is nowhere out in the world at all.
+      if (runtime.space !== OUTDOORS) continue;
       const position = runtime.entity.get(Position);
       if (position === undefined) continue;
       const distance = horizontalDistance(from, position);
@@ -1637,11 +1905,29 @@ export class WorldSimulation {
         }
       }
 
-      const wake = this.wakePosition(runtime.playerKey);
-      // Whichever way they already happened to be facing - a knockout has no
-      // reason to also spin them around.
-      const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
-      this.placePlayer(runtime.netId, wake, facingYaw);
+      // Woken up at home, by their own bed, if they have one (see decision
+      // 0055); otherwise back in the shared clearing, facing whichever way
+      // they already happened to be.
+      const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
+      if (home !== null) {
+        runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
+        this.placePlayer(
+          runtime.netId,
+          { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z },
+          HOME_WAKE_SPOT.yaw,
+          home.id,
+        );
+        this.spaceChanges.push({
+          netId: runtime.netId,
+          space: home.id,
+          x: HOME_WAKE_SPOT.x,
+          z: HOME_WAKE_SPOT.z,
+          yaw: HOME_WAKE_SPOT.yaw,
+        });
+      } else {
+        const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
+        this.placePlayer(runtime.netId, this.nextSpawnPosition(), facingYaw);
+      }
     }
 
     this.healthEvents.push({
@@ -1668,6 +1954,7 @@ export class WorldSimulation {
     cameraYaw: number,
     moveX: number,
     moveZ: number,
+    collision: CollisionWorld,
   ): void {
     if (runtime.dodgeCooldownTicks > 0) return;
 
@@ -1679,8 +1966,8 @@ export class WorldSimulation {
 
     position.x += dirX * DODGE_DISTANCE;
     position.z += dirZ * DODGE_DISTANCE;
-    resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision);
-    position.y = this.collision.terrain.heightAt(position.x, position.z);
+    resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, collision);
+    position.y = collision.terrain.heightAt(position.x, position.z);
 
     runtime.dodgeCooldownTicks = DODGE_COOLDOWN_TICKS;
     runtime.invulnerableUntilMs = this.nowMs + DODGE_INVULNERABLE_SECONDS * 1000;
@@ -1748,6 +2035,7 @@ export class WorldSimulation {
     };
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
+    if (buildable.isHome) this.collision.colliders.push(cabinCollider(prop));
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
@@ -1785,28 +2073,14 @@ export class WorldSimulation {
     return false;
   }
 
-  /** Just outside this player's own front door, or null if they have no home. */
-  private homePositionFor(playerKey: string): Vec3 | null {
+  /** This player's own home, or null if they have none. */
+  private homeOf(playerKey: string): BuiltProp | null {
     for (const [id, owner] of this.ownedBuiltProps) {
       if (owner !== playerKey) continue;
       const home = this.builtPropsById.get(id);
-      if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) continue;
-      // The door is on the model's local +Z side, which a turn of `yaw`
-      // carries round to (sin yaw, cos yaw).
-      const outFront = BUILDABLE_KINDS[home.kind].footprintRadius + 1.5;
-      return {
-        x: home.x + Math.sin(home.yaw) * outFront,
-        y: 0,
-        z: home.z + Math.cos(home.yaw) * outFront,
-      };
+      if (home !== undefined && BUILDABLE_KINDS[home.kind].isHome) return home;
     }
     return null;
-  }
-
-  /** Where a knocked-out player wakes up: their own home, or the shared clearing if they have none yet. */
-  private wakePosition(playerKey: string | null): Vec3 {
-    const home = playerKey !== null ? this.homePositionFor(playerKey) : null;
-    return home ?? this.nextSpawnPosition();
   }
 
   /** A tick of waiting at the water: the bite, the leash and giving up. */
@@ -1888,6 +2162,7 @@ export class WorldSimulation {
   regrowTrees(nowMs: number): TreeRegrown[] {
     const players: Vec3[] = [];
     for (const runtime of this.players.values()) {
+      if (runtime.space !== OUTDOORS) continue;
       const position = runtime.entity.get(Position);
       if (position !== undefined) players.push({ x: position.x, y: position.y, z: position.z });
     }
@@ -2034,6 +2309,7 @@ export class WorldSimulation {
     for (const { ownerKey, litUntilMs, ...prop } of props) {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
+      if (BUILDABLE_KINDS[prop.kind].isHome) this.collision.colliders.push(cabinCollider(prop));
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
       if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);
@@ -2265,9 +2541,15 @@ export class WorldSimulation {
   }
 
   /** Move a player directly. Used when restoring a save, never by a client. */
-  placePlayer(netId: number, position: Readonly<Vec3>, facingYaw: number): void {
+  placePlayer(
+    netId: number,
+    position: Readonly<Vec3>,
+    facingYaw: number,
+    space: number = OUTDOORS,
+  ): void {
     const runtime = this.players.get(netId);
     if (!runtime) return;
+    runtime.space = space;
     runtime.entity.set(Position, { x: position.x, y: position.y, z: position.z });
     runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
     runtime.entity.set(Facing, { yaw: facingYaw });
@@ -2294,19 +2576,19 @@ export class WorldSimulation {
   persistablePlayers(): PersistedPlayer[] {
     const saved: PersistedPlayer[] = [];
     for (const runtime of this.players.values()) {
-      const position = runtime.entity.get(Position);
-      const facing = runtime.entity.get(Facing);
-      if (!position || !facing) continue;
+      const outside = this.outdoorPositionOf(runtime.netId);
+      if (outside === null) continue;
       saved.push({
         netId: runtime.netId,
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        facingYaw: facing.yaw,
+        x: outside.x,
+        y: outside.y,
+        z: outside.z,
+        facingYaw: outside.yaw,
         items: inventoryEntries(runtime.inventory),
         hunger: runtime.hunger,
         health: runtime.health,
         equippedItem: runtime.equippedItem,
+        explored: runtime.explored,
       });
     }
     return saved;
@@ -2330,6 +2612,8 @@ export class WorldSimulation {
       .query(PlayerTag, Position, Velocity, Facing, Grounded, NetworkId)
       .readEach(([position, velocity, facing, grounded, networkId]) => {
         if (networkId.value !== viewerNetId) {
+          // Only whoever is in the same place: outdoors, or the same room.
+          if (this.players.get(networkId.value)?.space !== viewer.space) return;
           const dx = position.x - viewerPosition.x;
           const dz = position.z - viewerPosition.z;
           if (dx * dx + dz * dz > radiusSquared) return;
@@ -2359,8 +2643,9 @@ export class WorldSimulation {
       .readEach(([position, velocity, facing, networkId]) => {
         // A caught animal is gone until it respawns: left out of every
         // viewer's snapshot entirely, the same as a pickup nobody can see
-        // once it is taken.
+        // once it is taken. And there is no wildlife indoors.
         if (this.animals.get(networkId.value)?.caught === true) return;
+        if (viewer.space !== OUTDOORS) return;
 
         const dx = position.x - viewerPosition.x;
         const dz = position.z - viewerPosition.z;

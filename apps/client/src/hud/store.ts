@@ -91,6 +91,12 @@ export interface HudState {
   readonly cacheNews: string | null;
   /** Whether it is currently night out. */
   readonly isNight: boolean;
+  /** Whether the big map (M) is open - see decision 0054. */
+  readonly mapOpen: boolean;
+  /** What a door right here would do, if anything - see decision 0055. */
+  readonly door: 'enter' | 'visit' | 'locked' | 'leave' | null;
+  /** The home we are inside, if any: whether it is ours, and whether its door is locked. */
+  readonly home: { readonly yours: boolean; readonly locked: boolean } | null;
 }
 
 const INITIAL: HudState = {
@@ -134,6 +140,9 @@ const INITIAL: HudState = {
   huntingNews: null,
   cacheNews: null,
   isNight: false,
+  mapOpen: false,
+  door: null,
+  home: null,
 };
 
 /**

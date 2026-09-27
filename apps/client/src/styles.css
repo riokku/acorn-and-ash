@@ -940,3 +940,312 @@ body {
   font-size: 12px;
   color: var(--home-ink-faint);
 }
+
+/* ------------------------------------------------------------------------ */
+/* The minimap and the big map (decision 0054)                              */
+/* ------------------------------------------------------------------------ */
+
+.minimap {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 188px;
+  pointer-events: auto;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+}
+
+.minimap-canvas {
+  display: block;
+  cursor: pointer;
+}
+
+.minimap-buttons {
+  position: absolute;
+  right: -2px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.minimap-buttons button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(91, 70, 49, 0.55);
+  border-radius: 50%;
+  background: var(--parchment);
+  color: var(--ink-warm);
+  font:
+    700 14px/1 'Fraunces',
+    Georgia,
+    serif;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+}
+
+.minimap-buttons button:hover {
+  background: #fff8e6;
+}
+
+.minimap-buttons .minimap-key {
+  font-size: 11px;
+}
+
+.world-map-backdrop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 18, 12, 0.45);
+  pointer-events: auto;
+  animation: world-map-fade 160ms ease-out;
+}
+
+@keyframes world-map-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+.world-map-page {
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 1080px);
+  height: min(90vh, 860px);
+  padding: 16px 20px 12px;
+  border-radius: 6px 22px 6px 22px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 24px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(58, 42, 20, 0.14);
+  color: var(--ink-warm);
+}
+
+.world-map-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.world-map-header h2 {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  font-size: 24px;
+}
+
+.world-map-header p {
+  margin: 0;
+  color: var(--ink-warm-dim);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.world-map-close {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(91, 70, 49, 0.4);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-warm);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.world-map-close:hover {
+  background: rgba(91, 70, 49, 0.08);
+}
+
+.world-map-canvas-holder {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.world-map-canvas-holder:active {
+  cursor: grabbing;
+}
+
+.world-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* An inked double frame round the map, drawn over its edge. */
+.world-map-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(91, 70, 49, 0.55),
+    inset 0 0 0 5px var(--parchment),
+    inset 0 0 0 6px rgba(91, 70, 49, 0.35),
+    inset 0 0 40px rgba(120, 90, 50, 0.25);
+  pointer-events: none;
+}
+
+.world-map-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding-top: 10px;
+  font-size: 13px;
+}
+
+.world-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.world-map-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.world-map-legend span {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+}
+
+.legend-you {
+  background: #c0492f;
+  clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%);
+}
+
+.legend-home {
+  background: #a4553a;
+  clip-path: polygon(50% 0, 100% 45%, 85% 45%, 85% 100%, 15% 100%, 15% 45%, 0 45%);
+}
+
+.legend-stash {
+  width: auto !important;
+  height: auto !important;
+  color: #a33a28;
+  font-weight: 700;
+}
+
+.legend-player {
+  border: 1.5px solid #5b4631;
+  border-radius: 50%;
+  background: #6fa0c9;
+}
+
+.legend-unexplored {
+  border: 1px dashed rgba(91, 70, 49, 0.6);
+  background: #efe4c9;
+}
+
+.world-map-tools {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.world-map-tools button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 70, 49, 0.45);
+  border-radius: 999px;
+  background: #fff8e6;
+  color: var(--ink-warm);
+  font:
+    600 13px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+.world-map-tools button:hover {
+  background: #fffdf4;
+}
+
+.world-map-hint {
+  width: 100%;
+  margin: 0;
+  color: var(--ink-warm-dim);
+  font-size: 11px;
+  text-align: right;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Going inside a home (decision 0055)                                      */
+/* ------------------------------------------------------------------------ */
+
+/* A dark veil for going through a door: fades in quickly, lifts gently. */
+.scene-fade {
+  position: fixed;
+  inset: 0;
+  background: #120d09;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms ease-out;
+}
+
+.scene-fade-dark {
+  opacity: 1;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in;
+}
+
+.scene-fade-instant {
+  transition: none;
+}
+
+.door-lock {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(58, 42, 20, 0.14);
+  color: var(--ink-warm);
+  font-size: 13px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.door-lock-icon {
+  font-size: 14px;
+}
+
+.door-lock button {
+  padding: 5px 12px;
+  border: 1px solid rgba(91, 70, 49, 0.45);
+  border-radius: 999px;
+  background: #fff8e6;
+  color: var(--ink-warm);
+  font:
+    600 12px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+.door-lock button:hover {
+  background: #fffdf4;
+}

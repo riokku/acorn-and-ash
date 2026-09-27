@@ -7,6 +7,9 @@ import {
   BUILDABLE_KIND_ORDER,
   BUILD_ROTATION_STEP,
   CLEARING_TREE_LINE_INNER,
+  DOORWAY_REACH,
+  HOME_ROOM,
+  OUTDOORS,
   CAST_COOLDOWN_SECONDS,
   CHARGE_SECONDS,
   DEFAULT_CHARACTER,
@@ -25,15 +28,25 @@ import {
   animalInReach,
   buildTestClearing,
   buildableFootprint,
+  cabinCollider,
+  cabinDoorstep,
+  cabinDoorway,
+  createFlatTerrain,
+  homeRoomColliders,
+  isEnteringDoorway,
+  isLeavingRoom,
+  worldMoveDirection,
   buildWilderness,
   castLanding,
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
   createWildernessTerrain,
+  dayBrightness,
   dayProgress,
   gatherSpotInReach,
   isNight,
+  exploredFraction,
   nearestBuriedCache,
   nearestCampfire,
   pickupInReach,
@@ -104,10 +117,13 @@ import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
+import { createHomeInterior, type HomeInterior } from './scene/home-interior';
 import { planPlacement, type PlacementPlan } from './building/placement';
 import type { FishingPhase, HudStore } from './hud/store';
 import { compassToOwnCache, type Compass } from './hud/cache-compass';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
+import { MapFeed, type MapBuild } from './map/map-feed';
+import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
 
 /** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
@@ -116,6 +132,14 @@ const BASE_MOUSE_SENSITIVITY = 0.0023;
 const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
 const OFFLINE_FALLBACK_MS = 4000;
+/**
+ * Going through a door (see decision 0055): how long the screen stays dark
+ * once we are through, so the new place has drawn before it shows, and how
+ * long a fade started by walking at a door waits for the server before
+ * giving up (a locked door, say) and lifting again.
+ */
+const DOOR_FADE_HOLD_MS = 140;
+const DOOR_FADE_GIVE_UP_MS = 800;
 /**
  * How long news from the water stays on screen.
  *
@@ -209,6 +233,25 @@ function animalKindOf(animalId: number): AnimalKindId | undefined {
   return ANIMAL_DENS.find((den) => den.id === animalId)?.kind;
 }
 
+/** The cabin's block as a box the camera can bump into - see `homeCameraBlockers`. */
+function homeCameraBlocker(home: BuiltPropView): THREE.Mesh {
+  const collider = cabinCollider(home);
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      collider.shape === 'box' ? collider.halfX * 2 : 5,
+      HOME_CAMERA_BLOCKER_HEIGHT,
+      collider.shape === 'box' ? collider.halfZ * 2 : 4,
+    ),
+  );
+  box.position.set(collider.x, HOME_CAMERA_BLOCKER_HEIGHT / 2, collider.z);
+  box.rotation.y = home.yaw;
+  box.updateMatrixWorld(true);
+  return box;
+}
+
+/** From the ground to the ridge of the roof, and the chimney. */
+const HOME_CAMERA_BLOCKER_HEIGHT = 5;
+
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
@@ -269,6 +312,16 @@ export interface GameDebug {
   } | null;
   /** Every cache currently buried, wherever this browser last heard it was. */
   buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
+  /**
+   * The maps (see decision 0054): whether the painted world is ready, whether
+   * the big map is open, and how much of the world this player has seen.
+   */
+  mapState(): { painted: boolean; open: boolean; explored: number };
+  /**
+   * Where we are (see decision 0055): 0 outdoors, or the built-prop id of the
+   * home we are inside.
+   */
+  space(): number;
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -352,6 +405,39 @@ export class Game {
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
   private playing = false;
   private inventoryOpen = false;
+  /** Whether the big map (M) is open - see decision 0054. */
+  private mapOpen = false;
+  /**
+   * Where we are, as the server last said (see decision 0055): `OUTDOORS`,
+   * or inside the home with this built-prop id, in its room's own coordinates.
+   */
+  private space = OUTDOORS;
+  /** Word of where we are that arrived before there was a world to put us in. */
+  private pendingSpace: { space: number; x: number; z: number; yaw: number } | null = null;
+  /** Everything out in the world, hidden all at once while we are inside a home. */
+  private readonly outdoors = new THREE.Group();
+  /** The room inside a home, built the first time anybody goes in. */
+  private homeInterior: HomeInterior | null = null;
+  /** The walls and furniture of a room, shared by every home, in its own coordinates. */
+  private readonly roomCollision = createCollisionWorld(
+    createFlatTerrain(0),
+    homeRoomColliders(),
+    HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
+  );
+  /** Homes already made solid in `collision`, so a resent list never adds one twice. */
+  private readonly solidHomes = new Set<number>();
+  /**
+   * A plain box the size of each home, never drawn: only there so the
+   * camera pulls in rather than ending up inside somebody's walls.
+   */
+  private readonly homeCameraBlockers: THREE.Mesh[] = [];
+  /** A dark veil over the scene for going through a door, and when the dark should lift if nothing happens. */
+  private sceneFade: HTMLDivElement | null = null;
+  private fadeGiveUpAt: number | null = null;
+  /** What a door right here would do, for the hint. */
+  private doorHint: 'enter' | 'visit' | 'locked' | 'leave' | null = null;
+  /** What the minimap and the big map draw, kept up to date every frame. */
+  readonly mapFeed = new MapFeed();
   private readonly scratch: Vec3 = vec3();
   /**
    * Which way the character is aiming, set by a left click on the world and
@@ -458,6 +544,11 @@ export class Game {
     setup.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.daylight = addDaylight(this.scene);
+    this.scene.add(this.outdoors);
+    const fade = document.createElement('div');
+    fade.className = 'scene-fade';
+    this.options.canvas.insertAdjacentElement('afterend', fade);
+    this.sceneFade = fade;
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
     this.controls = new Controls(this.options.canvas);
 
@@ -493,7 +584,8 @@ export class Game {
    */
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
-    if (this.placing !== null) this.stopPlacing();
+    if (this.mapOpen) this.mapOpen = false;
+    else if (this.placing !== null) this.stopPlacing();
     else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
     else if (this.inventoryOpen) this.inventoryOpen = false;
@@ -509,9 +601,11 @@ export class Game {
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
       this.inventoryOpen = false;
+      this.mapOpen = false;
     }
     this.options.hud.publish({
       playing: this.playing,
+      mapOpen: this.mapOpen,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
       inventoryOpen: this.inventoryOpen,
@@ -527,6 +621,27 @@ export class Game {
       this.craftMenuOpen = false;
     }
     this.options.hud.publish({
+      inventoryOpen: this.inventoryOpen,
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
+    });
+  }
+
+  /**
+   * Open or put away the big map - M, or a click on the minimap or the map's
+   * own close button. Everything else that fills the middle of the screen
+   * steps aside for it; walking carries on underneath (see decision 0054).
+   */
+  toggleMap(): void {
+    this.mapOpen = !this.mapOpen;
+    if (this.mapOpen) {
+      this.stopPlacing();
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+      this.inventoryOpen = false;
+    }
+    this.options.hud.publish({
+      mapOpen: this.mapOpen,
       inventoryOpen: this.inventoryOpen,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
@@ -621,6 +736,12 @@ export class Game {
               refusal: this.placing.plan.refusal,
             },
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
+      space: () => this.space,
+      mapState: () => ({
+        painted: this.mapFeed.image !== null,
+        open: this.mapOpen,
+        explored: exploredFraction(this.mapFeed.explored),
+      }),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -830,6 +951,23 @@ export class Game {
       }
       case 'cache': {
         this.hearAboutCache(message.event);
+        break;
+      }
+      case 'space': {
+        if (this.localPlayer === null) {
+          this.pendingSpace = {
+            space: message.space,
+            x: message.x,
+            z: message.z,
+            yaw: message.yaw,
+          };
+        } else {
+          this.moveToSpace(message.space, message.x, message.z, message.yaw);
+        }
+        break;
+      }
+      case 'explored': {
+        this.mapFeed.mergeFromServer(message.cells);
         break;
       }
       case 'rejected': {
@@ -1046,12 +1184,12 @@ export class Game {
     this.clearing = clearing;
     this.clearingScene = buildClearingScene(clearing);
     this.clearingScene.setTakenPickups(this.takenPickups);
-    this.scene.add(this.clearingScene.group);
+    this.outdoors.add(this.clearingScene.group);
 
     this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
-    this.scene.add(this.wildernessScene.group);
+    this.outdoors.add(this.wildernessScene.group);
 
-    this.scene.add(this.floats.group);
+    this.outdoors.add(this.floats.group);
 
     const collision = createCollisionWorld(terrain, [
       ...clearing.colliders,
@@ -1068,6 +1206,20 @@ export class Game {
     );
     this.localCharacter.setName(this.options.identity.name);
     this.scene.add(this.localCharacter.group);
+    // Word of where we are can beat the world to it on arrival: waking up
+    // inside our own home, say.
+    const arrived = this.pendingSpace;
+    this.pendingSpace = null;
+    if (arrived !== null) this.moveToSpace(arrived.space, arrived.x, arrived.z, arrived.yaw);
+
+    this.mapFeed.ready = true;
+    // Painted in a worker while the player gets their bearings; the minimap
+    // shows blank parchment for the moment it takes.
+    paintWorldMapImage(seed)
+      .then((image) => {
+        this.mapFeed.image = image;
+      })
+      .catch((error: unknown) => console.warn('Could not paint the map', error));
 
     this.options.hud.publish({ ready: true });
   }
@@ -1119,7 +1271,7 @@ export class Game {
 
     for (const [id, built] of this.builtMeshes) {
       if (present.has(id)) continue;
-      this.scene.remove(built.group);
+      this.outdoors.remove(built.group);
       built.dispose();
       this.builtMeshes.delete(id);
     }
@@ -1139,9 +1291,34 @@ export class Game {
       if ('setLit' in built) built.setLit(prop.lit);
       built.group.position.set(prop.x, 0, prop.z);
       built.group.rotation.y = prop.yaw;
-      this.scene.add(built.group);
+      this.outdoors.add(built.group);
+      // A home is solid, apart from its door (see decision 0055) - the same
+      // walls the server holds everybody to, so walking into one predicts right.
+      if (
+        BUILDABLE_KINDS[prop.kind].isHome &&
+        this.collision !== null &&
+        !this.solidHomes.has(prop.id)
+      ) {
+        this.collision.colliders.push(cabinCollider(prop));
+        this.solidHomes.add(prop.id);
+        this.homeCameraBlockers.push(homeCameraBlocker(prop));
+      }
       this.builtMeshes.set(prop.id, built);
     }
+    this.updateMapBuilds();
+  }
+
+  /** Your own home and builds, for the maps - only when the built list changes, not every frame. */
+  private updateMapBuilds(): void {
+    const builds: MapBuild[] = [];
+    let home: MapFeed['home'] = null;
+    for (const prop of this.builtProps) {
+      if (!prop.yours) continue;
+      if (BUILDABLE_KINDS[prop.kind].isHome) home = { x: prop.x, z: prop.z, yaw: prop.yaw };
+      else builds.push({ kind: prop.kind, x: prop.x, z: prop.z, yaw: prop.yaw, lit: prop.lit });
+    }
+    this.mapFeed.home = home;
+    this.mapFeed.builds = builds;
   }
 
   /** Put every buried cache's mound where the server says it is, the same reconciling way as `applyBuiltProps`. */
@@ -1151,7 +1328,7 @@ export class Game {
 
     for (const [id, mound] of this.buriedCacheMeshes) {
       if (present.has(id)) continue;
-      this.scene.remove(mound.group);
+      this.outdoors.remove(mound.group);
       mound.dispose();
       this.buriedCacheMeshes.delete(id);
     }
@@ -1160,9 +1337,17 @@ export class Game {
       if (this.buriedCacheMeshes.has(cache.id)) continue;
       const mound = createBuriedCacheMound();
       mound.group.position.set(cache.x, 0, cache.z);
-      this.scene.add(mound.group);
+      this.outdoors.add(mound.group);
       this.buriedCacheMeshes.set(cache.id, mound);
     }
+    this.updateMapStashes();
+  }
+
+  /** Your own buried stashes, for the maps. */
+  private updateMapStashes(): void {
+    this.mapFeed.stashes = this.buriedCaches
+      .filter((cache) => cache.ownerNetId === this.selfNetId)
+      .map((cache) => ({ x: cache.x, z: cache.z }));
   }
 
   private removeRemote(netId: number): void {
@@ -1293,6 +1478,7 @@ export class Game {
     // means one thing at a time. The inventory panel has no digit keys of
     // its own to fight over, so it does not need to join that guard.
     this.handleEscapeInput(controls);
+    if (controls.takeMapToggle()) this.toggleMap();
     this.handleInventoryToggleInput(controls);
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
@@ -1321,9 +1507,61 @@ export class Game {
       if ('update' in built) built.update(deltaSeconds);
     }
 
+    if (this.homeInterior !== null && this.space !== OUTDOORS) {
+      this.homeInterior.cutAway(camera.camera.position.x, camera.camera.position.z);
+      this.homeInterior.update(
+        deltaSeconds,
+        dayBrightness(dayProgress(this.estimatedServerTimeMs())),
+      );
+    }
+    if (this.fadeGiveUpAt !== null && now > this.fadeGiveUpAt) {
+      this.fadeGiveUpAt = null;
+      this.sceneFade?.classList.remove('scene-fade-dark');
+    }
+
     setup.renderer.render(this.scene, camera.camera);
+    this.updateMapFeed(camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /**
+   * Where you are and which way the camera looks, for the maps, plus
+   * everybody else nearby - every frame, since the minimap turns with the
+   * camera. Also fills the map in around you straight away, ahead of the
+   * server's own word on it (see decision 0054).
+   */
+  private updateMapFeed(camera: FollowCamera): void {
+    const feed = this.mapFeed;
+    const player = this.localPlayer;
+    const home =
+      this.space === OUTDOORS ? undefined : this.builtProps.find((prop) => prop.id === this.space);
+    if (home !== undefined) {
+      // Inside a home, the map shows where the home is.
+      const doorstep = cabinDoorstep(home);
+      feed.player = { x: doorstep.x, z: doorstep.z, facingYaw: doorstep.yaw };
+    } else if (player !== null) {
+      const { position, facingYaw } = player.motion;
+      feed.player = { x: position.x, z: position.z, facingYaw };
+      feed.revealAt(position.x, position.z);
+    }
+    feed.cameraYaw = camera.look.yaw;
+    feed.isNight = isNight(dayProgress(this.estimatedServerTimeMs()));
+    feed.others =
+      this.space !== OUTDOORS
+        ? []
+        : this.remotePlayers.netIds().flatMap((netId) => {
+            const pose = this.remotePlayers.poseOf(netId);
+            if (pose === undefined) return [];
+            return [
+              {
+                x: pose.x,
+                z: pose.z,
+                color: new THREE.Color(this.colorFor(netId, this.roster.get(netId))).getHex(),
+                name: this.roster.get(netId)?.name ?? 'Somebody',
+              },
+            ];
+          });
+  }
 
   /**
    * B opens or closes the build menu, closing the craft menu if that was open
@@ -1333,6 +1571,11 @@ export class Game {
    * digit keys swap it for another without going back to the menu.
    */
   private handleBuildMenuInput(controls: Controls): void {
+    // Nothing to build on indoors - decorating comes later.
+    if (this.space !== OUTDOORS) {
+      controls.takeBuildMenuToggle();
+      return;
+    }
     if (controls.takeBuildMenuToggle()) {
       this.buildMenuOpen = !this.buildMenuOpen;
       if (this.buildMenuOpen) {
@@ -1547,7 +1790,11 @@ export class Game {
     const wilderness = this.wildernessScene;
     const clearing = this.clearingScene;
     if (wilderness !== null && clearing !== null) {
-      camera.update(from, 0, [wilderness.cameraBlockers, clearing.cameraBlockers]);
+      camera.update(from, 0, [
+        wilderness.cameraBlockers,
+        clearing.cameraBlockers,
+        ...this.homeCameraBlockers,
+      ]);
     }
 
     this.clickNdc.set(
@@ -1568,6 +1815,8 @@ export class Game {
    */
   private clickCandidates(): ClickCandidate[] {
     const candidates: ClickCandidate[] = [];
+    // A room's own coordinates overlap the clearing's: nothing out there is clickable from in here.
+    if (this.space !== OUTDOORS) return candidates;
     for (const prop of this.standingProps) {
       if (this.isFelled(prop.id)) continue;
       const kind = PROP_KINDS[prop.kind];
@@ -1685,8 +1934,35 @@ export class Game {
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.update(deltaSeconds);
 
-    camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);
+    camera.update(
+      position,
+      deltaSeconds,
+      this.space === OUTDOORS
+        ? [wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
+        : [],
+    );
     this.updatePlacement(camera, player);
+
+    // Walking into a door darkens the screen straight away, ahead of the
+    // server's own word that we are through - see decision 0055.
+    const walk = worldMoveDirection(intent.x, intent.z, camera.look.yaw);
+    if (this.walkingThroughADoor(player.motion.position, walk.x, walk.z)) this.darkenForDoor();
+    this.doorHint = this.doorHintAt(player.motion.position);
+
+    if (this.space !== OUTDOORS) {
+      // Nothing out in the world is within reach from in here.
+      this.nearbyItem = null;
+      this.nearGatherSpot = null;
+      this.nearBuriedCache = false;
+      this.ownCacheCompass = null;
+      this.nearCampfire = null;
+      this.aimedTree = null;
+      this.aimedAnimal = null;
+      this.canCast = false;
+      this.canBuild = false;
+      this.centreSunOn(position);
+      return;
+    }
 
     // Only a hint. The server decides who actually gets it.
     const reachable =
@@ -1796,13 +2072,129 @@ export class Game {
       Math.hypot(player.motion.position.x, player.motion.position.z) < CLEARING_TREE_LINE_INNER &&
       BUILDABLE_KIND_ORDER.some(canAfford);
 
-    // Keep the shadow map centred on the player instead of on the origin.
+    this.centreSunOn(position);
+  }
+
+  /** Keep the shadow map centred on the player instead of on the origin. */
+  private centreSunOn(position: Readonly<Vec3>): void {
     const sun = this.daylight?.sun;
-    if (sun !== undefined) {
-      sun.position.set(position.x + 28, position.y + 40, position.z + 18);
-      sun.target.position.set(position.x, position.y, position.z);
-      sun.target.updateMatrixWorld();
+    if (sun === undefined) return;
+    sun.position.set(position.x + 28, position.y + 40, position.z + 18);
+    sun.target.position.set(position.x, position.y, position.z);
+    sun.target.updateMatrixWorld();
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Going inside                                                            */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Go somewhere else entirely, because the server says so (see decision
+   * 0055): into a home's own room, or back out into the world. Everything
+   * out there is hidden or shown in one go, the room is built the first
+   * time it is needed, and the camera looks in like a dollhouse.
+   */
+  private moveToSpace(space: number, x: number, z: number, yaw: number): void {
+    const player = this.localPlayer;
+    if (player === null) return;
+    const inside = space !== OUTDOORS;
+    const changed = space !== this.space;
+    this.space = space;
+
+    this.outdoors.visible = !inside;
+    if (inside && this.homeInterior === null) {
+      this.homeInterior = createHomeInterior();
+      this.scene.add(this.homeInterior.group);
     }
+    if (this.homeInterior !== null) this.homeInterior.group.visible = inside;
+    this.daylight?.setIndoors(inside);
+    // Coming out, the camera looks at you from out front, with your home
+    // behind you: walking back towards the camera takes you out into the world.
+    this.camera?.setIndoors(inside, yaw + Math.PI);
+
+    const collision = inside ? this.roomCollision : this.collision;
+    if (collision !== null) {
+      const y = inside ? 0 : collision.terrain.heightAt(x, z);
+      player.moveToSpace(collision, { x, y, z }, yaw);
+    }
+
+    if (changed) {
+      // Everybody we could see is somewhere else now; the next snapshot
+      // brings whoever is here with us.
+      for (const netId of this.remotePlayers.netIds()) {
+        this.remotePlayers.remove(netId);
+        this.removeRemote(netId);
+      }
+      for (const id of this.remoteAnimals.netIds()) {
+        this.remoteAnimals.remove(id);
+        this.removeCritter(id);
+      }
+      this.stopPlacing();
+      this.buildMenuOpen = false;
+      this.aimYaw = null;
+    }
+    this.liftFade();
+  }
+
+  /** Whether walking this way, from here, is about to take us through a door. */
+  private walkingThroughADoor(position: Readonly<Vec3>, walkX: number, walkZ: number): boolean {
+    if (walkX === 0 && walkZ === 0) return false;
+    if (this.space !== OUTDOORS) return isLeavingRoom(position.x, position.z, walkX, walkZ, false);
+    return this.builtProps.some(
+      (prop) =>
+        BUILDABLE_KINDS[prop.kind].isHome &&
+        (prop.locked !== true || prop.yours) &&
+        isEnteringDoorway(prop, position.x, position.z, walkX, walkZ, false),
+    );
+  }
+
+  /** What a door right here would do, if anything: for the hint along the bottom. */
+  private doorHintAt(position: Readonly<Vec3>): 'enter' | 'visit' | 'locked' | 'leave' | null {
+    if (this.space !== OUTDOORS) {
+      return position.z > HOME_ROOM.halfDepth - 1.4 && Math.abs(position.x - HOME_ROOM.doorX) < 1.3
+        ? 'leave'
+        : null;
+    }
+    for (const prop of this.builtProps) {
+      if (!BUILDABLE_KINDS[prop.kind].isHome) continue;
+      const doorway = cabinDoorway(prop);
+      if (Math.hypot(position.x - doorway.x, position.z - doorway.z) > DOORWAY_REACH + 1) continue;
+      if (prop.yours) return 'enter';
+      return prop.locked === true ? 'locked' : 'visit';
+    }
+    return null;
+  }
+
+  /** Start fading to dark for a door, lifting again on its own if nothing comes of it. */
+  private darkenForDoor(): void {
+    const fade = this.sceneFade;
+    if (fade === null || fade.classList.contains('scene-fade-dark')) return;
+    fade.classList.add('scene-fade-dark');
+    this.fadeGiveUpAt = performance.now() + DOOR_FADE_GIVE_UP_MS;
+  }
+
+  /**
+   * Now that we are through: straight to dark if it was not already (a
+   * knockout, or pressing E rather than walking in), then lift, once the new
+   * place has had a frame to draw.
+   */
+  private liftFade(): void {
+    const fade = this.sceneFade;
+    if (fade === null) return;
+    this.fadeGiveUpAt = null;
+    if (!fade.classList.contains('scene-fade-dark')) {
+      fade.classList.add('scene-fade-instant', 'scene-fade-dark');
+      // Read something off it, so the browser takes the jump to dark before
+      // the fade back out starts.
+      void fade.offsetWidth;
+      fade.classList.remove('scene-fade-instant');
+    }
+    window.setTimeout(() => fade.classList.remove('scene-fade-dark'), DOOR_FADE_HOLD_MS);
+  }
+
+  /** Lock or unlock our own front door - from the button shown inside our home. */
+  setDoorLocked(locked: boolean): void {
+    this.connection?.sendSetDoorLock(locked);
   }
 
   /**
@@ -1906,7 +2298,17 @@ export class Game {
       huntingNews: this.currentHuntingNews(now),
       cacheNews: this.currentCacheNews(now),
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
+      mapOpen: this.mapOpen,
+      door: this.doorHint,
+      home: this.homeHere(),
     });
+  }
+
+  /** The home we are inside, if any: whether it is ours, and whether its door is locked. */
+  private homeHere(): { yours: boolean; locked: boolean } | null {
+    if (this.space === OUTDOORS) return null;
+    const home = this.builtProps.find((prop) => prop.id === this.space);
+    return { yours: home?.yours ?? false, locked: home?.locked === true };
   }
 
   private readonly handleResize = (): void => {

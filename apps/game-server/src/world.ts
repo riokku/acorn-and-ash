@@ -11,6 +11,7 @@ import {
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
   SNAPSHOT_EVERY_N_TICKS,
+  EXPLORED_SEND_INTERVAL_TICKS,
   TICK_MILLISECONDS,
   RejectReason,
   WorldSimulation,
@@ -33,6 +34,8 @@ import {
   encodeHunger,
   encodeRejected,
   encodeEquipped,
+  encodeExplored,
+  encodeSpace,
   encodeRoster,
   encodeSnapshot,
   encodeThreatHit,
@@ -178,6 +181,22 @@ export class World extends DurableObject<WorldEnv> {
     // Welcome, is what tells everybody else about them in turn.
     server.send(encodeRoster(this.currentRoster()));
     server.send(encodeEquipped(simulation.equippedList()));
+    // Their map as they left it, before the first step has a chance to add
+    // anything to it - see decision 0054.
+    const explored = simulation.exploredMapOf(netId);
+    if (explored !== null) server.send(encodeExplored(explored));
+    // Outdoors, or waking up inside their own home - see decision 0055.
+    const arrived = simulation.readPlayer(netId);
+    if (arrived !== undefined) {
+      server.send(
+        encodeSpace(
+          simulation.spaceOf(netId),
+          arrived.position.x,
+          arrived.position.z,
+          arrived.facingYaw,
+        ),
+      );
+    }
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -233,6 +252,15 @@ export class World extends DurableObject<WorldEnv> {
       simulation.useItem(attachment.netId, decoded.item);
       this.announceHunger(simulation);
       this.announceEquipped(simulation);
+      return;
+    }
+    if (decoded.type === 'setDoorLock') {
+      // Only ever their own door, settled the moment it arrives.
+      const home = simulation.setHomeLocked(attachment.netId, decoded.locked);
+      if (home !== null) {
+        this.writeHomeLocked(home.id, home.locked === true);
+        this.broadcastBuiltProps(simulation);
+      }
       return;
     }
     if (decoded.type === 'hello') {
@@ -317,6 +345,8 @@ export class World extends DurableObject<WorldEnv> {
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
+    this.announceSpaceChanges(simulation);
+    if (simulation.tick % EXPLORED_SEND_INTERVAL_TICKS === 0) this.announceExplored(simulation);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -519,6 +549,45 @@ export class World extends DurableObject<WorldEnv> {
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
       if (event !== undefined) this.trySend(ws, encodeHealth(event));
+    }
+  }
+
+  /**
+   * Tell whoever just went through a door where they are now (see decision
+   * 0055). Private to them: everybody else simply stops or starts seeing
+   * them in their own snapshots.
+   */
+  private announceSpaceChanges(simulation: WorldSimulation): void {
+    const changes = simulation.drainSpaceChanges();
+    if (changes.length === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      for (const change of changes) {
+        if (change.netId !== attachment.netId) continue;
+        this.trySend(ws, encodeSpace(change.space, change.x, change.z, change.yaw));
+      }
+    }
+  }
+
+  /**
+   * Tell each player their map has grown, whole (see decision 0054).
+   *
+   * Private to the one it belongs to, and only as often as
+   * `EXPLORED_SEND_INTERVAL_TICKS` allows: their own browser has already
+   * filled the map in from where it thinks they are, so this only keeps it
+   * honest, and keeps the copy that gets saved in step with what they saw.
+   */
+  private announceExplored(simulation: WorldSimulation): void {
+    const changes = simulation.drainExploredChanges();
+    if (changes.length === 0) return;
+
+    const byNetId = new Map(changes.map((change) => [change.netId, change.explored]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const explored = byNetId.get(attachment.netId);
+      if (explored !== undefined) this.trySend(ws, encodeExplored(explored));
     }
   }
 
@@ -931,6 +1000,9 @@ export class World extends DurableObject<WorldEnv> {
     // anything - `initialEquippedItem` treats that exactly like a brand new
     // player, falling back to the first tool they still have, if any.
     this.addColumn('players', 'equipped_item_index', 'INTEGER');
+    // Null for anybody saved before the map existed: they start a fresh one,
+    // the same blank page a brand new player gets.
+    this.addColumn('players', 'explored', 'BLOB');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -955,6 +1027,8 @@ export class World extends DurableObject<WorldEnv> {
     // Which way a piece was turned when placed. Null for everything built
     // before pieces could be turned, which all faced the same way - zero.
     this.addColumn('built_props', 'yaw', 'REAL');
+    // Every door was open before doors could be locked.
+    this.addColumn('built_props', 'locked', 'INTEGER NOT NULL DEFAULT 0');
     // What a knockout buries, until it is dug back up - unlike built props,
     // this one is deleted once its reason for existing is gone.
     sql.exec(`CREATE TABLE IF NOT EXISTS buried_caches (
@@ -1015,8 +1089,10 @@ export class World extends DurableObject<WorldEnv> {
         hunger: number;
         health: number;
         equipped_item_index: number | null;
+        explored: ArrayBuffer | null;
       }>(
-        'SELECT x, y, z, facing_yaw, hunger, health, equipped_item_index FROM players WHERE player_key = ?',
+        'SELECT x, y, z, facing_yaw, hunger, health, equipped_item_index, explored ' +
+          'FROM players WHERE player_key = ?',
         playerKey,
       )
       .toArray();
@@ -1033,6 +1109,7 @@ export class World extends DurableObject<WorldEnv> {
       health: row.health,
       equippedItem:
         row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
+      explored: row.explored === null ? null : new Uint8Array(row.explored),
     };
   }
 
@@ -1123,7 +1200,8 @@ export class World extends DurableObject<WorldEnv> {
         owner_key: string | null;
         lit_until_ms: number | null;
         yaw: number | null;
-      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw FROM built_props')
+        locked: number;
+      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw, locked FROM built_props')
       .toArray();
     for (const row of rows) {
       const kind = buildableKindFromIndex(row.kind_index);
@@ -1141,6 +1219,7 @@ export class World extends DurableObject<WorldEnv> {
         // due back - and corrected within the first tick after waking by
         // `extinguishBurnedOutCampfires`.
         lit: row.lit_until_ms !== null,
+        locked: row.locked !== 0,
         ownerKey: row.owner_key,
         litUntilMs: row.lit_until_ms,
       });
@@ -1165,6 +1244,14 @@ export class World extends DurableObject<WorldEnv> {
       prop.yaw,
       Date.now(),
       ownerKey,
+    );
+  }
+
+  private writeHomeLocked(propId: number, locked: boolean): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE built_props SET locked = ? WHERE id = ?',
+      locked ? 1 : 0,
+      propId,
     );
   }
 
@@ -1250,15 +1337,17 @@ export class World extends DurableObject<WorldEnv> {
   /** Write one player's position, used when they disconnect. */
   private savePlayer(simulation: WorldSimulation, attachment: ConnectionAttachment): void {
     if (attachment.playerKey === null) return;
-    const motion = simulation.readPlayer(attachment.netId);
-    if (motion === undefined) return;
+    // Somebody inside a home is kept at its front door: a room's own
+    // coordinates mean nothing out in the world (see decision 0055).
+    const outside = simulation.outdoorPositionOf(attachment.netId);
+    if (outside === null) return;
     const equipped = simulation.equippedItemOf(attachment.netId);
     this.writePlayer(
       attachment.playerKey,
-      motion.position.x,
-      motion.position.y,
-      motion.position.z,
-      motion.facingYaw,
+      outside.x,
+      outside.y,
+      outside.z,
+      outside.yaw,
       simulation.hungerOf(attachment.netId),
       simulation.healthOf(attachment.netId),
       equipped === null ? null : itemIndex(equipped),
@@ -1267,6 +1356,8 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
+    const explored = simulation.exploredMapOf(attachment.netId);
+    if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
   }
 
   private writePlayer(
@@ -1353,6 +1444,18 @@ export class World extends DurableObject<WorldEnv> {
     }
   }
 
+  /**
+   * Keep one player's map. Only ever called once their row exists - after
+   * `writePlayer` or `writePlayerIdentity` - so a plain update is enough.
+   */
+  private writePlayerExplored(playerKey: string, explored: Uint8Array): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE players SET explored = ? WHERE player_key = ?',
+      explored.slice().buffer,
+      playerKey,
+    );
+  }
+
   private writeTakenPickup(pickupId: number, netId: number): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO pickups_taken (pickup_id, net_id, taken_at) VALUES (?, ?, ?) ' +
@@ -1390,6 +1493,7 @@ export class World extends DurableObject<WorldEnv> {
         player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
+      if (player.explored != null) this.writePlayerExplored(attachment.playerKey, player.explored);
     }
   }
 
