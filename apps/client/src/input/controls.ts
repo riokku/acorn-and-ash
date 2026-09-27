@@ -16,7 +16,6 @@ export interface MoveIntent {
 
 const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
-const RIGHT_MOUSE = mouseCode(2);
 
 /**
  * Hotkeys for crafting or building, in menu order: 1 is the first entry, 2 the
@@ -28,6 +27,13 @@ const RIGHT_MOUSE = mouseCode(2);
 const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
 /** Hotkeys for the hotbar, one per slot. Only live while neither menu is open. */
 const HOTBAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
+/**
+ * How long the left mouse button has to stay down before it commits to a
+ * charged attack instead of a light swing (see decision 0050). Comfortably
+ * above a deliberate click, and comfortably below `CHARGE_SECONDS`'s own one
+ * second, so there is real wind-up left once it commits.
+ */
+const CHARGE_HOLD_MS = 400;
 
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
@@ -57,13 +63,15 @@ export class Controls {
   private pointerLocked = false;
   private mouseDeltaX = 0;
   private mouseDeltaY = 0;
+  /** When the left button last went down, so a hold can be told apart from a tap - see `CHARGE_HOLD_MS`. */
+  private leftMouseDownAt: number | null = null;
+  /** Where the screen a left click landed, until `takeClickPoint` reads it. */
+  private pendingClickPoint: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
-  private readonly onPointerLockChange: (locked: boolean) => void;
 
-  constructor(canvas: HTMLCanvasElement, onPointerLockChange: (locked: boolean) => void) {
+  constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.onPointerLockChange = onPointerLockChange;
 
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
@@ -73,14 +81,9 @@ export class Controls {
     canvas.addEventListener('mousedown', this.handleMouseDown);
     // On the window, so letting go outside the canvas still counts as letting go.
     window.addEventListener('mouseup', this.handleMouseUp);
-    // Right mouse now charges an attack - the browser's own menu popping up
-    // over the game would otherwise come with it.
+    // The browser's own right-click menu would otherwise pop up over the
+    // game every time it is held to turn the camera.
     canvas.addEventListener('contextmenu', this.handleContextMenu);
-  }
-
-  /** Ask the browser to capture the mouse so the camera can turn freely. */
-  requestPointerLock(): void {
-    void this.canvas.requestPointerLock();
   }
 
   get isPointerLocked(): boolean {
@@ -104,19 +107,27 @@ export class Controls {
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
    * cannot climb the sky. Holding E is harmless in the same way: the server
-   * hands over each thing exactly once. Holding the mouse button chops at a
-   * steady rhythm, because the server decides how often an axe may swing.
+   * hands over each thing exactly once. Left mouse taps a light swing at a
+   * steady rhythm while held, exactly as before, unless it has been held past
+   * `CHARGE_HOLD_MS` - past that it commits to a charged attack instead (see
+   * decision 0050), freeing the right button entirely for turning the camera.
    */
   buttons(): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
     if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
-    if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) buttons |= PlayerButton.Swing;
     if (this.held.has('ControlLeft') || this.tapped.has('ControlLeft')) {
       buttons |= PlayerButton.Dodge;
     }
-    if (this.held.has(RIGHT_MOUSE) || this.tapped.has(RIGHT_MOUSE)) buttons |= PlayerButton.Charge;
+
+    const leftHeldPastThreshold =
+      this.leftMouseDownAt !== null && performance.now() - this.leftMouseDownAt >= CHARGE_HOLD_MS;
+    if (leftHeldPastThreshold) {
+      buttons |= PlayerButton.Charge;
+    } else if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) {
+      buttons |= PlayerButton.Swing;
+    }
     return buttons;
   }
 
@@ -167,6 +178,20 @@ export class Controls {
     return pressed;
   }
 
+  /** Whether I was pressed since this was last asked, to toggle the inventory panel. */
+  takeInventoryToggle(): boolean {
+    const pressed = this.tapped.has('KeyI');
+    this.tapped.delete('KeyI');
+    return pressed;
+  }
+
+  /** Whether Escape was pressed since this was last asked - closes a panel, or pauses. */
+  takeEscapeToggle(): boolean {
+    const pressed = this.tapped.has('Escape');
+    this.tapped.delete('Escape');
+    return pressed;
+  }
+
   /**
    * Which hotbar slots were picked since this was last asked, as indices into
    * the slot order (0 for the first slot, 1 for the second, and so on).
@@ -192,6 +217,29 @@ export class Controls {
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
     return delta;
+  }
+
+  /**
+   * Where on screen a left click landed on the game world since this was
+   * last asked, or null if there was none - read and cleared eagerly, the
+   * same as a craft or hotbar tap, since it rides along on whichever tick
+   * happens to carry the swing it triggers rather than waiting on one itself.
+   */
+  takeClickPoint(): { x: number; y: number } | null {
+    const point = this.pendingClickPoint;
+    this.pendingClickPoint = null;
+    return point;
+  }
+
+  /**
+   * Let go of every held key and button, as if the player had released them
+   * all at once. Used when the game pauses, so a walk or a chop in progress
+   * does not silently keep going underneath the curtain.
+   */
+  releaseAll(): void {
+    this.held.clear();
+    this.tapped.clear();
+    this.leftMouseDownAt = null;
   }
 
   dispose(): void {
@@ -221,15 +269,16 @@ export class Controls {
     this.tapped.clear();
   };
 
+  /**
+   * Only ever tracks a right-button drag now (see `handleMouseDown`), so
+   * losing it just means that drag ended - unlike the old always-locked
+   * scheme, that must not clear WASD or anything else still genuinely held.
+   */
   private readonly handlePointerLockChange = (): void => {
     this.pointerLocked = document.pointerLockElement === this.canvas;
-    if (!this.pointerLocked) {
-      this.held.clear();
-      this.tapped.clear();
-    }
-    this.onPointerLockChange(this.pointerLocked);
   };
 
+  /** Only accumulated during a right-button drag, when the mouse is captured - see `handleMouseDown`. */
   private readonly handleMouseMove = (event: MouseEvent): void => {
     if (!this.pointerLocked) return;
     this.mouseDeltaX += event.movementX;
@@ -237,22 +286,44 @@ export class Controls {
   };
 
   /**
-   * Mouse buttons are kept alongside the keys, under made-up names.
+   * The right button turns the camera, WoW-style: capture the mouse for as
+   * long as it is held so the drag can turn any distance without the cursor
+   * hitting the edge of the screen, then let go the moment it is released
+   * (see `handleMouseUp`). It never becomes a game button in its own right.
    *
-   * Only while the mouse is captured: the click that starts the game must not
-   * also be read as a swing at whatever happens to be in front of you.
+   * Every other button is kept alongside the keys, under a made-up name, the
+   * mouse otherwise being completely free to click on the world or the HUD -
+   * see decision 0050.
    */
   private readonly handleMouseDown = (event: MouseEvent): void => {
-    if (!this.pointerLocked) return;
+    if (event.button === 2) {
+      this.requestPointerLock();
+      return;
+    }
     this.held.add(mouseCode(event.button));
     this.tapped.add(mouseCode(event.button));
+    if (event.button === 0) {
+      this.leftMouseDownAt = performance.now();
+      this.pendingClickPoint = { x: event.clientX, y: event.clientY };
+    }
   };
 
   private readonly handleMouseUp = (event: MouseEvent): void => {
+    if (event.button === 2) {
+      if (this.pointerLocked) document.exitPointerLock();
+      return;
+    }
     this.held.delete(mouseCode(event.button));
+    if (event.button === 0) this.leftMouseDownAt = null;
   };
 
+  /** Ask the browser to capture the mouse, for a right-button camera drag. */
+  private requestPointerLock(): void {
+    void this.canvas.requestPointerLock();
+  }
+
+  /** The game canvas never shows the browser's own right-click menu. */
   private readonly handleContextMenu = (event: MouseEvent): void => {
-    if (this.pointerLocked) event.preventDefault();
+    event.preventDefault();
   };
 }

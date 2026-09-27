@@ -4,6 +4,7 @@ import { DEFAULT_WORLD_ID_FALLBACK, readSettings } from './settings';
 import { Game } from './game';
 import { HudStore } from './hud/store';
 import { mountHud } from './hud/mount';
+import { readHotbarLayout, writeHotbarLayout } from './hud/hotbar-layout';
 import { mountHome } from './home/mount';
 import { readIdentity, writeIdentity } from './home/identity';
 import { readPreferences, writePreferences, type Preferences } from './preferences/preferences';
@@ -20,6 +21,9 @@ if (!(canvas instanceof HTMLCanvasElement) || hudContainer === null || homeConta
 
 const settings = readSettings(window.location.search);
 const hud = new HudStore();
+// Whatever was dragged onto the hotbar last time, before Game ever publishes
+// anything else - see decision 0050.
+hud.publish({ hotbarSlots: readHotbarLayout(window.localStorage) });
 
 /**
  * Saves a choice from the Settings menu and applies its audio side straight
@@ -68,7 +72,13 @@ const enterWorld = (identity: PlayerIdentity): void => {
   mountHud(
     hudContainer,
     hud,
-    () => game.requestPointerLock(),
+    () => game.resume(),
+    () => game.toggleInventory(),
+    (item) => game.useItem(item),
+    (nextHotbarSlots) => {
+      writeHotbarLayout(window.localStorage, nextHotbarSlots);
+      hud.publish({ hotbarSlots: nextHotbarSlots });
+    },
     preferencesNow,
     (preferences) => {
       applyPreferences(preferences);

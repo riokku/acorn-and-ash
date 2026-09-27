@@ -75,6 +75,22 @@ async function hold(page: Page, key: string, ms: number): Promise<void> {
   await page.keyboard.up(key);
 }
 
+/**
+ * Move Playwright's own mouse to the middle of the screen.
+ *
+ * The mouse is free now (decision 0050), and a left click aims the camera at
+ * whatever ground point is under it before it is read as a swing or a cast -
+ * exactly the same point a real player looking at their target would click.
+ * Playwright's virtual mouse otherwise sits wherever it was last left, or at
+ * (0, 0) if it was never moved at all, and a swing clicked from the corner of
+ * the screen would aim the camera there instead of at whatever `faceTowards`
+ * just turned it towards.
+ */
+async function centerMouse(page: Page): Promise<void> {
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  await page.mouse.move(viewport.width / 2, viewport.height / 2);
+}
+
 function positionOf(text: string): { x: number; z: number } {
   const [x, z] = text.split(',').map((part) => Number(part.trim()));
   return { x: x ?? 0, z: z ?? 0 };
@@ -153,9 +169,11 @@ test.describe('the Settings menu', () => {
     await page.locator('.hud-curtain').click();
     await expect(page.locator('.hud-curtain')).toBeHidden();
 
-    // The same thing pressing Esc does in a real browser: releases the mouse
-    // and brings the curtain, gear included, back.
-    await page.evaluate(() => document.exitPointerLock());
+    // Escape backs all the way out to the curtain, gear included, once no
+    // craft, build or inventory panel is open to close first - see decision
+    // 0050. The mouse is free throughout now, so there is no pointer lock
+    // for this to release the way there used to be.
+    await page.keyboard.press('Escape');
     await expect(page.locator('.hud-curtain')).toBeVisible();
 
     await page.locator('.settings-button').click();
@@ -705,6 +723,7 @@ async function chopUntilFelled(
 ): Promise<void> {
   let lastSeen: number | null = null;
   let tapsWithoutProgress = 0;
+  await centerMouse(page);
 
   for (let step = 0; step < 40; step++) {
     const felled = await page.evaluate(() => window.acornDebug?.felledTrees() ?? []);
@@ -846,14 +865,17 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   // takes the server's own one second, but the hint that says so is too
   // short-lived to assert on reliably over a real browser and connection -
   // the hud-hint unit test already covers that text. This, per decision
-  // 0026, proves the swing lands, not the wind-up.
-  await page.mouse.down({ button: 'right' });
+  // 0026, proves the swing lands, not the wind-up. Left mouse, not right:
+  // decision 0050 moved charging onto a held left click, freeing the right
+  // button entirely for turning the camera.
+  await centerMouse(page);
+  await page.mouse.down();
   await expect
     .poll(async () => (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length, {
       timeout: 20_000,
     })
     .toBe(1);
-  await page.mouse.up({ button: 'right' });
+  await page.mouse.up();
 
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
@@ -917,6 +939,7 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
 
 /** A quick press of the left mouse button, the way a person clicks. */
 async function click(page: Page): Promise<void> {
+  await centerMouse(page);
   await page.mouse.down();
   await page.waitForTimeout(90);
   await page.mouse.up();
@@ -1096,6 +1119,7 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
  * before the first one lands, until the server says it is caught.
  */
 async function catchUntilCaught(page: Page, animalId: number): Promise<void> {
+  await centerMouse(page);
   for (let step = 0; step < 20; step++) {
     const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
     const animal = animals.find((entry) => entry.id === animalId);
@@ -1285,6 +1309,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   const before = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
   expect(before).not.toBeNull();
 
+  await centerMouse(page);
   for (let attempt = 0; attempt < 10; attempt++) {
     const stillThere = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
       (entry) => entry.id === raccoon.id,

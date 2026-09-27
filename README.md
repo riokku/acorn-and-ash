@@ -64,7 +64,12 @@ The game is online-only. Every world runs on the server.
 > something to plan around, not just something to watch. A small compass
 > also now appears on screen whenever you have something buried and not yet
 > dug up, pointing the way back to it, so finding your way there again is
-> never just luck. See [the roadmap](#roadmap).
+> never just luck. The mouse is free now, the way it is in World of
+> Warcraft - click on a tree, an animal, the water, the hotbar or your pack
+> instead of it being captured for your whole time in the world, with the
+> right button turning the camera on its own and a tooltip on every hotbar
+> slot. Press `I`, or click the new bag button, to see everything you're
+> carrying and drag any of it onto the bar. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -79,13 +84,20 @@ The game is online-only. Every world runs on the server.
 | `1` / `2` / `3` (craft menu open) | Craft an axe / fishing rod / torch                             |
 | `B`                               | Open the build menu                                            |
 | `1`–`4` (build menu open)         | Build a campfire, cabin, flower bed or lantern                 |
-| Left mouse                        | Chop, cast, hook, fight off                                    |
-| Right mouse (held)                | Charge a heavy attack                                          |
+| `I`, or the bag button            | Open or close your pack                                        |
+| Left mouse (click)                | Chop, cast, hook, fight off, or click a hotbar/pack item       |
+| Left mouse (held)                 | Charge a heavy attack                                          |
+| Right mouse (held), then drag     | Turn the camera                                                |
 | Left `Ctrl`                       | Dodge                                                          |
-| Mouse                             | Look around                                                    |
-| `Esc`                             | Let go of the mouse                                            |
+| `Esc`                             | Close a panel, or pause                                        |
 
 There is nothing to land on yet, so a jump is a hop in place.
+
+The mouse is free the rest of the time, the way it is in World of Warcraft:
+click on a tree, an animal or the water to aim at it (the same as looking
+straight at it always did) and the same click chops, catches or casts;
+click the hotbar or your pack instead of only pressing a number. See
+[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md).
 
 Nothing can be carried at all until you find a bag - the very first thing to
 look for, a few steps from where you start. Once you have it, you can carry
@@ -99,12 +111,22 @@ which fish bite and how often lives in
 [decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
 
 A hotbar along the bottom of the screen shows what's in your pack, six slots
-at a time - wire order, so it needs nothing new picked or arranged. Press its
-number to equip whatever is shown there - shown in your hand from then on,
-for anyone nearby to see - eating it too, right away, if it's food. Styled as
-a row of wax-seal circles on a parchment strip, the same warm look the craft
-and build menus and the Home screen all now share. See
+at a time - wire order unless you have dragged something onto a slot
+yourself, in which case that slot keeps showing it from then on. Press its
+number, or click it, to equip whatever is shown there - shown in your hand
+from then on, for anyone nearby to see - eating it too, right away, if it's
+food. Hover a slot for a tooltip saying what it is. Styled as a row of
+wax-seal circles on a parchment strip, the same warm look the craft and
+build menus and the Home screen all now share. See
 [decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
+
+Press `I`, or the bag button next to the hotbar, to see everything you're
+carrying, not just the six slots there's room for on the bar - the same
+parchment look, with every item's icon, name and count. Drag one onto a
+hotbar slot to pin it there, or drag a hotbar slot back onto the pack to
+unpin it; clicking an item in either place equips it, the same as its
+number key. See
+[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md).
 
 ### Your character
 
@@ -228,14 +250,18 @@ briefly untouchable, so timed right it gets you through a swing rather than
 only away from it. It needs a moment to recharge before it is ready again.
 See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
-Holding right click winds up a charged attack - about a second, rooted to
-the spot the whole time, the same as the raccoon's own wind-up asks of it.
-Whatever it lands on when it goes off is finished outright: a tree falls in
-one regardless of how many ordinary swings it would otherwise take, and a
-raccoon is beaten in one regardless of how many hits it has left. It is a
-real trade - you cannot move, dodge or block while charging - so it suits a
-decisive moment more than a running fight. See
-[decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md).
+Holding left click past a quick tap winds up a charged attack - about a
+second, rooted to the spot the whole time, the same as the raccoon's own
+wind-up asks of it. Whatever it lands on when it goes off is finished
+outright: a tree falls in one regardless of how many ordinary swings it
+would otherwise take, and a raccoon is beaten in one regardless of how many
+hits it has left. It is a real trade - you cannot move, dodge or block
+while charging - so it suits a decisive moment more than a running fight.
+See [decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md)
+for the charge itself, and
+[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) for
+why it moved off the right mouse button, which now turns the camera
+instead.
 
 ### Fishing
 

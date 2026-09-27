@@ -99,6 +99,7 @@ import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
 import { compassToOwnCache, type Compass } from './hud/cache-compass';
+import { resolveHotbarSlots } from './hud/hotbar-layout';
 import type { PlayerIdentity } from './home/identity';
 
 /** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
@@ -286,7 +287,15 @@ export class Game {
   private canBuild = false;
   private buildMenuOpen = false;
   private craftMenuOpen = false;
+  /** Whether the curtain has been dismissed - see `resume`/`pause`. */
+  private playing = false;
+  private inventoryOpen = false;
   private readonly scratch: Vec3 = vec3();
+  /** Scratch objects for `aimTowardsClickPoint`, reused every click rather than allocated fresh. */
+  private readonly clickRaycaster = new THREE.Raycaster();
+  private readonly clickNdc = new THREE.Vector2();
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private readonly groundHit = new THREE.Vector3();
 
   private setup: RendererSetup | null = null;
   private camera: FollowCamera | null = null;
@@ -380,9 +389,7 @@ export class Game {
 
     this.daylight = addDaylight(this.scene);
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
-    this.controls = new Controls(this.options.canvas, (locked) =>
-      this.options.hud.publish({ pointerLocked: locked }),
-    );
+    this.controls = new Controls(this.options.canvas);
 
     this.options.hud.publish({
       backend: setup.backend,
@@ -398,12 +405,73 @@ export class Game {
     setup.renderer.setAnimationLoop(this.frame);
   }
 
-  /** Called when the player clicks the curtain. */
-  requestPointerLock(): void {
-    this.controls?.requestPointerLock();
+  /** Called when the player clicks the curtain to start or come back to playing. */
+  resume(): void {
+    this.setPlaying(true);
     // Tied to this real click rather than page load: autoplay policy blocks
     // audio started without one.
     startAmbientMusic();
+  }
+
+  /**
+   * Whichever menu is open closes first; only once none are does Escape
+   * bring the curtain back - the same one-layer-at-a-time shape most games
+   * give the key. A panel closing this way just rides the next HUD publish,
+   * same as opening one with B, C or I always has; only pausing itself
+   * publishes straight away, the same responsiveness the curtain always had
+   * back when losing the mouse and losing the game were the same thing.
+   */
+  private handleEscapeInput(controls: Controls): void {
+    if (!controls.takeEscapeToggle()) return;
+    if (this.craftMenuOpen) this.craftMenuOpen = false;
+    else if (this.buildMenuOpen) this.buildMenuOpen = false;
+    else if (this.inventoryOpen) this.inventoryOpen = false;
+    else this.setPlaying(false);
+  }
+
+  private setPlaying(playing: boolean): void {
+    this.playing = playing;
+    if (!playing) {
+      // Nothing should keep walking, swinging or charging under the curtain.
+      this.controls?.releaseAll();
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+      this.inventoryOpen = false;
+    }
+    this.options.hud.publish({
+      playing: this.playing,
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
+      inventoryOpen: this.inventoryOpen,
+    });
+  }
+
+  /** Called from the HUD's own bag button - the mouse-first way to open the inventory panel. */
+  toggleInventory(): void {
+    this.inventoryOpen = !this.inventoryOpen;
+    if (this.inventoryOpen) {
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+    }
+    this.options.hud.publish({
+      inventoryOpen: this.inventoryOpen,
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
+    });
+  }
+
+  /**
+   * Equip whatever this item is, the same as pressing its hotbar number
+   * would - see `handleHotbarInput`. Its own method so a click on a hotbar
+   * slot or an inventory item can ask for exactly the same thing a key
+   * press does, through one shared gate. Also guards a pinned hotbar slot
+   * whose item is not currently carried: a slot like that still shows so a
+   * player can see what they pinned, but there is nothing yet to equip.
+   */
+  useItem(item: ItemId): void {
+    if (!ITEM_KINDS[item].equippable) return;
+    if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
+    this.connection?.sendUseItem(item);
   }
 
   /** Called from the Settings menu's sensitivity slider - takes effect on the very next frame. */
@@ -1091,13 +1159,21 @@ export class Game {
     if (mouse.x !== 0 || mouse.y !== 0) {
       camera.turn(mouse.x, mouse.y, BASE_MOUSE_SENSITIVITY * this.lookSensitivity);
     }
+    // A left click on the world aims the same way looking at it with the
+    // mouse already does, before the tap that comes with it is read below as
+    // a swing or a cast - see decision 0050.
+    const clickPoint = controls.takeClickPoint();
+    if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
 
     // Read ahead of anything below that might forget taps for a produced
     // movement tick, so a hotbar, craft or build key pressed this frame is
     // never swallowed by that blanket clear before this gets a look at it.
-    // Whichever menu is open takes the same digit keys over; the hotbar only
-    // gets a turn once both are closed, so every digit key means one thing
-    // at a time.
+    // Whichever of craft or build is open takes the same digit keys over;
+    // the hotbar only gets a turn once both are closed, so every digit key
+    // means one thing at a time. The inventory panel has no digit keys of
+    // its own to fight over, so it does not need to join that guard.
+    this.handleEscapeInput(controls);
+    this.handleInventoryToggleInput(controls);
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
     if (!this.buildMenuOpen && !this.craftMenuOpen) this.handleHotbarInput(controls);
@@ -1137,7 +1213,10 @@ export class Game {
   private handleBuildMenuInput(controls: Controls): void {
     if (controls.takeBuildMenuToggle()) {
       this.buildMenuOpen = !this.buildMenuOpen;
-      if (this.buildMenuOpen) this.craftMenuOpen = false;
+      if (this.buildMenuOpen) {
+        this.craftMenuOpen = false;
+        this.inventoryOpen = false;
+      }
     }
     if (!this.buildMenuOpen) return;
     for (const index of controls.takeBuildTaps()) {
@@ -1160,7 +1239,10 @@ export class Game {
   private handleCraftMenuInput(controls: Controls): void {
     if (controls.takeCraftMenuToggle()) {
       this.craftMenuOpen = !this.craftMenuOpen;
-      if (this.craftMenuOpen) this.buildMenuOpen = false;
+      if (this.craftMenuOpen) {
+        this.buildMenuOpen = false;
+        this.inventoryOpen = false;
+      }
     }
     if (!this.craftMenuOpen) return;
     for (const index of controls.takeCraftTaps()) {
@@ -1169,19 +1251,66 @@ export class Game {
     }
   }
 
+  /** I opens or closes the inventory panel, closing craft or build if either was open. */
+  private handleInventoryToggleInput(controls: Controls): void {
+    if (!controls.takeInventoryToggle()) return;
+    this.inventoryOpen = !this.inventoryOpen;
+    if (this.inventoryOpen) {
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+    }
+  }
+
   /**
    * Turn a hotbar slot picked this frame into a request to equip whatever
    * item is shown there - eating it too, if it is food, exactly as the
    * server's own `useItem` does. Only reached once neither menu is open, so
    * this never fires alongside a craft or a build off the very same key.
+   * Resolved through `resolveHotbarSlots` so a key press always agrees with
+   * whatever that same slot is showing on screen, pinned or not.
    */
   private handleHotbarInput(controls: Controls): void {
+    const resolved = resolveHotbarSlots(this.carrying, this.options.hud.getSnapshot().hotbarSlots);
     for (const index of controls.takeHotbarTaps()) {
-      const entry = this.carrying[index];
-      if (entry !== undefined && ITEM_KINDS[entry.item].equippable) {
-        this.connection?.sendUseItem(entry.item);
-      }
+      const item = resolved[index];
+      if (item !== undefined && item !== null) this.useItem(item);
     }
+  }
+
+  /**
+   * Turn the camera to face whatever ground point is under a screen-space
+   * click - the same thing the debug `faceTowards` does for the smoke
+   * tests, just aimed from a real click instead of a fixed spot. If the
+   * click does not land on the ground plane at all (looking almost
+   * straight up, say) the camera simply keeps whatever heading it already
+   * had, the same as a click on empty sky costing nothing today.
+   */
+  private aimTowardsClickPoint(point: { x: number; y: number }, camera: FollowCamera): void {
+    const from = this.motionOrOrigin();
+
+    // `camera.camera`'s actual position and rotation only get recomputed
+    // once a frame, inside `updateLocalPlayer` below - this runs earlier
+    // than that, right after a mouse turn may just have changed `look.yaw`.
+    // A zero-time update brings the real object in line with `look` right
+    // now, with nothing else in it gated by elapsed time, so the raycast
+    // below reads where the player is actually looking rather than
+    // wherever the camera last rendered a frame ago.
+    const wilderness = this.wildernessScene;
+    const clearing = this.clearingScene;
+    if (wilderness !== null && clearing !== null) {
+      camera.update(from, 0, [wilderness.cameraBlockers, clearing.cameraBlockers]);
+    }
+
+    this.clickNdc.set(
+      (point.x / window.innerWidth) * 2 - 1,
+      -(point.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    this.groundPlane.constant = -from.y;
+
+    const hit = this.clickRaycaster.ray.intersectPlane(this.groundPlane, this.groundHit);
+    if (hit === null) return;
+    camera.look.yaw = Math.atan2(-(hit.x - from.x), -(hit.z - from.z));
   }
 
   /** Records what the server just told us its clock reads, and when we heard it. */
@@ -1469,8 +1598,10 @@ export class Game {
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,
+      playing: this.playing,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
+      inventoryOpen: this.inventoryOpen,
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),

@@ -3,6 +3,7 @@ import { HEALTH_MAX, HUNGER_MAX, type ItemId } from '@acorn/shared';
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
 import type { Compass } from './cache-compass';
+import type { HotbarPins } from './hotbar-layout';
 
 /** Our own line: none out, waiting for a bite, or a fish on right now. */
 export type FishingPhase = 'waiting' | 'biting' | null;
@@ -21,12 +22,17 @@ export interface HudState {
   readonly serverTick: number;
   readonly position: { x: number; y: number; z: number };
   readonly correctionCm: number;
-  readonly pointerLocked: boolean;
+  /** Whether the curtain has been dismissed - gates the HUD the same way `pointerLocked` used to. */
+  readonly playing: boolean;
   readonly ready: boolean;
   /** What the server says this player is carrying. */
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   /** What the server's Equipped list says this player currently has in hand. */
   readonly equippedItem: ItemId | null;
+  /** Which item, if any, the player has dragged onto each of the six hotbar slots. */
+  readonly hotbarSlots: HotbarPins;
+  /** Whether the inventory panel (opened with I, or its own bag button) is currently showing. */
+  readonly inventoryOpen: boolean;
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
@@ -89,10 +95,12 @@ const INITIAL: HudState = {
   serverTick: 0,
   position: { x: 0, y: 0, z: 0 },
   correctionCm: 0,
-  pointerLocked: false,
+  playing: false,
   ready: false,
   carrying: [],
   equippedItem: null,
+  hotbarSlots: [null, null, null, null, null, null],
+  inventoryOpen: false,
   nearbyItem: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
