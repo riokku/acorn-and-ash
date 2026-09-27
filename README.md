@@ -44,7 +44,11 @@ The game is online-only. Every world runs on the server.
 > campfire has real art now, and you can light it - press `E` next to one -
 > for a genuinely animated fire that flickers for a while and either burns
 > down on its own or goes out early if you put it out by hand. The axe and
-> fishing rod are real modeled art now too. A fox roams the wilderness
+> fishing rod are real modeled art now too. Everything that used to be a
+> flat colour is painted now: lawn grass and leaf-strewn forest floor, a
+> rippling pond with lily pads and cattails, mossy rocks, and a log cabin,
+> split-rail fence, garden lantern, planter, path stones, rabbit and masked
+> raccoon all rebuilt as real little models. A fox roams the wilderness
 > alongside the rabbits and the raccoon - it flees you exactly like a
 > rabbit, but sometimes hunts one down itself, and you can catch it the
 > same way you catch any other prey. Every player now walks, runs and jumps
@@ -200,7 +204,7 @@ firelight itself.
 
 ### Wildlife
 
-A few rabbits (a placeholder box with two ears, for now) live at fixed spots
+A few rabbits - soft-furred, long-eared, with a powder-puff tail - live at fixed spots
 out in the wilderness. Left alone they amble about near home; get too close
 and one bolts, curving away for as long as you keep following. See
 [decision 0018](docs/decisions/0018-a-rabbit-that-flees.md).
@@ -372,8 +376,9 @@ itself away once placed. See
   everything nearby, not just a flame that looks lit.
 - **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
   per player: once you have built yours, that is where you start next time,
-  instead of the open clearing. A placeholder box with a peaked roof for now
-  - walked around, not into yet.
+  instead of the open clearing. A little log cabin, with a shingled roof, a
+  stone chimney, a window glowing warm and a woodpile by the wall - walked
+  around, not into yet.
 - **Flower bed** - six flowers, gathered by hand from a patch the same way
   as sticks. Capped at one per player.
 - **Lantern** - four flowers. Also capped at one per player, independently
@@ -382,8 +387,8 @@ itself away once placed. See
   smaller and closer - no switch, the same "atmosphere only" choice as the
   campfire's own fire.
 - **Fence** - two logs a segment, and not capped: place as many as you can
-  afford, one at a time, to actually line a boundary. A placeholder post-and-
-  rail shape for now.
+  afford, one at a time, to actually line a boundary. A rustic split-rail
+  fence.
 - **Garden path** - two sticks a stone, gathered by hand the same way
   flowers are. Not capped either, for the same reason a fence isn't - a
   trail is only one stone if you can only ever place one.
@@ -434,6 +439,13 @@ Add these to the end of the URL:
 | ------------------ | --------------------------------------------------- |
 | `?renderer=webgl2` | Force the WebGL 2 fallback, even where WebGPU works |
 | `?world=some-name` | Join a different world                              |
+| `?gallery`         | Look at all of the game's own art, in daylight      |
+
+The gallery needs no server and skips the Home screen. `?gallery=cabin` looks
+at one piece up close (also `fence`, `lantern`, `flowerBed`, `gardenPath`,
+`buriedCache`, `bag`, `sticks`, `rabbit`, `raccoon`, `fox`, `campfire`, and
+`pond`, `trees`, `rocks`, `stump`, `animals`, `ground`); add `&time=0.05` for
+night or `&spin` to turn slowly round.
 
 ## Commands
 
@@ -553,6 +565,13 @@ Every file under `assets/`, and anything served from R2, needs a row in
 without one, and the in-game credits page is generated from that file. See
 [`assets/README.md`](assets/README.md) for the rules about where art may come
 from.
+
+Most of the game's own art is not a file at all: its textures are painted in
+code while the world loads, and its cabin, fence, lantern, animals and the
+rest are built in code from those painted parts (see
+[`apps/client/src/art`](apps/client/src/art) and
+[decision 0053](docs/decisions/0053-painted-textures-and-real-shapes.md)).
+Nothing to download and nothing to license - all of it is this game's own.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
