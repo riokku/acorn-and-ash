@@ -59,7 +59,7 @@ const MAX_QUANTISED_VELOCITY = 32767;
 /** Angles are sent as a fraction of a full turn in 16 bits: about 0.005 degrees. */
 const ANGLE_SCALE = 65536 / TAU;
 
-const BYTES_PER_INPUT = 5;
+const BYTES_PER_INPUT = 7;
 const INPUT_HEADER_BYTES = 6;
 /** netId(2) + x,y,z(4 each) + vx,vy,vz(2 each) + yaw(2) + flags(1) */
 const BYTES_PER_SNAPSHOT_ENTITY = 23;
@@ -214,7 +214,8 @@ export function encodeInputBundle(inputs: readonly PlayerInput[]): ArrayBuffer {
     view.setInt8(offset, quantiseAxis(input.moveX));
     view.setInt8(offset + 1, quantiseAxis(input.moveZ));
     view.setUint16(offset + 2, quantiseAngle(input.yaw), true);
-    view.setUint8(offset + 4, input.buttons & 0xff);
+    view.setUint16(offset + 4, quantiseAngle(input.aimYaw), true);
+    view.setUint8(offset + 6, input.buttons & 0xff);
     offset += BYTES_PER_INPUT;
   }
   return buffer;
@@ -295,7 +296,8 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
         moveX: dequantiseAxis(view.getInt8(offset)),
         moveZ: dequantiseAxis(view.getInt8(offset + 1)),
         yaw: dequantiseAngle(view.getUint16(offset + 2, true)),
-        buttons: view.getUint8(offset + 4),
+        aimYaw: dequantiseAngle(view.getUint16(offset + 4, true)),
+        buttons: view.getUint8(offset + 6),
       });
       offset += BYTES_PER_INPUT;
     }

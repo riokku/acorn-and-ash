@@ -36,7 +36,7 @@ export const PlayerButton = {
   SawBite: 1 << 4,
   /** A quick step that leaves you briefly untouchable. See `WorldSimulation`'s `tryDodge`. */
   Dodge: 1 << 5,
-  /** Right mouse button, held. Winds up a charged attack - see `WorldSimulation`'s charging fields. */
+  /** Left mouse button, held past a short delay. Winds up a charged attack - see `WorldSimulation`'s charging fields. */
   Charge: 1 << 6,
 } as const;
 
@@ -46,6 +46,12 @@ export const PlayerButton = {
  * `moveX` and `moveZ` are in [-1, 1] and are relative to where the camera is
  * looking: `moveZ` of 1 means "away from the camera". `yaw` is the camera's
  * heading in radians. The server never trusts these beyond those ranges.
+ *
+ * `aimYaw` is which way a swing, a cast or a step-back dodge goes - the way the
+ * character faces, or whatever the player last clicked on. It used to be the
+ * camera's `yaw` too, but only a right-button drag turns the camera now, and a
+ * left click turns the character instead (see decision 0051), so the two are
+ * separate. A standing character turns to face it.
  */
 export interface PlayerInput {
   readonly seq: number;
@@ -53,15 +59,23 @@ export interface PlayerInput {
   readonly moveZ: number;
   readonly yaw: number;
   readonly buttons: number;
+  readonly aimYaw: number;
 }
 
-export function createInput(seq: number, moveX = 0, moveZ = 0, yaw = 0, buttons = 0): PlayerInput {
-  return { seq, moveX: clamp(moveX, -1, 1), moveZ: clamp(moveZ, -1, 1), yaw, buttons };
+export function createInput(
+  seq: number,
+  moveX = 0,
+  moveZ = 0,
+  yaw = 0,
+  buttons = 0,
+  aimYaw = yaw,
+): PlayerInput {
+  return { seq, moveX: clamp(moveX, -1, 1), moveZ: clamp(moveZ, -1, 1), yaw, buttons, aimYaw };
 }
 
 /** An input that asks for nothing, used when a player's packets go missing. */
-export function idleInput(seq: number, yaw: number): PlayerInput {
-  return { seq, moveX: 0, moveZ: 0, yaw, buttons: 0 };
+export function idleInput(seq: number, yaw: number, aimYaw = yaw): PlayerInput {
+  return { seq, moveX: 0, moveZ: 0, yaw, buttons: 0, aimYaw };
 }
 
 /** Everything about a player that movement reads and writes. */
@@ -171,12 +185,13 @@ export function stepPlayer(
     motion.grounded = false;
   }
 
-  // Swing the character round to face the way it is walking.
+  // Swing the character round to face the way it is walking, or, standing
+  // still, whatever it is aiming at - which is how a click on a tree turns
+  // the character to face it without the camera moving at all.
   const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-  if (speed > PLAYER_TURN_SPEED_THRESHOLD) {
-    const targetYaw = Math.atan2(-velocity.x, -velocity.z);
-    motion.facingYaw = rotateToward(motion.facingYaw, targetYaw, PLAYER_TURN_RATE * deltaSeconds);
-  }
+  const targetYaw =
+    speed > PLAYER_TURN_SPEED_THRESHOLD ? Math.atan2(-velocity.x, -velocity.z) : input.aimYaw;
+  motion.facingYaw = rotateToward(motion.facingYaw, targetYaw, PLAYER_TURN_RATE * deltaSeconds);
 }
 
 /** Is this button held down in the given input? */

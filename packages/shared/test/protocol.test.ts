@@ -58,8 +58,8 @@ describe('input bundles', () => {
   it('survives a round trip', () => {
     const inputs = [
       createInput(41, -1, 1, 0.5, 1),
-      createInput(42, 0.25, -0.75, -2.1, 0),
-      createInput(43, 0, 0, 3.0, 0),
+      createInput(42, 0.25, -0.75, -2.1, 0, 1.2),
+      createInput(43, 0, 0, 3.0, 0, -0.4),
     ];
     const decoded = decodeClientMessage(encodeInputBundle(inputs));
 
@@ -73,8 +73,16 @@ describe('input bundles', () => {
       expect(input.moveX).toBeCloseTo(original.moveX, 2);
       expect(input.moveZ).toBeCloseTo(original.moveZ, 2);
       expect(input.yaw).toBeCloseTo(original.yaw, 3);
+      expect(input.aimYaw).toBeCloseTo(original.aimYaw, 3);
       expect(input.buttons).toBe(original.buttons);
     });
+  });
+
+  it('keeps where the character aims apart from where the camera looks', () => {
+    const decoded = decodeClientMessage(encodeInputBundle([createInput(1, 0, 0, 0.3, 0, -2.5)]));
+    if (decoded?.type !== 'input') throw new Error('expected an input bundle');
+    expect(decoded.inputs[0]?.yaw).toBeCloseTo(0.3, 3);
+    expect(decoded.inputs[0]?.aimYaw).toBeCloseTo(-2.5, 3);
   });
 
   it('only sends the first sequence number', () => {
@@ -137,7 +145,7 @@ describe('rejecting rubbish from a client', () => {
 
   it('clamps a movement axis that is out of range', () => {
     // 0x7f is the largest value the wire format can hold, which means 1.0.
-    const buffer = new ArrayBuffer(11);
+    const buffer = new ArrayBuffer(inputBundleBytes(1));
     const view = new DataView(buffer);
     view.setUint8(0, 0x01);
     view.setUint32(1, 5, true);

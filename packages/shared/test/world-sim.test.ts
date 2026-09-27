@@ -400,6 +400,39 @@ describe('dodging', () => {
     expect(Math.abs(after.z - before.z)).toBeLessThan(0.5);
   });
 
+  it('steps back from where the character aims, not from where the camera looks', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    // The camera looks down -Z; the character was clicked round to face -X,
+    // so stepping back from it is towards +X.
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge, Math.PI / 2));
+    sim.step(tickClock());
+
+    const after = sim.readPlayer(1)?.position;
+    if (after === undefined) throw new Error('missing player');
+    expect(after.x - before.x).toBeGreaterThan(DODGE_DISTANCE * 0.9);
+    expect(Math.abs(after.z - before.z)).toBeLessThan(0.5);
+  });
+
+  it('reads a held direction from the camera, the same as walking, wherever the character aims', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    // D held, camera looking down -Z: to the camera's right is +X, even
+    // with the character aiming the opposite way round.
+    sim.queueInput(1, createInput(1, 1, 0, 0, PlayerButton.Dodge, Math.PI));
+    sim.step(tickClock());
+
+    const after = sim.readPlayer(1)?.position;
+    if (after === undefined) throw new Error('missing player');
+    expect(after.x - before.x).toBeGreaterThan(DODGE_DISTANCE * 0.9);
+  });
+
   it('cannot be used again until it has recharged', () => {
     const sim = createWorld();
     sim.addPlayer(1);
@@ -1250,6 +1283,32 @@ describe('chopping a tree down', () => {
 
     const expected = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
     expect(swingUntilFelled(sim, 1, tree.id)).toBe(expected);
+  });
+
+  it('chops the tree the character aims at, wherever the camera looks', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    // The camera looks straight away from the tree (yaw pi); the character
+    // was clicked round to face it (yaw 0).
+    sim.queueInput(1, createInput(1, 0, 0, Math.PI, PlayerButton.Swing, 0));
+    sim.step(tickClock());
+
+    expect(sim.drainChopEvents().map((event) => event.treeId)).toEqual([tree.id]);
+  });
+
+  it('misses a tree the camera looks at but the character does not face', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing, Math.PI));
+    sim.step(tickClock());
+
+    expect(sim.drainChopEvents()).toEqual([]);
   });
 
   it('counts down as you go, so you can see it coming', () => {
