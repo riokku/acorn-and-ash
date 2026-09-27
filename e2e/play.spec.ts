@@ -78,13 +78,13 @@ async function hold(page: Page, key: string, ms: number): Promise<void> {
 /**
  * Move Playwright's own mouse to the middle of the screen.
  *
- * The mouse is free now (decision 0050), and a left click aims the camera at
- * whatever ground point is under it before it is read as a swing or a cast -
- * exactly the same point a real player looking at their target would click.
- * Playwright's virtual mouse otherwise sits wherever it was last left, or at
- * (0, 0) if it was never moved at all, and a swing clicked from the corner of
- * the screen would aim the camera there instead of at whatever `faceTowards`
- * just turned it towards.
+ * The mouse is free now (decision 0050), and a left click turns the character
+ * to face whatever is under it before it is read as a swing or a cast
+ * (decision 0051) - exactly what a real player clicking their target would
+ * do. Playwright's virtual mouse otherwise sits wherever it was last left, or
+ * at (0, 0) if it was never moved at all, and a swing clicked from the corner
+ * of the screen would turn the character that way instead of towards whatever
+ * `faceTowards` just lined the camera up with.
  */
 async function centerMouse(page: Page): Promise<void> {
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };

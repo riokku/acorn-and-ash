@@ -65,6 +65,7 @@ import {
 
 import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
+import { clickAimYaw, type ClickCandidate } from './input/click-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
@@ -130,6 +131,16 @@ const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item 
 const HIT_LANDED_SHAKE = 0.35;
 /** Camera-shake strength for taking damage ourselves - sharper than landing one. */
 const TOOK_DAMAGE_SHAKE = 0.55;
+/**
+ * How generous a click on a tree is. A trunk is only a hand or two across,
+ * so it counts as at least this wide; a canopy counts as most of its drawn
+ * width, leaving the ragged edge of the leaves to whatever is behind it.
+ */
+const CLICK_TRUNK_MIN_RADIUS = 0.35;
+const CLICK_CANOPY_FRACTION = 0.8;
+/** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
+const CLICK_ANIMAL_RADIUS = 0.55;
+const CLICK_ANIMAL_HEIGHT = 0.9;
 
 /** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
 function isAnimalEntity(entity: SnapshotEntity): boolean {
@@ -291,11 +302,16 @@ export class Game {
   private playing = false;
   private inventoryOpen = false;
   private readonly scratch: Vec3 = vec3();
+  /**
+   * Which way the character is aiming, set by a left click on the world and
+   * let go again the moment the player walks off - null means "wherever the
+   * character already faces". Never the camera's heading: only a right-button
+   * drag turns the camera (see decision 0051).
+   */
+  private aimYaw: number | null = null;
   /** Scratch objects for `aimTowardsClickPoint`, reused every click rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
-  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  private readonly groundHit = new THREE.Vector3();
 
   private setup: RendererSetup | null = null;
   private camera: FollowCamera | null = null;
@@ -544,8 +560,11 @@ export class Game {
         if (camera === null) return;
         const from = this.motionOrOrigin();
         // Walking forward means walking down -Z, so a heading of zero already
-        // points that way: this is the angle that lines the two up.
-        camera.look.yaw = Math.atan2(-(x - from.x), -(z - from.z));
+        // points that way: this is the angle that lines the two up. The
+        // character aims the same way, as if the spot had been clicked.
+        const yaw = Math.atan2(-(x - from.x), -(z - from.z));
+        camera.look.yaw = yaw;
+        this.aimYaw = yaw;
       },
       pond: () => (this.clearing?.water ?? []).map((circle) => ({ ...circle })),
       canCast: () => this.canCast,
@@ -1159,9 +1178,9 @@ export class Game {
     if (mouse.x !== 0 || mouse.y !== 0) {
       camera.turn(mouse.x, mouse.y, BASE_MOUSE_SENSITIVITY * this.lookSensitivity);
     }
-    // A left click on the world aims the same way looking at it with the
-    // mouse already does, before the tap that comes with it is read below as
-    // a swing or a cast - see decision 0050.
+    // A left click on the world turns the character - never the camera - to
+    // face whatever is under the cursor, before the tap that comes with it is
+    // read below as a swing or a cast. See decision 0051.
     const clickPoint = controls.takeClickPoint();
     if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
 
@@ -1278,23 +1297,24 @@ export class Game {
   }
 
   /**
-   * Turn the camera to face whatever ground point is under a screen-space
-   * click - the same thing the debug `faceTowards` does for the smoke
-   * tests, just aimed from a real click instead of a fixed spot. If the
-   * click does not land on the ground plane at all (looking almost
-   * straight up, say) the camera simply keeps whatever heading it already
-   * had, the same as a click on empty sky costing nothing today.
+   * Turn the character - not the camera - to face whatever is under a
+   * screen-space click: the first tree or animal under the cursor, or else
+   * the patch of ground or water it lands on. The same thing the debug
+   * `faceTowards` does for the smoke tests, just aimed from a real click.
+   * A click that lands on nothing at all (open sky, say) or right at the
+   * character's own feet keeps whatever heading it already had.
    */
   private aimTowardsClickPoint(point: { x: number; y: number }, camera: FollowCamera): void {
     const from = this.motionOrOrigin();
 
     // `camera.camera`'s actual position and rotation only get recomputed
     // once a frame, inside `updateLocalPlayer` below - this runs earlier
-    // than that, right after a mouse turn may just have changed `look.yaw`.
-    // A zero-time update brings the real object in line with `look` right
-    // now, with nothing else in it gated by elapsed time, so the raycast
-    // below reads where the player is actually looking rather than
-    // wherever the camera last rendered a frame ago.
+    // than that, right after a right-button drag may just have changed
+    // `look.yaw`. A zero-time update brings the real object in line with
+    // `look` right now, with nothing else in it gated by elapsed time, so
+    // the ray below starts from where the camera actually is rather than
+    // wherever it last rendered a frame ago. It moves nothing the player
+    // can see: the camera is only caught up, never turned.
     const wilderness = this.wildernessScene;
     const clearing = this.clearingScene;
     if (wilderness !== null && clearing !== null) {
@@ -1306,11 +1326,52 @@ export class Game {
       -(point.y / window.innerHeight) * 2 + 1,
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
-    this.groundPlane.constant = -from.y;
 
-    const hit = this.clickRaycaster.ray.intersectPlane(this.groundPlane, this.groundHit);
-    if (hit === null) return;
-    camera.look.yaw = Math.atan2(-(hit.x - from.x), -(hit.z - from.z));
+    const yaw = clickAimYaw(this.clickRaycaster.ray, from, from.y, this.clickCandidates());
+    if (yaw !== null) this.aimYaw = yaw;
+  }
+
+  /**
+   * Everything a click can land on, as upright cylinders: each standing
+   * tree as a trunk and a canopy that both face its trunk, and each animal.
+   * Rebuilt per click rather than kept up to date - a click is rare, and a
+   * couple of hundred small objects is nothing to make once.
+   */
+  private clickCandidates(): ClickCandidate[] {
+    const candidates: ClickCandidate[] = [];
+    for (const prop of this.standingProps) {
+      if (this.isFelled(prop.id)) continue;
+      const kind = PROP_KINDS[prop.kind];
+      if (kind.shape.family !== 'tree') continue;
+      const base = prop.y ?? 0;
+      const trunkTop = base + kind.shape.trunkHeight * prop.scale;
+      candidates.push({
+        x: prop.x,
+        z: prop.z,
+        radius: Math.max(kind.colliderRadius * prop.scale, CLICK_TRUNK_MIN_RADIUS),
+        bottom: base,
+        top: trunkTop,
+      });
+      candidates.push({
+        x: prop.x,
+        z: prop.z,
+        radius: kind.shape.canopyRadius * prop.scale * CLICK_CANOPY_FRACTION,
+        bottom: base + kind.shape.trunkHeight * prop.scale * 0.6,
+        top: trunkTop + kind.shape.canopyHeight * prop.scale,
+      });
+    }
+    for (const id of this.remoteAnimals.netIds()) {
+      const pose = this.remoteAnimals.poseOf(id);
+      if (pose === undefined) continue;
+      candidates.push({
+        x: pose.x,
+        z: pose.z,
+        radius: CLICK_ANIMAL_RADIUS,
+        bottom: pose.y,
+        top: pose.y + CLICK_ANIMAL_HEIGHT,
+      });
+    }
+    return candidates;
   }
 
   /** Records what the server just told us its clock reads, and when we heard it. */
@@ -1352,7 +1413,20 @@ export class Game {
     }
     this.chargeWasHeld = chargeHeld;
 
-    const produced = player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw, buttons);
+    // Walking off lets go of whatever was clicked: the character aims the
+    // way it walks again. Not while charging, which roots it to the spot
+    // facing whatever it is about to hit.
+    if ((intent.x !== 0 || intent.z !== 0) && !chargeHeld) this.aimYaw = null;
+
+    const produced = player.advance(
+      deltaSeconds,
+      intent.x,
+      intent.z,
+      camera.look.yaw,
+      buttons,
+      this.aimYaw,
+    );
+    const aimYaw = this.aimYaw ?? player.motion.facingYaw;
     // A tap is only forgotten once a tick has carried it, so a quick press of
     // Space between two frames still turns into a jump.
     if (produced.length > 0) this.controls?.forgetTaps();
@@ -1422,7 +1496,7 @@ export class Game {
     const target =
       this.clearing === null
         ? null
-        : treeInReach(player.motion.position, camera.look.yaw, this.standingProps, (id) =>
+        : treeInReach(player.motion.position, aimYaw, this.standingProps, (id) =>
             this.isFelled(id),
           );
     this.aimedTree =
@@ -1446,7 +1520,7 @@ export class Game {
               : [{ id, x: pose.x, z: pose.z, kind }];
           })
         : [];
-    const animalTarget = animalInReach(player.motion.position, camera.look.yaw, animalCandidates);
+    const animalTarget = animalInReach(player.motion.position, aimYaw, animalCandidates);
     this.aimedAnimal =
       animalTarget === null
         ? null
@@ -1472,7 +1546,7 @@ export class Game {
       !axeHasSomethingToHit &&
       this.isEquipped('rod') &&
       this.clearing !== null &&
-      castLanding(player.motion.position, camera.look.yaw, this.clearing.water) !== null;
+      castLanding(player.motion.position, aimYaw, this.clearing.water) !== null;
 
     // Its own key, so it never competes with a swing or a cast for the click.
     const clearingData = this.clearing;
@@ -1505,7 +1579,7 @@ export class Game {
           canAfford(kind) &&
           buildSpotFor(
             player.motion.position,
-            camera.look.yaw,
+            aimYaw,
             BUILDABLE_KINDS[kind].footprintRadius,
             clearingData.water,
             buildBlockers,

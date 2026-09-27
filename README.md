@@ -69,7 +69,10 @@ The game is online-only. Every world runs on the server.
 > instead of it being captured for your whole time in the world, with the
 > right button turning the camera on its own and a tooltip on every hotbar
 > slot. Press `I`, or click the new bag button, to see everything you're
-> carrying and drag any of it onto the bar. See [the roadmap](#roadmap).
+> carrying and drag any of it onto the bar. Only a right-button drag turns
+> the camera now: a left click on a tree, an animal or the water turns your
+> character to face it instead, leaving the view exactly where you put it.
+> See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -85,7 +88,7 @@ The game is online-only. Every world runs on the server.
 | `B`                               | Open the build menu                                            |
 | `1`–`4` (build menu open)         | Build a campfire, cabin, flower bed or lantern                 |
 | `I`, or the bag button            | Open or close your pack                                        |
-| Left mouse (click)                | Chop, cast, hook, fight off, or click a hotbar/pack item       |
+| Left mouse (click)                | Turn to face what you click, and chop, cast, hook or fight it  |
 | Left mouse (held)                 | Charge a heavy attack                                          |
 | Right mouse (held), then drag     | Turn the camera                                                |
 | Left `Ctrl`                       | Dodge                                                          |
@@ -94,10 +97,14 @@ The game is online-only. Every world runs on the server.
 There is nothing to land on yet, so a jump is a hop in place.
 
 The mouse is free the rest of the time, the way it is in World of Warcraft:
-click on a tree, an animal or the water to aim at it (the same as looking
-straight at it always did) and the same click chops, catches or casts;
-click the hotbar or your pack instead of only pressing a number. See
-[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md).
+click on a tree, an animal or the water and your character turns to face it,
+and the same click chops, catches or casts; click the hotbar or your pack
+instead of only pressing a number. Only holding the right button and
+dragging turns the camera - a left click never moves it. Your character
+swings or casts whichever way it faces: the way you last clicked, or the way
+you are walking. See
+[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
+[decision 0051](docs/decisions/0051-a-click-turns-the-character-not-the-camera.md).
 
 Nothing can be carried at all until you find a bag - the very first thing to
 look for, a few steps from where you start. Once you have it, you can carry

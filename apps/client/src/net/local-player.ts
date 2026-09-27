@@ -65,6 +65,11 @@ export class LocalPlayer {
   /**
    * Run however many fixed ticks fit into the frame that just passed.
    *
+   * `aimYaw` is which way a swing or a cast goes, and which way a standing
+   * character turns to face; null means "wherever the character already
+   * faces", read fresh every tick so it keeps up with a walk that is still
+   * turning the character round.
+   *
    * Returns the inputs produced, so the caller can send them.
    */
   advance(
@@ -73,6 +78,7 @@ export class LocalPlayer {
     moveZ: number,
     cameraYaw: number,
     buttons = 0,
+    aimYaw: number | null = null,
   ): PlayerInput[] {
     // A long pause (a background tab) must not make the player sprint to catch up.
     this.accumulator = Math.min(this.accumulator + deltaSeconds, TICK_SECONDS * 5);
@@ -83,7 +89,14 @@ export class LocalPlayer {
       this.previous = cloneVec3(this.motion.position);
       this.previousYaw = this.motion.facingYaw;
 
-      const input = createInput(++this.sequence, moveX, moveZ, cameraYaw, buttons);
+      const input = createInput(
+        ++this.sequence,
+        moveX,
+        moveZ,
+        cameraYaw,
+        buttons,
+        aimYaw ?? this.motion.facingYaw,
+      );
       stepPlayer(this.motion, input, TICK_SECONDS, this.collision);
       this.pending.push(input);
       produced.push(input);

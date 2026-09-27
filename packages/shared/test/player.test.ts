@@ -141,6 +141,25 @@ describe('walking', () => {
     expect(Math.abs(Math.abs(rightwards.facingYaw) - Math.PI / 2)).toBeLessThan(0.05);
   });
 
+  it('turns to face where it aims while standing still, as after a click', () => {
+    const motion = createPlayerMotion({ x: 0, y: 0, z: 0 });
+    // The camera looks down -Z the whole time; only the aim points right.
+    for (let i = 0; i < 20; i++) {
+      stepPlayer(motion, createInput(i + 1, 0, 0, 0, 0, -Math.PI / 2), TICK_SECONDS, flatWorld);
+    }
+    expect(motion.facingYaw).toBeCloseTo(-Math.PI / 2, 5);
+    // Turning on the spot, not walking.
+    expect(Math.hypot(motion.position.x, motion.position.z)).toBeLessThan(1e-9);
+  });
+
+  it('faces the way it walks, whatever it was aiming at before', () => {
+    const motion = createPlayerMotion({ x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 60; i++) {
+      stepPlayer(motion, createInput(i + 1, 0, 1, 0, 0, Math.PI / 2), TICK_SECONDS, flatWorld);
+    }
+    expect(Math.abs(motion.facingYaw)).toBeLessThan(0.05);
+  });
+
   it('gives the same answer every time, so the client can predict it', () => {
     const inputs = Array.from({ length: 50 }, (_, i) =>
       createInput(i + 1, Math.sin(i * 0.3), Math.cos(i * 0.21), i * 0.05),

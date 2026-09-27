@@ -853,9 +853,12 @@ export class WorldSimulation {
         let wantsToDodge = false;
         let aimedYaw = aim.yaw;
         // Whatever was held on the input that asked to dodge - same idea as
-        // `aimedYaw`, judged from wherever the player ended up this tick.
+        // `aimedYaw`, judged from wherever the player ended up this tick. The
+        // camera's heading comes along too, since a held direction is relative
+        // to the camera rather than to where the character is aiming.
         let dodgeMoveX = 0;
         let dodgeMoveZ = 0;
+        let dodgeCameraYaw = 0;
 
         // A line in the water keeps its own time: the fish bites when it bites,
         // and wandering off brings the line in, whether or not inputs arrived.
@@ -866,7 +869,7 @@ export class WorldSimulation {
           // No packet arrived in time: the player coasts to a stop where they are.
           stepPlayer(
             scratch,
-            idleInput(runtime.lastProcessedSeq, aim.yaw),
+            idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw),
             TICK_SECONDS,
             this.collision,
           );
@@ -921,11 +924,12 @@ export class WorldSimulation {
                 wantsToDodge = true;
                 dodgeMoveX = input.moveX;
                 dodgeMoveZ = input.moveZ;
+                dodgeCameraYaw = input.yaw;
               }
             }
             runtime.lastProcessedSeq = input.seq;
-            aim.yaw = input.yaw;
-            aimedYaw = input.yaw;
+            aim.yaw = input.aimYaw;
+            aimedYaw = input.aimYaw;
           }
         }
 
@@ -967,7 +971,14 @@ export class WorldSimulation {
           if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw, false);
           if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
           if (wantsToDodge) {
-            this.tryDodge(runtime, scratch.position, aimedYaw, dodgeMoveX, dodgeMoveZ);
+            this.tryDodge(
+              runtime,
+              scratch.position,
+              aimedYaw,
+              dodgeCameraYaw,
+              dodgeMoveX,
+              dodgeMoveZ,
+            );
           }
           if (runtime.pendingBuild !== null) {
             const kind = runtime.pendingBuild;
@@ -1620,17 +1631,22 @@ export class WorldSimulation {
    * A quick, decisive step in whatever direction is held - or straight back,
    * if nothing is - that leaves the player briefly untouchable. See
    * `damagePlayer` for how that window is spent.
+   *
+   * A held direction is relative to the camera, the same as walking, so it
+   * is turned into a world direction with `cameraYaw`; stepping back is away
+   * from wherever the character is aiming, `aimYaw`.
    */
   private tryDodge(
     runtime: PlayerRuntime,
     position: Vec3,
     aimYaw: number,
+    cameraYaw: number,
     moveX: number,
     moveZ: number,
   ): void {
     if (runtime.dodgeCooldownTicks > 0) return;
 
-    const input = worldMoveDirection(moveX, moveZ, aimYaw);
+    const input = worldMoveDirection(moveX, moveZ, cameraYaw);
     const hasInput = input.x !== 0 || input.z !== 0;
     // No direction held: step straight back, away from wherever you are facing.
     const dirX = hasInput ? input.x : Math.sin(aimYaw);
