@@ -41,7 +41,7 @@ let sfxVolumeScale = 1;
 /**
  * Starts the background loop, once. Call this from a real click or key
  * press - autoplay policy blocks it otherwise - which is why it lives next
- * to `requestPointerLock` in game.ts rather than kicking off at page load.
+ * to `resume` in game.ts rather than kicking off at page load.
  */
 export function startAmbientMusic(): void {
   if (music !== null) return;
