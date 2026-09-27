@@ -46,6 +46,7 @@ export * from './sim/hunger';
 export * from './sim/day-night';
 export * from './sim/burying';
 export * from './sim/animals';
+export * from './sim/exploring';
 export * from './sim/world-sim';
 export * from './sim/identity';
 

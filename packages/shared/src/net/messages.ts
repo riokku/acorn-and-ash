@@ -47,6 +47,7 @@ export const ServerMessageType = {
   Cache: 0x21,
   Roster: 0x22,
   Equipped: 0x23,
+  Explored: 0x24,
 } as const;
 
 export const RejectReason = {
@@ -371,6 +372,16 @@ export interface EquippedMessage {
   readonly players: readonly EquippedEntry[];
 }
 
+/**
+ * Which parts of the world this player has seen, whole (see decision 0054):
+ * one bit per `EXPLORE_CELL_SIZE` square, in `exploring.ts`'s order. Private
+ * to the one it belongs to.
+ */
+export interface ExploredMessage {
+  readonly type: 'explored';
+  readonly cells: Uint8Array;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -391,4 +402,5 @@ export type ServerMessage =
   | BuriedCachesMessage
   | CacheMessage
   | RosterMessage
-  | EquippedMessage;
+  | EquippedMessage
+  | ExploredMessage;

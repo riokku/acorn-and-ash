@@ -99,6 +99,7 @@ The game is online-only. Every world runs on the server.
 | `Shift` (held, fence picked)      | Place it freely instead of joining it onto another fence       |
 | `Esc` or right mouse tap          | Put the piece away                                             |
 | `I`, or the bag button            | Open or close your pack                                        |
+| `M`, or click the minimap         | Open or close the map                                          |
 | Left mouse (click)                | Turn to face what you click, and chop, cast, hook or fight it  |
 | Left mouse (held)                 | Charge a heavy attack                                          |
 | Right mouse (held), then drag     | Turn the camera                                                |
@@ -186,6 +187,18 @@ the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+
+### The map
+
+A round minimap in the top right shows the land around you, turned so that
+whatever is ahead of the camera is at the top, with your home and your stash
+on it (pinned to its rim, pointing the way, once they're too far to show),
+other players nearby, and everything you've built. Press `M`, or click it,
+for the whole map: a field-journal page you can drag and zoom. It starts as
+blank parchment and fills in as you explore, and it remembers what you've
+seen from one visit to the next. It's painted from the world's own seed in
+the background, a second or so after you arrive. See
+[decision 0054](docs/decisions/0054-a-minimap-and-a-map-that-fills-in.md).
 
 ### Day and night
 

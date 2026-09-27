@@ -18,6 +18,7 @@ import {
   type CharacterId,
   type CraftedEvent,
   type EquippedMessage,
+  type ExploredMessage,
   type FishingEvent,
   type HealthEvent,
   type HungerEvent,
@@ -277,6 +278,19 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'equipped');
     if (message === undefined) throw new Error('Never received the opening equipped list');
     return message.players;
+  }
+
+  /** The newest word on which parts of the world this player has seen. */
+  explored(): ExploredMessage['cells'] | undefined {
+    const messages = this.received.filter((entry) => entry.type === 'explored');
+    return messages[messages.length - 1]?.cells;
+  }
+
+  /** The map as it stood the moment this player joined. */
+  openingExplored(): ExploredMessage['cells'] {
+    const message = this.received.find((entry) => entry.type === 'explored');
+    if (message === undefined) throw new Error('Never received the opening explored map');
+    return message.cells;
   }
 
   countOfMessages(type: ServerMessage['type']): number {

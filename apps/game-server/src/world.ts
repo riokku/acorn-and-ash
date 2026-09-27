@@ -11,6 +11,7 @@ import {
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
   SNAPSHOT_EVERY_N_TICKS,
+  EXPLORED_SEND_INTERVAL_TICKS,
   TICK_MILLISECONDS,
   RejectReason,
   WorldSimulation,
@@ -33,6 +34,7 @@ import {
   encodeHunger,
   encodeRejected,
   encodeEquipped,
+  encodeExplored,
   encodeRoster,
   encodeSnapshot,
   encodeThreatHit,
@@ -178,6 +180,10 @@ export class World extends DurableObject<WorldEnv> {
     // Welcome, is what tells everybody else about them in turn.
     server.send(encodeRoster(this.currentRoster()));
     server.send(encodeEquipped(simulation.equippedList()));
+    // Their map as they left it, before the first step has a chance to add
+    // anything to it - see decision 0054.
+    const explored = simulation.exploredMapOf(netId);
+    if (explored !== null) server.send(encodeExplored(explored));
     this.startTicking();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -317,6 +323,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
+    if (simulation.tick % EXPLORED_SEND_INTERVAL_TICKS === 0) this.announceExplored(simulation);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       this.broadcastSnapshots(simulation);
@@ -519,6 +526,27 @@ export class World extends DurableObject<WorldEnv> {
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
       if (event !== undefined) this.trySend(ws, encodeHealth(event));
+    }
+  }
+
+  /**
+   * Tell each player their map has grown, whole (see decision 0054).
+   *
+   * Private to the one it belongs to, and only as often as
+   * `EXPLORED_SEND_INTERVAL_TICKS` allows: their own browser has already
+   * filled the map in from where it thinks they are, so this only keeps it
+   * honest, and keeps the copy that gets saved in step with what they saw.
+   */
+  private announceExplored(simulation: WorldSimulation): void {
+    const changes = simulation.drainExploredChanges();
+    if (changes.length === 0) return;
+
+    const byNetId = new Map(changes.map((change) => [change.netId, change.explored]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const explored = byNetId.get(attachment.netId);
+      if (explored !== undefined) this.trySend(ws, encodeExplored(explored));
     }
   }
 
@@ -931,6 +959,9 @@ export class World extends DurableObject<WorldEnv> {
     // anything - `initialEquippedItem` treats that exactly like a brand new
     // player, falling back to the first tool they still have, if any.
     this.addColumn('players', 'equipped_item_index', 'INTEGER');
+    // Null for anybody saved before the map existed: they start a fresh one,
+    // the same blank page a brand new player gets.
+    this.addColumn('players', 'explored', 'BLOB');
     // A tree felled before this release has no record of when it fell. Count it
     // as having just come down, so an old clearing heals over the next half
     // hour instead of every stump popping back the moment somebody walks in.
@@ -1015,8 +1046,10 @@ export class World extends DurableObject<WorldEnv> {
         hunger: number;
         health: number;
         equipped_item_index: number | null;
+        explored: ArrayBuffer | null;
       }>(
-        'SELECT x, y, z, facing_yaw, hunger, health, equipped_item_index FROM players WHERE player_key = ?',
+        'SELECT x, y, z, facing_yaw, hunger, health, equipped_item_index, explored ' +
+          'FROM players WHERE player_key = ?',
         playerKey,
       )
       .toArray();
@@ -1033,6 +1066,7 @@ export class World extends DurableObject<WorldEnv> {
       health: row.health,
       equippedItem:
         row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
+      explored: row.explored === null ? null : new Uint8Array(row.explored),
     };
   }
 
@@ -1267,6 +1301,8 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
+    const explored = simulation.exploredMapOf(attachment.netId);
+    if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
   }
 
   private writePlayer(
@@ -1353,6 +1389,18 @@ export class World extends DurableObject<WorldEnv> {
     }
   }
 
+  /**
+   * Keep one player's map. Only ever called once their row exists - after
+   * `writePlayer` or `writePlayerIdentity` - so a plain update is enough.
+   */
+  private writePlayerExplored(playerKey: string, explored: Uint8Array): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE players SET explored = ? WHERE player_key = ?',
+      explored.slice().buffer,
+      playerKey,
+    );
+  }
+
   private writeTakenPickup(pickupId: number, netId: number): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO pickups_taken (pickup_id, net_id, taken_at) VALUES (?, ?, ?) ' +
@@ -1390,6 +1438,7 @@ export class World extends DurableObject<WorldEnv> {
         player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
+      if (player.explored != null) this.writePlayerExplored(attachment.playerKey, player.explored);
     }
   }
 

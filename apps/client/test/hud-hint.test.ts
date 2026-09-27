@@ -45,6 +45,7 @@ const BASE_STATE: HudState = {
   huntingNews: null,
   cacheNews: null,
   isNight: false,
+  mapOpen: false,
 };
 
 describe('the hint along the bottom', () => {

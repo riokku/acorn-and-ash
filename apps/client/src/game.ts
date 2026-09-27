@@ -34,6 +34,7 @@ import {
   dayProgress,
   gatherSpotInReach,
   isNight,
+  exploredFraction,
   nearestBuriedCache,
   nearestCampfire,
   pickupInReach,
@@ -108,6 +109,8 @@ import { planPlacement, type PlacementPlan } from './building/placement';
 import type { FishingPhase, HudStore } from './hud/store';
 import { compassToOwnCache, type Compass } from './hud/cache-compass';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
+import { MapFeed, type MapBuild } from './map/map-feed';
+import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
 
 /** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
@@ -270,6 +273,11 @@ export interface GameDebug {
   /** Every cache currently buried, wherever this browser last heard it was. */
   buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
   /**
+   * The maps (see decision 0054): whether the painted world is ready, whether
+   * the big map is open, and how much of the world this player has seen.
+   */
+  mapState(): { painted: boolean; open: boolean; explored: number };
+  /**
    * Turn the camera towards a spot in the world.
    *
    * The same thing the mouse does, and no more: the camera heading has always
@@ -352,6 +360,10 @@ export class Game {
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
   private playing = false;
   private inventoryOpen = false;
+  /** Whether the big map (M) is open - see decision 0054. */
+  private mapOpen = false;
+  /** What the minimap and the big map draw, kept up to date every frame. */
+  readonly mapFeed = new MapFeed();
   private readonly scratch: Vec3 = vec3();
   /**
    * Which way the character is aiming, set by a left click on the world and
@@ -493,7 +505,8 @@ export class Game {
    */
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
-    if (this.placing !== null) this.stopPlacing();
+    if (this.mapOpen) this.mapOpen = false;
+    else if (this.placing !== null) this.stopPlacing();
     else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
     else if (this.inventoryOpen) this.inventoryOpen = false;
@@ -509,9 +522,11 @@ export class Game {
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
       this.inventoryOpen = false;
+      this.mapOpen = false;
     }
     this.options.hud.publish({
       playing: this.playing,
+      mapOpen: this.mapOpen,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
       inventoryOpen: this.inventoryOpen,
@@ -527,6 +542,27 @@ export class Game {
       this.craftMenuOpen = false;
     }
     this.options.hud.publish({
+      inventoryOpen: this.inventoryOpen,
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
+    });
+  }
+
+  /**
+   * Open or put away the big map - M, or a click on the minimap or the map's
+   * own close button. Everything else that fills the middle of the screen
+   * steps aside for it; walking carries on underneath (see decision 0054).
+   */
+  toggleMap(): void {
+    this.mapOpen = !this.mapOpen;
+    if (this.mapOpen) {
+      this.stopPlacing();
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+      this.inventoryOpen = false;
+    }
+    this.options.hud.publish({
+      mapOpen: this.mapOpen,
       inventoryOpen: this.inventoryOpen,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
@@ -621,6 +657,11 @@ export class Game {
               refusal: this.placing.plan.refusal,
             },
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
+      mapState: () => ({
+        painted: this.mapFeed.image !== null,
+        open: this.mapOpen,
+        explored: exploredFraction(this.mapFeed.explored),
+      }),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
           id: entry.id,
@@ -830,6 +871,10 @@ export class Game {
       }
       case 'cache': {
         this.hearAboutCache(message.event);
+        break;
+      }
+      case 'explored': {
+        this.mapFeed.mergeFromServer(message.cells);
         break;
       }
       case 'rejected': {
@@ -1069,6 +1114,15 @@ export class Game {
     this.localCharacter.setName(this.options.identity.name);
     this.scene.add(this.localCharacter.group);
 
+    this.mapFeed.ready = true;
+    // Painted in a worker while the player gets their bearings; the minimap
+    // shows blank parchment for the moment it takes.
+    paintWorldMapImage(seed)
+      .then((image) => {
+        this.mapFeed.image = image;
+      })
+      .catch((error: unknown) => console.warn('Could not paint the map', error));
+
     this.options.hud.publish({ ready: true });
   }
 
@@ -1142,6 +1196,20 @@ export class Game {
       this.scene.add(built.group);
       this.builtMeshes.set(prop.id, built);
     }
+    this.updateMapBuilds();
+  }
+
+  /** Your own home and builds, for the maps - only when the built list changes, not every frame. */
+  private updateMapBuilds(): void {
+    const builds: MapBuild[] = [];
+    let home: MapFeed['home'] = null;
+    for (const prop of this.builtProps) {
+      if (!prop.yours) continue;
+      if (BUILDABLE_KINDS[prop.kind].isHome) home = { x: prop.x, z: prop.z, yaw: prop.yaw };
+      else builds.push({ kind: prop.kind, x: prop.x, z: prop.z, yaw: prop.yaw, lit: prop.lit });
+    }
+    this.mapFeed.home = home;
+    this.mapFeed.builds = builds;
   }
 
   /** Put every buried cache's mound where the server says it is, the same reconciling way as `applyBuiltProps`. */
@@ -1163,6 +1231,14 @@ export class Game {
       this.scene.add(mound.group);
       this.buriedCacheMeshes.set(cache.id, mound);
     }
+    this.updateMapStashes();
+  }
+
+  /** Your own buried stashes, for the maps. */
+  private updateMapStashes(): void {
+    this.mapFeed.stashes = this.buriedCaches
+      .filter((cache) => cache.ownerNetId === this.selfNetId)
+      .map((cache) => ({ x: cache.x, z: cache.z }));
   }
 
   private removeRemote(netId: number): void {
@@ -1293,6 +1369,7 @@ export class Game {
     // means one thing at a time. The inventory panel has no digit keys of
     // its own to fight over, so it does not need to join that guard.
     this.handleEscapeInput(controls);
+    if (controls.takeMapToggle()) this.toggleMap();
     this.handleInventoryToggleInput(controls);
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
@@ -1322,8 +1399,39 @@ export class Game {
     }
 
     setup.renderer.render(this.scene, camera.camera);
+    this.updateMapFeed(camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /**
+   * Where you are and which way the camera looks, for the maps, plus
+   * everybody else nearby - every frame, since the minimap turns with the
+   * camera. Also fills the map in around you straight away, ahead of the
+   * server's own word on it (see decision 0054).
+   */
+  private updateMapFeed(camera: FollowCamera): void {
+    const feed = this.mapFeed;
+    const player = this.localPlayer;
+    if (player !== null) {
+      const { position, facingYaw } = player.motion;
+      feed.player = { x: position.x, z: position.z, facingYaw };
+      feed.revealAt(position.x, position.z);
+    }
+    feed.cameraYaw = camera.look.yaw;
+    feed.isNight = isNight(dayProgress(this.estimatedServerTimeMs()));
+    feed.others = this.remotePlayers.netIds().flatMap((netId) => {
+      const pose = this.remotePlayers.poseOf(netId);
+      if (pose === undefined) return [];
+      return [
+        {
+          x: pose.x,
+          z: pose.z,
+          color: new THREE.Color(this.colorFor(netId, this.roster.get(netId))).getHex(),
+          name: this.roster.get(netId)?.name ?? 'Somebody',
+        },
+      ];
+    });
+  }
 
   /**
    * B opens or closes the build menu, closing the craft menu if that was open
@@ -1906,6 +2014,7 @@ export class Game {
       huntingNews: this.currentHuntingNews(now),
       cacheNews: this.currentCacheNews(now),
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
+      mapOpen: this.mapOpen,
     });
   }
 

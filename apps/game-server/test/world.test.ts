@@ -27,6 +27,7 @@ import {
   TICK_HZ,
   buildTestClearing,
   choppingRuleFor,
+  isExploredAt,
   recipeFor,
   type ItemId,
 } from '@acorn/shared';
@@ -238,6 +239,38 @@ describe('remembering where a player was', () => {
 
     expect(after.x).toBeCloseTo(before.x, 1);
     expect(after.z).toBeCloseTo(before.z, 1);
+    second.close();
+  });
+});
+
+describe('the map filling in as you explore', () => {
+  it('sends a new player a blank map, then fills in around them', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'mapperkey0001');
+    await waitFor('the opening map', () => client.countOfMessages('explored') > 0);
+    expect(client.openingExplored().every((byte) => byte === 0)).toBe(true);
+
+    await waitFor('the map to fill in around the spawn', () => {
+      const cells = client.explored();
+      return cells !== undefined && isExploredAt(cells, SPAWN_POSITION.x, SPAWN_POSITION.z);
+    });
+    client.close();
+  });
+
+  it('remembers what a returning player had seen', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'mapperkey0002';
+
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('the map to fill in', () => {
+      const cells = first.explored();
+      return cells !== undefined && isExploredAt(cells, SPAWN_POSITION.x, SPAWN_POSITION.z);
+    });
+    first.close();
+    await sleep(200);
+
+    const second = await TestClient.connect(worldId, playerKey);
+    await waitFor('the opening map', () => second.countOfMessages('explored') > 0);
+    expect(isExploredAt(second.openingExplored(), SPAWN_POSITION.x, SPAWN_POSITION.z)).toBe(true);
     second.close();
   });
 });

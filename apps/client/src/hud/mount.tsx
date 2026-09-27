@@ -7,6 +7,7 @@ import { Hud } from './Hud';
 import type { HudStore } from './store';
 import type { HotbarPins } from './hotbar-layout';
 import type { Preferences } from '../preferences/preferences';
+import type { MapFeed } from '../map/map-feed';
 
 /**
  * The HUD is React, drawn as an HTML layer over the canvas. The 3D scene is
@@ -22,6 +23,8 @@ export function mountHud(
   onHotbarSlotsChange: (next: HotbarPins) => void,
   initialPreferences: Preferences,
   onSettingsChange: (preferences: Preferences) => void,
+  mapFeed: MapFeed,
+  onToggleMap: () => void,
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -34,6 +37,8 @@ export function mountHud(
         onHotbarSlotsChange={onHotbarSlotsChange}
         initialPreferences={initialPreferences}
         onSettingsChange={onSettingsChange}
+        mapFeed={mapFeed}
+        onToggleMap={onToggleMap}
       />
     </StrictMode>,
   );

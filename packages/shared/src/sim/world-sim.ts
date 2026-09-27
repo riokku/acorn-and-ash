@@ -76,6 +76,7 @@ import {
   type Direction2D,
 } from './animals';
 import { dayProgress, isNight } from './day-night';
+import { exploreCellAt, exploredMapFrom, revealAround } from './exploring';
 import {
   addItem,
   hasItem,
@@ -203,6 +204,12 @@ export interface PersistedPlayer {
    * falls back to the same default a brand new player gets.
    */
   readonly equippedItem?: ItemId | null;
+  /**
+   * Which parts of the world they have seen (see decision 0054). Optional,
+   * the same reason `health` is; a save without one, or one of the wrong
+   * size, starts a fresh map.
+   */
+  readonly explored?: Uint8Array | null;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -539,6 +546,12 @@ interface PlayerRuntime {
    * anything here clearing the field itself.
    */
   equippedItem: ItemId | null;
+  /** Which parts of the world this player has seen - see `exploring.ts`. */
+  readonly explored: Uint8Array;
+  /** The square they were last in, so the map only needs looking at when they move into a new one. */
+  exploredCell: number | null;
+  /** Whether `explored` has grown since the player was last told. */
+  exploredChanged: boolean;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -789,6 +802,11 @@ export class WorldSimulation {
       charging: false,
       chargeReadyAtMs: 0,
       equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
+      explored: exploredMapFrom(saved?.explored),
+      exploredCell: null,
+      // Always worth sending once on arrival, whether or not anything new
+      // gets seen: it is how a returning player's map comes back.
+      exploredChanged: true,
     });
   }
 
@@ -1021,6 +1039,7 @@ export class WorldSimulation {
         facing.yaw = scratch.facingYaw;
         grounded.value = scratch.grounded;
         lastProcessed.seq = runtime.lastProcessedSeq;
+        this.exploreAround(runtime, position.x, position.z);
 
         // Catches the meter crossing a whole point on its own, if eating did
         // not already say something this tick.
@@ -1028,6 +1047,38 @@ export class WorldSimulation {
       });
 
     this.stepAnimals();
+  }
+
+  /**
+   * Mark what is around a player as seen, but only when they step into a new
+   * square: standing still, or wandering about inside one square, cannot
+   * reveal anything the last look did not.
+   */
+  private exploreAround(runtime: PlayerRuntime, x: number, z: number): void {
+    const cell = exploreCellAt(x, z);
+    if (cell === runtime.exploredCell) return;
+    runtime.exploredCell = cell;
+    if (revealAround(runtime.explored, x, z) > 0) runtime.exploredChanged = true;
+  }
+
+  /**
+   * Every player whose map has grown since they were last told, with that
+   * map, whole - it is small enough that sending all of it beats keeping
+   * track of which squares are new.
+   */
+  drainExploredChanges(): { readonly netId: number; readonly explored: Uint8Array }[] {
+    const changes: { netId: number; explored: Uint8Array }[] = [];
+    for (const runtime of this.players.values()) {
+      if (!runtime.exploredChanged) continue;
+      runtime.exploredChanged = false;
+      changes.push({ netId: runtime.netId, explored: runtime.explored });
+    }
+    return changes;
+  }
+
+  /** Which parts of the world this player has seen, or null for somebody not here. */
+  exploredMapOf(netId: number): Uint8Array | null {
+    return this.players.get(netId)?.explored ?? null;
   }
 
   /** Amble, react to the nearest player, or wait out a catch - whichever this tick calls for. */
@@ -2307,6 +2358,7 @@ export class WorldSimulation {
         hunger: runtime.hunger,
         health: runtime.health,
         equippedItem: runtime.equippedItem,
+        explored: runtime.explored,
       });
     }
     return saved;

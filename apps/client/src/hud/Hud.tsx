@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 import {
   BUILDABLE_KINDS,
@@ -22,10 +22,14 @@ import {
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
 import { InventoryPanel, InventoryToggleButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
+import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
+import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
+import { FogCache } from '../map/draw-map';
+import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
   readonly store: HudStore;
@@ -36,6 +40,9 @@ interface HudProps {
   readonly onHotbarSlotsChange: (next: HotbarPins) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
+  /** What the minimap and the big map draw - see decision 0054. */
+  readonly mapFeed: MapFeed;
+  readonly onToggleMap: () => void;
 }
 
 export function Hud({
@@ -47,8 +54,12 @@ export function Hud({
   onHotbarSlotsChange,
   initialPreferences,
   onSettingsChange,
+  mapFeed,
+  onToggleMap,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  // One parchment layer for both maps, so it is only ever worked out once.
+  const [fog] = useState(() => new FogCache());
 
   return (
     <>
@@ -89,11 +100,14 @@ export function Hud({
         />
       ) : null}
 
-      {state.ready && state.playing && state.ownCacheCompass !== null ? (
+      {state.ready && state.playing && !state.mapOpen && state.ownCacheCompass !== null ? (
         <CacheCompass compass={state.ownCacheCompass} />
       ) : null}
 
-      {state.ready && state.playing ? (
+      {state.ready && state.playing && !state.mapOpen ? (
+        <Minimap feed={mapFeed} fog={fog} onOpenMap={onToggleMap} />
+      ) : null}
+      {state.ready && state.playing && !state.mapOpen ? (
         <>
           <Hotbar state={state} onUseItem={onUseItem} onHotbarSlotsChange={onHotbarSlotsChange} />
           <InventoryToggleButton onToggle={onToggleInventory} />
@@ -116,14 +130,15 @@ export function Hud({
             {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
           </p>
           <p>
-            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · Esc
-            to pause
+            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · M
+            for the map · Esc to pause
           </p>
         </div>
       ) : null}
 
       {state.ready &&
       state.playing &&
+      !state.mapOpen &&
       (state.fishingNews !== null ||
         state.healthNews !== null ||
         state.cacheNews !== null ||
@@ -140,7 +155,7 @@ export function Hud({
         </p>
       ) : null}
 
-      {state.ready && state.playing ? (
+      {state.ready && state.playing && !state.mapOpen ? (
         <p
           className={
             state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
@@ -152,6 +167,11 @@ export function Hud({
         >
           {hint(state)}
         </p>
+      ) : null}
+
+      {/* Last, so the big map's page sits over everything else on screen. */}
+      {state.ready && state.playing && state.mapOpen ? (
+        <WorldMap feed={mapFeed} fog={fog} onClose={onToggleMap} />
       ) : null}
 
       {!state.ready ? (

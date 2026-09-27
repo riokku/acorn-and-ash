@@ -347,6 +347,22 @@ export const CHUNK_SIZE = 32;
 /** A player is only told about entities inside this radius. */
 export const INTEREST_RADIUS = 100;
 
+/**
+ * The map fills in as you explore (see decision 0054). The playable world is
+ * diced into squares this many metres across, and every square whose middle
+ * comes within `EXPLORE_REVEAL_RADIUS` of where you walk is marked as seen,
+ * for good.
+ */
+export const EXPLORE_CELL_SIZE = 4;
+/** How far around you counts as "been there" - roughly how far you can make things out through the trees. */
+export const EXPLORE_REVEAL_RADIUS = 36;
+/**
+ * How often, at most, the server tells a player their map has grown. The
+ * player's own browser fills its map in straight away from where it thinks
+ * they are; this only has to keep the saved copy honest.
+ */
+export const EXPLORED_SEND_INTERVAL_TICKS = 20;
+
 /** World lifecycle. */
 export const SAVE_INTERVAL_SECONDS = 30;
 export const SAVE_INTERVAL_TICKS = SAVE_INTERVAL_SECONDS * TICK_HZ;

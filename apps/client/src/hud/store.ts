@@ -91,6 +91,8 @@ export interface HudState {
   readonly cacheNews: string | null;
   /** Whether it is currently night out. */
   readonly isNight: boolean;
+  /** Whether the big map (M) is open - see decision 0054. */
+  readonly mapOpen: boolean;
 }
 
 const INITIAL: HudState = {
@@ -134,6 +136,7 @@ const INITIAL: HudState = {
   huntingNews: null,
   cacheNews: null,
   isNight: false,
+  mapOpen: false,
 };
 
 /**

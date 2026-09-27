@@ -23,6 +23,7 @@ import {
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
+import { EXPLORED_BYTES } from '../sim/exploring';
 import type {
   AnimalCaught,
   BuildRequest,
@@ -615,6 +616,19 @@ export function encodeEquipped(players: readonly EquippedEntry[]): ArrayBuffer {
   return buffer;
 }
 
+/**
+ * Which parts of the world one player has seen, whole (see decision 0054).
+ * Always the same size, so there is no count to send: the map's own shape
+ * is fixed by the world's.
+ */
+export function encodeExplored(cells: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(1 + EXPLORED_BYTES);
+  const bytes = new Uint8Array(buffer);
+  bytes[0] = ServerMessageType.Explored;
+  bytes.set(cells.subarray(0, EXPLORED_BYTES), 1);
+  return buffer;
+}
+
 export function encodeTreeHit(treeId: number, swingsLeft: number, netId: number): ArrayBuffer {
   const buffer = new ArrayBuffer(6);
   const view = new DataView(buffer);
@@ -1036,6 +1050,10 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offset += BYTES_PER_EQUIPPED_ENTRY;
       }
       return { type: 'equipped', players };
+    }
+    case ServerMessageType.Explored: {
+      if (data.byteLength !== 1 + EXPLORED_BYTES) return null;
+      return { type: 'explored', cells: new Uint8Array(data.slice(1)) };
     }
     case ServerMessageType.Rejected: {
       if (data.byteLength !== 2) return null;
