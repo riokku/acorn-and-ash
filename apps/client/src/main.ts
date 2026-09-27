@@ -89,6 +89,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     },
     game.mapFeed,
     () => game.toggleMap(),
+    (locked) => game.setDoorLocked(locked),
   );
   window.acornDebug = game.debug();
 

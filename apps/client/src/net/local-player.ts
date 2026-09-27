@@ -37,7 +37,7 @@ export interface PredictionStats {
 export class LocalPlayer {
   readonly motion: PlayerMotion;
 
-  private readonly collision: CollisionWorld;
+  private collision: CollisionWorld;
   private readonly pending: PlayerInput[] = [];
   private sequence = 0;
   private accumulator = 0;
@@ -56,6 +56,24 @@ export class LocalPlayer {
     this.collision = collision;
     this.previous = cloneVec3(spawn);
     this.previousYaw = 0;
+  }
+
+  /**
+   * Somewhere else entirely, straight away: through a door into a home's own
+   * room, or back out (see decision 0055). Walks on against `collision` from
+   * here on, and nothing eases the jump.
+   */
+  moveToSpace(collision: CollisionWorld, position: Readonly<Vec3>, facingYaw: number): void {
+    this.collision = collision;
+    this.motion.position = cloneVec3(position);
+    this.motion.velocity = { x: 0, y: 0, z: 0 };
+    this.motion.facingYaw = facingYaw;
+    this.motion.grounded = true;
+    this.previous = cloneVec3(position);
+    this.previousYaw = facingYaw;
+    this.smoothing.x = 0;
+    this.smoothing.y = 0;
+    this.smoothing.z = 0;
   }
 
   get stats(): PredictionStats {

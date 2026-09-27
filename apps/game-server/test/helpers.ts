@@ -8,6 +8,7 @@ import {
   encodeHello,
   encodeInputBundle,
   encodePing,
+  encodeSetDoorLock,
   encodeUseItem,
   createInput,
   type AnimalCaught,
@@ -19,6 +20,7 @@ import {
   type CraftedEvent,
   type EquippedMessage,
   type ExploredMessage,
+  type SpaceMessage,
   type FishingEvent,
   type HealthEvent,
   type HungerEvent,
@@ -278,6 +280,17 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'equipped');
     if (message === undefined) throw new Error('Never received the opening equipped list');
     return message.players;
+  }
+
+  /** Lock or unlock this player's own front door. */
+  setDoorLock(locked: boolean): void {
+    this.socket.send(encodeSetDoorLock(locked));
+  }
+
+  /** The newest word on which space this player is in: outdoors, or inside a home. */
+  latestSpace(): SpaceMessage | undefined {
+    const messages = this.received.filter((entry): entry is SpaceMessage => entry.type === 'space');
+    return messages[messages.length - 1];
   }
 
   /** The newest word on which parts of the world this player has seen. */

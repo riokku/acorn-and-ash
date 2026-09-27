@@ -43,6 +43,8 @@ interface HudProps {
   /** What the minimap and the big map draw - see decision 0054. */
   readonly mapFeed: MapFeed;
   readonly onToggleMap: () => void;
+  /** Lock or unlock our own front door - see decision 0055. */
+  readonly onSetDoorLock: (locked: boolean) => void;
 }
 
 export function Hud({
@@ -56,6 +58,7 @@ export function Hud({
   onSettingsChange,
   mapFeed,
   onToggleMap,
+  onSetDoorLock,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
@@ -98,6 +101,10 @@ export function Hud({
             if (kind !== undefined) onPickBuildable(kind);
           }}
         />
+      ) : null}
+
+      {state.ready && state.playing && !state.mapOpen && state.home?.yours === true ? (
+        <DoorLock locked={state.home.locked} onSetDoorLock={onSetDoorLock} />
       ) : null}
 
       {state.ready && state.playing && !state.mapOpen && state.ownCacheCompass !== null ? (
@@ -224,6 +231,30 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
     <span className={className}>
       {Math.round(state.health)}/{HEALTH_MAX}
     </span>
+  );
+}
+
+/**
+ * Inside your own home (see decision 0055): whether the door is open to
+ * visitors, and a click to change that. Only ever shown to the owner.
+ */
+function DoorLock({
+  locked,
+  onSetDoorLock,
+}: {
+  readonly locked: boolean;
+  readonly onSetDoorLock: (locked: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <div className="door-lock">
+      <span className="door-lock-icon" aria-hidden="true">
+        {locked ? '🔒' : '🔓'}
+      </span>
+      <span>{locked ? 'Door locked to visitors' : 'Visitors welcome'}</span>
+      <button type="button" onClick={() => onSetDoorLock(!locked)} data-testid="door-lock">
+        {locked ? 'Unlock' : 'Lock'}
+      </button>
+    </div>
   );
 }
 
@@ -420,6 +451,11 @@ export function hint(state: HudState): string {
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
   if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
+  // Doors - see decision 0055.
+  if (state.door === 'enter') return 'Walk in, or press E, to go inside';
+  if (state.door === 'visit') return 'Walk in, or press E, to visit';
+  if (state.door === 'locked') return "The door's locked";
+  if (state.door === 'leave') return 'Walk out through the door to leave';
   // A tree or animal only offers a hint once the axe is the active item:
   // without that the server ignores the click outright (trySwing's own first
   // check), so hinting at it here would send you to click on something that
@@ -431,6 +467,11 @@ export function hint(state: HudState): string {
   if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
+  if (state.home !== null) {
+    return state.home.yours
+      ? 'Home, sweet home · the door out is behind you'
+      : 'Visiting · the door out is behind you';
+  }
   return (
     'WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · ' +
     'C to craft · B to build · I for your pack'

@@ -1185,3 +1185,67 @@ body {
   font-size: 11px;
   text-align: right;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Going inside a home (decision 0055)                                      */
+/* ------------------------------------------------------------------------ */
+
+/* A dark veil for going through a door: fades in quickly, lifts gently. */
+.scene-fade {
+  position: fixed;
+  inset: 0;
+  background: #120d09;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms ease-out;
+}
+
+.scene-fade-dark {
+  opacity: 1;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in;
+}
+
+.scene-fade-instant {
+  transition: none;
+}
+
+.door-lock {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(58, 42, 20, 0.14);
+  color: var(--ink-warm);
+  font-size: 13px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.door-lock-icon {
+  font-size: 14px;
+}
+
+.door-lock button {
+  padding: 5px 12px;
+  border: 1px solid rgba(91, 70, 49, 0.45);
+  border-radius: 999px;
+  background: #fff8e6;
+  color: var(--ink-warm);
+  font:
+    600 12px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+.door-lock button:hover {
+  background: #fffdf4;
+}

@@ -25,6 +25,7 @@ export function mountHud(
   onSettingsChange: (preferences: Preferences) => void,
   mapFeed: MapFeed,
   onToggleMap: () => void,
+  onSetDoorLock: (locked: boolean) => void,
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -39,6 +40,7 @@ export function mountHud(
         onSettingsChange={onSettingsChange}
         mapFeed={mapFeed}
         onToggleMap={onToggleMap}
+        onSetDoorLock={onSetDoorLock}
       />
     </StrictMode>,
   );

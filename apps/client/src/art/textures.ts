@@ -8,7 +8,9 @@ import {
   paintFur,
   paintGrass,
   paintLogEnd,
+  paintQuilt,
   paintRipples,
+  paintRug,
   paintShingles,
   paintSoil,
   paintStone,
@@ -36,7 +38,9 @@ export type ArtTextureId =
   | 'soil'
   | 'burlap'
   | 'fur'
-  | 'ripples';
+  | 'ripples'
+  | 'quilt'
+  | 'rug';
 
 interface Recipe {
   readonly paint: () => Raster;
@@ -59,6 +63,8 @@ const RECIPES: Record<ArtTextureId, Recipe> = {
   burlap: { paint: () => paintBurlap(256), tiles: true, colour: true },
   fur: { paint: () => paintFur(256), tiles: true, colour: true },
   ripples: { paint: () => paintRipples(256), tiles: true, colour: false },
+  quilt: { paint: () => paintQuilt(256), tiles: true, colour: true },
+  rug: { paint: () => paintRug(256), tiles: false, colour: true },
 };
 
 /**

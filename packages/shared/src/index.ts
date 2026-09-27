@@ -19,6 +19,7 @@ export * from './world/water';
 export * from './world/wilderness';
 export * from './world/noise';
 export * from './world/animals';
+export * from './world/home';
 
 export * from './data/props';
 export * from './data/items';

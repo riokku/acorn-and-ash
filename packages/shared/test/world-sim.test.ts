@@ -48,7 +48,9 @@ import {
   type BuiltProp,
   type BuriedCache,
   type PersistedPlayer,
+  OUTDOORS,
 } from '../src/sim/world-sim';
+import { HOME_ENTRY, HOME_WAKE_SPOT, cabinDoorstep, cabinDoorway } from '../src/world/home';
 
 /** Every world a test builds, so they can be handed back when it finishes. */
 const built: WorldSimulation[] = [];
@@ -2223,12 +2225,14 @@ describe('threats', () => {
       sim.placePlayer(1, closeToDen, 0);
       for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
 
+      // Inside, by their own bed - see decision 0055.
+      expect(sim.spaceOf(1)).toBe(home.id);
       const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
       expect(position).toBeDefined();
       if (position === undefined) return;
-      const gapFromHome = Math.hypot(position.x - home.x, position.z - home.z);
-      expect(gapFromHome).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
-      expect(gapFromHome).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 3);
+      expect(position.x).toBeCloseTo(HOME_WAKE_SPOT.x, 1);
+      expect(position.z).toBeCloseTo(HOME_WAKE_SPOT.z, 1);
+      expect(sim.drainSpaceChanges().some((change) => change.space === home.id)).toBe(true);
     });
 
     it("a player's health survives a save and restore, the same as hunger does", () => {
@@ -2900,7 +2904,7 @@ describe('building', () => {
       expect(sim.drainBuildEvents()).toHaveLength(1);
     });
 
-    it('starts its owner just outside their own front door next time', () => {
+    it('wakes its owner up inside, by their own bed, next time', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
@@ -2913,12 +2917,10 @@ describe('building', () => {
         sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       back.addPlayer(9, undefined, 'chris');
+      expect(back.spaceOf(9)).toBe(home?.id);
       const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
-      expect(position).toBeDefined();
-      if (home === undefined || position === undefined) return;
-      const gap = Math.hypot(position.x - home.x, position.z - home.z);
-      expect(gap).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
-      expect(gap).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 3);
+      expect(position?.x).toBeCloseTo(HOME_WAKE_SPOT.x, 5);
+      expect(position?.z).toBeCloseTo(HOME_WAKE_SPOT.z, 5);
     });
 
     it('puts the front door on whichever side the cabin was turned to face', () => {
@@ -2932,15 +2934,149 @@ describe('building', () => {
       const home = sim.drainBuildEvents()[0]?.prop;
       if (home === undefined) throw new Error('the cabin was not built');
 
+      // Walk out of the room: you come out on the side the door now faces.
       const back = createWorld();
       back.restoreBuiltProps(
         sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       back.addPlayer(9, undefined, 'chris');
+      back.placePlayer(9, { x: HOME_ENTRY.x, y: 0, z: HOME_ENTRY.z }, 0, home.id);
+      for (let seq = 1; seq <= 20 && back.spaceOf(9) !== OUTDOORS; seq++) {
+        // Backwards, towards the door, with the camera looking into the room.
+        back.queueInput(9, createInput(seq, 0, -1, 0));
+        back.step(tickClock());
+      }
+      expect(back.spaceOf(9)).toBe(OUTDOORS);
       const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
-      if (position === undefined) throw new Error('no snapshot for the returning player');
-      expect(position.x - home.x).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
-      expect(Math.abs(position.z - home.z)).toBeLessThan(0.5);
+      if (position === undefined) throw new Error('no snapshot for the player who left');
+      expect(position.x - home.x).toBeGreaterThan(2);
+      expect(Math.abs(position.z - home.z)).toBeLessThan(1);
+    });
+
+    describe('going inside', () => {
+      /** A cabin built for `chris`, restored into a fresh world with its door facing +Z. */
+      function worldWithCabin(locked = false): { sim: WorldSimulation; home: BuiltProp } {
+        const sim = createWorld();
+        const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false, locked };
+        sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+        return { sim, home };
+      }
+
+      /** Stand in front of the door and walk at it for a second. */
+      function walkIntoTheDoor(sim: WorldSimulation, netId: number, home: BuiltProp): void {
+        const doorway = cabinDoorway(home);
+        sim.placePlayer(netId, { x: doorway.x, y: 0, z: doorway.z + 1.2 }, 0);
+        for (let seq = 1; seq <= 20; seq++) {
+          sim.queueInput(netId, createInput(seq, 0, 1, 0));
+          sim.step(tickClock());
+          if (sim.spaceOf(netId) !== OUTDOORS) return;
+        }
+      }
+
+      it('takes you in when you walk into the door, and back out again', () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(1, undefined, 'chris');
+        sim.drainSpaceChanges();
+
+        walkIntoTheDoor(sim, 1, home);
+        expect(sim.spaceOf(1)).toBe(home.id);
+        const arrived = sim.drainSpaceChanges().at(-1);
+        expect(arrived).toMatchObject({ netId: 1, space: home.id });
+        expect(arrived?.x).toBeCloseTo(HOME_ENTRY.x, 5);
+        expect(arrived?.z).toBeCloseTo(HOME_ENTRY.z, 5);
+
+        // Wait out the door's breather, then walk back out.
+        for (let i = 0; i < 20; i++) sim.step(tickClock());
+        for (let seq = 30; seq <= 60 && sim.spaceOf(1) !== OUTDOORS; seq++) {
+          sim.queueInput(1, createInput(seq, 0, -1, 0));
+          sim.step(tickClock());
+        }
+        expect(sim.spaceOf(1)).toBe(OUTDOORS);
+        const left = sim.drainSpaceChanges().at(-1);
+        const doorstep = cabinDoorstep(home);
+        expect(left?.x).toBeCloseTo(doorstep.x, 1);
+        expect(left?.z).toBeCloseTo(doorstep.z, 1);
+      });
+
+      it('lets a visitor in through an open door, but not a locked one', () => {
+        const open = worldWithCabin(false);
+        open.sim.addPlayer(2, undefined, 'visitor');
+        walkIntoTheDoor(open.sim, 2, open.home);
+        expect(open.sim.spaceOf(2)).toBe(open.home.id);
+
+        const locked = worldWithCabin(true);
+        locked.sim.addPlayer(2, undefined, 'visitor');
+        walkIntoTheDoor(locked.sim, 2, locked.home);
+        expect(locked.sim.spaceOf(2)).toBe(OUTDOORS);
+
+        // Its owner always gets in.
+        locked.sim.addPlayer(1, undefined, 'chris');
+        walkIntoTheDoor(locked.sim, 1, locked.home);
+        expect(locked.sim.spaceOf(1)).toBe(locked.home.id);
+      });
+
+      it('only ever locks your own door', () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(1, undefined, 'chris');
+        sim.addPlayer(2, undefined, 'visitor');
+        expect(sim.setHomeLocked(2, true)).toBeNull();
+        expect(sim.setHomeLocked(1, true)?.id).toBe(home.id);
+        expect(sim.builtPropsList().find((prop) => prop.id === home.id)?.locked).toBe(true);
+        // Already locked: nothing changed, nothing to say.
+        expect(sim.setHomeLocked(1, true)).toBeNull();
+        expect(sim.setHomeLocked(1, false)?.locked).toBe(false);
+      });
+
+      it('shows you only whoever is in the same place as you', () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(1, undefined, 'chris');
+        sim.addPlayer(2, undefined, 'visitor');
+        sim.placePlayer(2, { x: 0, y: 0, z: -12 }, 0);
+        expect(sim.spaceOf(1)).toBe(home.id);
+        expect(sim.snapshotFor(1).some((entity) => entity.netId === 2)).toBe(false);
+        expect(sim.snapshotFor(2).some((entity) => entity.netId === 1)).toBe(false);
+        // No wildlife in the house.
+        expect(
+          sim.snapshotFor(1).every((entity) => (entity.flags & SnapshotFlag.Animal) === 0),
+        ).toBe(true);
+
+        walkIntoTheDoor(sim, 2, home);
+        expect(sim.snapshotFor(1).some((entity) => entity.netId === 2)).toBe(true);
+      });
+
+      it("keeps a player inside at their home's front door when they are saved", () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(1, undefined, 'chris');
+        expect(sim.spaceOf(1)).toBe(home.id);
+        const saved = sim.persistablePlayers()[0];
+        const doorstep = cabinDoorstep(home);
+        expect(saved?.x).toBeCloseTo(doorstep.x, 5);
+        expect(saved?.z).toBeCloseTo(doorstep.z, 5);
+      });
+
+      it('makes the cabin solid, so you cannot walk through its walls', () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(2, undefined, 'visitor');
+        // Behind the cabin, walking straight at its back wall.
+        sim.placePlayer(2, { x: home.x, y: 0, z: home.z - 5 }, Math.PI);
+        for (let seq = 1; seq <= 60; seq++) {
+          sim.queueInput(2, createInput(seq, 0, 1, Math.PI));
+          sim.step(tickClock());
+        }
+        const position = sim.readPlayer(2)?.position;
+        expect(position?.z).toBeLessThan(home.z - 2);
+        expect(sim.spaceOf(2)).toBe(OUTDOORS);
+      });
+
+      it('leaves nothing out in the world within reach from inside', () => {
+        const { sim, home } = worldWithCabin();
+        sim.addPlayer(1, withTenLogs(1), 'chris');
+        expect(sim.spaceOf(1)).toBe(home.id);
+        sim.requestBuild(1, { kind: 'campfire', x: 0, z: -2, yaw: 0 });
+        sim.queueInput(1, createInput(1, 0, 0, 0, 0));
+        sim.step(tickClock());
+        expect(sim.drainBuildEvents()).toEqual([]);
+      });
     });
 
     it('somebody with no cabin yet still spawns exactly as before', () => {

@@ -22,10 +22,19 @@ const NIGHT_SUN_INTENSITY = 0.5;
 const FOG_NEAR = 55;
 const FOG_FAR = 120;
 
+/** Behind a room seen from inside a home: a warm, dark backdrop, like the edge of a stage. */
+const INDOOR_BACKDROP = new THREE.Color(0x1d1712);
+
 export interface DaylightRig {
   readonly sun: THREE.DirectionalLight;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
   update(progress: number): void;
+  /**
+   * Inside a home (see decision 0055): no sky and no fog behind the room,
+   * just a dark backdrop, while the daylight itself carries on through the
+   * windows and the open top of the dollhouse view.
+   */
+  setIndoors(indoors: boolean): void;
 }
 
 /** Soft daylight over the clearing, fog so the tree line fades out, and a day/night cycle over both. */
@@ -52,10 +61,15 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   scene.add(sun);
   scene.add(sun.target);
 
+  let indoors = false;
+  let lastProgress = 0.5;
+
   function update(progress: number): void {
+    lastProgress = progress;
     const brightness = dayBrightness(progress);
 
-    background.lerpColors(NIGHT_SKY, DAY_SKY, brightness);
+    if (indoors) background.copy(INDOOR_BACKDROP);
+    else background.lerpColors(NIGHT_SKY, DAY_SKY, brightness);
     fog.color.copy(background);
 
     sky.color.lerpColors(NIGHT_HEMI_SKY, DAY_HEMI_SKY, brightness);
@@ -69,5 +83,13 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   }
 
   update(0.5);
-  return { sun, update };
+  return {
+    sun,
+    update,
+    setIndoors(next) {
+      indoors = next;
+      scene.fog = next ? null : fog;
+      update(lastProgress);
+    },
+  };
 }
