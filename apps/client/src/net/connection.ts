@@ -8,7 +8,7 @@ import {
   encodeInputBundle,
   encodePing,
   encodeUseItem,
-  type BuildableKindId,
+  type BuildRequest,
   type CharacterId,
   type ItemId,
   type PlayerInput,
@@ -105,15 +105,13 @@ export class WorldConnection {
   }
 
   /**
-   * Ask to build whatever was picked from the build menu.
-   *
-   * Sent the moment it is picked, the same as crafting - the server still
-   * places it wherever this player currently stands and looks, using
-   * whatever it already has on hand for the tick that follows.
+   * Ask to build something exactly where the preview stands - sent the
+   * moment the player clicks to place it. The server still checks the spot
+   * is in reach and clear on the tick that follows.
    */
-  sendBuild(kind: BuildableKindId): void {
+  sendBuild(request: BuildRequest): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(encodeBuild(kind));
+    this.socket.send(encodeBuild(request));
   }
 
   /**

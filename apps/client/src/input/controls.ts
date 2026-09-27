@@ -34,6 +34,19 @@ const HOTBAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6']
  * second, so there is real wind-up left once it commits.
  */
 const CHARGE_HOLD_MS = 400;
+/**
+ * A right-button press shorter than this, that barely moved the mouse, is a
+ * tap rather than the start of a camera drag - it puts away a piece being
+ * placed (see decision 0052).
+ */
+const RIGHT_TAP_MAX_MS = 350;
+const RIGHT_TAP_MAX_TRAVEL_PX = 6;
+/**
+ * A single notch of an ordinary mouse wheel reports about a hundred pixels;
+ * a trackpad reports many small nudges instead. This much, added up, is one
+ * step either way.
+ */
+const WHEEL_STEP_PX = 50;
 
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
@@ -67,6 +80,15 @@ export class Controls {
   private leftMouseDownAt: number | null = null;
   /** Where the screen a left click landed, until `takeClickPoint` reads it. */
   private pendingClickPoint: { x: number; y: number } | null = null;
+  /** Where the cursor last was over the game, for a piece being placed to follow. */
+  private pointer: { x: number; y: number } | null = null;
+  /** When the right button went down, and how far the mouse has moved since, to tell a tap from a drag. */
+  private rightDownAt: number | null = null;
+  private rightTravelPx = 0;
+  private rightTapped = false;
+  /** Wheel movement not yet turned into whole steps, and the steps not yet read. */
+  private wheelRemainder = 0;
+  private wheelSteps = 0;
 
   private readonly canvas: HTMLCanvasElement;
 
@@ -84,6 +106,9 @@ export class Controls {
     // The browser's own right-click menu would otherwise pop up over the
     // game every time it is held to turn the camera.
     canvas.addEventListener('contextmenu', this.handleContextMenu);
+    // Not passive: the page itself must not scroll or zoom while the wheel
+    // turns a piece being placed.
+    canvas.addEventListener('wheel', this.handleWheel, { passive: false });
   }
 
   get isPointerLocked(): boolean {
@@ -211,6 +236,48 @@ export class Controls {
     return indices;
   }
 
+  /** Whether either Shift key is down right now. */
+  isShiftHeld(): boolean {
+    return this.held.has('ShiftLeft') || this.held.has('ShiftRight');
+  }
+
+  /**
+   * Where the cursor is over the game, in screen pixels, or null if it has
+   * not been over it yet. Stays put while the right button drags the camera,
+   * when the cursor is hidden and captured.
+   */
+  pointerPosition(): { x: number; y: number } | null {
+    return this.pointer;
+  }
+
+  /**
+   * Whole mouse-wheel steps since this was last asked, then reset: positive
+   * for rolling it towards you, negative for away.
+   */
+  takeWheelSteps(): number {
+    const steps = this.wheelSteps;
+    this.wheelSteps = 0;
+    return steps;
+  }
+
+  /** Whether the right button was tapped, rather than held to drag the camera, since this was last asked. */
+  takeRightClickTap(): boolean {
+    const tapped = this.rightTapped;
+    this.rightTapped = false;
+    return tapped;
+  }
+
+  /**
+   * Forget the left button's current press, as if it had already been let
+   * go: the click that places a piece is not also a swing, and holding it a
+   * moment too long must not start charging one either.
+   */
+  swallowLeftPress(): void {
+    this.held.delete(LEFT_MOUSE);
+    this.tapped.delete(LEFT_MOUSE);
+    this.leftMouseDownAt = null;
+  }
+
   /** How far the mouse has moved since this was last asked, then reset. */
   takeMouseDelta(): { x: number; y: number } {
     const delta = { x: this.mouseDeltaX, y: this.mouseDeltaY };
@@ -251,6 +318,7 @@ export class Controls {
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     window.removeEventListener('mouseup', this.handleMouseUp);
     this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
+    this.canvas.removeEventListener('wheel', this.handleWheel);
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
@@ -278,11 +346,21 @@ export class Controls {
     this.pointerLocked = document.pointerLockElement === this.canvas;
   };
 
-  /** Only accumulated during a right-button drag, when the mouse is captured - see `handleMouseDown`. */
+  /**
+   * Turns the camera only during a right-button drag, when the mouse is
+   * captured - see `handleMouseDown`. The rest of the time it just keeps
+   * track of where the cursor is.
+   */
   private readonly handleMouseMove = (event: MouseEvent): void => {
-    if (!this.pointerLocked) return;
+    if (!this.pointerLocked) {
+      this.pointer = { x: event.clientX, y: event.clientY };
+      return;
+    }
     this.mouseDeltaX += event.movementX;
     this.mouseDeltaY += event.movementY;
+    if (this.rightDownAt !== null) {
+      this.rightTravelPx += Math.abs(event.movementX) + Math.abs(event.movementY);
+    }
   };
 
   /**
@@ -296,7 +374,10 @@ export class Controls {
    * see decision 0050.
    */
   private readonly handleMouseDown = (event: MouseEvent): void => {
+    this.pointer = { x: event.clientX, y: event.clientY };
     if (event.button === 2) {
+      this.rightDownAt = performance.now();
+      this.rightTravelPx = 0;
       this.requestPointerLock();
       return;
     }
@@ -311,6 +392,14 @@ export class Controls {
   private readonly handleMouseUp = (event: MouseEvent): void => {
     if (event.button === 2) {
       if (this.pointerLocked) document.exitPointerLock();
+      if (
+        this.rightDownAt !== null &&
+        performance.now() - this.rightDownAt < RIGHT_TAP_MAX_MS &&
+        this.rightTravelPx < RIGHT_TAP_MAX_TRAVEL_PX
+      ) {
+        this.rightTapped = true;
+      }
+      this.rightDownAt = null;
       return;
     }
     this.held.delete(mouseCode(event.button));
@@ -321,6 +410,32 @@ export class Controls {
   private requestPointerLock(): void {
     void this.canvas.requestPointerLock();
   }
+
+  /** Adds up wheel movement into whole steps - see `WHEEL_STEP_PX`. */
+  private readonly handleWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    // Lines and pages are rare, but some mice report them instead of pixels.
+    const scale =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 33
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? 400
+          : 1;
+    const delta = event.deltaY * scale;
+    // One ordinary notch is always exactly one step, however many pixels
+    // this particular mouse says a notch is worth.
+    if (Math.abs(delta) >= WHEEL_STEP_PX) {
+      this.wheelSteps += Math.sign(delta);
+      this.wheelRemainder = 0;
+      return;
+    }
+    this.wheelRemainder += delta;
+    while (Math.abs(this.wheelRemainder) >= WHEEL_STEP_PX) {
+      const sign = Math.sign(this.wheelRemainder);
+      this.wheelSteps += sign;
+      this.wheelRemainder -= sign * WHEEL_STEP_PX;
+    }
+  };
 
   /** The game canvas never shows the browser's own right-click menu. */
   private readonly handleContextMenu = (event: MouseEvent): void => {

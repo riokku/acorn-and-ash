@@ -119,6 +119,12 @@ body {
   font-weight: 600;
 }
 
+/* A piece being placed that will not fit where it is pointed - see decision 0052. */
+.hud-hint-blocked {
+  border-color: #ff6f61;
+  color: #ffe3de;
+}
+
 /* What just happened to your line, just above the hint. */
 .hud-news {
   position: absolute;
@@ -327,6 +333,22 @@ body {
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px dashed rgba(58, 42, 20, 0.22);
+}
+
+/*
+ * The build menu's entries can be clicked, the same as pressing their number
+ * (see decision 0052). The panel itself stays click-through everywhere else,
+ * like the rest of the HUD.
+ */
+.hud-journal-entry-pickable {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+
+.hud-journal-entry-pickable:hover {
+  background-color: rgba(58, 42, 20, 0.08);
 }
 
 .hud-journal-entry:last-child {

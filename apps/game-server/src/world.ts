@@ -168,7 +168,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
-    server.send(encodeBuiltProps(simulation.builtPropsList()));
+    server.send(this.builtPropsFor(simulation, playerKey));
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
@@ -216,10 +216,15 @@ export class World extends DurableObject<WorldEnv> {
       return;
     }
     if (decoded.type === 'build') {
-      // Unlike crafting this still depends on where the player is and which
-      // way they are facing, so it waits for the next tick rather than
-      // settling immediately - the tick loop already has both to hand.
-      simulation.requestBuild(attachment.netId, decoded.kind);
+      // Unlike crafting this still depends on where the player is - the spot
+      // has to be in reach - so it waits for the next tick rather than
+      // settling immediately; the tick loop already has that to hand.
+      simulation.requestBuild(attachment.netId, {
+        kind: decoded.kind,
+        x: decoded.x,
+        z: decoded.z,
+        yaw: decoded.yaw,
+      });
       return;
     }
     if (decoded.type === 'useItem') {
@@ -452,7 +457,7 @@ export class World extends DurableObject<WorldEnv> {
     if (events.length === 0) return;
 
     for (const event of events) this.writeBuiltProp(event.prop, event.ownerKey);
-    this.broadcast(encodeBuiltProps(simulation.builtPropsList()));
+    this.broadcastBuiltProps(simulation);
     this.sendPacks(simulation, new Set(events.map((event) => event.netId)));
   }
 
@@ -607,7 +612,7 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.extinguishBurnedOutCampfires(nowMs);
     if (events.length === 0) return;
 
-    this.broadcast(encodeBuiltProps(simulation.builtPropsList()));
+    this.broadcastBuiltProps(simulation);
     for (const event of events) {
       this.writeCampfireLitState(event.propId, simulation.campfireLitUntilMsFor(event.propId));
     }
@@ -696,6 +701,26 @@ export class World extends DurableObject<WorldEnv> {
   private announceEquipped(simulation: WorldSimulation): void {
     if (simulation.drainEquipEvents().length === 0) return;
     this.broadcast(encodeEquipped(simulation.equippedList()));
+  }
+
+  /**
+   * Everything built, to everybody - each with their own copy, since whether
+   * a piece is theirs travels with it (see `BuiltPropView`).
+   */
+  private broadcastBuiltProps(simulation: WorldSimulation): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      this.trySend(ws, this.builtPropsFor(simulation, attachment.playerKey));
+    }
+  }
+
+  /** The built-prop list as this player should hear it, their own pieces marked. */
+  private builtPropsFor(simulation: WorldSimulation, playerKey: string | null): ArrayBuffer {
+    return encodeBuiltProps(
+      simulation.builtPropsList(),
+      (propId) => playerKey !== null && simulation.builtPropOwner(propId) === playerKey,
+    );
   }
 
   private broadcast(payload: ArrayBuffer, except?: WebSocket): void {
@@ -927,6 +952,9 @@ export class World extends DurableObject<WorldEnv> {
     // means unlit - true of everything built before this existed, which is
     // exactly right, and of every non-campfire kind, forever.
     this.addColumn('built_props', 'lit_until_ms', 'INTEGER');
+    // Which way a piece was turned when placed. Null for everything built
+    // before pieces could be turned, which all faced the same way - zero.
+    this.addColumn('built_props', 'yaw', 'REAL');
     // What a knockout buries, until it is dug back up - unlike built props,
     // this one is deleted once its reason for existing is gone.
     sql.exec(`CREATE TABLE IF NOT EXISTS buried_caches (
@@ -1094,7 +1122,8 @@ export class World extends DurableObject<WorldEnv> {
         z: number;
         owner_key: string | null;
         lit_until_ms: number | null;
-      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms FROM built_props')
+        yaw: number | null;
+      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw FROM built_props')
       .toArray();
     for (const row of rows) {
       const kind = buildableKindFromIndex(row.kind_index);
@@ -1106,6 +1135,7 @@ export class World extends DurableObject<WorldEnv> {
         kind,
         x: row.x,
         z: row.z,
+        yaw: row.yaw ?? 0,
         // Restored as lit even if this moment has already passed - the same
         // way a felled tree is restored as felled regardless of whether it is
         // due back - and corrected within the first tick after waking by
@@ -1119,18 +1149,20 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
-   * A campfire's identity (kind, x, z) is never updated once placed, so this
-   * is always a fresh insert - whether it is currently lit is a separate,
-   * mutable fact, updated afterwards by `writeCampfireLitState`.
+   * A built prop's identity (kind, x, z, yaw) is never updated once placed,
+   * so this is always a fresh insert - whether a campfire is currently lit
+   * is a separate, mutable fact, updated afterwards by
+   * `writeCampfireLitState`.
    */
   private writeBuiltProp(prop: BuiltProp, ownerKey: string | null): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO built_props (id, kind_index, x, z, built_at_ms, owner_key) VALUES (?, ?, ?, ?, ?, ?) ' +
-        'ON CONFLICT(id) DO NOTHING',
+      'INSERT INTO built_props (id, kind_index, x, z, yaw, built_at_ms, owner_key) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
       prop.id,
       buildableKindIndex(prop.kind),
       prop.x,
       prop.z,
+      prop.yaw,
       Date.now(),
       ownerKey,
     );

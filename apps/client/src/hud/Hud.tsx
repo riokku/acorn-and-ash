@@ -14,6 +14,7 @@ import {
   isFood,
   recipeFor,
   roomFor,
+  type BuildableKindId,
   type ItemId,
   type Recipe,
 } from '@acorn/shared';
@@ -31,6 +32,7 @@ interface HudProps {
   readonly onPlay: () => void;
   readonly onToggleInventory: () => void;
   readonly onUseItem: (item: ItemId) => void;
+  readonly onPickBuildable: (kind: BuildableKindId) => void;
   readonly onHotbarSlotsChange: (next: HotbarPins) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
@@ -41,6 +43,7 @@ export function Hud({
   onPlay,
   onToggleInventory,
   onUseItem,
+  onPickBuildable,
   onHotbarSlotsChange,
   initialPreferences,
   onSettingsChange,
@@ -79,6 +82,10 @@ export function Hud({
           title="Things I can build"
           entries={buildEntries(state)}
           closeHint="Pick one below, or B to close"
+          onPick={(index) => {
+            const kind = BUILDABLE_KIND_ORDER[index - 1];
+            if (kind !== undefined) onPickBuildable(kind);
+          }}
         />
       ) : null}
 
@@ -138,7 +145,9 @@ export function Hud({
           className={
             state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
               ? 'hud-hint hud-hint-urgent'
-              : 'hud-hint'
+              : (state.placing?.refusal ?? null) !== null && !state.buildMenuOpen
+                ? 'hud-hint hud-hint-blocked'
+                : 'hud-hint'
           }
         >
           {hint(state)}
@@ -287,10 +296,13 @@ function JournalPanel({
   title,
   entries,
   closeHint,
+  onPick,
 }: {
   title: string;
   entries: readonly RecipeEntry[];
   closeHint: string;
+  /** Clicking an entry does the same as pressing its number. Absent, entries are not clickable. */
+  onPick?: (index: number) => void;
 }): React.JSX.Element {
   return (
     <div className="hud-journal">
@@ -299,7 +311,16 @@ function JournalPanel({
         <span className="hud-journal-closehint">{closeHint}</span>
       </div>
       {entries.map((entry) => (
-        <div className="hud-journal-entry" key={entry.index}>
+        <div
+          className={
+            onPick === undefined
+              ? 'hud-journal-entry'
+              : 'hud-journal-entry hud-journal-entry-pickable'
+          }
+          key={entry.index}
+          onClick={onPick === undefined ? undefined : () => onPick(entry.index)}
+          role={onPick === undefined ? undefined : 'button'}
+        >
           <div className="hud-journal-stamp">{entry.icon}</div>
           <div className="hud-journal-entry-main">
             <div className="hud-journal-entry-name">
@@ -358,6 +379,8 @@ export function hint(state: HudState): string {
   // stays open until a pick closes it or its own key does. Only one is ever
   // open at once, so the order between them here never actually matters.
   if (state.buildMenuOpen) return buildMenuHint();
+  // The same goes for a piece picked from it and being placed.
+  if (state.placing !== null) return placingHint(state.placing);
   if (state.craftMenuOpen) return craftMenuHint();
   // Rooted to the spot until it resolves, so there is nothing else to offer
   // right now - the same reasoning a menu gets, just shorter-lived.
@@ -427,6 +450,17 @@ function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
 /** The journal panel itself now shows every choice by name, so this stays short. */
 function buildMenuHint(): string {
   return 'Pick one below, or B to close';
+}
+
+/**
+ * What is stopping a click from placing the piece, if anything - otherwise
+ * how to place it, turn it, and put it away.
+ */
+function placingHint(placing: NonNullable<HudState['placing']>): string {
+  if (placing.refusal !== null) return `${placing.refusal} · Esc to stop`;
+  const name = placing.name.toLowerCase();
+  const free = placing.canSnap ? ' · hold Shift to place freely' : '';
+  return `Click to place the ${name} · scroll to turn${free} · Esc to stop`;
 }
 
 function craftMenuHint(): string {

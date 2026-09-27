@@ -31,6 +31,7 @@ const BASE_STATE: HudState = {
   aimedAnimal: null,
   canBuild: false,
   buildMenuOpen: false,
+  placing: null,
   craftMenuOpen: false,
   canCast: false,
   fishing: null,
@@ -112,6 +113,35 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'axe', count: 1 }],
     };
     expect(hint(state)).toBe('Pick one below, or B to close');
+  });
+
+  it('says how to place a piece, turn it and put it away while one is out', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      placing: { name: 'Campfire', refusal: null, canSnap: false },
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+      carrying: [{ item: 'axe', count: 1 }],
+      equippedItem: 'axe',
+    };
+    expect(hint(state)).toBe('Click to place the campfire · scroll to turn · Esc to stop');
+  });
+
+  it('mentions Shift for a fence, which snaps onto others', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      placing: { name: 'Fence', refusal: null, canSnap: true },
+    };
+    expect(hint(state)).toBe(
+      'Click to place the fence · scroll to turn · hold Shift to place freely · Esc to stop',
+    );
+  });
+
+  it('says why a piece will not go where it is pointed', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      placing: { name: 'Fence', refusal: 'Too close to the oak', canSnap: true },
+    };
+    expect(hint(state)).toBe('Too close to the oak · Esc to stop');
   });
 
   it('walks you through the craft menu once it is open, ahead of everything else', () => {

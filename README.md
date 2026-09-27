@@ -72,6 +72,9 @@ The game is online-only. Every world runs on the server.
 > carrying and drag any of it onto the bar. Only a right-button drag turns
 > the camera now: a left click on a tree, an animal or the water turns your
 > character to face it instead, leaving the view exactly where you put it.
+> Building shows a see-through preview first now, following your mouse,
+> green where it fits and red where it doesn't - turn it with the wheel,
+> click to place it, and fence pieces snap together end to end.
 > See [the roadmap](#roadmap).
 
 ## Controls
@@ -86,7 +89,11 @@ The game is online-only. Every world runs on the server.
 | `C`                               | Open the craft menu                                            |
 | `1` / `2` / `3` (craft menu open) | Craft an axe / fishing rod / torch                             |
 | `B`                               | Open the build menu                                            |
-| `1`–`4` (build menu open)         | Build a campfire, cabin, flower bed or lantern                 |
+| `1`–`6` (build menu open)         | Pick a campfire, cabin, flower bed, lantern, fence or path     |
+| Left mouse (piece picked)         | Place it where its preview stands                              |
+| Mouse wheel (piece picked)        | Turn it                                                        |
+| `Shift` (held, fence picked)      | Place it freely instead of joining it onto another fence       |
+| `Esc` or right mouse tap          | Put the piece away                                             |
 | `I`, or the bag button            | Open or close your pack                                        |
 | Left mouse (click)                | Turn to face what you click, and chop, cast, hook or fight it  |
 | Left mouse (held)                 | Charge a heavy attack                                          |
@@ -341,8 +348,21 @@ production use the real wait.
 
 ### Building
 
-Press `B` to open a small menu of what you can place just in front of you,
-anywhere in the clearing, then a number to pick one:
+Press `B` to open a small menu of what you can place anywhere in the
+clearing, then a number to pick one - or click it. A see-through preview of
+it then follows your mouse across the ground, up to five metres from you,
+with an outline of the room it needs: green where it fits, red where it
+doesn't, and the hint along the bottom says why ("Too close to the oak",
+"Need 2 more logs"). Roll the mouse wheel to turn it, and click to place
+it. A fence piece snaps onto the end of one you have already built, so a
+line joins up cleanly and a corner comes out square - hold `Shift` to place
+one freely instead. Everything keeps a little breathing room from trees,
+rocks, the pond and other pieces, except fence pieces joined end to end and
+garden path stones laid side by side. After placing a fence or a path
+stone the preview stays out for the next, until you run out or press `Esc`
+(or tap the right mouse button); anything you can only have one of puts
+itself away once placed. See
+[decision 0052](docs/decisions/0052-a-build-preview-that-follows-the-mouse.md).
 
 - **Campfire** - four logs, exactly what felling the landmark oak by the axe
   stump pays out. Real modeled art, and you can light it: press `E` once
@@ -368,8 +388,7 @@ anywhere in the clearing, then a number to pick one:
   flowers are. Not capped either, for the same reason a fence isn't - a
   trail is only one stone if you can only ever place one.
 
-The hint at the bottom tells you when the spot you're facing is clear and
-your pack can afford whatever you have picked. What each one costs lives in
+What each one costs lives in
 [`packages/shared/src/data/buildables.ts`](packages/shared/src/data/buildables.ts).
 See [decision 0020](docs/decisions/0020-a-campfire-you-can-build.md) for the
 campfire and placement itself,

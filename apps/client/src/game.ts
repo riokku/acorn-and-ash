@@ -5,6 +5,8 @@ import {
   ANIMAL_KINDS,
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
+  BUILD_ROTATION_STEP,
+  CLEARING_TREE_LINE_INNER,
   CAST_COOLDOWN_SECONDS,
   CHARGE_SECONDS,
   DEFAULT_CHARACTER,
@@ -21,8 +23,8 @@ import {
   SnapshotFlag,
   TINT_COLORS,
   animalInReach,
-  buildSpotFor,
   buildTestClearing,
+  buildableFootprint,
   buildWilderness,
   castLanding,
   choppingRuleFor,
@@ -36,6 +38,7 @@ import {
   nearestCampfire,
   pickupInReach,
   replaceCollider,
+  roundFootprint,
   stumpColliderFor,
   treeAtGeneration,
   treeInReach,
@@ -43,9 +46,10 @@ import {
   type AnimalCaught,
   type AnimalKind,
   type AnimalKindId,
+  type BuildRequest,
   type BuildableKindId,
-  type BuildBlocker,
-  type BuiltProp,
+  type BuiltPropView,
+  type Footprint,
   type BuriedCacheView,
   type CacheEvent,
   type CharacterId,
@@ -98,6 +102,8 @@ import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
+import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
+import { planPlacement, type PlacementPlan } from './building/placement';
 import type { FishingPhase, HudStore } from './hud/store';
 import { compassToOwnCache, type Compass } from './hud/cache-compass';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
@@ -141,6 +147,24 @@ const CLICK_CANOPY_FRACTION = 0.8;
 /** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
 const CLICK_ANIMAL_RADIUS = 0.55;
 const CLICK_ANIMAL_HEIGHT = 0.9;
+/**
+ * How long a piece just placed counts as standing, for the preview's sake,
+ * before the server has said so itself - long enough for any sensible round
+ * trip, short enough that a piece the server refused stops getting in the way.
+ */
+const PENDING_PLACEMENT_MS = 3000;
+
+/** A piece being placed: what it is, how it is turned, and its preview. */
+interface Placing {
+  kind: BuildableKindId;
+  /** Which way the mouse wheel has turned it. */
+  yaw: number;
+  readonly ghost: BuildGhost;
+  /** Where it would go and whether it can, as of this frame. */
+  plan: PlacementPlan;
+  /** Whether at least one has been placed since picking it, for knowing when materials ran out. */
+  placedAny: boolean;
+}
 
 /** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
 function isAnimalEntity(entity: SnapshotEntity): boolean {
@@ -224,7 +248,24 @@ export interface GameDebug {
   /** Whether the craft menu (opened with C) is currently showing. */
   craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
-  builtProps(): Array<{ id: number; kind: string; x: number; z: number; lit: boolean }>;
+  builtProps(): Array<{
+    id: number;
+    kind: string;
+    x: number;
+    z: number;
+    yaw: number;
+    lit: boolean;
+    yours: boolean;
+  }>;
+  /**
+   * The piece being placed, if any: which kind, where its preview stands
+   * right now, and why a click would not place it, if it would not.
+   */
+  buildPreview(): {
+    kind: string;
+    spot: { x: number; z: number; yaw: number } | null;
+    refusal: string | null;
+  } | null;
   /** Every cache currently buried, wherever this browser last heard it was. */
   buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
   /**
@@ -286,7 +327,16 @@ export class Game {
     number,
     Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
   >();
-  private builtProps: readonly BuiltProp[] = [];
+  private builtProps: readonly BuiltPropView[] = [];
+  /** The piece being placed, if any - see decision 0052. */
+  private placing: Placing | null = null;
+  /**
+   * Pieces this player has just placed, until the server says they are built
+   * (or `PENDING_PLACEMENT_MS` passes): counted as standing already, so a
+   * second click on the same spot shows red at once, and the next fence
+   * piece can snap onto the one just laid without waiting for the round trip.
+   */
+  private pendingPlacements: { readonly request: BuildRequest; readonly sentAt: number }[] = [];
   private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
   private buriedCaches: readonly BuriedCacheView[] = [];
   /** Whether a cache of our own is close enough right now to dig up. */
@@ -309,9 +359,12 @@ export class Game {
    * drag turns the camera (see decision 0051).
    */
   private aimYaw: number | null = null;
-  /** Scratch objects for `aimTowardsClickPoint`, reused every click rather than allocated fresh. */
+  /** Scratch objects for `aimTowardsClickPoint` and the build preview, reused rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
+  /** The clearing's ground, which is flat at zero everywhere a piece can be placed. */
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private readonly groundHit = new THREE.Vector3();
 
   private setup: RendererSetup | null = null;
   private camera: FollowCamera | null = null;
@@ -439,7 +492,8 @@ export class Game {
    */
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
-    if (this.craftMenuOpen) this.craftMenuOpen = false;
+    if (this.placing !== null) this.stopPlacing();
+    else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
     else if (this.inventoryOpen) this.inventoryOpen = false;
     else this.setPlaying(false);
@@ -450,6 +504,7 @@ export class Game {
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
       this.controls?.releaseAll();
+      this.stopPlacing();
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
       this.inventoryOpen = false;
@@ -466,6 +521,7 @@ export class Game {
   toggleInventory(): void {
     this.inventoryOpen = !this.inventoryOpen;
     if (this.inventoryOpen) {
+      this.stopPlacing();
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
     }
@@ -488,6 +544,15 @@ export class Game {
     if (!ITEM_KINDS[item].equippable) return;
     if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
     this.connection?.sendUseItem(item);
+  }
+
+  /**
+   * Start placing one of these, the same as pressing its number with the
+   * build menu open - called when an entry in that menu is clicked.
+   */
+  pickBuildable(kind: BuildableKindId): void {
+    this.buildMenuOpen = false;
+    this.startPlacing(kind);
   }
 
   /** Called from the Settings menu's sensitivity slider - takes effect on the very next frame. */
@@ -546,6 +611,14 @@ export class Game {
       buildMenuOpen: () => this.buildMenuOpen,
       craftMenuOpen: () => this.craftMenuOpen,
       builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
+      buildPreview: () =>
+        this.placing === null
+          ? null
+          : {
+              kind: this.placing.kind,
+              spot: this.placing.plan.spot === null ? null : { ...this.placing.plan.spot },
+              refusal: this.placing.plan.refusal,
+            },
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
       pickups: () =>
         (this.clearing?.pickups ?? []).map((entry) => ({
@@ -735,6 +808,17 @@ export class Game {
       }
       case 'builtProps': {
         this.builtProps = message.props;
+        // Anything just placed that has now come back as built stops being
+        // pending - it is in the list for real.
+        this.pendingPlacements = this.pendingPlacements.filter(
+          (pending) =>
+            !message.props.some(
+              (prop) =>
+                prop.kind === pending.request.kind &&
+                Math.abs(prop.x - pending.request.x) < 0.05 &&
+                Math.abs(prop.z - pending.request.z) < 0.05,
+            ),
+        );
         this.applyBuiltProps();
         break;
       }
@@ -1052,6 +1136,7 @@ export class Game {
       // client that joins mid-burn should see the fire going from the start.
       if ('setLit' in built) built.setLit(prop.lit);
       built.group.position.set(prop.x, 0, prop.z);
+      built.group.rotation.y = prop.yaw;
       this.scene.add(built.group);
       this.builtMeshes.set(prop.id, built);
     }
@@ -1180,9 +1265,23 @@ export class Game {
     }
     // A left click on the world turns the character - never the camera - to
     // face whatever is under the cursor, before the tap that comes with it is
-    // read below as a swing or a cast. See decision 0051.
+    // read below as a swing or a cast. See decision 0051. While a piece is
+    // being placed, the same click places it instead, and is never a swing.
     const clickPoint = controls.takeClickPoint();
-    if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
+    if (this.placing !== null) {
+      if (clickPoint !== null) {
+        controls.swallowLeftPress();
+        this.placePiece();
+      }
+      this.turnPiece(controls.takeWheelSteps());
+      if (controls.takeRightClickTap()) this.stopPlacing();
+    } else {
+      if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
+      // Only a piece being placed has any use for either; left over from
+      // before one was picked, they would act on it the moment it was.
+      controls.takeWheelSteps();
+      controls.takeRightClickTap();
+    }
 
     // Read ahead of anything below that might forget taps for a produced
     // movement tick, so a hotbar, craft or build key pressed this frame is
@@ -1195,7 +1294,9 @@ export class Game {
     this.handleInventoryToggleInput(controls);
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
-    if (!this.buildMenuOpen && !this.craftMenuOpen) this.handleHotbarInput(controls);
+    if (!this.buildMenuOpen && !this.craftMenuOpen && this.placing === null) {
+      this.handleHotbarInput(controls);
+    }
 
     // If the server never answers, let the player walk about on their own rather
     // than staring at a loading screen.
@@ -1225,26 +1326,152 @@ export class Game {
   /**
    * B opens or closes the build menu, closing the craft menu if that was open
    * instead - only one ever shows at once, so a digit key always means one
-   * thing. While it is open, a digit key picks from it and sends the
-   * request - the server still places it wherever this player currently
-   * stands and looks.
+   * thing. While it is open, a digit key picks from it and starts placing
+   * that piece (see decision 0052); while a piece is being placed, the same
+   * digit keys swap it for another without going back to the menu.
    */
   private handleBuildMenuInput(controls: Controls): void {
     if (controls.takeBuildMenuToggle()) {
       this.buildMenuOpen = !this.buildMenuOpen;
       if (this.buildMenuOpen) {
+        this.stopPlacing();
         this.craftMenuOpen = false;
         this.inventoryOpen = false;
       }
     }
-    if (!this.buildMenuOpen) return;
+    if (!this.buildMenuOpen && this.placing === null) return;
     for (const index of controls.takeBuildTaps()) {
       const kind = BUILDABLE_KIND_ORDER[index];
       if (kind === undefined) continue;
-      this.connection?.sendBuild(kind);
       this.buildMenuOpen = false;
+      this.startPlacing(kind);
       break;
     }
+  }
+
+  /**
+   * Pick up a piece to place: its preview follows the mouse from the next
+   * frame on. Swapping one piece for another keeps the way it was turned;
+   * a fresh one starts squared up to the camera, so a fence runs across the
+   * view and a cabin's door faces the player.
+   */
+  private startPlacing(kind: BuildableKindId): void {
+    const yaw =
+      this.placing?.yaw ??
+      Math.round((this.camera?.look.yaw ?? 0) / BUILD_ROTATION_STEP) * BUILD_ROTATION_STEP;
+    this.stopPlacing();
+    this.craftMenuOpen = false;
+    this.inventoryOpen = false;
+
+    const ghost = createBuildGhost(createBuiltMesh(kind), buildableFootprint(kind, 0, 0, 0));
+    this.scene.add(ghost.group);
+    this.placing = {
+      kind,
+      yaw,
+      ghost,
+      plan: { spot: null, refusal: null, snapped: false, affordable: true },
+      placedAny: false,
+    };
+  }
+
+  /** Put the piece being placed away, if there is one. */
+  private stopPlacing(): void {
+    const placing = this.placing;
+    if (placing === null) return;
+    this.scene.remove(placing.ghost.group);
+    placing.ghost.dispose();
+    this.placing = null;
+  }
+
+  /** The mouse wheel turns the piece being placed, a step at a time. */
+  private turnPiece(steps: number): void {
+    if (this.placing === null || steps === 0) return;
+    this.placing.yaw += steps * BUILD_ROTATION_STEP;
+  }
+
+  /**
+   * Ask the server to build the piece being placed exactly where its preview
+   * stands - only if the preview says it fits, since the server would only
+   * refuse it anyway. A one-per-player piece puts the preview away once
+   * placed; anything else stays out to place another (see decision 0052).
+   */
+  private placePiece(): void {
+    const placing = this.placing;
+    if (placing === null) return;
+    const { spot, refusal } = placing.plan;
+    if (spot === null || refusal !== null) return;
+
+    const request: BuildRequest = { kind: placing.kind, x: spot.x, z: spot.z, yaw: spot.yaw };
+    this.connection?.sendBuild(request);
+    this.pendingPlacements.push({ request, sentAt: performance.now() });
+    placing.placedAny = true;
+    if (BUILDABLE_KINDS[placing.kind].capPerPlayer) this.stopPlacing();
+  }
+
+  /**
+   * Move the preview to wherever the mouse points this frame, and work out
+   * whether it fits. Runs after the camera has moved, so the preview never
+   * trails a frame behind the view.
+   */
+  private updatePlacement(camera: FollowCamera, player: LocalPlayer): void {
+    const placing = this.placing;
+    const clearing = this.clearing;
+    if (placing === null || clearing === null) return;
+
+    const now = performance.now();
+    this.pendingPlacements = this.pendingPlacements.filter(
+      (pending) => now - pending.sentAt < PENDING_PLACEMENT_MS,
+    );
+
+    placing.plan = planPlacement({
+      kind: placing.kind,
+      yaw: placing.yaw,
+      mouse: this.groundUnderPointer(camera),
+      player: player.motion.position,
+      snap: !(this.controls?.isShiftHeld() ?? false),
+      carrying: this.carrying,
+      built: this.builtProps,
+      pending: this.pendingPlacements.map((pending) => pending.request),
+      scenery: this.sceneryFootprints(),
+      water: clearing.water,
+    });
+
+    // Placed at least one and there is nothing left to pay for the next:
+    // done, the same as pressing Escape - but only once the server has
+    // caught up, so the last piece's own cost is not mistaken for running out.
+    if (placing.placedAny && !placing.plan.affordable && this.pendingPlacements.length === 0) {
+      this.stopPlacing();
+      return;
+    }
+
+    const { spot, refusal } = placing.plan;
+    if (spot === null) placing.ghost.hide();
+    else placing.ghost.show(spot.x, spot.z, spot.yaw, refusal === null);
+  }
+
+  /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
+  private groundUnderPointer(camera: FollowCamera): { x: number; z: number } | null {
+    const pointer = this.controls?.pointerPosition() ?? null;
+    if (pointer === null) return null;
+    this.clickNdc.set(
+      (pointer.x / window.innerWidth) * 2 - 1,
+      -(pointer.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const hit = this.clickRaycaster.ray.intersectPlane(this.groundPlane, this.groundHit);
+    return hit === null ? null : { x: hit.x, z: hit.z };
+  }
+
+  /** Every tree, rock and stump, as the same footprints the server checks a build against. */
+  private sceneryFootprints(): Footprint[] {
+    return this.standingProps.map((prop) =>
+      roundFootprint(
+        prop.x,
+        prop.z,
+        PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+        this.isFelled(prop.id) ? 'stump' : PROP_KINDS[prop.kind].displayName.toLowerCase(),
+      ),
+    );
   }
 
   /**
@@ -1401,8 +1628,12 @@ export class Game {
     // While the float is under on this screen, every input says so: the server
     // counts the time to click from the first of them, so a slow connection
     // does not shorten it.
+    // The left button places a piece while one is out, so it is never also
+    // a swing or a charge then.
+    const placingMask = this.placing === null ? ~0 : ~(PlayerButton.Swing | PlayerButton.Charge);
     const buttons =
-      (this.controls?.buttons() ?? 0) | (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+      ((this.controls?.buttons() ?? 0) & placingMask) |
+      (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
 
     // A fresh press starts the same local timer the server's own charge
     // runs on - only worth starting if a swing would even do anything, which
@@ -1453,6 +1684,7 @@ export class Game {
     character.update(deltaSeconds);
 
     camera.update(position, deltaSeconds, [wilderness.cameraBlockers, clearing.cameraBlockers]);
+    this.updatePlacement(camera, player);
 
     // Only a hint. The server decides who actually gets it.
     const reachable =
@@ -1549,42 +1781,18 @@ export class Game {
       castLanding(player.motion.position, aimYaw, this.clearing.water) !== null;
 
     // Its own key, so it never competes with a swing or a cast for the click.
-    const clearingData = this.clearing;
+    // Offered whenever something could be afforded and the player is inside
+    // the clearing, where building happens - exactly where it fits is the
+    // preview's job once a piece is picked (see decision 0052).
     const canAfford = (kind: BuildableKindId): boolean =>
       BUILDABLE_KINDS[kind].costs.every(
         (cost) =>
           (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
       );
-    const buildBlockers: BuildBlocker[] =
-      clearingData === null
-        ? []
-        : [
-            ...this.standingProps.map((prop) => ({
-              x: prop.x,
-              z: prop.z,
-              footprintRadius: PROP_KINDS[prop.kind].colliderRadius * prop.scale,
-            })),
-            ...this.builtProps.map((prop) => ({
-              x: prop.x,
-              z: prop.z,
-              footprintRadius: BUILDABLE_KINDS[prop.kind].footprintRadius,
-            })),
-          ];
-    // Any one of them being placeable right now is enough to offer the hint -
-    // the build menu is where you pick which.
     this.canBuild =
-      clearingData !== null &&
-      BUILDABLE_KIND_ORDER.some(
-        (kind) =>
-          canAfford(kind) &&
-          buildSpotFor(
-            player.motion.position,
-            aimYaw,
-            BUILDABLE_KINDS[kind].footprintRadius,
-            clearingData.water,
-            buildBlockers,
-          ) !== null,
-      );
+      this.clearing !== null &&
+      Math.hypot(player.motion.position.x, player.motion.position.z) < CLEARING_TREE_LINE_INNER &&
+      BUILDABLE_KIND_ORDER.some(canAfford);
 
     // Keep the shadow map centred on the player instead of on the origin.
     const sun = this.daylight?.sun;
@@ -1672,6 +1880,14 @@ export class Game {
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       canBuild: this.canBuild,
+      placing:
+        this.placing === null
+          ? null
+          : {
+              name: BUILDABLE_KINDS[this.placing.kind].displayName,
+              refusal: this.placing.plan.refusal,
+              canSnap: this.placing.kind === 'fence',
+            },
       playing: this.playing,
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,

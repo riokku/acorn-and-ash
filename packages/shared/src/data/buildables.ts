@@ -15,8 +15,18 @@ export interface BuildableKind {
   readonly id: BuildableKindId;
   readonly displayName: string;
   readonly costs: readonly RecipeCost[];
-  /** How much room it needs, so two of them - or one and a tree - don't overlap. */
+  /**
+   * How much room it needs, so two of them - or one and a tree - don't
+   * overlap. For something round, its radius. For something long and thin
+   * (see `footprintHalfLength`), how far it reaches either side of its line.
+   */
   readonly footprintRadius: number;
+  /**
+   * Present on a long, thin piece like a fence: its footprint is a line this
+   * far either side of its middle, along its own length, rather than a circle.
+   * Its ends are where another piece of the same kind joins on.
+   */
+  readonly footprintHalfLength?: number;
   /**
    * Whether this is the kind of thing a player calls home: where they start
    * next time, instead of the shared clearing spawn or wherever they last
@@ -89,7 +99,11 @@ export const BUILDABLE_KINDS = {
     // its own, so the real cost of a fence is however many of these a player
     // places in a row, not this number.
     costs: [{ item: 'log', amount: 2 }],
-    footprintRadius: 0.6,
+    // A line from post to post, not a circle: the posts stand 1.4 m apart,
+    // and a circle that covered both would keep everything a metre away
+    // from the middle of the rails.
+    footprintRadius: 0.12,
+    footprintHalfLength: 0.7,
     isHome: false,
     capPerPlayer: false,
     triangleBudget: 600,

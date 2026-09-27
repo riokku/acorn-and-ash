@@ -75,6 +75,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     () => game.resume(),
     () => game.toggleInventory(),
     (item) => game.useItem(item),
+    (kind) => game.pickBuildable(kind),
     (nextHotbarSlots) => {
       writeHotbarLayout(window.localStorage, nextHotbarSlots);
       hud.publish({ hotbarSlots: nextHotbarSlots });
