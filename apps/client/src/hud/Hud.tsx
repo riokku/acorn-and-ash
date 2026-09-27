@@ -14,17 +14,24 @@ import {
   isFood,
   recipeFor,
   roomFor,
+  type ItemId,
   type Recipe,
 } from '@acorn/shared';
 
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
+import { InventoryPanel, InventoryToggleButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
+import { Tooltip } from './Tooltip';
+import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
 
 interface HudProps {
   readonly store: HudStore;
   readonly onPlay: () => void;
+  readonly onToggleInventory: () => void;
+  readonly onUseItem: (item: ItemId) => void;
+  readonly onHotbarSlotsChange: (next: HotbarPins) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
 }
@@ -32,6 +39,9 @@ interface HudProps {
 export function Hud({
   store,
   onPlay,
+  onToggleInventory,
+  onUseItem,
+  onHotbarSlotsChange,
   initialPreferences,
   onSettingsChange,
 }: HudProps): React.JSX.Element {
@@ -72,25 +82,41 @@ export function Hud({
         />
       ) : null}
 
-      {state.ready && state.pointerLocked && state.ownCacheCompass !== null ? (
+      {state.ready && state.playing && state.ownCacheCompass !== null ? (
         <CacheCompass compass={state.ownCacheCompass} />
       ) : null}
 
-      {state.ready && state.pointerLocked ? <Hotbar state={state} /> : null}
+      {state.ready && state.playing ? (
+        <>
+          <Hotbar state={state} onUseItem={onUseItem} onHotbarSlotsChange={onHotbarSlotsChange} />
+          <InventoryToggleButton onToggle={onToggleInventory} />
+          <InventoryPanel
+            open={state.inventoryOpen}
+            entries={state.carrying}
+            onUseItem={onUseItem}
+            onUnpinFromHotbar={(slotIndex) =>
+              onHotbarSlotsChange(clearSlot(state.hotbarSlots, slotIndex))
+            }
+          />
+        </>
+      ) : null}
 
-      {state.ready && !state.pointerLocked ? (
+      {state.ready && !state.playing ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
           <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
           <p>
             {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
           </p>
-          <p>WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go</p>
+          <p>
+            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · Esc
+            to pause
+          </p>
         </div>
       ) : null}
 
       {state.ready &&
-      state.pointerLocked &&
+      state.playing &&
       (state.fishingNews !== null ||
         state.healthNews !== null ||
         state.cacheNews !== null ||
@@ -107,7 +133,7 @@ export function Hud({
         </p>
       ) : null}
 
-      {state.ready && state.pointerLocked ? (
+      {state.ready && state.playing ? (
         <p
           className={
             state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
@@ -363,8 +389,8 @@ export function hint(state: HudState): string {
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   return (
-    'WASD to walk · Shift to sprint · Space to jump · mouse to look · Esc to let go · ' +
-    'C to craft · B to build'
+    'WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · ' +
+    'C to craft · B to build · I for your pack'
   );
 }
 
@@ -407,24 +433,34 @@ function craftMenuHint(): string {
   return 'Pick one below, or C to close';
 }
 
-const HOTBAR_SIZE = 6;
-
 /**
- * The row of slots along the bottom: whatever you are carrying, in pack
- * order, one slot per item kind up to six. Empty slots still show their
- * number, so which key does what never depends on what you happen to be
- * holding.
+ * The row of slots along the bottom, one per item kind up to six. A slot
+ * shows whatever has been dragged onto it from the pack, or failing that
+ * whatever wire order would put there - see `resolveHotbarSlots`. Empty
+ * slots still show their number, so which key does what never depends on
+ * what you happen to be holding.
  */
-function Hotbar({ state }: { state: HudState }): React.JSX.Element {
-  const slots = Array.from({ length: HOTBAR_SIZE }, (_, index) => state.carrying[index] ?? null);
+function Hotbar({
+  state,
+  onUseItem,
+  onHotbarSlotsChange,
+}: {
+  state: HudState;
+  onUseItem: (item: ItemId) => void;
+  onHotbarSlotsChange: (next: HotbarPins) => void;
+}): React.JSX.Element {
+  const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots);
   return (
     <div className="hotbar">
-      {slots.map((entry, index) => (
+      {resolved.map((item, index) => (
         <HotbarSlot
           key={index}
           slotNumber={index + 1}
-          entry={entry}
-          equipped={entry !== null && entry.item === state.equippedItem}
+          item={item}
+          count={state.carrying.find((entry) => entry.item === item)?.count ?? 0}
+          equipped={item !== null && item === state.equippedItem}
+          onUseItem={onUseItem}
+          onAssign={(dropped) => onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))}
         />
       ))}
     </div>
@@ -433,32 +469,69 @@ function Hotbar({ state }: { state: HudState }): React.JSX.Element {
 
 function HotbarSlot({
   slotNumber,
-  entry,
+  item,
+  count,
   equipped,
+  onUseItem,
+  onAssign,
 }: {
   slotNumber: number;
-  entry: HudState['carrying'][number] | null;
+  item: ItemId | null;
+  count: number;
   equipped: boolean;
+  onUseItem: (item: ItemId) => void;
+  onAssign: (item: ItemId) => void;
 }): React.JSX.Element {
-  const kind = entry === null ? null : ITEM_KINDS[entry.item];
+  const kind = item === null ? null : ITEM_KINDS[item];
   const usable = kind !== null && kind.equippable;
   const classes = ['hotbar-slot'];
   if (usable) classes.push('hotbar-slot-usable');
   if (equipped) classes.push('hotbar-slot-equipped');
+  if (item !== null && count === 0) classes.push('hotbar-slot-unavailable');
+
+  const label =
+    kind === null ? (
+      'Empty - drag an item here from your pack'
+    ) : (
+      <>
+        <strong>{kind.displayName}</strong>
+        {usable ? ` · click, drag, or press ${slotNumber}` : null}
+      </>
+    );
+
   return (
-    <div className={classes.join(' ')} title={kind?.displayName}>
-      <span className="hotbar-slot-key">{slotNumber}</span>
-      {kind !== null ? (
-        <ItemIcon
-          item={kind.id}
-          color={colorOf(kind.placeholderColor)}
-          className="hotbar-slot-icon"
-        />
-      ) : null}
-      {kind !== null && entry !== null && kind.maxCarry > 1 ? (
-        <span className="hotbar-slot-count">{entry.count}</span>
-      ) : null}
-    </div>
+    <Tooltip label={label}>
+      <div
+        className={classes.join(' ')}
+        draggable={item !== null}
+        onDragStart={(event) => {
+          if (item === null) return;
+          event.dataTransfer.setData('text/plain', item);
+          event.dataTransfer.setData(HOTBAR_SLOT_DRAG_TYPE, String(slotNumber - 1));
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const dropped = event.dataTransfer.getData('text/plain');
+          if (dropped !== '') onAssign(dropped as ItemId);
+        }}
+        onClick={() => {
+          if (item !== null) onUseItem(item);
+        }}
+      >
+        <span className="hotbar-slot-key">{slotNumber}</span>
+        {kind !== null && item !== null ? (
+          <ItemIcon
+            item={item}
+            color={colorOf(kind.placeholderColor)}
+            className="hotbar-slot-icon"
+          />
+        ) : null}
+        {kind !== null && kind.maxCarry > 1 && count > 0 ? (
+          <span className="hotbar-slot-count">{count}</span>
+        ) : null}
+      </div>
+    </Tooltip>
   );
 }
 
