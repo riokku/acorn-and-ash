@@ -95,13 +95,20 @@ const enterWorld = (identity: PlayerIdentity): void => {
   });
 };
 
-const unmountHome = mountHome(
-  homeContainer,
-  readIdentity(window.localStorage),
-  (identity) => {
-    unmountHome();
-    enterWorld(identity);
-  },
-  startingPreferences,
-  applyPreferences,
-);
+// The art gallery (see decision 0053) is its own small page: no server, no
+// Home screen, no HUD - just the game's art laid out in daylight to look at.
+// Loaded only when asked for, so playing never downloads it.
+if (new URLSearchParams(window.location.search).has('gallery')) {
+  void import('./gallery/gallery').then(({ startGallery }) => startGallery(canvas));
+} else {
+  const unmountHome = mountHome(
+    homeContainer,
+    readIdentity(window.localStorage),
+    (identity) => {
+      unmountHome();
+      enterWorld(identity);
+    },
+    startingPreferences,
+    applyPreferences,
+  );
+}

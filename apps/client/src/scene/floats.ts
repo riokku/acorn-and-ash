@@ -91,6 +91,9 @@ export class Floats {
     color: 0xd8432f,
     roughness: 0.5,
   });
+  /** A thin antenna standing up out of the float, red at the tip, so a bite is easy to see. */
+  private readonly antennaShape = new THREE.CylinderGeometry(0.006, 0.008, 0.11, 5);
+  private readonly antennaTip = new THREE.SphereGeometry(0.014, 6, 4);
   private readonly lineMaterial = new THREE.LineBasicMaterial({ color: 0xe8e4da });
   /** One metre of rod, laid along Z so it can be pointed with lookAt. */
   private readonly rodShape = new THREE.CylinderGeometry(0.016, 0.028, 1, 6);
@@ -116,7 +119,11 @@ export class Floats {
     const cap = new THREE.Mesh(this.floatCap, this.capMaterial);
     cap.position.y = 0.01;
     body.castShadow = true;
-    float.add(body, cap);
+    const antenna = new THREE.Mesh(this.antennaShape, this.bodyMaterial);
+    antenna.position.y = 0.09;
+    const tip = new THREE.Mesh(this.antennaTip, this.capMaterial);
+    tip.position.y = 0.145;
+    float.add(body, cap, antenna, tip);
     float.position.set(x, WATER_SURFACE_Y, z);
 
     const linePositions = new Float32Array(LINE_POINTS * 3);
@@ -212,6 +219,8 @@ export class Floats {
     this.ripples.length = 0;
     this.floatBody.dispose();
     this.floatCap.dispose();
+    this.antennaShape.dispose();
+    this.antennaTip.dispose();
     this.rippleShape.dispose();
     this.rodShape.dispose();
     this.rodMaterial.dispose();

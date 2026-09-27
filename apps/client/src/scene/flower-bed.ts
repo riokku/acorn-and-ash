@@ -1,11 +1,14 @@
 import * as THREE from 'three/webgpu';
 
-import { BUILDABLE_KINDS, ITEM_KINDS } from '@acorn/shared';
+import { ITEM_KINDS } from '@acorn/shared';
 
+import { paintedMaterial } from '../art/materials';
+import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { flowerModelParts } from './flower-models';
 
 /**
- * A flower bed: a low planter box with a handful of blooms on top. Each
+ * A flower bed (see decision 0053): a low planter of stained boards with a
+ * handful of blooms growing in its soil. Each
  * bloom uses the real flower model once it has loaded (see
  * flower-models.ts); until then, or if it fails to load, a placeholder
  * stem-and-sphere stands in, the same as everything else does before its
@@ -35,26 +38,53 @@ export function createFlowerBed(): FlowerBed {
   const group = new THREE.Group();
   const disposables: Array<{ dispose(): void }> = [];
 
-  const boxMaterial = new THREE.MeshStandardMaterial({
-    color: BUILDABLE_KINDS.flowerBed.placeholderColor,
-    roughness: 0.95,
-  });
-  const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x2e2116, roughness: 1 });
-  disposables.push(boxMaterial, soilMaterial);
-
-  const boxGeometry = new THREE.BoxGeometry(BOX_WIDTH, BOX_HEIGHT, BOX_DEPTH);
-  const box = new THREE.Mesh(boxGeometry, boxMaterial);
-  box.position.y = BOX_HEIGHT / 2;
-  box.castShadow = true;
-  box.receiveShadow = true;
-  group.add(box);
-  disposables.push(boxGeometry);
-
-  const soilGeometry = new THREE.BoxGeometry(BOX_WIDTH - 0.14, 0.04, BOX_DEPTH - 0.14);
-  const soil = new THREE.Mesh(soilGeometry, soilMaterial);
-  soil.position.y = BOX_HEIGHT - 0.02;
-  group.add(soil);
-  disposables.push(soilGeometry);
+  // A planter of stained boards, two high on each side, held at the corners
+  // by square posts that stand a little proud, with dark garden soil inside.
+  const boards = paintedMaterial('wood', { tint: 0xb48a66, roughness: 0.9 });
+  const posts = paintedMaterial('wood', { tint: 0x8f6a4e, roughness: 0.9 });
+  const soilMaterial = paintedMaterial('soil', { roughness: 1 });
+  const builder = new ModelBuilder();
+  const boardHeight = BOX_HEIGHT / 2;
+  const thickness = 0.04;
+  for (let row = 0; row < 2; row++) {
+    const y = boardHeight * (row + 0.5);
+    for (const side of [-1, 1]) {
+      builder.add(
+        boards,
+        plankGeometry(BOX_WIDTH, boardHeight - 0.008, thickness, 'x', 1, 400 + row * 2 + side),
+        placed(0, y, (side * (BOX_DEPTH - thickness)) / 2),
+      );
+      builder.add(
+        boards,
+        plankGeometry(
+          thickness,
+          boardHeight - 0.008,
+          BOX_DEPTH - thickness * 2,
+          'z',
+          1,
+          410 + row * 2 + side,
+        ),
+        placed((side * (BOX_WIDTH - thickness)) / 2, y, 0),
+      );
+    }
+  }
+  for (const x of [-1, 1]) {
+    for (const z of [-1, 1]) {
+      builder.add(
+        posts,
+        plankGeometry(0.07, BOX_HEIGHT + 0.05, 0.07, 'y', 1, 420 + x + z * 2),
+        placed((x * BOX_WIDTH) / 2, (BOX_HEIGHT + 0.05) / 2, (z * BOX_DEPTH) / 2),
+      );
+    }
+  }
+  builder.add(
+    soilMaterial,
+    plankGeometry(BOX_WIDTH - thickness * 2, 0.04, BOX_DEPTH - thickness * 2, 'x', 0.6, 430),
+    placed(0, BOX_HEIGHT - 0.04, 0),
+  );
+  const planter = builder.build();
+  group.add(planter.group);
+  disposables.push(planter);
 
   const realFlower = flowerModelParts();
   if (realFlower !== undefined) {

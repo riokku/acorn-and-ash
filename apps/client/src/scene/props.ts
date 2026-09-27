@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { type PlacedProp, type PropKind } from '@acorn/shared';
 
+import { paintedMaterial } from '../art/materials';
+import { stumpGeometries } from './pickup-models';
 import { realModelPartsFor } from './prop-models';
 
 /**
@@ -55,19 +57,12 @@ export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
   }
 
   if (kind.shape.family === 'stump') {
-    const { radius, height } = kind.shape;
+    // Bark sides flaring into roots, and a sawn top showing its rings (see
+    // pickup-models.ts), wearing the shared painted materials.
+    const { bark, top } = stumpGeometries(kind.shape.radius, kind.shape.height);
     return [
-      instanced(
-        // Wider at the base than the cut, like a tree that was felled here.
-        new THREE.CylinderGeometry(radius * 0.92, radius * 1.15, height, 9),
-        new THREE.MeshStandardMaterial({
-          color: kind.placeholderColor,
-          roughness: 1,
-          flatShading: true,
-        }),
-        count,
-        height / 2,
-      ),
+      instanced(bark, paintedMaterial('bark', { roughness: 1 }), count, 0, 'geometry'),
+      instanced(top, paintedMaterial('logEnd', { roughness: 0.95 }), count, 0, 'geometry'),
     ];
   }
 
@@ -99,7 +94,9 @@ function instanced(
   // False for real models: the clearing and the wilderness each build their
   // own instanced mesh for the same kind, sharing one geometry and material
   // loaded once (see prop-models.ts), so neither owns it to dispose.
-  ownsResources = true,
+  // 'geometry' for a shape built here that wears a shared painted material
+  // (see materials.ts): the geometry is this mesh's own, the material not.
+  ownsResources: boolean | 'geometry' = true,
 ): PropPart {
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   mesh.castShadow = true;
@@ -110,10 +107,8 @@ function instanced(
     mesh,
     offset: new THREE.Matrix4().makeTranslation(0, centreHeight, 0),
     dispose: () => {
-      if (ownsResources) {
-        geometry.dispose();
-        material.dispose();
-      }
+      if (ownsResources !== false) geometry.dispose();
+      if (ownsResources === true) material.dispose();
       mesh.dispose();
     },
   };

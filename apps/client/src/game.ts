@@ -93,6 +93,7 @@ import { createCritter, type Critter } from './scene/critter';
 import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { createFox, type Fox } from './scene/fox';
 import { preloadFoxModel } from './scene/fox-model';
+import { preloadArtTextures } from './art/textures';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
@@ -931,6 +932,7 @@ export class Game {
       preloadItemModels(),
       preloadFoxModel(),
       preloadCharacterModels(),
+      preloadArtTextures(),
     ]);
     if (this.clearingScene !== null) return;
 
@@ -943,7 +945,7 @@ export class Game {
     this.clearingScene.setTakenPickups(this.takenPickups);
     this.scene.add(this.clearingScene.group);
 
-    this.wildernessScene = buildWildernessScene(wilderness, terrain);
+    this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
     this.scene.add(this.wildernessScene.group);
 
     this.scene.add(this.floats.group);
