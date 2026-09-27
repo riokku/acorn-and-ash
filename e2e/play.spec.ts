@@ -22,7 +22,20 @@ declare global {
       aimedAnimal(): { name: string; hitsLeft?: number } | null;
       canBuild(): boolean;
       buildMenuOpen(): boolean;
-      builtProps(): Array<{ id: number; kind: string; x: number; z: number; lit: boolean }>;
+      builtProps(): Array<{
+        id: number;
+        kind: string;
+        x: number;
+        z: number;
+        yaw: number;
+        lit: boolean;
+        yours: boolean;
+      }>;
+      buildPreview(): {
+        kind: string;
+        spot: { x: number; z: number; yaw: number } | null;
+        refusal: string | null;
+      } | null;
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       canCast(): boolean;
@@ -1371,26 +1384,52 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
 }
 
 /**
- * Face the given spot, open the build menu with B, and pick the given menu
- * slot until something appears somewhere.
+ * Face the given spot, open the build menu with B, pick the given menu slot,
+ * then point the mouse at open ground ahead and click until something
+ * appears - the way a player places a piece once its preview follows the
+ * mouse (decision 0052). Tries a few spots down the screen from the middle,
+ * nearer and nearer the player, in case the first is not clear.
  */
 async function buildFacing(
   page: Page,
   target: { x: number; z: number },
   digit: string,
 ): Promise<void> {
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   for (let attempt = 0; attempt < 15; attempt++) {
-    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) return;
+    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) break;
     await page.evaluate(
       ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
       [target.x, target.z],
     );
-    await page.keyboard.press('KeyB');
-    await page.waitForTimeout(150);
-    await page.keyboard.press(digit);
-    await page.waitForTimeout(200);
+    if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) === null) {
+      await page.keyboard.press('KeyB');
+      await page.waitForTimeout(150);
+      await page.keyboard.press(digit);
+    }
+    const lower = (attempt % 3) * 70;
+    await page.mouse.move(viewport.width / 2, viewport.height / 2 + lower);
+    await expect
+      .poll(
+        async () => (await page.evaluate(() => window.acornDebug?.buildPreview()))?.spot ?? null,
+      )
+      .not.toBeNull();
+    const preview = await page.evaluate(() => window.acornDebug?.buildPreview() ?? null);
+    if (preview?.refusal === null) {
+      await page.mouse.click(viewport.width / 2, viewport.height / 2 + lower);
+    }
+    await page.waitForTimeout(300);
   }
-  throw new Error('never built anything');
+  if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) === 0) {
+    throw new Error('never built anything');
+  }
+  // Whatever was left out to place another goes away again - on its own
+  // once the materials run out, a moment after the server says so, or
+  // with Escape otherwise.
+  await page.waitForTimeout(800);
+  if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) !== null) {
+    await page.keyboard.press('Escape');
+  }
 }
 
 test('you can chop enough logs to build a campfire, and it is still there next time', async ({
@@ -1446,16 +1485,24 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   await expect(page.locator('.hud-hint')).toContainText('Press B to build');
 
   // Opening the menu with only four logs offers the campfire but not the
-  // cabin (which costs ten) - picking the unaffordable one should do
-  // nothing and leave the menu's own key free for a moment later. The
-  // journal panel itself lists every option now (decision 0043); the hint
-  // line beneath it just says how to close the menu.
+  // cabin (which costs ten). Picking the unaffordable one still shows its
+  // preview, red, saying what is missing (decision 0052) - and a click
+  // then places nothing. The journal panel itself lists every option now
+  // (decision 0043); the hint line beneath it just says how to close the menu.
   await page.keyboard.press('KeyB');
   await expect(page.locator('.hud-hint')).toContainText('Pick one below, or B to close');
   await page.keyboard.press('Digit2');
-  await page.waitForTimeout(200);
-  expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
   expect(await page.evaluate(() => window.acornDebug?.buildMenuOpen() ?? true)).toBe(false);
+  await centerMouse(page);
+  await expect(page.locator('.hud-hint')).toContainText('Need 6 more logs');
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
+  // Escape puts it away again, before anything else it would do.
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)).toBeNull();
+  await expect(page.locator('.hud-curtain')).toBeHidden();
 
   await buildFacing(page, spawnSpot, 'Digit1');
 

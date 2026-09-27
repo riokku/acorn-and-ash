@@ -578,22 +578,28 @@ describe('asking to use an item from the hotbar', () => {
 });
 
 describe('asking to build something', () => {
-  it('survives a round trip', () => {
-    const decoded = decodeClientMessage(encodeBuild('cabin'));
-    expect(decoded).toEqual({ type: 'build', kind: 'cabin' });
+  const cabin = { kind: 'cabin', x: 4.25, z: -7.5, yaw: 1.1 } as const;
+
+  it('survives a round trip, with where and which way', () => {
+    const decoded = decodeClientMessage(encodeBuild(cabin));
+    if (decoded?.type !== 'build') throw new Error('expected a build');
+    expect(decoded.kind).toBe('cabin');
+    expect(decoded.x).toBeCloseTo(4.25, 2);
+    expect(decoded.z).toBeCloseTo(-7.5, 2);
+    expect(decoded.yaw).toBeCloseTo(1.1, 3);
   });
 
-  it('is two bytes: not worth batching with the input bundle', () => {
-    expect(encodeBuild('campfire').byteLength).toBe(2);
+  it('is eight bytes: not worth batching with the input bundle', () => {
+    expect(encodeBuild(cabin).byteLength).toBe(8);
   });
 
   it('refuses one that has been cut short', () => {
-    const encoded = encodeBuild('campfire');
-    expect(decodeClientMessage(encoded.slice(0, 1))).toBeNull();
+    const encoded = encodeBuild(cabin);
+    expect(decodeClientMessage(encoded.slice(0, 7))).toBeNull();
   });
 
   it('refuses a buildable kind this build has never heard of', () => {
-    const encoded = new Uint8Array(encodeBuild('campfire').slice(0));
+    const encoded = new Uint8Array(encodeBuild(cabin).slice(0));
     encoded[1] = 200;
     expect(decodeClientMessage(encoded.buffer)).toBeNull();
   });
@@ -683,8 +689,8 @@ describe('telling everybody what has been built', () => {
 
   it('carries every campfire, with its id and where it stands', () => {
     const props: BuiltProp[] = [
-      { id: 1, kind: 'campfire', x: 4.2, z: -6.75, lit: false },
-      { id: 2, kind: 'campfire', x: -30, z: 12.5, lit: false },
+      { id: 1, kind: 'campfire', x: 4.2, z: -6.75, yaw: 0, lit: false },
+      { id: 2, kind: 'campfire', x: -30, z: 12.5, yaw: 0, lit: false },
     ];
     const decoded = roundTrip(props);
     expect(decoded).toHaveLength(2);
@@ -697,8 +703,8 @@ describe('telling everybody what has been built', () => {
 
   it('carries whether a campfire is lit', () => {
     const props: BuiltProp[] = [
-      { id: 1, kind: 'campfire', x: 0, z: 0, lit: true },
-      { id: 2, kind: 'campfire', x: 1, z: 1, lit: false },
+      { id: 1, kind: 'campfire', x: 0, z: 0, yaw: 0, lit: true },
+      { id: 2, kind: 'campfire', x: 1, z: 1, yaw: 0, lit: false },
     ];
     const decoded = roundTrip(props);
     expect(decoded?.[0]?.lit).toBe(true);
@@ -709,19 +715,34 @@ describe('telling everybody what has been built', () => {
     expect(encodeBuiltProps([]).byteLength).toBe(2);
   });
 
-  it('costs eight bytes a prop', () => {
-    const props: BuiltProp[] = [{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }];
-    expect(encodeBuiltProps(props).byteLength).toBe(10);
+  it('costs ten bytes a prop', () => {
+    const props: BuiltProp[] = [{ id: 1, kind: 'campfire', x: 0, z: 0, yaw: 0, lit: false }];
+    expect(encodeBuiltProps(props).byteLength).toBe(12);
+  });
+
+  it('carries which way each piece was turned', () => {
+    const decoded = roundTrip([{ id: 1, kind: 'fence', x: 0, z: 0, yaw: -2.2, lit: false }]);
+    expect(decoded?.[0]?.yaw).toBeCloseTo(-2.2, 3);
+  });
+
+  it("marks only the recipient's own pieces as theirs", () => {
+    const props: BuiltProp[] = [
+      { id: 1, kind: 'cabin', x: 0, z: 0, yaw: 0, lit: false },
+      { id: 2, kind: 'cabin', x: 9, z: 0, yaw: 0, lit: false },
+    ];
+    const decoded = decodeServerMessage(encodeBuiltProps(props, (id) => id === 2));
+    if (decoded?.type !== 'builtProps') throw new Error('expected built props');
+    expect(decoded.props.map((prop) => prop.yours)).toEqual([false, true]);
   });
 
   it('refuses one that has been cut short', () => {
-    const encoded = encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }]);
+    const encoded = encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, yaw: 0, lit: false }]);
     expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
   });
 
   it('refuses a kind this build has never heard of', () => {
     const encoded = new Uint8Array(
-      encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, lit: false }]).slice(0),
+      encodeBuiltProps([{ id: 1, kind: 'campfire', x: 0, z: 0, yaw: 0, lit: false }]).slice(0),
     );
     encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
@@ -736,6 +757,7 @@ describe('telling everybody what has been built', () => {
       kind: 'campfire',
       x: 0,
       z: 0,
+      yaw: 0,
       lit: false,
     }));
     const decoded = roundTrip(props);

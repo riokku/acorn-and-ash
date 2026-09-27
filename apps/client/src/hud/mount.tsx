@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import type { ItemId } from '@acorn/shared';
+import type { BuildableKindId, ItemId } from '@acorn/shared';
 
 import { Hud } from './Hud';
 import type { HudStore } from './store';
@@ -18,6 +18,7 @@ export function mountHud(
   onPlay: () => void,
   onToggleInventory: () => void,
   onUseItem: (item: ItemId) => void,
+  onPickBuildable: (kind: BuildableKindId) => void,
   onHotbarSlotsChange: (next: HotbarPins) => void,
   initialPreferences: Preferences,
   onSettingsChange: (preferences: Preferences) => void,
@@ -29,6 +30,7 @@ export function mountHud(
         onPlay={onPlay}
         onToggleInventory={onToggleInventory}
         onUseItem={onUseItem}
+        onPickBuildable={onPickBuildable}
         onHotbarSlotsChange={onHotbarSlotsChange}
         initialPreferences={initialPreferences}
         onSettingsChange={onSettingsChange}

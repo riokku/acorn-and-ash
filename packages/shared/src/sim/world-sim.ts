@@ -2,6 +2,8 @@ import { createWorld, type Entity, type World } from 'koota';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  BUILD_REACH,
+  BUILD_REACH_SLACK,
   CAMPFIRE_BURN_SECONDS,
   CHARGE_SECONDS,
   DODGE_COOLDOWN_TICKS,
@@ -89,7 +91,13 @@ import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import { animalInReach, type CatchCandidate } from './hunting';
-import { buildSpotFor, nearestCampfire, type BuildBlocker } from './building';
+import {
+  buildableFootprint,
+  checkBuildSpot,
+  nearestCampfire,
+  roundFootprint,
+  type Footprint,
+} from './building';
 import {
   CAST_COOLDOWN_TICKS,
   readCastInput,
@@ -270,6 +278,11 @@ export interface BuiltProp {
   readonly x: number;
   readonly z: number;
   /**
+   * Which way it was turned when placed, the same way a model's `rotation.y`
+   * reads. Zero for everything built before pieces could be turned.
+   */
+  readonly yaw: number;
+  /**
    * Only meaningful for a campfire - always false for every other kind.
    * Atmosphere only: it burns down on its own after `CAMPFIRE_BURN_SECONDS`,
    * or a player can put it out early by hand. Mutable, unlike the fields
@@ -303,6 +316,18 @@ export interface BuildEvent {
   readonly netId: number;
   readonly prop: BuiltProp;
   readonly ownerKey: string | null;
+}
+
+/**
+ * What a player asked to build, and exactly where: wherever their preview
+ * stood when they clicked (see decision 0052). Only a request - the server
+ * still checks every part of it.
+ */
+export interface BuildRequest {
+  readonly kind: BuildableKindId;
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
 }
 
 /** Half of what a player was carrying, left where a knockout took them down. */
@@ -479,12 +504,12 @@ interface PlayerRuntime {
    */
   interactWasHeld: boolean;
   /**
-   * What to build on the next tick, chosen from the client's build menu, or
-   * null when nothing is waiting. A discrete request rather than a held
-   * button - like crafting, it is settled the moment it arrives - so there is
-   * no held/clicked edge to track here the way there is for a swing.
+   * What to build on the next tick, and where, or null when nothing is
+   * waiting. A discrete request rather than a held button - like crafting,
+   * it is settled the moment it arrives - so there is no held/clicked edge
+   * to track here the way there is for a swing.
    */
-  pendingBuild: BuildableKindId | null;
+  pendingBuild: BuildRequest | null;
   /** Their line in the water, if they have one out. */
   cast: Cast | null;
   lastProcessedSeq: number;
@@ -767,11 +792,11 @@ export class WorldSimulation {
     });
   }
 
-  /** Ask to build whatever is picked from the client's menu, next tick. */
-  requestBuild(netId: number, kind: BuildableKindId): void {
+  /** Ask to build something at a particular spot, next tick. */
+  requestBuild(netId: number, request: BuildRequest): void {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return;
-    runtime.pendingBuild = kind;
+    runtime.pendingBuild = request;
   }
 
   removePlayer(netId: number): boolean {
@@ -981,9 +1006,9 @@ export class WorldSimulation {
             );
           }
           if (runtime.pendingBuild !== null) {
-            const kind = runtime.pendingBuild;
+            const request = runtime.pendingBuild;
             runtime.pendingBuild = null;
-            this.tryBuild(runtime, scratch.position, aimedYaw, kind);
+            this.tryBuild(runtime, scratch.position, request);
           }
         }
 
@@ -1680,17 +1705,14 @@ export class WorldSimulation {
   }
 
   /**
-   * Place whatever was picked from the build menu in front of this player, if
-   * they can afford it, there is a clear spot for it, and - for anything
-   * capped to one per player - they do not already have one of that kind.
+   * Place what this player asked for where they asked for it, if they can
+   * afford it, the spot is in reach and clear (see `checkBuildSpot`), and -
+   * for anything capped to one per player - they do not already have one of
+   * that kind.
    */
-  private tryBuild(
-    runtime: PlayerRuntime,
-    position: Readonly<Vec3>,
-    aimYaw: number,
-    kind: BuildableKindId,
-  ): void {
+  private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
     if (runtime.swingCooldownTicks > 0) return;
+    const { kind } = request;
     const buildable = BUILDABLE_KINDS[kind];
     if (!canAfford(runtime.inventory, buildable)) return;
     // Capped kinds are capped per kind, not shared across all of them: a
@@ -1703,36 +1725,54 @@ export class WorldSimulation {
     )
       return;
 
-    const blockers: BuildBlocker[] = [
-      ...this.standing.map((prop) => ({
-        x: prop.x,
-        z: prop.z,
-        footprintRadius: PROP_KINDS[prop.kind].colliderRadius * prop.scale,
-      })),
-      ...this.builtProps.map((built) => ({
-        x: built.x,
-        z: built.z,
-        footprintRadius: BUILDABLE_KINDS[built.kind].footprintRadius,
-      })),
-    ];
-    const spot = buildSpotFor(
+    const piece = buildableFootprint(kind, request.x, request.z, request.yaw);
+    const refusal = checkBuildSpot(
+      piece,
       position,
-      aimYaw,
-      buildable.footprintRadius,
+      BUILD_REACH + BUILD_REACH_SLACK,
       this.clearing.water,
-      blockers,
+      this.buildFootprints(),
     );
-    if (spot === null) return;
+    if (refusal !== null) return;
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
 
-    const prop: BuiltProp = { id: this.nextBuiltPropId++, kind, x: spot.x, z: spot.z, lit: false };
+    const prop: BuiltProp = {
+      id: this.nextBuiltPropId++,
+      kind,
+      x: request.x,
+      z: request.z,
+      yaw: request.yaw,
+      lit: false,
+    };
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
+  }
+
+  /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
+  private buildFootprints(): Footprint[] {
+    return [
+      ...this.standing.map((prop) =>
+        roundFootprint(
+          prop.x,
+          prop.z,
+          PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+          PROP_KINDS[prop.kind].displayName.toLowerCase(),
+        ),
+      ),
+      ...this.builtProps.map((built) =>
+        buildableFootprint(built.kind, built.x, built.z, built.yaw),
+      ),
+    ];
+  }
+
+  /** Whose a built prop is, by player key, or null if it is communal. */
+  builtPropOwner(propId: number): string | null {
+    return this.ownedBuiltProps.get(propId) ?? null;
   }
 
   /** Whether this player already has one of this particular kind built somewhere. */
@@ -1751,8 +1791,14 @@ export class WorldSimulation {
       if (owner !== playerKey) continue;
       const home = this.builtPropsById.get(id);
       if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) continue;
-      const footprint = BUILDABLE_KINDS[home.kind].footprintRadius;
-      return { x: home.x, y: 0, z: home.z + footprint + 1.5 };
+      // The door is on the model's local +Z side, which a turn of `yaw`
+      // carries round to (sin yaw, cos yaw).
+      const outFront = BUILDABLE_KINDS[home.kind].footprintRadius + 1.5;
+      return {
+        x: home.x + Math.sin(home.yaw) * outFront,
+        y: 0,
+        z: home.z + Math.cos(home.yaw) * outFront,
+      };
     }
     return null;
   }

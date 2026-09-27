@@ -1,6 +1,7 @@
 import { SELF } from 'cloudflare:test';
 
 import {
+  BUILDABLE_KINDS,
   decodeServerMessage,
   encodeBuild,
   encodeCraft,
@@ -34,6 +35,9 @@ import {
 } from '@acorn/shared';
 
 /** A stand-in for one browser tab. */
+/** How far ahead of the player `buildInFront` puts a piece's edge: within reach, past pickup reach. */
+const BUILD_IN_FRONT = 2;
+
 export class TestClient {
   readonly received: ServerMessage[] = [];
   private readonly socket: WebSocket;
@@ -82,8 +86,23 @@ export class TestClient {
     this.socket.send(encodeCraft(item));
   }
 
-  build(kind: BuildableKindId): void {
-    this.socket.send(encodeBuild(kind));
+  /**
+   * Ask to build a couple of steps ahead of wherever this player last showed
+   * up in a snapshot, looking along `yaw` - where every build used to land
+   * before pieces followed the mouse (see decision 0052).
+   */
+  buildInFront(kind: BuildableKindId, yaw: number): void {
+    const here = this.positionOf(this.welcome().netId) ?? { x: 0, z: 0 };
+    // The piece's own edge that far ahead, so even a cabin clears its builder.
+    const ahead = BUILDABLE_KINDS[kind].footprintRadius + BUILD_IN_FRONT;
+    this.socket.send(
+      encodeBuild({
+        kind,
+        x: here.x - Math.sin(yaw) * ahead,
+        z: here.z - Math.cos(yaw) * ahead,
+        yaw: 0,
+      }),
+    );
   }
 
   useItem(item: ItemId): void {

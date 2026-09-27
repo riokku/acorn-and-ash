@@ -1458,7 +1458,7 @@ describe('building', () => {
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
       client.walk(0, 0, yaw, 4);
-      client.build('campfire');
+      client.buildInFront('campfire', yaw);
       await sleep(120);
     }
     throw new Error('never built anything');
@@ -1523,7 +1523,7 @@ describe('building', () => {
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
       client.walk(0, 0, yaw, 4);
-      client.build('campfire');
+      client.buildInFront('campfire', yaw);
       await sleep(100);
     }
 
@@ -1550,8 +1550,8 @@ describe('building', () => {
   }, 30_000);
 
   /**
-   * A campfire lands `BUILD_DISTANCE` away, outside interact reach, so
-   * lighting it needs one more short walk first.
+   * A campfire lands a couple of steps away (see `buildInFront`), outside
+   * interact reach, so lighting it needs one more short walk first.
    */
   async function walkOntoCampfire(
     client: TestClient,
@@ -1650,7 +1650,7 @@ describe('building', () => {
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
       client.walk(0, 0, yaw, 4);
-      client.build('cabin');
+      client.buildInFront('cabin', yaw);
       await sleep(120);
     }
     throw new Error('never built a cabin');
@@ -1715,7 +1715,7 @@ describe('building', () => {
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
       client.walk(0, 0, yaw, 4);
-      client.build('lantern');
+      client.buildInFront('lantern', yaw);
       await sleep(120);
     }
     throw new Error('never built a lantern');
@@ -1753,7 +1753,7 @@ describe('building', () => {
     await walkToOpenGround(returning);
     for (let step = 0; step < 10; step++) {
       returning.walk(0, 0, 0, 4);
-      returning.build('lantern');
+      returning.buildInFront('lantern', 0);
       await sleep(100);
     }
     expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);

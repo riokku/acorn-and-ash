@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
+  BUILD_REACH,
+  BUILD_REACH_SLACK,
   CHARGE_SECONDS,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
@@ -86,6 +88,16 @@ function drive(
     sim.step(tickClock());
   }
   return seq;
+}
+
+/**
+ * How far in front of the player these tests put a piece: its own edge a
+ * couple of steps away, clear of the player (see decision 0052) - where a
+ * campfire always landed before pieces followed the mouse, within
+ * `BUILD_REACH` even for a cabin, and past `PICKUP_REACH`.
+ */
+function inFront(kind: BuildableKindId): number {
+  return BUILDABLE_KINDS[kind].footprintRadius + 2;
 }
 
 describe('the world simulation', () => {
@@ -2201,7 +2213,7 @@ describe('threats', () => {
         'chris',
       );
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
-      sim.requestBuild(1, 'cabin');
+      sim.requestBuild(1, { kind: 'cabin', x: 0, z: -inFront('cabin'), yaw: 0 });
       sim.queueInput(1, createInput(1, 0, 0, 0, 0));
       sim.step(tickClock());
       const home = sim.drainBuildEvents()[0]?.prop;
@@ -2451,6 +2463,7 @@ describe('threats', () => {
           kind: 'campfire',
           x: probePosition.x,
           z: probePosition.z,
+          yaw: 0,
           lit: true,
           ownerKey: null,
           litUntilMs: nightMs + 999_999_999,
@@ -2470,6 +2483,7 @@ describe('threats', () => {
           kind: 'campfire',
           x: probePosition.x,
           z: probePosition.z,
+          yaw: 0,
           lit: false,
           ownerKey: null,
           litUntilMs: null,
@@ -2489,6 +2503,7 @@ describe('threats', () => {
           kind: 'lantern',
           x: probePosition.x,
           z: probePosition.z,
+          yaw: 0,
           lit: false,
           ownerKey: null,
           litUntilMs: null,
@@ -2662,7 +2677,10 @@ describe('building', () => {
     return seq;
   }
 
-  /** Ask to build, aimed FACE_OUT unless told otherwise, and let one tick settle it. */
+  /**
+   * Ask to build `inFront` of the player, in the direction `yaw` looks
+   * (FACE_OUT unless told otherwise), and let one tick settle it.
+   */
   function requestAndStep(
     sim: WorldSimulation,
     netId: number,
@@ -2670,7 +2688,13 @@ describe('building', () => {
     seq: number,
     yaw = FACE_OUT,
   ): void {
-    sim.requestBuild(netId, kind);
+    const at = sim.readPlayer(netId)?.position ?? { x: 0, y: 0, z: 0 };
+    sim.requestBuild(netId, {
+      kind,
+      x: at.x - Math.sin(yaw) * inFront(kind),
+      z: at.z - Math.cos(yaw) * inFront(kind),
+      yaw: 0,
+    });
     sim.queueInput(netId, createInput(seq, 0, 0, yaw, 0));
     sim.step(tickClock());
   }
@@ -2711,6 +2735,48 @@ describe('building', () => {
 
     expect(sim.drainBuildEvents()).toEqual([]);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
+  });
+
+  it('builds exactly where it was asked to, turned the way it was asked', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    sim.requestBuild(1, { kind: 'campfire', x: 1.5, z: -3, yaw: 0.75 });
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
+    sim.step(tickClock());
+
+    expect(sim.builtPropsList()).toEqual([
+      expect.objectContaining({ kind: 'campfire', x: 1.5, z: -3, yaw: 0.75 }),
+    ]);
+  });
+
+  it('refuses a spot out of reach, and spends nothing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+
+    const tooFar = BUILD_REACH + BUILD_REACH_SLACK + 0.5;
+    sim.requestBuild(1, { kind: 'campfire', x: 0, z: -tooFar, yaw: 0 });
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
+    sim.step(tickClock());
+
+    expect(sim.drainBuildEvents()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
+  });
+
+  it('refuses a spot right on top of a tree, whatever the client asked for', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withLogs(1));
+    const tree = sim.clearing.props.find((prop) => PROP_KINDS[prop.kind].shape.family === 'tree');
+    if (tree === undefined) throw new Error('no tree in the clearing');
+    sim.placePlayer(1, { x: tree.x, y: 0, z: tree.z + 2 }, FACE_OUT);
+
+    sim.requestBuild(1, { kind: 'campfire', x: tree.x, z: tree.z, yaw: 0 });
+    sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
+    sim.step(tickClock());
+
+    expect(sim.drainBuildEvents()).toEqual([]);
   });
 
   it('will not stack a second campfire on top of the first', () => {
@@ -2853,6 +2919,28 @@ describe('building', () => {
       const gap = Math.hypot(position.x - home.x, position.z - home.z);
       expect(gap).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
       expect(gap).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 3);
+    });
+
+    it('puts the front door on whichever side the cabin was turned to face', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withTenLogs(1), 'chris');
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      // A quarter turn: the door, on the model's +Z side, now faces +X.
+      sim.requestBuild(1, { kind: 'cabin', x: 0, z: -inFront('cabin'), yaw: Math.PI / 2 });
+      sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+      const home = sim.drainBuildEvents()[0]?.prop;
+      if (home === undefined) throw new Error('the cabin was not built');
+
+      const back = createWorld();
+      back.restoreBuiltProps(
+        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+      );
+      back.addPlayer(9, undefined, 'chris');
+      const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
+      if (position === undefined) throw new Error('no snapshot for the returning player');
+      expect(position.x - home.x).toBeGreaterThan(BUILDABLE_KINDS.cabin.footprintRadius);
+      expect(Math.abs(position.z - home.z)).toBeLessThan(0.5);
     });
 
     it('somebody with no cabin yet still spawns exactly as before', () => {
@@ -3011,6 +3099,24 @@ describe('building', () => {
       expect(countOf(sim.inventoryOf(1), 'log')).toBe(2);
     });
 
+    it('joins fence pieces end to end into one line', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withLogs(1, 6));
+      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
+      const length = BUILDABLE_KINDS.fence.footprintHalfLength * 2;
+
+      let seq = 1;
+      for (let piece = 0; piece < 3; piece++) {
+        sim.requestBuild(1, { kind: 'fence', x: (piece - 1) * length, z: -3, yaw: 0 });
+        sim.queueInput(1, createInput(seq++, 0, 0, FACE_OUT, 0));
+        sim.step(tickClock());
+        seq = waitOutCooldown(sim, 1, seq);
+      }
+
+      expect(sim.builtPropsList().filter((prop) => prop.kind === 'fence')).toHaveLength(3);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    });
+
     it('lets the same player lay down more than one garden path stone', () => {
       const sim = createWorld();
       sim.addPlayer(1, withSticks(1, 4));
@@ -3099,7 +3205,7 @@ describe('building', () => {
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'campfire', 1);
       // Still exactly where building leaves you: past PICKUP_REACH from the
-      // campfire itself, which lands BUILD_DISTANCE away.
+      // campfire itself, which these tests put `inFront` of the player.
 
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());

@@ -120,11 +120,32 @@ export const PICKUP_REACH = 2;
 /**
  * Building.
  *
- * A build always lands this far in front of the player - aim and place,
- * nothing free-form yet - close enough to feel deliberate rather than
- * flung.
+ * A piece goes wherever the mouse points on the ground, up to this far from
+ * the player's feet to its middle (see decision 0052) - far enough to lay a
+ * few fence pieces without walking, close enough to feel deliberate.
  */
-export const BUILD_DISTANCE = 2.6;
+export const BUILD_REACH = 5;
+/**
+ * How much further the server lets a piece land than `BUILD_REACH`. The player
+ * can keep walking between clicking and the server hearing about it, and a
+ * placement is not worth refusing over a step's difference.
+ */
+export const BUILD_REACH_SLACK = 1;
+/**
+ * Breathing room every piece keeps from trees, rocks, the pond and other
+ * builds, so nothing looks jammed together. Fence pieces joined end to end,
+ * and garden path stones beside each other, are allowed closer.
+ */
+export const BUILD_SPACING = 0.3;
+/** The mouse wheel turns a piece being placed in steps of this much: 15 degrees. */
+export const BUILD_ROTATION_STEP = Math.PI / 12;
+/**
+ * How close the mouse has to come to the free end of a fence for a new piece
+ * to snap onto it.
+ */
+export const FENCE_SNAP_RADIUS = 1;
+/** Two fence ends this close together count as joined. */
+export const FENCE_JOIN_TOLERANCE = 0.08;
 
 /**
  * Campfires.

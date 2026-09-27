@@ -11,11 +11,7 @@
 
 import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
-import {
-  buildableKindFromIndex,
-  buildableKindIndex,
-  type BuildableKindId,
-} from '../data/buildables';
+import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import {
   characterFromIndex,
   characterIndex,
@@ -29,6 +25,7 @@ import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
 import type {
   AnimalCaught,
+  BuildRequest,
   BuiltProp,
   BuriedCacheView,
   CacheEvent,
@@ -43,6 +40,7 @@ import {
   ClientMessageType,
   RejectReason,
   ServerMessageType,
+  type BuiltPropView,
   type ClientMessage,
   type EquippedEntry,
   type RejectReasonCode,
@@ -106,10 +104,12 @@ const BYTES_PER_TAKEN_PICKUP = 2;
 /** treeId(2) + generation(1) + flags(1) */
 const BYTES_PER_TREE_STATE = 4;
 const TREE_FELLED_FLAG = 1;
-/** id(2) + kind(1) + x(2) + z(2) + flags(1) */
-const BYTES_PER_BUILT_PROP = 8;
+/** id(2) + kind(1) + x(2) + z(2) + yaw(2) + flags(1) */
+const BYTES_PER_BUILT_PROP = 10;
 /** Only a campfire ever sets this, but the bit costs nothing on anything else. */
 const BUILT_PROP_LIT_FLAG = 1;
+/** Set only on the copy of the list sent to whoever owns it. */
+const BUILT_PROP_YOURS_FLAG = 2;
 /** id(2) + ownerNetId(2) + x(2) + z(2) */
 const BYTES_PER_BURIED_CACHE = 8;
 /** A network id no real connection ever has, standing in for "not connected right now." */
@@ -140,7 +140,8 @@ const CACHE_MESSAGE_BYTES = 4;
 
 /** type(1) + which item to make(1) */
 const CRAFT_MESSAGE_BYTES = 2;
-const BUILD_MESSAGE_BYTES = 2;
+/** type(1) + which kind(1) + x(2) + z(2) + yaw(2) */
+const BUILD_MESSAGE_BYTES = 8;
 /** type(1) + which item to use(1) */
 const USE_ITEM_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
@@ -237,11 +238,14 @@ export function encodeCraft(item: ItemId): ArrayBuffer {
   return buffer;
 }
 
-export function encodeBuild(kind: BuildableKindId): ArrayBuffer {
+export function encodeBuild(request: BuildRequest): ArrayBuffer {
   const buffer = new ArrayBuffer(BUILD_MESSAGE_BYTES);
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Build);
-  view.setUint8(1, buildableKindIndex(kind));
+  view.setUint8(1, buildableKindIndex(request.kind));
+  view.setInt16(2, clamp(quantisePosition(request.x), INT16_MIN, INT16_MAX), true);
+  view.setInt16(4, clamp(quantisePosition(request.z), INT16_MIN, INT16_MAX), true);
+  view.setUint16(6, quantiseAngle(request.yaw), true);
   return buffer;
 }
 
@@ -320,7 +324,13 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     if (data.byteLength !== BUILD_MESSAGE_BYTES) return null;
     const kind = buildableKindFromIndex(view.getUint8(1));
     if (kind === null) return null;
-    return { type: 'build', kind };
+    return {
+      type: 'build',
+      kind,
+      x: dequantisePosition(view.getInt16(2, true)),
+      z: dequantisePosition(view.getInt16(4, true)),
+      yaw: dequantiseAngle(view.getUint16(6, true)),
+    };
   }
 
   if (type === ClientMessageType.UseItem) {
@@ -478,7 +488,10 @@ export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
  * rather than the oldest - losing sight of something built long ago is a much
  * smaller problem than a new campfire silently never reaching anybody.
  */
-export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
+export function encodeBuiltProps(
+  props: readonly BuiltProp[],
+  isYours: (propId: number) => boolean = () => false,
+): ArrayBuffer {
   const start = Math.max(0, props.length - MAX_BUILT_PROPS);
   const count = props.length - start;
   const buffer = new ArrayBuffer(2 + count * BYTES_PER_BUILT_PROP);
@@ -494,7 +507,11 @@ export function encodeBuiltProps(props: readonly BuiltProp[]): ArrayBuffer {
     view.setUint8(offset + 2, buildableKindIndex(prop.kind));
     view.setInt16(offset + 3, clamp(quantisePosition(prop.x), INT16_MIN, INT16_MAX), true);
     view.setInt16(offset + 5, clamp(quantisePosition(prop.z), INT16_MIN, INT16_MAX), true);
-    view.setUint8(offset + 7, prop.lit ? BUILT_PROP_LIT_FLAG : 0);
+    view.setUint16(offset + 7, quantiseAngle(prop.yaw), true);
+    view.setUint8(
+      offset + 9,
+      (prop.lit ? BUILT_PROP_LIT_FLAG : 0) | (isYours(prop.id) ? BUILT_PROP_YOURS_FLAG : 0),
+    );
     offset += BYTES_PER_BUILT_PROP;
   }
   return buffer;
@@ -906,17 +923,20 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength < 2) return null;
       const count = view.getUint8(1);
       if (data.byteLength !== 2 + count * BYTES_PER_BUILT_PROP) return null;
-      const props: BuiltProp[] = [];
+      const props: BuiltPropView[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
         const kind = buildableKindFromIndex(view.getUint8(offset + 2));
         if (kind === null) return null;
+        const flags = view.getUint8(offset + 9);
         props.push({
           id: view.getUint16(offset, true),
           kind,
           x: dequantisePosition(view.getInt16(offset + 3, true)),
           z: dequantisePosition(view.getInt16(offset + 5, true)),
-          lit: (view.getUint8(offset + 7) & BUILT_PROP_LIT_FLAG) !== 0,
+          yaw: dequantiseAngle(view.getUint16(offset + 7, true)),
+          lit: (flags & BUILT_PROP_LIT_FLAG) !== 0,
+          yours: (flags & BUILT_PROP_YOURS_FLAG) !== 0,
         });
         offset += BYTES_PER_BUILT_PROP;
       }

@@ -78,16 +78,19 @@ export interface CraftMessage {
 }
 
 /**
- * Build whatever was picked from the build menu, aimed wherever the player
- * currently stands and looks.
+ * Build this, exactly here and turned this way: wherever the player's preview
+ * stood when they clicked (see decision 0052).
  *
  * Like crafting, this is its own small message rather than a bit on the input
- * bundle - unlike crafting, where it lands still depends on the player's
- * position and aim, which the server already tracks every tick regardless.
+ * bundle. The server still checks the spot is within reach of wherever it has
+ * the player standing, and clear.
  */
 export interface BuildMessage {
   readonly type: 'build';
   readonly kind: BuildableKindId;
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
 }
 
 /**
@@ -263,7 +266,17 @@ export interface CaughtMessage {
  */
 export interface BuiltPropsMessage {
   readonly type: 'builtProps';
-  readonly props: readonly BuiltProp[];
+  readonly props: readonly BuiltPropView[];
+}
+
+/**
+ * A built prop as one particular player hears about it: whether it is theirs
+ * comes along too, so their preview can say they already have a cabin rather
+ * than turning green for one the server will refuse. Only ever about the
+ * player it was sent to - nobody learns who else owns what.
+ */
+export interface BuiltPropView extends BuiltProp {
+  readonly yours: boolean;
 }
 
 /**

@@ -56,6 +56,16 @@ export interface HudState {
   readonly canBuild: boolean;
   /** Whether the build menu (opened with B) is currently showing. */
   readonly buildMenuOpen: boolean;
+  /**
+   * The piece being placed, if any (see decision 0052): its name, why a
+   * click would not place it right now, and whether it can snap onto others
+   * of its kind.
+   */
+  readonly placing: {
+    readonly name: string;
+    readonly refusal: string | null;
+    readonly canSnap: boolean;
+  } | null;
   /** Whether the craft menu (opened with C) is currently showing. */
   readonly craftMenuOpen: boolean;
   /** Whether a click right now would cast a line. */
@@ -110,6 +120,7 @@ const INITIAL: HudState = {
   aimedAnimal: null,
   canBuild: false,
   buildMenuOpen: false,
+  placing: null,
   craftMenuOpen: false,
   canCast: false,
   fishing: null,
