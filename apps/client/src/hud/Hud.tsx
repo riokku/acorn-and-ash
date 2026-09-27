@@ -72,6 +72,10 @@ export function Hud({
         />
       ) : null}
 
+      {state.ready && state.pointerLocked && state.ownCacheCompass !== null ? (
+        <CacheCompass compass={state.ownCacheCompass} />
+      ) : null}
+
       {state.ready && state.pointerLocked ? <Hotbar state={state} /> : null}
 
       {state.ready && !state.pointerLocked ? (
@@ -165,6 +169,30 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
     <span className={className}>
       {Math.round(state.health)}/{HEALTH_MAX}
     </span>
+  );
+}
+
+/**
+ * A small arrow back to a buried stash, once it is far enough away that
+ * stumbling onto it again would be luck rather than memory. The arrow
+ * rotates to keep pointing the right way as the camera turns; the number
+ * below it is how far.
+ */
+function CacheCompass({
+  compass,
+}: {
+  compass: NonNullable<HudState['ownCacheCompass']>;
+}): React.JSX.Element {
+  return (
+    <div className="cache-compass">
+      <span
+        className="cache-compass-arrow"
+        style={{ transform: `rotate(${compass.bearingDegrees}deg)` }}
+      >
+        ▲
+      </span>
+      Your stash · {Math.round(compass.distanceMeters)} m
+    </div>
   );
 }
 

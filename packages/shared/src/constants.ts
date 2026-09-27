@@ -296,6 +296,26 @@ export const ANIMAL_RESPAWN_SECONDS = 60;
 /** Close enough for a hunter to actually catch whatever it has been chasing. */
 export const PREDATOR_CATCH_RADIUS = 1;
 
+/**
+ * Night danger.
+ *
+ * A threat's own `alertRadius`/`safeRadius` (see `AnimalKind`) scale up by
+ * this much once night falls, so it notices a player from farther off in
+ * the dark - Phase 4's own goal, "nights feel tense but fair." Combat
+ * itself never changes: chase speed, damage and hits to defeat are the same
+ * at any hour, so this only ever makes sneaking past harder, not a fight
+ * once it has started.
+ */
+export const NIGHT_ALERT_RADIUS_MULTIPLIER = 1.75;
+/**
+ * Close enough to a lit campfire or a built lantern - or simply carrying a
+ * lit torch - to cancel `NIGHT_ALERT_RADIUS_MULTIPLIER` entirely and be
+ * noticed at the same distance as by day. One number for both built kinds
+ * rather than one apiece, picked between the lantern's own light and the
+ * campfire's wider one, until a playtest says it needs to split.
+ */
+export const LIGHT_SAFETY_RADIUS = 6;
+
 /** Where a fresh player appears, in the middle of the clearing. */
 export const SPAWN_POSITION = { x: 0, y: 0, z: 6 } as const;
 /** New players are spread around the spawn point so they do not stack up. */

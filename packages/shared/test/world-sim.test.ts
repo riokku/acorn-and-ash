@@ -27,6 +27,7 @@ import { BUILDABLE_KINDS, type BuildableKindId } from '../src/data/buildables';
 import { ITEM_KINDS, type ItemId } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
+import { DAY_LENGTH_MS } from '../src/sim/day-night';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { addItem, countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
@@ -2313,6 +2314,129 @@ describe('threats', () => {
       for (let i = 0; i < 12; i++) sim.step(tickClock());
 
       expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
+    });
+  });
+
+  describe('noticing players in the dark', () => {
+    const kind = ANIMAL_KINDS.maskedRaccoon;
+    // Chosen so a chase (which pulls up short at threat.attackRadius from
+    // the player, not all the way to them) still carries the raccoon well
+    // past its own leashRadius (10) from the den - the only way "it chased"
+    // and "it only ever wandered" read as clearly different distances.
+    // Also comfortably between the day alert radius (8) and the bolder one
+    // once dark (8 * 1.75 = 14), which is the whole point being tested.
+    const probeDistance = 13;
+    const probePosition = { x: raccoonDen.x, y: 0, z: raccoonDen.z + probeDistance };
+    // Each a clock of its own, anchored to a guaranteed day or night moment,
+    // so these tests never depend on how many ticks the rest of this file
+    // has already spent on the shared clock above.
+    let dayMs = DAY_LENGTH_MS * 0.5;
+    const tickDay = (): number => (dayMs += TICK_MILLISECONDS);
+    let nightMs = DAY_LENGTH_MS * 0.85;
+    const tickNight = (): number => (nightMs += TICK_MILLISECONDS);
+
+    /** The furthest this raccoon strays from its own den over some ticks. */
+    const strayFromDen = (sim: WorldSimulation, ticks: number, tick: () => number): number => {
+      let furthest = 0;
+      for (let i = 0; i < ticks; i++) {
+        sim.step(tick());
+        const entity = animalEntity(sim, 1, raccoonDen.id);
+        furthest = Math.max(furthest, Math.hypot(entity.x - raccoonDen.x, entity.z - raccoonDen.z));
+      }
+      return furthest;
+    };
+
+    it('stays within its leash by day, from a distance that does not notice a player', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, probePosition, 0);
+
+      expect(strayFromDen(sim, 60, tickDay)).toBeLessThanOrEqual(kind.leashRadius + 0.2);
+    });
+
+    it('notices the same player from the same distance once it is dark', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, probePosition, 0);
+
+      expect(strayFromDen(sim, 60, tickNight)).toBeGreaterThan(kind.leashRadius + 0.5);
+    });
+
+    it('is unbothered by the same dark once the player has a torch lit', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, {
+        netId: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        facingYaw: 0,
+        items: [
+          { item: 'bag', count: 1 },
+          { item: 'torch', count: 1 },
+        ],
+        hunger: HUNGER_MAX,
+      });
+      expect(sim.useItem(1, 'torch')).toBe(true);
+      sim.placePlayer(1, probePosition, 0);
+
+      expect(strayFromDen(sim, 60, tickNight)).toBeLessThanOrEqual(kind.leashRadius + 0.2);
+    });
+
+    it('is unbothered by the same dark standing next to a lit campfire', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, probePosition, 0);
+      sim.restoreBuiltProps([
+        {
+          id: 9001,
+          kind: 'campfire',
+          x: probePosition.x,
+          z: probePosition.z,
+          lit: true,
+          ownerKey: null,
+          litUntilMs: nightMs + 999_999_999,
+        },
+      ]);
+
+      expect(strayFromDen(sim, 60, tickNight)).toBeLessThanOrEqual(kind.leashRadius + 0.2);
+    });
+
+    it('does not count a campfire that is not actually lit', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, probePosition, 0);
+      sim.restoreBuiltProps([
+        {
+          id: 9002,
+          kind: 'campfire',
+          x: probePosition.x,
+          z: probePosition.z,
+          lit: false,
+          ownerKey: null,
+          litUntilMs: null,
+        },
+      ]);
+
+      expect(strayFromDen(sim, 60, tickNight)).toBeGreaterThan(kind.leashRadius + 0.5);
+    });
+
+    it('is unbothered by the same dark next to a built lantern, which has no lit flag of its own', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, probePosition, 0);
+      sim.restoreBuiltProps([
+        {
+          id: 9003,
+          kind: 'lantern',
+          x: probePosition.x,
+          z: probePosition.z,
+          lit: false,
+          ownerKey: null,
+          litUntilMs: null,
+        },
+      ]);
+
+      expect(strayFromDen(sim, 60, tickNight)).toBeLessThanOrEqual(kind.leashRadius + 0.2);
     });
   });
 });

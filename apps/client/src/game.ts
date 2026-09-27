@@ -98,6 +98,7 @@ import { addDaylight, type DaylightRig } from './scene/lighting';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import type { FishingPhase, HudStore } from './hud/store';
+import { compassToOwnCache, type Compass } from './hud/cache-compass';
 import type { PlayerIdentity } from './home/identity';
 
 /** Multiplied by the Settings menu's sensitivity slider - see `setLookSensitivity`. */
@@ -278,6 +279,8 @@ export class Game {
   private buriedCaches: readonly BuriedCacheView[] = [];
   /** Whether a cache of our own is close enough right now to dig up. */
   private nearBuriedCache = false;
+  /** The way back to a buried cache of our own, once it is a real walk rather than something already in reach. */
+  private ownCacheCompass: Compass | null = null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   private nearCampfire: 'lit' | 'unlit' | null = null;
   private canBuild = false;
@@ -1270,6 +1273,17 @@ export class Game {
         this.buriedCaches,
         (cache) => cache.ownerNetId === this.selfNetId,
       ) !== null;
+    // A way back to it otherwise, so it is not just something to stumble
+    // back onto by luck out in the wilderness - hidden the moment the hint
+    // above takes over.
+    this.ownCacheCompass = this.nearBuriedCache
+      ? null
+      : compassToOwnCache(
+          player.motion.position,
+          this.buriedCaches,
+          this.selfNetId,
+          camera.look.yaw,
+        );
 
     // Same idea, only a hint: the server is the one that actually decides
     // whether a press lights it, puts it out, or does nothing at all.
@@ -1450,6 +1464,7 @@ export class Game {
       nearbyItem: this.nearbyItem,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
+      ownCacheCompass: this.ownCacheCompass,
       nearCampfire: this.nearCampfire,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,

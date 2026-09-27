@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { ANIMAL_TARGET_REACHED_DISTANCE } from '../src/constants';
+import { ANIMAL_TARGET_REACHED_DISTANCE, NIGHT_ALERT_RADIUS_MULTIPLIER } from '../src/constants';
 import {
   fleeDirection,
   hasReachedTarget,
+  nightDetection,
   shouldFlee,
   towardDirection,
   wanderTarget,
@@ -57,6 +58,21 @@ describe('fleeing', () => {
     expect(Number.isFinite(direction.x)).toBe(true);
     expect(Number.isFinite(direction.z)).toBe(true);
     expect(Math.hypot(direction.x, direction.z)).toBeCloseTo(1, 5);
+  });
+});
+
+describe('night detection', () => {
+  const kind = { alertRadius: 8, safeRadius: 12 };
+
+  it('leaves the radii alone by day, or once a player is lit', () => {
+    expect(nightDetection(kind, false)).toEqual(kind);
+  });
+
+  it('scales both radii up the same amount when bold in the dark', () => {
+    expect(nightDetection(kind, true)).toEqual({
+      alertRadius: kind.alertRadius * NIGHT_ALERT_RADIUS_MULTIPLIER,
+      safeRadius: kind.safeRadius * NIGHT_ALERT_RADIUS_MULTIPLIER,
+    });
   });
 });
 

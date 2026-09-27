@@ -58,7 +58,13 @@ The game is online-only. Every world runs on the server.
 > night falls. The build menu now offers a fence and a garden path stone
 > too, both cheap and uncapped so a whole line of either is one trip's
 > worth of gathering, not a single decoration like the flower bed or the
-> lantern. See [the roadmap](#roadmap).
+> lantern. The masked raccoon now notices you from much farther away once
+> night falls, unless you are carrying a lit torch or standing near a lit
+> campfire or a built lantern - the first real reason night itself is
+> something to plan around, not just something to watch. A small compass
+> also now appears on screen whenever you have something buried and not yet
+> dug up, pointing the way back to it, so finding your way there again is
+> never just luck. See [the roadmap](#roadmap).
 
 ## Controls
 
@@ -147,13 +153,14 @@ A 20-minute day runs the whole time a world is awake, the sky and light
 brightening and dimming smoothly between noon and midnight. It's the
 server's own clock, so it never skips and it's the same moment for everyone
 in the world; the HUD's "Time" row says which half you're in right now.
-Nothing about how the game plays changes with it yet, other than actually
-being able to see - a lit campfire, a built lantern or a torch in hand are
+A lit campfire, a built lantern or a torch in hand are
 real light now, casting a warm, flickering glow on what's nearby rather than
 just looking lit, so it's worth having one of the three going before the sky
-gets dark. See [decision 0027](docs/decisions/0027-a-day-and-night-cycle.md)
-and [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for
-the firelight itself.
+gets dark - and now more than a matter of taste: see [Danger](#danger) below
+for what changes once night actually falls. See
+[decision 0027](docs/decisions/0027-a-day-and-night-cycle.md) and
+[decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for the
+firelight itself.
 
 ### Wildlife
 
@@ -191,12 +198,29 @@ you're knocked out - you wake up safe at home, if you have a cabin, or the
 shared clearing otherwise, healed straight back up. See
 [decision 0024](docs/decisions/0024-a-masked-raccoon-that-fights-back.md).
 
+It notices you from much farther away once night falls - bolder in the
+dark, the same as a real animal would be. Carrying a lit torch, or staying
+close to a lit campfire or a built lantern, cancels that entirely: you're
+noticed from exactly the same distance as by day. Nothing about an actual
+fight changes at night - the same chase, the same wind-up, the same three
+hits to fight it off - only how easily it notices you in the first place.
+See
+[decision 0049](docs/decisions/0049-raccoons-get-bolder-at-night-and-a-cache-compass.md).
+
 A knockout buries half of what you were carrying - your axe and rod always
 stay with you - right where you went down, and heals you fully same as
 before. A small mound marks the spot; walk back to it and the HUD offers to
 dig it up, the same as reaching for anything else on the ground. Nobody but
 you can dig up your own cache. See
 [decision 0028](docs/decisions/0028-buried-items-after-a-knockout.md).
+
+A small compass appears on screen too, the moment you're not already
+standing next to it: an arrow pointing the way, and how far, to the nearest
+thing you have buried and not yet dug up. It turns as you look around, so
+it always points the real way regardless of which way you're facing, and it
+disappears once you're close enough to dig - handed straight back to the
+usual "press E" hint at that point. See
+[decision 0049](docs/decisions/0049-raccoons-get-bolder-at-night-and-a-cache-compass.md).
 
 Left `Ctrl` dodges - a quick, decisive step in whatever direction you are
 holding, or straight back if you are holding nothing - and leaves you
