@@ -2019,9 +2019,11 @@ export class Game {
 
     // Walking off lets go of whatever was clicked: the character aims the
     // way it walks again. Not while mid-move with the feet planted, which
-    // keeps facing whatever it is about to hit.
-    const busy = player.action.kind !== ActionKind.Idle;
-    if ((intent.x !== 0 || intent.z !== 0) && !busy) this.aimYaw = null;
+    // keeps facing whatever it is about to hit - but creeping through a
+    // wind-up does turn to walk, so the strike goes where it is facing.
+    const kind = player.action.kind;
+    const walksFreely = kind === ActionKind.Idle || kind === ActionKind.Charge;
+    if ((intent.x !== 0 || intent.z !== 0) && walksFreely) this.aimYaw = null;
 
     const produced = player.advance(
       deltaSeconds,

@@ -16,6 +16,7 @@ import {
   type ActionContext,
   type ActionState,
   type CollisionWorld,
+  type Footing,
   type Impact,
   type PlayerInput,
   type PlayerMotion,
@@ -287,7 +288,7 @@ export class LocalPlayer {
   private stepFeet(
     motion: PlayerMotion,
     input: PlayerInput,
-    footing: 'free' | 'planted' | 'still' | 'dodging',
+    footing: Footing,
     action: ActionState,
   ): void {
     if (footing === 'dodging') stepDodge(motion, action, this.collision);

@@ -436,9 +436,9 @@ export function hint(state: HudState): string {
   // The same goes for a piece picked from it and being placed.
   if (state.placing !== null) return placingHint(state.placing);
   if (state.craftMenuOpen) return craftMenuHint();
-  // Rooted to the spot until it resolves, so there is nothing else to offer
-  // right now - the same reasoning a menu gets, just shorter-lived.
-  if (state.charging) return 'Charging a heavy swing - rooted to the spot';
+  // Committed until it resolves, so there is nothing else to offer right
+  // now - the same reasoning a menu gets, just shorter-lived.
+  if (state.charging) return 'Charging a heavy swing - you can only creep';
   // Nothing can be carried without a bag, so this beats every hint below
   // that would otherwise send you to press E for nothing.
   const hasBag = state.carrying.some((entry) => entry.item === 'bag');

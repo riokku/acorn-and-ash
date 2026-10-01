@@ -4,6 +4,7 @@ import {
   ANIMAL_RESPAWN_SECONDS,
   BUILD_REACH,
   BUILD_REACH_SLACK,
+  CHARGE_WALK_SHARE,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
   DODGE_DISTANCE,
@@ -14,6 +15,7 @@ import {
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
   PLAYER_RADIUS,
+  PLAYER_WALK_SPEED,
   PREDATOR_CATCH_RADIUS,
   SPAWN_POSITION,
   SWING_COOLDOWN_TICKS,
@@ -2726,24 +2728,28 @@ describe('a charged attack', () => {
     expect(sim.felledTreeIds()).toContain(tree.id);
   });
 
-  it('roots you to the spot while it winds up, even holding a direction the whole time', () => {
+  it('slows you to a creep while it winds up, holding a direction the whole time', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     const before = sim.readPlayer(1)?.position;
     if (before === undefined) throw new Error('missing player');
 
     let seq = 1;
-    // Held throughout - if charging did not override it, this would have
-    // carried the player a couple of metres by now.
-    for (let i = 0; i < 10; i++) {
+    // Half a second, held throughout - walking, this would have carried the
+    // player a couple of metres by now.
+    const ticks = 10;
+    for (let i = 0; i < ticks; i++) {
       sim.queueInput(1, createInput(seq++, 0, 1, 0, PlayerButton.Charge));
       sim.step(tickClock());
     }
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Charge);
 
     const during = sim.readPlayer(1)?.position;
     if (during === undefined) throw new Error('missing player');
-    expect(during.x).toBeCloseTo(before.x, 5);
-    expect(during.z).toBeCloseTo(before.z, 5);
+    const crept = Math.hypot(during.x - before.x, during.z - before.z);
+    const creepPace = PLAYER_WALK_SPEED * CHARGE_WALK_SHARE * ticks * TICK_SECONDS;
+    expect(crept).toBeGreaterThan(creepPace * 0.9);
+    expect(crept).toBeLessThanOrEqual(creepPace + 1e-6);
   });
 
   it('never starts with nothing in hand', () => {

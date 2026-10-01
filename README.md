@@ -309,14 +309,18 @@ too. It needs a moment to recharge before it is ready again.
 See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
 Holding left click past a quick tap winds up a charged attack - about a
-second, crouched and rooted to the spot the whole time, the same as the
-raccoon's own wind-up asks of it - then leaps forward into a slam. Whatever it lands on when it goes off is finished
+second with your arm wound back, slowed to a creep at a third of walking
+pace - then leaps forward into a slam. Whatever it lands on when it goes off is finished
 outright: a tree falls in one regardless of how many ordinary swings it
 would otherwise take, and a raccoon is beaten in one regardless of how many
-hits it has left. It is a real trade - you cannot move, dodge or block
-while charging - so it suits a decisive moment more than a running fight.
+hits it has left. It is a real trade - you can only creep, and cannot run,
+jump, dodge or block while charging - so it suits a decisive moment more
+than a running fight. Creep while charging and you turn to face the way you
+walk, so the slam lands that way.
 See [decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md)
-for the charge itself, and
+for the charge itself,
+[decision 0059](docs/decisions/0059-creeping-through-a-charge.md) for
+creeping through it, and
 [decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) for
 why it moved off the right mouse button, which now turns the camera
 instead.

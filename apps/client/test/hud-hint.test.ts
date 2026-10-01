@@ -254,7 +254,7 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'axe', count: 1 }],
       aimedTree: { name: 'Oak', swingsLeft: 3 },
     };
-    expect(hint(state)).toBe('Charging a heavy swing - rooted to the spot');
+    expect(hint(state)).toBe('Charging a heavy swing - you can only creep');
   });
 });
 

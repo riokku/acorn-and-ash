@@ -114,6 +114,14 @@ async function load(): Promise<void> {
           },
         ]),
       );
+      // The wound-back arm on its own, for creeping along on walking legs.
+      const charge = whole.get('chargeHold');
+      if (charge !== undefined) {
+        upper.set(
+          'chargeHold',
+          keepTracks(charge, 'chargeHoldUpper', (bone) => UPPER_BODY_BONES.has(bone)),
+        );
+      }
     }
     library = { whole, upper, lower };
   } catch (error) {

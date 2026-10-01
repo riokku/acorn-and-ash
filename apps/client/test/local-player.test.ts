@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ActionKind,
+  CHARGE_WALK_SHARE,
   PLAYER_WALK_SPEED,
   PlayerButton,
   SPAWN_POSITION,
@@ -179,5 +181,20 @@ describe('jumping and sprinting on the client', () => {
     player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Jump);
     expect(player.motion.position.y).toBeGreaterThan(0);
     expect(player.motion.grounded).toBe(false);
+  });
+});
+
+describe('charging on the client', () => {
+  it('creeps at the same pace the server allows, so there is nothing to correct', () => {
+    const player = createPlayer();
+    player.setActionContext(() => ({ canAttack: true, castInstead: false }));
+    const ticks = 10;
+    for (let i = 0; i < ticks; i++) player.advance(TICK_SECONDS, 0, 1, 0, PlayerButton.Charge);
+    expect(player.action.kind).toBe(ActionKind.Charge);
+
+    const crept = SPAWN_POSITION.z - player.motion.position.z;
+    const creepPace = PLAYER_WALK_SPEED * CHARGE_WALK_SHARE * ticks * TICK_SECONDS;
+    expect(crept).toBeGreaterThan(creepPace * 0.9);
+    expect(crept).toBeLessThanOrEqual(creepPace + 1e-6);
   });
 });

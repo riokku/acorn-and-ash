@@ -111,6 +111,11 @@ export interface MovePose {
   readonly charge: number;
   /** Whether whatever is in hand is put away: nobody sleeps holding an axe. */
   readonly handsFree: boolean;
+  /**
+   * Whether the legs can walk on underneath while the arms keep the move
+   * going: creeping through a charge's wind-up (see `CHARGE_WALK_SHARE`).
+   */
+  readonly legsFree: boolean;
 }
 
 const NO_MOVE: MovePose = {
@@ -121,6 +126,7 @@ const NO_MOVE: MovePose = {
   roll: null,
   charge: 0,
   handsFree: false,
+  legsFree: false,
 };
 
 /** A move as it reaches the drawing code: the shared state, with `age` in fractional ticks. */
@@ -172,12 +178,13 @@ export function movePose(move: MoveView): MovePose {
 
     case ActionKind.Charge:
       // Crouched, arm wound right back, gathering: held, trembling harder
-      // the longer it winds up.
+      // the longer it winds up. Creeping along, the legs walk instead.
       return {
         ...NO_MOVE,
         clip: 'chargeHold',
         time: 0,
         charge: Math.min(1, move.age / CHARGE_TICKS),
+        legsFree: true,
       };
 
     case ActionKind.Strike: {
