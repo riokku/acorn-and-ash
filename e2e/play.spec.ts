@@ -583,7 +583,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   expect(axe).toBeDefined();
   if (bag === undefined || axe === undefined) throw new Error('no bag or axe in the clearing');
 
-  // Nothing can be carried, the axe included, before the bag is found.
+  // Find the bag first, the way a new player would - not that the axe needs it.
   await walkWithinReachOf(equipper, bag.x, bag.z);
   await equipper.keyboard.press('KeyE');
   await expect
@@ -801,12 +801,14 @@ async function chopUntilFelled(
  * making it the active item. Finding a tool is no longer enough to swing,
  * cast or eat with it - it has to be made active first, the same as
  * `equip(page, 'axe')` proves it visually in the dedicated equip test above.
+ * The bag has a button of its own rather than a numbered slot (see
+ * decision 0060), so it is left out of the count.
  */
 async function equip(page: Page, item: string): Promise<void> {
   const slot =
-    (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).findIndex(
-      (entry) => entry.item === item,
-    ) + 1;
+    (await page.evaluate(() => window.acornDebug?.carrying() ?? []))
+      .filter((entry) => entry.item !== 'bag')
+      .findIndex((entry) => entry.item === item) + 1;
   await page.keyboard.press(`Digit${slot}`);
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.equippedItem() ?? null))

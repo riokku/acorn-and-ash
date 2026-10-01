@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ITEM_KINDS } from '../src/data/items';
 import { RECIPES, RECIPE_ITEMS, recipeFor } from '../src/data/recipes';
-import { canAfford, craft } from '../src/sim/crafting';
+import { canAfford, canCraft, craft } from '../src/sim/crafting';
 import { addItem, countOf, createInventory } from '../src/sim/inventory';
 
 describe('the recipe table', () => {
@@ -65,10 +65,40 @@ describe('crafting', () => {
     expect(countOf(pack, 'axe')).toBe(0);
   });
 
-  it('refuses a craft with no bag to put the result in, materials or not', () => {
+  it('crafts with no bag at all, into one of the six slots everybody has', () => {
     const pack = createInventory();
-    pack.stick = 3;
-    expect(craft(pack, 'axe')).toBe(false);
+    addItem(pack, 'stick', 3);
+    expect(craft(pack, 'axe')).toBe(true);
+    expect(countOf(pack, 'axe')).toBe(1);
+  });
+
+  it('counts the slot its own makings free up as room for the result', () => {
+    // Six slots, every one taken - but the two sticks a torch costs are a
+    // whole slot on their own, so spending them makes room for the torch.
+    const pack = createInventory();
+    addItem(pack, 'stick', 2);
+    addItem(pack, 'log', 10);
+    addItem(pack, 'perch', 10);
+    addItem(pack, 'trout', 10);
+    addItem(pack, 'meat', 10);
+    addItem(pack, 'flower', 10);
+    expect(canCraft(pack, 'torch')).toBe(true);
+    expect(craft(pack, 'torch')).toBe(true);
+    expect(countOf(pack, 'torch')).toBe(1);
+    expect(countOf(pack, 'stick')).toBe(0);
+  });
+
+  it('refuses a craft whose makings free no slot, when every slot is taken', () => {
+    // Three sticks leave one behind after a torch, so the stack keeps its slot.
+    const pack = createInventory();
+    addItem(pack, 'stick', 3);
+    addItem(pack, 'log', 10);
+    addItem(pack, 'perch', 10);
+    addItem(pack, 'trout', 10);
+    addItem(pack, 'meat', 10);
+    addItem(pack, 'flower', 10);
+    expect(canCraft(pack, 'torch')).toBe(false);
+    expect(craft(pack, 'torch')).toBe(false);
     expect(countOf(pack, 'stick')).toBe(3);
   });
 
@@ -121,13 +151,13 @@ describe('crafting', () => {
 });
 
 describe('what a recipe is worth', () => {
-  it('costs an amount that actually fits in the item it wants', () => {
+  it('never costs more than one slot of the item it wants', () => {
     for (const item of RECIPE_ITEMS) {
       const recipe = recipeFor(item);
       expect(recipe).not.toBeNull();
       for (const cost of recipe?.costs ?? []) {
         expect(cost.amount).toBeGreaterThan(0);
-        expect(cost.amount).toBeLessThanOrEqual(ITEM_KINDS[cost.item].maxCarry);
+        expect(cost.amount).toBeLessThanOrEqual(ITEM_KINDS[cost.item].stackSize);
       }
     }
   });

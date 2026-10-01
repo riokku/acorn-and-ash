@@ -100,7 +100,8 @@ export const ROD_PICKUP_ID = 2;
 
 /**
  * Where the bag is waiting: a few steps from the spawn point, so it is the
- * very first thing anybody finds. Nothing else can be carried until it is.
+ * very first thing anybody finds - and its four extra slots with it (see
+ * decision 0060).
  *
  * Kept clear of every other pickup and gather spot's own reach - close
  * enough and the stick patch at (2.6, 1.8) would let a player scoop up the

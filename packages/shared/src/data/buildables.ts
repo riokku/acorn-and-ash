@@ -60,9 +60,8 @@ export const BUILDABLE_KINDS = {
   cabin: {
     id: 'cabin',
     displayName: 'Cabin',
-    // Logs have a maxCarry of 10 - the most a player can ever hold at once -
-    // so this is as much as a single trip can possibly pay for, and the most
-    // this recipe could ever cost without becoming unbuildable.
+    // A single slot's worth of logs (see decision 0060) - one trip to the
+    // trees, however few slots are free, pays for it.
     costs: [{ item: 'log', amount: 10 }],
     footprintRadius: 3,
     isHome: true,
@@ -83,7 +82,7 @@ export const BUILDABLE_KINDS = {
   lantern: {
     id: 'lantern',
     displayName: 'Lantern',
-    // A flower's own maxCarry is 10, split so a single trip can afford
+    // A slot holds ten flowers, split so a single slot's worth can afford
     // either a bed on its own or a bed and a lantern together.
     costs: [{ item: 'flower', amount: 4 }],
     footprintRadius: 0.35,

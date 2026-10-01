@@ -164,10 +164,10 @@ describe('what the pond gives up', () => {
     for (const row of others) expect(carp?.weight).toBeLessThan(row.weight);
   });
 
-  it('lets you carry ten of each fish, and one rod', () => {
-    expect(ITEM_KINDS.perch.maxCarry).toBe(10);
-    expect(ITEM_KINDS.trout.maxCarry).toBe(10);
-    expect(ITEM_KINDS.goldenCarp.maxCarry).toBe(10);
+  it('stacks ten of each fish to a slot, and lets you carry one rod', () => {
+    expect(ITEM_KINDS.perch.stackSize).toBe(10);
+    expect(ITEM_KINDS.trout.stackSize).toBe(10);
+    expect(ITEM_KINDS.goldenCarp.stackSize).toBe(10);
     expect(ITEM_KINDS.rod.maxCarry).toBe(1);
   });
 
@@ -502,7 +502,12 @@ describe('fishing in the world', () => {
   });
 
   it('throws the fish back when the pack has no room for it', () => {
-    const full = POND_FISH.map((row) => ({ item: row.item, count: ITEM_KINDS[row.item].maxCarry }));
+    // The rod and three full stacks of each fish fill all ten of the bag's
+    // slots, with no part-filled stack left for a catch to top up.
+    const full = POND_FISH.map((row) => ({
+      item: row.item,
+      count: ITEM_KINDS[row.item].stackSize * 3,
+    }));
     const { sim, events, click, waitFor } = atTheWater([
       { item: 'bag', count: 1 },
       { item: 'rod', count: 1 },
@@ -514,7 +519,7 @@ describe('fishing in the world', () => {
     const caught = events.find((event) => event.kind === 'caught');
     if (caught?.kind !== 'caught') throw new Error('expected a catch');
     expect(caught.added).toBe(0);
-    expect(sim.inventoryOf(1)[caught.item]).toBe(ITEM_KINDS[caught.item].maxCarry);
+    expect(sim.inventoryOf(1)[caught.item]).toBe(ITEM_KINDS[caught.item].stackSize * 3);
   });
 
   it('takes a breath before the next cast', () => {

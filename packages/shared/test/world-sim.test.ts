@@ -607,7 +607,7 @@ describe('finding the bag', () => {
 });
 
 describe('picking the axe up', () => {
-  /** A player who has already found their bag - nothing else can be picked up without one. */
+  /** A player who has already found their bag, and has its ten slots to fill. */
   function withBag(netId: number): PersistedPlayer {
     return {
       netId,
@@ -645,9 +645,22 @@ describe('picking the axe up', () => {
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
   });
 
-  it('will not hand over the axe to a player with no bag yet', () => {
+  it('hands over the axe with no bag at all, into one of the six slots everybody has', () => {
     const sim = createWorld();
     sim.addPlayer(1);
+    reachForTheAxe(sim, 1);
+
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
+  });
+
+  it('leaves the axe where it is for a player whose every slot is taken', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      ...withBag(1),
+      // No bag after all: six slots, every one a full stack of sticks.
+      items: [{ item: 'stick', count: ITEM_KINDS.stick.stackSize * 6 }],
+    });
     reachForTheAxe(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
@@ -1079,7 +1092,7 @@ describe('gathering sticks', () => {
   const spot = STICK_PATCHES[0];
   if (spot === undefined) throw new Error('no stick patch to test against');
 
-  /** A player who has already found their bag - nothing can be gathered without one. */
+  /** A player who has already found their bag, and has its ten slots to fill. */
   function withBag(netId: number): PersistedPlayer {
     return {
       netId,
@@ -1101,13 +1114,13 @@ describe('gathering sticks', () => {
     expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
   });
 
-  it('does nothing at all without a bag yet', () => {
+  it('gathers with no bag at all, into one of the six slots everybody has', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
-    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
   });
 
   it('does nothing far from every patch', () => {
@@ -1168,7 +1181,7 @@ describe('gathering sticks', () => {
     expect(sim.hungerOf(1)).toBe(50);
   });
 
-  it('falls through to eating once the stick pile is full', () => {
+  it('falls through to eating once there is no room for another stick', () => {
     const sim = createWorld();
     sim.addPlayer(1, {
       netId: 1,
@@ -1177,8 +1190,9 @@ describe('gathering sticks', () => {
       z: 0,
       facingYaw: 0,
       items: [
+        // The perch and nine full stacks of sticks fill all ten of the bag's slots.
         { item: 'bag', count: 1 },
-        { item: 'stick', count: ITEM_KINDS.stick.maxCarry },
+        { item: 'stick', count: ITEM_KINDS.stick.stackSize * 9 },
         { item: 'perch', count: 1 },
       ],
       hunger: 50,
@@ -1513,10 +1527,11 @@ describe('chopping a tree down', () => {
     const sim = createWorld();
     sim.addPlayer(1, {
       ...withAxe(1),
+      // The axe and nine full stacks of logs fill all ten of the bag's slots.
       items: [
         { item: 'bag', count: 1 },
         { item: 'axe', count: 1 },
-        { item: 'log', count: 10 },
+        { item: 'log', count: 90 },
       ],
     });
     const tree = findTree(sim, 'birch');
@@ -1534,7 +1549,7 @@ describe('chopping a tree down', () => {
     expect(sim.felledTreeIds()).toEqual([tree.id]);
     expect(lastEvent?.swingsLeft).toBe(0);
     expect(lastEvent?.logsGained).toBe(0);
-    expect(countOf(sim.inventoryOf(1), 'log')).toBe(10);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(90);
   });
 
   it('remembers half-chopped trees and felled ones across a restart', () => {
@@ -2042,9 +2057,10 @@ describe('catching wildlife', () => {
     sim.addPlayer(1, {
       ...withAxe(1),
       items: [
+        // The axe and nine full stacks of meat fill all ten of the bag's slots.
         { item: 'bag', count: 1 },
         { item: 'axe', count: 1 },
-        { item: 'meat', count: ITEM_KINDS.meat.maxCarry },
+        { item: 'meat', count: ITEM_KINDS.meat.stackSize * 9 },
       ],
     });
     standByDen(sim, 1);
@@ -2052,7 +2068,7 @@ describe('catching wildlife', () => {
     swingOnce(sim, 1, 1, FACE_DEN);
 
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 0 }]);
-    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(ITEM_KINDS.meat.maxCarry);
+    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(ITEM_KINDS.meat.stackSize * 9);
   });
 
   it('vanishes from every snapshot the moment it is caught', () => {

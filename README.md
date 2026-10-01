@@ -10,9 +10,9 @@ The game is online-only. Every world runs on the server.
 > real birch, oak and pine trees, real rocks and a pond,
 > surrounded by generated wilderness you can walk out into, a real animated
 > character you walk, sprint and jump around, a
-> third-person camera, and a server that decides where everybody is. Find a
-> bag near where you start before anything else - nothing can be carried
-> without one. Then find the axe standing in a stump and chop trees down;
+> third-person camera, and a server that decides where everybody is. Your
+> pack starts with six slots, and the bag near where you start adds four
+> more. Find the axe standing in a stump and chop trees down;
 > they grow back while you are away. Find the rod on the bank of the pond
 > and catch fish. Gather sticks by hand and craft your own axe or rod
 > instead. A hotbar along the bottom shows what you're carrying, six slots
@@ -121,16 +121,18 @@ you are walking. See
 [decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
 [decision 0051](docs/decisions/0051-a-click-turns-the-character-not-the-camera.md).
 
-Nothing can be carried at all until you find a bag - the very first thing to
-look for, a few steps from where you start. Once you have it, you can carry
-one axe, one fishing rod, ten logs, ten sticks, ten flowers, ten meat and ten
-of each kind of fish. The limits, and how much hunger eating one restores,
+Your pack has six slots to start with. The bag, a few steps from where you
+start, adds four more, for ten. A slot holds up to ten of one thing - logs,
+sticks, flowers, meat or one kind of fish - so fourteen logs take two slots.
+A tool takes a whole slot, and you only ever carry one of each. The bag
+itself never takes a slot. How much fits in a slot, what the bag adds, and
+how much hunger eating something restores,
 live in [`packages/shared/src/data/items.ts`](packages/shared/src/data/items.ts),
 what each tree costs in swings and pays in logs lives in
 [`packages/shared/src/data/props.ts`](packages/shared/src/data/props.ts), and
 which fish bite and how often lives in
 [`packages/shared/src/data/fish.ts`](packages/shared/src/data/fish.ts). See
-[decision 0040](docs/decisions/0040-a-bag-to-find-and-a-hotbar.md).
+[decision 0060](docs/decisions/0060-a-pack-of-slots.md).
 
 A hotbar along the bottom of the screen shows what's in your pack, six slots
 at a time - wire order unless you have dragged something onto a slot
@@ -142,13 +144,18 @@ wax-seal circles on a parchment strip, the same warm look the craft and
 build menus and the Home screen all now share. See
 [decision 0043](docs/decisions/0043-a-field-journal-for-crafting-and-carrying.md).
 
-Press `I`, or the bag button next to the hotbar, to see everything you're
-carrying, not just the six slots there's room for on the bar - the same
-parchment look, with every item's icon, name and count. Drag one onto a
+The bag button at the end of the hotbar shows how full your pack is: its
+ring has one segment per slot, filled for each one in use, with "4/6"
+underneath. It turns orange once every slot is taken. Press `I`, or click
+it, to open your pack and see everything you're carrying, not just the six
+there's room for on the bar - the same parchment look, with a meter of slots
+used, one square per slot (empty ones dashed), and every stack's icon, name
+and count. Drag one onto a
 hotbar slot to pin it there, or drag a hotbar slot back onto the pack to
 unpin it; clicking an item in either place equips it, the same as its
 number key. See
-[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md).
+[decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
+[decision 0060](docs/decisions/0060-a-pack-of-slots.md).
 
 ### Your character
 
@@ -353,7 +360,7 @@ needs and marks the ones you can afford right now, and `C` again closes it.
 Building (`B`) opens the same kind of page, for campfires, cabins, flower
 beds and lanterns instead. Finding the axe in the stump and the rod on the
 bank still work exactly as before; crafting is another way to get one, and
-still needs a bag the same as anything else does. The torch has no such
+needs a free slot for it once the ingredients are used up. The torch has no such
 shortcut - crafting is the only way to get one - and it equips and shows in
 your hand exactly like the axe and rod, casting real firelight for as long
 as it's the one you have equipped. See
@@ -418,7 +425,7 @@ itself away once placed. See
   for now. It burns for a while and goes out on its own, or put it out early
   by pressing `E` again. A lit fire casts real, flickering light on
   everything nearby, not just a flame that looks lit.
-- **Cabin** - ten logs, the most a pack can ever hold at once. Capped at one
+- **Cabin** - ten logs, one slot's worth. Capped at one
   per player. A little log cabin, with a shingled roof, a stone chimney, a
   window glowing warm and a woodpile by the wall - and you can go inside
   (see below).
