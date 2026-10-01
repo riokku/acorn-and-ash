@@ -583,7 +583,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   expect(axe).toBeDefined();
   if (bag === undefined || axe === undefined) throw new Error('no bag or axe in the clearing');
 
-  // Nothing can be carried, the axe included, before the bag is found.
+  // Find the bag first, the way a new player would - not that the axe needs it.
   await walkWithinReachOf(equipper, bag.x, bag.z);
   await equipper.keyboard.press('KeyE');
   await expect

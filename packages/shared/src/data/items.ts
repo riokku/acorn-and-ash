@@ -24,12 +24,22 @@ export interface ItemKind {
   /** What more than one is called: logs, but two trout and not two trouts. */
   readonly pluralName: string;
   /**
-   * The most of this one player can carry.
-   *
-   * The limit is per kind rather than a shared bag of slots, so carrying the axe
-   * never costs you room for logs.
+   * How many fit in one slot of a player's pack - ten of anything gathered,
+   * while a tool takes a whole slot to itself. More than a slot's worth just
+   * spills into another slot (see decision 0060).
    */
-  readonly maxCarry: number;
+  readonly stackSize: number;
+  /**
+   * The most of this one player can ever carry, however much room is left -
+   * or undefined for no limit but the pack's own slots. One axe is all
+   * anybody needs, so a tool stops at one rather than filling a slot apiece.
+   */
+  readonly maxCarry: number | undefined;
+  /**
+   * If this is a pack, how many slots it adds to the ones everybody starts
+   * with. A pack never takes up a slot itself: it is what the slots are in.
+   */
+  readonly extraSlots: number | undefined;
   /** Placeholder colour, as 0xRRGGBB. */
   readonly placeholderColor: number;
   /** How much hunger eating one restores, or undefined if it cannot be eaten. */
@@ -52,7 +62,9 @@ export const ITEM_KINDS = {
     id: 'axe',
     displayName: 'Axe',
     pluralName: 'Axes',
+    stackSize: 1,
     maxCarry: 1,
+    extraSlots: undefined,
     placeholderColor: 0x9a7b4f,
     restoresHunger: undefined,
     keepOnKnockout: true,
@@ -62,7 +74,9 @@ export const ITEM_KINDS = {
     id: 'log',
     displayName: 'Log',
     pluralName: 'Logs',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0x8c6239,
     restoresHunger: undefined,
     keepOnKnockout: false,
@@ -72,7 +86,9 @@ export const ITEM_KINDS = {
     id: 'rod',
     displayName: 'Fishing rod',
     pluralName: 'Fishing rods',
+    stackSize: 1,
     maxCarry: 1,
+    extraSlots: undefined,
     placeholderColor: 0xb89a5e,
     restoresHunger: undefined,
     keepOnKnockout: true,
@@ -82,7 +98,9 @@ export const ITEM_KINDS = {
     id: 'perch',
     displayName: 'Perch',
     pluralName: 'Perch',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0x8fa35a,
     restoresHunger: 40,
     keepOnKnockout: false,
@@ -92,7 +110,9 @@ export const ITEM_KINDS = {
     id: 'trout',
     displayName: 'Trout',
     pluralName: 'Trout',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0xc98f86,
     restoresHunger: 40,
     keepOnKnockout: false,
@@ -102,7 +122,9 @@ export const ITEM_KINDS = {
     id: 'goldenCarp',
     displayName: 'Golden carp',
     pluralName: 'Golden carp',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0xe8b53a,
     restoresHunger: 40,
     keepOnKnockout: false,
@@ -112,7 +134,9 @@ export const ITEM_KINDS = {
     id: 'stick',
     displayName: 'Stick',
     pluralName: 'Sticks',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0xb5895a,
     restoresHunger: undefined,
     keepOnKnockout: false,
@@ -122,7 +146,9 @@ export const ITEM_KINDS = {
     id: 'meat',
     displayName: 'Meat',
     pluralName: 'Meat',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0xb5573f,
     // A catch takes a real chase, unlike a fish that only takes a click at
     // the right moment, so it is worth a little more than one.
@@ -134,7 +160,9 @@ export const ITEM_KINDS = {
     id: 'flower',
     displayName: 'Flower',
     pluralName: 'Flowers',
-    maxCarry: 10,
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
     placeholderColor: 0xdd5fa8,
     restoresHunger: undefined,
     keepOnKnockout: false,
@@ -144,10 +172,14 @@ export const ITEM_KINDS = {
     id: 'bag',
     displayName: 'Bag',
     pluralName: 'Bags',
+    stackSize: 1,
     maxCarry: 1,
+    // Six slots become ten - see decision 0060.
+    extraSlots: 4,
     placeholderColor: 0x5f6b45,
     restoresHunger: undefined,
-    // Never lose the one thing everything else you carry depends on.
+    // Never lose the four extra slots everything else you carry may be
+    // sitting in.
     keepOnKnockout: true,
     equippable: false,
   },
@@ -158,7 +190,9 @@ export const ITEM_KINDS = {
     // A permanent tool once made, the same as the axe and rod - no fuel to
     // track, matching the campfire's own atmosphere-only fire (see decision
     // 0033).
+    stackSize: 1,
     maxCarry: 1,
+    extraSlots: undefined,
     placeholderColor: 0x7a5230,
     restoresHunger: undefined,
     // As essential at night as the axe and rod are for gathering, so a
@@ -211,3 +245,11 @@ export const FOOD_ITEMS: readonly ItemId[] = ITEM_ORDER.filter(isFood);
  * chopping is the more common reason to have a hand free at all.
  */
 export const TOOL_ITEMS: readonly ItemId[] = ['axe', 'rod'];
+
+/** Whether this is a pack: something that adds slots rather than taking one. */
+export function isPack(item: ItemId): boolean {
+  return ITEM_KINDS[item].extraSlots !== undefined;
+}
+
+/** Every pack there is to find, in the wire order. */
+export const PACK_ITEMS: readonly ItemId[] = ITEM_ORDER.filter(isPack);

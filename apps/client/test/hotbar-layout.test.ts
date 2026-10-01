@@ -47,6 +47,22 @@ describe('resolving what a hotbar slot shows', () => {
     expect(resolveHotbarSlots(carrying, pins)).toEqual(['rod', 'axe', null, null, null, null]);
   });
 
+  it('leaves the bag out, since it has a button of its own', () => {
+    const carrying = [
+      { item: 'axe' as const, count: 1 },
+      { item: 'bag' as const, count: 1 },
+      { item: 'torch' as const, count: 1 },
+    ];
+    expect(resolveHotbarSlots(carrying, NOTHING_PINNED)).toEqual([
+      'axe',
+      'torch',
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it('keeps showing a pin even if that item is not currently carried', () => {
     const pins = assignSlot(NOTHING_PINNED, 2, 'torch');
     expect(resolveHotbarSlots([], pins)).toEqual([null, null, 'torch', null, null, null]);

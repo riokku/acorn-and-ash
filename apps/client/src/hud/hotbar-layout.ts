@@ -8,7 +8,7 @@
  * 0050 and decision 0040's own note that manual placement was a follow-up.
  */
 
-import { ITEM_ORDER, type ItemId } from '@acorn/shared';
+import { ITEM_ORDER, isPack, type ItemId } from '@acorn/shared';
 
 const STORAGE_KEY = 'acorn.hotbarLayout';
 export const HOTBAR_SIZE = 6;
@@ -64,14 +64,18 @@ export function clearSlot(pins: HotbarPins, slotIndex: number): HotbarPins {
  * What each of the six slots actually shows right now: a pin if it has one,
  * otherwise the next carried item that nothing else has claimed, in wire
  * order - the same thing `Hotbar` renders and a hotbar-key press equips, so
- * the two can never disagree about what a given slot means.
+ * the two can never disagree about what a given slot means. A pack never
+ * fills a slot on its own: it has its own button at the end of the bar
+ * (see decision 0060), and there is nothing to do with it from a number key.
  */
 export function resolveHotbarSlots(
   carrying: readonly { readonly item: ItemId; readonly count: number }[],
   pins: HotbarPins,
 ): readonly (ItemId | null)[] {
   const pinned = new Set(pins.filter((pin): pin is ItemId => pin !== null));
-  const autoOrder = carrying.map((entry) => entry.item).filter((item) => !pinned.has(item));
+  const autoOrder = carrying
+    .map((entry) => entry.item)
+    .filter((item) => !pinned.has(item) && !isPack(item));
 
   let autoIndex = 0;
   return pins.map((pin) => {

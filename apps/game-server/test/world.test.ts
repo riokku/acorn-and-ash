@@ -549,8 +549,9 @@ async function walkToTheAxe(client: TestClient): Promise<void> {
 /**
  * Walk a fresh connection to the bag and pick it up.
  *
- * Nothing else can be carried before this, so almost every test that goes on
- * to pick up, gather, chop, fish, hunt or eat something starts here first.
+ * Its four extra slots mean a test that goes on to pick up, gather, chop,
+ * fish, hunt or eat something never has to think about the six a player
+ * starts with running out, so almost every one starts here first.
  */
 async function findTheBag(client: TestClient): Promise<void> {
   await walkWithinReach(client, BAG_SPOT);
@@ -591,16 +592,13 @@ describe('finding the bag', () => {
     client.close();
   });
 
-  it('is the one thing a bagless player can still pick up', async () => {
-    const client = await TestClient.connect(nextWorldId(), 'nothing-yet');
+  it('is not needed to pick something up - six slots come before any bag', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'no-bag-yet');
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await sleep(150);
+    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
 
-    // Standing right in the stump, holding the button down, still nothing -
-    // there is nowhere yet to put an axe.
-    expect(client.inventory()).toEqual([]);
-    expect(client.takenPickups()).toEqual([]);
+    expect(client.inventory()).toEqual([{ item: 'axe', count: 1 }]);
     client.close();
   });
 });
@@ -828,14 +826,14 @@ describe('gathering and crafting', () => {
     client.close();
   });
 
-  it('gathers nothing at all without a bag yet', async () => {
+  it('gathers with no bag at all, into one of the six slots everybody has', async () => {
     const client = await TestClient.connect(nextWorldId(), 'bagless-gatherer');
     await walkWithinReach(client, stickPatch);
 
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await sleep(150);
+    await waitFor('a stick', () => client.inventory().some((entry) => entry.item === 'stick'));
 
-    expect(client.inventory()).toEqual([]);
+    expect(client.inventory()).toEqual([{ item: 'stick', count: 1 }]);
     client.close();
   });
 
@@ -1254,7 +1252,7 @@ describe('fishing', () => {
     const again = await TestClient.connect(worldId, 'the-angler');
     await waitFor('the pack', () => again.countOfMessages('inventory') > 0);
     expect(again.inventory()).toContainEqual({ item: caught.item, count: 1 });
-    expect(ITEM_KINDS[caught.item].maxCarry).toBe(10);
+    expect(ITEM_KINDS[caught.item].stackSize).toBe(10);
     again.close();
   }, 45_000);
 
@@ -1963,8 +1961,8 @@ describe('threats', () => {
     const first = await TestClient.connect(worldId, 'gets-buried');
     // Something worth losing - an empty pack has nothing a knockout can
     // bury, and burying half of one stick would still be none. A bag first,
-    // same as anything else worth carrying - and it survives the knockout
-    // itself, being a tool, so digging the cache back up later still works.
+    // the same as most tests here - and it survives the knockout itself,
+    // being kept like a tool, so its slots are still there to dig into.
     await findTheBag(first);
     await walkWithinReach(first, stickPatch);
     const hasTwoSticks = (): boolean =>

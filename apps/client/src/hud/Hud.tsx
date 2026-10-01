@@ -10,6 +10,8 @@ import {
   ITEM_KINDS,
   RECIPE_ITEMS,
   canAfford,
+  canCraft,
+  hasItem,
   inventoryFromEntries,
   isFood,
   recipeFor,
@@ -21,7 +23,7 @@ import {
 
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
-import { InventoryPanel, InventoryToggleButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
+import { InventoryPanel, PackButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
 import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
 import { WorldMap } from './WorldMap';
@@ -116,11 +118,17 @@ export function Hud({
       ) : null}
       {state.ready && state.playing && !state.mapOpen ? (
         <>
-          <Hotbar state={state} onUseItem={onUseItem} onHotbarSlotsChange={onHotbarSlotsChange} />
-          <InventoryToggleButton onToggle={onToggleInventory} />
+          {state.inventoryOpen ? <div className="inventory-scrim" /> : null}
+          <Hotbar
+            state={state}
+            onUseItem={onUseItem}
+            onHotbarSlotsChange={onHotbarSlotsChange}
+            onToggleInventory={onToggleInventory}
+          />
           <InventoryPanel
             open={state.inventoryOpen}
-            entries={state.carrying}
+            carrying={state.carrying}
+            equippedItem={state.equippedItem}
             onUseItem={onUseItem}
             onUnpinFromHotbar={(slotIndex) =>
               onHotbarSlotsChange(clearSlot(state.hotbarSlots, slotIndex))
@@ -309,7 +317,7 @@ function craftEntries(state: HudState): RecipeEntry[] {
         ),
         displayName: kind.displayName,
         costs: recipe.costs,
-        ready: roomFor(inventory, item) > 0 && canAfford(inventory, recipe),
+        ready: canCraft(inventory, item),
       },
     ];
   });
@@ -439,18 +447,8 @@ export function hint(state: HudState): string {
   // Committed until it resolves, so there is nothing else to offer right
   // now - the same reasoning a menu gets, just shorter-lived.
   if (state.charging) return 'Charging a heavy swing - you can only creep';
-  // Nothing can be carried without a bag, so this beats every hint below
-  // that would otherwise send you to press E for nothing.
-  const hasBag = state.carrying.some((entry) => entry.item === 'bag');
-  if (!hasBag && (state.nearbyItem !== null || state.nearGatherSpot !== null)) {
-    return "You'll need something to carry things in first";
-  }
-  if (state.nearbyItem !== null) {
-    return `Press E to pick up the ${ITEM_KINDS[state.nearbyItem].displayName.toLowerCase()}`;
-  }
-  if (state.nearGatherSpot !== null) {
-    return `Press E to gather ${ITEM_KINDS[state.nearGatherSpot].pluralName.toLowerCase()}`;
-  }
+  if (state.nearbyItem !== null) return pickupHint(state, state.nearbyItem);
+  if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
   if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
@@ -487,6 +485,27 @@ export function hint(state: HudState): string {
     'WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · ' +
     'C to craft · B to build · I for your pack'
   );
+}
+
+/**
+ * What E would do with something at your feet - or why it would not, once
+ * every slot is taken or it is a second of something you only ever carry
+ * one of (see decision 0060).
+ */
+function pickupHint(state: HudState, item: ItemId): string {
+  const kind = ITEM_KINDS[item];
+  const name = kind.displayName.toLowerCase();
+  const pack = inventoryFromEntries(state.carrying);
+  if (roomFor(pack, item) > 0) return `Press E to pick up the ${name}`;
+  if (kind.maxCarry === 1 && hasItem(pack, item)) return `You can only carry one ${name}`;
+  return `Your pack is full · no room for the ${name}`;
+}
+
+/** What E would do beside a patch: gather from it, or nothing until a slot frees up. */
+function gatherHint(state: HudState, item: ItemId): string {
+  const plural = ITEM_KINDS[item].pluralName.toLowerCase();
+  if (roomFor(inventoryFromEntries(state.carrying), item) > 0) return `Press E to gather ${plural}`;
+  return `Your pack is full · no room for more ${plural}`;
 }
 
 function hungerHint(state: HudState): string {
@@ -540,20 +559,22 @@ function craftMenuHint(): string {
 }
 
 /**
- * The row of slots along the bottom, one per item kind up to six. A slot
- * shows whatever has been dragged onto it from the pack, or failing that
- * whatever wire order would put there - see `resolveHotbarSlots`. Empty
- * slots still show their number, so which key does what never depends on
- * what you happen to be holding.
+ * The row of slots along the bottom, one per item kind up to six, then the
+ * bag button that opens the pack. A slot shows whatever has been dragged
+ * onto it from the pack, or failing that whatever wire order would put
+ * there - see `resolveHotbarSlots`. Empty slots still show their number, so
+ * which key does what never depends on what you happen to be holding.
  */
 function Hotbar({
   state,
   onUseItem,
   onHotbarSlotsChange,
+  onToggleInventory,
 }: {
   state: HudState;
   onUseItem: (item: ItemId) => void;
   onHotbarSlotsChange: (next: HotbarPins) => void;
+  onToggleInventory: () => void;
 }): React.JSX.Element {
   const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots);
   return (
@@ -569,6 +590,12 @@ function Hotbar({
           onAssign={(dropped) => onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))}
         />
       ))}
+      <span className="hotbar-divider" aria-hidden="true" />
+      <PackButton
+        carrying={state.carrying}
+        open={state.inventoryOpen}
+        onToggle={onToggleInventory}
+      />
     </div>
   );
 }
@@ -633,7 +660,7 @@ function HotbarSlot({
             className="hotbar-slot-icon"
           />
         ) : null}
-        {kind !== null && kind.maxCarry > 1 && count > 0 ? (
+        {kind !== null && kind.stackSize > 1 && count > 0 ? (
           <span className="hotbar-slot-count">{count}</span>
         ) : null}
       </div>

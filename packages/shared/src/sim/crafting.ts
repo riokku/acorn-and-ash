@@ -25,8 +25,21 @@ export function canAfford(
 }
 
 /**
- * Make one of an item, if there is a recipe for it, the pack can afford it
- * and has room for the result.
+ * Whether one of an item could be made right now: there is a recipe for it,
+ * the pack can afford it, and there is room for the result once the makings
+ * are spent - two sticks used up can free the very slot a torch goes in.
+ */
+export function canCraft(inventory: Inventory, item: ItemId): boolean {
+  const recipe = recipeFor(item);
+  if (recipe === null || !canAfford(inventory, recipe)) return false;
+
+  const afterSpending = { ...inventory };
+  for (const cost of recipe.costs) removeItem(afterSpending, cost.item, cost.amount);
+  return roomFor(afterSpending, item) > 0;
+}
+
+/**
+ * Make one of an item, if `canCraft` says it could be.
  *
  * Nothing is spent on a craft that could not be carried: losing the makings
  * of your only axe to a full pack would be a nasty surprise. Returns whether
@@ -34,9 +47,7 @@ export function canAfford(
  */
 export function craft(inventory: Inventory, item: ItemId): boolean {
   const recipe = recipeFor(item);
-  if (recipe === null) return false;
-  if (roomFor(inventory, item) === 0) return false;
-  if (!canAfford(inventory, recipe)) return false;
+  if (recipe === null || !canCraft(inventory, item)) return false;
 
   for (const cost of recipe.costs) removeItem(inventory, cost.item, cost.amount);
   addItem(inventory, item);
