@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ANIMAL_DENS,
+  CLOSE_PLAYING_ELSEWHERE,
   ANIMAL_KINDS,
   AXE_PICKUP_ID,
   BAG_PICKUP_ID,
@@ -242,6 +243,98 @@ describe('remembering where a player was', () => {
     expect(after.x).toBeCloseTo(before.x, 1);
     expect(after.z).toBeCloseTo(before.z, 1);
     second.close();
+  });
+});
+
+describe('one of you per world', () => {
+  /** Walk a little way from the spawn, and say where it got to. */
+  async function wanderOff(client: TestClient): Promise<{ x: number; z: number }> {
+    const netId = client.welcome().netId;
+    for (let i = 0; i < 4; i++) {
+      client.walk(1, 1, 0, 8);
+      await sleep(150);
+    }
+    await waitFor(
+      'to have moved',
+      () => {
+        const here = client.positionOf(netId);
+        return here !== undefined && Math.hypot(here.x, here.z - 6) > 2;
+      },
+      6000,
+    );
+    await sleep(200);
+    const here = client.positionOf(netId);
+    if (here === undefined) throw new Error('lost the player');
+    return here;
+  }
+
+  it('carries on in the same body when the same player joins again, leaving no copy behind', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'back-again-player';
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    const before = await wanderOff(first);
+
+    // The first connection never says goodbye: as far as the server knows
+    // it is still here, the way a dropped one looks until it times out.
+    const again = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome back', () => again.received.some((entry) => entry.type === 'welcome'));
+    expect(again.welcome().netId).toBe(first.welcome().netId);
+
+    await waitFor('the first connection to be let go', () => first.closedWith !== null);
+    expect(first.closedWith).toBe(CLOSE_PLAYING_ELSEWHERE);
+
+    // Right where it stood - not back at the last save - and only the once.
+    await waitFor('some snapshots', () => again.snapshots().length >= 3);
+    const players = again.latestSnapshot().entities.filter((entity) => !isAnimal(entity));
+    expect(players).toHaveLength(1);
+    const here = again.positionOf(again.welcome().netId);
+    expect(here?.x).toBeCloseTo(before.x, 1);
+    expect(here?.z).toBeCloseTo(before.z, 1);
+    again.close();
+  });
+
+  it('keeps the player when the old connection closes after the new one took over', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'two-tabs-player';
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    const again = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome back', () => again.received.some((entry) => entry.type === 'welcome'));
+    await waitFor('the first connection to be let go', () => first.closedWith !== null);
+    first.close();
+    await sleep(300);
+
+    const netId = again.welcome().netId;
+    expect(again.received.some((entry) => entry.type === 'playerLeft')).toBe(false);
+    const snapshotsBefore = again.snapshots().length;
+    await waitFor('more snapshots', () => again.snapshots().length > snapshotsBefore + 2);
+    expect(again.positionOf(netId)).toBeDefined();
+    again.close();
+  });
+
+  it('listens to the new connection from its very first input', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'counts-from-one';
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    const before = await wanderOff(first);
+
+    // A reloaded page counts its inputs from one again, well below what
+    // the old connection had got up to.
+    const again = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome back', () => again.received.some((entry) => entry.type === 'welcome'));
+    const netId = again.welcome().netId;
+    again.walk(-1, -1, 0, 8);
+    await waitFor(
+      'to walk back',
+      () => {
+        const here = again.positionOf(netId);
+        return here !== undefined && Math.hypot(here.x - before.x, here.z - before.z) > 1;
+      },
+      6000,
+    );
+    again.close();
   });
 });
 

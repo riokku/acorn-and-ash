@@ -931,6 +931,23 @@ export class WorldSimulation {
     runtime.pendingBuild = request;
   }
 
+  /**
+   * The same player, back on a new connection while their body was still
+   * here (see decision 0057): they carry on in it exactly as it stands. Only
+   * what the old connection was in the middle of sending is forgotten - a
+   * reloaded page counts its inputs from one again, and anything at or below
+   * the old count would otherwise be thrown away as already done.
+   */
+  handOver(netId: number): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return;
+    runtime.queue.length = 0;
+    runtime.lastProcessedSeq = 0;
+    runtime.previousButtons = 0;
+    runtime.swingWasHeld = false;
+    runtime.interactWasHeld = false;
+  }
+
   removePlayer(netId: number): boolean {
     const runtime = this.players.get(netId);
     if (!runtime) return false;

@@ -201,6 +201,30 @@ describe('the world simulation', () => {
     expect(Math.abs(afterReplay - afterTen)).toBeLessThan(0.3);
   });
 
+  it('hands a player over to a new connection right where they stand', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    drive(sim, 1, 0, 1, 30);
+    // Still in the queue when the old connection went: never simulated.
+    sim.queueInput(1, createInput(31, 1, 0, 0));
+    const before = sim.readPlayer(1)?.position;
+
+    sim.handOver(1);
+    expect(sim.lastProcessedSeq(1)).toBe(0);
+    for (let i = 0; i < 20; i++) sim.step(tickClock());
+    const settled = sim.readPlayer(1)?.position;
+    if (before === undefined || settled === undefined) throw new Error('missing player');
+    // Coasted to a stop where it was, without taking the old step sideways.
+    expect(Math.abs(settled.x - before.x)).toBeLessThan(0.05);
+
+    // And the new connection is listened to from its first input, counting from one.
+    drive(sim, 1, 0, 1, TICK_HZ);
+    const walked = sim.readPlayer(1)?.position;
+    if (walked === undefined) throw new Error('missing player');
+    expect(walked.z).toBeLessThan(settled.z - 1);
+    expect(sim.lastProcessedSeq(1)).toBe(TICK_HZ);
+  });
+
   it('throws away the oldest inputs when a client floods it', () => {
     const sim = createWorld();
     sim.addPlayer(1);

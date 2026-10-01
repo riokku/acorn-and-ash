@@ -133,9 +133,7 @@ export function Hud({
         <div className="hud-curtain" onClick={onPlay} role="presentation">
           <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
-          <p>
-            {state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play'}
-          </p>
+          <p>{curtainMessage(state)}</p>
           <p>
             WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · M
             for the map · Esc to pause
@@ -206,6 +204,7 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
     connected: ['Connected', 'hud-status-good'],
     offline: ['Offline', 'hud-status-bad'],
     rejected: ['World full', 'hud-status-bad'],
+    elsewhere: ['Playing elsewhere', 'hud-status-warn'],
   };
   const entry = labels[state.connection];
   return <span className={entry[1]}>{entry[0]}</span>;
@@ -656,8 +655,17 @@ function renderer(state: HudState): string {
   return state.forcedFallback ? `${state.backend} (forced)` : state.backend;
 }
 
+/** What the paused curtain says: welcome back, or that you are playing in another tab. */
+export function curtainMessage(state: HudState): string {
+  if (state.connection === 'elsewhere') {
+    return 'You are playing in another tab or window. Click to play here instead';
+  }
+  return state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play';
+}
+
 function loadingMessage(state: HudState): string {
   if (state.connection === 'offline') return 'Cannot reach the world server. Retrying…';
   if (state.connection === 'rejected') return 'This world is full. Try again in a moment.';
+  if (state.connection === 'elsewhere') return 'You are playing in another tab or window.';
   return 'Waking the forest…';
 }
