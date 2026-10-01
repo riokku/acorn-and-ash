@@ -413,9 +413,10 @@ function JournalPanel({
  * Whatever you could do right now beats the list of what the keys are. A line
  * in the water beats everything, because the moment matters. Picking something
  * up beats chopping: you are more likely to be reaching for the thing at your
- * feet than swinging at the tree behind it. And a tree or an animal you can
- * swing at beats a cast, the same way round as the server decides it - a tree
- * beats the animal too, if somehow both are in reach at once.
+ * feet than swinging at the tree behind it. And the rest goes the same way
+ * round as the server decides a click: the axe chops a tree before anything
+ * else, the rod casts at water in front of it, and anything else in hand
+ * takes a swing at an animal (see decision 0056).
  */
 export function hint(state: HudState): string {
   if (state.fishing === 'biting') return "It's biting! Click!";
@@ -423,6 +424,9 @@ export function hint(state: HudState): string {
   // Real danger, unlike being hungry: one more hit like the last one and you
   // are knocked out, so this beats everything but an actual bite.
   if (state.health <= HEALTH_LOW_THRESHOLD) return 'Hurt badly - one more hit and you are down';
+  // Settled in, E gets you up rather than doing anything else it would.
+  if (state.resting === 'chair') return 'Sitting comfortably · move or press E to get up';
+  if (state.resting === 'bed') return 'Snug in bed · move or press E to get up';
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
@@ -456,14 +460,22 @@ export function hint(state: HudState): string {
   if (state.door === 'visit') return 'Walk in, or press E, to visit';
   if (state.door === 'locked') return "The door's locked";
   if (state.door === 'leave') return 'Walk out through the door to leave';
-  // A tree or animal only offers a hint once the axe is the active item:
-  // without that the server ignores the click outright (trySwing's own first
-  // check), so hinting at it here would send you to click on something that
-  // does nothing. Carrying the axe is not enough - it has to be equipped.
-  const axeActive = state.equippedItem === 'axe';
-  if (state.aimedTree !== null && axeActive) return chopHint(state.aimedTree);
-  if (state.aimedAnimal !== null && axeActive) return catchHint(state.aimedAnimal);
+  // Food picked out and room for it is eaten first, even beside these (the
+  // hunger hint above and below says so); otherwise E sits or lies down.
+  const eatsInstead =
+    state.hunger < HUNGER_MAX && state.equippedItem !== null && isFood(state.equippedItem);
+  if (state.restingNearby !== null && eatsInstead) return 'Press E to eat';
+  if (state.restingNearby === 'chair') return 'Press E to sit down';
+  if (state.restingNearby === 'bed') return 'Press E to lie down';
+  // Only the axe chops, so a tree only offers a hint once it is the active
+  // item - carrying it is not enough, it has to be equipped. Anything in hand
+  // takes a swing at an animal, though, even a fish (see decision 0056) -
+  // unless it is the rod facing water, which casts instead.
+  if (state.aimedTree !== null && state.equippedItem === 'axe') return chopHint(state.aimedTree);
   if (state.canCast) return 'Left click to cast';
+  if (state.aimedAnimal !== null && state.equippedItem !== null) {
+    return catchHint(state.aimedAnimal);
+  }
   if (state.canBuild) return 'Press B to build';
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);

@@ -4,10 +4,8 @@ import {
   ANIMAL_RESPAWN_SECONDS,
   BUILD_REACH,
   BUILD_REACH_SLACK,
-  CHARGE_SECONDS,
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
-  DODGE_COOLDOWN_TICKS,
   DODGE_DISTANCE,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -50,7 +48,23 @@ import {
   type PersistedPlayer,
   OUTDOORS,
 } from '../src/sim/world-sim';
-import { HOME_ENTRY, HOME_WAKE_SPOT, cabinDoorstep, cabinDoorway } from '../src/world/home';
+import {
+  HOME_BED,
+  HOME_CHAIR,
+  HOME_ENTRY,
+  HOME_WAKE_SPOT,
+  cabinDoorstep,
+  cabinDoorway,
+} from '../src/world/home';
+import { ActionKind, Gesture, RiseFrom } from '../src/sim/actions';
+import {
+  CHARGE_TICKS,
+  DODGE,
+  KNOCKED_OUT_TICKS,
+  LIGHT_COMBO,
+  RISE,
+  STRIKE,
+} from '../src/data/moves';
 
 /** Every world a test builds, so they can be handed back when it finishes. */
 const built: WorldSimulation[] = [];
@@ -382,16 +396,58 @@ describe('the world simulation', () => {
   });
 });
 
+/**
+ * Press dodge once, then let go and feed plain inputs until the roll is
+ * over - a roll carries on by itself once it starts, and only inputs move
+ * it along. Returns the next sequence number.
+ */
+function dodge(
+  sim: WorldSimulation,
+  netId: number,
+  seq: number,
+  moveX = 0,
+  moveZ = 0,
+  aimYaw = 0,
+): number {
+  sim.queueInput(netId, createInput(seq++, moveX, moveZ, 0, PlayerButton.Dodge, aimYaw));
+  sim.step(tickClock());
+  for (let i = 1; i < DODGE.end; i++) {
+    sim.queueInput(netId, createInput(seq++, 0, 0, 0, 0, aimYaw));
+    sim.step(tickClock());
+  }
+  return seq;
+}
+
+/**
+ * Click once - press, then let go - and keep feeding inputs until the
+ * swing it starts has landed: a blow lands partway into the swing, not on
+ * the click (see decision 0056). Returns the next sequence number.
+ */
+function swingOnce(
+  sim: WorldSimulation,
+  netId: number,
+  seq: number,
+  aimYaw = 0,
+  cameraYaw = aimYaw,
+): number {
+  sim.queueInput(netId, createInput(seq++, 0, 0, cameraYaw, PlayerButton.Swing, aimYaw));
+  sim.step(tickClock());
+  for (let i = 0; i < LIGHT_COMBO[0].impact; i++) {
+    sim.queueInput(netId, createInput(seq++, 0, 0, cameraYaw, 0, aimYaw));
+    sim.step(tickClock());
+  }
+  return seq;
+}
+
 describe('dodging', () => {
-  it('steps straight back when nothing is held', () => {
+  it('rolls straight back when nothing is held', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     const before = sim.readPlayer(1)?.position;
     if (before === undefined) throw new Error('missing player');
 
     // Facing yaw 0 looks down -Z, same as everywhere else - backward is +Z.
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
-    sim.step(tickClock());
+    dodge(sim, 1, 1);
 
     const after = sim.readPlayer(1)?.position;
     if (after === undefined) throw new Error('missing player');
@@ -399,14 +455,27 @@ describe('dodging', () => {
     expect(Math.abs(after.x - before.x)).toBeLessThan(0.5);
   });
 
-  it('steps in whatever direction is held, instead of straight back', () => {
+  it('carries you over the roll, rather than all at once', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     const before = sim.readPlayer(1)?.position;
     if (before === undefined) throw new Error('missing player');
 
-    sim.queueInput(1, createInput(1, 1, 0, 0, PlayerButton.Dodge));
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
     sim.step(tickClock());
+    const firstTick = sim.readPlayer(1)?.position;
+    if (firstTick === undefined) throw new Error('missing player');
+    expect(firstTick.z - before.z).toBeCloseTo(DODGE_DISTANCE / DODGE.travel, 1);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Dodge);
+  });
+
+  it('rolls in whatever direction is held, instead of straight back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const before = sim.readPlayer(1)?.position;
+    if (before === undefined) throw new Error('missing player');
+
+    dodge(sim, 1, 1, 1, 0);
 
     const after = sim.readPlayer(1)?.position;
     if (after === undefined) throw new Error('missing player');
@@ -414,16 +483,15 @@ describe('dodging', () => {
     expect(Math.abs(after.z - before.z)).toBeLessThan(0.5);
   });
 
-  it('steps back from where the character aims, not from where the camera looks', () => {
+  it('rolls back from where the character aims, not from where the camera looks', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     const before = sim.readPlayer(1)?.position;
     if (before === undefined) throw new Error('missing player');
 
     // The camera looks down -Z; the character was clicked round to face -X,
-    // so stepping back from it is towards +X.
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge, Math.PI / 2));
-    sim.step(tickClock());
+    // so rolling back from it is towards +X.
+    dodge(sim, 1, 1, 0, 0, Math.PI / 2);
 
     const after = sim.readPlayer(1)?.position;
     if (after === undefined) throw new Error('missing player');
@@ -439,8 +507,7 @@ describe('dodging', () => {
 
     // D held, camera looking down -Z: to the camera's right is +X, even
     // with the character aiming the opposite way round.
-    sim.queueInput(1, createInput(1, 1, 0, 0, PlayerButton.Dodge, Math.PI));
-    sim.step(tickClock());
+    dodge(sim, 1, 1, 1, 0, Math.PI);
 
     const after = sim.readPlayer(1)?.position;
     if (after === undefined) throw new Error('missing player');
@@ -451,14 +518,12 @@ describe('dodging', () => {
     const sim = createWorld();
     sim.addPlayer(1);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
-    sim.step(tickClock());
+    const seq = dodge(sim, 1, 1);
     const afterFirst = sim.readPlayer(1)?.position;
     if (afterFirst === undefined) throw new Error('missing player');
 
-    // Straight away, comfortably inside the cooldown.
-    sim.queueInput(1, createInput(2, 0, 0, 0, PlayerButton.Dodge));
-    sim.step(tickClock());
+    // Straight after the first roll, comfortably inside the cooldown.
+    dodge(sim, 1, seq);
     const afterSecond = sim.readPlayer(1)?.position;
     if (afterSecond === undefined) throw new Error('missing player');
     expect(afterSecond.z - afterFirst.z).toBeLessThan(0.5);
@@ -468,15 +533,13 @@ describe('dodging', () => {
     const sim = createWorld();
     sim.addPlayer(1);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Dodge));
-    sim.step(tickClock());
+    let seq = dodge(sim, 1, 1);
     const afterFirst = sim.readPlayer(1)?.position;
     if (afterFirst === undefined) throw new Error('missing player');
 
-    for (let i = 0; i < DODGE_COOLDOWN_TICKS; i++) sim.step(tickClock());
+    seq = drive(sim, 1, 0, 0, DODGE.cooldown - DODGE.end, seq);
 
-    sim.queueInput(1, createInput(2, 0, 0, 0, PlayerButton.Dodge));
-    sim.step(tickClock());
+    dodge(sim, 1, seq);
     const afterSecond = sim.readPlayer(1)?.position;
     if (afterSecond === undefined) throw new Error('missing player');
     expect(afterSecond.z - afterFirst.z).toBeGreaterThan(DODGE_DISTANCE * 0.9);
@@ -1307,8 +1370,7 @@ describe('chopping a tree down', () => {
 
     // The camera looks straight away from the tree (yaw pi); the character
     // was clicked round to face it (yaw 0).
-    sim.queueInput(1, createInput(1, 0, 0, Math.PI, PlayerButton.Swing, 0));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, 0, Math.PI);
 
     expect(sim.drainChopEvents().map((event) => event.treeId)).toEqual([tree.id]);
   });
@@ -1319,10 +1381,27 @@ describe('chopping a tree down', () => {
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing, Math.PI));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, Math.PI, 0);
 
     expect(sim.drainChopEvents()).toEqual([]);
+  });
+
+  it('lands partway into the swing, not the moment you click', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    let seq = 1;
+    sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+    sim.step(tickClock());
+    const landedOn: number[] = [];
+    for (let age = 1; age <= LIGHT_COMBO[0].end; age++) {
+      if (sim.drainChopEvents().length > 0) landedOn.push(age - 1);
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+      sim.step(tickClock());
+    }
+    expect(landedOn).toEqual([LIGHT_COMBO[0].impact]);
   });
 
   it('counts down as you go, so you can see it coming', () => {
@@ -1332,8 +1411,7 @@ describe('chopping a tree down', () => {
     standAt(sim, 1, tree);
     const total = choppingRuleFor(PROP_KINDS.birch)?.swingsToFell ?? 0;
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1);
 
     expect(sim.drainChopEvents()).toEqual([
       { netId: 1, treeId: tree.id, swingsLeft: total - 1, logsGained: 0 },
@@ -1347,9 +1425,9 @@ describe('chopping a tree down', () => {
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
 
-    // Hold the button down for one cooldown's worth of ticks.
+    // Hold the button down for one swing's worth of ticks.
     let landed = 0;
-    for (let i = 1; i <= SWING_COOLDOWN_TICKS; i++) {
+    for (let i = 1; i <= LIGHT_COMBO[0].end; i++) {
       sim.queueInput(1, createInput(i, 0, 0, 0, PlayerButton.Swing));
       sim.step(tickClock());
       landed += sim.drainChopEvents().length;
@@ -1465,8 +1543,7 @@ describe('chopping a tree down', () => {
     const tree = findTree(sim, 'birch');
     standAt(sim, 1, tree);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1);
     expect(sim.drainChopEvents()).toHaveLength(1);
     expect(sim.drainChopEvents()).toEqual([]);
   });
@@ -1886,14 +1963,13 @@ describe('catching wildlife', () => {
     sim.addPlayer(1, withAxe(1));
     standByDen(sim, 1);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, FACE_DEN);
 
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
     expect(countOf(sim.inventoryOf(1), 'meat')).toBe(1);
   });
 
-  it('does nothing with the axe in the pack but not the active item', () => {
+  it('catches it with whatever is in hand - the rod as well as the axe', () => {
     const sim = createWorld();
     sim.addPlayer(1, {
       netId: 1,
@@ -1911,11 +1987,9 @@ describe('catching wildlife', () => {
     });
     standByDen(sim, 1);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, FACE_DEN);
 
-    expect(sim.drainCatchEvents()).toEqual([]);
-    expect(countOf(sim.inventoryOf(1), 'meat')).toBe(0);
+    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
   });
 
   it('never lets a tree hide behind a rabbit: a swing near a den has no tree to prefer', () => {
@@ -1927,13 +2001,12 @@ describe('catching wildlife', () => {
     expect(sim.treeInReachOf(facingDen, FACE_DEN)).toBeNull();
   });
 
-  it('refuses to catch anything without an axe', () => {
+  it('refuses to catch anything with nothing in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     standByDen(sim, 1);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, FACE_DEN);
 
     expect(sim.drainCatchEvents()).toEqual([]);
   });
@@ -1950,8 +2023,7 @@ describe('catching wildlife', () => {
     });
     standByDen(sim, 1);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, FACE_DEN);
 
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 0 }]);
     expect(countOf(sim.inventoryOf(1), 'meat')).toBe(ITEM_KINDS.meat.maxCarry);
@@ -1962,8 +2034,7 @@ describe('catching wildlife', () => {
     sim.addPlayer(1, withAxe(1));
     standByDen(sim, 1);
 
-    sim.queueInput(1, createInput(1, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, 1, FACE_DEN);
 
     const stillThere = sim
       .snapshotFor(1)
@@ -1976,17 +2047,15 @@ describe('catching wildlife', () => {
     sim.addPlayer(1, withAxe(1));
     standByDen(sim, 1);
 
-    let seq = 1;
-    sim.queueInput(1, createInput(seq++, 0, 0, FACE_DEN, PlayerButton.Swing));
-    const caughtAt = tickClock();
-    sim.step(caughtAt);
+    let seq = swingOnce(sim, 1, 1, FACE_DEN);
+    const caughtAt = clockMs;
     expect(sim.drainCatchEvents()).toHaveLength(1);
 
-    // Short of the wait: still gone. Also clears the axe's own swing cooldown
-    // from the first catch, well before the animal is due back - a rabbit
-    // fresh from its den gets one wander tick's start on running off again,
-    // so nothing here can afford to dawdle once it reappears.
-    for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
+    // Short of the wait: still gone. Also lets the first swing finish, well
+    // before the animal is due back - a rabbit fresh from its den gets one
+    // wander tick's start on running off again, so nothing here can afford
+    // to dawdle once it reappears.
+    for (let i = 0; i < LIGHT_COMBO[0].end; i++) {
       sim.queueInput(1, createInput(seq++, 0, 0, FACE_DEN, 0));
       sim.step(tickClock());
     }
@@ -2008,10 +2077,9 @@ describe('catching wildlife', () => {
     expect(backAgain?.x).toBeCloseTo(den.x, 3);
     expect(backAgain?.z).toBeCloseTo(den.z, 3);
 
-    // Worth a swing on the very next tick, before it has had any chance to
+    // Worth a swing straight away, begun before it has had any chance to
     // wander off the spot it just reappeared on.
-    sim.queueInput(1, createInput(seq, 0, 0, FACE_DEN, PlayerButton.Swing));
-    sim.step(tickClock());
+    swingOnce(sim, 1, seq, FACE_DEN);
     expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: 'meat', added: 1 }]);
   });
 });
@@ -2128,28 +2196,37 @@ describe('threats', () => {
     expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage * 2);
   });
 
+  /**
+   * Keep clicking at it, a fresh click every few ticks, until it is beaten
+   * or the clock runs out, collecting what came of it. It hits back in the
+   * meantime: a hit makes you flinch and loses you that swing, so this does
+   * not count on every click landing - only on each landed one counting.
+   */
+  function fightUntilDefeated(sim: WorldSimulation, netId: number, seq: number) {
+    const hitsLeft: number[] = [];
+    for (let tick = 0; tick < 400; tick++) {
+      const clicking = tick % 3 === 0;
+      sim.queueInput(netId, createInput(seq++, 0, 0, 0, clicking ? PlayerButton.Swing : 0));
+      sim.step(tickClock());
+      hitsLeft.push(...sim.drainThreatHitEvents().map((event) => event.hitsLeft));
+      const caught = sim.drainCatchEvents();
+      if (caught.length > 0) return { hitsLeft, caught, seq };
+    }
+    throw new Error('never beat it');
+  }
+
   it('takes several swings to fight off, one ThreatHit short each time', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     sim.placePlayer(1, closeToDen, 0);
 
-    let seq = 1;
-    for (let hit = 1; hit < threat.hitsToDefeat; hit++) {
-      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
-      sim.step(tickClock());
-      expect(sim.drainThreatHitEvents()).toEqual([
-        { animalId: raccoonDen.id, hitsLeft: threat.hitsToDefeat - hit },
-      ]);
-      expect(sim.drainCatchEvents()).toEqual([]);
-      for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
-        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
-        sim.step(tickClock());
-      }
-    }
-
-    sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
-    sim.step(tickClock());
-    expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: null, added: 0 }]);
+    const fight = fightUntilDefeated(sim, 1, 1);
+    const countdown = Array.from(
+      { length: threat.hitsToDefeat - 1 },
+      (_, i) => threat.hitsToDefeat - 1 - i,
+    );
+    expect(fight.hitsLeft).toEqual(countdown);
+    expect(fight.caught).toEqual([{ netId: 1, item: null, added: 0 }]);
   });
 
   it('reports full hits again once a defeated one comes back', () => {
@@ -2157,25 +2234,31 @@ describe('threats', () => {
     sim.addPlayer(1, withAxe(1));
     sim.placePlayer(1, closeToDen, 0);
 
-    let seq = 1;
-    let defeatedAt = 0;
-    for (let hit = 1; hit <= threat.hitsToDefeat; hit++) {
-      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
-      defeatedAt = tickClock();
-      sim.step(defeatedAt);
-      sim.drainThreatHitEvents();
-      sim.drainCatchEvents();
-      for (let i = 0; i < SWING_COOLDOWN_TICKS; i++) {
-        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
-        sim.step(tickClock());
-      }
-    }
+    const fight = fightUntilDefeated(sim, 1, 1);
+    const defeatedAt = clockMs;
 
-    sim.queueInput(1, createInput(seq, 0, 0, 0, 0));
+    sim.queueInput(1, createInput(fight.seq, 0, 0, 0, 0));
     sim.step(defeatedAt + ANIMAL_RESPAWN_SECONDS * 1000 + TICK_MILLISECONDS);
     expect(sim.drainThreatHitEvents()).toEqual([
-      { animalId: raccoonDen.id, hitsLeft: threat.hitsToDefeat },
+      { animalId: raccoonDen.id, hitsLeft: threat.hitsToDefeat, netId: null },
     ]);
+  });
+
+  it('makes you flinch when it lands a hit, stopping your swing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    sim.placePlayer(1, closeToDen, 0);
+
+    // Stand there through the wind-up, swinging at the very end of it.
+    let seq = 1;
+    let flinched = false;
+    for (let tick = 0; tick < 20 && !flinched; tick++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, tick >= 10 ? PlayerButton.Swing : 0));
+      sim.step(tickClock());
+      flinched = sim.actionOf(1)?.kind === ActionKind.Flinch;
+    }
+    expect(flinched).toBe(true);
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
   });
 
   describe('a knockout', () => {
@@ -2188,12 +2271,44 @@ describe('threats', () => {
       // health at twenty-five a hit, with room to spare before a fifth starts.
       for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
 
+      // Down where they fell for a moment, healed already...
       expect(sim.healthOf(1)).toBe(HEALTH_MAX);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.KnockedOut);
+
+      // ...then up off the ground, far away in the clearing.
+      for (let i = 0; i < KNOCKED_OUT_TICKS; i++) sim.step(tickClock());
+      expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Ground });
       const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
       expect(position).toBeDefined();
       if (position === undefined) return;
       const gapFromDen = Math.hypot(position.x - raccoonDen.x, position.z - raccoonDen.z);
       expect(gapFromDen).toBeGreaterThan(20);
+    });
+
+    it('stays down, untouched, until it wakes up, however close the raccoon', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.KnockedOut);
+
+      const events = sim.drainHealthEvents();
+      for (let i = 0; i < KNOCKED_OUT_TICKS - 1; i++) sim.step(tickClock());
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX);
+      expect(sim.drainHealthEvents()).toEqual([]);
+      expect(events.some((event) => event.knockedOut)).toBe(true);
+    });
+
+    it('saves you where you will wake up, if you leave while down', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      sim.placePlayer(1, closeToDen, 0);
+      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.KnockedOut);
+
+      const saved = sim.persistablePlayers().find((player) => player.netId === 1);
+      expect(saved?.x).toBeCloseTo(SPAWN_POSITION.x, 3);
+      expect(saved?.z).toBeCloseTo(SPAWN_POSITION.z, 3);
     });
 
     it('wakes you at your own cabin instead, if you have one', () => {
@@ -2223,10 +2338,11 @@ describe('threats', () => {
       if (home === undefined) return;
 
       sim.placePlayer(1, closeToDen, 0);
-      for (let i = 0; i < 4 * 42; i++) sim.step(tickClock());
+      for (let i = 0; i < 4 * 42 + KNOCKED_OUT_TICKS; i++) sim.step(tickClock());
 
-      // Inside, by their own bed - see decision 0055.
+      // Inside, getting out of their own bed - see decisions 0055 and 0056.
       expect(sim.spaceOf(1)).toBe(home.id);
+      expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Bed });
       const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
       expect(position).toBeDefined();
       if (position === undefined) return;
@@ -2550,10 +2666,41 @@ describe('a charged attack', () => {
     sim.placePlayer(netId, { x: tree.x, y: 0, z: tree.z + radius + 1 }, 0);
   }
 
-  // Real time only advances a whole tick at once, so the first tick past
-  // CHARGE_SECONDS is one tick later than the raw seconds-to-ticks maths
-  // suggests - the same off-by-one a threat's own wind-up already has.
-  const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ) + 1;
+  /**
+   * Hold the button down through the whole wind-up and until the strike
+   * lands, or until it plainly never will. Returns the next sequence number.
+   */
+  function chargeUntilItLands(sim: WorldSimulation, netId: number, seq: number): number {
+    for (let i = 0; i < CHARGE_TICKS + STRIKE.impact + 20; i++) {
+      sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+      sim.step(tickClock());
+      const action = sim.actionOf(netId);
+      if (action?.kind === ActionKind.Strike && action.age >= STRIKE.impact) break;
+    }
+    return seq;
+  }
+
+  it('winds up for as long as it says, then lands partway into the strike', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+
+    let seq = 1;
+    for (let i = 0; i < CHARGE_TICKS; i++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+      sim.step(tickClock());
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Charge);
+    }
+    expect(sim.drainChopEvents()).toEqual([]);
+    for (let i = 0; i <= STRIKE.impact; i++) {
+      expect(sim.drainChopEvents()).toEqual([]);
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+      sim.step(tickClock());
+    }
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Strike);
+    expect(sim.felledTreeIds()).toContain(tree.id);
+  });
 
   it('roots you to the spot while it winds up, even holding a direction the whole time', () => {
     const sim = createWorld();
@@ -2575,21 +2722,20 @@ describe('a charged attack', () => {
     expect(during.z).toBeCloseTo(before.z, 5);
   });
 
-  it('never starts without an axe in hand', () => {
+  it('never starts with nothing in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
-    sim.step(tickClock());
-    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+    chargeUntilItLands(sim, 1, 1);
 
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
     expect(sim.felledTreeIds()).toEqual([]);
     expect(sim.drainChopEvents()).toEqual([]);
   });
 
-  it('never starts with the axe in the pack but not the active item', () => {
+  it('fells nothing with the rod in hand: only the axe chops a tree', () => {
     const sim = createWorld();
     sim.addPlayer(1, {
       netId: 1,
@@ -2608,9 +2754,7 @@ describe('a charged attack', () => {
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
-    sim.step(tickClock());
-    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+    chargeUntilItLands(sim, 1, 1);
 
     expect(sim.felledTreeIds()).toEqual([]);
     expect(sim.drainChopEvents()).toEqual([]);
@@ -2624,9 +2768,7 @@ describe('a charged attack', () => {
     const swingsToFell = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
     expect(swingsToFell).toBeGreaterThan(1);
 
-    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
-    sim.step(tickClock());
-    for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+    chargeUntilItLands(sim, 1, 1);
 
     expect(sim.felledTreeIds()).toContain(tree.id);
     expect(sim.drainChopEvents()).toEqual([
@@ -2642,17 +2784,49 @@ describe('a charged attack', () => {
     const threat = ANIMAL_KINDS.maskedRaccoon.threat;
     if (threat === undefined) throw new Error('the masked raccoon has lost its threat behaviour');
 
+    const inItsReach = { x: raccoonDen.x, y: 0, z: raccoonDen.z + threat.attackRadius - 0.1 };
+
+    /** Stand in its reach and let its first swing land, which leaves a gap before the next. */
+    function takeItsFirstSwing(sim: WorldSimulation): number {
+      sim.placePlayer(1, inItsReach, 0);
+      let seq = 1;
+      while (sim.healthOf(1) === HEALTH_MAX && seq < 60) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+        sim.step(tickClock());
+      }
+      expect(sim.healthOf(1)).toBeLessThan(HEALTH_MAX);
+      return seq;
+    }
+
     it('defeats it outright, regardless of hitsToDefeat', () => {
       const sim = createWorld();
       sim.addPlayer(1, withAxe(1));
       expect(threat.hitsToDefeat).toBeGreaterThan(1);
-      sim.placePlayer(1, { x: raccoonDen.x, y: 0, z: raccoonDen.z + threat.attackRadius - 0.1 }, 0);
 
-      sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Charge));
-      sim.step(tickClock());
-      for (let i = 0; i < CHARGE_TICKS; i++) sim.step(tickClock());
+      // Wound up in the gap after its own swing, the whole point of reading one.
+      const seq = takeItsFirstSwing(sim);
+      chargeUntilItLands(sim, 1, seq);
 
       expect(sim.drainCatchEvents()).toEqual([{ netId: 1, item: null, added: 0 }]);
+    });
+
+    it('is knocked out of its wind-up by a hit landing first', () => {
+      const sim = createWorld();
+      sim.addPlayer(1, withAxe(1));
+      sim.placePlayer(1, { x: raccoonDen.x, y: 0, z: raccoonDen.z + threat.attackRadius - 0.1 }, 0);
+
+      // Winding up right into its own wind-up: it gets there first.
+      let seq = 1;
+      let interrupted = false;
+      for (let i = 0; i < CHARGE_TICKS && !interrupted; i++) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+        sim.step(tickClock());
+        interrupted = sim.actionOf(1)?.kind === ActionKind.Flinch;
+      }
+
+      expect(interrupted).toBe(true);
+      expect(sim.drainCatchEvents()).toEqual([]);
+      expect(sim.healthOf(1)).toBe(HEALTH_MAX - threat.damage);
     });
   });
 });
@@ -3394,5 +3568,174 @@ describe('building', () => {
       ]);
       expect(restored.builtPropsList()[0]?.lit).toBe(false);
     });
+  });
+});
+
+describe('moves in the world', () => {
+  /** A cabin built for `chris`, restored into a fresh world: chris starts inside it, by the bed. */
+  function worldWithChrisAtHome(): { sim: WorldSimulation; home: BuiltProp } {
+    const sim = createWorld();
+    const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false };
+    sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+    sim.addPlayer(1, undefined, 'chris');
+    return { sim, home };
+  }
+
+  function press(sim: WorldSimulation, netId: number, seq: number, buttons: number): number {
+    sim.queueInput(netId, createInput(seq++, 0, 0, 0, buttons));
+    sim.step(tickClock());
+    sim.queueInput(netId, createInput(seq++, 0, 0, 0, 0));
+    sim.step(tickClock());
+    return seq;
+  }
+
+  it('lies you down in bed when you press interact beside it, and gets you up when you move', () => {
+    const { sim } = worldWithChrisAtHome();
+    let seq = press(sim, 1, 1, PlayerButton.Interact);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Lie);
+    const lying = sim.readPlayer(1);
+    expect(lying?.position.x).toBeCloseTo(HOME_BED.stand.x, 5);
+    expect(lying?.position.z).toBeCloseTo(HOME_BED.stand.z, 5);
+    expect(lying?.facingYaw).toBeCloseTo(HOME_BED.stand.yaw, 5);
+
+    // Walking gets you up, and only once you are up do you go anywhere.
+    for (let i = 0; i < 4; i++) {
+      sim.queueInput(1, createInput(seq++, 0, 1, 0));
+      sim.step(tickClock());
+    }
+    expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Bed });
+    expect(sim.readPlayer(1)?.position.x).toBeCloseTo(HOME_BED.stand.x, 5);
+    for (let i = 0; i < RISE.bed; i++) {
+      sim.queueInput(1, createInput(seq++, 0, 1, 0));
+      sim.step(tickClock());
+    }
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+  });
+
+  it('sits you in the chair when you press interact beside it', () => {
+    const { sim } = worldWithChrisAtHome();
+    sim.placePlayer(1, { x: HOME_CHAIR.stand.x, y: 0, z: HOME_CHAIR.stand.z + 0.3 }, 0, 7);
+    press(sim, 1, 1, PlayerButton.Interact);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Sit);
+    expect(sim.readPlayer(1)?.position.z).toBeCloseTo(HOME_CHAIR.stand.z, 5);
+  });
+
+  it('eats the food in hand beside the chair while hungry, and sits down once full', () => {
+    const sim = createWorld();
+    const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false };
+    sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+    sim.addPlayer(
+      1,
+      {
+        netId: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        facingYaw: 0,
+        items: [
+          { item: 'bag', count: 1 },
+          { item: 'perch', count: 1 },
+        ],
+        hunger: HUNGER_MAX - 1,
+        equippedItem: 'perch',
+      },
+      'chris',
+    );
+    sim.placePlayer(1, { x: HOME_CHAIR.stand.x, y: 0, z: HOME_CHAIR.stand.z + 0.3 }, 0, 7);
+    const seq = press(sim, 1, 1, PlayerButton.Interact);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+
+    press(sim, 1, seq, PlayerButton.Interact);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Sit);
+  });
+
+  it('keeps a chair for whoever sat in it first', () => {
+    const { sim } = worldWithChrisAtHome();
+    sim.addPlayer(2, undefined, 'visitor');
+    sim.placePlayer(1, { x: HOME_CHAIR.stand.x, y: 0, z: HOME_CHAIR.stand.z }, 0, 7);
+    sim.placePlayer(2, { x: HOME_CHAIR.stand.x + 0.4, y: 0, z: HOME_CHAIR.stand.z + 0.3 }, 0, 7);
+    press(sim, 1, 1, PlayerButton.Interact);
+    press(sim, 2, 1, PlayerButton.Interact);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Sit);
+    expect(sim.actionOf(2)?.kind).toBe(ActionKind.Idle);
+  });
+
+  it('never swings indoors, whatever is in hand', () => {
+    const sim = createWorld();
+    const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false };
+    sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+    sim.addPlayer(
+      1,
+      {
+        netId: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        facingYaw: 0,
+        items: [
+          { item: 'bag', count: 1 },
+          { item: 'axe', count: 1 },
+        ],
+        hunger: HUNGER_MAX,
+      },
+      'chris',
+    );
+    press(sim, 1, 1, PlayerButton.Swing);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+  });
+
+  it('swings anything in hand, and needs something in hand to swing at all', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    press(sim, 1, 1, PlayerButton.Swing);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+
+    sim.addPlayer(2, {
+      netId: 2,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'perch', count: 1 },
+      ],
+      hunger: HUNGER_MAX,
+      equippedItem: 'perch',
+    });
+    press(sim, 2, 1, PlayerButton.Swing);
+    expect(sim.actionOf(2)).toMatchObject({ kind: ActionKind.Swing, step: 1 });
+  });
+
+  it("puts everybody's move in the snapshot, for every browser to play", () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'axe', count: 1 },
+      ],
+      hunger: HUNGER_MAX,
+    });
+    sim.addPlayer(2);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Swing));
+    sim.step(tickClock());
+    const seen = sim.snapshotFor(2).find((entity) => entity.netId === 1);
+    expect(seen?.action).toBe(ActionKind.Swing | (1 << 5));
+    expect(seen?.actionAge).toBe(0);
+  });
+
+  it('tells everybody when somebody picks something up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: BAG_SPOT.x, y: 0, z: BAG_SPOT.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(sim.drainGestureEvents()).toEqual([{ netId: 1, gesture: Gesture.PickUp, item: 'bag' }]);
   });
 });

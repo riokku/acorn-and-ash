@@ -5,21 +5,16 @@ import {
   BUILD_REACH,
   BUILD_REACH_SLACK,
   CAMPFIRE_BURN_SECONDS,
-  CHARGE_SECONDS,
-  DODGE_COOLDOWN_TICKS,
-  DODGE_DISTANCE,
-  DODGE_INVULNERABLE_SECONDS,
   HEALTH_MAX,
   HUNGER_EMPTY_AFTER_SECONDS,
   HUNGER_MAX,
   INPUT_BACKLOG_CATCHUP_THRESHOLD,
   INTEREST_RADIUS,
+  LAG_COMPENSATION_TICKS,
   LIGHT_SAFETY_RADIUS,
   MAX_INPUTS_PER_TICK,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
-  PLAYER_HEIGHT,
-  PLAYER_RADIUS,
   PREDATOR_CATCH_RADIUS,
   REGROW_MIN_SECONDS,
   SPAWN_POSITION,
@@ -28,7 +23,7 @@ import {
   SWING_COOLDOWN_TICKS,
   TICK_SECONDS,
 } from '../constants';
-import { createCollisionWorld, resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
 import {
   AimYaw,
   AnimalTag,
@@ -72,7 +67,9 @@ import {
   homeRoomColliders,
   isEnteringDoorway,
   isLeavingRoom,
+  restingPlaceInReach,
   type PlacedSpot,
+  type RestingPlace,
 } from '../world/home';
 import { castLanding } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -131,6 +128,24 @@ import {
   type PlayerInput,
   type PlayerMotion,
 } from './player';
+import {
+  ActionKind,
+  RiseFrom,
+  advanceAction,
+  beginAction,
+  createActionState,
+  footedInput,
+  isFreeToInteract,
+  isUntouchable,
+  packActionByte,
+  stepDodge,
+  Gesture,
+  type ActionContext,
+  type ActionState,
+  type GestureEvent,
+  type Impact,
+} from './actions';
+import { DODGE, KNOCKED_OUT_TICKS, LIGHT_COMBO, STRIKE } from '../data/moves';
 
 export interface WorldSimulationOptions {
   readonly seed: number;
@@ -176,6 +191,17 @@ export interface SnapshotEntity {
   vz: number;
   yaw: number;
   flags: number;
+  /**
+   * What a player is in the middle of - a swing, a roll, sitting down - as
+   * `packActionByte` packs it, with how far into it they are, which way a
+   * roll is going and how long before they may roll again (see
+   * `sim/actions.ts`). Every browser plays other players' moves from these,
+   * and a player's own browser picks up from them when it is corrected.
+   * All zero for an animal.
+   */
+  action: number;
+  actionAge: number;
+  actionHeading: number;
 }
 
 export const SnapshotFlag = {
@@ -272,6 +298,8 @@ export interface ThreatHit {
   readonly animalId: number;
   /** Swings still needed to defeat it. A fresh arrival, or one just back from being defeated, reports its full count. */
   readonly hitsLeft: number;
+  /** Whose swing it was, so their own browser, which already showed it land, does not show it twice. Null when nobody's. */
+  readonly netId: number | null;
 }
 
 /**
@@ -567,14 +595,21 @@ interface PlayerRuntime {
   lastSentHunger: number;
   /** How much a threat has left to take before they are knocked out. */
   health: number;
-  /** Ticks left before this player may dodge again. */
-  dodgeCooldownTicks: number;
-  /** Until this real time, any attack simply misses - see `damagePlayer`. */
-  invulnerableUntilMs: number;
-  /** Winding up a charged attack, rooted to the spot until it resolves. */
-  charging: boolean;
-  /** When a charge in progress resolves, in real time. Meaningless unless `charging`. */
-  chargeReadyAtMs: number;
+  /**
+   * What they are busy doing: a swing, a charge, a dodge, a flinch, being
+   * down, sitting... - see `sim/actions.ts`, which their browser runs too.
+   */
+  readonly action: ActionState;
+  /** The buttons on the last input, so the next one can tell a fresh press. */
+  previousButtons: number;
+  /** The tick they were knocked out on, so they wake up a while later. */
+  knockedOutAtTick: number;
+  /**
+   * The tick their last dodge began on. How long a roll leaves you
+   * untouchable is counted on the server's own clock, not in inputs, so
+   * a browser that stops sending mid-roll cannot stay untouchable.
+   */
+  dodgeStartedAtTick: number;
   /**
    * What this player last chose to hold, or null if they never have. Read
    * through `equippedItemOf`, never directly - the pack can empty this out
@@ -625,7 +660,20 @@ interface AnimalRuntime {
   attackStateEndsAtMs: number;
   /** Swings landed on a threat since it last came back from being defeated. */
   hitsTaken: number;
+  /**
+   * Where it has been over the last few ticks, newest at `trailHead`, so a
+   * blow can land on it where it was when the swing began (see
+   * `landBlow`). Emptied whenever it jumps somewhere, so nothing counts
+   * from before.
+   */
+  readonly trailX: Float32Array;
+  readonly trailZ: Float32Array;
+  trailHead: number;
+  trailCount: number;
 }
+
+/** How many ticks of an animal's recent path are kept for a blow to look back over. */
+const ANIMAL_TRAIL_TICKS = 10;
 
 /**
  * The authoritative world.
@@ -680,6 +728,7 @@ export class WorldSimulation {
   private castCounter = 0;
   private readonly hungerEvents: HungerEvent[] = [];
   private readonly healthEvents: HealthEvent[] = [];
+  private readonly gestureEvents: GestureEvent[] = [];
   private readonly craftEvents: CraftedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
@@ -775,6 +824,10 @@ export class WorldSimulation {
       attackState: 'none',
       attackStateEndsAtMs: 0,
       hitsTaken: 0,
+      trailX: new Float32Array(ANIMAL_TRAIL_TICKS),
+      trailZ: new Float32Array(ANIMAL_TRAIL_TICKS),
+      trailHead: 0,
+      trailCount: 0,
     });
   }
 
@@ -856,10 +909,10 @@ export class WorldSimulation {
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
       health: saved?.health ?? HEALTH_MAX,
-      dodgeCooldownTicks: 0,
-      invulnerableUntilMs: 0,
-      charging: false,
-      chargeReadyAtMs: 0,
+      action: createActionState(),
+      previousButtons: 0,
+      knockedOutAtTick: 0,
+      dodgeStartedAtTick: -Infinity,
       equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
       explored: exploredMapFrom(saved?.explored),
       exploredCell: null,
@@ -933,6 +986,18 @@ export class WorldSimulation {
     this.tick += 1;
     const scratch = this.scratch;
 
+    // Anybody who has been down long enough wakes up at home, before anybody
+    // moves this tick - moving a player from outside the loop below is the
+    // only way that sticks (see decision 0024).
+    for (const runtime of this.players.values()) {
+      if (
+        runtime.action.kind === ActionKind.KnockedOut &&
+        this.tick - runtime.knockedOutAtTick >= KNOCKED_OUT_TICKS
+      ) {
+        this.wakeUp(runtime);
+      }
+    }
+
     this.world
       .query(PlayerTag, Position, Velocity, Facing, Grounded, NetworkId, LastProcessedInput, AimYaw)
       .updateEach(([position, velocity, facing, grounded, networkId, lastProcessed, aim]) => {
@@ -952,21 +1017,15 @@ export class WorldSimulation {
 
         let wantsToInteract = false;
         let wantsToToggleCampfire = false;
-        let wantsToSwing = false;
         let wantsToCast = false;
-        let wantsToDodge = false;
         let aimedYaw = aim.yaw;
-        // Whatever was held on the input that asked to dodge - same idea as
-        // `aimedYaw`, judged from wherever the player ended up this tick. The
-        // camera's heading comes along too, since a held direction is relative
-        // to the camera rather than to where the character is aiming.
-        let dodgeMoveX = 0;
-        let dodgeMoveZ = 0;
-        let dodgeCameraYaw = 0;
         // Which way the last input was walking, as a world direction: walking
         // into a doorway is how you go through it (see decision 0055).
         let walkX = 0;
         let walkZ = 0;
+        // Blows that land this tick, judged once the player has finished
+        // moving, the same as every other reach.
+        const impacts: Impact[] = [];
         // Inside a home only its own walls and furniture are there to bump
         // into, and nothing out in the world is in reach.
         const outdoors = runtime.space === OUTDOORS;
@@ -978,69 +1037,72 @@ export class WorldSimulation {
 
         const steps = inputsToConsume(runtime.queue.length);
         if (steps === 0) {
-          // No packet arrived in time: the player coasts to a stop where they are.
-          stepPlayer(
-            scratch,
-            idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw),
-            TICK_SECONDS,
-            collision,
-          );
+          // No packet arrived in time: the player coasts to a stop where they
+          // are, and whatever they were doing waits for the next one, the same
+          // way it waits in their own browser.
+          const idle = idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw);
+          if (runtime.action.kind === ActionKind.Idle) {
+            stepPlayer(scratch, idle, TICK_SECONDS, collision);
+          } else if (runtime.action.kind !== ActionKind.Dodge) {
+            stepPlayer(
+              scratch,
+              footedInput(idle, 'still', scratch.facingYaw),
+              TICK_SECONDS,
+              collision,
+            );
+          }
         } else {
           for (let i = 0; i < steps; i++) {
             const input = runtime.queue.shift();
             if (input === undefined) break;
 
-            if (
-              !runtime.charging &&
-              runtime.cast === null &&
-              runtime.swingCooldownTicks === 0 &&
-              isHeld(input, PlayerButton.Charge) &&
-              this.isActiveItem(runtime, 'axe')
-            ) {
-              runtime.charging = true;
-              runtime.chargeReadyAtMs = this.nowMs + CHARGE_SECONDS * 1000;
+            const context = this.actionContext(runtime, scratch.position, input.aimYaw);
+            const tick = advanceAction(runtime.action, input, runtime.previousButtons, context);
+            runtime.previousButtons = input.buttons;
+            if (runtime.action.kind === ActionKind.Dodge && runtime.action.age === 0) {
+              runtime.dodgeStartedAtTick = this.tick;
             }
+            if (tick.footing === 'dodging') {
+              stepDodge(scratch, runtime.action, collision);
+            } else {
+              stepPlayer(
+                scratch,
+                footedInput(input, tick.footing, scratch.facingYaw),
+                TICK_SECONDS,
+                collision,
+              );
+            }
+            if (tick.footing === 'free') {
+              const walk = worldMoveDirection(input.moveX, input.moveZ, input.yaw);
+              walkX = walk.x;
+              walkZ = walk.z;
+            } else {
+              walkX = 0;
+              walkZ = 0;
+            }
+            if (tick.impact !== null) impacts.push(tick.impact);
+            if (tick.cast) wantsToCast = true;
 
-            // Rooted to the spot while charging - no steering away from
-            // whatever it is about to land on, the same commitment a
-            // threat's own wind-up asks of it.
-            const effectiveInput = runtime.charging
-              ? { ...input, moveX: 0, moveZ: 0, buttons: 0 }
-              : input;
-            stepPlayer(scratch, effectiveInput, TICK_SECONDS, collision);
-            const walk = worldMoveDirection(effectiveInput.moveX, effectiveInput.moveZ, input.yaw);
-            walkX = walk.x;
-            walkZ = walk.z;
-
-            if (!runtime.charging) {
-              const interactHeld = isHeld(input, PlayerButton.Interact);
+            const interactHeld = isHeld(input, PlayerButton.Interact);
+            const freshInteract = interactHeld && !runtime.interactWasHeld;
+            runtime.interactWasHeld = interactHeld;
+            const swingHeld = isHeld(input, PlayerButton.Swing);
+            const clicked = swingHeld && !runtime.swingWasHeld;
+            runtime.swingWasHeld = swingHeld;
+            // Reaching for things is only for somebody free to do it: not
+            // mid-swing, mid-roll, down, or sat down.
+            if (isFreeToInteract(runtime.action)) {
               if (interactHeld) wantsToInteract = true;
-              if (interactHeld && !runtime.interactWasHeld) wantsToToggleCampfire = true;
-              runtime.interactWasHeld = interactHeld;
-              const swingHeld = isHeld(input, PlayerButton.Swing);
-              const clicked = swingHeld && !runtime.swingWasHeld;
-              runtime.swingWasHeld = swingHeld;
-              if (runtime.cast !== null) {
-                // With a line out, the button is for the fish and nothing else,
-                // and each input is read in turn: when the click was made matters.
-                this.readLine(runtime, runtime.cast, {
-                  seq: input.seq,
-                  clicked,
-                  sawBite: isHeld(input, PlayerButton.SawBite),
-                });
-              } else {
-                if (swingHeld) wantsToSwing = true;
-                if (clicked) wantsToCast = true;
-              }
-              // Held, the same as a swing - the cooldown is what stops a dodge
-              // from repeating faster than `tryDodge` allows, so there is no
-              // need to also demand a fresh press.
-              if (isHeld(input, PlayerButton.Dodge)) {
-                wantsToDodge = true;
-                dodgeMoveX = input.moveX;
-                dodgeMoveZ = input.moveZ;
-                dodgeCameraYaw = input.yaw;
-              }
+              if (freshInteract) wantsToToggleCampfire = true;
+            }
+            if (runtime.cast !== null) {
+              // With a line out, the button is for the fish and nothing else,
+              // and each input is read in turn: when the click was made matters.
+              this.readLine(runtime, runtime.cast, {
+                seq: input.seq,
+                clicked,
+                sawBite: isHeld(input, PlayerButton.SawBite),
+              });
             }
             runtime.lastProcessedSeq = input.seq;
             aim.yaw = input.aimYaw;
@@ -1053,9 +1115,8 @@ export class WorldSimulation {
         if (runtime.doorCooldownTicks > 0) runtime.doorCooldownTicks -= 1;
         else if (this.tryDoor(runtime, scratch, walkX, walkZ, wantsToToggleCampfire)) {
           wantsToInteract = false;
-          wantsToSwing = false;
           wantsToCast = false;
-          wantsToDodge = false;
+          impacts.length = 0;
           runtime.pendingBuild = null;
           aim.yaw = scratch.facingYaw;
           aimedYaw = scratch.facingYaw;
@@ -1063,10 +1124,22 @@ export class WorldSimulation {
 
         // Reaching and swinging are judged where the player ended up, not where
         // they started, and only the server ever decides what happens. Inside
-        // a home, there is nothing out in the world in reach: only your own
-        // pack, to eat from.
+        // a home, there is nothing out in the world in reach: only the chair
+        // and the bed, and your own pack, to eat from. Food picked out and
+        // room for it comes first, even beside them: that is what it was
+        // picked out for.
         if (wantsToInteract && runtime.space !== OUTDOORS) {
-          this.tryEat(runtime);
+          const place = wantsToToggleCampfire
+            ? restingPlaceInReach(scratch.position.x, scratch.position.z)
+            : null;
+          const hungryWithFood =
+            foodToEat(runtime.inventory, runtime.hunger, runtime.equippedItem) !== null;
+          if (!hungryWithFood && place !== null && this.isRestingPlaceFree(runtime, place)) {
+            this.settleInto(runtime, scratch, place);
+            aim.yaw = scratch.facingYaw;
+          } else {
+            this.tryEat(runtime);
+          }
         } else if (wantsToInteract) {
           // The same button reaches for what is at your feet first, then for
           // a patch of sticks, then for a cache of your own buried nearby,
@@ -1083,6 +1156,7 @@ export class WorldSimulation {
                 // otherwise holding the button down to "keep warm" would fall
                 // through and eat from the pack on every tick after the first.
                 const nearCampfire = this.tryToggleCampfire(
+                  runtime,
                   scratch.position,
                   this.nowMs,
                   wantsToToggleCampfire,
@@ -1094,40 +1168,13 @@ export class WorldSimulation {
         }
 
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
-        if (runtime.dodgeCooldownTicks > 0) runtime.dodgeCooldownTicks -= 1;
         if (runtime.space !== OUTDOORS) {
-          // Nothing to chop, catch, cast at or build on in here. A dodge is
-          // still a dodge, against the room's own walls.
-          runtime.charging = false;
+          // Nothing to chop, catch, cast at or build on in here.
           runtime.pendingBuild = null;
-          if (wantsToDodge) {
-            this.tryDodge(
-              runtime,
-              scratch.position,
-              aimedYaw,
-              dodgeCameraYaw,
-              dodgeMoveX,
-              dodgeMoveZ,
-              this.roomCollision,
-            );
-          }
-        } else if (runtime.cast === null) {
-          if (runtime.charging && this.nowMs >= runtime.chargeReadyAtMs) {
-            runtime.charging = false;
-            this.trySwing(runtime, scratch.position, aimedYaw, true);
-          }
-          if (wantsToSwing) this.trySwing(runtime, scratch.position, aimedYaw, false);
-          if (wantsToCast) this.tryCast(runtime, scratch.position, aimedYaw);
-          if (wantsToDodge) {
-            this.tryDodge(
-              runtime,
-              scratch.position,
-              aimedYaw,
-              dodgeCameraYaw,
-              dodgeMoveX,
-              dodgeMoveZ,
-              this.collision,
-            );
+        } else {
+          for (const impact of impacts) this.landBlow(runtime, scratch.position, aimedYaw, impact);
+          if (wantsToCast && runtime.cast === null) {
+            this.tryCast(runtime, scratch.position, aimedYaw);
           }
           if (runtime.pendingBuild !== null) {
             const request = runtime.pendingBuild;
@@ -1135,7 +1182,6 @@ export class WorldSimulation {
             this.tryBuild(runtime, scratch.position, request);
           }
         }
-
         position.x = scratch.position.x;
         position.y = scratch.position.y;
         position.z = scratch.position.z;
@@ -1204,9 +1250,10 @@ export class WorldSimulation {
   ): void {
     runtime.space = space;
     runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
-    // A line out comes in, a charge is let go: neither survives a doorway.
+    // A line out comes in, and whatever they were in the middle of is let
+    // go: neither survives a doorway.
     if (runtime.cast !== null) this.endCast(runtime, { outcome: 'walkedAway' });
-    runtime.charging = false;
+    if (runtime.action.kind !== ActionKind.Idle) beginAction(runtime.action, ActionKind.Idle);
     motion.position.x = spot.x;
     motion.position.z = spot.z;
     motion.position.y = space === OUTDOORS ? this.collision.terrain.heightAt(spot.x, spot.z) : 0;
@@ -1253,6 +1300,20 @@ export class WorldSimulation {
     const position = runtime.entity.get(Position);
     const facing = runtime.entity.get(Facing);
     if (position === undefined || facing === undefined) return null;
+    if (runtime.action.kind === ActionKind.KnockedOut) {
+      // Down and about to wake up somewhere else: that is where they come back.
+      const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
+      if (home !== null) {
+        const doorstep = cabinDoorstep(home);
+        return {
+          x: doorstep.x,
+          y: this.collision.terrain.heightAt(doorstep.x, doorstep.z),
+          z: doorstep.z,
+          yaw: doorstep.yaw,
+        };
+      }
+      return { ...SPAWN_POSITION, yaw: facing.yaw };
+    }
     if (runtime.space === OUTDOORS) return { ...position, yaw: facing.yaw };
     const home = this.builtPropsById.get(runtime.space);
     const out = home === undefined ? this.nextSpawnPosition() : cabinDoorstep(home);
@@ -1316,6 +1377,7 @@ export class WorldSimulation {
           }
           // Time is up: back at the den, as if it had never left.
           runtime.caught = false;
+          runtime.trailCount = 0;
           runtime.engaged = false;
           runtime.attackState = 'none';
           runtime.targetX = runtime.denX;
@@ -1329,7 +1391,11 @@ export class WorldSimulation {
           // same reason a client needs telling, not just assuming, when a
           // built prop reappears.
           if (kind.threat !== undefined) {
-            this.threatHitEvents.push({ animalId: runtime.id, hitsLeft: kind.threat.hitsToDefeat });
+            this.threatHitEvents.push({
+              animalId: runtime.id,
+              hitsLeft: kind.threat.hitsToDefeat,
+              netId: null,
+            });
           }
           return;
         }
@@ -1387,6 +1453,17 @@ export class WorldSimulation {
         // snapping to face the den the instant it stops.
         if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
       });
+
+    // Every animal's path, for a blow to look back over (see `landBlow`).
+    for (const runtime of this.animals.values()) {
+      if (runtime.caught) continue;
+      const position = runtime.entity.get(Position);
+      if (position === undefined) continue;
+      runtime.trailHead = (runtime.trailHead + 1) % ANIMAL_TRAIL_TICKS;
+      runtime.trailX[runtime.trailHead] = position.x;
+      runtime.trailZ[runtime.trailHead] = position.z;
+      runtime.trailCount = Math.min(runtime.trailCount + 1, ANIMAL_TRAIL_TICKS);
+    }
   }
 
   /**
@@ -1492,8 +1569,15 @@ export class WorldSimulation {
     let best: PlayerRuntime | null = null;
     let bestDistance = Infinity;
     for (const runtime of this.players.values()) {
-      // Somebody indoors is nowhere out in the world at all.
+      // Somebody indoors is nowhere out in the world at all, and somebody
+      // down, or getting back up, is left alone.
       if (runtime.space !== OUTDOORS) continue;
+      if (
+        runtime.action.kind === ActionKind.KnockedOut ||
+        (runtime.action.kind === ActionKind.Rise && runtime.action.step !== RiseFrom.Chair)
+      ) {
+        continue;
+      }
       const position = runtime.entity.get(Position);
       if (position === undefined) continue;
       const distance = horizontalDistance(from, position);
@@ -1604,6 +1688,7 @@ export class WorldSimulation {
       pickupId: pickup.id,
       item: pickup.item,
     });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: pickup.item });
     return true;
   }
 
@@ -1622,6 +1707,7 @@ export class WorldSimulation {
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     this.gatherEvents.push(runtime.netId);
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: spot.item });
     return true;
   }
 
@@ -1642,6 +1728,7 @@ export class WorldSimulation {
     for (const entry of cache.items) addItem(runtime.inventory, entry.item, entry.count);
     this.buriedCaches.splice(this.buriedCaches.indexOf(cache), 1);
     this.cacheEvents.push({ netId: runtime.netId, kind: 'dugUp', cacheId: cache.id });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: null });
     return true;
   }
 
@@ -1655,6 +1742,7 @@ export class WorldSimulation {
    * rather than flickering it every tick.
    */
   private tryToggleCampfire(
+    runtime: PlayerRuntime,
     position: Readonly<Vec3>,
     nowMs: number,
     isFreshPress: boolean,
@@ -1670,6 +1758,7 @@ export class WorldSimulation {
       this.campfireLitUntilMs.delete(campfire.id);
     }
     this.campfireLitEvents.push({ propId: campfire.id, lit: campfire.lit });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: null });
     return true;
   }
 
@@ -1713,6 +1802,7 @@ export class WorldSimulation {
     removeItem(runtime.inventory, item);
     runtime.hunger = eat(runtime.hunger, item);
     this.queueHungerEvent(runtime, item);
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Eat, item });
   }
 
   /**
@@ -1764,64 +1854,119 @@ export class WorldSimulation {
   }
 
   /**
-   * Swing at whatever is in front of this player.
-   *
-   * Nothing happens without the axe active, without a tree or an animal in
-   * reach, or before the cooldown is up, so holding the button down chops at
-   * a steady rhythm rather than as fast as packets arrive. A tree in reach
-   * always wins over an animal behind it, the same way a tree already wins
-   * over a cast in `tryCast`.
-   *
-   * `charged` is the payoff for a held-down, rooted-to-the-spot charge - see
-   * where `charging` resolves in `step`: whatever it lands on goes down
-   * outright, however many swings that would otherwise have taken.
+   * What a move needs to know about this player's situation right now (see
+   * `sim/actions.ts`): whether they have anything in hand to swing, out in
+   * the world with no line in the water, and whether a click with the rod
+   * would cast instead - water decides.
    */
-  private trySwing(
+  private actionContext(
     runtime: PlayerRuntime,
     position: Readonly<Vec3>,
     aimYaw: number,
-    charged: boolean,
+  ): ActionContext {
+    const held = this.equippedItemOf(runtime.netId);
+    const canAttack = held !== null && runtime.space === OUTDOORS && runtime.cast === null;
+    const castInstead =
+      canAttack &&
+      held === 'rod' &&
+      runtime.swingCooldownTicks === 0 &&
+      castLanding(position, aimYaw, this.clearing.water) !== null;
+    return { canAttack, castInstead };
+  }
+
+  /**
+   * A swing or a charged strike lands, at the moment its blow connects:
+   * on the tree in front, with the axe - a tree is only for chopping - or
+   * failing that on whatever animal is in reach, with anything at all in
+   * hand. Swinging at nothing is a swing at nothing.
+   *
+   * A charged strike is the payoff for winding up, rooted to the spot:
+   * whatever it lands on goes down outright, however many swings that would
+   * otherwise have taken.
+   */
+  private landBlow(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    aimYaw: number,
+    impact: Impact,
   ): void {
-    if (runtime.swingCooldownTicks > 0) return;
-    if (!this.isActiveItem(runtime, 'axe')) return;
+    if (this.equippedItemOf(runtime.netId) === null) return;
+    const charged = impact.kind === 'strike';
 
-    const target = this.treeInReachOf(position, aimYaw);
-    if (target !== null) {
-      runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
-
-      const state = this.treeState(target.prop.id);
-      const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + 1;
-      const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
-
-      if (swingsLeft > 0) {
-        state.swingsTaken = swingsTaken;
-        this.chopEvents.push({
-          netId: runtime.netId,
-          treeId: target.prop.id,
-          swingsLeft,
-          logsGained: 0,
-        });
+    if (this.isActiveItem(runtime, 'axe')) {
+      const tree = this.treeInReachOf(position, aimYaw);
+      if (tree !== null) {
+        this.chopTree(runtime, tree, charged);
         return;
       }
+    }
 
-      this.fellTree(target.prop.id, this.nowMs);
-      // A full pack means the wood stays on the ground. The tree still falls:
-      // you did chop it down, you just cannot carry what came off it.
-      const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
+    // Looking back to when the swing began, and a little before for the
+    // browser having shown it slightly in the past (see decision 0056).
+    const began =
+      impact.kind === 'strike' ? STRIKE.impact : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
+    const animalTarget = this.animalInReachOf(position, aimYaw, began + LAG_COMPENSATION_TICKS);
+    if (animalTarget !== null) this.catchAnimal(runtime, animalTarget.id, charged);
+  }
+
+  /** One blow of the axe into a tree, or the one that brings it down. */
+  private chopTree(runtime: PlayerRuntime, target: ChopTarget, charged: boolean): void {
+    const state = this.treeState(target.prop.id);
+    const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + 1;
+    const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
+
+    if (swingsLeft > 0) {
+      state.swingsTaken = swingsTaken;
       this.chopEvents.push({
         netId: runtime.netId,
         treeId: target.prop.id,
-        swingsLeft: 0,
-        logsGained,
+        swingsLeft,
+        logsGained: 0,
       });
       return;
     }
 
-    const animalTarget = this.animalInReachOf(position, aimYaw);
-    if (animalTarget === null) return;
+    this.fellTree(target.prop.id, this.nowMs);
+    // A full pack means the wood stays on the ground. The tree still falls:
+    // you did chop it down, you just cannot carry what came off it.
+    const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
+    this.chopEvents.push({
+      netId: runtime.netId,
+      treeId: target.prop.id,
+      swingsLeft: 0,
+      logsGained,
+    });
+  }
 
-    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
-    this.catchAnimal(runtime, animalTarget.id, charged);
+  /** Whether nobody else is already in this chair, or in this bed. */
+  private isRestingPlaceFree(runtime: PlayerRuntime, place: RestingPlace): boolean {
+    const kind = place.kind === 'chair' ? ActionKind.Sit : ActionKind.Lie;
+    const rising = place.kind === 'chair' ? RiseFrom.Chair : RiseFrom.Bed;
+    for (const other of this.players.values()) {
+      if (other === runtime || other.space !== runtime.space) continue;
+      const { action } = other;
+      if (action.kind === kind || (action.kind === ActionKind.Rise && action.step === rising)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Sit down in the chair, or lie down in bed: stood at its spot, facing its
+   * way, and settling in (see decision 0056). Getting up again is the
+   * player's own move - see `advanceAction`.
+   */
+  private settleInto(runtime: PlayerRuntime, motion: PlayerMotion, place: RestingPlace): void {
+    motion.position.x = place.stand.x;
+    motion.position.z = place.stand.z;
+    motion.position.y = 0;
+    motion.velocity.x = 0;
+    motion.velocity.y = 0;
+    motion.velocity.z = 0;
+    motion.facingYaw = place.stand.yaw;
+    motion.grounded = true;
+    beginAction(runtime.action, place.kind === 'chair' ? ActionKind.Sit : ActionKind.Lie);
   }
 
   /**
@@ -1846,7 +1991,7 @@ export class WorldSimulation {
       animal.hitsTaken += 1;
       const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
       if (hitsLeft > 0) {
-        this.threatHitEvents.push({ animalId: animal.id, hitsLeft });
+        this.threatHitEvents.push({ animalId: animal.id, hitsLeft, netId: runtime.netId });
         return;
       }
     }
@@ -1865,21 +2010,27 @@ export class WorldSimulation {
   }
 
   /**
-   * Take health off a player, knocking them out the instant it empties: woken
-   * up wherever `wakePosition` says - their own home, or the shared clearing
-   * if they have none - and healed straight back to full, the same tick.
+   * Take health off a player. A hit that lands makes them flinch, which stops
+   * whatever they were doing - a charge included - and one that empties
+   * their health knocks them out: down where they stand, half their pack
+   * buried there, healed straight back to full, and woken up a couple of
+   * seconds later at home (see `wakeUp`).
    *
-   * A dodge timed right beats this outright: while `invulnerableUntilMs`
-   * holds, the hit simply never lands.
+   * A dodge timed right beats this outright: mid-roll, the hit simply never
+   * lands. Nobody can be hit while down or getting back up either.
    */
   private damagePlayer(runtime: PlayerRuntime, amount: number): void {
-    if (this.nowMs < runtime.invulnerableUntilMs) {
-      this.healthEvents.push({
-        netId: runtime.netId,
-        health: Math.round(runtime.health),
-        knockedOut: false,
-        dodged: true,
-      });
+    if (runtime.action.kind === ActionKind.Dodge) {
+      if (this.tick - runtime.dodgeStartedAtTick < DODGE.invulnerable) {
+        this.healthEvents.push({
+          netId: runtime.netId,
+          health: Math.round(runtime.health),
+          knockedOut: false,
+          dodged: true,
+        });
+        return;
+      }
+    } else if (isUntouchable(runtime.action)) {
       return;
     }
 
@@ -1888,7 +2039,7 @@ export class WorldSimulation {
     runtime.health = knockedOut ? HEALTH_MAX : remaining;
 
     if (knockedOut) {
-      // Read before placePlayer moves them - this is where it stays buried.
+      // Where they fell is where it stays buried.
       const position = runtime.entity.get(Position);
       if (position !== undefined) {
         const buried = buryHalf(runtime.inventory);
@@ -1904,30 +2055,12 @@ export class WorldSimulation {
           this.cacheEvents.push({ netId: runtime.netId, kind: 'buried', cache });
         }
       }
-
-      // Woken up at home, by their own bed, if they have one (see decision
-      // 0055); otherwise back in the shared clearing, facing whichever way
-      // they already happened to be.
-      const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
-      if (home !== null) {
-        runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
-        this.placePlayer(
-          runtime.netId,
-          { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z },
-          HOME_WAKE_SPOT.yaw,
-          home.id,
-        );
-        this.spaceChanges.push({
-          netId: runtime.netId,
-          space: home.id,
-          x: HOME_WAKE_SPOT.x,
-          z: HOME_WAKE_SPOT.z,
-          yaw: HOME_WAKE_SPOT.yaw,
-        });
-      } else {
-        const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
-        this.placePlayer(runtime.netId, this.nextSpawnPosition(), facingYaw);
-      }
+      if (runtime.cast !== null) this.endCast(runtime, { outcome: 'walkedAway' });
+      runtime.pendingBuild = null;
+      beginAction(runtime.action, ActionKind.KnockedOut);
+      runtime.knockedOutAtTick = this.tick;
+    } else {
+      beginAction(runtime.action, ActionKind.Flinch);
     }
 
     this.healthEvents.push({
@@ -1939,38 +2072,34 @@ export class WorldSimulation {
   }
 
   /**
-   * A quick, decisive step in whatever direction is held - or straight back,
-   * if nothing is - that leaves the player briefly untouchable. See
-   * `damagePlayer` for how that window is spent.
-   *
-   * A held direction is relative to the camera, the same as walking, so it
-   * is turned into a world direction with `cameraYaw`; stepping back is away
-   * from wherever the character is aiming, `aimYaw`.
+   * Wake a knocked-out player up, once they have been down long enough: at
+   * home, getting out of their own bed, if they have one (see decision
+   * 0055); otherwise getting up off the ground in the shared clearing,
+   * facing whichever way they already happened to be.
    */
-  private tryDodge(
-    runtime: PlayerRuntime,
-    position: Vec3,
-    aimYaw: number,
-    cameraYaw: number,
-    moveX: number,
-    moveZ: number,
-    collision: CollisionWorld,
-  ): void {
-    if (runtime.dodgeCooldownTicks > 0) return;
-
-    const input = worldMoveDirection(moveX, moveZ, cameraYaw);
-    const hasInput = input.x !== 0 || input.z !== 0;
-    // No direction held: step straight back, away from wherever you are facing.
-    const dirX = hasInput ? input.x : Math.sin(aimYaw);
-    const dirZ = hasInput ? input.z : Math.cos(aimYaw);
-
-    position.x += dirX * DODGE_DISTANCE;
-    position.z += dirZ * DODGE_DISTANCE;
-    resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, collision);
-    position.y = collision.terrain.heightAt(position.x, position.z);
-
-    runtime.dodgeCooldownTicks = DODGE_COOLDOWN_TICKS;
-    runtime.invulnerableUntilMs = this.nowMs + DODGE_INVULNERABLE_SECONDS * 1000;
+  private wakeUp(runtime: PlayerRuntime): void {
+    const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
+    if (home !== null) {
+      runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
+      this.placePlayer(
+        runtime.netId,
+        { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z },
+        HOME_WAKE_SPOT.yaw,
+        home.id,
+      );
+      this.spaceChanges.push({
+        netId: runtime.netId,
+        space: home.id,
+        x: HOME_WAKE_SPOT.x,
+        z: HOME_WAKE_SPOT.z,
+        yaw: HOME_WAKE_SPOT.yaw,
+      });
+      beginAction(runtime.action, ActionKind.Rise, RiseFrom.Bed);
+    } else {
+      const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
+      this.placePlayer(runtime.netId, this.nextSpawnPosition(), facingYaw);
+      beginAction(runtime.action, ActionKind.Rise, RiseFrom.Ground);
+    }
   }
 
   /**
@@ -1982,7 +2111,6 @@ export class WorldSimulation {
   private tryCast(runtime: PlayerRuntime, position: Readonly<Vec3>, aimYaw: number): void {
     if (runtime.swingCooldownTicks > 0) return;
     if (!this.isActiveItem(runtime, 'rod')) return;
-    if (this.isActiveItem(runtime, 'axe') && this.treeInReachOf(position, aimYaw) !== null) return;
 
     const spot = castLanding(position, aimYaw, this.clearing.water);
     if (spot === null) return;
@@ -2039,6 +2167,7 @@ export class WorldSimulation {
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: null });
   }
 
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
@@ -2205,13 +2334,24 @@ export class WorldSimulation {
   }
 
   /** The animal this player would catch if they swung, or null. Used by tests. */
-  animalInReachOf(position: Readonly<Vec3>, aimYaw: number): CatchTarget | null {
+  animalInReachOf(position: Readonly<Vec3>, aimYaw: number, ticksBack = 0): CatchTarget | null {
     const candidates: CatchCandidate[] = [];
     for (const runtime of this.animals.values()) {
       if (runtime.caught) continue;
       const animalPosition = runtime.entity.get(Position);
       if (animalPosition === undefined) continue;
       candidates.push({ id: runtime.id, x: animalPosition.x, z: animalPosition.z });
+      // Wherever it was over the last few ticks counts too: a swing that
+      // began with it in reach lands, however fast it bolted since.
+      const back = Math.min(ticksBack, runtime.trailCount - 1);
+      for (let i = 1; i <= back; i++) {
+        const index = (runtime.trailHead - i + ANIMAL_TRAIL_TICKS) % ANIMAL_TRAIL_TICKS;
+        candidates.push({
+          id: runtime.id,
+          x: runtime.trailX[index] ?? 0,
+          z: runtime.trailZ[index] ?? 0,
+        });
+      }
     }
 
     const found = animalInReach(position, aimYaw, candidates);
@@ -2372,6 +2512,16 @@ export class WorldSimulation {
   }
 
   /** Hand over every change to anybody's health since this was last asked. */
+  /** Everything anybody did with their hands since this was last asked, for everybody nearby to see. */
+  drainGestureEvents(): GestureEvent[] {
+    return this.gestureEvents.splice(0);
+  }
+
+  /** What this player is in the middle of, for a snapshot or a test. */
+  actionOf(netId: number): Readonly<ActionState> | null {
+    return this.players.get(netId)?.action ?? null;
+  }
+
   drainHealthEvents(): HealthEvent[] {
     return this.healthEvents.splice(0);
   }
@@ -2554,6 +2704,8 @@ export class WorldSimulation {
     runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
     runtime.entity.set(Facing, { yaw: facingYaw });
     runtime.entity.set(AimYaw, { yaw: facingYaw });
+    // Whatever they were in the middle of does not come with them.
+    beginAction(runtime.action, ActionKind.Idle);
   }
 
   /**
@@ -2570,6 +2722,7 @@ export class WorldSimulation {
     if (runtime === undefined) return;
     runtime.entity.set(Position, { x: position.x, y: position.y, z: position.z });
     runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
+    runtime.trailCount = 0;
   }
 
   /** Everything worth writing to storage. */
@@ -2625,6 +2778,7 @@ export class WorldSimulation {
         if (speedSquared > SPRINT_REPORTING_SPEED * SPRINT_REPORTING_SPEED) {
           flags |= SnapshotFlag.Sprinting;
         }
+        const action = this.players.get(networkId.value)?.action;
         into.push({
           netId: networkId.value,
           x: position.x,
@@ -2635,6 +2789,9 @@ export class WorldSimulation {
           vz: velocity.z,
           yaw: facing.yaw,
           flags,
+          action: action === undefined ? 0 : packActionByte(action),
+          actionAge: action?.age ?? 0,
+          actionHeading: action?.heading ?? 0,
         });
       });
 
@@ -2662,6 +2819,9 @@ export class WorldSimulation {
           vz: velocity.z,
           yaw: facing.yaw,
           flags: SnapshotFlag.Animal | (speedSquared > 0.04 ? SnapshotFlag.Moving : 0),
+          action: 0,
+          actionAge: 0,
+          actionHeading: 0,
         });
       });
 

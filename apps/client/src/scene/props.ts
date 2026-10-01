@@ -119,10 +119,18 @@ export function placeInstance(parts: PropPart[], index: number, prop: PlacedProp
   for (const part of parts) placeOneInstance(part, index, prop);
 }
 
-export function placeOneInstance(part: PropPart, index: number, prop: PlacedProp): void {
+/** Put one prop into one part, tipped over by `tilt` about its own foot if given - a tree shaking from a blow. */
+export function placeOneInstance(
+  part: PropPart,
+  index: number,
+  prop: PlacedProp,
+  tilt?: THREE.Quaternion,
+): void {
+  const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.rotationY);
+  if (tilt !== undefined) turn.premultiply(tilt);
   const matrix = new THREE.Matrix4().compose(
     new THREE.Vector3(prop.x, prop.y ?? 0, prop.z),
-    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), prop.rotationY),
+    turn,
     new THREE.Vector3(prop.scale, prop.scale, prop.scale),
   );
   part.mesh.setMatrixAt(index, part.offset.clone().premultiply(matrix));

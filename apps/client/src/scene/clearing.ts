@@ -41,6 +41,13 @@ export interface ClearingScene {
    * ones back at whatever size this generation of them is.
    */
   setTreeStates(states: ReadonlyMap<number, TreeAppearance>): void;
+  /**
+   * A blow landing on a tree: it shivers, tipping a little away along
+   * `awayX`, `awayZ` - the way the blow was going - and settling back.
+   */
+  shakeTree(treeId: number, awayX: number, awayZ: number, strength?: number): void;
+  /** Moves anything shaking along. */
+  update(deltaSeconds: number): void;
   dispose(): void;
 }
 
@@ -132,6 +139,22 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 
   /** What is drawn right now, so nothing is rebuilt that has not changed. */
   const drawn = new Map<number, TreeAppearance>();
+  const treeById = new Map(trees.map((tree) => [tree.id, tree]));
+  /** Trees shivering from a blow, and how far into it. */
+  const shaking = new Map<number, TreeShake>();
+
+  /** Draw a standing tree tipped over by `tilt`, about its own foot. */
+  const tipTree = (treeId: number, tilt: THREE.Quaternion): void => {
+    const tree = treeById.get(treeId);
+    const slot = standing.get(treeId);
+    const state = drawn.get(treeId) ?? UNTOUCHED;
+    if (tree === undefined || slot === undefined || state.felled) return;
+    const grown = treeAtGeneration(clearing.seed, tree, state.generation);
+    for (const part of slot.parts) {
+      placeOneInstance(part, slot.index, grown, tilt);
+      part.mesh.instanceMatrix.needsUpdate = true;
+    }
+  };
 
   const scene: ClearingScene = {
     group,
@@ -182,6 +205,30 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
       group.add(cameraBlockers);
       scene.cameraBlockers = cameraBlockers;
     },
+    shakeTree: (treeId, awayX, awayZ, strength = 1) => {
+      const length = Math.hypot(awayX, awayZ);
+      if (length < 1e-6 || !standing.has(treeId)) return;
+      // Tipped about the level line across the blow, top first along it.
+      shaking.set(treeId, {
+        axis: new THREE.Vector3(awayZ / length, 0, -awayX / length),
+        age: 0,
+        strength,
+      });
+    },
+    update: (deltaSeconds) => {
+      for (const [treeId, shake] of shaking) {
+        shake.age += deltaSeconds;
+        const done = shake.age >= TREE_SHAKE_SECONDS;
+        const angle = done
+          ? 0
+          : TREE_SHAKE_ANGLE *
+            shake.strength *
+            Math.exp(-shake.age * TREE_SHAKE_SETTLE) *
+            Math.sin(shake.age * TREE_SHAKE_SPEED + 0.6);
+        tipTree(treeId, tilt.setFromAxisAngle(shake.axis, angle));
+        if (done) shaking.delete(treeId);
+      }
+    },
     dispose: () => {
       for (const item of disposables) item.dispose();
       cameraBlockers.geometry.dispose();
@@ -192,6 +239,19 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 }
 
 const UNTOUCHED: TreeAppearance = { generation: 0, felled: false };
+
+interface TreeShake {
+  readonly axis: THREE.Vector3;
+  age: number;
+  readonly strength: number;
+}
+
+/** How far a struck tree tips at most, in radians, and how quickly it shivers and settles. */
+const TREE_SHAKE_ANGLE = 0.035;
+const TREE_SHAKE_SPEED = 34;
+const TREE_SHAKE_SETTLE = 7;
+const TREE_SHAKE_SECONDS = 0.6;
+const tilt = new THREE.Quaternion();
 
 /** A cylinder for everything still standing, with stumps where trees came down. */
 function blockersFor(

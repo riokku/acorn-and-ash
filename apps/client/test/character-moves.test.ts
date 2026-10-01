@@ -1,0 +1,139 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  ActionKind,
+  CHARGE_TICKS,
+  DODGE,
+  LIGHT_COMBO,
+  RISE,
+  RiseFrom,
+  SETTLE,
+  STRIKE,
+  TICK_SECONDS,
+} from '@acorn/shared';
+
+import {
+  EAT_BITES,
+  EAT_SECONDS,
+  clipBlowSeconds,
+  eatingPose,
+  lineUp,
+  movePose,
+  type MoveView,
+} from '../src/scene/character-moves';
+
+function view(kind: ActionKind, age: number, extra: Partial<MoveView> = {}): MoveView {
+  return { kind, step: 0, age, atTree: false, flinchVariant: 0, roll: 'forward', ...extra };
+}
+
+describe('drawing a swing', () => {
+  it('lands every swing clip on exactly the tick the rules land the blow on', () => {
+    LIGHT_COMBO.forEach((swing, index) => {
+      const step = index + 1;
+      const pose = movePose(view(ActionKind.Swing, swing.impact, { step }));
+      expect(pose.clip).not.toBeNull();
+      if (pose.clip === null) return;
+      expect(pose.time).toBeCloseTo(clipBlowSeconds(pose.clip) ?? -1, 5);
+    });
+  });
+
+  it('chops at a tree with the woodcutter swing instead, blow still on the tick', () => {
+    const [first] = LIGHT_COMBO;
+    const impact = first?.impact ?? 4;
+    const pose = movePose(view(ActionKind.Swing, impact, { step: 1, atTree: true }));
+    expect(pose.clip).toBe('chop');
+    expect(pose.time).toBeCloseTo(clipBlowSeconds('chop') ?? -1, 5);
+  });
+
+  it('plays each swing of the combo with its own clip', () => {
+    const clips = [1, 2, 3].map((step) => movePose(view(ActionKind.Swing, 0, { step })).clip);
+    expect(new Set(clips).size).toBe(3);
+  });
+
+  it('never asks for a moment before a clip starts', () => {
+    expect(lineUp('attack3', 3, 1, 0)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('drawing a charged strike', () => {
+  it('holds a trembling wind-up that grows until the charge is ready', () => {
+    const early = movePose(view(ActionKind.Charge, 2));
+    const ready = movePose(view(ActionKind.Charge, CHARGE_TICKS));
+    expect(early.clip).toBe('chargeHold');
+    expect(early.charge).toBeLessThan(ready.charge);
+    expect(ready.charge).toBe(1);
+  });
+
+  it('brings the strike down on the tick it lands', () => {
+    const pose = movePose(view(ActionKind.Strike, STRIKE.impact));
+    expect(pose.clip).toBe('strike');
+    expect(pose.time).toBeCloseTo(clipBlowSeconds('strike') ?? -1, 5);
+  });
+});
+
+describe('drawing a dodge', () => {
+  it('tumbles forward and back as a roll, all the way over by the end of the travel', () => {
+    for (const roll of ['forward', 'backward'] as const) {
+      expect(movePose(view(ActionKind.Dodge, 0, { roll })).roll).toBe(0);
+      expect(movePose(view(ActionKind.Dodge, DODGE.travel, { roll })).roll).toBe(1);
+    }
+  });
+
+  it('hops to the sides with the pack’s own dodges, not a roll', () => {
+    expect(movePose(view(ActionKind.Dodge, 3, { roll: 'left' })).clip).toBe('dodgeLeft');
+    expect(movePose(view(ActionKind.Dodge, 3, { roll: 'right' })).clip).toBe('dodgeRight');
+    expect(movePose(view(ActionKind.Dodge, 3, { roll: 'left' })).roll).toBeNull();
+  });
+});
+
+describe('drawing resting', () => {
+  it('settles onto the seat and stays there, hands free', () => {
+    const sitting = movePose(view(ActionKind.Sit, SETTLE.chair + 30));
+    expect(sitting.clip).toBe('sitIdle');
+    expect(sitting.loop).toBe(true);
+    expect(sitting.rest).toBe(1);
+    expect(sitting.handsFree).toBe(true);
+  });
+
+  it('is back off the bed and holding things again by the end of getting up', () => {
+    const up = movePose(view(ActionKind.Rise, RISE.bed, { step: RiseFrom.Bed }));
+    expect(up.rest).toBe(0);
+    expect(up.handsFree).toBe(false);
+  });
+
+  it('gets up off the ground where it fell, never onto a bed', () => {
+    for (let age = 0; age <= RISE.ground; age += 5) {
+      expect(movePose(view(ActionKind.Rise, age, { step: RiseFrom.Ground })).rest).toBe(0);
+    }
+  });
+});
+
+describe('eating', () => {
+  it('lifts the food, takes every bite, and lowers an empty hand', () => {
+    expect(eatingPose(0).reach).toBe(0);
+    expect(eatingPose(0).left).toBe(1);
+    for (const bite of EAT_BITES) {
+      const pose = eatingPose(bite);
+      expect(pose.reach).toBe(1);
+      expect(pose.bite).toBe(1);
+    }
+    const done = eatingPose(EAT_SECONDS);
+    expect(done.reach).toBe(0);
+    expect(done.left).toBe(0);
+  });
+
+  it('eats a little more with every bite', () => {
+    let left = 1;
+    for (const bite of EAT_BITES) {
+      const after = eatingPose(bite + TICK_SECONDS).left;
+      expect(after).toBeLessThan(left);
+      left = after;
+    }
+  });
+
+  it('pulls the food just away between bites', () => {
+    const [first, second] = EAT_BITES;
+    if (first === undefined || second === undefined) throw new Error('no bites');
+    expect(eatingPose((first + second) / 2).bite).toBeLessThan(0.1);
+  });
+});

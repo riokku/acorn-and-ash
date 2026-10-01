@@ -337,8 +337,8 @@ test('dodging moves you a decisive step, on command', async ({ page }) => {
   const before = positionOf(await hudValue(page, 'Position'));
   await hold(page, 'ControlLeft', 100);
 
-  // A dodge lands the instant the server sees the button, so this only needs
-  // a moment to arrive - not the long hold a walk or a sprint would.
+  // A roll carries you 4 m in under half a second once the server sees the
+  // button, so this only needs a tap - not the long hold a walk or a sprint would.
   await expect
     .poll(async () => {
       const after = positionOf(await hudValue(page, 'Position'));

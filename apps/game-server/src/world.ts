@@ -7,6 +7,7 @@ import {
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
+  MAX_GESTURES_PER_MESSAGE,
   MAX_PLAYERS_PER_WORLD,
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
@@ -35,6 +36,7 @@ import {
   encodeRejected,
   encodeEquipped,
   encodeExplored,
+  encodeGestures,
   encodeSpace,
   encodeRoster,
   encodeSnapshot,
@@ -346,6 +348,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceRegrowth(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
     this.announceSpaceChanges(simulation);
+    this.announceGestures(simulation);
     if (simulation.tick % EXPLORED_SEND_INTERVAL_TICKS === 0) this.announceExplored(simulation);
 
     if (simulation.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
@@ -687,6 +690,18 @@ export class World extends DurableObject<WorldEnv> {
     }
   }
 
+  /**
+   * Tell everybody what anybody did with their hands this tick - picked
+   * something up, dug, reached out, ate - so every browser can play it on
+   * them (see decision 0056). One small message for the lot.
+   */
+  private announceGestures(simulation: WorldSimulation): void {
+    const gestures = simulation.drainGestureEvents();
+    for (let start = 0; start < gestures.length; start += MAX_GESTURES_PER_MESSAGE) {
+      this.broadcast(encodeGestures(gestures.slice(start, start + MAX_GESTURES_PER_MESSAGE)));
+    }
+  }
+
   private broadcastSnapshots(simulation: WorldSimulation): void {
     const serverTimeMs = this.worldTimeMs();
     for (const ws of this.ctx.getWebSockets()) {
@@ -702,6 +717,7 @@ export class World extends DurableObject<WorldEnv> {
           serverTimeMs,
           simulation.lastProcessedSeq(attachment.netId),
           entities,
+          simulation.actionOf(attachment.netId)?.dodgeCooldown ?? 0,
         ),
       );
     }

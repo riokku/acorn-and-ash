@@ -20,7 +20,20 @@ function createPlayer(): LocalPlayer {
 }
 
 function serverState(netId: number, x: number, z: number, vx = 0, vz = 0): SnapshotEntity {
-  return { netId, x, y: 0, z, vx, vy: 0, vz, yaw: 0, flags: 0 };
+  return {
+    netId,
+    x,
+    y: 0,
+    z,
+    vx,
+    vy: 0,
+    vz,
+    yaw: 0,
+    flags: 0,
+    action: 0,
+    actionAge: 0,
+    actionHeading: 0,
+  };
 }
 
 describe('moving before the server answers', () => {

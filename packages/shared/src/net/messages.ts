@@ -2,6 +2,7 @@ import type { BuildableKindId } from '../data/buildables';
 import type { CharacterId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
+import type { GestureEvent } from '../sim/actions';
 import type {
   AnimalCaught,
   BuiltProp,
@@ -50,6 +51,7 @@ export const ServerMessageType = {
   Equipped: 0x23,
   Explored: 0x24,
   Space: 0x25,
+  Gestures: 0x26,
 } as const;
 
 export const RejectReason = {
@@ -158,6 +160,8 @@ export interface SnapshotMessage {
   readonly serverTimeMs: number;
   /** The newest input from this client that the server has simulated. */
   readonly ackSeq: number;
+  /** Inputs before this client's own player may dodge again: theirs alone, so it travels once. */
+  readonly dodgeCooldown: number;
   readonly entities: readonly SnapshotEntity[];
 }
 
@@ -414,6 +418,15 @@ export interface SpaceMessage {
   readonly yaw: number;
 }
 
+/**
+ * Somebody picked something up, dug, reached out or ate (see decision 0056):
+ * a moment's gesture for every browser nearby to play on them.
+ */
+export interface GesturesMessage {
+  readonly type: 'gestures';
+  readonly gestures: readonly GestureEvent[];
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -436,4 +449,5 @@ export type ServerMessage =
   | RosterMessage
   | EquippedMessage
   | ExploredMessage
-  | SpaceMessage;
+  | SpaceMessage
+  | GesturesMessage;

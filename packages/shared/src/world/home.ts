@@ -166,6 +166,73 @@ export const HOME_WAKE_SPOT: PlacedSpot = {
   yaw: -Math.PI / 2,
 };
 
+/**
+ * Somewhere to sit or lie down inside (see decision 0056).
+ *
+ * While you use it you stay standing, as far as the rules go, at `stand`:
+ * clear of everything, so getting up never leaves you inside the furniture
+ * to be shoved back out. Only your drawn model moves onto the seat or the
+ * mattress, to `rest`.
+ */
+export interface RestingPlace {
+  readonly kind: 'chair' | 'bed';
+  /** Where you are while you use it, and which way you face. */
+  readonly stand: PlacedSpot;
+  /** Where your drawn model settles, how high up, and which way it faces. */
+  readonly rest: PlacedSpot & { readonly y: number };
+}
+
+/**
+ * The chair, pulled up to the table and facing it. The sitting pose sits
+ * back into a seat a little behind where it starts, so the model rests just
+ * in front of the chair's middle; you stand beside it, on the door side.
+ */
+export const HOME_CHAIR: RestingPlace = {
+  kind: 'chair',
+  stand: {
+    x: HOME_FURNITURE.chair.x,
+    z: HOME_FURNITURE.chair.z + HOME_FURNITURE.chair.radius + PLAYER_RADIUS + 0.07,
+    yaw: HOME_FURNITURE.chair.yaw,
+  },
+  rest: {
+    // Facing -X, towards the table: "in front" is -X.
+    x: HOME_FURNITURE.chair.x - 0.24,
+    y: 0.15,
+    z: HOME_FURNITURE.chair.z,
+    yaw: HOME_FURNITURE.chair.yaw,
+  },
+};
+
+/**
+ * The bed: lying on your back on top of the quilt with your head on the
+ * pillow at the headboard (-Z) end, and getting in and out on the side that
+ * faces the room, where you wake up too.
+ */
+export const HOME_BED: RestingPlace = {
+  kind: 'bed',
+  stand: HOME_WAKE_SPOT,
+  rest: {
+    x: HOME_FURNITURE.bed.x,
+    y: HOME_FURNITURE.bed.height + 0.02,
+    z: HOME_FURNITURE.bed.z - HOME_FURNITURE.bed.halfLength + 0.8,
+    // Facing +Z, so lying on your back puts your head towards the headboard.
+    yaw: Math.PI,
+  },
+};
+
+/** How far from the chair's middle, or the bed's edge, you can be and still use it. */
+const RESTING_REACH = 0.85;
+
+/** The chair or the bed, if you are close enough to either to sit or lie down. */
+export function restingPlaceInReach(x: number, z: number): RestingPlace | null {
+  const { chair, bed } = HOME_FURNITURE;
+  if (Math.hypot(x - chair.x, z - chair.z) <= chair.radius + RESTING_REACH) return HOME_CHAIR;
+  const outsideX = Math.max(0, Math.abs(x - bed.x) - bed.halfWidth);
+  const outsideZ = Math.max(0, Math.abs(z - bed.z) - bed.halfLength);
+  if (Math.hypot(outsideX, outsideZ) <= RESTING_REACH) return HOME_BED;
+  return null;
+}
+
 /** Everything you bump into inside, in the room's own coordinates. */
 export function homeRoomColliders(): Collider[] {
   const { halfWidth, halfDepth, wallHeight, wallThickness, doorX, doorHalfWidth } = HOME_ROOM;

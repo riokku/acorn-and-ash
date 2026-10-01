@@ -97,6 +97,10 @@ export interface HudState {
   readonly door: 'enter' | 'visit' | 'locked' | 'leave' | null;
   /** The home we are inside, if any: whether it is ours, and whether its door is locked. */
   readonly home: { readonly yours: boolean; readonly locked: boolean } | null;
+  /** Sat in the chair or lying in bed right now, if either - see decision 0056. */
+  readonly resting: 'chair' | 'bed' | null;
+  /** The chair or the bed close enough to sit or lie down on, inside a home. */
+  readonly restingNearby: 'chair' | 'bed' | null;
 }
 
 const INITIAL: HudState = {
@@ -143,6 +147,8 @@ const INITIAL: HudState = {
   mapOpen: false,
   door: null,
   home: null,
+  resting: null,
+  restingNearby: null,
 };
 
 /**

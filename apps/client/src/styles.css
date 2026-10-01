@@ -1210,6 +1210,13 @@ body {
   transition: none;
 }
 
+/* Losing consciousness after a knockout, and coming round again (decision 0056). */
+.scene-fade-slow,
+.scene-fade-slow.scene-fade-dark {
+  transition-duration: 800ms;
+  transition-timing-function: ease-in-out;
+}
+
 .door-lock {
   position: absolute;
   top: 12px;
