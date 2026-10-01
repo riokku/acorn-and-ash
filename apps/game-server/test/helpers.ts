@@ -44,6 +44,8 @@ const BUILD_IN_FRONT = 2;
 
 export class TestClient {
   readonly received: ServerMessage[] = [];
+  /** How the server hung up on this client, once it has. */
+  closedWith: number | null = null;
   private readonly socket: WebSocket;
   private sequence = 0;
 
@@ -60,6 +62,9 @@ export class TestClient {
     });
     socket.addEventListener('error', (event: Event) => {
       console.error('test client socket error', event);
+    });
+    socket.addEventListener('close', (event: CloseEvent) => {
+      this.closedWith = event.code;
     });
     socket.accept();
   }

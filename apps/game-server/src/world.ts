@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 import {
   CHARACTER_KINDS,
+  CLOSE_PLAYING_ELSEWHERE,
   DEFAULT_CHARACTER,
   DEFAULT_TINT_COLOR,
   DEFAULT_WORLD_SEED,
@@ -136,7 +137,17 @@ export class World extends DurableObject<WorldEnv> {
     }
 
     const simulation = this.ensureSimulation();
-    if (simulation.playerCount >= MAX_PLAYERS_PER_WORLD) {
+    const requestedKey = url.searchParams.get('player');
+    const playerKey =
+      requestedKey !== null && PLAYER_KEY_PATTERN.test(requestedKey) ? requestedKey : null;
+
+    // The same player already here on another connection - one that dropped
+    // without this end hearing it close yet, or another tab - carries on in
+    // the body they already have, right where it stands, rather than leaving
+    // a copy of themselves behind (see decision 0057).
+    const earlier = playerKey !== null ? this.connectionOf(playerKey, simulation) : null;
+
+    if (earlier === null && simulation.playerCount >= MAX_PLAYERS_PER_WORLD) {
       const { 0: client, 1: server } = new WebSocketPair();
       server.accept();
       server.send(encodeRejected(RejectReason.WorldFull));
@@ -144,17 +155,18 @@ export class World extends DurableObject<WorldEnv> {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    const requestedKey = url.searchParams.get('player');
-    const playerKey =
-      requestedKey !== null && PLAYER_KEY_PATTERN.test(requestedKey) ? requestedKey : null;
-
-    const netId = this.claimNetId();
+    const netId = earlier?.attachment.netId ?? this.claimNetId();
     const { 0: client, 1: server } = new WebSocketPair();
 
     // A returning player's own name and tint, so they need not wait for a
     // fresh Hello to be counted among "who else is here" by the next player
     // to join right behind them.
-    const identity = playerKey ? this.loadPlayerIdentity(playerKey) : undefined;
+    const identity =
+      earlier?.attachment ?? (playerKey ? this.loadPlayerIdentity(playerKey) : undefined);
+
+    if (earlier !== null) {
+      this.letGo(earlier.ws, CLOSE_PLAYING_ELSEWHERE, 'Playing somewhere else now');
+    }
 
     // Hibernatable sockets: the runtime can put this object to sleep and wake it
     // when a message arrives, instead of us holding it open.
@@ -167,7 +179,8 @@ export class World extends DurableObject<WorldEnv> {
       colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
     } satisfies ConnectionAttachment);
 
-    simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
+    if (earlier !== null) simulation.handOver(netId);
+    else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
@@ -810,8 +823,37 @@ export class World extends DurableObject<WorldEnv> {
 
   private broadcast(payload: ArrayBuffer, except?: WebSocket): void {
     for (const ws of this.ctx.getWebSockets()) {
-      if (ws === except) continue;
+      if (ws === except || this.attachmentFor(ws) === null) continue;
       this.trySend(ws, payload);
+    }
+  }
+
+  /** The live connection playing as `playerKey`, if they are here already. */
+  private connectionOf(
+    playerKey: string,
+    simulation: WorldSimulation,
+  ): { ws: WebSocket; attachment: ConnectionAttachment } | null {
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment?.playerKey === playerKey && simulation.hasPlayer(attachment.netId)) {
+        return { ws, attachment };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Hang up on a connection whose player has moved on to another one. Its
+   * attachment goes first, so nothing counts it as anybody from here on -
+   * not the snapshots, not the roster, and not its own close arriving later,
+   * which would otherwise take the player out from under the new connection.
+   */
+  private letGo(ws: WebSocket, code: number, reason: string): void {
+    ws.serializeAttachment(null);
+    try {
+      ws.close(code, reason);
+    } catch {
+      // Already gone at the far end, which is usually why they came back.
     }
   }
 

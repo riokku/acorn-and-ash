@@ -642,6 +642,7 @@ export class Game {
 
   /** Called when the player clicks the curtain to start or come back to playing. */
   resume(): void {
+    this.connection?.playHere();
     this.setPlaying(true);
     // Tied to this real click rather than page load: autoplay policy blocks
     // audio started without one.
@@ -889,6 +890,9 @@ export class Game {
       onStateChange: (state, detail) => {
         this.connectionState = state;
         this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
+        // Playing in another tab now: the curtain comes down here, and
+        // clicking it is how to play in this one again (see `resume`).
+        if (state === 'elsewhere') this.setPlaying(false);
       },
     });
     this.connection.connect();
