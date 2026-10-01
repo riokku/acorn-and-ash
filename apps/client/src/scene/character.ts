@@ -98,48 +98,48 @@ const MODEL_SCALE = 0.6;
 const HAND_BONE_NAME = 'handslotr';
 
 /**
- * The carried grip. Z is the axis that swings the axe between lying flat and
- * standing upright - found by sampling the live angle between the axe's
- * handle and straight up in a running browser at a handful of Z values, and
- * confirmed against the axe model's own geometry (the wide blade-shaped
- * vertices cluster at the high end of local Y, the handle shaft down to the
- * low end) so "upright" and "which end is the blade" are both grounded in
- * measurement rather than assumption.
- *
- * The 30 degree angle that first measurement landed on put the axe the
- * right amount off vertical, but with the blade pointing backwards - and
- * the next attempt at fixing that made things worse, not better: adding a
- * half turn to Z alone negates all three components of the direction the
- * handle points, which does not land the same distance off vertical the
- * way the comment here used to claim - it is close to the supplementary
- * angle instead, which is why the axe ended up hanging almost straight
- * down into the ground. A further `Math.PI` on Y corrects for exactly
- * that: applied on top of the Z half turn, it puts the up component back
- * where it was (so the same ~30 degrees off vertical returns) while
- * leaving the forward and sideways components flipped from the original,
- * which is the actual fix - confirmed this time by reading the held axe's
- * real world Y position (comfortably above both the hand and the ground)
- * alongside the angle, not the angle alone.
- *
- * `HELD_AXE_REST_X` steers which way, of everywhere on the resulting cone
- * of directions ~30 degrees off vertical, it actually leans - not a small
- * tilt in isolation the way "20 degrees forward" first suggested, since X
- * here interacts with the Y and Z already in place rather than adding a
- * separate small tilt on top of them. With Y and Z fixed, sweeping X alone
- * traces that whole cone at an almost exactly constant ~29.5 degrees off
- * vertical while the forward/sideways split changes completely, including
- * through the still-too-far-backward lean the first value gave - so this
- * value was found by sampling that sweep directly against a real
- * screenshot Chris sent, and reading off the point that lands furthest
- * toward the character's own front with the least sideways drift, rather
- * than trusting what a plain 20-degree offset from the previous value
- * would visually mean.
+ * The upright carry every long tool started from. Z is the axis that swings
+ * a tool between lying flat and standing upright, and X steers which way,
+ * around the resulting cone ~30 degrees off vertical, it leans - read off
+ * a sweep against a real screenshot of Chris's for the furthest toward the
+ * character's own front (see decision 0036 for the full story).
  */
 const HELD_AXE_REST_X = 2.8;
 const HELD_AXE_REST_Y = Math.PI;
 const HELD_AXE_REST_Z = 1.05 + Math.PI;
-const HELD_AXE_ROTATION = new THREE.Euler(HELD_AXE_REST_X, HELD_AXE_REST_Y, HELD_AXE_REST_Z);
+const UPRIGHT_CARRY = new THREE.Euler(HELD_AXE_REST_X, HELD_AXE_REST_Y, HELD_AXE_REST_Z);
 const HELD_AXE_OFFSET = new THREE.Vector3(0, -0.12, 0);
+
+/**
+ * Half a turn about a tool's own handle, which runs along its local Y: the
+ * axe's blade sticks out along its own -X, so this swaps which way it faces
+ * without moving the handle at all.
+ */
+const ABOUT_THE_HANDLE = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(0, 1, 0),
+  Math.PI,
+);
+
+/**
+ * How much further the carried axe leans forward than the upright carry,
+ * in radians - about 15 degrees, so roughly 45 degrees off vertical in
+ * all. Turning about the axe's own Z tips the handle toward the blade's
+ * side, which is forward once the blade faces forward.
+ */
+const AXE_EXTRA_LEAN = 0.26;
+
+/**
+ * The axe carried blade first: the upright carry, turned about its handle so
+ * the edge faces away from the player rather than back at them, then tipped
+ * a little further forward. Measured in the moves gallery, standing still
+ * the blade points ahead of the character and down a little, not back at them.
+ */
+const AXE_CARRY = new THREE.Euler().setFromQuaternion(
+  new THREE.Quaternion()
+    .setFromEuler(UPRIGHT_CARRY)
+    .multiply(ABOUT_THE_HANDLE)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), AXE_EXTRA_LEAN)),
+);
 
 /**
  * How a held item sits relative to the hand bone: `rotation`/`offset` place
@@ -169,14 +169,14 @@ interface HeldGrips {
 }
 
 /**
- * The rod shares the axe's own confirmed grip rather than a fresh guess: both
- * are long, one-handed tools whose model sits with its base at the local
- * origin (see `loadScaledModel`), gripped by that same base end. Nobody has
- * sampled this one against a real screenshot yet the way the axe's numbers
- * were - Chris can flag it from the PR preview if the rod's angle looks
- * wrong and it'll get the same treatment.
+ * The rod shares the upright carry the axe's grip was first matched to
+ * rather than a fresh guess: both are long, one-handed tools whose model
+ * sits with its base at the local origin (see `loadScaledModel`), gripped by
+ * that same base end. Nobody has sampled this one against a real screenshot
+ * yet the way the axe's numbers were - Chris can flag it from the PR preview
+ * if the rod's angle looks wrong and it'll get the same treatment.
  */
-const TOOL_HELD_REST: HeldItemRest = { rotation: HELD_AXE_ROTATION, offset: HELD_AXE_OFFSET };
+const TOOL_HELD_REST: HeldItemRest = { rotation: UPRIGHT_CARRY, offset: HELD_AXE_OFFSET };
 
 /** A long tool gripped the animation pack's way, a hand's width up from the end of its handle. */
 const TOOL_USE_GRIP: HeldItemRest = {
@@ -184,6 +184,23 @@ const TOOL_USE_GRIP: HeldItemRest = {
   offset: new THREE.Vector3(0, -0.14, 0),
 };
 const TOOL_GRIPS: HeldGrips = { carry: TOOL_HELD_REST, use: TOOL_USE_GRIP };
+
+/**
+ * The axe its own way round: blade first both carried and swung. Gripped
+ * like every other tool, the blade trailed behind every blow - chop, combo
+ * and charged strike alike - which measured as the edge pointing against
+ * the way the head was travelling at each impact; the same half turn about
+ * the handle puts it in front.
+ */
+const AXE_GRIPS: HeldGrips = {
+  carry: { rotation: AXE_CARRY, offset: HELD_AXE_OFFSET },
+  use: {
+    rotation: new THREE.Euler().setFromQuaternion(
+      new THREE.Quaternion().setFromEuler(TOOL_USE_GRIP.rotation).multiply(ABOUT_THE_HANDLE),
+    ),
+    offset: TOOL_USE_GRIP.offset,
+  },
+};
 
 /**
  * Every food item shares one rest pose too: small enough, and round enough,
@@ -207,9 +224,9 @@ const FOOD_USE_GRIP: HeldItemRest = {
 const FOOD_GRIPS: HeldGrips = { carry: FOOD_HELD_REST, use: FOOD_USE_GRIP };
 
 const HELD_ITEM_REST: Partial<Record<ItemId, HeldGrips>> = {
-  axe: TOOL_GRIPS,
+  axe: AXE_GRIPS,
   rod: TOOL_GRIPS,
-  // Same grip as the axe and rod, as a starting guess - it's the same shape
+  // Same grip as the rod, as a starting guess - it's the same shape
   // of thing, a long tool held by its base. Unconfirmed against a real
   // screenshot the way the axe's own numbers were; flag it from a PR preview
   // if the torch looks wrong in hand.

@@ -182,6 +182,9 @@ making it a real, shared choice covering every tool and food item, and
 [decision 0045](docs/decisions/0045-an-item-has-to-be-active-to-use-it.md)
 for making it something you need, not just something you can see.
 
+The axe is carried blade first, leaning forward, and every blow lands edge
+first - see [decision 0058](docs/decisions/0058-the-axe-blade-first.md).
+
 ### Moves
 
 Every move your character makes is a real animation now, from KayKit's free
