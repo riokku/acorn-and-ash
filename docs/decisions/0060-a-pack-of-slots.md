@@ -27,8 +27,8 @@ before.
 
 **A pack adds slots and never takes one.** The bag has `extraSlots: 4`. It
 can always be picked up, even into a full pack. If you carry more than one
-kind of pack, only the biggest counts (you wear one on your back). There is
-only one kind so far, so Chris can still change this.
+kind of pack, only the biggest counts (you wear one on your back). Chris
+confirmed this, so a second pack is an upgrade, not an add-on.
 
 **The bag is no longer a gate.** Six slots come before any bag. The bag is
 still kept through a knockout, so the four slots it adds never vanish.
