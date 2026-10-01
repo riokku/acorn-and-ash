@@ -24,6 +24,8 @@ import {
   SNAPSHOT_HZ,
   SnapshotFlag,
   FLOWER_PATCHES,
+  GATHER_PATCH_MAX_COUNT,
+  GATHER_PATCH_MIN_COUNT,
   SPAWN_POSITION,
   STICK_PATCHES,
   TICK_HZ,
@@ -528,18 +530,52 @@ async function walkWithinReach(
   const netId = client.welcome().netId;
   await waitFor('a first snapshot', () => client.positionOf(netId) !== undefined);
 
-  for (let step = 0; step < 60; step++) {
+  let previous: { x: number; z: number } | undefined;
+  for (let step = 0; step < 90; step++) {
     const here = client.positionOf(netId);
     if (here === undefined) break;
     const gap = Math.hypot(here.x - spot.x, here.z - spot.z);
     if (gap < PICKUP_REACH - 0.4) return;
     // Walking forward is walking down -Z, so this is the heading that lines up.
     const yaw = Math.atan2(-(spot.x - here.x), -(spot.z - here.z));
-    client.walk(0, 1, yaw, 4);
-    await sleep(110);
+    // Pressed flat against something - the pond, say, now that a patch can
+    // be anywhere - so step sideways around it before heading on.
+    const stuck =
+      previous !== undefined && Math.hypot(here.x - previous.x, here.z - previous.z) < 0.15;
+    client.walk(stuck ? 1 : 0, stuck ? 0 : 1, yaw, stuck ? 8 : 4);
+    previous = here;
+    await sleep(stuck ? 220 : 110);
   }
   const ended = client.positionOf(netId);
   throw new Error(`Never reached ${spot.x}, ${spot.z}; stopped at ${ended?.x}, ${ended?.z}`);
+}
+
+/**
+ * Hold the interact button at the nearest patch of this with any left, until
+ * the pack has this many - moving on to the next whenever one is picked
+ * clean, and waiting for one to grow back if every one of them is.
+ */
+async function gatherFromPatches(client: TestClient, item: ItemId, count: number): Promise<void> {
+  const enough = (): boolean =>
+    (client.inventory().find((entry) => entry.item === item)?.count ?? 0) >= count;
+  await waitFor('the patches', () => client.countOfMessages('gatherPatches') > 0);
+  for (let step = 0; step < 120 && !enough(); step++) {
+    const here = client.positionOf(client.welcome().netId);
+    const away = (spot: { x: number; z: number }): number =>
+      here === undefined ? Infinity : Math.hypot(here.x - spot.x, here.z - spot.z);
+    const patch = client
+      .gatherPatches()
+      .filter((candidate) => candidate.item === item && candidate.remaining > 0)
+      .sort((a, b) => away(a) - away(b))[0];
+    if (patch === undefined) {
+      await sleep(300);
+      continue;
+    }
+    if (away(patch) > PICKUP_REACH - 0.4) await walkWithinReach(client, patch);
+    client.walk(0, 0, 0, 4, PlayerButton.Interact);
+    await sleep(120);
+  }
+  if (!enough()) throw new Error(`never gathered ${count} of ${item}`);
 }
 
 async function walkToTheAxe(client: TestClient): Promise<void> {
@@ -794,15 +830,8 @@ describe('gathering and crafting', () => {
   const stickPatch = STICK_PATCHES[0];
   if (stickPatch === undefined) throw new Error('no stick patch to test against');
 
-  /** Hold the interact button at a gather spot until the pack has this many sticks. */
   async function gatherSticks(client: TestClient, count: number): Promise<void> {
-    const enough = (): boolean =>
-      (client.inventory().find((entry) => entry.item === 'stick')?.count ?? 0) >= count;
-    for (let step = 0; step < 60 && !enough(); step++) {
-      client.walk(0, 0, 0, 4, PlayerButton.Interact);
-      await sleep(120);
-    }
-    if (!enough()) throw new Error('never gathered enough sticks');
+    await gatherFromPatches(client, 'stick', count);
   }
 
   function sticksForAnAxe(): number {
@@ -888,6 +917,137 @@ describe('gathering and crafting', () => {
       { item: 'axe', count: 1 },
       { item: 'bag', count: 1 },
     ]);
+    second.close();
+  });
+});
+
+describe('patches running out', () => {
+  const stickPatch = STICK_PATCHES[0];
+  if (stickPatch === undefined) throw new Error('no stick patch to test against');
+
+  it('tells a new player where every patch is and how many each holds', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'patch-looker');
+    await waitFor('the patches', () => client.countOfMessages('gatherPatches') > 0);
+
+    const patches = client.gatherPatches();
+    expect(patches).toHaveLength(STICK_PATCHES.length + FLOWER_PATCHES.length);
+    for (const patch of patches) {
+      expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+      expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
+    }
+    client.close();
+  });
+
+  it('counts down for everybody as one player gathers, and stays picked clean', async () => {
+    const worldId = nextWorldId();
+    const gatherer = await TestClient.connect(worldId, 'patch-picker');
+    const watcher = await TestClient.connect(worldId, 'patch-watcher');
+    await waitFor('the patches', () => gatherer.countOfMessages('gatherPatches') > 0);
+    const held = gatherer.gatherPatches().find((patch) => patch.id === 1)?.remaining ?? 0;
+
+    // Every word the watcher has had about this patch, oldest first: it may
+    // already have grown back somewhere else by the time anybody looks.
+    const counts = (): number[] =>
+      watcher.received.flatMap((message) =>
+        message.type === 'gatherPatches'
+          ? message.patches.filter((patch) => patch.id === 1).map((patch) => patch.remaining)
+          : [],
+      );
+
+    await walkWithinReach(gatherer, stickPatch);
+    for (let step = 0; step < 60 && !counts().includes(0); step++) {
+      gatherer.walk(0, 0, 0, 4, PlayerButton.Interact);
+      await sleep(120);
+    }
+
+    await waitFor('the watcher to hear it is picked clean', () => counts().includes(0));
+    // One at a time, all the way down - the watcher saw every one go.
+    const countdown = counts();
+    expect(countdown.slice(0, countdown.indexOf(0) + 1)).toEqual(
+      Array.from({ length: held + 1 }, (_, taken) => held - taken),
+    );
+    expect(gatherer.inventory()).toEqual([{ item: 'stick', count: held }]);
+    gatherer.close();
+    watcher.close();
+  });
+});
+
+describe('dropping and destroying', () => {
+  async function withSticks(client: TestClient): Promise<number> {
+    await walkWithinReach(client, STICK_PATCHES[0] ?? { x: 0, z: 0 });
+    client.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('a stick', () => client.inventory().some((entry) => entry.item === 'stick'));
+    // The interact button is still down for a tick or two after the stick
+    // lands; dropping before it lets go would see the stick picked straight
+    // back up.
+    await client.caughtUp();
+    return client.inventory().find((entry) => entry.item === 'stick')?.count ?? 0;
+  }
+
+  it('drops a stick for everybody to see, and lets somebody else pick it up', async () => {
+    const worldId = nextWorldId();
+    const dropper = await TestClient.connect(worldId, 'stick-dropper');
+    const finder = await TestClient.connect(worldId, 'stick-finder');
+    await withSticks(dropper);
+
+    dropper.discard('stick', 1);
+    await waitFor('the pile', () => finder.droppedPiles().length > 0);
+    const [pile] = finder.droppedPiles();
+    expect(pile).toMatchObject({ item: 'stick', count: 1 });
+    expect(dropper.discarded()).toEqual([
+      { netId: dropper.welcome().netId, item: 'stick', count: 1, destroyed: false },
+    ]);
+    await waitFor('the pack without it', () =>
+      dropper.inventory().every((entry) => entry.item !== 'stick'),
+    );
+
+    if (pile === undefined) throw new Error('no pile');
+    dropper.close();
+    await walkWithinReach(finder, pile);
+    finder.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('the stick', () => finder.inventory().some((entry) => entry.item === 'stick'));
+    await waitFor('the pile to be gone', () => finder.droppedPiles().length === 0);
+    finder.close();
+  });
+
+  it('destroys without leaving anything behind', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'stick-destroyer');
+    const held = await withSticks(client);
+
+    client.discard('stick', held, true);
+    await waitFor('the news', () => client.discarded().length > 0);
+    expect(client.discarded()).toEqual([
+      { netId: client.welcome().netId, item: 'stick', count: held, destroyed: true },
+    ]);
+    await waitFor('the pack without it', () => client.inventory().length === 0);
+    expect(client.droppedPiles()).toEqual([]);
+    client.close();
+  });
+
+  it('never lets go of the bag', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'bag-keeper');
+    await findTheBag(client);
+
+    client.discard('bag', 1);
+    client.discard('bag', 1, true);
+    await sleep(200);
+    expect(client.inventory()).toEqual([{ item: 'bag', count: 1 }]);
+    expect(client.discarded()).toEqual([]);
+    client.close();
+  });
+
+  it('keeps a dropped pile lying there while the world sleeps', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'sleepy-dropper');
+    await withSticks(first);
+    first.discard('stick', 1);
+    await waitFor('the pile', () => first.droppedPiles().length > 0);
+    first.close();
+    await sleep(100);
+
+    const second = await TestClient.connect(worldId, 'sleepy-dropper');
+    await waitFor('the opening piles', () => second.countOfMessages('droppedPiles') > 0);
+    expect(second.droppedPiles()).toEqual([expect.objectContaining({ item: 'stick', count: 1 })]);
     second.close();
   });
 });
@@ -1576,17 +1736,9 @@ describe('building', () => {
 
   /** Walk back to open ground near spawn - clear of every landmark - to build on. */
   async function walkToOpenGround(client: TestClient): Promise<void> {
-    const netId = client.welcome().netId;
-    for (let step = 0; step < 60; step++) {
-      const here = client.positionOf(netId);
-      if (here === undefined) break;
-      const gap = Math.hypot(here.x - SPAWN_POSITION.x, here.z - SPAWN_POSITION.z);
-      if (gap < 3) return;
-      const yaw = Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
-      client.walk(0, 1, yaw, 4);
-      await sleep(110);
-    }
-    throw new Error('never made it back to open ground');
+    // The same walk as reaching for anything, so it steps around the pond
+    // from wherever a patch happened to be.
+    await walkWithinReach(client, SPAWN_POSITION);
   }
 
   /** Face the middle of the clearing and ask to build until something appears. */
@@ -1849,15 +2001,8 @@ describe('building', () => {
     client.close();
   });
 
-  /** Hold the interact button at a flower patch until the pack has this many. */
   async function gatherFlowers(client: TestClient, count: number): Promise<void> {
-    const enough = (): boolean =>
-      (client.inventory().find((entry) => entry.item === 'flower')?.count ?? 0) >= count;
-    for (let step = 0; step < 60 && !enough(); step++) {
-      client.walk(0, 0, 0, 4, PlayerButton.Interact);
-      await sleep(120);
-    }
-    if (!enough()) throw new Error('never gathered enough flowers');
+    await gatherFromPatches(client, 'flower', count);
   }
 
   /** Face the middle of the clearing and ask to build a lantern until one appears. */
@@ -1902,9 +2047,8 @@ describe('building', () => {
     );
     expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
 
-    // The same patch, never used up - a real reason nobody needs to remember
-    // which flower patch was whose.
-    await walkWithinReach(returning, patch);
+    // Whichever flower patches have any left - or have grown back since -
+    // with nothing about which ones were whose to remember.
     await gatherFlowers(returning, 4);
     await walkToOpenGround(returning);
     for (let step = 0; step < 10; step++) {

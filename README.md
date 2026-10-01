@@ -83,31 +83,32 @@ The game is online-only. Every world runs on the server.
 
 ## Controls
 
-| Key                                 | Does                                                           |
-| ----------------------------------- | -------------------------------------------------------------- |
-| `W` `A` `S` `D` or the arrow keys   | Walk                                                           |
-| `Shift` (held)                      | Sprint                                                         |
-| `Space`                             | Jump                                                           |
-| `E`                                 | Pick up, gather, dig up a cache, light/put out a campfire, eat |
-| `E` beside your chair or bed        | Sit down or lie down (move, or `E` again, to get up)           |
-| `1`–`6`                             | Equip the hotbar slot - eats it too if it's food               |
-| `C`                                 | Open the craft menu                                            |
-| `1` / `2` / `3` (craft menu open)   | Craft an axe / fishing rod / torch                             |
-| `B`                                 | Open the build menu                                            |
-| `1`–`6` (build menu open)           | Pick a campfire, cabin, flower bed, lantern, fence or path     |
-| Left mouse (piece picked)           | Place it where its preview stands                              |
-| Mouse wheel (piece picked)          | Turn it                                                        |
-| `Shift` (held, fence picked)        | Place it freely instead of joining it onto another fence       |
-| `Esc` or right mouse tap            | Put the piece away                                             |
-| `I`, or the bag button              | Open or close your pack                                        |
-| `M`, or click the minimap           | Open or close the map                                          |
-| Walk into your door, or `E` there   | Go inside your home, or back out                               |
-| Left mouse (click)                  | Turn to face what you click, and chop, cast, hook or fight it  |
-| Left mouse (click as a swing lands) | Carry on into the next swing, up to three in a row             |
-| Left mouse (held)                   | Charge a heavy attack                                          |
-| Right mouse (held), then drag       | Turn the camera                                                |
-| Left `Ctrl`                         | Dodge roll                                                     |
-| `Esc`                               | Close a panel, or pause                                        |
+| Key                                  | Does                                                           |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `W` `A` `S` `D` or the arrow keys    | Walk                                                           |
+| `Shift` (held)                       | Sprint                                                         |
+| `Space`                              | Jump                                                           |
+| `E`                                  | Pick up, gather, dig up a cache, light/put out a campfire, eat |
+| `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)           |
+| `1`–`6`                              | Equip the hotbar slot - eats it too if it's food               |
+| `C`                                  | Open the craft menu                                            |
+| `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                             |
+| `B`                                  | Open the build menu                                            |
+| `1`–`6` (build menu open)            | Pick a campfire, cabin, flower bed, lantern, fence or path     |
+| Left mouse (piece picked)            | Place it where its preview stands                              |
+| Mouse wheel (piece picked)           | Turn it                                                        |
+| `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence       |
+| `Esc` or right mouse tap             | Put the piece away                                             |
+| `I`, or the bag button               | Open or close your pack                                        |
+| Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                    |
+| `M`, or click the minimap            | Open or close the map                                          |
+| Walk into your door, or `E` there    | Go inside your home, or back out                               |
+| Left mouse (click)                   | Turn to face what you click, and chop, cast, hook or fight it  |
+| Left mouse (click as a swing lands)  | Carry on into the next swing, up to three in a row             |
+| Left mouse (held)                    | Charge a heavy attack                                          |
+| Right mouse (held), then drag        | Turn the camera                                                |
+| Left `Ctrl`                          | Dodge roll                                                     |
+| `Esc`                                | Close a panel, or pause                                        |
 
 There is nothing to land on yet, so a jump is a hop in place.
 
@@ -156,6 +157,17 @@ unpin it; clicking an item in either place equips it, the same as its
 number key. See
 [decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
 [decision 0060](docs/decisions/0060-a-pack-of-slots.md).
+
+Right-click any slot, in the pack or on the hotbar, to make room: **Drop
+one**, **Drop all**, or **Destroy**, which asks "Are you sure?" first.
+Dropped things land just in front of you in a pile that anybody can pick
+up with `E`, and fade after ten minutes if nobody does. Destroyed things
+are gone for good. Nothing can be dropped indoors, and the bag never
+leaves you, since it holds your extra slots. Whenever something goes into
+your pack - gathered, picked up, looted, caught or crafted - a small card
+in the bottom right says so, such as "+3 Sticks", adding repeats together
+rather than stacking them up. See
+[decision 0061](docs/decisions/0061-patches-run-out-and-dropping.md).
 
 ### Your character
 
@@ -348,7 +360,10 @@ the bite. See [decision 0014](docs/decisions/0014-fishing.md).
 
 Sticks are gathered by hand - no tool needed - from a couple of patches of
 fallen branches in the clearing. Press `E` next to one, the same as picking
-something up off the ground. A patch never runs out, so it does not matter if
+something up off the ground. A patch holds between two and six, one per
+press, and looks emptier as you pick it. Picked clean, it grows back a few
+minutes later somewhere else in the clearing (see
+[Patches growing back](#patches-growing-back)), so it does not matter if
 somebody else already grabbed the world's one axe or rod: you can still get
 your own. Flower patches work exactly the same way; what flowers are for
 lives in [Building](#building) below.
@@ -398,6 +413,22 @@ the spot; it waits until they move. See
 
 Half an hour is a long time to wait while working on it, so `local` runs and
 preview links use two minutes instead, set by `WORLD_REGROW_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
+production use the real wait.
+
+### Patches growing back
+
+A stick or flower patch picked clean is gone for three to six minutes, then
+grows back with a fresh two to six, somewhere new in the clearing: never in
+the pond, on a rock, on anything built, right where people arrive, or on top
+of another patch. Everybody in the world shares the same patches, and an
+empty one stays empty if you log out and come back, the same as a stump.
+How many a patch holds and how far it keeps from things live in
+[`packages/shared/src/constants.ts`](packages/shared/src/constants.ts). See
+[decision 0061](docs/decisions/0061-patches-run-out-and-dropping.md).
+
+`local` runs and preview links wait 30 to 60 seconds instead, set by
+`WORLD_PATCH_REGROW_SECONDS` in
 [`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
 production use the real wait.
 

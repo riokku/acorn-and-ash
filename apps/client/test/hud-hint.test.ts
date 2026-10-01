@@ -23,6 +23,7 @@ const BASE_STATE: HudState = {
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
   nearbyItem: null,
+  nearbyPile: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
   ownCacheCompass: null,
@@ -44,6 +45,9 @@ const BASE_STATE: HudState = {
   craftingNews: null,
   huntingNews: null,
   cacheNews: null,
+  discardNews: null,
+  toasts: [],
+  canDrop: true,
   isNight: false,
   mapOpen: false,
   door: null,
@@ -239,6 +243,57 @@ describe('the hint along the bottom', () => {
       nearbyItem: 'axe',
     };
     expect(hint(state)).toBe('Press E to pick up the axe');
+  });
+
+  it('offers to pick up something dropped, saying how many', () => {
+    const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'stick', count: 3 } };
+    expect(hint(state)).toBe('Press E to pick up 3 sticks');
+  });
+
+  it('names one dropped thing the same way the toast does', () => {
+    const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'flower', count: 1 } };
+    expect(hint(state)).toBe('Press E to pick up 1 flower');
+  });
+
+  it('calls a dropped tool "the" tool, since there is only ever one', () => {
+    const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'axe', count: 1 } };
+    expect(hint(state)).toBe('Press E to pick up the axe');
+  });
+
+  it('reaches for something dropped before a patch, the same order as the server', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      nearbyPile: { item: 'flower', count: 2 },
+      nearGatherSpot: 'stick',
+    };
+    expect(hint(state)).toBe('Press E to pick up 2 flowers');
+  });
+
+  it('reaches for something lying in the clearing before anything dropped', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      nearbyItem: 'rod',
+      nearbyPile: { item: 'stick', count: 2 },
+    };
+    expect(hint(state)).toBe('Press E to pick up the fishing rod');
+  });
+
+  it('says the pack is full, rather than offering a pile there is no slot for', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'log', count: 60 }],
+      nearbyPile: { item: 'stick', count: 4 },
+    };
+    expect(hint(state)).toBe('Your pack is full · no room for 4 sticks');
+  });
+
+  it('says only one is ever carried, rather than offering a dropped second axe', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'axe', count: 1 }],
+      nearbyPile: { item: 'axe', count: 1 },
+    };
+    expect(hint(state)).toBe('You can only carry one axe');
   });
 
   it('offers to dig up a buried cache of your own within reach', () => {

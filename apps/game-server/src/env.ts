@@ -17,6 +17,15 @@ export interface WorldEnv extends Env {
    */
   readonly WORLD_REGROW_SECONDS?: string;
   /**
+   * The shortest a picked-clean stick or flower patch takes to grow back
+   * somewhere new, in seconds. Patches return somewhere between this and
+   * twice it.
+   *
+   * Set low on previews and local runs so a patch moving can be watched in
+   * one sitting. Three minutes everywhere real.
+   */
+  readonly WORLD_PATCH_REGROW_SECONDS?: string;
+  /**
    * How long a full hunger meter takes to run out, in seconds, if nothing is
    * eaten.
    *

@@ -26,6 +26,7 @@ export function mountHud(
   mapFeed: MapFeed,
   onToggleMap: () => void,
   onSetDoorLock: (locked: boolean) => void,
+  onDiscard: (item: ItemId, amount: number, destroy: boolean) => void,
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -41,6 +42,7 @@ export function mountHud(
         mapFeed={mapFeed}
         onToggleMap={onToggleMap}
         onSetDoorLock={onSetDoorLock}
+        onDiscard={onDiscard}
       />
     </StrictMode>,
   );

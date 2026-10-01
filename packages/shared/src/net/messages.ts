@@ -3,12 +3,15 @@ import type { CharacterId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
+import type { GatherPatchView } from '../sim/gathering';
+import type { DroppedPileView } from '../sim/dropping';
 import type {
   AnimalCaught,
   BuiltProp,
   BuriedCacheView,
   CacheEvent,
   CraftedEvent,
+  DiscardedEvent,
   FishingEvent,
   HealthEvent,
   HungerEvent,
@@ -25,6 +28,7 @@ export const ClientMessageType = {
   Hello: 0x05,
   UseItem: 0x06,
   SetDoorLock: 0x07,
+  Discard: 0x08,
 } as const;
 
 /** What the server says back. */
@@ -52,6 +56,9 @@ export const ServerMessageType = {
   Explored: 0x24,
   Space: 0x25,
   Gestures: 0x26,
+  GatherPatches: 0x27,
+  DroppedPiles: 0x28,
+  Discarded: 0x29,
 } as const;
 
 export const RejectReason = {
@@ -135,6 +142,18 @@ export interface HelloMessage {
   readonly color: TintColorId;
 }
 
+/**
+ * Drop or destroy some of one thing from the pack, to make room (see
+ * decision 0061). Settled the moment it arrives, the same as crafting.
+ */
+export interface DiscardMessage {
+  readonly type: 'discard';
+  readonly item: ItemId;
+  /** How many. The server never takes more than the player actually holds. */
+  readonly amount: number;
+  readonly destroy: boolean;
+}
+
 export type ClientMessage =
   | InputBundleMessage
   | PingMessage
@@ -142,7 +161,8 @@ export type ClientMessage =
   | BuildMessage
   | HelloMessage
   | UseItemMessage
-  | SetDoorLockMessage;
+  | SetDoorLockMessage
+  | DiscardMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';
@@ -427,6 +447,32 @@ export interface GesturesMessage {
   readonly gestures: readonly GestureEvent[];
 }
 
+/**
+ * Every stick and flower patch: where it is now and how many are left (see
+ * decision 0061). Sent whole - there are only a handful - on arrival and to
+ * everybody whenever one is gathered from, grows back or moves.
+ */
+export interface GatherPatchesMessage {
+  readonly type: 'gatherPatches';
+  readonly patches: readonly GatherPatchView[];
+}
+
+/**
+ * Everything lying where somebody dropped it, sent whole the same way as
+ * buried caches: on arrival, and to everybody whenever a pile is dropped,
+ * added to, picked up or fades.
+ */
+export interface DroppedPilesMessage {
+  readonly type: 'droppedPiles';
+  readonly piles: readonly DroppedPileView[];
+}
+
+/** Word that you dropped or destroyed something, for your own HUD alone. */
+export interface DiscardedMessage {
+  readonly type: 'discarded';
+  readonly event: DiscardedEvent;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -450,4 +496,7 @@ export type ServerMessage =
   | EquippedMessage
   | ExploredMessage
   | SpaceMessage
-  | GesturesMessage;
+  | GesturesMessage
+  | GatherPatchesMessage
+  | DroppedPilesMessage
+  | DiscardedMessage;

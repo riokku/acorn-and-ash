@@ -12,6 +12,10 @@ import {
   encodeBuild,
   encodeCraft,
   encodeUseItem,
+  encodeDiscard,
+  encodeDiscarded,
+  encodeDroppedPiles,
+  encodeGatherPatches,
   encodeEquipped,
   encodeBuiltProps,
   encodeBuriedCaches,
@@ -40,6 +44,8 @@ import {
   MAX_EQUIPPED_ENTRIES,
 } from '../src/net/protocol';
 import { createInput } from '../src/sim/player';
+import type { GatherPatchView } from '../src/sim/gathering';
+import type { DroppedPileView } from '../src/sim/dropping';
 import type { EquippedEntry, RosterEntry } from '../src/net/messages';
 import type {
   AnimalCaught,
@@ -1018,5 +1024,119 @@ describe('telling everybody what everybody has equipped', () => {
       item: null,
     }));
     expect(roundTrip(players)).toHaveLength(MAX_EQUIPPED_ENTRIES);
+  });
+});
+
+describe('asking to drop or destroy something', () => {
+  it('survives a round trip, dropping or destroying', () => {
+    expect(
+      decodeClientMessage(encodeDiscard({ item: 'stick', amount: 3, destroy: false })),
+    ).toEqual({ type: 'discard', item: 'stick', amount: 3, destroy: false });
+    expect(decodeClientMessage(encodeDiscard({ item: 'axe', amount: 1, destroy: true }))).toEqual({
+      type: 'discard',
+      item: 'axe',
+      amount: 1,
+      destroy: true,
+    });
+  });
+
+  it('carries a whole stack of anything, not just one byte of it', () => {
+    const decoded = decodeClientMessage(
+      encodeDiscard({ item: 'log', amount: 300, destroy: false }),
+    );
+    expect(decoded).toMatchObject({ amount: 300 });
+  });
+
+  it('is five bytes', () => {
+    expect(encodeDiscard({ item: 'stick', amount: 1, destroy: false }).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeDiscard({ item: 'stick', amount: 1, destroy: false });
+    expect(decodeClientMessage(encoded.slice(0, 4))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(encodeDiscard({ item: 'stick', amount: 1, destroy: false }));
+    encoded[1] = 200;
+    expect(decodeClientMessage(encoded.buffer)).toBeNull();
+  });
+
+  it('refuses dropping none at all', () => {
+    expect(decodeClientMessage(encodeDiscard({ item: 'stick', amount: 0, destroy: false }))).toBe(
+      null,
+    );
+  });
+});
+
+describe('telling everybody where the patches are', () => {
+  const roundTrip = (patches: readonly GatherPatchView[]): readonly GatherPatchView[] | null => {
+    const decoded = decodeServerMessage(encodeGatherPatches(patches));
+    return decoded?.type === 'gatherPatches' ? decoded.patches : null;
+  };
+
+  it('carries each patch, what it offers, where it is and how many are left', () => {
+    const decoded = roundTrip([
+      { id: 1, item: 'stick', x: 2.6, z: 1.8, remaining: 4 },
+      { id: 3, item: 'flower', x: -14.25, z: 9.5, remaining: 0 },
+    ]);
+    expect(decoded).toHaveLength(2);
+    expect(decoded?.[0]).toMatchObject({ id: 1, item: 'stick', remaining: 4 });
+    expect(decoded?.[0]?.x).toBeCloseTo(2.6, 2);
+    expect(decoded?.[1]).toMatchObject({ id: 3, item: 'flower', remaining: 0 });
+    expect(decoded?.[1]?.z).toBeCloseTo(9.5, 2);
+  });
+
+  it('costs seven bytes a patch', () => {
+    expect(encodeGatherPatches([]).byteLength).toBe(2);
+    expect(
+      encodeGatherPatches([{ id: 1, item: 'stick', x: 0, z: 0, remaining: 2 }]).byteLength,
+    ).toBe(9);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeGatherPatches([{ id: 1, item: 'stick', x: 0, z: 0, remaining: 2 }]);
+    expect(decodeServerMessage(encoded.slice(0, 6))).toBeNull();
+  });
+});
+
+describe('telling everybody what has been dropped', () => {
+  const roundTrip = (piles: readonly DroppedPileView[]): readonly DroppedPileView[] | null => {
+    const decoded = decodeServerMessage(encodeDroppedPiles(piles));
+    return decoded?.type === 'droppedPiles' ? decoded.piles : null;
+  };
+
+  it('carries an empty world', () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it('carries each pile, what it is, how many and where', () => {
+    const decoded = roundTrip([{ id: 513, item: 'log', count: 300, x: -3.5, z: 7.25 }]);
+    expect(decoded?.[0]).toMatchObject({ id: 513, item: 'log', count: 300 });
+    expect(decoded?.[0]?.x).toBeCloseTo(-3.5, 2);
+    expect(decoded?.[0]?.z).toBeCloseTo(7.25, 2);
+  });
+
+  it('costs nine bytes a pile', () => {
+    expect(encodeDroppedPiles([{ id: 1, item: 'stick', count: 1, x: 0, z: 0 }]).byteLength).toBe(
+      11,
+    );
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeDroppedPiles([{ id: 1, item: 'stick', count: 1, x: 0, z: 0 }]);
+    expect(decodeServerMessage(encoded.slice(0, 8))).toBeNull();
+  });
+});
+
+describe('word that you dropped or destroyed something', () => {
+  it('survives a round trip', () => {
+    const event = { netId: 12, item: 'flower', count: 6, destroyed: true } as const;
+    expect(decodeServerMessage(encodeDiscarded(event))).toEqual({ type: 'discarded', event });
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeDiscarded({ netId: 1, item: 'stick', count: 1, destroyed: false });
+    expect(decodeServerMessage(encoded.slice(0, 6))).toBeNull();
   });
 });

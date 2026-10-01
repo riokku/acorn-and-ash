@@ -48,7 +48,9 @@ import {
   createWildernessTerrain,
   dayBrightness,
   dayProgress,
+  droppedPileInReach,
   gatherSpotInReach,
+  isDiscardable,
   isNight,
   exploredFraction,
   nearestBuriedCache,
@@ -76,6 +78,9 @@ import {
   type CollisionWorld,
   type CraftedEvent,
   type ActionContext,
+  type DiscardedEvent,
+  type DroppedPileView,
+  type GatherPatchView,
   type FishingEvent,
   type GestureEvent,
   type HealthEvent,
@@ -95,6 +100,7 @@ import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
+import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
@@ -141,6 +147,8 @@ import { planPlacement, type PlacementPlan } from './building/placement';
 import type { FishingPhase, HudStore } from './hud/store';
 import { compassToOwnCache, type Compass } from './hud/cache-compass';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
+import { amountOf } from './hud/item-words';
+import { ToastShelf, packGains } from './hud/toasts';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -323,10 +331,19 @@ export interface GameDebug {
   takenPickups(): number[];
   /** Everything the clearing has lying about to be found. */
   pickups(): Array<{ id: number; item: string; x: number; z: number }>;
-  /** Every patch you could gather from, and what it offers. */
-  gatherSpots(): Array<{ x: number; z: number; item: string }>;
+  /**
+   * Every stick and flower patch, wherever the server last said it is, and
+   * how many it has left - none while it is picked clean and growing back.
+   */
+  gatherSpots(): Array<{ id: number; x: number; z: number; item: string; remaining: number }>;
+  /** Everything anybody has dropped that is still lying about. */
+  droppedPiles(): Array<{ id: number; item: string; count: number; x: number; z: number }>;
   /** What is within reach right now, if anything. */
   nearbyItem(): string | null;
+  /** Something dropped within reach right now, if anything. */
+  nearbyPile(): { item: string; count: number } | null;
+  /** The toasts showing right now: what each one says it gained, and how many. */
+  toasts(): Array<{ item: string; count: number }>;
   /** What a nearby patch would gather, if anything is within reach right now. */
   nearGatherSpot(): string | null;
   /** Trees the server says are down. */
@@ -404,6 +421,8 @@ export interface GameDebug {
   craftingNews(): string | null;
   /** The last thing said about what we caught, if it is still on screen. */
   huntingNews(): string | null;
+  /** The last thing said about what we dropped or destroyed, if it is still on screen. */
+  discardNews(): string | null;
 }
 
 export interface GameOptions {
@@ -527,6 +546,21 @@ export class Game {
   private nearbyItem: ItemId | null = null;
   private nearGatherSpot: ItemId | null = null;
   /**
+   * Every stick and flower patch, and everything dropped, as the server last
+   * said - drawn by `groundItems` once the world is built (see decision 0061).
+   */
+  private gatherPatches: readonly GatherPatchView[] = [];
+  private droppedPiles: readonly DroppedPileView[] = [];
+  private groundItems: GroundItems | null = null;
+  private nearbyPile: { item: ItemId; count: number } | null = null;
+  /**
+   * Whether `carrying` is this connection's first word on the pack yet. The
+   * first list is what we already had, not something just gained, so it
+   * never makes a toast.
+   */
+  private packHeardFrom = false;
+  private readonly toastShelf = new ToastShelf();
+  /**
    * What the server says about every tree that is not as the seed left it, and
    * how far along the one being chopped is.
    */
@@ -553,6 +587,7 @@ export class Game {
   private craftingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
   private cacheNews: { text: string; until: number } | null = null;
+  private discardNews: { text: string; until: number } | null = null;
   /**
    * What each character's moves need remembering between frames - which
    * swing is at a tree, which flinch is next (see `MoveMemory`) - ours, and
@@ -738,6 +773,17 @@ export class Game {
   }
 
   /**
+   * Drop or destroy some of something in the pack, from the slot menu (see
+   * decision 0061). Only asked for here; the server decides whether it
+   * happens, and how many that really is.
+   */
+  discard(item: ItemId, amount: number, destroy: boolean): void {
+    if (!isDiscardable(item) || amount < 1) return;
+    if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
+    this.connection?.sendDiscard({ item, amount: Math.floor(amount), destroy });
+  }
+
+  /**
    * Start placing one of these, the same as pressing its number with the
    * build menu open - called when an entry in that menu is clicked.
    */
@@ -782,6 +828,7 @@ export class Game {
       equippedItem: () => this.equipped.get(this.selfNetId) ?? null,
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
+      nearbyPile: () => (this.nearbyPile === null ? null : { ...this.nearbyPile }),
       nearGatherSpot: () => this.nearGatherSpot,
       felledTrees: () => [...this.treeStates].filter(([, state]) => state.felled).map(([id]) => id),
       treeGenerations: () =>
@@ -824,7 +871,12 @@ export class Game {
           x: entry.x,
           z: entry.z,
         })),
-      gatherSpots: () => (this.clearing?.gatherSpots ?? []).map((spot) => ({ ...spot })),
+      gatherSpots: () => this.gatherPatches.map((patch) => ({ ...patch })),
+      droppedPiles: () => this.droppedPiles.map((pile) => ({ ...pile })),
+      toasts: () =>
+        this.toastShelf
+          .current(performance.now())
+          .map((toast) => ({ item: toast.item, count: toast.count })),
       faceTowards: (x, z) => {
         const camera = this.camera;
         if (camera === null) return;
@@ -846,6 +898,7 @@ export class Game {
       healthNews: () => this.currentHealthNews(performance.now()),
       craftingNews: () => this.currentCraftingNews(performance.now()),
       huntingNews: () => this.currentHuntingNews(performance.now()),
+      discardNews: () => this.currentDiscardNews(performance.now()),
     };
   }
 
@@ -859,6 +912,7 @@ export class Game {
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
+    this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -903,6 +957,9 @@ export class Game {
       case 'welcome': {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
+        // A fresh connection starts from a fresh pack list: what it says is
+        // what we had, not what we just gained.
+        this.packHeardFrom = false;
         this.syncServerClock(message.serverTimeMs);
         // Every fresh connection is a clean slate on the server - this has to
         // be resent on every reconnect, not only the first one.
@@ -956,7 +1013,24 @@ export class Game {
         break;
       }
       case 'inventory': {
-        this.carrying = message.items.map((entry) => ({ ...entry }));
+        const carrying = message.items.map((entry) => ({ ...entry }));
+        if (this.packHeardFrom) this.showGains(packGains(this.carrying, carrying));
+        this.packHeardFrom = true;
+        this.carrying = carrying;
+        break;
+      }
+      case 'gatherPatches': {
+        this.gatherPatches = message.patches;
+        this.groundItems?.setGatherPatches(this.gatherPatches);
+        break;
+      }
+      case 'droppedPiles': {
+        this.droppedPiles = message.piles;
+        this.groundItems?.setDroppedPiles(this.droppedPiles);
+        break;
+      }
+      case 'discarded': {
+        this.hearAboutDiscard(message.event);
         break;
       }
       case 'pickupsTaken': {
@@ -1209,6 +1283,33 @@ export class Game {
     return news !== null && now < news.until ? news.text : null;
   }
 
+  /**
+   * Everything the pack just gained, as toasts (see decision 0061). Pushed
+   * straight to the HUD, the same as news, so a stall in the render loop
+   * cannot swallow one.
+   */
+  private showGains(gained: readonly { item: ItemId; count: number }[]): void {
+    if (gained.length === 0) return;
+    const now = performance.now();
+    this.toastShelf.add(gained, now);
+    this.options.hud.publish({ toasts: this.toastShelf.current(now) });
+  }
+
+  /** Only ever about us: the server only tells whoever did the dropping or destroying. */
+  private hearAboutDiscard(event: DiscardedEvent): void {
+    if (event.netId !== this.selfNetId || event.count <= 0) return;
+    const now = performance.now();
+    const what = amountOf(event.item, event.count);
+    const text = event.destroyed ? `Destroyed ${what}.` : `Dropped ${what}.`;
+    this.discardNews = { text, until: now + NEWS_MS };
+    this.options.hud.publish({ discardNews: this.currentDiscardNews() });
+  }
+
+  private currentDiscardNews(now = performance.now()): string | null {
+    const news = this.discardNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
   /** Only ever about us: nobody else has any reason to know what we just caught. */
   private hearAboutCatching(event: AnimalCaught): void {
     const now = performance.now();
@@ -1299,6 +1400,13 @@ export class Game {
     this.clearingScene = buildClearingScene(clearing);
     this.clearingScene.setTakenPickups(this.takenPickups);
     this.outdoors.add(this.clearingScene.group);
+
+    // Word of where the patches are, and anything dropped, usually beats the
+    // world itself to it on arrival.
+    this.groundItems = createGroundItems((x, z) => terrain.heightAt(x, z));
+    this.groundItems.setGatherPatches(this.gatherPatches);
+    this.groundItems.setDroppedPiles(this.droppedPiles);
+    this.outdoors.add(this.groundItems.group);
 
     this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
     this.outdoors.add(this.wildernessScene.group);
@@ -2084,6 +2192,7 @@ export class Game {
     if (this.space !== OUTDOORS) {
       // Nothing out in the world is within reach from in here.
       this.nearbyItem = null;
+      this.nearbyPile = null;
       this.nearGatherSpot = null;
       this.nearBuriedCache = false;
       this.ownCacheCompass = null;
@@ -2109,10 +2218,11 @@ export class Game {
           );
     this.nearbyItem = reachable?.item ?? null;
 
+    const pile = droppedPileInReach(player.motion.position, this.droppedPiles);
+    this.nearbyPile = pile === null ? null : { item: pile.item, count: pile.count };
+
     this.nearGatherSpot =
-      this.clearing === null
-        ? null
-        : (gatherSpotInReach(player.motion.position, this.clearing.gatherSpots)?.item ?? null);
+      gatherSpotInReach(player.motion.position, this.gatherPatches)?.item ?? null;
 
     // Only a hint here too: the server decides whether it is really this
     // player's to dig up.
@@ -2593,6 +2703,7 @@ export class Game {
       carrying: this.carrying,
       equippedItem: this.equipped.get(this.selfNetId) ?? null,
       nearbyItem: this.nearbyItem,
+      nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
       ownCacheCompass: this.ownCacheCompass,
@@ -2623,6 +2734,9 @@ export class Game {
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
       cacheNews: this.currentCacheNews(now),
+      discardNews: this.currentDiscardNews(now),
+      toasts: this.toastShelf.current(now),
+      canDrop: this.space === OUTDOORS,
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
       mapOpen: this.mapOpen,
       door: this.doorHint,

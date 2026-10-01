@@ -124,6 +124,53 @@ export const WILDERNESS = {
 export const PICKUP_REACH = 2;
 
 /**
+ * Stick and flower patches (see decision 0061).
+ *
+ * Each one holds somewhere between these many, picked one at a time. Picked
+ * clean, it is gone for a few minutes and then grows back at a fresh spot in
+ * the clearing with a fresh count - short enough that a flower bed's six
+ * flowers are never more than a short wait away.
+ */
+export const GATHER_PATCH_MIN_COUNT = 2;
+export const GATHER_PATCH_MAX_COUNT = 6;
+/** The shortest a picked-clean patch takes to grow back. It returns between this and twice it. */
+export const PATCH_REGROW_MIN_SECONDS = 3 * 60;
+/**
+ * How far from the middle of the clearing a patch can grow back: the open
+ * ground inside the ring of trees, not tucked in among their trunks.
+ */
+export const PATCH_REGROW_RADIUS = CLEARING_TREE_LINE_INNER - 4;
+/** Room a patch keeps from trees, rocks and anything built, so it is never half inside one. */
+export const PATCH_CLEARANCE = 1;
+/**
+ * How far a patch keeps from anything else lying about to be picked up or
+ * gathered: twice the reach, so standing in reach of one never also puts the
+ * other in reach.
+ */
+export const PATCH_SPACING = PICKUP_REACH * 2;
+/**
+ * How far from the spawn point a patch keeps when it grows back, so nobody
+ * arrives standing on one. A literal rather than worked out from the spawn
+ * ring, which is declared further down this file.
+ */
+export const PATCH_SPAWN_CLEARANCE = 5;
+
+/**
+ * Dropping things (see decision 0061).
+ *
+ * Whatever a player drops lies where they left it for anybody to pick up,
+ * and fades after this long if nobody does, so the clearing never fills up
+ * with clutter.
+ */
+export const DROPPED_PILE_SECONDS = 10 * 60;
+/** Dropping more of the same thing this close to a pile of it adds to that pile. */
+export const DROPPED_PILE_MERGE_RADIUS = 1;
+/** How far in front of a player's feet something they drop lands. */
+export const DROP_DISTANCE = 0.7;
+/** The most piles a world keeps at once; past this, the oldest fades early. */
+export const MAX_DROPPED_PILES = 64;
+
+/**
  * Building.
  *
  * A piece goes wherever the mouse points on the ground, up to this far from

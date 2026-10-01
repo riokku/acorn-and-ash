@@ -12,9 +12,12 @@ declare global {
       equippedItem(): string | null;
       takenPickups(): number[];
       pickups(): Array<{ id: number; item: string; x: number; z: number }>;
-      gatherSpots(): Array<{ x: number; z: number; item: string }>;
+      gatherSpots(): Array<{ id: number; x: number; z: number; item: string; remaining: number }>;
+      droppedPiles(): Array<{ id: number; item: string; count: number; x: number; z: number }>;
       nearbyItem(): string | null;
+      nearbyPile(): { item: string; count: number } | null;
       nearGatherSpot(): string | null;
+      toasts(): Array<{ item: string; count: number }>;
       felledTrees(): number[];
       treeGenerations(): Array<{ id: number; generation: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
@@ -47,6 +50,7 @@ declare global {
       healthNews(): string | null;
       craftingNews(): string | null;
       huntingNews(): string | null;
+      discardNews(): string | null;
       mapState(): { painted: boolean; open: boolean; explored: number };
     };
   }
@@ -473,6 +477,53 @@ async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Pr
   throw new Error(`Never got within reach of the gather spot at ${x}, ${z}`);
 }
 
+/** How many of something we carry right now, as the server says. */
+async function countHeld(page: Page, item: string): Promise<number> {
+  return page.evaluate(
+    (id) => window.acornDebug?.carrying().find((entry) => entry.item === id)?.count ?? 0,
+    item,
+  );
+}
+
+/**
+ * Gather at least `wanted` more sticks or flowers, walking from one patch to
+ * the next as each runs out - a patch only holds two to six (see decision
+ * 0061) - and waiting for one to grow back if every one is picked clean.
+ */
+async function gatherFromPatches(
+  page: Page,
+  item: 'stick' | 'flower',
+  wanted: number,
+): Promise<void> {
+  const start = await countHeld(page, item);
+  for (let visit = 0; visit < 12; visit++) {
+    if ((await countHeld(page, item)) - start >= wanted) return;
+
+    const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+    const patches = (await page.evaluate(() => window.acornDebug?.gatherSpots() ?? [])).filter(
+      (patch) => patch.item === item && patch.remaining > 0,
+    );
+    patches.sort(
+      (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
+    );
+    const patch = patches[0];
+    if (patch === undefined) {
+      // Everything picked clean: one grows back within a minute locally.
+      await page.waitForTimeout(5000);
+      continue;
+    }
+
+    await walkWithinReachOfGatherSpot(page, patch.x, patch.z);
+    // Taps, not a hold: the server paces gathering the same way it paces a
+    // swing, and holding down the key does not gather any faster.
+    for (let i = 0; i < patch.remaining; i++) {
+      await page.keyboard.press('KeyE');
+      await page.waitForTimeout(600);
+    }
+  }
+  throw new Error(`Never managed to gather ${wanted} ${item}s`);
+}
+
 /**
  * Walk up to a tree until the game says a swing would reach it.
  *
@@ -658,24 +709,24 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
   await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
   await expect(page.locator('.hud-hint')).toContainText('Press E to gather sticks');
 
-  const craftRow = page.locator('.hud-row', { hasText: 'Craft' }).first();
-  await expect(craftRow).toContainText('Axe');
-  // Not enough sticks yet: the recipe is not lit up.
-  await expect(craftRow.locator('.hud-status-good')).toHaveCount(0);
+  // One stick taken, one fewer left in the patch, and a toast to say so.
+  const before = spot.remaining;
+  await page.keyboard.press('KeyE');
+  await expect
+    .poll(async () => {
+      const patches = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
+      return patches.find((patch) => patch.id === spot.id)?.remaining;
+    })
+    .toBe(before - 1);
+  await expect(page.locator('[data-testid="toast"]').first()).toContainText('+1 Stick');
+  await page.waitForTimeout(600);
 
-  // Taps, not a hold: the server paces gathering the same way it paces a
-  // swing, and holding down the key does not gather any faster.
-  for (let i = 0; i < 6; i++) {
-    await page.keyboard.press('KeyE');
-    await page.waitForTimeout(600);
-  }
+  await gatherFromPatches(page, 'stick', 2);
+  expect(await countHeld(page, 'stick')).toBeGreaterThanOrEqual(3);
 
-  const sticks = await page.evaluate(
-    () => window.acornDebug?.carrying().find((entry) => entry.item === 'stick')?.count ?? 0,
-  );
-  expect(sticks).toBeGreaterThanOrEqual(3);
-  await expect(craftRow.locator('.hud-status-good')).toContainText('Axe');
-
+  // The first recipe, picked from the craft menu.
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.hud-journal')).toContainText('Axe');
   await page.keyboard.press('Digit1');
   await expect
     .poll(
@@ -686,10 +737,10 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
     )
     .toBe(1);
 
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Axe');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.craftingNews() ?? null))
     .toBe('You made an axe.');
+  await page.keyboard.press('KeyC');
 
   // Nothing thrown while gathering, crafting or drawing the stick patches.
   expect(errors).toEqual([]);
@@ -709,22 +760,12 @@ test('crafting a torch lets you equip it, lighting up in your hand', async ({ pa
   expect(spot).toBeDefined();
   if (spot === undefined) throw new Error('no stick patch in the clearing');
 
-  await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
   // Only two needed, half what a first axe costs.
-  for (let i = 0; i < 4; i++) {
-    await page.keyboard.press('KeyE');
-    await page.waitForTimeout(600);
-  }
-  const sticks = await page.evaluate(
-    () => window.acornDebug?.carrying().find((entry) => entry.item === 'stick')?.count ?? 0,
-  );
-  expect(sticks).toBeGreaterThanOrEqual(2);
-
-  const craftRow = page.locator('.hud-row', { hasText: 'Craft' }).first();
-  await expect(craftRow).toContainText('Torch');
-  await expect(craftRow.locator('.hud-status-good')).toContainText('Torch');
+  await gatherFromPatches(page, 'stick', 2);
 
   // The third recipe, after the axe and the fishing rod.
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.hud-journal')).toContainText('Torch');
   await page.keyboard.press('Digit3');
   await expect
     .poll(
@@ -737,11 +778,68 @@ test('crafting a torch lets you equip it, lighting up in your hand', async ({ pa
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.craftingNews() ?? null))
     .toBe('You made a torch.');
+  await page.keyboard.press('KeyC');
 
   await equip(page, 'torch');
   // A look at the held torch and the light it casts, by eye - the same
   // reason the axe's own grip got a screenshot in the equip test above.
   await page.screenshot({ path: 'test-results/equip-torch.png' });
+
+  expect(errors).toEqual([]);
+});
+
+test('you can drop sticks to pick up again, or destroy them for good', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto(`/?world=drop-${Date.now()}`);
+  await waitForConnected(page);
+  await page.locator('.hud-curtain').click();
+
+  await gatherFromPatches(page, 'stick', 2);
+  const held = await countHeld(page, 'stick');
+
+  // Right-click the sticks in the pack, and drop one.
+  await page.keyboard.press('KeyI');
+  await page.locator('[data-testid="pack-slot-stick"]').first().click({ button: 'right' });
+  await expect(page.locator('[data-testid="slot-menu"]')).toBeVisible();
+  await page.locator('[data-testid="slot-menu-drop-one"]').click();
+  await expect.poll(async () => countHeld(page, 'stick')).toBe(held - 1);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.discardNews() ?? null))
+    .toBe('Dropped 1 stick.');
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.droppedPiles() ?? []))
+    .toEqual([expect.objectContaining({ item: 'stick', count: 1 })]);
+  await page.keyboard.press('KeyI');
+  await page.screenshot({ path: 'test-results/dropped-stick.png' });
+
+  // It lands at your feet, so E picks it straight back up - a pile before
+  // any patch beside it, the same order the server reaches in.
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.nearbyPile() ?? null))
+    .toEqual({ item: 'stick', count: 1 });
+  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up 1 stick');
+  await page.keyboard.press('KeyE');
+  await expect.poll(async () => countHeld(page, 'stick')).toBe(held);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.droppedPiles() ?? []))
+    .toEqual([]);
+
+  // Destroying asks first, and only then are they gone.
+  await page.keyboard.press('KeyI');
+  await page.locator('[data-testid="pack-slot-stick"]').first().click({ button: 'right' });
+  await page.locator('[data-testid="slot-menu-destroy"]').click();
+  await expect(page.locator('[data-testid="slot-menu"]')).toContainText("can't get them back");
+  expect(await countHeld(page, 'stick')).toBe(held);
+  await page.locator('[data-testid="slot-menu-confirm-destroy"]').click();
+  await expect.poll(async () => countHeld(page, 'stick')).toBe(0);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.discardNews() ?? null))
+    .toBe(`Destroyed ${held} sticks.`);
+  // Destroyed, not dropped: nothing left lying about.
+  expect(await page.evaluate(() => window.acornDebug?.droppedPiles() ?? [])).toEqual([]);
 
   expect(errors).toEqual([]);
 });
@@ -1652,15 +1750,10 @@ test('you can gather flowers and plant something pretty for the garden', async (
   await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
   await expect(page.locator('.hud-hint')).toContainText('Press E to gather flowers');
 
-  // A lantern is the cheaper of the two decorations, at four - gathered in
-  // taps, the same pacing the stick patches already use.
-  for (let i = 0; i < 6; i++) {
-    await page.keyboard.press('KeyE');
-    await page.waitForTimeout(600);
-  }
-  const gathered = await page.evaluate(
-    () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
-  );
+  // A lantern is the cheaper of the two decorations, at four - more than
+  // one patch may hold, so this walks on to the next once one runs out.
+  await gatherFromPatches(page, 'flower', 4);
+  const gathered = await countHeld(page, 'flower');
   expect(gathered).toBeGreaterThanOrEqual(4);
 
   await walkToward(page, spawnSpot);

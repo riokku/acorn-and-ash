@@ -38,12 +38,14 @@ export interface PlacedPickup {
 }
 
 /**
- * A patch anybody can gather from by hand, any time - fallen branches for a
- * stick, wildflowers for a flower. Unlike a pickup it is never used up, so it
- * carries no id and nothing about it is ever sent over the wire: every client
- * already knows it is always there, the same way it knows where every tree is.
+ * Where a patch anybody can gather from by hand starts out - fallen branches
+ * for a stick, wildflowers for a flower. A patch holds only a few and moves
+ * once it is picked clean (see decision 0061 and `sim/gathering.ts`), so this
+ * is only its first spot; the server says where each one is now.
  */
 export interface GatherSpot {
+  /** Which patch this is, for as long as the world lasts, wherever it moves to. */
+  readonly id: number;
   readonly x: number;
   readonly z: number;
   readonly item: ItemId;
@@ -206,7 +208,7 @@ export function buildTestClearing(seed: number): Clearing {
   const gatherSpots: GatherSpot[] = [
     ...STICK_PATCHES.map((spot) => ({ ...spot, item: 'stick' as const })),
     ...FLOWER_PATCHES.map((spot) => ({ ...spot, item: 'flower' as const })),
-  ];
+  ].map((spot, index) => ({ id: index + 1, ...spot }));
 
   const water = POND;
   // Scattered rocks were placed before there was a pond, so a few land in it or

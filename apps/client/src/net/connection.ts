@@ -5,6 +5,7 @@ import {
   decodeServerMessage,
   encodeBuild,
   encodeCraft,
+  encodeDiscard,
   encodeHello,
   encodeInputBundle,
   encodePing,
@@ -12,6 +13,7 @@ import {
   encodeUseItem,
   type BuildRequest,
   type CharacterId,
+  type DiscardRequest,
   type ItemId,
   type PlayerInput,
   type ServerMessage,
@@ -160,6 +162,16 @@ export class WorldConnection {
   sendUseItem(item: ItemId): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeUseItem(item));
+  }
+
+  /**
+   * Ask to drop or destroy some of one thing in the pack (see decision
+   * 0061). Sent straight away, the same as using an item: rare and
+   * deliberate, nothing the input bundle needs to batch up.
+   */
+  sendDiscard(request: DiscardRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeDiscard(request));
   }
 
   /**

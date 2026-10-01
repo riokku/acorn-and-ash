@@ -22,7 +22,13 @@
   //
   // Hunger empties in three minutes rather than twenty, for the same reason:
   // fast enough to watch happen in one sitting, not so fast it feels broken.
-  "vars": { "WORLD_REGROW_SECONDS": "120", "WORLD_HUNGER_EMPTY_SECONDS": "180" },
+  // A picked-clean stick or flower patch is back somewhere new in thirty
+  // seconds to a minute rather than three to six.
+  "vars": {
+    "WORLD_REGROW_SECONDS": "120",
+    "WORLD_HUNGER_EMPTY_SECONDS": "180",
+    "WORLD_PATCH_REGROW_SECONDS": "30",
+  },
 
   "env": {
     // One of these is deployed per pull request, renamed on the command line to
@@ -39,8 +45,14 @@
       },
       // A preview is for trying things out, so trees come back while you watch:
       // two to four minutes rather than thirty to sixty. Hunger empties in
-      // three minutes rather than twenty, for the same reason.
-      "vars": { "WORLD_REGROW_SECONDS": "120", "WORLD_HUNGER_EMPTY_SECONDS": "180" },
+      // three minutes rather than twenty, and a picked-clean patch is back
+      // in thirty seconds to a minute rather than three to six, for the same
+      // reason.
+      "vars": {
+        "WORLD_REGROW_SECONDS": "120",
+        "WORLD_HUNGER_EMPTY_SECONDS": "180",
+        "WORLD_PATCH_REGROW_SECONDS": "30",
+      },
     },
     "staging": {
       "name": "acorn-ash-game-server-staging",
@@ -49,10 +61,14 @@
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
       // The real wait: half an hour, up to an hour. Hunger takes the real
-      // twenty minutes too. Both spelled out rather than left to the default,
+      // twenty minutes too, and patches the real three to six. Both spelled out rather than left to the default,
       // because an environment that says nothing here makes Wrangler warn on
       // every deploy.
-      "vars": { "WORLD_REGROW_SECONDS": "1800", "WORLD_HUNGER_EMPTY_SECONDS": "1200" },
+      "vars": {
+        "WORLD_REGROW_SECONDS": "1800",
+        "WORLD_HUNGER_EMPTY_SECONDS": "1200",
+        "WORLD_PATCH_REGROW_SECONDS": "180",
+      },
     },
     "production": {
       "name": "acorn-ash-game-server-production",
@@ -60,7 +76,11 @@
       "durable_objects": {
         "bindings": [{ "name": "WORLD", "class_name": "World" }],
       },
-      "vars": { "WORLD_REGROW_SECONDS": "1800", "WORLD_HUNGER_EMPTY_SECONDS": "1200" },
+      "vars": {
+        "WORLD_REGROW_SECONDS": "1800",
+        "WORLD_HUNGER_EMPTY_SECONDS": "1200",
+        "WORLD_PATCH_REGROW_SECONDS": "180",
+      },
     },
   },
 }
