@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import {
   BUILDABLE_KINDS,
@@ -13,6 +13,7 @@ import {
   canCraft,
   hasItem,
   inventoryFromEntries,
+  isDiscardable,
   isFood,
   recipeFor,
   roomFor,
@@ -23,11 +24,18 @@ import {
 
 import type { HudStore, HudState } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
-import { InventoryPanel, PackButton, HOTBAR_SLOT_DRAG_TYPE } from './InventoryPanel';
+import {
+  InventoryPanel,
+  PackButton,
+  HOTBAR_SLOT_DRAG_TYPE,
+  type SlotMenuTarget,
+} from './InventoryPanel';
 import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
 import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
+import { amountOf, gainedLabel } from './item-words';
+import type { ToastView } from './toasts';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
 import { FogCache } from '../map/draw-map';
@@ -47,6 +55,8 @@ interface HudProps {
   readonly onToggleMap: () => void;
   /** Lock or unlock our own front door - see decision 0055. */
   readonly onSetDoorLock: (locked: boolean) => void;
+  /** Drop or destroy some of something in the pack - see decision 0061. */
+  readonly onDiscard: (item: ItemId, amount: number, destroy: boolean) => void;
 }
 
 export function Hud({
@@ -61,10 +71,21 @@ export function Hud({
   mapFeed,
   onToggleMap,
   onSetDoorLock,
+  onDiscard,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
   const [fog] = useState(() => new FogCache());
+  const [slotMenu, setSlotMenu] = useState<SlotMenuTarget | null>(null);
+  const showingWorld = state.ready && state.playing && !state.mapOpen;
+  // Gone the moment there is nothing left of it to drop - used up, eaten, or
+  // dropped already from the other copy of the same slot.
+  const menuTarget =
+    showingWorld &&
+    slotMenu !== null &&
+    state.carrying.some((entry) => entry.item === slotMenu.item && entry.count > 0)
+      ? slotMenu
+      : null;
 
   return (
     <>
@@ -124,6 +145,7 @@ export function Hud({
             onUseItem={onUseItem}
             onHotbarSlotsChange={onHotbarSlotsChange}
             onToggleInventory={onToggleInventory}
+            onOpenSlotMenu={setSlotMenu}
           />
           <InventoryPanel
             open={state.inventoryOpen}
@@ -133,9 +155,12 @@ export function Hud({
             onUnpinFromHotbar={(slotIndex) =>
               onHotbarSlotsChange(clearSlot(state.hotbarSlots, slotIndex))
             }
+            onOpenSlotMenu={setSlotMenu}
           />
         </>
       ) : null}
+
+      {showingWorld && state.toasts.length > 0 ? <Toasts toasts={state.toasts} /> : null}
 
       {state.ready && !state.playing ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
@@ -157,14 +182,16 @@ export function Hud({
         state.cacheNews !== null ||
         state.hungerNews !== null ||
         state.craftingNews !== null ||
-        state.huntingNews !== null) ? (
+        state.huntingNews !== null ||
+        state.discardNews !== null) ? (
         <p className="hud-news">
           {state.fishingNews ??
             state.healthNews ??
             state.cacheNews ??
             state.hungerNews ??
             state.craftingNews ??
-            state.huntingNews}
+            state.huntingNews ??
+            state.discardNews}
         </p>
       ) : null}
 
@@ -180,6 +207,16 @@ export function Hud({
         >
           {hint(state)}
         </p>
+      ) : null}
+
+      {menuTarget !== null ? (
+        <SlotMenu
+          key={`${menuTarget.item}-${menuTarget.x}-${menuTarget.y}`}
+          target={menuTarget}
+          canDrop={state.canDrop}
+          onDiscard={onDiscard}
+          onClose={() => setSlotMenu(null)}
+        />
       ) : null}
 
       {/* Last, so the big map's page sits over everything else on screen. */}
@@ -448,6 +485,9 @@ export function hint(state: HudState): string {
   // now - the same reasoning a menu gets, just shorter-lived.
   if (state.charging) return 'Charging a heavy swing - you can only creep';
   if (state.nearbyItem !== null) return pickupHint(state, state.nearbyItem);
+  // The same order the server tries a press of E in: something lying in the
+  // clearing to be found, then something dropped, then a patch.
+  if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
@@ -499,6 +539,19 @@ function pickupHint(state: HudState, item: ItemId): string {
   if (roomFor(pack, item) > 0) return `Press E to pick up the ${name}`;
   if (kind.maxCarry === 1 && hasItem(pack, item)) return `You can only carry one ${name}`;
   return `Your pack is full · no room for the ${name}`;
+}
+
+/**
+ * What E would do beside something dropped: pick up as much of it as there
+ * is room for, or nothing until a slot frees up.
+ */
+function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): string {
+  const kind = ITEM_KINDS[pile.item];
+  const pack = inventoryFromEntries(state.carrying);
+  if (roomFor(pack, pile.item) > 0) return `Press E to pick up ${amountOf(pile.item, pile.count)}`;
+  const name = kind.displayName.toLowerCase();
+  if (kind.maxCarry === 1 && hasItem(pack, pile.item)) return `You can only carry one ${name}`;
+  return `Your pack is full · no room for ${amountOf(pile.item, pile.count)}`;
 }
 
 /** What E would do beside a patch: gather from it, or nothing until a slot frees up. */
@@ -570,11 +623,13 @@ function Hotbar({
   onUseItem,
   onHotbarSlotsChange,
   onToggleInventory,
+  onOpenSlotMenu,
 }: {
   state: HudState;
   onUseItem: (item: ItemId) => void;
   onHotbarSlotsChange: (next: HotbarPins) => void;
   onToggleInventory: () => void;
+  onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element {
   const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots);
   return (
@@ -588,6 +643,7 @@ function Hotbar({
           equipped={item !== null && item === state.equippedItem}
           onUseItem={onUseItem}
           onAssign={(dropped) => onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))}
+          onOpenSlotMenu={onOpenSlotMenu}
         />
       ))}
       <span className="hotbar-divider" aria-hidden="true" />
@@ -607,6 +663,7 @@ function HotbarSlot({
   equipped,
   onUseItem,
   onAssign,
+  onOpenSlotMenu,
 }: {
   slotNumber: number;
   item: ItemId | null;
@@ -614,6 +671,7 @@ function HotbarSlot({
   equipped: boolean;
   onUseItem: (item: ItemId) => void;
   onAssign: (item: ItemId) => void;
+  onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element {
   const kind = item === null ? null : ITEM_KINDS[item];
   const usable = kind !== null && kind.equippable;
@@ -629,6 +687,7 @@ function HotbarSlot({
       <>
         <strong>{kind.displayName}</strong>
         {usable ? ` · click, drag, or press ${slotNumber}` : null}
+        {count > 0 && isDiscardable(kind.id) ? ' · right-click to drop' : null}
       </>
     );
 
@@ -651,6 +710,11 @@ function HotbarSlot({
         onClick={() => {
           if (item !== null) onUseItem(item);
         }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          if (item === null || count === 0) return;
+          onOpenSlotMenu({ item, count, x: event.clientX, y: event.clientY });
+        }}
       >
         <span className="hotbar-slot-key">{slotNumber}</span>
         {kind !== null && item !== null ? (
@@ -665,6 +729,163 @@ function HotbarSlot({
         ) : null}
       </div>
     </Tooltip>
+  );
+}
+
+/**
+ * Everything just gained, down the right-hand side: one small note per kind
+ * of thing, "+3 Sticks", fading out a few seconds after the last one went in
+ * (see decision 0061).
+ */
+function Toasts({ toasts }: { toasts: readonly ToastView[] }): React.JSX.Element {
+  return (
+    <div className="toasts" aria-live="polite">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={toast.fading ? 'toast toast-fading' : 'toast'}
+          data-testid="toast"
+        >
+          <ItemIcon
+            item={toast.item}
+            color={colorOf(ITEM_KINDS[toast.item].placeholderColor)}
+            className="toast-icon"
+          />
+          <span>{gainedLabel(toast.item, toast.count)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** How wide the slot menu is, so it can be kept from running off the side of the screen. */
+const SLOT_MENU_WIDTH = 200;
+
+/**
+ * The small menu a right-click on a slot opens: drop one, drop the lot, or
+ * destroy it - the last only once it has been asked a second time, since
+ * there is no getting it back (see decision 0061). The bag never offers any
+ * of it: it is what the extra slots hang off.
+ */
+function SlotMenu({
+  target,
+  canDrop,
+  onDiscard,
+  onClose,
+}: {
+  target: SlotMenuTarget;
+  canDrop: boolean;
+  onDiscard: (item: ItemId, amount: number, destroy: boolean) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const [confirming, setConfirming] = useState(false);
+  const { item, count } = target;
+  const kind = ITEM_KINDS[item];
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  const act = (amount: number, destroy: boolean): void => {
+    onDiscard(item, amount, destroy);
+    onClose();
+  };
+
+  // Opened upwards from anywhere in the bottom half, which is where the
+  // hotbar is, so it never hangs off the bottom of the screen.
+  const opensUp = target.y > window.innerHeight / 2;
+  const style: React.CSSProperties = {
+    left: Math.max(8, Math.min(target.x, window.innerWidth - SLOT_MENU_WIDTH - 8)),
+    top: target.y,
+    width: SLOT_MENU_WIDTH,
+    transform: opensUp ? 'translateY(-100%)' : undefined,
+  };
+
+  let body: React.ReactNode;
+  if (!isDiscardable(item)) {
+    body = <p className="slot-menu-note">Your bag stays with you. It holds your extra slots.</p>;
+  } else if (confirming) {
+    body = (
+      <>
+        <p className="slot-menu-note">
+          Destroy {amountOf(item, count)}? You can&apos;t get {count === 1 ? 'it' : 'them'} back.
+        </p>
+        <button
+          type="button"
+          className="slot-menu-danger"
+          onClick={() => act(count, true)}
+          data-testid="slot-menu-confirm-destroy"
+        >
+          Yes, destroy
+        </button>
+        <button type="button" onClick={() => setConfirming(false)}>
+          Keep {count === 1 ? 'it' : 'them'}
+        </button>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        {count > 1 ? (
+          <button
+            type="button"
+            disabled={!canDrop}
+            onClick={() => act(1, false)}
+            data-testid="slot-menu-drop-one"
+          >
+            Drop one
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={!canDrop}
+          onClick={() => act(count, false)}
+          data-testid="slot-menu-drop-all"
+        >
+          {count > 1 ? `Drop all ${count}` : 'Drop'}
+        </button>
+        {canDrop ? null : <p className="slot-menu-note">Nowhere to drop things indoors.</p>}
+        <button
+          type="button"
+          className="slot-menu-danger"
+          onClick={() => setConfirming(true)}
+          data-testid="slot-menu-destroy"
+        >
+          Destroy…
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="slot-menu-backdrop"
+        role="presentation"
+        onMouseDown={onClose}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
+      />
+      <div
+        className="slot-menu"
+        role="menu"
+        style={style}
+        onContextMenu={(event) => event.preventDefault()}
+        data-testid="slot-menu"
+      >
+        <div className="slot-menu-title">
+          <ItemIcon item={item} color={colorOf(kind.placeholderColor)} className="toast-icon" />
+          <span>{count === 1 ? kind.displayName : `${count} ${kind.pluralName}`}</span>
+        </div>
+        {body}
+      </div>
+    </>
   );
 }
 

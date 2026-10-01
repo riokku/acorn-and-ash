@@ -57,9 +57,9 @@ describe('the gather spots', () => {
   const expectedSpots = [
     ...STICK_PATCHES.map((spot) => ({ ...spot, item: 'stick' })),
     ...FLOWER_PATCHES.map((spot) => ({ ...spot, item: 'flower' })),
-  ];
+  ].map((spot, index) => ({ id: index + 1, ...spot }));
 
-  it('carries the stick and flower patches, so every client agrees where they are', () => {
+  it('carries where the stick and flower patches start, each with an id of its own', () => {
     const { gatherSpots } = buildTestClearing(4242);
     expect(gatherSpots).toEqual(expectedSpots);
   });

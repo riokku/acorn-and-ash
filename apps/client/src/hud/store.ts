@@ -4,6 +4,7 @@ import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
 import type { Compass } from './cache-compass';
 import type { HotbarPins } from './hotbar-layout';
+import type { ToastView } from './toasts';
 
 /** Our own line: none out, waiting for a bite, or a fish on right now. */
 export type FishingPhase = 'waiting' | 'biting' | null;
@@ -35,6 +36,8 @@ export interface HudState {
   readonly inventoryOpen: boolean;
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
+  /** Something somebody dropped, if any is within reach right now: what, and how many. */
+  readonly nearbyPile: { readonly item: ItemId; readonly count: number } | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
   readonly nearGatherSpot: ItemId | null;
   /** Whether a cache of our own is close enough right now to dig up. */
@@ -89,6 +92,12 @@ export interface HudState {
   readonly huntingNews: string | null;
   /** What just happened to a buried cache of ours, while it is still worth showing. */
   readonly cacheNews: string | null;
+  /** What we last dropped or destroyed, while it is still worth showing. */
+  readonly discardNews: string | null;
+  /** Everything just gained, for the toasts down the side (see decision 0061). */
+  readonly toasts: readonly ToastView[];
+  /** Whether dropping something would work here: out of doors, where it has somewhere to land. */
+  readonly canDrop: boolean;
   /** Whether it is currently night out. */
   readonly isNight: boolean;
   /** Whether the big map (M) is open - see decision 0054. */
@@ -122,6 +131,7 @@ const INITIAL: HudState = {
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
   nearbyItem: null,
+  nearbyPile: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
   ownCacheCompass: null,
@@ -143,6 +153,9 @@ const INITIAL: HudState = {
   craftingNews: null,
   huntingNews: null,
   cacheNews: null,
+  discardNews: null,
+  toasts: [],
+  canDrop: true,
   isNight: false,
   mapOpen: false,
   door: null,

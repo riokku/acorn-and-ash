@@ -8,12 +8,20 @@ import {
   CLEARING_TREE_LINE_INNER,
   DEFAULT_WORLD_SEED,
   DODGE_DISTANCE,
+  DROPPED_PILE_SECONDS,
+  GATHER_PATCH_MAX_COUNT,
+  GATHER_PATCH_MIN_COUNT,
   HEALTH_MAX,
   HUNGER_MAX,
   INTEREST_RADIUS,
   MAX_PLAYERS_PER_WORLD,
+  MAX_DROPPED_PILES,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
+  PATCH_CLEARANCE,
+  PATCH_REGROW_MIN_SECONDS,
+  PATCH_SPACING,
+  PATCH_SPAWN_CLEARANCE,
   PLAYER_RADIUS,
   PLAYER_WALK_SPEED,
   PREDATOR_CATCH_RADIUS,
@@ -31,6 +39,8 @@ import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { DAY_LENGTH_MS } from '../src/sim/day-night';
 import { regrowDueAtMs } from '../src/sim/regrowth';
+import { patchRegrowDelayMs } from '../src/sim/gathering';
+import { overlapsWater } from '../src/world/water';
 import { addItem, countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
 import {
@@ -39,6 +49,7 @@ import {
   BAG_PICKUP_ID,
   BAG_SPOT,
   FLOWER_PATCHES,
+  POND,
   STICK_PATCHES,
 } from '../src/world/clearing';
 import {
@@ -1131,8 +1142,9 @@ describe('gathering sticks', () => {
     expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
   });
 
-  it('is never used up: two players can draw from the same patch at once', () => {
+  it('shares one patch between everybody: two players at once take two from it', () => {
     const sim = createWorld();
+    const before = patchNamed(sim, 1).remaining;
     sim.addPlayer(1, withBag(1));
     sim.addPlayer(2, withBag(2));
     sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
@@ -1142,6 +1154,54 @@ describe('gathering sticks', () => {
     sim.step(tickClock());
     expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
     expect(countOf(sim.inventoryOf(2), 'stick')).toBe(1);
+    expect(patchNamed(sim, 1).remaining).toBe(before - 2);
+  });
+
+  it('starts every patch with somewhere from two to six', () => {
+    const sim = createWorld();
+    for (const patch of sim.gatherPatchesList()) {
+      expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+      expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
+    }
+  });
+
+  it('runs out: takes one each time, then nothing once it is picked clean', () => {
+    const sim = createWorld();
+    const held = patchNamed(sim, 1).remaining;
+    sim.addPlayer(1, withBag(1));
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+
+    holdInteract(sim, 1, (held + 2) * SWING_COOLDOWN_TICKS);
+
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(held);
+    expect(patchNamed(sim, 1).remaining).toBe(0);
+  });
+
+  it('gives the last one to only one of two players reaching for it at once', () => {
+    const sim = createWorld();
+    sim.restorePatches([{ ...savedPatch(sim, 1), remaining: 1 }]);
+    sim.addPlayer(1, withBag(1));
+    sim.addPlayer(2, withBag(2));
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.placePlayer(2, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    const total = countOf(sim.inventoryOf(1), 'stick') + countOf(sim.inventoryOf(2), 'stick');
+    expect(total).toBe(1);
+    expect(patchNamed(sim, 1).remaining).toBe(0);
+  });
+
+  it('says which patch changed, so it can be saved and sent', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withBag(1));
+    sim.placePlayer(1, { x: spot.x, y: 0, z: spot.z }, 0);
+    sim.drainPatchChanges();
+    sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+    expect(sim.drainPatchChanges()).toEqual([1]);
+    expect(sim.drainPatchChanges()).toEqual([]);
   });
 
   it('will not gather faster than the cooldown allows', () => {
@@ -1204,6 +1264,365 @@ describe('gathering sticks', () => {
 
     expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
     expect(sim.hungerOf(1)).toBeGreaterThan(50);
+  });
+});
+
+/** One patch as the world would tell a browser about it. */
+function patchNamed(sim: WorldSimulation, id: number) {
+  const patch = sim.gatherPatchesList().find((candidate) => candidate.id === id);
+  if (patch === undefined) throw new Error(`no patch ${id}`);
+  return patch;
+}
+
+/** One patch as the world would save it. */
+function savedPatch(sim: WorldSimulation, id: number) {
+  const saved = sim.persistedPatch(id);
+  if (saved === null) throw new Error(`no patch ${id}`);
+  return saved;
+}
+
+/** Hold the interact button down for this many ticks. */
+function holdInteract(sim: WorldSimulation, netId: number, ticks: number): void {
+  for (let i = 1; i <= ticks; i++) {
+    sim.queueInput(netId, createInput(i, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+  }
+}
+
+describe('a picked-clean patch growing back', () => {
+  /** A world whose first stick patch was picked clean just now. */
+  function withEmptyPatch(generation = 0) {
+    const sim = createWorld();
+    const emptiedAtMs = tickClock();
+    sim.restorePatches([{ ...savedPatch(sim, 1), remaining: 0, generation, emptiedAtMs }]);
+    sim.drainPatchChanges();
+    const dueAt = emptiedAtMs + patchRegrowDelayMs(DEFAULT_WORLD_SEED, 1, generation);
+    return { sim, dueAt };
+  }
+
+  it('waits out a few minutes before coming back', () => {
+    const { sim, dueAt } = withEmptyPatch();
+    expect(dueAt - clockMs).toBeGreaterThanOrEqual(PATCH_REGROW_MIN_SECONDS * 1000);
+
+    sim.regrowPatches(dueAt - 1);
+    expect(patchNamed(sim, 1).remaining).toBe(0);
+    expect(sim.drainPatchChanges()).toEqual([]);
+  });
+
+  it('comes back somewhere else, with a fresh two to six', () => {
+    const { sim, dueAt } = withEmptyPatch();
+    const before = patchNamed(sim, 1);
+
+    sim.regrowPatches(dueAt);
+
+    const after = patchNamed(sim, 1);
+    expect(after.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+    expect(after.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
+    expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeGreaterThan(0.5);
+    expect(savedPatch(sim, 1).generation).toBe(1);
+    expect(sim.drainPatchChanges()).toEqual([1]);
+  });
+
+  it('comes back at once on waking, if it was due while nobody was here', () => {
+    const { sim, dueAt } = withEmptyPatch();
+    sim.regrowPatches(dueAt + 24 * 60 * 60 * 1000);
+    expect(patchNamed(sim, 1).remaining).toBeGreaterThan(0);
+  });
+
+  it('never grows back in the pond, on a rock or tree, at spawn or on another patch', () => {
+    const sim = createWorld();
+    for (let generation = 0; generation < 60; generation++) {
+      // The same world each time - Koota only hands out so many - with its
+      // first patch picked clean at a later and later generation.
+      const emptiedAtMs = tickClock();
+      sim.restorePatches([{ ...savedPatch(sim, 1), remaining: 0, generation, emptiedAtMs }]);
+      sim.regrowPatches(emptiedAtMs + patchRegrowDelayMs(DEFAULT_WORLD_SEED, 1, generation));
+      const grown = patchNamed(sim, 1);
+      expect(grown.remaining).toBeGreaterThan(0);
+
+      expect(overlapsWater(POND, grown.x, grown.z, PATCH_CLEARANCE)).toBe(false);
+      expect(Math.hypot(grown.x - SPAWN_POSITION.x, grown.z - SPAWN_POSITION.z)).toBeGreaterThan(
+        PATCH_SPAWN_CLEARANCE,
+      );
+      for (const prop of sim.clearing.props) {
+        const radius = PROP_KINDS[prop.kind].colliderRadius * prop.scale;
+        expect(Math.hypot(prop.x - grown.x, prop.z - grown.z)).toBeGreaterThan(radius);
+      }
+      for (const other of sim.gatherPatchesList()) {
+        if (other.id === grown.id) continue;
+        expect(Math.hypot(other.x - grown.x, other.z - grown.z)).toBeGreaterThanOrEqual(
+          PATCH_SPACING,
+        );
+      }
+    }
+  });
+
+  it('moves out from under anything built on top of it, keeping what it had left', () => {
+    const sim = createWorld();
+    const before = patchNamed(sim, 1);
+    sim.addPlayer(1, {
+      netId: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'log', count: 10 }],
+      hunger: HUNGER_MAX,
+    });
+    sim.placePlayer(1, { x: before.x + 2, y: 0, z: before.z }, 0);
+    sim.drainPatchChanges();
+
+    sim.requestBuild(1, { kind: 'campfire', x: before.x, z: before.z, yaw: 0 });
+    sim.queueInput(1, createInput(1, 0, 0, 0, 0));
+    sim.step(tickClock());
+
+    expect(sim.builtPropsList()).toHaveLength(1);
+    const after = patchNamed(sim, 1);
+    expect(after.remaining).toBe(before.remaining);
+    expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeGreaterThan(1);
+    expect(sim.drainPatchChanges()).toEqual([1]);
+  });
+
+  it('remembers where every patch is and how many are left across a save', () => {
+    const { sim, dueAt } = withEmptyPatch();
+    sim.regrowPatches(dueAt);
+    const saved = sim.gatherPatchesList().map((patch) => savedPatch(sim, patch.id));
+
+    const later = createWorld();
+    later.restorePatches(saved);
+    expect(later.gatherPatchesList()).toEqual(sim.gatherPatchesList());
+  });
+
+  it('keeps a picked-clean patch empty across a save, still counting down', () => {
+    const { sim, dueAt } = withEmptyPatch();
+    const later = createWorld();
+    later.restorePatches([savedPatch(sim, 1)]);
+    later.regrowPatches(dueAt - 1);
+    expect(patchNamed(later, 1).remaining).toBe(0);
+    later.regrowPatches(dueAt);
+    expect(patchNamed(later, 1).remaining).toBeGreaterThan(0);
+  });
+
+  it('ignores a saved patch that makes no sense, rather than handing out a hundred sticks', () => {
+    const sim = createWorld();
+    const fresh = patchNamed(sim, 1);
+    sim.restorePatches([
+      { ...savedPatch(sim, 1), remaining: 100 },
+      { ...savedPatch(sim, 1), x: Number.NaN },
+      { id: 999, x: 0, z: 0, remaining: 3, generation: 0, emptiedAtMs: 0 },
+    ]);
+    expect(patchNamed(sim, 1)).toEqual(fresh);
+    expect(sim.gatherPatchesList()).toHaveLength(STICK_PATCHES.length + FLOWER_PATCHES.length);
+  });
+});
+
+describe('dropping and destroying', () => {
+  /** A player carrying these, with their bag, standing in the open facing north. */
+  function carrying(netId: number, items: PersistedPlayer['items']): PersistedPlayer {
+    return {
+      netId,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [{ item: 'bag', count: 1 }, ...items],
+      hunger: HUNGER_MAX,
+    };
+  }
+
+  const OPEN_GROUND = { x: -10, y: 0, z: 4 };
+
+  function setUp(items: PersistedPlayer['items']) {
+    const sim = createWorld();
+    sim.addPlayer(1, carrying(1, items));
+    sim.placePlayer(1, OPEN_GROUND, 0);
+    sim.step(tickClock());
+    return sim;
+  }
+
+  it('drops one just in front of you, for anybody to pick up', () => {
+    const sim = setUp([{ item: 'stick', count: 5 }]);
+    expect(sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, clockMs)).toBe(true);
+
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(4);
+    const [pile] = sim.droppedPilesList();
+    expect(pile).toMatchObject({ item: 'stick', count: 1 });
+    if (pile === undefined) return;
+    // Facing north, which is toward -z.
+    expect(pile.z).toBeLessThan(OPEN_GROUND.z);
+    expect(Math.hypot(pile.x - OPEN_GROUND.x, pile.z - OPEN_GROUND.z)).toBeLessThan(1);
+    expect(sim.drainDiscardEvents()).toEqual([
+      { netId: 1, item: 'stick', count: 1, destroyed: false },
+    ]);
+  });
+
+  it('adds more of the same, dropped in the same place, to the one pile', () => {
+    const sim = setUp([{ item: 'stick', count: 5 }]);
+    sim.discardItem(1, { item: 'stick', amount: 2, destroy: false }, clockMs);
+    sim.discardItem(1, { item: 'stick', amount: 3, destroy: false }, clockMs);
+
+    expect(sim.droppedPilesList()).toEqual([expect.objectContaining({ item: 'stick', count: 5 })]);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+  });
+
+  it('keeps different things in piles of their own', () => {
+    const sim = setUp([
+      { item: 'stick', count: 2 },
+      { item: 'flower', count: 2 },
+    ]);
+    sim.discardItem(1, { item: 'stick', amount: 2, destroy: false }, clockMs);
+    sim.discardItem(1, { item: 'flower', amount: 2, destroy: false }, clockMs);
+    expect(sim.droppedPilesList()).toHaveLength(2);
+  });
+
+  it('destroys without leaving anything behind', () => {
+    const sim = setUp([{ item: 'log', count: 3 }]);
+    expect(sim.discardItem(1, { item: 'log', amount: 3, destroy: true }, clockMs)).toBe(true);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    expect(sim.droppedPilesList()).toEqual([]);
+    expect(sim.drainDiscardEvents()).toEqual([
+      { netId: 1, item: 'log', count: 3, destroyed: true },
+    ]);
+  });
+
+  it('never drops or destroys the bag', () => {
+    const sim = setUp([]);
+    expect(sim.discardItem(1, { item: 'bag', amount: 1, destroy: false }, clockMs)).toBe(false);
+    expect(sim.discardItem(1, { item: 'bag', amount: 1, destroy: true }, clockMs)).toBe(false);
+    expect(countOf(sim.inventoryOf(1), 'bag')).toBe(1);
+  });
+
+  it('never takes more than you hold, and does nothing with what you do not have', () => {
+    const sim = setUp([{ item: 'stick', count: 3 }]);
+    sim.discardItem(1, { item: 'stick', amount: 99, destroy: false }, clockMs);
+    expect(sim.droppedPilesList()).toEqual([expect.objectContaining({ count: 3 })]);
+    expect(sim.discardItem(1, { item: 'flower', amount: 1, destroy: false }, clockMs)).toBe(false);
+    expect(sim.discardItem(1, { item: 'stick', amount: 0, destroy: true }, clockMs)).toBe(false);
+  });
+
+  it("drops tools too, and an emptied hand is everybody's news", () => {
+    const sim = setUp([{ item: 'axe', count: 1 }]);
+    sim.useItem(1, 'axe');
+    sim.drainEquipEvents();
+
+    sim.discardItem(1, { item: 'axe', amount: 1, destroy: false }, clockMs);
+    expect(sim.equippedItemOf(1)).toBeNull();
+    expect(sim.drainEquipEvents()).toEqual([1]);
+    expect(sim.droppedPilesList()).toEqual([expect.objectContaining({ item: 'axe', count: 1 })]);
+  });
+
+  it('will not drop anything indoors, where there is nowhere for it to lie, but will destroy', () => {
+    const sim = setUp([{ item: 'stick', count: 3 }]);
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0, 42);
+    expect(sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, clockMs)).toBe(false);
+    expect(sim.discardItem(1, { item: 'stick', amount: 1, destroy: true }, clockMs)).toBe(true);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(2);
+  });
+
+  it('lands at your feet rather than in the pond', () => {
+    const circle = POND[0];
+    if (circle === undefined) throw new Error('no pond');
+    const sim = setUp([{ item: 'stick', count: 1 }]);
+    // On the bank to the pond's west, facing east toward the water.
+    const bank = { x: circle.x - circle.radius - 0.4, y: 0, z: circle.z };
+    sim.placePlayer(1, bank, -Math.PI / 2);
+
+    sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, clockMs);
+    const [pile] = sim.droppedPilesList();
+    expect(pile?.x).toBeCloseTo(bank.x);
+    expect(pile?.z).toBeCloseTo(bank.z);
+  });
+
+  it('lets anybody pick a pile up with the interact button', () => {
+    const sim = setUp([{ item: 'stick', count: 4 }]);
+    sim.discardItem(1, { item: 'stick', amount: 4, destroy: false }, clockMs);
+    const [pile] = sim.droppedPilesList();
+    if (pile === undefined) throw new Error('nothing was dropped');
+    sim.drainPileChanges();
+
+    sim.addPlayer(2, carrying(2, []));
+    sim.placePlayer(2, { x: pile.x, y: 0, z: pile.z }, 0);
+    sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(2), 'stick')).toBe(4);
+    expect(sim.droppedPilesList()).toEqual([]);
+    expect(sim.drainPileChanges()).toEqual([pile.id]);
+    expect(sim.drainGatherEvents()).toContain(2);
+  });
+
+  it('picks up only what fits, leaving the rest lying there', () => {
+    const sim = setUp([{ item: 'stick', count: 5 }]);
+    sim.discardItem(1, { item: 'stick', amount: 5, destroy: false }, clockMs);
+    const [pile] = sim.droppedPilesList();
+    if (pile === undefined) throw new Error('nothing was dropped');
+
+    // No bag: six slots, five full of logs and one nearly full of sticks.
+    sim.addPlayer(2, {
+      netId: 2,
+      x: 0,
+      y: 0,
+      z: 0,
+      facingYaw: 0,
+      items: [
+        { item: 'log', count: ITEM_KINDS.log.stackSize * 5 },
+        { item: 'stick', count: ITEM_KINDS.stick.stackSize - 2 },
+      ],
+      hunger: HUNGER_MAX,
+    });
+    sim.placePlayer(2, { x: pile.x, y: 0, z: pile.z }, 0);
+    sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    sim.step(tickClock());
+
+    expect(countOf(sim.inventoryOf(2), 'stick')).toBe(ITEM_KINDS.stick.stackSize);
+    expect(sim.droppedPilesList()).toEqual([expect.objectContaining({ count: 3 })]);
+  });
+
+  it('fades after ten minutes if nobody picks it up', () => {
+    const sim = setUp([{ item: 'stick', count: 1 }]);
+    const droppedAt = clockMs;
+    sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, droppedAt);
+    sim.drainPileChanges();
+
+    sim.fadeDroppedPiles(droppedAt + DROPPED_PILE_SECONDS * 1000 - 1);
+    expect(sim.droppedPilesList()).toHaveLength(1);
+    sim.fadeDroppedPiles(droppedAt + DROPPED_PILE_SECONDS * 1000);
+    expect(sim.droppedPilesList()).toEqual([]);
+    expect(sim.drainPileChanges()).toHaveLength(1);
+  });
+
+  it('starts the ten minutes over whenever more is added to a pile', () => {
+    const sim = setUp([{ item: 'stick', count: 2 }]);
+    const first = clockMs;
+    sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, first);
+    sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, first + 60_000);
+    sim.fadeDroppedPiles(first + DROPPED_PILE_SECONDS * 1000);
+    expect(sim.droppedPilesList()).toHaveLength(1);
+  });
+
+  it('keeps only so many piles, letting the oldest fade early', () => {
+    const sim = setUp([{ item: 'stick', count: MAX_DROPPED_PILES + 1 }]);
+    for (let i = 0; i <= MAX_DROPPED_PILES; i++) {
+      // Each one a few steps from the last, so none of them share a pile.
+      sim.placePlayer(1, { x: -20 + (i % 10) * 2, y: 0, z: -12 + Math.floor(i / 10) * 2 }, 0);
+      sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, clockMs + i);
+    }
+    const piles = sim.droppedPilesList();
+    expect(piles).toHaveLength(MAX_DROPPED_PILES);
+    expect(piles.some((pile) => pile.id === 1)).toBe(false);
+  });
+
+  it('remembers every pile across a save, fading on time even after waking', () => {
+    const sim = setUp([{ item: 'flower', count: 3 }]);
+    const droppedAt = clockMs;
+    sim.discardItem(1, { item: 'flower', amount: 3, destroy: false }, droppedAt);
+    const saved = sim.droppedPilesList().map((pile) => sim.persistedPile(pile.id));
+
+    const later = createWorld();
+    later.restoreDroppedPiles(saved.flatMap((pile) => (pile === null ? [] : [pile])));
+    expect(later.droppedPilesList()).toEqual(sim.droppedPilesList());
+    later.fadeDroppedPiles(droppedAt + DROPPED_PILE_SECONDS * 1000);
+    expect(later.droppedPilesList()).toEqual([]);
   });
 });
 

@@ -65,48 +65,94 @@ export function createSatchel(): { group: THREE.Group; dispose(): void } {
 }
 
 /**
+ * Every stick a patch can hold, in the order they are drawn: a patch holding
+ * three shows the first three. The first four lie crossed in the middle, the
+ * way the pile always looked; the last two are a little off to the side, so
+ * a full patch reads as more than a pile of four.
+ */
+const PATCH_STICKS = [
+  { turn: 0.3, length: 0.58, radius: 0.024, x: 0, y: 0.03, z: 0 },
+  { turn: -0.45, length: 0.5, radius: 0.02, x: 0, y: 0.05, z: 0 },
+  { turn: 0.95, length: 0.46, radius: 0.022, x: 0, y: 0.07, z: 0 },
+  { turn: 2.1, length: 0.36, radius: 0.016, x: 0, y: 0.03, z: 0 },
+  { turn: 1.5, length: 0.42, radius: 0.018, x: 0.2, y: 0.02, z: -0.18 },
+  { turn: -1.2, length: 0.4, radius: 0.017, x: -0.18, y: 0.02, z: 0.2 },
+] as const;
+
+/** One forked stick lying on the grass, with its bark on and its broken ends showing. */
+function addStick(builder: ModelBuilder, index: number): void {
+  const stick = PATCH_STICKS[index];
+  if (stick === undefined) return;
+  const bark = paintedMaterial('bark', { roughness: 1 });
+  const ends = paintedMaterial('logEnd', { tint: 0xe8d4b4, roughness: 1 });
+  const log = logGeometry(stick.length, stick.radius, {
+    sides: 5,
+    seed: 600 + index,
+    wobble: 0.15,
+    taper: 0.35,
+    tile: 0.35,
+    ringEvery: 0.2,
+  });
+  const matrix = placed(stick.x, stick.y, stick.z, {
+    y: stick.turn,
+    z: (index % 2 === 0 ? 1 : -1) * 0.08,
+  });
+  builder.add(bark, log.side, matrix).add(ends, log.ends, matrix);
+  // A short twig forking off each of the longer ones.
+  if (stick.length > 0.45) {
+    const twig = logGeometry(0.16, stick.radius * 0.5, {
+      sides: 4,
+      seed: 620 + index,
+      tile: 0.3,
+    });
+    const along = stick.length * 0.2;
+    const twigMatrix = placed(
+      stick.x + Math.cos(-stick.turn) * along,
+      stick.y + 0.01,
+      stick.z + Math.sin(-stick.turn) * along,
+      { y: stick.turn + 0.6 },
+    ).multiply(new THREE.Matrix4().makeTranslation(0.08, 0, 0));
+    builder.add(bark, twig.side, twigMatrix).add(ends, twig.ends, twigMatrix);
+  }
+}
+
+/**
  * A little pile of fallen branches: a few forked sticks lying crossed on the
  * grass, their bark on and their broken ends showing.
  */
-export function createStickPileModel(): { group: THREE.Group; dispose(): void } {
-  const bark = paintedMaterial('bark', { roughness: 1 });
-  const ends = paintedMaterial('logEnd', { tint: 0xe8d4b4, roughness: 1 });
+export function createStickPileModel(count = 4): { group: THREE.Group; dispose(): void } {
   const builder = new ModelBuilder();
-  const sticks = [
-    { turn: 0.3, length: 0.58, radius: 0.024, y: 0.03 },
-    { turn: -0.45, length: 0.5, radius: 0.02, y: 0.05 },
-    { turn: 0.95, length: 0.46, radius: 0.022, y: 0.07 },
-    { turn: 2.1, length: 0.36, radius: 0.016, y: 0.03 },
-  ];
-  sticks.forEach((stick, index) => {
-    const log = logGeometry(stick.length, stick.radius, {
-      sides: 5,
-      seed: 600 + index,
-      wobble: 0.15,
-      taper: 0.35,
-      tile: 0.35,
-      ringEvery: 0.2,
-    });
-    const matrix = placed(0, stick.y, 0, { y: stick.turn, z: (index % 2 === 0 ? 1 : -1) * 0.08 });
-    builder.add(bark, log.side, matrix).add(ends, log.ends, matrix);
-    // A short twig forking off each of the longer ones.
-    if (stick.length > 0.45) {
-      const twig = logGeometry(0.16, stick.radius * 0.5, {
-        sides: 4,
-        seed: 620 + index,
-        tile: 0.3,
-      });
-      const along = stick.length * 0.2;
-      const twigMatrix = placed(
-        Math.cos(-stick.turn) * along,
-        stick.y + 0.01,
-        Math.sin(-stick.turn) * along,
-        { y: stick.turn + 0.6 },
-      ).multiply(new THREE.Matrix4().makeTranslation(0.08, 0, 0));
-      builder.add(bark, twig.side, twigMatrix).add(ends, twig.ends, twigMatrix);
-    }
-  });
+  for (let index = 0; index < Math.min(count, PATCH_STICKS.length); index++) {
+    addStick(builder, index);
+  }
   return builder.build();
+}
+
+/**
+ * A stick patch that can hold anywhere up to its most (see decision 0061):
+ * every stick its own small model, so taking one away is only a matter of
+ * hiding it rather than building the pile again.
+ */
+export function createStickPatchModel(): {
+  group: THREE.Group;
+  sticks: readonly THREE.Object3D[];
+  dispose(): void;
+} {
+  const group = new THREE.Group();
+  const models = PATCH_STICKS.map((_, index) => {
+    const builder = new ModelBuilder();
+    addStick(builder, index);
+    const model = builder.build();
+    group.add(model.group);
+    return model;
+  });
+  return {
+    group,
+    sticks: models.map((model) => model.group),
+    dispose: () => {
+      for (const model of models) model.dispose();
+    },
+  };
 }
 
 /**

@@ -7,14 +7,12 @@ import {
   stumpFor,
   treeAtGeneration,
   type Clearing,
-  type GatherSpot,
   type PlacedPickup,
   type PlacedProp,
 } from '@acorn/shared';
 
-import { flowerModelParts } from './flower-models';
 import { itemModelParts } from './item-models';
-import { createSatchel, createStickPileModel } from './pickup-models';
+import { createSatchel } from './pickup-models';
 import { createPond } from './pond';
 import {
   HIDDEN_INSTANCE,
@@ -127,15 +125,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     group.add(model);
   }
 
-  // Never taken away, unlike a pickup: there is nothing here to track once it
-  // is placed.
-  for (const spot of clearing.gatherSpots) {
-    const model =
-      spot.item === 'flower'
-        ? createFlowerPatch(spot, disposables)
-        : createStickPile(spot, disposables);
-    group.add(model);
-  }
+  // Stick and flower patches are not drawn here: they run out and move, so
+  // they are drawn wherever the server says they are (see ground-items.ts).
 
   /** What is drawn right now, so nothing is rebuilt that has not changed. */
   const drawn = new Map<number, TreeAppearance>();
@@ -414,82 +405,5 @@ function createAxePickup(
       headMaterial.dispose();
     },
   });
-  return group;
-}
-
-/** A little pile of fallen branches to gather sticks from (see pickup-models.ts). */
-function createStickPile(
-  spot: GatherSpot,
-  disposables: Array<{ dispose(): void }>,
-): THREE.Object3D {
-  const pile = createStickPileModel();
-  pile.group.position.set(spot.x, 0, spot.z);
-  disposables.push(pile);
-  return pile.group;
-}
-
-/**
- * A little patch of wildflowers: a handful of thin stems, each topped with a
- * small bloom, scattered within a step or two of the spot's centre.
- */
-function createFlowerPatch(
-  spot: GatherSpot,
-  disposables: Array<{ dispose(): void }>,
-): THREE.Object3D {
-  const group = new THREE.Group();
-
-  const offsets = [
-    { x: 0, z: 0 },
-    { x: 0.28, z: 0.12 },
-    { x: -0.22, z: 0.2 },
-    { x: 0.1, z: -0.26 },
-    { x: -0.26, z: -0.1 },
-  ];
-
-  const realFlower = flowerModelParts();
-  if (realFlower !== undefined) {
-    // Shared geometry and material loaded once for every flower patch and
-    // bed in the world, so this group never owns them to dispose.
-    offsets.forEach((offset, index) => {
-      for (const part of realFlower) {
-        const bloom = new THREE.Mesh(part.geometry, part.material);
-        bloom.position.set(offset.x, 0, offset.z);
-        bloom.rotation.y = index * 1.3;
-        bloom.castShadow = true;
-        group.add(bloom);
-      }
-    });
-  } else {
-    const stemGeometry = new THREE.CylinderGeometry(0.012, 0.018, 0.3, 5);
-    const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.9 });
-    const headGeometry = new THREE.SphereGeometry(0.07, 6, 5);
-    const headMaterial = new THREE.MeshStandardMaterial({
-      color: ITEM_KINDS.flower.placeholderColor,
-      roughness: 0.7,
-      flatShading: true,
-    });
-    disposables.push({
-      dispose: () => {
-        stemGeometry.dispose();
-        stemMaterial.dispose();
-        headGeometry.dispose();
-        headMaterial.dispose();
-      },
-    });
-
-    for (const offset of offsets) {
-      const stem = new THREE.Mesh(stemGeometry, stemMaterial);
-      stem.position.set(offset.x, 0.15, offset.z);
-      stem.castShadow = true;
-      group.add(stem);
-
-      const head = new THREE.Mesh(headGeometry, headMaterial);
-      head.position.set(offset.x, 0.32, offset.z);
-      head.castShadow = true;
-      group.add(head);
-    }
-  }
-
-  group.position.set(spot.x, 0, spot.z);
   return group;
 }

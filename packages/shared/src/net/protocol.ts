@@ -25,6 +25,8 @@ import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
 import { GESTURE_COUNT, type Gesture, type GestureEvent } from '../sim/actions';
 import { EXPLORED_BYTES } from '../sim/exploring';
+import type { GatherPatchView } from '../sim/gathering';
+import { MAX_PILE_COUNT, type DroppedPileView } from '../sim/dropping';
 import type {
   AnimalCaught,
   BuildRequest,
@@ -32,6 +34,8 @@ import type {
   BuriedCacheView,
   CacheEvent,
   CraftedEvent,
+  DiscardedEvent,
+  DiscardRequest,
   FishingEvent,
   HealthEvent,
   HungerEvent,
@@ -85,6 +89,10 @@ export const MAX_CHANGED_TREES = 255;
 export const MAX_BUILT_PROPS = 255;
 /** Only ever one per knockout, so this ceiling is not expected to matter in practice. */
 export const MAX_BURIED_CACHES = 255;
+/** A clearing has a handful of patches; a one-byte count is plenty. */
+export const MAX_GATHER_PATCHES = 255;
+/** A world keeps at most `MAX_DROPPED_PILES` (64), well inside a one-byte count. */
+export const MAX_SENT_DROPPED_PILES = 255;
 /** A world never holds more players than this, so the roster never needs to either. */
 export const MAX_ROSTER_ENTRIES = MAX_PLAYERS_PER_WORLD;
 /** One entry per connected player, the same ceiling `Roster` already has. */
@@ -120,6 +128,10 @@ const BUILT_PROP_YOURS_FLAG = 2;
 const BUILT_PROP_LOCKED_FLAG = 4;
 /** id(2) + ownerNetId(2) + x(2) + z(2) */
 const BYTES_PER_BURIED_CACHE = 8;
+/** id(1) + item(1) + x(2) + z(2) + how many are left(1) */
+const BYTES_PER_GATHER_PATCH = 7;
+/** id(2) + item(1) + count(2) + x(2) + z(2) */
+const BYTES_PER_DROPPED_PILE = 9;
 /** A network id no real connection ever has, standing in for "not connected right now." */
 const NO_OWNER = 0xffff;
 
@@ -154,6 +166,12 @@ const BUILD_MESSAGE_BYTES = 8;
 const USE_ITEM_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
+/** type(1) + which item(1) + how many(2) + flags(1) */
+const DISCARD_MESSAGE_BYTES = 5;
+/** type(1) + netId(2) + which item(1) + how many(2) + flags(1) */
+const DISCARDED_MESSAGE_BYTES = 7;
+/** Destroyed, rather than dropped on the ground. */
+const DISCARD_DESTROY_FLAG = 1;
 
 /** type(1) + netId(2) + what was caught(1) + how many went in(1) */
 const CAUGHT_MESSAGE_BYTES = 5;
@@ -265,6 +283,17 @@ export function encodeSetDoorLock(locked: boolean): ArrayBuffer {
   return buffer;
 }
 
+/** Drop or destroy some of one thing (see decision 0061). */
+export function encodeDiscard(request: DiscardRequest): ArrayBuffer {
+  const buffer = new ArrayBuffer(DISCARD_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Discard);
+  view.setUint8(1, itemIndex(request.item));
+  view.setUint16(2, clamp(Math.round(request.amount), 0, 0xffff), true);
+  view.setUint8(4, request.destroy ? DISCARD_DESTROY_FLAG : 0);
+  return buffer;
+}
+
 export function encodeUseItem(item: ItemId): ArrayBuffer {
   const buffer = new ArrayBuffer(USE_ITEM_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -359,6 +388,19 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     const item = itemFromIndex(view.getUint8(1));
     if (item === null) return null;
     return { type: 'useItem', item };
+  }
+
+  if (type === ClientMessageType.Discard) {
+    if (data.byteLength !== DISCARD_MESSAGE_BYTES) return null;
+    const item = itemFromIndex(view.getUint8(1));
+    const amount = view.getUint16(2, true);
+    if (item === null || amount === 0) return null;
+    return {
+      type: 'discard',
+      item,
+      amount,
+      destroy: (view.getUint8(4) & DISCARD_DESTROY_FLAG) !== 0,
+    };
   }
 
   if (type === ClientMessageType.Hello) {
@@ -579,6 +621,122 @@ export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuf
     offset += BYTES_PER_BURIED_CACHE;
   }
   return buffer;
+}
+
+/**
+ * Every stick and flower patch, sent whole: where each is and how many are
+ * left, zero meaning picked clean and waiting to grow back somewhere else.
+ */
+export function encodeGatherPatches(patches: readonly GatherPatchView[]): ArrayBuffer {
+  const count = Math.min(patches.length, MAX_GATHER_PATCHES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_GATHER_PATCH);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.GatherPatches);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const patch = patches[i];
+    if (patch === undefined) break;
+    view.setUint8(offset, patch.id & 0xff);
+    view.setUint8(offset + 1, itemIndex(patch.item));
+    view.setInt16(offset + 2, clamp(quantisePosition(patch.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(offset + 4, clamp(quantisePosition(patch.z), INT16_MIN, INT16_MAX), true);
+    view.setUint8(offset + 6, clamp(patch.remaining, 0, 0xff));
+    offset += BYTES_PER_GATHER_PATCH;
+  }
+  return buffer;
+}
+
+function decodeGatherPatches(view: DataView): GatherPatchView[] | null {
+  if (view.byteLength < 2) return null;
+  const count = view.getUint8(1);
+  if (view.byteLength !== 2 + count * BYTES_PER_GATHER_PATCH) return null;
+  const patches: GatherPatchView[] = [];
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const item = itemFromIndex(view.getUint8(offset + 1));
+    if (item === null) return null;
+    patches.push({
+      id: view.getUint8(offset),
+      item,
+      x: dequantisePosition(view.getInt16(offset + 2, true)),
+      z: dequantisePosition(view.getInt16(offset + 4, true)),
+      remaining: view.getUint8(offset + 6),
+    });
+    offset += BYTES_PER_GATHER_PATCH;
+  }
+  return patches;
+}
+
+/**
+ * Everything lying where somebody dropped it, sent whole. Keeps the newest
+ * if there were ever somehow more than fit, the same as buried caches.
+ */
+export function encodeDroppedPiles(piles: readonly DroppedPileView[]): ArrayBuffer {
+  const start = Math.max(0, piles.length - MAX_SENT_DROPPED_PILES);
+  const count = piles.length - start;
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_DROPPED_PILE);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.DroppedPiles);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const pile = piles[start + i];
+    if (pile === undefined) break;
+    view.setUint16(offset, pile.id & 0xffff, true);
+    view.setUint8(offset + 2, itemIndex(pile.item));
+    view.setUint16(offset + 3, clamp(pile.count, 0, MAX_PILE_COUNT), true);
+    view.setInt16(offset + 5, clamp(quantisePosition(pile.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(offset + 7, clamp(quantisePosition(pile.z), INT16_MIN, INT16_MAX), true);
+    offset += BYTES_PER_DROPPED_PILE;
+  }
+  return buffer;
+}
+
+function decodeDroppedPiles(view: DataView): DroppedPileView[] | null {
+  if (view.byteLength < 2) return null;
+  const count = view.getUint8(1);
+  if (view.byteLength !== 2 + count * BYTES_PER_DROPPED_PILE) return null;
+  const piles: DroppedPileView[] = [];
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const item = itemFromIndex(view.getUint8(offset + 2));
+    if (item === null) return null;
+    piles.push({
+      id: view.getUint16(offset, true),
+      item,
+      count: view.getUint16(offset + 3, true),
+      x: dequantisePosition(view.getInt16(offset + 5, true)),
+      z: dequantisePosition(view.getInt16(offset + 7, true)),
+    });
+    offset += BYTES_PER_DROPPED_PILE;
+  }
+  return piles;
+}
+
+/** Word that a player dropped or destroyed something. Only they are ever sent it. */
+export function encodeDiscarded(event: DiscardedEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(DISCARDED_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Discarded);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, itemIndex(event.item));
+  view.setUint16(4, clamp(event.count, 0, 0xffff), true);
+  view.setUint8(6, event.destroyed ? DISCARD_DESTROY_FLAG : 0);
+  return buffer;
+}
+
+function decodeDiscarded(view: DataView): DiscardedEvent | null {
+  const item = itemFromIndex(view.getUint8(3));
+  if (item === null) return null;
+  return {
+    netId: view.getUint16(1, true),
+    item,
+    count: view.getUint16(4, true),
+    destroyed: (view.getUint8(6) & DISCARD_DESTROY_FLAG) !== 0,
+  };
 }
 
 /**
@@ -1074,6 +1232,19 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offset += BYTES_PER_BURIED_CACHE;
       }
       return { type: 'buriedCaches', caches };
+    }
+    case ServerMessageType.GatherPatches: {
+      const patches = decodeGatherPatches(view);
+      return patches === null ? null : { type: 'gatherPatches', patches };
+    }
+    case ServerMessageType.DroppedPiles: {
+      const piles = decodeDroppedPiles(view);
+      return piles === null ? null : { type: 'droppedPiles', piles };
+    }
+    case ServerMessageType.Discarded: {
+      if (data.byteLength !== DISCARDED_MESSAGE_BYTES) return null;
+      const event = decodeDiscarded(view);
+      return event === null ? null : { type: 'discarded', event };
     }
     case ServerMessageType.TreeHit: {
       if (data.byteLength !== 6) return null;

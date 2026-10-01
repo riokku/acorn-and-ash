@@ -5,6 +5,7 @@ import {
   BUILD_REACH,
   BUILD_REACH_SLACK,
   CAMPFIRE_BURN_SECONDS,
+  GATHER_PATCH_MAX_COUNT,
   HEALTH_MAX,
   HUNGER_EMPTY_AFTER_SECONDS,
   HUNGER_MAX,
@@ -12,9 +13,14 @@ import {
   INTEREST_RADIUS,
   LAG_COMPENSATION_TICKS,
   LIGHT_SAFETY_RADIUS,
+  MAX_DROPPED_PILES,
   MAX_INPUTS_PER_TICK,
   MAX_QUEUED_INPUTS_PER_PLAYER,
   MAX_TREE_GENERATION,
+  PATCH_CLEARANCE,
+  PATCH_REGROW_MIN_SECONDS,
+  PATCH_SPACING,
+  PATCH_SPAWN_CLEARANCE,
   PREDATOR_CATCH_RADIUS,
   REGROW_MIN_SECONDS,
   SPAWN_POSITION,
@@ -71,7 +77,7 @@ import {
   type PlacedSpot,
   type RestingPlace,
 } from '../world/home';
-import { castLanding } from '../world/water';
+import { castLanding, overlapsWater } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
 import {
@@ -87,6 +93,7 @@ import { dayProgress, isNight } from './day-night';
 import { exploreCellAt, exploredMapFrom, revealAround } from './exploring';
 import {
   addItem,
+  countOf,
   hasItem,
   removeItem,
   createInventory,
@@ -95,7 +102,26 @@ import {
   type Inventory,
 } from './inventory';
 import { pickupInReach } from './pickups';
-import { gatherSpotInReach } from './gathering';
+import {
+  freshPatch,
+  gatherSpotInReach,
+  patchCount,
+  patchIsDue,
+  patchRegrowSpot,
+  patchView,
+  type GatherPatch,
+  type GatherPatchView,
+} from './gathering';
+import {
+  dropSpot,
+  droppedPileInReach,
+  isDiscardable,
+  pileFadesAtMs,
+  pileToMergeInto,
+  pileView,
+  type DroppedPile,
+  type DroppedPileView,
+} from './dropping';
 import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
@@ -103,6 +129,7 @@ import { animalInReach, type CatchCandidate } from './hunting';
 import {
   buildableFootprint,
   checkBuildSpot,
+  footprintGap,
   nearestCampfire,
   roundFootprint,
   type Footprint,
@@ -161,6 +188,14 @@ export interface WorldSimulationOptions {
    * be watched rather than waited out. Left alone everywhere real.
    */
   readonly regrowMinSeconds?: number;
+  /**
+   * The shortest a picked-clean stick or flower patch takes to grow back, in
+   * seconds. Patches return somewhere between this and twice it.
+   *
+   * Turned down for previews and local runs the same way `regrowMinSeconds`
+   * is, so a patch moving can be watched rather than waited out.
+   */
+  readonly patchRegrowMinSeconds?: number;
   /**
    * How long a full hunger meter takes to empty, in seconds, if nothing is
    * eaten.
@@ -533,6 +568,46 @@ export interface CraftedEvent {
   readonly item: ItemId;
 }
 
+/**
+ * A player dropped or destroyed something from their pack, for their own HUD
+ * alone: everybody else sees a dropped pile turn up from the next pile list.
+ */
+export interface DiscardedEvent {
+  readonly netId: number;
+  readonly item: ItemId;
+  readonly count: number;
+  /** Destroyed, rather than dropped on the ground. */
+  readonly destroyed: boolean;
+}
+
+/** What a client asks to drop or destroy (see decision 0061). */
+export interface DiscardRequest {
+  readonly item: ItemId;
+  /** How many. More than they hold just means all of it. */
+  readonly amount: number;
+  readonly destroy: boolean;
+}
+
+/** A stick or flower patch as it goes into and comes out of storage. */
+export interface PersistedPatch {
+  readonly id: number;
+  readonly x: number;
+  readonly z: number;
+  readonly remaining: number;
+  readonly generation: number;
+  readonly emptiedAtMs: number;
+}
+
+/** A dropped pile as it goes into and comes out of storage. */
+export interface PersistedPile {
+  readonly id: number;
+  readonly item: ItemId;
+  readonly count: number;
+  readonly x: number;
+  readonly z: number;
+  readonly droppedAtMs: number;
+}
+
 /** A tree that has come back. */
 export interface TreeRegrown {
   readonly treeId: number;
@@ -703,6 +778,7 @@ export class WorldSimulation {
     HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
   );
   readonly regrowMinSeconds: number;
+  readonly patchRegrowMinSeconds: number;
   readonly hungerDrainPerSecond: number;
 
   /** How many ticks have been simulated since the world was created. */
@@ -732,6 +808,16 @@ export class WorldSimulation {
   private readonly craftEvents: CraftedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
+  /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
+  private readonly patches: GatherPatch[];
+  /** Patches gathered from, grown back or moved since this was last asked, by id. */
+  private readonly patchChanges = new Set<number>();
+  /** Everything lying where somebody dropped it, oldest first. */
+  private readonly droppedPiles: DroppedPile[] = [];
+  private nextDroppedPileId = 1;
+  /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
+  private readonly pileChanges = new Set<number>();
+  private readonly discardEvents: DiscardedEvent[] = [];
   /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
   private readonly equipEvents: number[] = [];
   /** Everything anybody has ever built. Nothing is ever removed from it yet. */
@@ -766,10 +852,12 @@ export class WorldSimulation {
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
     this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
+    this.patchRegrowMinSeconds = options.patchRegrowMinSeconds ?? PATCH_REGROW_MIN_SECONDS;
     this.hungerDrainPerSecond = hungerDrainPerSecond(
       options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
     );
     this.clearing = buildTestClearing(options.seed);
+    this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
     this.collision = createCollisionWorld(terrain, [
@@ -1158,11 +1246,14 @@ export class WorldSimulation {
             this.tryEat(runtime);
           }
         } else if (wantsToInteract) {
-          // The same button reaches for what is at your feet first, then for
-          // a patch of sticks, then for a cache of your own buried nearby,
-          // then a nearby campfire to light or put out, and only failing all
-          // four reaches into your own pack instead.
-          const pickedUp = this.tryPickup(runtime, scratch.position);
+          // The same button reaches for what is at your feet first - a tool
+          // lying there, then anything somebody dropped - then for a patch
+          // of sticks, then for a cache of your own buried nearby, then a
+          // nearby campfire to light or put out, and only failing all of
+          // those reaches into your own pack instead.
+          const pickedUp =
+            this.tryPickup(runtime, scratch.position) ||
+            this.tryPickUpPile(runtime, scratch.position);
           if (!pickedUp) {
             const gathered = this.tryGather(runtime, scratch.position);
             if (!gathered) {
@@ -1710,22 +1801,238 @@ export class WorldSimulation {
   }
 
   /**
-   * Gather from a nearby patch - sticks or flowers, whatever it offers - if
-   * there is one in reach and this player is not still catching their breath
-   * from a swing, a cast or a gather of their own. Unlike a pickup the patch
-   * is never used up - only how often any one player may draw from it.
-   * Returns whether it happened.
+   * Pick up the nearest pile somebody dropped, if there is one in reach - as
+   * much of it as fits, leaving the rest lying there. Returns whether
+   * anything was picked up.
+   */
+  private tryPickUpPile(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    const pile = droppedPileInReach(position, this.droppedPiles);
+    if (pile === null) return false;
+    const taken = addItem(runtime.inventory, pile.item, pile.count);
+    if (taken === 0) return false;
+
+    pile.count -= taken;
+    if (pile.count === 0) this.droppedPiles.splice(this.droppedPiles.indexOf(pile), 1);
+    this.pileChanges.add(pile.id);
+    this.gatherEvents.push(runtime.netId);
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: pile.item });
+    return true;
+  }
+
+  /**
+   * Gather one from a nearby patch - sticks or flowers, whatever it offers -
+   * if there is one in reach with any left and this player is not still
+   * catching their breath from a swing, a cast or a gather of their own.
+   * Taking the last one leaves the patch picked clean until it grows back
+   * somewhere else (see `regrowPatches`). Returns whether it happened.
    */
   private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
     if (runtime.swingCooldownTicks > 0) return false;
-    const spot = gatherSpotInReach(position, this.clearing.gatherSpots);
-    if (spot === null) return false;
-    if (addItem(runtime.inventory, spot.item) === 0) return false;
+    const patch = gatherSpotInReach(position, this.patches);
+    if (patch === null) return false;
+    if (addItem(runtime.inventory, patch.item) === 0) return false;
 
+    patch.remaining -= 1;
+    if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
+    this.patchChanges.add(patch.id);
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     this.gatherEvents.push(runtime.netId);
-    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: spot.item });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: patch.item });
     return true;
+  }
+
+  /**
+   * Bring back every picked-clean patch whose time is up, each at a fresh
+   * spot with a fresh count.
+   *
+   * Called with real time, the same reason `regrowTrees` is: on waking,
+   * anything picked clean long enough ago comes back at once.
+   */
+  regrowPatches(nowMs: number): void {
+    for (const patch of this.patches) {
+      if (!patchIsDue(this.seed, patch, nowMs, this.patchRegrowMinSeconds)) continue;
+      const generation = patch.generation + 1;
+      this.movePatch(patch, generation);
+      patch.remaining = patchCount(this.seed, patch.id, generation);
+      patch.emptiedAtMs = 0;
+    }
+  }
+
+  /**
+   * Put a patch somewhere new: the first open spot its seed offers for this
+   * generation, or back where the clearing first laid it if somehow none of
+   * them is.
+   */
+  private movePatch(patch: GatherPatch, generation: number): void {
+    const footprints = this.buildFootprints();
+    const spot =
+      patchRegrowSpot(this.seed, patch.id, generation, (x, z) =>
+        this.patchSpotIsClear(patch.id, x, z, footprints),
+      ) ?? this.clearing.gatherSpots.find((original) => original.id === patch.id);
+    if (spot !== undefined) {
+      patch.x = spot.x;
+      patch.z = spot.z;
+    }
+    patch.generation = generation;
+    this.patchChanges.add(patch.id);
+  }
+
+  /**
+   * Whether a patch could grow here: on open ground, not in the pond, not on
+   * a tree, rock or anything built, not right where people arrive, and not
+   * so close to anything else waiting to be picked up that one press of the
+   * button could mean either.
+   */
+  private patchSpotIsClear(
+    patchId: number,
+    x: number,
+    z: number,
+    footprints: readonly Footprint[],
+  ): boolean {
+    if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < PATCH_SPAWN_CLEARANCE) {
+      return false;
+    }
+    if (overlapsWater(this.clearing.water, x, z, PATCH_CLEARANCE)) return false;
+    const here = roundFootprint(x, z, PATCH_CLEARANCE, 'patch');
+    if (footprints.some((footprint) => footprintGap(here, footprint) < 0)) return false;
+
+    const tooClose = (other: { x: number; z: number }): boolean =>
+      Math.hypot(other.x - x, other.z - z) < PATCH_SPACING;
+    for (const other of this.patches) {
+      if (other.id !== patchId && other.remaining > 0 && tooClose(other)) return false;
+    }
+    for (const pickup of this.clearing.pickups) {
+      if (!this.takenPickups.has(pickup.id) && tooClose(pickup)) return false;
+    }
+    if (this.droppedPiles.some(tooClose)) return false;
+    return !this.buriedCaches.some(tooClose);
+  }
+
+  /**
+   * Move any patch a new piece was just built on top of, keeping however
+   * many it had left: a patch under a cabin would be out of reach for good,
+   * and never picked clean, never grow back anywhere else either.
+   */
+  private movePatchesFrom(piece: Footprint): void {
+    for (const patch of this.patches) {
+      if (patch.remaining === 0) continue;
+      const here = roundFootprint(patch.x, patch.z, PATCH_CLEARANCE, 'patch');
+      if (footprintGap(here, piece) < 0) this.movePatch(patch, patch.generation + 1);
+    }
+  }
+
+  /**
+   * Drop or destroy some of what this player is carrying, to make room.
+   *
+   * Dropped things land just in front of them - or at their feet, if in
+   * front is water or a tree - added to a pile of the same thing already
+   * there, or starting a new one. Never a bag, never more than they hold,
+   * and never dropped indoors, where there is nowhere for a pile to lie;
+   * destroying works anywhere. Not tied to the tick loop, the same as
+   * crafting: settled the moment it arrives, so the caller says what time
+   * it is - a pile's fading is counted from then. Returns whether anything
+   * changed.
+   */
+  discardItem(netId: number, request: DiscardRequest, nowMs: number): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return false;
+    const { item, destroy } = request;
+    if (!isDiscardable(item) || !Number.isInteger(request.amount) || request.amount < 1) {
+      return false;
+    }
+    const count = Math.min(request.amount, countOf(runtime.inventory, item));
+    if (count === 0) return false;
+
+    if (!destroy) {
+      if (runtime.space !== OUTDOORS) return false;
+      const position = runtime.entity.get(Position);
+      if (position === undefined) return false;
+      this.dropPile(item, count, position, runtime.entity.get(Facing)?.yaw ?? 0, nowMs);
+      this.gestureEvents.push({ netId, gesture: Gesture.PickUp, item: null });
+    }
+
+    const wasHolding = this.equippedItemOf(netId);
+    removeItem(runtime.inventory, item, count);
+    if (item === 'rod' && runtime.cast !== null && !hasItem(runtime.inventory, 'rod')) {
+      this.endCast(runtime, { outcome: 'walkedAway' });
+    }
+    if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+    this.discardEvents.push({ netId, item, count, destroyed: destroy });
+    return true;
+  }
+
+  /** Lay down a pile, or add to one of the same thing right there. */
+  private dropPile(
+    item: ItemId,
+    count: number,
+    position: Readonly<Vec3>,
+    facingYaw: number,
+    nowMs: number,
+  ): void {
+    const ahead = dropSpot(position, facingYaw);
+    const landsInFront = this.dropSpotIsClear(ahead.x, ahead.z);
+    const x = landsInFront ? ahead.x : position.x;
+    const z = landsInFront ? ahead.z : position.z;
+
+    const existing = pileToMergeInto(this.droppedPiles, item, count, x, z);
+    if (existing !== null) {
+      existing.count += count;
+      existing.droppedAtMs = nowMs;
+      // Freshly added to, so it is the newest now: the last to fade early.
+      this.droppedPiles.splice(this.droppedPiles.indexOf(existing), 1);
+      this.droppedPiles.push(existing);
+      this.pileChanges.add(existing.id);
+      return;
+    }
+
+    if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
+      const oldest = this.droppedPiles.shift();
+      if (oldest !== undefined) this.pileChanges.add(oldest.id);
+    }
+    const pile: DroppedPile = {
+      id: this.claimPileId(),
+      item,
+      count,
+      x,
+      z,
+      droppedAtMs: nowMs,
+    };
+    this.droppedPiles.push(pile);
+    this.pileChanges.add(pile.id);
+  }
+
+  /**
+   * A fresh pile id. Ids travel in two bytes, so after the last one they
+   * start again from one, stepping over any still lying about.
+   */
+  private claimPileId(): number {
+    for (;;) {
+      const id = this.nextDroppedPileId;
+      this.nextDroppedPileId = id >= 0xffff ? 1 : id + 1;
+      if (!this.droppedPiles.some((pile) => pile.id === id)) return id;
+    }
+  }
+
+  /** Whether something dropped here would lie on open ground, not in the pond or inside a trunk. */
+  private dropSpotIsClear(x: number, z: number): boolean {
+    if (overlapsWater(this.clearing.water, x, z, 0)) return false;
+    const here = roundFootprint(x, z, 0, 'pile');
+    return !this.buildFootprints().some((footprint) => footprintGap(here, footprint) < 0);
+  }
+
+  /**
+   * Let every pile whose time is up fade away.
+   *
+   * Called with real time, the same reason `regrowTrees` is: on waking,
+   * anything that should have faded while nobody was here is gone at once.
+   */
+  fadeDroppedPiles(nowMs: number): void {
+    for (let index = this.droppedPiles.length - 1; index >= 0; index--) {
+      const pile = this.droppedPiles[index];
+      if (pile === undefined || nowMs < pileFadesAtMs(pile)) continue;
+      this.droppedPiles.splice(index, 1);
+      this.pileChanges.add(pile.id);
+    }
   }
 
   /**
@@ -2181,6 +2488,7 @@ export class WorldSimulation {
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
     if (buildable.isHome) this.collision.colliders.push(cabinCollider(prop));
+    this.movePatchesFrom(piece);
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
@@ -2688,6 +2996,99 @@ export class WorldSimulation {
   /** Hand over everything that happened since this was last asked. */
   drainPickupEvents(): PickupTaken[] {
     return this.pickupEvents.splice(0);
+  }
+
+  /** Every stick and flower patch as a browser is told it, picked-clean ones included. */
+  gatherPatchesList(): GatherPatchView[] {
+    return this.patches.map(patchView);
+  }
+
+  /** One patch as it goes into storage, or null if there is no such patch. */
+  persistedPatch(id: number): PersistedPatch | null {
+    const patch = this.patches.find((candidate) => candidate.id === id);
+    if (patch === undefined) return null;
+    const { x, z, remaining, generation, emptiedAtMs } = patch;
+    return { id, x, z, remaining, generation, emptiedAtMs };
+  }
+
+  /**
+   * Put the patches back as they were after the world wakes from storage.
+   *
+   * Anything in the save that does not make sense - a patch the clearing no
+   * longer has, a count out of range - is left as the clearing lays it out
+   * instead, so a bad row can never crash a world or hand out a hundred
+   * sticks.
+   */
+  restorePatches(saved: Iterable<PersistedPatch>): void {
+    for (const row of saved) {
+      const patch = this.patches.find((candidate) => candidate.id === row.id);
+      if (patch === undefined) continue;
+      const sensible =
+        Number.isFinite(row.x) &&
+        Number.isFinite(row.z) &&
+        Number.isInteger(row.remaining) &&
+        row.remaining >= 0 &&
+        row.remaining <= GATHER_PATCH_MAX_COUNT &&
+        Number.isInteger(row.generation) &&
+        row.generation >= 0 &&
+        Number.isFinite(row.emptiedAtMs);
+      if (!sensible) continue;
+      patch.x = row.x;
+      patch.z = row.z;
+      patch.remaining = row.remaining;
+      patch.generation = row.generation;
+      patch.emptiedAtMs = row.emptiedAtMs;
+    }
+  }
+
+  /** Which patches changed since this was last asked, so they can be saved and sent. */
+  drainPatchChanges(): number[] {
+    const ids = [...this.patchChanges];
+    this.patchChanges.clear();
+    return ids;
+  }
+
+  /** Everything lying where somebody dropped it, as a browser is told it. */
+  droppedPilesList(): DroppedPileView[] {
+    return this.droppedPiles.map(pileView);
+  }
+
+  /** One pile as it goes into storage, or null if it is gone - picked up or faded. */
+  persistedPile(id: number): PersistedPile | null {
+    const pile = this.droppedPiles.find((candidate) => candidate.id === id);
+    if (pile === undefined) return null;
+    const { item, count, x, z, droppedAtMs } = pile;
+    return { id, item, count, x, z, droppedAtMs };
+  }
+
+  /** Put dropped piles back as they were after the world wakes from storage. */
+  restoreDroppedPiles(saved: Iterable<PersistedPile>): void {
+    const rows = [...saved].filter(
+      (row) =>
+        Number.isInteger(row.count) &&
+        row.count > 0 &&
+        Number.isFinite(row.x) &&
+        Number.isFinite(row.z) &&
+        Number.isFinite(row.droppedAtMs),
+    );
+    rows.sort((a, b) => a.droppedAtMs - b.droppedAtMs);
+    for (const row of rows.slice(-MAX_DROPPED_PILES)) {
+      this.droppedPiles.push({ ...row });
+      this.nextDroppedPileId = Math.max(this.nextDroppedPileId, (row.id % 0xffff) + 1);
+      // `claimPileId` steps over any id still in use, so wrapping here is safe.
+    }
+  }
+
+  /** Which piles changed since this was last asked, so they can be saved and sent. */
+  drainPileChanges(): number[] {
+    const ids = [...this.pileChanges];
+    this.pileChanges.clear();
+    return ids;
+  }
+
+  /** Hand over everything anybody dropped or destroyed since this was last asked. */
+  drainDiscardEvents(): DiscardedEvent[] {
+    return this.discardEvents.splice(0);
   }
 
   /** Read one player's state, mostly for tests and for saving. */

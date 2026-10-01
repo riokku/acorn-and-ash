@@ -1399,3 +1399,137 @@ body {
 .door-lock button:hover {
   background: #fffdf4;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Toasts, and the drop or destroy menu (decision 0061)                     */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Everything just gained, down the bottom right: the newest at the bottom,
+ * nearest the hotbar, older ones pushed up above it.
+ */
+.toasts {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(58, 42, 20, 0.14);
+  color: var(--ink-warm);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  animation: toast-in 220ms ease-out;
+  transition:
+    opacity 450ms ease-in,
+    transform 450ms ease-in;
+}
+
+.toast-fading {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.toast-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Catches the click that closes the menu, so it never also lands on the world. */
+.slot-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.slot-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 4px 12px 4px 12px;
+  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(58, 42, 20, 0.16);
+  color: var(--ink-warm);
+  font-size: 13px;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.slot-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid rgba(58, 42, 20, 0.14);
+  font-weight: 700;
+}
+
+.slot-menu button {
+  padding: 7px 10px;
+  border: 1px solid rgba(91, 70, 49, 0.35);
+  border-radius: 8px;
+  background: #fff8e6;
+  color: var(--ink-warm);
+  font:
+    600 13px/1.2 system-ui,
+    sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.slot-menu button:hover:not(:disabled) {
+  background: #fffdf4;
+}
+
+.slot-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.slot-menu button.slot-menu-danger {
+  border-color: rgba(166, 58, 40, 0.5);
+  color: #9a2f1f;
+}
+
+.slot-menu button.slot-menu-danger:hover {
+  background: #ffe9e2;
+}
+
+.slot-menu-note {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--ink-warm-dim);
+  font-size: 12px;
+  line-height: 1.35;
+}

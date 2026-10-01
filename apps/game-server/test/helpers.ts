@@ -5,6 +5,7 @@ import {
   decodeServerMessage,
   encodeBuild,
   encodeCraft,
+  encodeDiscard,
   encodeHello,
   encodeInputBundle,
   encodePing,
@@ -18,6 +19,9 @@ import {
   type CacheEvent,
   type CharacterId,
   type CraftedEvent,
+  type DiscardedEvent,
+  type DroppedPilesMessage,
+  type GatherPatchesMessage,
   type EquippedMessage,
   type ExploredMessage,
   type SpaceMessage,
@@ -116,6 +120,20 @@ export class TestClient {
 
   useItem(item: ItemId): void {
     this.socket.send(encodeUseItem(item));
+  }
+
+  /**
+   * Wait until the server has simulated every input sent so far - so a
+   * button still held from a moment ago cannot act on whatever happens next.
+   */
+  async caughtUp(): Promise<void> {
+    const sent = this.sequence;
+    await waitFor('every input simulated', () => this.latestSnapshot().ackSeq >= sent);
+  }
+
+  /** Drop some of something on the ground, or destroy it outright. */
+  discard(item: ItemId, amount: number, destroy = false): void {
+    this.socket.send(encodeDiscard({ item, amount, destroy }));
   }
 
   hello(name: string, character: CharacterId = 'knight', color: TintColorId = 'amber'): void {
@@ -310,6 +328,23 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'explored');
     if (message === undefined) throw new Error('Never received the opening explored map');
     return message.cells;
+  }
+
+  /** The newest word on every stick and flower patch: where, and how many are left. */
+  gatherPatches(): GatherPatchesMessage['patches'] {
+    const messages = this.received.filter((entry) => entry.type === 'gatherPatches');
+    return messages[messages.length - 1]?.patches ?? [];
+  }
+
+  /** The newest word on everything lying where somebody dropped it. */
+  droppedPiles(): DroppedPilesMessage['piles'] {
+    const messages = this.received.filter((entry) => entry.type === 'droppedPiles');
+    return messages[messages.length - 1]?.piles ?? [];
+  }
+
+  /** Everything the server has said this client dropped or destroyed, oldest first. */
+  discarded(): DiscardedEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'discarded' ? [entry.event] : []));
   }
 
   /** Everything anybody was seen doing with their hands, oldest first (see decision 0056). */

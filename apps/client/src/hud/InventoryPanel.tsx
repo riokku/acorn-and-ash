@@ -3,6 +3,7 @@ import {
   PACK_ITEMS,
   hasItem,
   inventoryFromEntries,
+  isDiscardable,
   packSlots,
   packStacks,
   slotsUsed,
@@ -12,6 +13,18 @@ import {
 
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
+
+/**
+ * A slot right-clicked to drop or destroy what is in it: what, how many -
+ * that stack, or everything a hotbar slot stands for - and where the click
+ * was, for the menu to open beside it (see decision 0061).
+ */
+export interface SlotMenuTarget {
+  readonly item: ItemId;
+  readonly count: number;
+  readonly x: number;
+  readonly y: number;
+}
 
 /** The custom drag type a hotbar slot sets on itself, so dropping it back here can unpin it. */
 export const HOTBAR_SLOT_DRAG_TYPE = 'application/x-acorn-hotbar-slot';
@@ -127,12 +140,14 @@ export function InventoryPanel({
   equippedItem,
   onUseItem,
   onUnpinFromHotbar,
+  onOpenSlotMenu,
 }: {
   open: boolean;
   carrying: CarriedEntries;
   equippedItem: ItemId | null;
   onUseItem: (item: ItemId) => void;
   onUnpinFromHotbar: (slotIndex: number) => void;
+  onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element | null {
   if (!open) return null;
 
@@ -161,7 +176,9 @@ export function InventoryPanel({
           />
           <span className="hud-journal-title">Your pack</span>
         </span>
-        <span className="hud-journal-closehint">Drag onto a hotbar slot, or I to close</span>
+        <span className="hud-journal-closehint">
+          Drag onto a hotbar slot · right-click to drop · I to close
+        </span>
       </div>
 
       <div className="inventory-meter">
@@ -191,6 +208,7 @@ export function InventoryPanel({
             count={stack.count}
             equipped={stack.item === equippedItem}
             onUseItem={onUseItem}
+            onOpenSlotMenu={onOpenSlotMenu}
           />
         ))}
         {Array.from({ length: emptySlots }, (_, index) => (
@@ -209,11 +227,13 @@ function PackSlot({
   count,
   equipped,
   onUseItem,
+  onOpenSlotMenu,
 }: {
   item: ItemId;
   count: number;
   equipped: boolean;
   onUseItem: (item: ItemId) => void;
+  onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element {
   const kind = ITEM_KINDS[item];
   const classes = ['inventory-item'];
@@ -226,6 +246,7 @@ function PackSlot({
         <>
           <strong>{kind.displayName}</strong>
           {kind.equippable ? ' · click or drag to a hotbar slot' : null}
+          {isDiscardable(item) ? ' · right-click to drop' : null}
         </>
       }
     >
@@ -236,6 +257,11 @@ function PackSlot({
           event.dataTransfer.setData('text/plain', item);
         }}
         onClick={() => onUseItem(item)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onOpenSlotMenu({ item, count, x: event.clientX, y: event.clientY });
+        }}
+        data-testid={`pack-slot-${item}`}
       >
         {kind.stackSize > 1 ? <span className="inventory-item-count">{count}</span> : null}
         <ItemIcon

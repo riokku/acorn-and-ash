@@ -31,7 +31,10 @@ import {
   encodeCache,
   encodeCaught,
   encodeCrafted,
+  encodeDiscarded,
+  encodeDroppedPiles,
   encodeFishing,
+  encodeGatherPatches,
   encodeHealth,
   encodeHunger,
   encodeRejected,
@@ -57,6 +60,8 @@ import {
   type BuriedCache,
   type CharacterId,
   type ItemId,
+  type PersistedPatch,
+  type PersistedPile,
   type PersistedPlayer,
   type PersistedTree,
   type RosterEntry,
@@ -188,6 +193,9 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
+    // Where every stick and flower patch is now, and what anybody dropped.
+    server.send(encodeGatherPatches(simulation.gatherPatchesList()));
+    server.send(encodeDroppedPiles(simulation.droppedPilesList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
       encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
@@ -267,6 +275,20 @@ export class World extends DurableObject<WorldEnv> {
       simulation.useItem(attachment.netId, decoded.item);
       this.announceHunger(simulation);
       this.announceEquipped(simulation);
+      return;
+    }
+    if (decoded.type === 'discard') {
+      // Settled the moment it arrives, the same as crafting: dropping lands
+      // wherever the player is standing right now.
+      simulation.discardItem(
+        attachment.netId,
+        { item: decoded.item, amount: decoded.amount, destroy: decoded.destroy },
+        Date.now(),
+      );
+      this.announceDiscards(simulation);
+      this.announcePiles(simulation, Date.now());
+      this.announceEquipped(simulation);
+      this.announceFishing(simulation);
       return;
     }
     if (decoded.type === 'setDoorLock') {
@@ -359,6 +381,8 @@ export class World extends DurableObject<WorldEnv> {
     this.announceHealth(simulation);
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
+    this.announcePatches(simulation, startedAt);
+    this.announcePiles(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
     this.announceSpaceChanges(simulation);
     this.announceGestures(simulation);
@@ -415,10 +439,9 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
-   * Tell anybody who gathered a stick this tick what is in their pack now.
-   *
-   * Unlike a pickup, a gather spot never runs out, so there is nothing here
-   * for everybody else to be told about.
+   * Tell anybody who gathered from a patch or picked up a dropped pile this
+   * tick what is in their pack now. What that did to the patch or the pile
+   * is everybody's news, told by `announcePatches` and `announcePiles`.
    */
   private announceGathering(simulation: WorldSimulation): void {
     const netIds = simulation.drainGatherEvents();
@@ -688,6 +711,64 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
+   * Bring back any picked-clean patch whose time is up, then tell everybody
+   * about every patch that changed - gathered from, grown back or moved -
+   * and write those straight to storage, so a patch picked clean stays
+   * picked clean however soon the world goes to sleep (see decision 0061).
+   *
+   * Checked every tick for the same reason `announceRegrowth` is; the walk
+   * is over a handful of patches.
+   */
+  private announcePatches(simulation: WorldSimulation, nowMs: number): void {
+    simulation.regrowPatches(nowMs);
+    const changed = simulation.drainPatchChanges();
+    if (changed.length === 0) return;
+
+    for (const id of changed) {
+      const patch = simulation.persistedPatch(id);
+      if (patch !== null) this.writePatch(patch);
+    }
+    this.broadcast(encodeGatherPatches(simulation.gatherPatchesList()));
+  }
+
+  /**
+   * Let any dropped pile whose time is up fade, then tell everybody about
+   * every pile that changed - dropped, added to, picked up or faded - and
+   * write those straight to storage.
+   */
+  private announcePiles(simulation: WorldSimulation, nowMs: number): void {
+    simulation.fadeDroppedPiles(nowMs);
+    const changed = simulation.drainPileChanges();
+    if (changed.length === 0) return;
+
+    for (const id of changed) {
+      const pile = simulation.persistedPile(id);
+      if (pile === null) this.deletePile(id);
+      else this.writePile(pile);
+    }
+    this.broadcast(encodeDroppedPiles(simulation.droppedPilesList()));
+  }
+
+  /**
+   * Tell a player what they just dropped or destroyed, for their HUD, then
+   * send their pack the same as any other way it changes. Private to them:
+   * a dropped pile turning up is everybody's news, told by `announcePiles`.
+   */
+  private announceDiscards(simulation: WorldSimulation): void {
+    const events = simulation.drainDiscardEvents();
+    if (events.length === 0) return;
+
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      for (const event of events) {
+        if (event.netId === attachment.netId) this.trySend(ws, encodeDiscarded(event));
+      }
+    }
+    this.sendPacks(simulation, new Set(events.map((event) => event.netId)));
+  }
+
+  /**
    * Tell everybody about a campfire lighting up or going out, whether a
    * player did it or it just burned down - checked every tick for the same
    * reason `announceRegrowth` is: the important run is the first one after a
@@ -896,6 +977,7 @@ export class World extends DurableObject<WorldEnv> {
     const simulation = new WorldSimulation({
       seed: this.seed(),
       regrowMinSeconds: this.regrowMinSeconds(),
+      patchRegrowMinSeconds: this.patchRegrowMinSeconds(),
       hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
     });
     this.simulation = simulation;
@@ -903,6 +985,8 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
+    simulation.restorePatches(this.loadPatches());
+    simulation.restoreDroppedPiles(this.loadPiles());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -923,6 +1007,8 @@ export class World extends DurableObject<WorldEnv> {
     // an hour later would be shown the stump they left and then watch it turn
     // into a tree a tick afterwards.
     this.announceRegrowth(simulation, Date.now());
+    this.announcePatches(simulation, Date.now());
+    this.announcePiles(simulation, Date.now());
     this.announceCampfireLighting(simulation, Date.now());
     if (simulation.playerCount > 0) this.startTicking();
     return simulation;
@@ -949,6 +1035,17 @@ export class World extends DurableObject<WorldEnv> {
    */
   private regrowMinSeconds(): number | undefined {
     const configured = Number(this.env.WORLD_REGROW_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
+  }
+
+  /**
+   * How long a picked-clean stick or flower patch takes to grow back, if the
+   * environment says. Only honoured when it is a sensible positive number,
+   * the same as `regrowMinSeconds`.
+   */
+  private patchRegrowMinSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_PATCH_REGROW_SECONDS);
     if (!Number.isFinite(configured) || configured <= 0) return undefined;
     return configured;
   }
@@ -1101,6 +1198,26 @@ export class World extends DurableObject<WorldEnv> {
       item_index INTEGER NOT NULL,
       count INTEGER NOT NULL,
       PRIMARY KEY (cache_id, item_index)
+    )`);
+    // Where each stick and flower patch is now and how many it has left (see
+    // decision 0061). A patch with no row is still where the clearing first
+    // laid it, holding its first count.
+    sql.exec(`CREATE TABLE IF NOT EXISTS gather_patches (
+      patch_id INTEGER PRIMARY KEY,
+      x REAL NOT NULL,
+      z REAL NOT NULL,
+      remaining INTEGER NOT NULL,
+      generation INTEGER NOT NULL,
+      emptied_at_ms INTEGER NOT NULL
+    )`);
+    // Whatever anybody dropped, until it is picked up or fades.
+    sql.exec(`CREATE TABLE IF NOT EXISTS dropped_piles (
+      id INTEGER PRIMARY KEY,
+      item_index INTEGER NOT NULL,
+      count INTEGER NOT NULL,
+      x REAL NOT NULL,
+      z REAL NOT NULL,
+      dropped_at_ms INTEGER NOT NULL
     )`);
   }
 
@@ -1383,6 +1500,92 @@ export class World extends DurableObject<WorldEnv> {
     const sql = this.ctx.storage.sql;
     sql.exec('DELETE FROM buried_caches WHERE id = ?', cacheId);
     sql.exec('DELETE FROM buried_cache_items WHERE cache_id = ?', cacheId);
+  }
+
+  private loadPatches(): PersistedPatch[] {
+    return this.ctx.storage.sql
+      .exec<{
+        patch_id: number;
+        x: number;
+        z: number;
+        remaining: number;
+        generation: number;
+        emptied_at_ms: number;
+      }>('SELECT patch_id, x, z, remaining, generation, emptied_at_ms FROM gather_patches')
+      .toArray()
+      .map((row) => ({
+        id: row.patch_id,
+        x: row.x,
+        z: row.z,
+        remaining: row.remaining,
+        generation: row.generation,
+        emptiedAtMs: row.emptied_at_ms,
+      }));
+  }
+
+  private writePatch(patch: PersistedPatch): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO gather_patches (patch_id, x, z, remaining, generation, emptied_at_ms) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(patch_id) DO UPDATE SET x = excluded.x, z = excluded.z, ' +
+        'remaining = excluded.remaining, generation = excluded.generation, ' +
+        'emptied_at_ms = excluded.emptied_at_ms',
+      patch.id,
+      patch.x,
+      patch.z,
+      patch.remaining,
+      patch.generation,
+      patch.emptiedAtMs,
+    );
+  }
+
+  private loadPiles(): PersistedPile[] {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        id: number;
+        item_index: number;
+        count: number;
+        x: number;
+        z: number;
+        dropped_at_ms: number;
+      }>('SELECT id, item_index, count, x, z, dropped_at_ms FROM dropped_piles')
+      .toArray();
+    const piles: PersistedPile[] = [];
+    for (const row of rows) {
+      const item = itemFromIndex(row.item_index);
+      // Written by a newer build that knew an item this one does not.
+      if (item === null) continue;
+      piles.push({
+        id: row.id,
+        item,
+        count: row.count,
+        x: row.x,
+        z: row.z,
+        droppedAtMs: row.dropped_at_ms,
+      });
+    }
+    return piles;
+  }
+
+  private writePile(pile: PersistedPile): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO dropped_piles (id, item_index, count, x, z, dropped_at_ms) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(id) DO UPDATE SET item_index = excluded.item_index, ' +
+        'count = excluded.count, x = excluded.x, z = excluded.z, ' +
+        'dropped_at_ms = excluded.dropped_at_ms',
+      pile.id,
+      itemIndex(pile.item),
+      pile.count,
+      pile.x,
+      pile.z,
+      pile.droppedAtMs,
+    );
+  }
+
+  /** Picked up or faded: nothing keeps a pile around once it no longer exists. */
+  private deletePile(id: number): void {
+    this.ctx.storage.sql.exec('DELETE FROM dropped_piles WHERE id = ?', id);
   }
 
   private loadTakenPickups(): number[] {
