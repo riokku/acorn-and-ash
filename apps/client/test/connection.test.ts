@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { playerKey, worldSocketUrl } from '../src/net/connection';
+import { CLOSE_PLAYING_ELSEWHERE } from '@acorn/shared';
+
+import {
+  WorldConnection,
+  playerKey,
+  worldSocketUrl,
+  type ConnectionState,
+} from '../src/net/connection';
 import { readSettings } from '../src/settings';
 
 describe('finding the world server', () => {
@@ -72,5 +79,101 @@ describe('settings', () => {
 
   it('lets a world be chosen from the address bar', () => {
     expect(readSettings('?world=test-world').worldId).toBe('test-world');
+  });
+});
+
+/** A WebSocket that only does what the test tells it to. */
+class FakeSocket extends EventTarget {
+  static readonly OPEN = 1;
+  static made: FakeSocket[] = [];
+  readyState = 0;
+  binaryType = 'blob';
+
+  constructor(readonly url: string) {
+    super();
+    FakeSocket.made.push(this);
+  }
+
+  send(): void {}
+
+  close(): void {
+    this.readyState = 3;
+  }
+
+  open(): void {
+    this.readyState = FakeSocket.OPEN;
+    this.dispatchEvent(new Event('open'));
+  }
+
+  hangUp(code: number): void {
+    this.readyState = 3;
+    this.dispatchEvent(Object.assign(new Event('close'), { code }));
+  }
+
+  fail(): void {
+    this.dispatchEvent(new Event('error'));
+  }
+}
+
+describe('staying connected to the world', () => {
+  let states: ConnectionState[];
+  let connection: WorldConnection;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('WebSocket', FakeSocket);
+    FakeSocket.made = [];
+    states = [];
+    connection = new WorldConnection('wss://acorn.example/ws', {
+      onMessage: () => {},
+      onStateChange: (state) => states.push(state),
+    });
+    connection.connect();
+    FakeSocket.made[0]?.open();
+  });
+
+  afterEach(() => {
+    connection.close();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('tries again by itself after the connection drops', () => {
+    FakeSocket.made[0]?.hangUp(1006);
+    expect(states.at(-1)).toBe('offline');
+    vi.advanceTimersByTime(2500);
+    expect(FakeSocket.made).toHaveLength(2);
+  });
+
+  it('stays put once the player is playing in another tab, until asked to play here', () => {
+    FakeSocket.made[0]?.hangUp(CLOSE_PLAYING_ELSEWHERE);
+    expect(states.at(-1)).toBe('elsewhere');
+    vi.advanceTimersByTime(60_000);
+    expect(FakeSocket.made).toHaveLength(1);
+
+    connection.playHere();
+    expect(FakeSocket.made).toHaveLength(2);
+    expect(states.at(-1)).toBe('connecting');
+  });
+
+  it('does not open a second connection when asked to play here mid-reconnect', () => {
+    FakeSocket.made[0]?.hangUp(1006);
+    connection.playHere();
+    vi.advanceTimersByTime(2500);
+    expect(FakeSocket.made).toHaveLength(2);
+  });
+
+  it('pays no attention to a connection it has already given up on', () => {
+    const first = FakeSocket.made[0];
+    first?.fail();
+    vi.advanceTimersByTime(2500);
+    expect(FakeSocket.made).toHaveLength(2);
+    FakeSocket.made[1]?.open();
+
+    // The old one finally reporting itself closed must not tear down the new one.
+    first?.hangUp(1006);
+    vi.advanceTimersByTime(10_000);
+    expect(FakeSocket.made).toHaveLength(2);
+    expect(states.at(-1)).toBe('connected');
   });
 });

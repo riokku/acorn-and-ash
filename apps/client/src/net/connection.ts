@@ -1,4 +1,5 @@
 import {
+  CLOSE_PLAYING_ELSEWHERE,
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
   decodeServerMessage,
@@ -17,7 +18,12 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
-export type ConnectionState = 'connecting' | 'connected' | 'offline' | 'rejected';
+/**
+ * `elsewhere`: this player has since joined the same world from another tab
+ * or window, which carries on with them (see decision 0057). This one waits
+ * to be asked to play here again rather than reconnecting by itself.
+ */
+export type ConnectionState = 'connecting' | 'connected' | 'offline' | 'rejected' | 'elsewhere';
 
 export interface ConnectionHandlers {
   onMessage(message: ServerMessage): void;
@@ -44,6 +50,8 @@ export class WorldConnection {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  /** Told the player is playing in another tab now: see `standDown`. */
+  private standingDown = false;
 
   /** Round trip time, measured by the client alone. */
   pingMs = 0;
@@ -62,7 +70,11 @@ export class WorldConnection {
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
 
+    // Every handler checks it is still listening to the current socket: a
+    // socket that was already given up on must not stop the timers, or start
+    // a second reconnect, for the one that replaced it.
     socket.addEventListener('open', () => {
+      if (this.socket !== socket) return;
       this.handlers.onStateChange('connected');
       this.flushTimer = setInterval(() => this.flush(), INPUT_SEND_INTERVAL_MS);
       this.pingTimer = setInterval(() => this.sendPing(), PING_INTERVAL_MS);
@@ -70,7 +82,7 @@ export class WorldConnection {
     });
 
     socket.addEventListener('message', (event) => {
-      if (typeof event.data === 'string') return;
+      if (this.socket !== socket || typeof event.data === 'string') return;
       const message = decodeServerMessage(event.data as ArrayBuffer);
       if (message === null) return;
       if (message.type === 'pong') {
@@ -80,8 +92,25 @@ export class WorldConnection {
       this.handlers.onMessage(message);
     });
 
-    socket.addEventListener('close', () => this.handleDrop('The connection closed'));
-    socket.addEventListener('error', () => this.handleDrop('The connection failed'));
+    socket.addEventListener('close', (event) => {
+      if (this.socket !== socket) return;
+      if (event.code === CLOSE_PLAYING_ELSEWHERE) this.standDown();
+      else this.handleDrop('The connection closed');
+    });
+    socket.addEventListener('error', () => {
+      if (this.socket !== socket) return;
+      this.handleDrop('The connection failed');
+    });
+  }
+
+  /**
+   * Come back to this tab after playing in another one: connecting again
+   * takes the player back over from it, the same way it took them from here.
+   */
+  playHere(): void {
+    if (!this.standingDown) return;
+    this.standingDown = false;
+    this.connect();
   }
 
   /** Queue one tick of input. It goes out with the next bundle. */
@@ -172,6 +201,15 @@ export class WorldConnection {
 
     this.handlers.onStateChange('offline', detail);
     this.reconnectTimer = setTimeout(() => this.connect(), RECONNECT_DELAY_MS);
+  }
+
+  /** Playing somewhere else now: stay quiet until asked to play here again. */
+  private standDown(): void {
+    this.standingDown = true;
+    this.stopTimers();
+    this.socket = null;
+    this.outgoing = [];
+    this.handlers.onStateChange('elsewhere');
   }
 
   private stopTimers(): void {

@@ -182,6 +182,9 @@ making it a real, shared choice covering every tool and food item, and
 [decision 0045](docs/decisions/0045-an-item-has-to-be-active-to-use-it.md)
 for making it something you need, not just something you can see.
 
+The axe is carried blade first, leaning forward, and every blow lands edge
+first - see [decision 0058](docs/decisions/0058-the-axe-blade-first.md).
+
 ### Moves
 
 Every move your character makes is a real animation now, from KayKit's free
@@ -446,7 +449,11 @@ books and jars, herbs drying from a beam and a braided rug. The fire and the
 lamp glow brighter at night. Walk back into the door to go out.
 
 Once you have a home, it's where you wake up: when you arrive, and after a
-knockout, you're beside your own bed. Inside your own home, a button at the
+knockout, you're beside your own bed. A connection that drops and comes back
+is not arriving, though: you carry on right where you were, and there is only
+ever one of you in a world. Open the game in a second tab and that tab takes
+over, while the first one pauses and offers to take you back. See
+[decision 0057](docs/decisions/0057-one-of-you-per-world.md). Inside your own home, a button at the
 top locks the door to visitors or opens it again. Anybody can visit an open
 home, and only ever sees whoever else is inside with them. See
 [decision 0055](docs/decisions/0055-going-inside-your-home.md).
@@ -478,8 +485,9 @@ pnpm dev:web   # the whole game, on http://localhost:8787
 ```
 
 `pnpm dev:web` runs it the way it is deployed: the game client served by the
-Worker, talking to a real World Durable Object. **Open it in two tabs to see two
-players.**
+Worker, talking to a real World Durable Object. **Open it in a normal window and
+a private one to see two players.** Two tabs in the same browser are the same
+player, so the newer one takes over from the older.
 
 `pnpm dev` starts just the client, on http://localhost:5173, with hot reloading.
 If it cannot reach a server it builds the clearing anyway and lets you walk about

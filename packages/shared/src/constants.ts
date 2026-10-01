@@ -381,6 +381,13 @@ export const SAVE_INTERVAL_TICKS = SAVE_INTERVAL_SECONDS * TICK_HZ;
 /** A tick longer than this gets logged. Durable Objects give us 30 s of CPU per event. */
 export const SLOW_TICK_BUDGET_MS = 10;
 export const MAX_PLAYERS_PER_WORLD = 50;
+/**
+ * The WebSocket close code the server sends a connection whose player has
+ * since joined again from somewhere else - another tab, say (see decision
+ * 0057). A browser told this stays put rather than reconnecting, or two tabs
+ * would take the player back off each other forever.
+ */
+export const CLOSE_PLAYING_ELSEWHERE = 4002;
 
 /** A 20-minute day. Night never skips in multiplayer. */
 export const DAY_LENGTH_SECONDS = 20 * 60;

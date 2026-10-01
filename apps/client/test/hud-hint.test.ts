@@ -1,7 +1,7 @@
 import { HEALTH_MAX, HUNGER_MAX } from '@acorn/shared';
 import { describe, expect, it } from 'vitest';
 
-import { hint } from '../src/hud/Hud';
+import { curtainMessage, hint } from '../src/hud/Hud';
 import type { HudState } from '../src/hud/store';
 
 const BASE_STATE: HudState = {
@@ -365,5 +365,17 @@ describe('the hint at the chair and the bed', () => {
   it('says how to get up again, even when hungry, since E gets you up then', () => {
     expect(hint({ ...inside, resting: 'chair', hunger: 0 })).toMatch(/move or press E to get up$/);
     expect(hint({ ...inside, resting: 'bed' })).toBe('Snug in bed · move or press E to get up');
+  });
+});
+
+describe('the paused curtain', () => {
+  it('welcomes the player back by name', () => {
+    expect(curtainMessage(BASE_STATE)).toBe('Welcome, Acorn. Click to play');
+  });
+
+  it('says so when the player is playing in another tab, and how to play here', () => {
+    expect(curtainMessage({ ...BASE_STATE, connection: 'elsewhere' })).toBe(
+      'You are playing in another tab or window. Click to play here instead',
+    );
   });
 });
