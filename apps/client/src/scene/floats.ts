@@ -56,6 +56,12 @@ export interface Angler {
   readonly y: number;
   readonly z: number;
   readonly yaw: number;
+  /**
+   * The tip of the rod in their hand, as it is drawn this frame, if there
+   * is one to be had: the line runs from there, and no stand-in rod is
+   * needed (see decision 0056).
+   */
+  readonly rodTip?: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**
@@ -244,22 +250,28 @@ export class Floats {
 
   /** The rod held out in front, and the line from its tip to the float. */
   private drawLine(entry: FloatLine, angler: Angler): void {
-    const forwardX = -Math.sin(angler.yaw);
-    const forwardZ = -Math.cos(angler.yaw);
-    this.hand.set(
-      angler.x + forwardX * ROD_HAND_FORWARD,
-      angler.y + ROD_HAND_UP,
-      angler.z + forwardZ * ROD_HAND_FORWARD,
-    );
-    this.tip.set(
-      angler.x + forwardX * ROD_TIP_FORWARD,
-      angler.y + ROD_TIP_UP,
-      angler.z + forwardZ * ROD_TIP_FORWARD,
-    );
-    entry.rod.position.copy(this.hand).lerp(this.tip, 0.5);
-    entry.rod.scale.set(1, 1, this.hand.distanceTo(this.tip));
-    entry.rod.lookAt(this.tip);
-    entry.rod.visible = true;
+    if (angler.rodTip !== undefined) {
+      // Their own rod is in their hand: the line starts at its tip.
+      this.tip.set(angler.rodTip.x, angler.rodTip.y, angler.rodTip.z);
+      entry.rod.visible = false;
+    } else {
+      const forwardX = -Math.sin(angler.yaw);
+      const forwardZ = -Math.cos(angler.yaw);
+      this.hand.set(
+        angler.x + forwardX * ROD_HAND_FORWARD,
+        angler.y + ROD_HAND_UP,
+        angler.z + forwardZ * ROD_HAND_FORWARD,
+      );
+      this.tip.set(
+        angler.x + forwardX * ROD_TIP_FORWARD,
+        angler.y + ROD_TIP_UP,
+        angler.z + forwardZ * ROD_TIP_FORWARD,
+      );
+      entry.rod.position.copy(this.hand).lerp(this.tip, 0.5);
+      entry.rod.scale.set(1, 1, this.hand.distanceTo(this.tip));
+      entry.rod.lookAt(this.tip);
+      entry.rod.visible = true;
+    }
 
     const tipX = this.tip.x;
     const tipY = this.tip.y;

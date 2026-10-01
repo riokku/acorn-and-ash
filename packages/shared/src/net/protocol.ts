@@ -23,6 +23,7 @@ import {
 import { clamp } from '../math/vec3';
 import { wrapAngle, TAU } from '../math/angles';
 import type { PlayerInput } from '../sim/player';
+import { GESTURE_COUNT, type Gesture, type GestureEvent } from '../sim/actions';
 import { EXPLORED_BYTES } from '../sim/exploring';
 import type {
   AnimalCaught,
@@ -60,9 +61,13 @@ const ANGLE_SCALE = 65536 / TAU;
 
 const BYTES_PER_INPUT = 7;
 const INPUT_HEADER_BYTES = 6;
-/** netId(2) + x,y,z(4 each) + vx,vy,vz(2 each) + yaw(2) + flags(1) */
-const BYTES_PER_SNAPSHOT_ENTITY = 23;
-const SNAPSHOT_HEADER_BYTES = 14;
+/**
+ * netId(2) + x,y,z(4 each) + vx,vy,vz(2 each) + yaw(2) + flags(1) + the move
+ * in progress: packed kind(1) + age(1) + heading(1).
+ */
+const BYTES_PER_SNAPSHOT_ENTITY = 26;
+/** type(1) + tick(4) + serverTimeMs(4) + ackSeq(4) + count(1) + the viewer's own dodge cooldown(1). */
+const SNAPSHOT_HEADER_BYTES = 15;
 
 /** A bundle never carries more than this, so a bad client cannot make us work. */
 export const MAX_INPUTS_PER_BUNDLE = 32;
@@ -397,6 +402,7 @@ export function encodeSnapshot(
   serverTimeMs: number,
   ackSeq: number,
   entities: readonly SnapshotEntity[],
+  dodgeCooldown = 0,
 ): ArrayBuffer {
   const count = Math.min(entities.length, MAX_SNAPSHOT_ENTITIES);
   const buffer = new ArrayBuffer(SNAPSHOT_HEADER_BYTES + count * BYTES_PER_SNAPSHOT_ENTITY);
@@ -406,6 +412,7 @@ export function encodeSnapshot(
   view.setUint32(5, serverTimeMs >>> 0, true);
   view.setUint32(9, ackSeq >>> 0, true);
   view.setUint8(13, count);
+  view.setUint8(14, clamp(Math.round(dodgeCooldown), 0, 255));
 
   let offset = SNAPSHOT_HEADER_BYTES;
   for (let i = 0; i < count; i++) {
@@ -420,6 +427,9 @@ export function encodeSnapshot(
     view.setInt16(offset + 18, quantiseVelocity(entity.vz), true);
     view.setUint16(offset + 20, quantiseAngle(entity.yaw), true);
     view.setUint8(offset + 22, entity.flags & 0xff);
+    view.setUint8(offset + 23, entity.action & 0xff);
+    view.setUint8(offset + 24, clamp(Math.round(entity.actionAge), 0, 255));
+    view.setUint8(offset + 25, entity.actionHeading & 0xff);
     offset += BYTES_PER_SNAPSHOT_ENTITY;
   }
   return buffer;
@@ -648,6 +658,50 @@ export function encodeSpace(space: number, x: number, z: number, yaw: number): A
   return buffer;
 }
 
+/** A gesture each: netId(2) + which(1) + item(1). */
+const BYTES_PER_GESTURE = 4;
+/** One message carries at most this many; a busier tick sends the rest in another. */
+export const MAX_GESTURES_PER_MESSAGE = 255;
+
+/** What everybody did with their hands this tick (see decision 0056). */
+export function encodeGestures(gestures: readonly GestureEvent[]): ArrayBuffer {
+  const count = Math.min(gestures.length, MAX_GESTURES_PER_MESSAGE);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_GESTURE);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Gestures);
+  view.setUint8(1, count);
+  for (let i = 0; i < count; i++) {
+    const gesture = gestures[i];
+    if (gesture === undefined) break;
+    const offset = 2 + i * BYTES_PER_GESTURE;
+    view.setUint16(offset, gesture.netId & 0xffff, true);
+    view.setUint8(offset + 2, gesture.gesture);
+    view.setUint8(offset + 3, gesture.item === null ? NO_ITEM : itemIndex(gesture.item));
+  }
+  return buffer;
+}
+
+function decodeGestures(view: DataView): GestureEvent[] | null {
+  const count = view.getUint8(1);
+  if (view.byteLength !== 2 + count * BYTES_PER_GESTURE) return null;
+  const gestures: GestureEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    const offset = 2 + i * BYTES_PER_GESTURE;
+    const which = view.getUint8(offset + 2);
+    if (which >= GESTURE_COUNT) return null;
+    const itemByte = view.getUint8(offset + 3);
+    const item = itemByte === NO_ITEM ? null : itemFromIndex(itemByte);
+    if (itemByte !== NO_ITEM && item === null) return null;
+    gestures.push({
+      netId: view.getUint16(offset, true),
+      // Checked against GESTURE_COUNT just above.
+      gesture: which as Gesture,
+      item,
+    });
+  }
+  return gestures;
+}
+
 /**
  * Which parts of the world one player has seen, whole (see decision 0054).
  * Always the same size, so there is no count to send: the map's own shape
@@ -789,21 +843,31 @@ function decodeCaught(view: DataView): AnimalCaught | null {
   return { netId: view.getUint16(1, true), item, added: view.getUint8(4) };
 }
 
+/** Whose swing a threat hit was, when it was nobody's. */
+const NOBODY = 0xffff;
+
 /**
  * A swing landed on a threat, or one just came back from being defeated, in
- * four bytes. Everybody is sent it, the same as a tree hit.
+ * six bytes: which animal, what it has left, and whose swing it was.
+ * Everybody is sent it, the same as a tree hit.
  */
 export function encodeThreatHit(event: ThreatHit): ArrayBuffer {
-  const buffer = new ArrayBuffer(4);
+  const buffer = new ArrayBuffer(6);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.ThreatHit);
   view.setUint16(1, event.animalId & 0xffff, true);
   view.setUint8(3, clamp(Math.round(event.hitsLeft), 0, 255));
+  view.setUint16(4, event.netId === null ? NOBODY : event.netId & 0xffff, true);
   return buffer;
 }
 
 function decodeThreatHit(view: DataView): ThreatHit {
-  return { animalId: view.getUint16(1, true), hitsLeft: view.getUint8(3) };
+  const netId = view.getUint16(4, true);
+  return {
+    animalId: view.getUint16(1, true),
+    hitsLeft: view.getUint8(3),
+    netId: netId === NOBODY ? null : netId,
+  };
 }
 
 /** Bit flags packed into a Health message's last byte, so a dodge costs no extra space. */
@@ -898,6 +962,9 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           vz: dequantiseVelocity(view.getInt16(offset + 18, true)),
           yaw: dequantiseAngle(view.getUint16(offset + 20, true)),
           flags: view.getUint8(offset + 22),
+          action: view.getUint8(offset + 23),
+          actionAge: view.getUint8(offset + 24),
+          actionHeading: view.getUint8(offset + 25),
         });
         offset += BYTES_PER_SNAPSHOT_ENTITY;
       }
@@ -906,6 +973,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         tick: view.getUint32(1, true),
         serverTimeMs: view.getUint32(5, true),
         ackSeq: view.getUint32(9, true),
+        dodgeCooldown: view.getUint8(14),
         entities,
       };
     }
@@ -1036,7 +1104,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       return event === null ? null : { type: 'caught', event };
     }
     case ServerMessageType.ThreatHit: {
-      if (data.byteLength !== 4) return null;
+      if (data.byteLength !== 6) return null;
       return { type: 'threatHit', event: decodeThreatHit(view) };
     }
     case ServerMessageType.Health: {
@@ -1093,6 +1161,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         z: dequantisePosition(view.getInt16(5, true)),
         yaw: dequantiseAngle(view.getUint16(7, true)),
       };
+    }
+    case ServerMessageType.Gestures: {
+      if (data.byteLength < 2) return null;
+      const gestures = decodeGestures(view);
+      return gestures === null ? null : { type: 'gestures', gestures };
     }
     case ServerMessageType.Explored: {
       if (data.byteLength !== 1 + EXPLORED_BYTES) return null;

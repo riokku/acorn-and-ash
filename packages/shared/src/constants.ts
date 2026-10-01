@@ -15,6 +15,12 @@ export const SNAPSHOT_HZ = TICK_HZ / SNAPSHOT_EVERY_N_TICKS;
 
 /** Other players are drawn this far in the past so they glide instead of teleporting. */
 export const INTERPOLATION_DELAY_SECONDS = 0.1;
+/**
+ * How far back a blow looks for a moving target, on top of the swing's own
+ * wind-up: the browser shows everything else a little in the past, so a
+ * swing aimed at what it showed still lands (see decision 0056).
+ */
+export const LAG_COMPENSATION_TICKS = 3;
 
 /**
  * The client samples one input per simulation tick, then posts them in bundles.

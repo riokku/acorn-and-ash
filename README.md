@@ -34,7 +34,7 @@ The game is online-only. Every world runs on the server.
 > right where you went down - your axe and rod always stay with you - so
 > it's worth walking back for. Or fight it off first, with the same axe, and
 > it runs off empty-handed. A quick dodge can get you through its swing
-> untouched, timed right, and holding right click winds up a heavy swing of
+> untouched, timed right, and holding left click winds up a heavy swing of
 > your own that finishes a tree or a fight outright - if you can afford to
 > stand still long enough for it. A day passes every twenty minutes, the sky
 > brightening and dimming the same way for everyone in the world at once -
@@ -83,29 +83,31 @@ The game is online-only. Every world runs on the server.
 
 ## Controls
 
-| Key                               | Does                                                           |
-| --------------------------------- | -------------------------------------------------------------- |
-| `W` `A` `S` `D` or the arrow keys | Walk                                                           |
-| `Shift` (held)                    | Sprint                                                         |
-| `Space`                           | Jump                                                           |
-| `E`                               | Pick up, gather, dig up a cache, light/put out a campfire, eat |
-| `1`–`6`                           | Equip the hotbar slot - eats it too if it's food               |
-| `C`                               | Open the craft menu                                            |
-| `1` / `2` / `3` (craft menu open) | Craft an axe / fishing rod / torch                             |
-| `B`                               | Open the build menu                                            |
-| `1`–`6` (build menu open)         | Pick a campfire, cabin, flower bed, lantern, fence or path     |
-| Left mouse (piece picked)         | Place it where its preview stands                              |
-| Mouse wheel (piece picked)        | Turn it                                                        |
-| `Shift` (held, fence picked)      | Place it freely instead of joining it onto another fence       |
-| `Esc` or right mouse tap          | Put the piece away                                             |
-| `I`, or the bag button            | Open or close your pack                                        |
-| `M`, or click the minimap         | Open or close the map                                          |
-| Walk into your door, or `E` there | Go inside your home, or back out                               |
-| Left mouse (click)                | Turn to face what you click, and chop, cast, hook or fight it  |
-| Left mouse (held)                 | Charge a heavy attack                                          |
-| Right mouse (held), then drag     | Turn the camera                                                |
-| Left `Ctrl`                       | Dodge                                                          |
-| `Esc`                             | Close a panel, or pause                                        |
+| Key                                 | Does                                                           |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `W` `A` `S` `D` or the arrow keys   | Walk                                                           |
+| `Shift` (held)                      | Sprint                                                         |
+| `Space`                             | Jump                                                           |
+| `E`                                 | Pick up, gather, dig up a cache, light/put out a campfire, eat |
+| `E` beside your chair or bed        | Sit down or lie down (move, or `E` again, to get up)           |
+| `1`–`6`                             | Equip the hotbar slot - eats it too if it's food               |
+| `C`                                 | Open the craft menu                                            |
+| `1` / `2` / `3` (craft menu open)   | Craft an axe / fishing rod / torch                             |
+| `B`                                 | Open the build menu                                            |
+| `1`–`6` (build menu open)           | Pick a campfire, cabin, flower bed, lantern, fence or path     |
+| Left mouse (piece picked)           | Place it where its preview stands                              |
+| Mouse wheel (piece picked)          | Turn it                                                        |
+| `Shift` (held, fence picked)        | Place it freely instead of joining it onto another fence       |
+| `Esc` or right mouse tap            | Put the piece away                                             |
+| `I`, or the bag button              | Open or close your pack                                        |
+| `M`, or click the minimap           | Open or close the map                                          |
+| Walk into your door, or `E` there   | Go inside your home, or back out                               |
+| Left mouse (click)                  | Turn to face what you click, and chop, cast, hook or fight it  |
+| Left mouse (click as a swing lands) | Carry on into the next swing, up to three in a row             |
+| Left mouse (held)                   | Charge a heavy attack                                          |
+| Right mouse (held), then drag       | Turn the camera                                                |
+| Left `Ctrl`                         | Dodge roll                                                     |
+| `Esc`                               | Close a panel, or pause                                        |
 
 There is nothing to land on yet, so a jump is a hop in place.
 
@@ -167,8 +169,9 @@ or whatever fish or meat you picked - parented straight onto the character's
 own hand, so it moves with the arm through every animation. Not automatic:
 finding a tool or catching a fish does not equip it on its own, only
 pressing its slot does - and nothing works with it until you have. A left
-click only chops or fights off whatever you're aimed at once the axe is the
-one shown in your hand; a cast needs the rod shown the same way. Carrying a
+click only chops a tree once the axe is the one shown in your hand, and a
+cast needs the rod shown the same way; anything in hand, though, even a
+fish, takes a swing at an animal. Carrying a
 tool you haven't equipped does nothing for you. Everyone nearby sees it too,
 not just you - the server tells every connected player what everyone else
 has equipped, the same way it already tells them each other's names. See
@@ -178,6 +181,25 @@ held axe's own first appearance,
 making it a real, shared choice covering every tool and food item, and
 [decision 0045](docs/decisions/0045-an-item-has-to-be-active-to-use-it.md)
 for making it something you need, not just something you can see.
+
+### Moves
+
+Every move your character makes is a real animation now, from KayKit's free
+Character Animations pack: three different swings in a row if you keep
+clicking as each one lands, a crouch and a leaping two-handed slam for a
+charged strike, a tumble for a dodge, a stagger when something hits you,
+falling down when you're knocked out and getting back up, chopping at a tree
+like a woodcutter, casting, waiting and reeling at the pond, bending down to
+pick things up, digging with a shovel, lifting food to your mouth a bite at
+a time, and sitting and lying down at home. Your feet stay planted while you
+swing, until you walk off. Everybody else sees the same moves on you.
+
+Blows land on the very moment the animation does, and feel like it: a brief
+pause on the hit, a little camera kick, chips of wood flying out of a tree
+as it shivers, tufts of fur off an animal as it's knocked back, a pale streak
+behind the swing, a whoosh through the air, and dust where a charged strike
+hits the ground. See
+[decision 0056](docs/decisions/0056-moves-with-weight.md).
 
 ### The wilderness
 
@@ -276,15 +298,16 @@ disappears once you're close enough to dig - handed straight back to the
 usual "press E" hint at that point. See
 [decision 0049](docs/decisions/0049-raccoons-get-bolder-at-night-and-a-cache-compass.md).
 
-Left `Ctrl` dodges - a quick, decisive step in whatever direction you are
-holding, or straight back if you are holding nothing - and leaves you
-briefly untouchable, so timed right it gets you through a swing rather than
-only away from it. It needs a moment to recharge before it is ready again.
+Left `Ctrl` dodges - a quick roll of about four metres in whatever direction
+you are holding, or straight back if you are holding nothing - and leaves
+you untouchable for its first third of a second, so timed right it gets you
+through a swing rather than only away from it. It gets you out of a stagger,
+too. It needs a moment to recharge before it is ready again.
 See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
 Holding left click past a quick tap winds up a charged attack - about a
-second, rooted to the spot the whole time, the same as the raccoon's own
-wind-up asks of it. Whatever it lands on when it goes off is finished
+second, crouched and rooted to the spot the whole time, the same as the
+raccoon's own wind-up asks of it - then leaps forward into a slam. Whatever it lands on when it goes off is finished
 outright: a tree falls in one regardless of how many ordinary swings it
 would otherwise take, and a raccoon is beaten in one regardless of how many
 hits it has left. It is a real trade - you cannot move, dodge or block
@@ -423,6 +446,11 @@ knockout, you're beside your own bed. Inside your own home, a button at the
 top locks the door to visitors or opens it again. Anybody can visit an open
 home, and only ever sees whoever else is inside with them. See
 [decision 0055](docs/decisions/0055-going-inside-your-home.md).
+
+Press `E` beside the chair to sit down at the table, or beside the bed to
+lie down on it; walk, or press `E` again, to get up. Only one person fits in
+each at a time. With food in your hand and room for it, `E` eats it first.
+See [decision 0056](docs/decisions/0056-moves-with-weight.md).
 See [decision 0020](docs/decisions/0020-a-campfire-you-can-build.md) for the
 campfire and placement itself,
 [decision 0022](docs/decisions/0022-a-cabin-of-your-own.md) for the cabin,
@@ -474,7 +502,11 @@ at one piece up close (also `fence`, `lantern`, `flowerBed`, `gardenPath`,
 `buriedCache`, `bag`, `sticks`, `rabbit`, `raccoon`, `fox`, `campfire`, and
 `pond`, `trees`, `rocks`, `stump`, `animals`, `ground`); add `&time=0.05` for
 night or `&spin` to turn slowly round. `?gallery=home` shows the room inside
-a home, on its own.
+a home, on its own, and `?gallery=home&resting` has somebody sitting in the
+chair and somebody lying in the bed. `?gallery=moves` plays every move a
+character makes, over and over; `&demo=combo` (or `chop`, `strike`,
+`roll-forward`, `flinch`, `knockout`, `sit`, `lie`, `eat`, `fishing` and so
+on) picks one, and `&strip=7` lays it out as seven frozen moments.
 
 ## Commands
 

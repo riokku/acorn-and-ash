@@ -10,19 +10,23 @@ import {
   DOORWAY_REACH,
   HOME_ROOM,
   OUTDOORS,
+  ActionKind,
   CAST_COOLDOWN_SECONDS,
-  CHARGE_SECONDS,
   DEFAULT_CHARACTER,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
   ITEM_KINDS,
+  LIGHT_COMBO,
+  STRIKE,
+  TICK_SECONDS,
+  isFreeToInteract,
+  restingPlaceInReach,
   POND_FISH,
   PROP_KINDS,
   PlayerButton,
   RECIPE_ITEMS,
   SPAWN_POSITION,
-  SPRINT_REPORTING_SPEED,
   SnapshotFlag,
   TINT_COLORS,
   animalInReach,
@@ -55,6 +59,8 @@ import {
   stumpColliderFor,
   treeAtGeneration,
   treeInReach,
+  unpackActionByte,
+  createActionState,
   vec3,
   type AnimalCaught,
   type AnimalKind,
@@ -69,7 +75,9 @@ import {
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
+  type ActionContext,
   type FishingEvent,
+  type GestureEvent,
   type HealthEvent,
   type HungerEvent,
   type ItemId,
@@ -84,7 +92,7 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { clickAimYaw, type ClickCandidate } from './input/click-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
-import { LocalPlayer } from './net/local-player';
+import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { buildClearingScene, type ClearingScene } from './scene/clearing';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
@@ -93,13 +101,24 @@ import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
 import { preloadItemModels } from './scene/item-models';
 import { preloadCharacterModels } from './scene/character-model';
-import { playTreeHit, playThreatHit, playTookDamage, startAmbientMusic } from './audio/sound';
+import { preloadCharacterAnimations } from './scene/character-animations';
+import { MoveMemory, restSpotFor, rollDirection } from './scene/character-driver';
+import {
+  playSwoosh,
+  playThreatHit,
+  playTookDamage,
+  playTreeHit,
+  startAmbientMusic,
+} from './audio/sound';
 import {
   colorForPlayer,
   createCharacter,
-  pickAnimationState,
   type Character,
+  type FishingPose,
 } from './scene/character';
+import { isSweeping, type MovePose } from './scene/character-moves';
+import { ImpactBursts } from './scene/impact-bursts';
+import { WeaponTrail } from './scene/weapon-trail';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
 import { createCabin, type Cabin } from './scene/cabin';
@@ -160,6 +179,41 @@ const FISHING_CAMERA_PITCH = 0.62;
 const RAREST_FISH = [...POND_FISH].sort((a, b) => a.weight - b.weight)[0]?.item ?? null;
 /** Camera-shake strength for a swing connecting with a tree or an animal. */
 const HIT_LANDED_SHAKE = 0.35;
+/** How much bigger everything about a charged strike's blow is than a light one's. */
+const CHARGED_BLOW = 1.6;
+/** How far out from a tree's middle its bark is, near enough, where chips fly from. */
+const TRUNK_FACE = 0.3;
+/** How high up a blow lands on a tree, and on an animal, in metres. */
+const BLOW_HEIGHT_ON_TREE = 0.9;
+const BLOW_HEIGHT_ON_ANIMAL = 0.25;
+/** How far an animal is knocked back by a blow, in metres, how far its head goes up, and for how long. */
+const ANIMAL_JOLT_DISTANCE = 0.22;
+const ANIMAL_JOLT_TILT = 0.45;
+const ANIMAL_JOLT_SECONDS = 0.4;
+
+/** An animal knocked back by a blow: which way, and how far into it. */
+interface AnimalJolt {
+  readonly awayX: number;
+  readonly awayZ: number;
+  age: number;
+  readonly strength: number;
+}
+
+/** Which way a blow from `from` travels on into `to`, flat along the ground. */
+function awayFrom(
+  from: Readonly<{ x: number; z: number }>,
+  to: Readonly<{ x: number; z: number }>,
+): { x: number; z: number } {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const length = Math.hypot(dx, dz);
+  return length < 1e-6 ? { x: 0, z: -1 } : { x: dx / length, z: dz / length };
+}
+/**
+ * How far into a knockout the screen starts going dark, in ticks: after the
+ * fall has played out, with time to go fully dark before waking up.
+ */
+const KNOCKOUT_DARKENS_AT_TICKS = 18;
 /** Camera-shake strength for taking damage ourselves - sharper than landing one. */
 const TOOK_DAMAGE_SHAKE = 0.55;
 /**
@@ -436,6 +490,8 @@ export class Game {
   private fadeGiveUpAt: number | null = null;
   /** What a door right here would do, for the hint. */
   private doorHint: 'enter' | 'visit' | 'locked' | 'leave' | null = null;
+  /** The chair or the bed close enough to use, inside a home, while free to. */
+  private restingNearby: 'chair' | 'bed' | null = null;
   /** What the minimap and the big map draw, kept up to date every frame. */
   readonly mapFeed = new MapFeed();
   private readonly scratch: Vec3 = vec3();
@@ -498,13 +554,29 @@ export class Game {
   private huntingNews: { text: string; until: number } | null = null;
   private cacheNews: { text: string; until: number } | null = null;
   /**
-   * Read purely from our own held key, not anything the server has
-   * confirmed - the same as `aimedTree`/`aimedAnimal` are only ever a hint,
-   * this just says a charge is under way for exactly as long as the
-   * server's own `CHARGE_SECONDS` would have it resolve after.
+   * What each character's moves need remembering between frames - which
+   * swing is at a tree, which flinch is next (see `MoveMemory`) - ours, and
+   * everybody else's by netId.
    */
-  private chargeWasHeld = false;
-  private chargingUntil: number | null = null;
+  private readonly localMoves = new MoveMemory();
+  private readonly remoteMoves = new Map<number, MoveMemory>();
+  /** Where everybody's line is at, as far as drawing them goes, ours included. */
+  private readonly fishingPoses = new Map<number, FishingPose>();
+  private readonly scratchTip = new THREE.Vector3();
+  private readonly scratchHand = new THREE.Vector3();
+  private readonly scratchBlow = new THREE.Vector3();
+  /** Chips, fur and dust thrown off where blows land (see decision 0056). */
+  private readonly bursts = new ImpactBursts();
+  /** The streak behind each character's swings, ours included, by netId. */
+  private readonly trails = new Map<number, WeaponTrail>();
+  /** Animals knocked back by a blow, and how far into it. */
+  private readonly animalJolts = new Map<number, AnimalJolt>();
+  /** The animal a swing of ours would land on, as last worked out. */
+  private aimedAnimalId: number | null = null;
+  /** Scratch space for reading another player's move out of a snapshot. */
+  private readonly remoteAction = createActionState();
+  /** Whether the screen went dark for a knockout of ours, so it knows to come back. */
+  private knockoutDark = false;
   /** The server takes a breath after every cast ends; so does the hint. */
   private castReadyAt = 0;
   private canCast = false;
@@ -537,6 +609,7 @@ export class Game {
     void preloadItemModels();
     void preloadFoxModel();
     void preloadCharacterModels();
+    void preloadCharacterAnimations();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -545,6 +618,7 @@ export class Game {
 
     this.daylight = addDaylight(this.scene);
     this.scene.add(this.outdoors);
+    this.scene.add(this.bursts.group);
     const fade = document.createElement('div');
     fade.className = 'scene-fade';
     this.options.canvas.insertAdjacentElement('afterend', fade);
@@ -795,6 +869,9 @@ export class Game {
     this.builtMeshes.clear();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
+    this.bursts.dispose();
+    for (const trail of this.trails.values()) trail.dispose();
+    this.trails.clear();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -851,7 +928,9 @@ export class Game {
         this.playersOnline = playerEntities.length;
 
         const self = playerEntities.find((entity) => entity.netId === this.selfNetId);
-        if (self !== undefined) this.localPlayer?.reconcile(self, message.ackSeq);
+        if (self !== undefined) {
+          this.localPlayer?.reconcile(self, message.ackSeq, message.dodgeCooldown);
+        }
 
         this.remotePlayers.ingest(message.serverTimeMs, playerEntities, this.selfNetId);
         const present = new Set(
@@ -895,17 +974,27 @@ export class Game {
       }
       case 'treeHit': {
         this.swingsLeft.set(message.treeId, message.swingsLeft);
-        this.camera?.shake(HIT_LANDED_SHAKE);
-        playTreeHit();
-        // Everybody nearby hears the same chop; only play it back on our own
-        // character when it was actually our swing that landed.
-        if (message.netId === this.selfNetId) this.localCharacter?.swingAxe();
+        // Our own swing already showed itself landing, the moment it did
+        // here (see `showOwnBlow`); everybody else's shows now.
+        if (message.netId !== this.selfNetId) {
+          playTreeHit();
+          const tree = this.standingProps.find((prop) => prop.id === message.treeId);
+          const from = this.remotePlayers.poseOf(message.netId);
+          if (tree !== undefined && from !== undefined) this.showBlowOnTree(tree, from, 1);
+        }
         break;
       }
       case 'threatHit': {
         this.threatHitsLeft.set(message.event.animalId, message.event.hitsLeft);
-        this.camera?.shake(HIT_LANDED_SHAKE);
-        playThreatHit();
+        if (message.event.netId !== null && message.event.netId !== this.selfNetId) {
+          playThreatHit();
+          const from = this.remotePlayers.poseOf(message.event.netId);
+          if (from !== undefined) this.showBlowOnAnimal(message.event.animalId, from, 1);
+        }
+        break;
+      }
+      case 'gestures': {
+        for (const gesture of message.gestures) this.showGesture(gesture);
         break;
       }
       case 'fishing': {
@@ -990,6 +1079,18 @@ export class Game {
     if (event.kind === 'cast') this.floats.cast(event.netId, event.x, event.z);
     else if (event.kind === 'bite') this.floats.bite(event.netId);
     else this.floats.reelIn(event.netId);
+    // Our own cast already started when we clicked (see `showOwnCast`):
+    // saying so again changes nothing.
+    this.setFishingPose(
+      event.netId,
+      event.kind === 'cast'
+        ? 'casting'
+        : event.kind === 'bite'
+          ? 'biting'
+          : event.kind === 'caught'
+            ? 'landing'
+            : null,
+    );
 
     if (event.netId !== this.selfNetId) return;
     if (event.kind === 'cast') {
@@ -1062,8 +1163,9 @@ export class Game {
     return news !== null && now < news.until ? news.text : null;
   }
 
-  private currentlyCharging(now = performance.now()): boolean {
-    return this.chargingUntil !== null && now < this.chargingUntil;
+  /** Whether we are winding up a charged strike, rooted to the spot. */
+  private currentlyCharging(): boolean {
+    return this.localPlayer?.action.kind === ActionKind.Charge;
   }
 
   /** Only ever about us: nobody else has any reason to know what we just made. */
@@ -1144,7 +1246,14 @@ export class Game {
       netId === this.selfNetId ? this.localCharacter : this.remoteCharacters.get(netId);
     if (character === null || character === undefined) return undefined;
     const { x, y, z } = character.group.position;
-    return { x, y, z, yaw: character.group.rotation.y };
+    const tip = character.heldTip(this.scratchTip);
+    return {
+      x,
+      y,
+      z,
+      yaw: character.group.rotation.y,
+      ...(tip === null ? {} : { rodTip: { x: tip.x, y: tip.y, z: tip.z } }),
+    };
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1173,6 +1282,7 @@ export class Game {
       preloadItemModels(),
       preloadFoxModel(),
       preloadCharacterModels(),
+      preloadCharacterAnimations(),
       preloadArtTextures(),
     ]);
     if (this.clearingScene !== null) return;
@@ -1197,6 +1307,7 @@ export class Game {
     ]);
     this.collision = collision;
     this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
+    this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
     this.applyTreeStates();
     this.applyBuiltProps();
 
@@ -1351,11 +1462,25 @@ export class Game {
   }
 
   private removeRemote(netId: number): void {
+    this.remoteMoves.delete(netId);
+    this.fishingPoses.delete(netId);
+    const trail = this.trails.get(netId);
+    if (trail !== undefined) {
+      this.scene.remove(trail.mesh);
+      trail.dispose();
+      this.trails.delete(netId);
+    }
     const character = this.remoteCharacters.get(netId);
     if (character === undefined) return;
     this.scene.remove(character.group);
     character.dispose();
     this.remoteCharacters.delete(netId);
+  }
+
+  /** The standing tree in reach from here, facing this way, if any. */
+  private treeAt(position: Readonly<Vec3>, yaw: number) {
+    if (this.clearing === null) return null;
+    return treeInReach(position, yaw, this.standingProps, (id) => this.isFelled(id));
   }
 
   private characterFor(netId: number): Character {
@@ -1499,6 +1624,8 @@ export class Game {
     this.updateLocalPlayer(deltaSeconds, camera);
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
+    this.bursts.update(deltaSeconds);
+    this.clearingScene?.update(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
     this.daylight?.update(dayProgress(this.estimatedServerTimeMs()));
     // Only campfires animate right now; the `in` check skips the other
@@ -1886,19 +2013,11 @@ export class Game {
       ((this.controls?.buttons() ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
 
-    // A fresh press starts the same local timer the server's own charge
-    // runs on - only worth starting if a swing would even do anything, which
-    // needs the axe active, not merely carried.
-    const chargeHeld = (buttons & PlayerButton.Charge) !== 0;
-    if (chargeHeld && !this.chargeWasHeld && this.isEquipped('axe')) {
-      this.chargingUntil = performance.now() + CHARGE_SECONDS * 1000;
-    }
-    this.chargeWasHeld = chargeHeld;
-
     // Walking off lets go of whatever was clicked: the character aims the
-    // way it walks again. Not while charging, which roots it to the spot
-    // facing whatever it is about to hit.
-    if ((intent.x !== 0 || intent.z !== 0) && !chargeHeld) this.aimYaw = null;
+    // way it walks again. Not while mid-move with the feet planted, which
+    // keeps facing whatever it is about to hit.
+    const busy = player.action.kind !== ActionKind.Idle;
+    if ((intent.x !== 0 || intent.z !== 0) && !busy) this.aimYaw = null;
 
     const produced = player.advance(
       deltaSeconds,
@@ -1913,26 +2032,33 @@ export class Game {
     // Space between two frames still turns into a jump.
     if (produced.length > 0) this.controls?.forgetTaps();
     for (const input of produced) this.connection?.send(input);
+    this.showOwnMoves(player.drainEvents());
 
     const position = player.renderPosition(this.scratch);
     character.group.position.set(position.x, position.y, position.z);
     character.group.rotation.y =
       this.facingWhileFishing(this.selfNetId, position) ?? player.renderYaw();
 
-    // The same thresholds the server judges everyone else's snapshot by (see
-    // SnapshotFlag), so the local player's own animation reads the same way
-    // it would to someone watching them from across the clearing.
+    // Drawn from the very move the server will judge, predicted here: see
+    // `sim/actions.ts` and decision 0056.
+    const action = player.action;
     const velocity = player.motion.velocity;
-    const speedSquared = velocity.x * velocity.x + velocity.z * velocity.z;
-    character.setAnimationState(
-      pickAnimationState(
-        speedSquared > 0.04,
-        speedSquared > SPRINT_REPORTING_SPEED * SPRINT_REPORTING_SPEED,
-        !player.motion.grounded,
-      ),
+    const move = this.localMoves.view(
+      action.kind,
+      action.step,
+      player.actionAge(),
+      this.aimedTree !== null && this.isEquipped('axe'),
+      rollDirection(action.heading, player.renderYaw()),
     );
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
-    character.update(deltaSeconds);
+    character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
+    character.setRestSpot(restSpotFor(action.kind, action.step, this.space));
+    const pose = character.update(deltaSeconds, {
+      move,
+      locomotion: { speed: Math.hypot(velocity.x, velocity.z), airborne: !player.motion.grounded },
+    });
+    this.sweepTrail(this.selfNetId, character, pose, deltaSeconds);
+    this.showKnockout(action.kind, action.age);
 
     camera.update(
       position,
@@ -1958,7 +2084,11 @@ export class Game {
       this.nearCampfire = null;
       this.aimedTree = null;
       this.aimedAnimal = null;
+      this.aimedAnimalId = null;
       this.canCast = false;
+      this.restingNearby = isFreeToInteract(action)
+        ? (restingPlaceInReach(player.motion.position.x, player.motion.position.z)?.kind ?? null)
+        : null;
       this.canBuild = false;
       this.centreSunOn(position);
       return;
@@ -2003,12 +2133,7 @@ export class Game {
     const nearbyCampfire = nearestCampfire(player.motion.position, this.builtProps);
     this.nearCampfire = nearbyCampfire === null ? null : nearbyCampfire.lit ? 'lit' : 'unlit';
 
-    const target =
-      this.clearing === null
-        ? null
-        : treeInReach(player.motion.position, aimYaw, this.standingProps, (id) =>
-            this.isFelled(id),
-          );
+    const target = this.treeAt(player.motion.position, aimYaw);
     this.aimedTree =
       target === null
         ? null
@@ -2021,7 +2146,7 @@ export class Game {
     // way the server's own `trySwing` decides it, so this is only worth
     // working out when there is no tree to claim the click first.
     const animalCandidates =
-      target === null
+      target === null || !this.isEquipped('axe')
         ? this.remoteAnimals.netIds().flatMap((id) => {
             const pose = this.remoteAnimals.poseOf(id);
             const kind = animalKindOf(id);
@@ -2031,6 +2156,7 @@ export class Game {
           })
         : [];
     const animalTarget = animalInReach(player.motion.position, aimYaw, animalCandidates);
+    this.aimedAnimalId = animalTarget?.id ?? null;
     this.aimedAnimal =
       animalTarget === null
         ? null
@@ -2149,6 +2275,12 @@ export class Game {
   }
 
   /** What a door right here would do, if anything: for the hint along the bottom. */
+  /** Sat in the chair or lying in bed, if either. */
+  private restingNow(): 'chair' | 'bed' | null {
+    const kind = this.localPlayer?.action.kind;
+    return kind === ActionKind.Sit ? 'chair' : kind === ActionKind.Lie ? 'bed' : null;
+  }
+
   private doorHintAt(position: Readonly<Vec3>): 'enter' | 'visit' | 'locked' | 'leave' | null {
     if (this.space !== OUTDOORS) {
       return position.z > HOME_ROOM.halfDepth - 1.4 && Math.abs(position.x - HOME_ROOM.doorX) < 1.3
@@ -2198,6 +2330,167 @@ export class Game {
   }
 
   /**
+   * What a click of ours would do right now, as best we can tell: swing, if
+   * something is in hand out in the world with no line in the water, or
+   * cast, with the rod facing water - the same as the server decides it
+   * (see `WorldSimulation.actionContext`).
+   */
+  private actionContext(position: Readonly<Vec3>, aimYaw: number): ActionContext {
+    const held = this.equipped.get(this.selfNetId) ?? null;
+    const canAttack = held !== null && this.space === OUTDOORS && this.fishingPhase === null;
+    const castInstead =
+      canAttack &&
+      held === 'rod' &&
+      performance.now() >= this.castReadyAt &&
+      this.clearing !== null &&
+      castLanding(position, aimYaw, this.clearing.water) !== null;
+    return { canAttack, castInstead };
+  }
+
+  /**
+   * Whether somebody else's swing would be at a tree: the axe in hand and a
+   * trunk in front, the same rule their own browser and the server go by.
+   */
+  private wouldChopAt(
+    netId: number,
+    pose: { x: number; y: number; z: number; yaw: number },
+  ): boolean {
+    if (this.equipped.get(netId) !== 'axe' || this.space !== OUTDOORS) return false;
+    return this.treeAt(pose, pose.yaw) !== null;
+  }
+
+  /**
+   * A knockout of ours: down where we fell, the screen going dark as we
+   * lose consciousness, then lifting as we wake up - at home in bed, or in
+   * the clearing (see decision 0056).
+   */
+  private showKnockout(kind: ActionKind, age: number): void {
+    const fade = this.sceneFade;
+    if (fade === null) return;
+    if (kind === ActionKind.KnockedOut && age >= KNOCKOUT_DARKENS_AT_TICKS && !this.knockoutDark) {
+      this.knockoutDark = true;
+      fade.classList.add('scene-fade-slow', 'scene-fade-dark');
+    } else if (kind !== ActionKind.KnockedOut && this.knockoutDark) {
+      this.knockoutDark = false;
+      fade.classList.remove('scene-fade-dark');
+      window.setTimeout(() => fade.classList.remove('scene-fade-slow'), 900);
+    }
+  }
+
+  /** Somebody picked something up, dug, reached out or ate: show it on them. */
+  private showGesture(event: GestureEvent): void {
+    const character =
+      event.netId === this.selfNetId ? this.localCharacter : this.remoteCharacters.get(event.netId);
+    character?.playGesture(event.gesture, event.item);
+  }
+
+  private setFishingPose(netId: number, pose: FishingPose | null): void {
+    if (pose === null) this.fishingPoses.delete(netId);
+    else this.fishingPoses.set(netId, pose);
+  }
+
+  /** Whatever our own player just did, shown the moment it happened here rather than when the server says so. */
+  private showOwnMoves(events: readonly PredictedEvent[]): void {
+    for (const event of events) {
+      if (event.kind === 'cast') this.setFishingPose(this.selfNetId, 'casting');
+      else if (event.kind === 'impact') this.showOwnBlow(event.impact.kind === 'strike');
+      else if (event.kind === 'began') this.swooshFor(event.action, event.step);
+    }
+  }
+
+  /** The swish of a swing of ours, timed to peak as its blow lands. */
+  private swooshFor(action: ActionKind, step: number): void {
+    if (action === ActionKind.Swing) {
+      const swing = LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
+      playSwoosh((swing?.impact ?? 4) * TICK_SECONDS);
+    } else if (action === ActionKind.Strike) {
+      playSwoosh(STRIKE.impact * TICK_SECONDS, CHARGED_BLOW);
+    }
+  }
+
+  /**
+   * One of our own blows landing, on whatever our browser thinks is in
+   * reach - the same way the server picks it: an axe bites a tree first,
+   * and anything in hand strikes an animal. A jolt, a pause on the moment,
+   * the sound and the chips or fur of it, straight away, the way it feels to
+   * swing. The server's word follows and settles what it actually did.
+   */
+  private showOwnBlow(strike: boolean): void {
+    const player = this.localPlayer;
+    if (player === null) return;
+    const from = player.motion.position;
+    const aimYaw = this.aimYaw ?? player.motion.facingYaw;
+    const strength = strike ? CHARGED_BLOW : 1;
+    if (strike) this.showSlam();
+    const tree = this.isEquipped('axe') ? this.treeAt(from, aimYaw) : null;
+    if (tree !== null) {
+      this.showBlowOnTree(tree.prop, from, strength);
+      playTreeHit();
+    } else if (this.aimedAnimalId !== null) {
+      this.showBlowOnAnimal(this.aimedAnimalId, from, strength);
+      playThreatHit();
+    } else {
+      return;
+    }
+    this.localCharacter?.hitStop(strike ? 0.14 : 0.07);
+    this.camera?.shake(strike ? HIT_LANDED_SHAKE * 1.8 : HIT_LANDED_SHAKE);
+  }
+
+  /** A charged strike coming down: dust thrown up where it hits the ground. */
+  private showSlam(): void {
+    const player = this.localPlayer;
+    const tip = this.localCharacter?.heldTip(this.scratchBlow) ?? null;
+    if (player === null || tip === null) return;
+    tip.y = Math.max(tip.y, player.motion.position.y + 0.05);
+    const yaw = player.motion.facingYaw;
+    this.bursts.burst('dust', tip, -Math.sin(yaw), -Math.cos(yaw), 1);
+    this.camera?.shake(HIT_LANDED_SHAKE * 0.6);
+  }
+
+  /** A blow landing on a tree, from somebody at `from`: chips fly and the tree shivers. */
+  private showBlowOnTree(tree: PlacedProp, from: Readonly<Vec3>, strength: number): void {
+    const away = awayFrom(from, tree);
+    // Off the near side of the trunk, about waist high, flying back out of the cut.
+    const at = this.scratchBlow.set(
+      tree.x - away.x * TRUNK_FACE,
+      from.y + BLOW_HEIGHT_ON_TREE,
+      tree.z - away.z * TRUNK_FACE,
+    );
+    this.bursts.burst('wood', at, -away.x, -away.z, strength);
+    this.clearingScene?.shakeTree(tree.id, away.x, away.z, strength);
+  }
+
+  /** A blow landing on an animal, from somebody at `from`: fur flies and it is knocked back a step. */
+  private showBlowOnAnimal(animalId: number, from: Readonly<Vec3>, strength: number): void {
+    const pose = this.remoteAnimals.poseOf(animalId);
+    if (pose === undefined) return;
+    const away = awayFrom(from, pose);
+    const at = this.scratchBlow.set(pose.x, pose.y + BLOW_HEIGHT_ON_ANIMAL, pose.z);
+    this.bursts.burst('fur', at, away.x, away.z, strength);
+    this.animalJolts.set(animalId, { awayX: away.x, awayZ: away.z, age: 0, strength });
+  }
+
+  /** Streak whatever this character is swinging behind it while it sweeps round fast. */
+  private sweepTrail(
+    netId: number,
+    character: Character,
+    pose: MovePose | null,
+    deltaSeconds: number,
+  ): void {
+    const sweeping = pose !== null && isSweeping(pose);
+    let trail = this.trails.get(netId);
+    if (trail === undefined) {
+      if (!sweeping) return;
+      trail = new WeaponTrail();
+      this.scene.add(trail.mesh);
+      this.trails.set(netId, trail);
+    }
+    const tip = sweeping ? character.heldTip(this.scratchTip) : null;
+    const hand = tip === null ? null : character.handPosition(this.scratchHand);
+    trail.update(deltaSeconds, hand, tip);
+  }
+
+  /**
    * Somebody with a line out faces their float, whichever way they last walked.
    * Only how they are drawn: which way they face is not something the server
    * needs to hear about.
@@ -2228,8 +2521,23 @@ export class Game {
       const character = this.characterFor(netId);
       character.group.position.set(pose.x, pose.y, pose.z);
       character.group.rotation.y = this.facingWhileFishing(netId, pose) ?? pose.yaw;
-      character.setAnimationState(pickAnimationState(pose.moving, pose.sprinting, pose.airborne));
-      character.update(deltaSeconds);
+      const action = unpackActionByte(pose.action, this.remoteAction);
+      const memory = this.remoteMoves.get(netId) ?? new MoveMemory();
+      this.remoteMoves.set(netId, memory);
+      const move = memory.view(
+        action.kind,
+        action.step,
+        pose.actionAge,
+        action.kind === ActionKind.Swing && this.wouldChopAt(netId, pose),
+        rollDirection(pose.actionHeading, pose.yaw),
+      );
+      character.setFishing(this.fishingPoses.get(netId) ?? null);
+      character.setRestSpot(restSpotFor(action.kind, action.step, this.space));
+      const drawn = character.update(deltaSeconds, {
+        move,
+        locomotion: { speed: pose.speed, airborne: pose.airborne },
+      });
+      this.sweepTrail(netId, character, drawn, deltaSeconds);
     }
   }
 
@@ -2242,7 +2550,19 @@ export class Game {
       if (pose === undefined) continue;
       const critter = this.critterFor(animalId);
       critter.group.position.set(pose.x, pose.y, pose.z);
-      critter.group.rotation.y = pose.yaw;
+      critter.group.rotation.set(0, pose.yaw, 0, 'YXZ');
+      const jolt = this.animalJolts.get(animalId);
+      if (jolt === undefined) continue;
+      jolt.age += deltaSeconds;
+      if (jolt.age >= ANIMAL_JOLT_SECONDS) {
+        this.animalJolts.delete(animalId);
+        continue;
+      }
+      // Knocked back and its head thrown up, fast, then easing back.
+      const knock = (1 - Math.exp(-jolt.age * 40)) * Math.exp(-jolt.age * 9) * jolt.strength;
+      critter.group.position.x += jolt.awayX * ANIMAL_JOLT_DISTANCE * knock;
+      critter.group.position.z += jolt.awayZ * ANIMAL_JOLT_DISTANCE * knock;
+      critter.group.rotation.x = ANIMAL_JOLT_TILT * knock;
     }
   }
 
@@ -2293,7 +2613,7 @@ export class Game {
       hungerNews: this.currentHungerNews(now),
       health: this.health,
       healthNews: this.currentHealthNews(now),
-      charging: this.currentlyCharging(now),
+      charging: this.currentlyCharging(),
       craftingNews: this.currentCraftingNews(now),
       huntingNews: this.currentHuntingNews(now),
       cacheNews: this.currentCacheNews(now),
@@ -2301,6 +2621,8 @@ export class Game {
       mapOpen: this.mapOpen,
       door: this.doorHint,
       home: this.homeHere(),
+      resting: this.restingNow(),
+      restingNearby: this.space === OUTDOORS ? null : this.restingNearby,
     });
   }
 

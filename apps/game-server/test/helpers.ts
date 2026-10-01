@@ -22,6 +22,7 @@ import {
   type ExploredMessage,
   type SpaceMessage,
   type FishingEvent,
+  type GestureEvent,
   type HealthEvent,
   type HungerEvent,
   type InventoryMessage,
@@ -304,6 +305,11 @@ export class TestClient {
     const message = this.received.find((entry) => entry.type === 'explored');
     if (message === undefined) throw new Error('Never received the opening explored map');
     return message.cells;
+  }
+
+  /** Everything anybody was seen doing with their hands, oldest first (see decision 0056). */
+  gestures(): GestureEvent[] {
+    return this.received.flatMap((entry) => (entry.type === 'gestures' ? entry.gestures : []));
   }
 
   countOfMessages(type: ServerMessage['type']): number {

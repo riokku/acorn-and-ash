@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 
 import {
+  Gesture,
   ITEM_KINDS,
   ITEM_ORDER,
   PLAYER_HEIGHT,
@@ -11,12 +12,32 @@ import {
 
 import { instantiateAnimatedModel, type AnimatedModel, type ModelPart } from './model-loading';
 import { characterModelTemplate } from './character-model';
-import { itemModelParts } from './item-models';
-import { pickAnimationState, type CharacterAnimState } from './character-animation';
+import { TARGET_HEIGHTS, itemModelParts } from './item-models';
+import { characterClips, type CharacterClips } from './character-animations';
+import { CharacterAnimator, type FishingPose, type Locomotion } from './character-animator';
+import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
 import { createFlickerLight, type FlickerLight } from './fire-light';
 
-export { pickAnimationState, type CharacterAnimState };
+export type { FishingPose, Locomotion, MoveView };
+
+/** Which way a dodge rolls, as the character sees it. */
+export type RollDirection = 'forward' | 'backward' | 'left' | 'right';
+
+/** Everything that decides how a character is drawn this frame. */
+export interface CharacterFrame {
+  /** What they are in the middle of, with its age in fractional ticks. */
+  readonly move: MoveView;
+  readonly locomotion: Locomotion;
+}
+
+/** Where a sitting or lying body rests, in the same space the character stands in. */
+export interface RestSpot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+}
 
 /**
  * A character: real modeled art once its own model has loaded (see
@@ -30,32 +51,37 @@ export interface Character {
   setColor(color: THREE.ColorRepresentation): void;
   /** Shows a floating name label above the character's head, or hides it for null. */
   setName(name: string | null): void;
-  /** Which of the four named clips should be playing right now. A no-op on the placeholder. */
-  setAnimationState(state: CharacterAnimState): void;
-  /** Plays a one-shot swing of the held axe, timed to a chop landing. A no-op on the placeholder. */
-  swingAxe(): void;
   /**
    * Shows this item in the character's hand, replacing whatever was shown
    * before - or shows nothing for null. A no-op on the placeholder.
    */
   setEquippedItem(item: ItemId | null): void;
-  /** Advances the animation mixer and any swing in progress. A no-op on the placeholder. */
-  update(deltaSeconds: number): void;
+  /**
+   * Something done with the hands, over whatever else is going on: picking
+   * up, digging, reaching, eating. `item` is shown in hand while it plays -
+   * the fish being eaten - or null to leave the hand as it is.
+   */
+  playGesture(gesture: Gesture, item: ItemId | null): void;
+  /** Where their line is at, or null with no line out. */
+  setFishing(pose: FishingPose | null): void;
+  /** Where the body settles when they sit or lie down, or null when there is nowhere. */
+  setRestSpot(spot: RestSpot | null): void;
+  /** Freeze the moment a blow of theirs lands, for a beat. */
+  hitStop(seconds: number): void;
+  /**
+   * Where the far end of whatever is in hand is right now - the axe's head,
+   * the rod's tip - in the world, or null with nothing in hand.
+   */
+  heldTip(into: THREE.Vector3): THREE.Vector3 | null;
+  /** Where the hand holding things is right now, in the world. */
+  handPosition(into: THREE.Vector3): THREE.Vector3 | null;
+  /** Draws this frame. Returns the move's pose, for effects that follow it. */
+  update(deltaSeconds: number, frame: CharacterFrame): MovePose | null;
   dispose(): void;
 }
 
 /** Every item that can ever be shown in a hand, in the wire's own stable order. */
 const HELD_ITEM_IDS: readonly ItemId[] = ITEM_ORDER.filter((id) => ITEM_KINDS[id].equippable);
-
-const CLIP_NAME_BY_STATE: Record<CharacterAnimState, string> = {
-  idle: 'Idle_A_Rig_Medium',
-  walk: 'Walking_A_Rig_Medium',
-  run: 'Running_A_Rig_Medium',
-  jump: 'Jump_Idle_Rig_Medium',
-};
-
-/** Fade time between two clips - quick enough to feel responsive, soft enough not to pop. */
-const CROSSFADE_SECONDS = 0.15;
 
 /** Knight rendered noticeably too large at the pack's own native scale. */
 const MODEL_SCALE = 0.6;
@@ -116,23 +142,6 @@ const HELD_AXE_ROTATION = new THREE.Euler(HELD_AXE_REST_X, HELD_AXE_REST_Y, HELD
 const HELD_AXE_OFFSET = new THREE.Vector3(0, -0.12, 0);
 
 /**
- * A swing with no attack clip to drive it yet: the axe alone sweeps around
- * the same Z axis its resting grip leans on, through vertical and out the
- * other side, then back to rest. `game.ts` calls this when the server
- * confirms a chop landed (`treeHit`) rather than the moment the swing button
- * is pressed, so it never plays for a swing that connected with nothing, and
- * only for a swing that was actually this player's own. Which way that arc
- * reads on screen (a forward chop versus something backwards-looking) is not
- * confirmed - the same visual gap the grip angle had before real numbers
- * replaced the guess, but there is no equivalent number to sample for "which
- * direction looks like chopping". The arm itself stays in whatever
- * locomotion pose it was already in - a real swinging arm needs a clip from
- * the pack this project doesn't have converted yet (see decision 0036).
- */
-const SWING_DURATION_SECONDS = 0.25;
-const SWING_SWEEP_RADIANS = 1.3;
-
-/**
  * How a held item sits relative to the hand bone: `rotation`/`offset` place
  * it, and everything is scaled by `1 / MODEL_SCALE` to cancel the character's
  * own shrink, the same as the axe's group always was.
@@ -140,6 +149,23 @@ const SWING_SWEEP_RADIANS = 1.3;
 interface HeldItemRest {
   readonly rotation: THREE.Euler;
   readonly offset: THREE.Vector3;
+}
+
+/**
+ * How a held thing sits in the hand two ways: `carry`, walking about or
+ * standing, and `use`, mid-swing or fishing, and blended between the two
+ * as a move starts and ends (see decision 0056).
+ *
+ * The animation pack's own moves turn the hand as though a weapon points
+ * along the hand's own "up" - straight up with the axe raised overhead,
+ * straight ahead as a chop lands - so `use` holds everything that way, a
+ * little way up the handle. Carried like that, though, the axe sticks
+ * straight out in front, so standing about keeps the upright carry that
+ * was matched to Chris's screenshot.
+ */
+interface HeldGrips {
+  readonly carry: HeldItemRest;
+  readonly use: HeldItemRest;
 }
 
 /**
@@ -152,6 +178,13 @@ interface HeldItemRest {
  */
 const TOOL_HELD_REST: HeldItemRest = { rotation: HELD_AXE_ROTATION, offset: HELD_AXE_OFFSET };
 
+/** A long tool gripped the animation pack's way, a hand's width up from the end of its handle. */
+const TOOL_USE_GRIP: HeldItemRest = {
+  rotation: new THREE.Euler(0, 0, 0),
+  offset: new THREE.Vector3(0, -0.14, 0),
+};
+const TOOL_GRIPS: HeldGrips = { carry: TOOL_HELD_REST, use: TOOL_USE_GRIP };
+
 /**
  * Every food item shares one rest pose too: small enough, and round enough,
  * that a fish or a cut of meat reads fine held at roughly the same angle -
@@ -162,18 +195,29 @@ const FOOD_HELD_REST: HeldItemRest = {
   offset: new THREE.Vector3(0, -0.05, 0.03),
 };
 
-const HELD_ITEM_REST: Partial<Record<ItemId, HeldItemRest>> = {
-  axe: TOOL_HELD_REST,
-  rod: TOOL_HELD_REST,
+/**
+ * Swung, a fish or a cut of meat is held by one end and brought round
+ * lengthways - a fish's long side lies along its own Z, turned here to
+ * point along the hand's up.
+ */
+const FOOD_USE_GRIP: HeldItemRest = {
+  rotation: new THREE.Euler(-Math.PI / 2, 0, 0),
+  offset: new THREE.Vector3(0, 0.1, 0),
+};
+const FOOD_GRIPS: HeldGrips = { carry: FOOD_HELD_REST, use: FOOD_USE_GRIP };
+
+const HELD_ITEM_REST: Partial<Record<ItemId, HeldGrips>> = {
+  axe: TOOL_GRIPS,
+  rod: TOOL_GRIPS,
   // Same grip as the axe and rod, as a starting guess - it's the same shape
   // of thing, a long tool held by its base. Unconfirmed against a real
   // screenshot the way the axe's own numbers were; flag it from a PR preview
   // if the torch looks wrong in hand.
-  torch: TOOL_HELD_REST,
-  perch: FOOD_HELD_REST,
-  trout: FOOD_HELD_REST,
-  goldenCarp: FOOD_HELD_REST,
-  meat: FOOD_HELD_REST,
+  torch: TOOL_GRIPS,
+  perch: FOOD_GRIPS,
+  trout: FOOD_GRIPS,
+  goldenCarp: FOOD_GRIPS,
+  meat: FOOD_GRIPS,
 };
 
 /** Warm torchlight - dimmer and closer than the campfire's (see fire-light.ts and campfire.ts). */
@@ -239,10 +283,34 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
   ],
 };
 
-/** This item's parts to put in a hand, or undefined to leave that item showing nothing. */
-function heldItemParts(item: ItemId): ModelPart[] | undefined {
-  if (item === 'axe' || item === 'rod' || item === 'torch') return itemModelParts(item);
-  return FOOD_HELD_PARTS[item];
+/** Anything that can be shown in a hand: what you carry, and the shovel that comes out to dig. */
+type HeldThing = ItemId | 'shovel';
+
+interface HeldModel {
+  readonly group: THREE.Group;
+  /** How far along it its far end is - the axe's head, the rod's tip - in its own units. */
+  readonly tipHeight: number;
+  /** Its two grips (see `HeldGrips`), ready to blend between. */
+  readonly carry: THREE.Quaternion;
+  readonly use: THREE.Quaternion;
+  readonly carryOffset: THREE.Vector3;
+  readonly useOffset: THREE.Vector3;
+}
+
+/** This thing's parts to put in a hand, or undefined to leave it showing nothing. */
+function heldItemParts(thing: HeldThing): ModelPart[] | undefined {
+  if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
+    return itemModelParts(thing);
+  }
+  return FOOD_HELD_PARTS[thing];
+}
+
+/** Where along a held thing its far end is: the full length of a tool, the middle of a fish. */
+function tipHeightOf(thing: HeldThing): number {
+  if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
+    return TARGET_HEIGHTS[thing];
+  }
+  return 0.08;
 }
 
 const CAPSULE_LENGTH = PLAYER_HEIGHT - PLAYER_RADIUS * 2;
@@ -287,13 +355,24 @@ export function createCharacter(
   return createPlaceholderCharacter(color);
 }
 
-/** The real, rigged character: crossfades between its four named clips as `setAnimationState` asks. */
+/**
+ * How high above the ground a dodge roll turns about: the middle of a
+ * crouched body, so it tumbles over itself rather than about its feet.
+ */
+const ROLL_PIVOT_HEIGHT = 0.42;
+/** How high a roll hops at its top. */
+const ROLL_HOP = 0.1;
+
+/** The real, rigged character, every move played by its animator (see decision 0056). */
 function createAnimatedCharacter(
   template: AnimatedModel,
   color: THREE.ColorRepresentation,
 ): Character {
   const instance = instantiateAnimatedModel(template);
   const model = instance.root;
+  // The template's own four clips only ever stand in until the animation
+  // library has loaded: every move comes from there.
+  instance.mixer.stopAllAction();
 
   // Every character in the pack shares Knight's own rig, which faces the
   // pack's +Z - but this game's convention is yaw 0 = facing -Z (see the
@@ -303,14 +382,19 @@ function createAnimatedCharacter(
   // Corrected on an inner wrapper, not `group` itself: the outer group's
   // own rotation.y is overwritten every frame with the live facing
   // direction, which would instantly undo a correction applied there
-  // instead. Applying it here rather than per-model keeps every character
-  // that ever gets converted correct for free, the same way this fixed it
-  // for all six the moment the other five had real models to test it
-  // against.
+  // instead.
   model.rotation.y = Math.PI;
   model.scale.setScalar(MODEL_SCALE);
+  // group (where they stand) > rest (onto a seat or a mattress) > pivot (a
+  // roll tumbles about it) > the model itself.
   const group = new THREE.Group();
-  group.add(model);
+  const rest = new THREE.Group();
+  const pivot = new THREE.Group();
+  pivot.position.y = ROLL_PIVOT_HEIGHT;
+  model.position.y = -ROLL_PIVOT_HEIGHT;
+  pivot.add(model);
+  rest.add(pivot);
+  group.add(rest);
 
   // Materials are shared with the template by default - cloned per instance
   // so tinting one player's colour in below never bleeds into another's.
@@ -341,8 +425,8 @@ function createAnimatedCharacter(
   // animation for free, with no per-frame code needed here. Scaled up to
   // cancel MODEL_SCALE: parented this deep, it would otherwise shrink along
   // with the character, even though it's the same physical item as the one
-  // on the ground. All start hidden; `setEquippedItem` shows at most one.
-  const heldItems = new Map<ItemId, THREE.Group>();
+  // on the ground. All start hidden; at most one shows at a time.
+  const heldItems = new Map<HeldThing, HeldModel>();
   // Lives only while a torch is actually part of the rig - `held.visible`
   // already hides its light along with the rest of the group whenever some
   // other item is equipped instead (three.js skips an invisible object's
@@ -350,21 +434,21 @@ function createAnimatedCharacter(
   let torchFlicker: FlickerLight | undefined;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
-    for (const item of HELD_ITEM_IDS) {
-      const parts = heldItemParts(item);
-      const rest = HELD_ITEM_REST[item];
-      if (parts === undefined || rest === undefined) continue;
+    for (const thing of [...HELD_ITEM_IDS, 'shovel'] as const) {
+      const parts = heldItemParts(thing);
+      const grips = thing === 'shovel' ? TOOL_GRIPS : HELD_ITEM_REST[thing];
+      if (parts === undefined || grips === undefined) continue;
       const held = new THREE.Group();
       for (const part of parts) {
         const mesh = new THREE.Mesh(part.geometry, part.material);
         mesh.castShadow = true;
         held.add(mesh);
       }
-      held.rotation.copy(rest.rotation);
-      held.position.copy(rest.offset);
+      held.rotation.copy(grips.carry.rotation);
+      held.position.copy(grips.carry.offset);
       held.scale.setScalar(1 / MODEL_SCALE);
       held.visible = false;
-      if (item === 'torch') {
+      if (thing === 'torch') {
         torchFlicker = createFlickerLight(
           TORCH_LIGHT_COLOR,
           TORCH_LIGHT_INTENSITY,
@@ -374,26 +458,63 @@ function createAnimatedCharacter(
         held.add(torchFlicker.light);
       }
       handBone.add(held);
-      heldItems.set(item, held);
+      heldItems.set(thing, {
+        group: held,
+        tipHeight: tipHeightOf(thing),
+        carry: new THREE.Quaternion().setFromEuler(grips.carry.rotation),
+        use: new THREE.Quaternion().setFromEuler(grips.use.rotation),
+        carryOffset: grips.carry.offset,
+        useOffset: grips.use.offset,
+      });
     }
   }
-  const heldAxe = heldItems.get('axe');
 
-  const actionByState = new Map<CharacterAnimState, THREE.AnimationAction>();
-  for (const action of instance.actions) {
-    const state = (Object.keys(CLIP_NAME_BY_STATE) as CharacterAnimState[]).find(
-      (candidate) => CLIP_NAME_BY_STATE[candidate] === action.getClip().name,
-    );
-    if (state !== undefined) actionByState.set(state, action);
-  }
-
-  let current = actionByState.get('idle');
-  current?.play();
-
-  // Seconds into the current swing, or null when the axe is at rest - not a
-  // boolean, since the sweep below needs to know how far into it to be.
-  let swingElapsed: number | null = null;
+  let equipped: ItemId | null = null;
+  /** How long the shovel has left out, digging, in seconds. */
+  let digging = 0;
+  /** The food being eaten, in hand until the last mouthful has gone. */
+  let eating: ItemId | null = null;
+  let handsFree = false;
+  let restSpot: RestSpot | null = null;
+  let animator: CharacterAnimator | null = null;
+  /** How far into the using grip whatever is in hand is, from carrying (0) to using (1). */
+  let gripBlend = 0;
+  let clock = 0;
   const nameplate = attachNameplate(group);
+
+  /** The animator, made once the library has loaded, or null while it is on its way. */
+  const animatorFor = (): CharacterAnimator | null => {
+    if (animator !== null) return animator;
+    const clips: CharacterClips | null = characterClips() ?? fallbackClips(template);
+    if (clips === null) return null;
+    animator = new CharacterAnimator(model, clips);
+    return animator;
+  };
+
+  const showHeld = (): void => {
+    const bites = animator?.eating ?? null;
+    // Eaten a mouthful at a time, and the hand comes back down empty.
+    const left = eating !== null && bites !== null ? bites.left : 1;
+    const showing: HeldThing | null =
+      digging > 0
+        ? 'shovel'
+        : eating !== null
+          ? left > 0
+            ? eating
+            : null
+          : handsFree
+            ? null
+            : equipped;
+    for (const [thing, held] of heldItems) {
+      held.group.visible = thing === showing;
+      held.group.scale.setScalar((1 / MODEL_SCALE) * (thing === eating ? left : 1));
+    }
+  };
+
+  const shown = (): HeldModel | undefined => {
+    for (const [, held] of heldItems) if (held.group.visible) return held;
+    return undefined;
+  };
 
   return {
     group,
@@ -401,36 +522,59 @@ function createAnimatedCharacter(
       for (const material of materials) material.color.set(next);
     },
     setName: nameplate.setName,
-    setAnimationState: (state) => {
-      const next = actionByState.get(state);
-      if (next === undefined || next === current) return;
-      next.reset().fadeIn(CROSSFADE_SECONDS).play();
-      current?.fadeOut(CROSSFADE_SECONDS);
-      current = next;
-    },
     setEquippedItem: (item) => {
-      for (const [id, held] of heldItems) held.visible = id === item;
+      equipped = item;
+      showHeld();
     },
-    swingAxe: () => {
-      if (heldAxe !== undefined) swingElapsed = 0;
+    playGesture: (gesture, item) => {
+      const playing = animatorFor();
+      if (playing === null) return;
+      playing.playGesture(gesture);
+      if (gesture === Gesture.Eat) eating = item;
+      if (gesture === Gesture.Dig) digging = GESTURE_DIG_SECONDS;
     },
-    update: (deltaSeconds) => {
-      instance.mixer.update(deltaSeconds);
+    setFishing: (pose) => animatorFor()?.setFishing(pose),
+    setRestSpot: (spot) => {
+      restSpot = spot;
+    },
+    hitStop: (seconds) => animatorFor()?.hitStop(seconds),
+    heldTip: (into) => {
+      const held = shown();
+      if (held === undefined) return null;
+      held.group.updateWorldMatrix(true, false);
+      return held.group.localToWorld(into.set(0, held.tipHeight, 0));
+    },
+    handPosition: (into) => {
+      if (handBone === undefined) return null;
+      handBone.updateWorldMatrix(true, false);
+      return into.setFromMatrixPosition(handBone.matrixWorld);
+    },
+    update: (deltaSeconds, frame) => {
+      clock += deltaSeconds;
       torchFlicker?.update(deltaSeconds);
-      if (heldAxe === undefined || swingElapsed === null) return;
-      swingElapsed += deltaSeconds;
-      if (swingElapsed >= SWING_DURATION_SECONDS) {
-        swingElapsed = null;
-        heldAxe.rotation.copy(HELD_AXE_ROTATION);
-        return;
+      digging = Math.max(0, digging - deltaSeconds);
+      const playing = animatorFor();
+      if (playing === null) return null;
+      const pose = playing.update(deltaSeconds, frame.move, frame.locomotion);
+      handsFree = pose.handsFree;
+      const bites = playing.eating;
+      if (bites === null) eating = null;
+      showHeld();
+      // Into the using grip as a move starts, back to carrying as it ends; a
+      // shovel is out for nothing but using.
+      const target = digging > 0 ? 1 : playing.inUse;
+      gripBlend += (target - gripBlend) * (1 - Math.exp(-GRIP_FOLLOW * deltaSeconds));
+      for (const [thing, held] of heldItems) {
+        if (!held.group.visible) continue;
+        held.group.quaternion.slerpQuaternions(held.carry, held.use, gripBlend);
+        held.group.position.lerpVectors(held.carryOffset, held.useOffset, gripBlend);
+        if (thing === eating && bites !== null) holdToMouth(held.group, model, bites.reach);
       }
-      // Out and back on the same half-cycle of a sine wave, so it starts and
-      // ends exactly at rest with no pop on either end.
-      const progress = swingElapsed / SWING_DURATION_SECONDS;
-      const sweep = Math.sin(progress * Math.PI) * SWING_SWEEP_RADIANS;
-      heldAxe.rotation.set(HELD_AXE_ROTATION.x, HELD_AXE_ROTATION.y, HELD_AXE_REST_Z + sweep);
+      placeBody(pose, frame, group, rest, pivot, restSpot, clock);
+      return pose;
     },
     dispose: () => {
+      animator?.dispose();
       instance.mixer.stopAllAction();
       for (const material of materials) material.dispose();
       // Geometry (and the template root it was cloned from) is shared across
@@ -438,6 +582,117 @@ function createAnimatedCharacter(
       nameplate.dispose();
     },
   };
+}
+
+/** How quickly a held thing turns between its two grips, per second. */
+const GRIP_FOLLOW = 22;
+
+/** How long a shovel stays out to dig, in seconds. */
+const GESTURE_DIG_SECONDS = 1.35;
+
+/** A mouthful held crosswise: a fish's length, along its own Z, turned side to side. */
+const MOUTHFUL_TURN = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(0, 1, 0),
+  Math.PI / 2,
+);
+const wantedTurn = new THREE.Quaternion();
+const handTurn = new THREE.Quaternion();
+
+/**
+ * Turn food up at the mouth crosswise, centred in the hand - whichever way
+ * the hand has turned to get it there - as far as `reach` has brought it.
+ */
+function holdToMouth(food: THREE.Object3D, model: THREE.Object3D, reach: number): void {
+  if (food.parent === null || reach <= 0) return;
+  model.getWorldQuaternion(wantedTurn).multiply(MOUTHFUL_TURN);
+  food.parent.getWorldQuaternion(handTurn);
+  food.quaternion.slerp(handTurn.invert().multiply(wantedTurn), reach);
+  food.position.multiplyScalar(1 - reach);
+}
+
+/**
+ * Move the drawn body for the move under way: onto the seat or mattress
+ * while resting, tumbling through a roll, trembling as a charge winds up.
+ */
+function placeBody(
+  pose: MovePose,
+  frame: CharacterFrame,
+  group: THREE.Group,
+  rest: THREE.Group,
+  pivot: THREE.Group,
+  restSpot: RestSpot | null,
+  clock: number,
+): void {
+  // Onto the seat or the mattress: the rest spot, seen from where they stand.
+  if (restSpot !== null && pose.rest > 0) {
+    const yaw = group.rotation.y;
+    const dx = restSpot.x - group.position.x;
+    const dz = restSpot.z - group.position.z;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    // Into the group's own turned frame: the inverse of Three's own turn.
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+    // Climbing onto it goes up before it goes across.
+    const up = Math.min(1, pose.rest * 1.6);
+    rest.position.set(localX * pose.rest, (restSpot.y - group.position.y) * up, localZ * pose.rest);
+    rest.rotation.y = shortestTurn(yaw, restSpot.yaw) * pose.rest;
+  } else {
+    rest.position.set(0, 0, 0);
+    rest.rotation.y = 0;
+  }
+
+  // A roll: over the head for forward and back, over the shoulder for the sides.
+  pivot.rotation.set(0, 0, 0);
+  pivot.position.set(0, ROLL_PIVOT_HEIGHT, 0);
+  pivot.scale.set(1, 1, 1);
+  if (pose.roll !== null) {
+    const turn = easeInOut(pose.roll) * Math.PI * 2;
+    const arc = Math.sin(pose.roll * Math.PI);
+    pivot.rotation.x = frame.move.roll === 'backward' ? turn : -turn;
+    pivot.position.y = ROLL_PIVOT_HEIGHT + ROLL_HOP * arc;
+    // Tucked up small over the top of the roll.
+    const tuck = 1 - 0.22 * arc;
+    pivot.scale.set(tuck, tuck, tuck);
+  }
+
+  // Gathering power: a tremble that builds as the charge does.
+  if (pose.charge > 0) {
+    const shake = 0.012 * pose.charge * pose.charge;
+    pivot.position.x += Math.sin(clock * 53) * shake;
+    pivot.position.z += Math.cos(clock * 47) * shake;
+  }
+}
+
+function shortestTurn(from: number, to: number): number {
+  let delta = (to - from) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+}
+
+/**
+ * The character model's own four clips, under the names the animator knows
+ * them by - so walking about still animates if the library failed to load.
+ */
+function fallbackClips(template: AnimatedModel): CharacterClips | null {
+  const names: Record<string, MoveClip> = {
+    Idle_A_Rig_Medium: 'idle',
+    Walking_A_Rig_Medium: 'walk',
+    Running_A_Rig_Medium: 'run',
+    Jump_Idle_Rig_Medium: 'jumpAir',
+  };
+  const whole = new Map<MoveClip, THREE.AnimationClip>();
+  for (const clip of template.clips) {
+    const name = names[clip.name];
+    if (name !== undefined) whole.set(name, clip);
+  }
+  if (whole.size === 0) return null;
+  return { whole, upper: whole, lower: whole };
 }
 
 function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character {
@@ -469,10 +724,14 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     group,
     setColor: (next) => material.color.set(next),
     setName: nameplate.setName,
-    setAnimationState: () => {},
     setEquippedItem: () => {},
-    swingAxe: () => {},
-    update: () => {},
+    playGesture: () => {},
+    setFishing: () => {},
+    setRestSpot: () => {},
+    hitStop: () => {},
+    heldTip: () => null,
+    handPosition: () => null,
+    update: () => null,
     dispose: () => {
       body.geometry.dispose();
       snout.geometry.dispose();

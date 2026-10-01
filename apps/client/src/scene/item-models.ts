@@ -3,6 +3,7 @@ import { loadScaledModel, type ModelPart } from './model-loading';
 import axeUrl from '@assets/items/axe.glb?url';
 import rodUrl from '@assets/items/rod.glb?url';
 import torchUrl from '@assets/items/wooden-torch.glb?url';
+import shovelUrl from '@assets/items/shovel.glb?url';
 
 /**
  * As tall as the placeholder shape each one replaces - except `torch`, which
@@ -11,16 +12,20 @@ import torchUrl from '@assets/items/wooden-torch.glb?url';
  * preview if it looks too long or short, the same way the rod's held angle
  * was left for a screenshot to confirm (see character.ts).
  */
-const TARGET_HEIGHTS = {
+export const TARGET_HEIGHTS = {
   axe: 0.75,
   rod: 1.7,
   torch: 0.8,
+  // Not something you carry: it only comes out of nowhere to dig up a cache
+  // (see decision 0056).
+  shovel: 0.85,
 } as const;
 
 const MODEL_URLS: Record<keyof typeof TARGET_HEIGHTS, string> = {
   axe: axeUrl,
   rod: rodUrl,
   torch: torchUrl,
+  shovel: shovelUrl,
 };
 
 const modelParts = new Map<keyof typeof TARGET_HEIGHTS, ModelPart[]>();

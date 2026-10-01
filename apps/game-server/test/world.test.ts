@@ -8,6 +8,7 @@ import {
   BAG_PICKUP_ID,
   BAG_SPOT,
   DEFAULT_WORLD_SEED,
+  Gesture,
   AXE_STUMP,
   CHOP_REACH,
   HEALTH_MAX,
@@ -472,6 +473,20 @@ describe('finding the bag', () => {
     expect(client.inventory()).toEqual([]);
     expect(client.takenPickups()).toEqual([]);
     client.close();
+  });
+
+  it('shows everybody the player bending to pick it up', async () => {
+    const worldId = nextWorldId();
+    const finder = await TestClient.connect(worldId, 'bag-bender');
+    const watcher = await TestClient.connect(worldId, 'bag-watcher');
+    await findTheBag(finder);
+
+    const expected = { netId: finder.welcome().netId, gesture: Gesture.PickUp, item: 'bag' };
+    await waitFor('the gesture', () => watcher.gestures().length > 0);
+    expect(watcher.gestures()).toEqual([expected]);
+    expect(finder.gestures()).toEqual([expected]);
+    finder.close();
+    watcher.close();
   });
 
   it('hands over the bag when a player reaches for it', async () => {
@@ -1369,9 +1384,11 @@ describe('catching wildlife', () => {
   /**
    * Sprint toward wherever the animal currently is - it wanders, so a fixed
    * spot would not do - and once close enough, hold still and swing, the way
-   * `chopUntilFelled` does for a tree that cannot move. Stops early on a
-   * catch; otherwise spends the whole step budget, which is exactly what the
-   * no-axe test needs to prove a swing there still catches nothing.
+   * `chopUntilFelled` does for a tree that cannot move. Only swings once in
+   * reach: a swing plants your feet (see decision 0056), so swinging on the
+   * run would never close the gap. Stops early on a catch; otherwise spends
+   * the whole step budget, which is exactly what the no-axe test needs to
+   * prove a swing there still catches nothing.
    */
   async function huntAnimal(client: TestClient, animalId: number, steps: number): Promise<void> {
     const netId = client.welcome().netId;
@@ -1385,7 +1402,7 @@ describe('catching wildlife', () => {
       if (here === undefined) return;
       const yaw = Math.atan2(-(animal.x - here.x), -(animal.z - here.z));
       const closingIn = Math.hypot(animal.x - here.x, animal.z - here.z) > CHOP_REACH - 0.5;
-      const buttons = closingIn ? PlayerButton.Sprint | PlayerButton.Swing : PlayerButton.Swing;
+      const buttons = closingIn ? PlayerButton.Sprint : PlayerButton.Swing;
       client.walk(0, closingIn ? 1 : 0, yaw, 4, buttons);
       await sleep(110);
     }

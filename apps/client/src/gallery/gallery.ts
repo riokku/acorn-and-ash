@@ -132,6 +132,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showHomeInside(renderer, scene, daylight, params, time);
     return;
   }
+  if (focus === 'moves') {
+    scene.add(createGalleryGround([]));
+    const { showMoves } = await import('./moves');
+    await showMoves(renderer, scene, params);
+    return;
+  }
 
   const scenery: PlacedProp[] = SCENERY.map((entry, index) => ({
     id: index + 1,
@@ -219,7 +225,12 @@ function showHomeInside(
   const inside = createHomeInterior();
   scene.add(inside.group);
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 100);
-  const target = new THREE.Vector3(0, 0.7, -0.3);
+  // `&x=` and `&z=` look somewhere else in the room, up close.
+  const target = new THREE.Vector3(
+    Number(params.get('x') ?? 0),
+    0.7,
+    Number(params.get('z') ?? -0.3),
+  );
   let angle = Number(params.get('angle') ?? 0.25);
   const distance = Number(params.get('distance') ?? 8.8);
   const height = Number(params.get('height') ?? 6.2);
@@ -232,12 +243,25 @@ function showHomeInside(
   resize();
   window.addEventListener('resize', resize);
   const daylightAmount = dayBrightness(Number.isFinite(time) ? time : 0.42);
+  // `&resting` sits somebody in the chair and lies somebody on the bed.
+  let drawResting: ((deltaSeconds: number) => void) | null = null;
+  if (params.has('resting')) {
+    void import('./moves')
+      .then(({ addRestingCharacters }) =>
+        addRestingCharacters(scene, Number(params.get('at') ?? 60)),
+      )
+      .then((draw) => {
+        drawResting = draw;
+      });
+  }
   let last = performance.now();
   let frames = 0;
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const delta = Math.min(0.1, (now - last) / 1000);
     last = now;
+    if (params.has('resting') && drawResting === null) return;
+    drawResting?.(params.has('at') ? 0 : delta);
     if (spin) angle += delta * 0.25;
     camera.position.set(
       target.x + Math.sin(angle) * distance,

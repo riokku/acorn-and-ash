@@ -48,6 +48,8 @@ const BASE_STATE: HudState = {
   mapOpen: false,
   door: null,
   home: null,
+  resting: null,
+  restingNearby: null,
 };
 
 describe('the hint along the bottom', () => {
@@ -304,5 +306,64 @@ describe('the hint at a door', () => {
       /^Home, sweet home/,
     );
     expect(hint({ ...BASE_STATE, home: { yours: false, locked: false } })).toMatch(/^Visiting/);
+  });
+});
+
+describe('the hint in a fight', () => {
+  it('offers a swing at an animal with anything in hand, not just the axe', () => {
+    for (const item of ['axe', 'torch', 'rod', 'perch'] as const) {
+      const state: HudState = {
+        ...BASE_STATE,
+        equippedItem: item,
+        aimedAnimal: { name: 'Raccoon', hitsLeft: 3 },
+      };
+      expect(hint(state)).toBe('Left click to fight off the raccoon · 3 hits left');
+    }
+  });
+
+  it('casts instead, with the rod out facing water', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      equippedItem: 'rod',
+      canCast: true,
+      aimedAnimal: { name: 'Rabbit' },
+    };
+    expect(hint(state)).toBe('Left click to cast');
+  });
+
+  it('only chops a tree with the axe, and swings at an animal behind it with anything else', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      equippedItem: 'torch',
+      aimedTree: { name: 'Oak', swingsLeft: 3 },
+      aimedAnimal: { name: 'Rabbit' },
+    };
+    expect(hint(state)).toBe('Left click to catch the rabbit');
+  });
+});
+
+describe('the hint at the chair and the bed', () => {
+  const inside: HudState = { ...BASE_STATE, home: { yours: true, locked: false } };
+
+  it('offers to sit down or lie down', () => {
+    expect(hint({ ...inside, restingNearby: 'chair' })).toBe('Press E to sit down');
+    expect(hint({ ...inside, restingNearby: 'bed' })).toBe('Press E to lie down');
+  });
+
+  it('says E eats first, with food in hand and room for it', () => {
+    const state: HudState = {
+      ...inside,
+      restingNearby: 'chair',
+      equippedItem: 'perch',
+      carrying: [{ item: 'perch', count: 1 }],
+      hunger: HUNGER_MAX - 20,
+    };
+    expect(hint(state)).toBe('Press E to eat');
+    expect(hint({ ...state, hunger: HUNGER_MAX })).toBe('Press E to sit down');
+  });
+
+  it('says how to get up again, even when hungry, since E gets you up then', () => {
+    expect(hint({ ...inside, resting: 'chair', hunger: 0 })).toMatch(/move or press E to get up$/);
+    expect(hint({ ...inside, resting: 'bed' })).toBe('Snug in bed · move or press E to get up');
   });
 });

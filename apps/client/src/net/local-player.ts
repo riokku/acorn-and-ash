@@ -1,17 +1,46 @@
 import {
+  ActionKind,
   SnapshotFlag,
   TICK_SECONDS,
+  advanceAction,
   cloneVec3,
+  copyActionState,
+  createActionState,
   createInput,
   createPlayerMotion,
   distance,
+  footedInput,
+  stepDodge,
   stepPlayer,
+  unpackActionByte,
+  type ActionContext,
+  type ActionState,
   type CollisionWorld,
+  type Impact,
   type PlayerInput,
   type PlayerMotion,
   type SnapshotEntity,
   type Vec3,
 } from '@acorn/shared';
+
+/**
+ * What the situation is for deciding a move - anything in hand, whether a
+ * click would cast - as best this browser can tell, at a position and aim.
+ */
+export type ActionContextFor = (position: Readonly<Vec3>, aimYaw: number) => ActionContext;
+
+/** Something this browser's own player just did, on its own say-so, for drawing straight away. */
+export type PredictedEvent =
+  | { readonly kind: 'impact'; readonly impact: Impact; readonly seq: number }
+  | { readonly kind: 'cast'; readonly seq: number }
+  | {
+      readonly kind: 'began';
+      readonly action: ActionKind;
+      readonly step: number;
+      readonly seq: number;
+    };
+
+const NO_CONTEXT: ActionContextFor = () => ({ canAttack: false, castInstead: false });
 
 /** Corrections smaller than this are ignored: they are just rounding. */
 const IGNORE_CORRECTION = 0.02;
@@ -51,11 +80,41 @@ export class LocalPlayer {
 
   private lastCorrection = 0;
 
+  /**
+   * What they are in the middle of - a swing, a roll - predicted here the
+   * moment it starts, the same way walking is, by the very rules the server
+   * runs (see `sim/actions.ts`).
+   */
+  readonly action: ActionState = createActionState();
+  /** The buttons on the newest input the server has seen, so a replay can tell a fresh press. */
+  private ackedButtons = 0;
+  /** The buttons on the newest input made here. */
+  private previousButtons = 0;
+  private contextFor: ActionContextFor = NO_CONTEXT;
+  private readonly events: PredictedEvent[] = [];
+  private readonly scratchAction: ActionState = createActionState();
+
   constructor(spawn: Readonly<Vec3>, collision: CollisionWorld) {
     this.motion = createPlayerMotion(spawn);
     this.collision = collision;
     this.previous = cloneVec3(spawn);
     this.previousYaw = 0;
+  }
+
+  /** How this browser works out what a click would do: see `ActionContextFor`. */
+  setActionContext(contextFor: ActionContextFor): void {
+    this.contextFor = contextFor;
+  }
+
+  /** Everything predicted since this was last asked. */
+  drainEvents(): PredictedEvent[] {
+    return this.events.splice(0);
+  }
+
+  /** How far into the move under way, in ticks, including the part-tick being drawn. */
+  actionAge(): number {
+    const alpha = Math.min(1, this.accumulator / TICK_SECONDS);
+    return this.action.kind === ActionKind.Idle ? 0 : this.action.age + alpha;
   }
 
   /**
@@ -115,7 +174,27 @@ export class LocalPlayer {
         buttons,
         aimYaw ?? this.motion.facingYaw,
       );
-      stepPlayer(this.motion, input, TICK_SECONDS, this.collision);
+      const before = this.action.kind;
+      const beforeAge = this.action.age;
+      const tick = advanceAction(
+        this.action,
+        input,
+        this.previousButtons,
+        this.contextFor(this.motion.position, input.aimYaw),
+      );
+      this.previousButtons = input.buttons;
+      this.stepFeet(this.motion, input, tick.footing, this.action);
+      if (this.action.kind !== before || (this.action.age === 0 && beforeAge !== 0)) {
+        this.events.push({
+          kind: 'began',
+          action: this.action.kind,
+          step: this.action.step,
+          seq: input.seq,
+        });
+      }
+      if (tick.impact !== null)
+        this.events.push({ kind: 'impact', impact: tick.impact, seq: input.seq });
+      if (tick.cast) this.events.push({ kind: 'cast', seq: input.seq });
       this.pending.push(input);
       produced.push(input);
     }
@@ -131,9 +210,10 @@ export class LocalPlayer {
    * has not seen yet are replayed on top of its position. If the result is close
    * to where we already were, nothing visible happens.
    */
-  reconcile(serverState: SnapshotEntity, ackSeq: number): void {
+  reconcile(serverState: SnapshotEntity, ackSeq: number, dodgeCooldown = 0): void {
     while (this.pending.length > 0 && (this.pending[0]?.seq ?? 0) <= ackSeq) {
-      this.pending.shift();
+      const acked = this.pending.shift();
+      if (acked !== undefined) this.ackedButtons = acked.buttons;
     }
 
     const replayed: PlayerMotion = {
@@ -142,9 +222,24 @@ export class LocalPlayer {
       facingYaw: serverState.yaw,
       grounded: (serverState.flags & SnapshotFlag.Airborne) === 0,
     };
+    // The move too picks up from the server's word and replays on top of it,
+    // so a swing it cut short, or a flinch it started, shows here as well.
+    const action = unpackActionByte(serverState.action, this.scratchAction);
+    action.age = serverState.actionAge;
+    action.heading = serverState.actionHeading;
+    action.dodgeCooldown = dodgeCooldown;
+    let previousButtons = this.ackedButtons;
     for (const input of this.pending) {
-      stepPlayer(replayed, input, TICK_SECONDS, this.collision);
+      const tick = advanceAction(
+        action,
+        input,
+        previousButtons,
+        this.contextFor(replayed.position, input.aimYaw),
+      );
+      previousButtons = input.buttons;
+      this.stepFeet(replayed, input, tick.footing, action);
     }
+    copyActionState(action, this.action);
 
     const error = distance(replayed.position, this.motion.position);
     this.lastCorrection = error;
@@ -186,6 +281,23 @@ export class LocalPlayer {
     const alpha = Math.min(1, this.accumulator / TICK_SECONDS);
     const delta = shortestTurn(this.previousYaw, this.motion.facingYaw);
     return this.previousYaw + delta * alpha;
+  }
+
+  /** Walk, stand planted, or roll, whichever the move asks of the feet this tick. */
+  private stepFeet(
+    motion: PlayerMotion,
+    input: PlayerInput,
+    footing: 'free' | 'planted' | 'still' | 'dodging',
+    action: ActionState,
+  ): void {
+    if (footing === 'dodging') stepDodge(motion, action, this.collision);
+    else
+      stepPlayer(
+        motion,
+        footedInput(input, footing, motion.facingYaw),
+        TICK_SECONDS,
+        this.collision,
+      );
   }
 
   private decaySmoothing(deltaSeconds: number): void {

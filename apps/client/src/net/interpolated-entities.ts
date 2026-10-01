@@ -1,5 +1,6 @@
 import {
   INTERPOLATION_DELAY_SECONDS,
+  TICK_MILLISECONDS,
   lerpAngle,
   SnapshotFlag,
   type SnapshotEntity,
@@ -16,6 +17,12 @@ interface Sample {
   /** Always false for wildlife - only a player's own snapshot entry ever sets these bits. */
   readonly sprinting: boolean;
   readonly airborne: boolean;
+  /** Horizontal speed, in metres a second. */
+  readonly speed: number;
+  /** The move under way, packed as the snapshot carries it (see `packActionByte`). */
+  readonly action: number;
+  readonly actionAge: number;
+  readonly actionHeading: number;
 }
 
 export interface RemotePose {
@@ -26,6 +33,13 @@ export interface RemotePose {
   readonly moving: boolean;
   readonly sprinting: boolean;
   readonly airborne: boolean;
+  /** Horizontal speed, in metres a second. */
+  readonly speed: number;
+  /** The move being drawn, packed as the snapshot carries it. */
+  readonly action: number;
+  /** How far into it, in fractional ticks, at the moment being drawn. */
+  readonly actionAge: number;
+  readonly actionHeading: number;
 }
 
 /** Older samples than this are no use to anybody. */
@@ -72,6 +86,10 @@ export class InterpolatedEntities {
         moving: (entity.flags & SnapshotFlag.Moving) !== 0,
         sprinting: (entity.flags & SnapshotFlag.Sprinting) !== 0,
         airborne: (entity.flags & SnapshotFlag.Airborne) !== 0,
+        speed: Math.hypot(entity.vx, entity.vz),
+        action: entity.action,
+        actionAge: entity.actionAge,
+        actionHeading: entity.actionHeading,
       });
       while (samples.length > 2 && (samples[0]?.timeMs ?? 0) < serverTimeMs - HISTORY_MS) {
         samples.shift();
@@ -117,11 +135,11 @@ export class InterpolatedEntities {
 
     // Not enough history yet, or the connection has gone quiet: hold still
     // rather than guessing and having to take it back.
-    if (samples.length === 1 || renderTime >= newest.timeMs) return toPose(newest);
+    if (samples.length === 1 || renderTime >= newest.timeMs) return toPose(newest, renderTime);
 
     const oldest = samples[0];
     if (oldest === undefined) return undefined;
-    if (renderTime <= oldest.timeMs) return toPose(oldest);
+    if (renderTime <= oldest.timeMs) return toPose(oldest, renderTime);
 
     for (let i = samples.length - 1; i > 0; i--) {
       const after = samples[i];
@@ -130,6 +148,9 @@ export class InterpolatedEntities {
       if (renderTime >= before.timeMs && renderTime <= after.timeMs) {
         const span = after.timeMs - before.timeMs;
         const alpha = span <= 0 ? 1 : (renderTime - before.timeMs) / span;
+        // Whichever move had begun by the moment being drawn: the later
+        // snapshot's, if it had started by then, else the earlier one's.
+        const move = beganAt(after) <= renderTime ? after : before;
         return {
           x: before.x + (after.x - before.x) * alpha,
           y: before.y + (after.y - before.y) * alpha,
@@ -138,14 +159,23 @@ export class InterpolatedEntities {
           moving: after.moving,
           sprinting: after.sprinting,
           airborne: after.airborne,
+          speed: before.speed + (after.speed - before.speed) * alpha,
+          action: move.action,
+          actionAge: (renderTime - beganAt(move)) / TICK_MILLISECONDS,
+          actionHeading: move.actionHeading,
         };
       }
     }
-    return toPose(newest);
+    return toPose(newest, renderTime);
   }
 }
 
-function toPose(sample: Sample): RemotePose {
+/** When, on the server's clock, the move a sample shows had begun. */
+function beganAt(sample: Sample): number {
+  return sample.timeMs - sample.actionAge * TICK_MILLISECONDS;
+}
+
+function toPose(sample: Sample, renderTime: number): RemotePose {
   return {
     x: sample.x,
     y: sample.y,
@@ -154,5 +184,9 @@ function toPose(sample: Sample): RemotePose {
     moving: sample.moving,
     sprinting: sample.sprinting,
     airborne: sample.airborne,
+    speed: sample.speed,
+    action: sample.action,
+    actionAge: Math.max(0, (renderTime - beganAt(sample)) / TICK_MILLISECONDS),
+    actionHeading: sample.actionHeading,
   };
 }

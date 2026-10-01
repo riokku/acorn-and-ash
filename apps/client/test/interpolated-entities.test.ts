@@ -4,8 +4,29 @@ import { INTERPOLATION_DELAY_SECONDS, SnapshotFlag, type SnapshotEntity } from '
 
 import { InterpolatedEntities } from '../src/net/interpolated-entities';
 
-function entity(netId: number, x: number, z: number, yaw = 0, flags = 0): SnapshotEntity {
-  return { netId, x, y: 0, z, vx: 0, vy: 0, vz: 0, yaw, flags };
+function entity(
+  netId: number,
+  x: number,
+  z: number,
+  yaw = 0,
+  flags = 0,
+  action = 0,
+  actionAge = 0,
+): SnapshotEntity {
+  return {
+    netId,
+    x,
+    y: 0,
+    z,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    yaw,
+    flags,
+    action,
+    actionAge,
+    actionHeading: 0,
+  };
 }
 
 const DELAY_MS = INTERPOLATION_DELAY_SECONDS * 1000;
@@ -111,5 +132,26 @@ describe('tracking where other entities are, between snapshots', () => {
     const animals = new InterpolatedEntities();
     animals.ingest(1000, [entity(1001, 0, 0), entity(1002, 5, 5)]);
     expect(animals.netIds().sort()).toEqual([1001, 1002]);
+  });
+
+  it('draws a move from the moment it began, however the snapshots fell', () => {
+    const players = new InterpolatedEntities();
+    // A swing (kind 1) that began half a tick before the second snapshot.
+    players.ingest(1000, [entity(2, 0, 0, 0, 0, 0, 0)]);
+    players.ingest(1100, [entity(2, 0, 0, 0, 0, 1, 2)]);
+    // Drawn a tenth of a second behind: at 1050, the swing had begun at 1000.
+    players.advance((1050 + DELAY_MS - 1100) / 1000);
+    const pose = players.poseOf(2);
+    expect(pose?.action).toBe(1);
+    expect(pose?.actionAge).toBeCloseTo(1, 5);
+  });
+
+  it('keeps showing the earlier move until the next one has begun', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [entity(2, 0, 0, 0, 0, 0, 0)]);
+    // This swing began at 1100 - 1 tick = 1050.
+    players.ingest(1100, [entity(2, 0, 0, 0, 0, 1, 1)]);
+    players.advance((1020 + DELAY_MS - 1100) / 1000);
+    expect(players.poseOf(2)?.action).toBe(0);
   });
 });

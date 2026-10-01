@@ -175,12 +175,39 @@ describe('server messages', () => {
 
   it('round-trips a snapshot', () => {
     const entities: SnapshotEntity[] = [
-      { netId: 1, x: 12.34, y: 0, z: -56.78, vx: 3.2, vy: 0, vz: -1.05, yaw: 1.2, flags: 1 },
-      { netId: 2, x: -0.01, y: 1.5, z: 0.99, vx: 0, vy: -24.5, vz: 0, yaw: -3.0, flags: 0 },
+      {
+        netId: 1,
+        x: 12.34,
+        y: 0,
+        z: -56.78,
+        vx: 3.2,
+        vy: 0,
+        vz: -1.05,
+        yaw: 1.2,
+        flags: 1,
+        action: 0b1010_0001,
+        actionAge: 7,
+        actionHeading: 200,
+      },
+      {
+        netId: 2,
+        x: -0.01,
+        y: 1.5,
+        z: 0.99,
+        vx: 0,
+        vy: -24.5,
+        vz: 0,
+        yaw: -3.0,
+        flags: 0,
+        action: 0,
+        actionAge: 0,
+        actionHeading: 0,
+      },
     ];
-    const decoded = decodeServerMessage(encodeSnapshot(90, 5000, 41, entities));
+    const decoded = decodeServerMessage(encodeSnapshot(90, 5000, 41, entities, 17));
 
     if (decoded?.type !== 'snapshot') throw new Error('expected a snapshot');
+    expect(decoded.dodgeCooldown).toBe(17);
     expect(decoded.tick).toBe(90);
     expect(decoded.serverTimeMs).toBe(5000);
     expect(decoded.ackSeq).toBe(41);
@@ -198,12 +225,18 @@ describe('server messages', () => {
       expect(entity.vz).toBeCloseTo(original.vz, 2);
       expect(entity.yaw).toBeCloseTo(original.yaw, 3);
       expect(entity.flags).toBe(original.flags);
+      expect(entity.action).toBe(original.action);
+      expect(entity.actionAge).toBe(original.actionAge);
+      expect(entity.actionHeading).toBe(original.actionHeading);
     });
   });
 
   it('keeps a snapshot for a busy world small', () => {
-    expect(snapshotBytes(10)).toBeLessThan(256);
-    expect(snapshotBytes(MAX_PLAYERS_PER_WORLD)).toBeLessThan(1200);
+    // Three bytes a player bigger since everybody's moves started travelling
+    // with them (see decision 0056): still well under a kilobyte and a half
+    // for a full world, ten times a second.
+    expect(snapshotBytes(10)).toBeLessThan(300);
+    expect(snapshotBytes(MAX_PLAYERS_PER_WORLD)).toBeLessThan(1400);
   });
 
   it('round-trips the small messages', () => {
@@ -226,7 +259,7 @@ describe('server messages', () => {
   });
 
   it('rejects a snapshot whose length does not match its count', () => {
-    const buffer = new ArrayBuffer(14 + 23);
+    const buffer = new ArrayBuffer(15 + 26);
     const view = new DataView(buffer);
     view.setUint8(0, 0x11);
     view.setUint8(13, 4);
@@ -387,20 +420,30 @@ describe('telling players a threat was hit', () => {
     return decoded?.type === 'threatHit' ? decoded.event : null;
   };
 
-  it('carries which one and how many swings it has left', () => {
-    expect(roundTrip({ animalId: 1005, hitsLeft: 2 })).toEqual({ animalId: 1005, hitsLeft: 2 });
+  it('carries which one, how many swings it has left, and whose swing it was', () => {
+    expect(roundTrip({ animalId: 1005, hitsLeft: 2, netId: 7 })).toEqual({
+      animalId: 1005,
+      hitsLeft: 2,
+      netId: 7,
+    });
   });
 
-  it('says a full count again for one just back from being defeated', () => {
-    expect(roundTrip({ animalId: 1005, hitsLeft: 3 })).toEqual({ animalId: 1005, hitsLeft: 3 });
+  it('says a full count again, from nobody, for one just back from being defeated', () => {
+    expect(roundTrip({ animalId: 1005, hitsLeft: 3, netId: null })).toEqual({
+      animalId: 1005,
+      hitsLeft: 3,
+      netId: null,
+    });
   });
 
   it('is tiny, the same as a tree hit', () => {
-    expect(encodeThreatHit({ animalId: 1005, hitsLeft: 2 }).byteLength).toBeLessThanOrEqual(4);
+    expect(
+      encodeThreatHit({ animalId: 1005, hitsLeft: 2, netId: 7 }).byteLength,
+    ).toBeLessThanOrEqual(6);
   });
 
   it('refuses a message of the wrong length', () => {
-    const encoded = encodeThreatHit({ animalId: 1005, hitsLeft: 2 });
+    const encoded = encodeThreatHit({ animalId: 1005, hitsLeft: 2, netId: 7 });
     expect(decodeServerMessage(encoded.slice(0, 3))).toBeNull();
   });
 });

@@ -28,12 +28,14 @@ export * from './data/recipes';
 export * from './data/animals';
 export * from './data/buildables';
 export * from './data/characters';
+export * from './data/moves';
 
 export * from './collision/capsule';
 
 export * from './ecs/traits';
 
 export * from './sim/player';
+export * from './sim/actions';
 export * from './sim/inventory';
 export * from './sim/pickups';
 export * from './sim/gathering';
