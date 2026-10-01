@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {
   ActionKind,
   CHARGE_TICKS,
+  CHARGE_WALK_SHARE,
   DODGE,
   FLINCH,
   Gesture,
@@ -10,6 +11,7 @@ import {
   HOME_CHAIR,
   KNOCKED_OUT_TICKS,
   LIGHT_COMBO,
+  PLAYER_WALK_SPEED,
   RISE,
   RiseFrom,
   SETTLE,
@@ -60,6 +62,8 @@ interface Demo {
   readonly fishing?: FishingPose;
   /** What a blow throws off as it lands, in front of the character. */
   readonly burst?: BurstKind;
+  /** How fast it is walking (on the spot), in metres a second, at this many ticks in. */
+  speed?(age: number): number;
 }
 
 const IDLE = { kind: ActionKind.Idle, step: 0, age: 0 };
@@ -99,6 +103,20 @@ const DEMOS: readonly Demo[] = [
         : age < CHARGE_TICKS + STRIKE.end
           ? { kind: ActionKind.Strike, step: 0, age: age - CHARGE_TICKS }
           : IDLE,
+  },
+  {
+    // The same wind-up, creeping along on walking legs.
+    name: 'creep',
+    item: 'axe',
+    burst: 'dust',
+    length: CHARGE_TICKS + STRIKE.end + 8,
+    move: (age) =>
+      age < CHARGE_TICKS
+        ? { kind: ActionKind.Charge, step: 0, age }
+        : age < CHARGE_TICKS + STRIKE.end
+          ? { kind: ActionKind.Strike, step: 0, age: age - CHARGE_TICKS }
+          : IDLE,
+    speed: (age) => (age < CHARGE_TICKS ? PLAYER_WALK_SPEED * CHARGE_WALK_SHARE : 0),
   },
   ...(['forward', 'backward', 'left', 'right'] as const).map((roll): Demo => ({
     name: `roll-${roll}`,
@@ -298,7 +316,7 @@ function drawAt(showing: Showing, age: number, deltaSeconds: number): void {
   );
   const pose = character.update(deltaSeconds, {
     move: { ...move, atTree: demo.atTree ?? false, flinchVariant: 0, roll: demo.roll ?? 'forward' },
-    locomotion: { speed: 0, airborne: false },
+    locomotion: { speed: demo.speed?.(age) ?? 0, airborne: false },
   });
   const sweeping = pose !== null && isSweeping(pose);
   const tip = sweeping ? character.heldTip(scratchTip) : null;

@@ -18,6 +18,7 @@ import {
 } from '../src/sim/actions';
 import { CHARGE_TICKS, DODGE, FLINCH, LIGHT_COMBO, RISE, SETTLE, STRIKE } from '../src/data/moves';
 import { PlayerButton, createInput } from '../src/sim/player';
+import { CHARGE_WALK_SHARE } from '../src/constants';
 
 const ARMED: ActionContext = { canAttack: true, castInstead: false };
 const UNARMED: ActionContext = { canAttack: false, castInstead: false };
@@ -140,21 +141,29 @@ describe('the rod at the water', () => {
 });
 
 describe('a charged strike', () => {
-  it('roots you while it winds up, then leaps and lands', () => {
+  it('slows you to a creep while it winds up, then plants you to leap and land', () => {
     const { state, feed } = player();
-    const footing = new Set<string>();
+    const footing: string[] = [];
     let landedOn = -1;
     for (let i = 0; i <= CHARGE_TICKS + STRIKE.impact; i++) {
       const tick = feed(PlayerButton.Charge, 0, 1);
-      footing.add(tick.footing);
+      footing.push(tick.footing);
       if (tick.impact !== null) {
         expect(tick.impact).toEqual({ kind: 'strike' });
         landedOn = i;
       }
     }
-    expect(footing).toEqual(new Set(['planted']));
+    expect(new Set(footing.slice(0, CHARGE_TICKS))).toEqual(new Set(['creeping']));
+    expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['planted']));
     expect(landedOn).toBe(CHARGE_TICKS + STRIKE.impact);
     expect(state.kind).toBe(ActionKind.Strike);
+  });
+
+  it('creeps from a swing that has landed too, not just from standing', () => {
+    const { feed } = player();
+    feed(PlayerButton.Swing);
+    for (let i = 1; i <= LIGHT_COMBO[0].impact; i++) feed(PlayerButton.Swing);
+    expect(feed(PlayerButton.Charge, 0, 1).footing).toBe('creeping');
   });
 
   it('follows on from a swing that has landed, if the button is still down', () => {
@@ -170,6 +179,17 @@ describe('a charged strike', () => {
     feed(PlayerButton.Charge);
     feed(PlayerButton.Dodge);
     expect(state.kind).toBe(ActionKind.Charge);
+  });
+
+  it('creeps at a share of walking pace, no quicker on a diagonal, never sprinting or jumping', () => {
+    const buttons = PlayerButton.Sprint | PlayerButton.Jump | PlayerButton.Charge;
+    const straight = footedInput(createInput(1, 0, -1, 0, buttons), 'creeping', 0);
+    expect(straight.moveZ).toBeCloseTo(-CHARGE_WALK_SHARE, 5);
+    expect(straight.buttons & (PlayerButton.Sprint | PlayerButton.Jump)).toBe(0);
+    expect(straight.buttons & PlayerButton.Charge).toBe(PlayerButton.Charge);
+
+    const diagonal = footedInput(createInput(1, 1, -1, 0, buttons), 'creeping', 0);
+    expect(Math.hypot(diagonal.moveX, diagonal.moveZ)).toBeCloseTo(CHARGE_WALK_SHARE, 5);
   });
 });
 

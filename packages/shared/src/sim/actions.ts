@@ -16,7 +16,13 @@
  * everything that follows from an input is decided here.
  */
 
-import { DODGE_DISTANCE, PLAYER_HEIGHT, PLAYER_RADIUS, TICK_SECONDS } from '../constants';
+import {
+  CHARGE_WALK_SHARE,
+  DODGE_DISTANCE,
+  PLAYER_HEIGHT,
+  PLAYER_RADIUS,
+  TICK_SECONDS,
+} from '../constants';
 import {
   CHARGE_TICKS,
   DODGE,
@@ -114,11 +120,13 @@ export interface ActionContext {
  * How the player's feet behave this tick.
  *
  * - `free`: walking as usual.
+ * - `creeping`: walking at `CHARGE_WALK_SHARE` of the usual pace, with no
+ *   sprinting or jumping - winding up a charged attack.
  * - `planted`: no walking or jumping, but still turning to face their aim.
  * - `still`: no walking, jumping or turning - sitting, lying, down, getting up.
  * - `dodging`: carried along the dodge instead of walking (see `stepDodge`).
  */
-export type Footing = 'free' | 'planted' | 'still' | 'dodging';
+export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging';
 
 /** A blow landing on this tick. */
 export type Impact =
@@ -178,7 +186,7 @@ export function advanceAction(
       // Holding on past the click, once this swing has landed, winds up a charge.
       if (held(PlayerButton.Charge) && context.canAttack && state.age > swing.impact) {
         beginAction(state, ActionKind.Charge);
-        return { footing: 'planted', impact: null, cast: false };
+        return { footing: 'creeping', impact: null, cast: false };
       }
       const impact: Impact | null =
         state.age === swing.impact ? { kind: 'swing', step: swingStep(state.step) } : null;
@@ -204,9 +212,13 @@ export function advanceAction(
     }
 
     case ActionKind.Charge:
-      // Committed: nothing gets you out of it but a hit.
-      if (state.age >= CHARGE_TICKS) beginAction(state, ActionKind.Strike);
-      return { footing: 'planted', impact: null, cast: false };
+      // Committed: nothing gets you out of it but a hit. You can still creep
+      // up on whatever it is meant for, though.
+      if (state.age >= CHARGE_TICKS) {
+        beginAction(state, ActionKind.Strike);
+        return { footing: 'planted', impact: null, cast: false };
+      }
+      return { footing: 'creeping', impact: null, cast: false };
 
     case ActionKind.Strike: {
       const impact: Impact | null = state.age === STRIKE.impact ? { kind: 'strike' } : null;
@@ -291,7 +303,7 @@ function startFromIdle(
   if (!context.canAttack) return FREE;
   if (held(PlayerButton.Charge)) {
     beginAction(state, ActionKind.Charge);
-    return { footing: 'planted', impact: null, cast: false };
+    return { footing: 'creeping', impact: null, cast: false };
   }
   if (!held(PlayerButton.Swing)) return FREE;
   if (context.castInstead) {
@@ -362,8 +374,9 @@ export function stepDodge(
 }
 
 /**
- * The input walking actually sees, given how the feet are this tick: no
- * walking or jumping once they are planted, and not even turning once still.
+ * The input walking actually sees, given how the feet are this tick: only a
+ * creep while winding up, no walking or jumping once they are planted, and
+ * not even turning once still.
  */
 export function footedInput(
   input: Readonly<PlayerInput>,
@@ -372,6 +385,12 @@ export function footedInput(
 ): PlayerInput {
   if (footing === 'free') return input;
   const buttons = input.buttons & ~(PlayerButton.Jump | PlayerButton.Sprint);
+  if (footing === 'creeping') {
+    // Scaled after evening out a diagonal, so a creep is no quicker that way.
+    const length = Math.sqrt(input.moveX * input.moveX + input.moveZ * input.moveZ);
+    const share = CHARGE_WALK_SHARE / Math.max(1, length);
+    return { ...input, moveX: input.moveX * share, moveZ: input.moveZ * share, buttons };
+  }
   if (footing === 'still') {
     return { ...input, moveX: 0, moveZ: 0, buttons, aimYaw: facingYaw };
   }

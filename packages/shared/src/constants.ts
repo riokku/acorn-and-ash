@@ -196,13 +196,19 @@ export const DODGE_COOLDOWN_TICKS = Math.round(DODGE_COOLDOWN_SECONDS * TICK_HZ)
  * A charged attack.
  *
  * The last piece of "light and charged attacks, dodge, readable enemy
- * wind-ups": held rather than tapped, and rooted to the spot for as long as
+ * wind-ups": held rather than tapped, and slowed to a creep for as long as
  * it takes - your own wind-up, readable the same way a threat's is. Once it
  * goes off it always finishes whatever it lands on outright, tree or
  * threat, however many swings that would otherwise have taken - the payoff
- * for standing still and committing to it.
+ * for slowing right down and committing to it.
  */
 export const CHARGE_SECONDS = 1;
+/**
+ * How much of walking pace is left while winding up a charged attack: a
+ * slow creep, enough to edge up on something without running at it, and
+ * no sprinting or jumping.
+ */
+export const CHARGE_WALK_SHARE = 1 / 3;
 
 /**
  * Fishing.

@@ -33,6 +33,12 @@ const GAITS: readonly Gait[] = ['idle', 'walk', 'run', 'jumpAir'];
 const GAIT_FOLLOW = 10;
 /** The pace each walking clip was made for, as near as looks right. */
 const WALK_PACE = 4.5;
+/**
+ * The slowest the walk plays, as a share of its own pace: slow enough for
+ * creeping through a charge's wind-up at a third of walking pace without
+ * the feet sliding.
+ */
+const WALK_SLOWEST = 0.3;
 const RUN_PACE = 7;
 /** How quickly a hit-stop's lost time is caught back up afterwards, as a share of real time. */
 const CATCH_UP = 0.6;
@@ -54,6 +60,12 @@ interface MoveLayer {
   readonly key: string;
   readonly clip: MoveClip;
   readonly action: THREE.AnimationAction;
+  /**
+   * The same clip above the waist only, for a move that lets the legs walk
+   * on underneath it (see `MovePose.legsFree`), or null for one that has
+   * the whole body.
+   */
+  readonly upper: THREE.AnimationAction | null;
   weight: number;
   /** Seconds to fade fully in, or out once it is `fading`. */
   fade: number;
@@ -225,10 +237,20 @@ export class CharacterAnimator {
     this.eatingNow = this.eatingFor === null ? null : eatingPose(this.eatingFor);
 
     const pose = movePose({ ...move, age: move.age - this.lag / TICK_SECONDS });
+    const stillness = 1 - Math.min(1, locomotion.speed / 1.5);
     this.updateMoves(deltaSeconds, move.kind, pose);
     const moveWeight = Math.min(
       1,
       this.moves.reduce((sum, layer) => sum + layer.weight, 0),
+    );
+    // How much of the legs moves have: all of it, but for a move that lets
+    // them walk on underneath, which hands them back as the walk picks up.
+    const moveLegs = Math.min(
+      1,
+      this.moves.reduce(
+        (sum, layer) => sum + layer.weight * (layer.upper === null ? 1 : stillness),
+        0,
+      ),
     );
     this.updateGaits(deltaSeconds, locomotion);
 
@@ -236,7 +258,6 @@ export class CharacterAnimator {
     if (moveWeight > 0.5) for (const layer of this.gestures) layer.ending = true;
     this.advanceChannel(this.gestures, delta);
     this.advanceChannel(this.fishing, delta);
-    const stillness = 1 - Math.min(1, locomotion.speed / 1.5);
     const gesture = channelWeights(this.gestures, stillness);
     const fishing = channelWeights(this.fishing, stillness);
     // Gestures come first, fishing under them, walking under both.
@@ -249,8 +270,9 @@ export class CharacterAnimator {
     // Everything below shares out one whole for the upper body and one for
     // the legs, so blending never falls back to the bind pose or doubles up.
     const free = 1 - moveWeight;
+    const freeLegs = 1 - moveLegs;
     const gaitUpper = free * (1 - gestureUpper - fishingUpper);
-    const gaitLower = free * (1 - gestureLower - fishingLower);
+    const gaitLower = freeLegs * (1 - gestureLower - fishingLower);
     for (const gait of GAITS) {
       const share = this.gaitWeight[gait];
       this.gaitUpper.get(gait)?.setEffectiveWeight(gaitUpper * share);
@@ -258,11 +280,12 @@ export class CharacterAnimator {
     }
     for (const [, action] of this.upper) action.setEffectiveWeight(0);
     for (const [, action] of this.lower) action.setEffectiveWeight(0);
-    applyChannel(this.gestures, free * gestureUpper, free * gestureLower, stillness);
-    applyChannel(this.fishing, free * fishingUpper, free * fishingLower, stillness);
+    this.applyMoves(stillness);
+    applyChannel(this.gestures, free * gestureUpper, freeLegs * gestureLower, stillness);
+    applyChannel(this.fishing, free * fishingUpper, freeLegs * fishingLower, stillness);
 
     const gaitRate = delta === 0 ? 0 : 1;
-    this.gaitRate('walk', gaitRate * clamp(locomotion.speed / WALK_PACE, 0.55, 1.6));
+    this.gaitRate('walk', gaitRate * clamp(locomotion.speed / WALK_PACE, WALK_SLOWEST, 1.6));
     this.gaitRate('run', gaitRate * clamp(locomotion.speed / RUN_PACE, 0.75, 1.35));
     this.gaitRate('idle', gaitRate);
     this.gaitRate('jumpAir', gaitRate);
@@ -346,7 +369,8 @@ export class CharacterAnimator {
         // The same action may still be on its way out from before: take it over.
         const reused = this.moves.findIndex((layer) => layer.action === action);
         if (reused >= 0) this.moves.splice(reused, 1);
-        this.moves.push({ key, clip: pose.clip, action, weight: 0, fade, fading: false });
+        const upper = pose.legsFree ? (this.upper.get(pose.clip) ?? null) : null;
+        this.moves.push({ key, clip: pose.clip, action, upper, weight: 0, fade, fading: false });
       }
     }
 
@@ -365,11 +389,25 @@ export class CharacterAnimator {
         layer.action.time = pose.loop
           ? pose.time % Math.max(duration, 1e-3)
           : Math.min(pose.time, duration - 1e-4);
+        if (layer.upper !== null) layer.upper.time = layer.action.time;
       }
     }
+  }
+
+  /**
+   * Share the moves' weight out between their clips: the whole body, or,
+   * for one that lets the legs walk on, the same clip above the waist only,
+   * more of it the faster the legs are going.
+   */
+  private applyMoves(stillness: number): void {
     const total = this.moves.reduce((sum, layer) => sum + layer.weight, 0);
     const scale = total > 1 ? 1 / total : 1;
-    for (const layer of this.moves) layer.action.setEffectiveWeight(layer.weight * scale);
+    for (const layer of this.moves) {
+      const weight = layer.weight * scale;
+      const walking = layer.upper === null ? 0 : 1 - stillness;
+      layer.action.setEffectiveWeight(weight * (1 - walking));
+      layer.upper?.setEffectiveWeight(layer.upper.getEffectiveWeight() + weight * walking);
+    }
   }
 
   private overlay(
