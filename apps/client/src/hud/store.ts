@@ -111,6 +111,8 @@ export interface HudState {
   readonly charging: boolean;
   /** What we last made, while it is still worth showing. */
   readonly craftingNews: string | null;
+  /** What we last cooked over a campfire, while it is still worth showing. */
+  readonly cookingNews: string | null;
   /** What we last caught, while it is still worth showing. */
   readonly huntingNews: string | null;
   /** What just happened to a buried cache of ours, while it is still worth showing. */
@@ -178,6 +180,7 @@ const INITIAL: HudState = {
   healthNews: null,
   charging: false,
   craftingNews: null,
+  cookingNews: null,
   huntingNews: null,
   cacheNews: null,
   discardNews: null,

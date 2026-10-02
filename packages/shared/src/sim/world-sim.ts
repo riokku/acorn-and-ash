@@ -145,6 +145,7 @@ import {
   type CastInput,
 } from './fishing';
 import { drainHunger, eat, foodToEat, hungerDrainPerSecond } from './hunger';
+import { cookOne, cookedItemFor } from './cooking';
 import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
 import {
   PlayerButton,
@@ -589,6 +590,13 @@ export interface CraftedEvent {
   readonly item: ItemId;
 }
 
+/** Word that a player cooked one piece of food over a lit campfire. */
+export interface CookedEvent {
+  readonly netId: number;
+  readonly raw: ItemId;
+  readonly cooked: ItemId;
+}
+
 /**
  * A player dropped or destroyed something from their pack, for their own HUD
  * alone: everybody else sees a dropped pile turn up from the next pile list.
@@ -829,6 +837,7 @@ export class WorldSimulation {
   private readonly healthEvents: HealthEvent[] = [];
   private readonly gestureEvents: GestureEvent[] = [];
   private readonly craftEvents: CraftedEvent[] = [];
+  private readonly cookingEvents: CookedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
@@ -1305,7 +1314,7 @@ export class WorldSimulation {
                 // this tick is the fresh press that actually toggles it -
                 // otherwise holding the button down to "keep warm" would fall
                 // through and eat from the pack on every tick after the first.
-                const nearCampfire = this.tryToggleCampfire(
+                const nearCampfire = this.tryUseCampfire(
                   runtime,
                   scratch.position,
                   this.nowMs,
@@ -2161,7 +2170,7 @@ export class WorldSimulation {
    * when `isFreshPress` is true, so holding the button down toggles it once
    * rather than flickering it every tick.
    */
-  private tryToggleCampfire(
+  private tryUseCampfire(
     runtime: PlayerRuntime,
     position: Readonly<Vec3>,
     nowMs: number,
@@ -2170,6 +2179,23 @@ export class WorldSimulation {
     const campfire = nearestCampfire(position, this.builtProps);
     if (campfire === null) return false;
     if (!isFreshPress) return true;
+
+    // A lit fire cooks one piece of the raw food actually held in hand.
+    // Cookable food claims the press even when the result will not fit, so a
+    // full pack never turns "cook this" into the surprising act of putting
+    // the fire out.
+    const held = this.equippedItemOf(runtime.netId);
+    if (campfire.lit && held !== null && cookedItemFor(held) !== null) {
+      const cooked = cookOne(runtime.inventory, held);
+      if (cooked !== null) {
+        this.cookingEvents.push({ netId: runtime.netId, raw: held, cooked });
+        this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: held });
+        // If that was the last raw piece, the hand is now empty. Resending the
+        // equipped list settles that for this player and everybody nearby.
+        this.equipEvents.push(runtime.netId);
+      }
+      return true;
+    }
 
     campfire.lit = !campfire.lit;
     if (campfire.lit) {
@@ -3033,6 +3059,11 @@ export class WorldSimulation {
     return this.craftEvents.splice(0);
   }
 
+  /** Hand over every campfire cook since this was last asked. */
+  drainCookingEvents(): CookedEvent[] {
+    return this.cookingEvents.splice(0);
+  }
+
   /**
    * Select one item from the pack as this player's equipped item - what
    * shows in their hand, and what everyone nearby is now told they are
@@ -3059,7 +3090,15 @@ export class WorldSimulation {
       this.equipEvents.push(netId);
       changed = true;
     }
-    if (isFood(item) && runtime.hunger < HUNGER_MAX) {
+    const savingForFire =
+      cookedItemFor(item) !== null &&
+      runtime.space === OUTDOORS &&
+      (() => {
+        const position = runtime.entity.get(Position);
+        const campfire = position === undefined ? null : nearestCampfire(position, this.builtProps);
+        return campfire?.lit === true;
+      })();
+    if (isFood(item) && runtime.hunger < HUNGER_MAX && !savingForFire) {
       this.eatItem(runtime, item);
       changed = true;
     }

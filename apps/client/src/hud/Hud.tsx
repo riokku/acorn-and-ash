@@ -11,6 +11,8 @@ import {
   RECIPE_ITEMS,
   canAfford,
   canCraft,
+  canCook,
+  cookedItemFor,
   hasItem,
   inventoryFromEntries,
   isDiscardable,
@@ -197,6 +199,7 @@ export function Hud({
         state.cacheNews !== null ||
         state.hungerNews !== null ||
         state.craftingNews !== null ||
+        state.cookingNews !== null ||
         state.huntingNews !== null ||
         state.discardNews !== null) ? (
         <p className="hud-news">
@@ -205,6 +208,7 @@ export function Hud({
             state.cacheNews ??
             state.hungerNews ??
             state.craftingNews ??
+            state.cookingNews ??
             state.huntingNews ??
             state.discardNews}
         </p>
@@ -544,6 +548,10 @@ export function hint(state: HudState): string {
   // Settled in, E gets you up rather than doing anything else it would.
   if (state.resting === 'chair') return 'Sitting comfortably · move or press E to get up';
   if (state.resting === 'bed') return 'Snug in bed · move or press E to get up';
+  // A held raw food beside a lit campfire is deliberately saved for cooking
+  // even while hungry, so say what E will really do before the hunger nudge.
+  const cookingNow = campfireCookingHint(state);
+  if (cookingNow !== null) return cookingNow;
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
@@ -632,6 +640,18 @@ function gatherHint(state: HudState, item: ItemId): string {
   const plural = ITEM_KINDS[item].pluralName.toLowerCase();
   if (roomFor(inventoryFromEntries(state.carrying), item) > 0) return `Press E to gather ${plural}`;
   return `Your pack is full · no room for more ${plural}`;
+}
+
+function campfireCookingHint(state: HudState): string | null {
+  if (state.nearCampfire !== 'lit' || state.equippedItem === null) return null;
+  const raw = state.equippedItem;
+  const cooked = cookedItemFor(raw);
+  if (cooked === null) return null;
+  const pack = inventoryFromEntries(state.carrying);
+  if (canCook(pack, raw)) {
+    return `Press E to roast the ${ITEM_KINDS[raw].displayName.toLowerCase()}`;
+  }
+  return `Your pack is full · no room for ${ITEM_KINDS[cooked].displayName.toLowerCase()}`;
 }
 
 function hungerHint(state: HudState): string {
