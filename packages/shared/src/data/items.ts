@@ -17,7 +17,11 @@ export type ItemId =
   | 'flower'
   | 'bag'
   | 'torch'
-  | 'bone';
+  | 'bone'
+  | 'roastedPerch'
+  | 'roastedTrout'
+  | 'roastedGoldenCarp'
+  | 'roastedMeat';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -215,6 +219,54 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: false,
   },
+  roastedPerch: {
+    id: 'roastedPerch',
+    displayName: 'Roasted perch',
+    pluralName: 'Roasted perch',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x9a6a43,
+    restoresHunger: 60,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  roastedTrout: {
+    id: 'roastedTrout',
+    displayName: 'Roasted trout',
+    pluralName: 'Roasted trout',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xaa6652,
+    restoresHunger: 60,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  roastedGoldenCarp: {
+    id: 'roastedGoldenCarp',
+    displayName: 'Roasted golden carp',
+    pluralName: 'Roasted golden carp',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xc58b32,
+    restoresHunger: 75,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  roastedMeat: {
+    id: 'roastedMeat',
+    displayName: 'Roasted meat',
+    pluralName: 'Roasted meat',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x874737,
+    restoresHunger: 75,
+    keepOnKnockout: false,
+    equippable: true,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -236,6 +288,11 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'bag',
   'torch',
   'bone',
+  // Only add new ids at the end: these numbers are persisted in saved packs.
+  'roastedPerch',
+  'roastedTrout',
+  'roastedGoldenCarp',
+  'roastedMeat',
 ];
 
 export function itemIndex(id: ItemId): number {
