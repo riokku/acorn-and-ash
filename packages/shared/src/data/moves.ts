@@ -40,7 +40,7 @@ export const LIGHT_COMBO: readonly [ComboSwing, ComboSwing, ComboSwing] = [
   { impact: 5, chain: 14, planted: 10, end: 14 },
 ];
 
-/** How long a charge winds up before it goes off: see `CHARGE_SECONDS`. */
+/** Minimum wind-up before a released charge can strike: see `CHARGE_SECONDS`. */
 export const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ);
 
 /**

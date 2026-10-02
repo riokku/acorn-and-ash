@@ -16,6 +16,8 @@ export interface MoveIntent {
 
 const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
+const LIGHT_ATTACK = 'LightAttack';
+const CHARGED_ATTACK = 'ChargedAttack';
 
 /**
  * Hotkeys for crafting or building, in menu order: 1 is the first entry, 2 the
@@ -78,6 +80,8 @@ export class Controls {
   private mouseDeltaY = 0;
   /** When the left button last went down, so a hold can be told apart from a tap - see `CHARGE_HOLD_MS`. */
   private leftMouseDownAt: number | null = null;
+  private leftChargeSent = false;
+  private leftSwingSent = false;
   /** Where the screen a left click landed, until `takeClickPoint` reads it. */
   private pendingClickPoint: { x: number; y: number } | null = null;
   /** Where the cursor last was over the game, for a piece being placed to follow. */
@@ -132,12 +136,11 @@ export class Controls {
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
    * cannot climb the sky. Holding E is harmless in the same way: the server
-   * hands over each thing exactly once. Left mouse taps a light swing at a
-   * steady rhythm while held, exactly as before, unless it has been held past
-   * `CHARGE_HOLD_MS` - past that it commits to a charged attack instead (see
-   * decision 0050), freeing the right button entirely for turning the camera.
+   * hands over each thing exactly once. A short left click swings on release;
+   * holding it charges without first swinging. Fishing uses immediate clicks
+   * so casting and reacting to a bite never wait for an attack decision.
    */
-  buttons(): number {
+  buttons(immediateSwing = false): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
@@ -148,9 +151,15 @@ export class Controls {
 
     const leftHeldPastThreshold =
       this.leftMouseDownAt !== null && performance.now() - this.leftMouseDownAt >= CHARGE_HOLD_MS;
-    if (leftHeldPastThreshold) {
+    if (immediateSwing) {
+      if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) {
+        buttons |= PlayerButton.Swing;
+        this.leftSwingSent = true;
+      }
+    } else if (!this.leftSwingSent && (leftHeldPastThreshold || this.tapped.has(CHARGED_ATTACK))) {
       buttons |= PlayerButton.Charge;
-    } else if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) {
+      this.leftChargeSent = true;
+    } else if (this.tapped.has(LIGHT_ATTACK)) {
       buttons |= PlayerButton.Swing;
     }
     return buttons;
@@ -282,7 +291,11 @@ export class Controls {
   swallowLeftPress(): void {
     this.held.delete(LEFT_MOUSE);
     this.tapped.delete(LEFT_MOUSE);
+    this.tapped.delete(LIGHT_ATTACK);
+    this.tapped.delete(CHARGED_ATTACK);
     this.leftMouseDownAt = null;
+    this.leftChargeSent = false;
+    this.leftSwingSent = false;
   }
 
   /** How far the mouse has moved since this was last asked, then reset. */
@@ -314,6 +327,9 @@ export class Controls {
     this.held.clear();
     this.tapped.clear();
     this.leftMouseDownAt = null;
+    this.leftChargeSent = false;
+    this.leftSwingSent = false;
+    this.pendingClickPoint = null;
   }
 
   dispose(): void {
@@ -340,8 +356,7 @@ export class Controls {
 
   /** Clicking away must not leave the player walking into a tree forever. */
   private readonly handleBlur = (): void => {
-    this.held.clear();
-    this.tapped.clear();
+    this.releaseAll();
   };
 
   /**
@@ -392,6 +407,8 @@ export class Controls {
     this.tapped.add(mouseCode(event.button));
     if (event.button === 0) {
       this.leftMouseDownAt = performance.now();
+      this.leftChargeSent = false;
+      this.leftSwingSent = false;
       this.pendingClickPoint = { x: event.clientX, y: event.clientY };
     }
   };
@@ -410,7 +427,14 @@ export class Controls {
       return;
     }
     this.held.delete(mouseCode(event.button));
-    if (event.button === 0) this.leftMouseDownAt = null;
+    if (event.button === 0) {
+      if (this.leftMouseDownAt !== null && !this.leftChargeSent && !this.leftSwingSent) {
+        this.tapped.add(
+          performance.now() - this.leftMouseDownAt < CHARGE_HOLD_MS ? LIGHT_ATTACK : CHARGED_ATTACK,
+        );
+      }
+      this.leftMouseDownAt = null;
+    }
   };
 
   /** Ask the browser to capture the mouse, for a right-button camera drag. */

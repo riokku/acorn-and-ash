@@ -156,7 +156,7 @@ describe('a charged strike', () => {
     const footing: string[] = [];
     let landedOn = -1;
     for (let i = 0; i <= CHARGE_TICKS + STRIKE.impact; i++) {
-      const tick = feed(PlayerButton.Charge, 0, 1);
+      const tick = feed(i < CHARGE_TICKS ? PlayerButton.Charge : 0, 0, 1);
       footing.push(tick.footing);
       if (tick.impact !== null) {
         expect(tick.impact).toEqual({ kind: 'strike' });
@@ -166,6 +166,27 @@ describe('a charged strike', () => {
     expect(new Set(footing.slice(0, CHARGE_TICKS))).toEqual(new Set(['creeping']));
     expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['planted']));
     expect(landedOn).toBe(CHARGE_TICKS + STRIKE.impact);
+    expect(state.kind).toBe(ActionKind.Strike);
+  });
+
+  it('holds a fully charged blow without swinging until the button is released', () => {
+    const { state, feed } = player();
+    for (let i = 0; i < CHARGE_TICKS + 20; i++) {
+      expect(feed(PlayerButton.Charge).impact).toBeNull();
+      expect(state.kind).toBe(ActionKind.Charge);
+    }
+    feed();
+    expect(state.kind).toBe(ActionKind.Strike);
+  });
+
+  it('finishes the full wind-up even when released early', () => {
+    const { state, feed } = player();
+    feed(PlayerButton.Charge);
+    for (let i = 1; i < CHARGE_TICKS; i++) {
+      feed();
+      expect(state.kind).toBe(ActionKind.Charge);
+    }
+    feed();
     expect(state.kind).toBe(ActionKind.Strike);
   });
 

@@ -220,9 +220,9 @@ export function advanceAction(
     }
 
     case ActionKind.Charge:
-      // Committed: nothing gets you out of it but a hit. You can still creep
-      // up on whatever it is meant for, though.
-      if (state.age >= CHARGE_TICKS) {
+      // Hold the prepared blow until release. An early release still finishes
+      // the wind-up, so a strong attack always pays its full preparation cost.
+      if (state.age >= CHARGE_TICKS && !held(PlayerButton.Charge)) {
         beginAction(state, ActionKind.Strike);
         return { footing: 'planted', impact: null, cast: false };
       }

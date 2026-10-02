@@ -3128,12 +3128,15 @@ describe('a charged attack', () => {
   }
 
   /**
-   * Hold the button down through the whole wind-up and until the strike
+   * Hold the button through the wind-up, then release and wait until the strike
    * lands, or until it plainly never will. Returns the next sequence number.
    */
   function chargeUntilItLands(sim: WorldSimulation, netId: number, seq: number): number {
     for (let i = 0; i < CHARGE_TICKS + STRIKE.impact + 20; i++) {
-      sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+      sim.queueInput(
+        netId,
+        createInput(seq++, 0, 0, 0, i < CHARGE_TICKS ? PlayerButton.Charge : 0),
+      );
       sim.step(tickClock());
       const action = sim.actionOf(netId);
       if (action?.kind === ActionKind.Strike && action.age >= STRIKE.impact) break;
@@ -3156,7 +3159,7 @@ describe('a charged attack', () => {
     expect(sim.drainChopEvents()).toEqual([]);
     for (let i = 0; i <= STRIKE.impact; i++) {
       expect(sim.drainChopEvents()).toEqual([]);
-      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Charge));
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
       sim.step(tickClock());
     }
     expect(sim.actionOf(1)?.kind).toBe(ActionKind.Strike);
