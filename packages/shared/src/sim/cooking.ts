@@ -8,13 +8,7 @@
  */
 
 import type { ItemId } from '../data/items';
-import {
-  addItem,
-  countOf,
-  removeItem,
-  roomFor,
-  type Inventory,
-} from './inventory';
+import { addItem, countOf, removeItem, roomFor, type Inventory } from './inventory';
 
 export const COOKING_RESULTS = {
   perch: 'roastedPerch',
