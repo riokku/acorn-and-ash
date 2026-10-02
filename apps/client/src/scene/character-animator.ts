@@ -123,6 +123,7 @@ export class CharacterAnimator {
   private readonly lower = new Map<MoveClip, THREE.AnimationAction>();
   private readonly gestures: Channel = [];
   private readonly fishing: Channel = [];
+  /** Last pose requested by the game; automatic clip transitions must not change it. */
   private fishingPose: FishingPose | null = null;
   /** A hit-stop in progress: seconds of it left. */
   private stopLeft = 0;
@@ -469,7 +470,6 @@ export class CharacterAnimator {
         layer.ending = true;
         // A cast carries straight on into waiting for a bite.
         if (layer.then !== null && channel === this.fishing && i === channel.length - 1) {
-          this.fishingPose = layer.then;
           const next = this.fishingOverlay(layer.then);
           if (next !== null) channel.push(next);
         }

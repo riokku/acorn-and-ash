@@ -2403,8 +2403,12 @@ export class Game {
     // The left button places a piece while one is out, so it is never also
     // a swing or a charge then.
     const placingMask = this.placing === null ? ~0 : ~(PlayerButton.Swing | PlayerButton.Charge);
+    const fishingClick =
+      this.fishingPhase !== null ||
+      this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)
+        .castInstead;
     const buttons =
-      ((this.controls?.buttons() ?? 0) & placingMask) |
+      ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
 
     // Walking off lets go of whatever was clicked: the character aims the
