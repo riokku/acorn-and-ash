@@ -9,8 +9,10 @@ import {
   Gesture,
   HOME_BED,
   HOME_CHAIR,
+  ITEM_KINDS,
   KNOCKED_OUT_TICKS,
   LIGHT_COMBO,
+  PLAYER_SPRINT_SPEED,
   PLAYER_WALK_SPEED,
   RISE,
   RiseFrom,
@@ -35,6 +37,7 @@ import {
   type RestSpot,
   type RollDirection,
 } from '../scene/character';
+import type { FireLights } from '../scene/fire-light';
 import type { RendererSetup } from '../scene/renderer';
 
 /**
@@ -42,7 +45,8 @@ import type { RendererSetup } from '../scene/renderer';
  * character, for looking the animations over (see decision 0056):
  * `?gallery=moves` shows them all, looping; `&demo=` picks one to look at up
  * close; `&strip=N` lays that one out as N frozen moments across its length;
- * `&at=` freezes them all at one moment, in ticks.
+ * `&at=` freezes them all at one moment, in ticks; `&item=` puts something
+ * else in every hand.
  */
 
 /** One move to show, and how it unfolds tick by tick. */
@@ -70,6 +74,10 @@ const IDLE = { kind: ActionKind.Idle, step: 0, age: 0 };
 const [SWING_1, SWING_2, SWING_3] = LIGHT_COMBO;
 
 const DEMOS: readonly Demo[] = [
+  // Walking and running about with something carried: where it sits as the
+  // arms swing (`&item=` swaps what is carried).
+  { name: 'walk', item: 'torch', length: 40, move: () => IDLE, speed: () => PLAYER_WALK_SPEED },
+  { name: 'run', item: 'rod', length: 40, move: () => IDLE, speed: () => PLAYER_SPRINT_SPEED },
   {
     name: 'combo',
     item: 'axe',
@@ -190,6 +198,7 @@ let bursts: ImpactBursts | null = null;
 export async function showMoves(
   renderer: RendererSetup['renderer'],
   scene: THREE.Scene,
+  fireLights: FireLights,
   params: URLSearchParams,
 ): Promise<void> {
   await Promise.all([preloadCharacterModels(), preloadItemModels(), preloadCharacterAnimations()]);
@@ -199,6 +208,8 @@ export async function showMoves(
   const freezeAt = params.has('at') ? Number(params.get('at')) : null;
   const spacing = Number(params.get('spacing') ?? 1.7);
   const turn = Number(params.get('turn') ?? 0.5);
+  const asked = params.get('item');
+  const carrying = asked !== null && asked in ITEM_KINDS ? (asked as ItemId) : null;
 
   const showings: Showing[] = [];
   bursts = new ImpactBursts();
@@ -207,7 +218,7 @@ export async function showMoves(
     const character = createCharacter('knight', 0xf2efe6);
     character.group.position.set(x, 0, z);
     character.group.rotation.y = turn;
-    character.setEquippedItem(demo.item);
+    character.setEquippedItem(carrying ?? demo.item);
     scene.add(character.group);
     const label = createNameplate(frozen ? `${demo.name} @${age}` : demo.name);
     label.sprite.position.set(x, 1.45, z);
@@ -282,6 +293,7 @@ export async function showMoves(
     }
     // Frozen moments hold their chips mid-air too.
     if (showings.some((showing) => !showing.frozen)) bursts?.update(delta);
+    fireLights.update(camera.position);
     renderer.render(scene, camera);
     frames += 1;
     if (frames === 8) document.body.dataset.galleryReady = 'true';

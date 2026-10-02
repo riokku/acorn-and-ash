@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 
+import { isFireGlow } from './fire-light';
+
 /**
  * The see-through preview of a piece being placed (see decision 0052): the
  * very same model the piece will have once built, washed over in one soft
@@ -69,9 +71,9 @@ export function createBuildGhost(source: GhostSource, footprint: GhostFootprint)
   // Every mesh keeps its shape but wears the ghost's material instead; a
   // light (a lantern's glow) would light up the ground under a piece that is
   // not there yet, so it goes entirely.
-  const lights: THREE.Light[] = [];
+  const lights: THREE.Object3D[] = [];
   source.group.traverse((object) => {
-    if (object instanceof THREE.Light) {
+    if (object instanceof THREE.Light || isFireGlow(object)) {
       lights.push(object);
       return;
     }

@@ -129,6 +129,7 @@ export class CharacterAnimator {
   /** How far behind the move the drawing is, in seconds, after a hit-stop. */
   private lag = 0;
   private use = 0;
+  private swing = 0;
   /** Seconds into eating, or null when not eating. */
   private eatingFor: number | null = null;
   private eatingNow: EatingPose | null = null;
@@ -211,6 +212,14 @@ export class CharacterAnimator {
     return this.use;
   }
 
+  /**
+   * How much the arms are swinging along with a walk or a run, from 0 to 1:
+   * none standing still, or once a move or a gesture has the arms.
+   */
+  get armSwing(): number {
+    return this.swing;
+  }
+
   /** How eating is going, or null when not eating. */
   get eating(): EatingPose | null {
     return this.eatingNow;
@@ -273,6 +282,7 @@ export class CharacterAnimator {
     const freeLegs = 1 - moveLegs;
     const gaitUpper = free * (1 - gestureUpper - fishingUpper);
     const gaitLower = freeLegs * (1 - gestureLower - fishingLower);
+    this.swing = gaitUpper * (this.gaitWeight.walk + this.gaitWeight.run);
     for (const gait of GAITS) {
       const share = this.gaitWeight[gait];
       this.gaitUpper.get(gait)?.setEffectiveWeight(gaitUpper * share);

@@ -17,7 +17,7 @@ import { characterClips, type CharacterClips } from './character-animations';
 import { CharacterAnimator, type FishingPose, type Locomotion } from './character-animator';
 import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
-import { createFlickerLight, type FlickerLight } from './fire-light';
+import { createFireGlow, type FireGlow } from './fire-light';
 
 export type { FishingPose, Locomotion, MoveView };
 
@@ -121,25 +121,77 @@ const ABOUT_THE_HANDLE = new THREE.Quaternion().setFromAxisAngle(
 );
 
 /**
- * How much further the carried axe leans forward than the upright carry,
- * in radians - about 15 degrees, so roughly 45 degrees off vertical in
- * all. Turning about the axe's own Z tips the handle toward the blade's
- * side, which is forward once the blade faces forward.
+ * How far off vertical the upright carry stands with the character standing
+ * still - about 30 degrees forward, measured in the moves gallery.
  */
-const AXE_EXTRA_LEAN = 0.26;
+const UPRIGHT_LEAN = Math.PI / 6;
 
 /**
- * The axe carried blade first: the upright carry, turned about its handle so
- * the edge faces away from the player rather than back at them, then tipped
- * a little further forward. Measured in the moves gallery, standing still
- * the blade points ahead of the character and down a little, not back at them.
+ * How far forward of vertical each long tool is carried, standing still.
+ * Upright, walking swung the hand far enough back that the torch's flame
+ * went into the character's hair and the rod and axe leaned back over
+ * their shoulder (see decision 0062).
  */
-const AXE_CARRY = new THREE.Euler().setFromQuaternion(
-  new THREE.Quaternion()
-    .setFromEuler(UPRIGHT_CARRY)
-    .multiply(ABOUT_THE_HANDLE)
-    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), AXE_EXTRA_LEAN)),
-);
+const CARRY_LEAN = {
+  axe: THREE.MathUtils.degToRad(55),
+  rod: THREE.MathUtils.degToRad(45),
+  torch: THREE.MathUtils.degToRad(45),
+} as const;
+
+/**
+ * How far every long tool tips out to the character's right, away from the
+ * head: upright, it leaned in a little, and from the camera behind, the
+ * helmet hid it.
+ */
+const CARRY_SPLAY = THREE.MathUtils.degToRad(12);
+
+/**
+ * How much the wrist holds a carried tool steady against the arm swinging
+ * through a walk or a run, from 0 (none: it swings back with every stride)
+ * to 1 (fixed to the body, as stiff as a puppet's).
+ */
+const WRIST_STEADY = 0.8;
+
+const SIDE_TO_SIDE = new THREE.Vector3(1, 0, 0);
+const ALONG_THE_HANDLE = new THREE.Vector3(0, 1, 0);
+const TIP_AXIS = new THREE.Vector3(0, 0, 1);
+/** A tool's own X, which carried runs ahead of the character and down. */
+const SPLAY_AXIS = new THREE.Vector3(1, 0, 0);
+const NO_TURN = new THREE.Quaternion();
+
+/** Tipped out to the right by `CARRY_SPLAY`, then turned about the handle by `turn`. */
+function splayedAndTurned(turn: THREE.Quaternion): THREE.Quaternion {
+  return new THREE.Quaternion().setFromAxisAngle(SPLAY_AXIS, CARRY_SPLAY).multiply(turn);
+}
+
+/**
+ * A long tool carried in the hand: the upright carry, tipped about its own
+ * Z - which, held upright, runs from one side of the character to the
+ * other - to `lean` off vertical in all, out to the right a little, then
+ * turned about its handle by `turn`.
+ */
+function carriedAt(lean: number, turn: THREE.Quaternion): THREE.Euler {
+  return new THREE.Euler().setFromQuaternion(
+    new THREE.Quaternion()
+      .setFromEuler(UPRIGHT_CARRY)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(TIP_AXIS, UPRIGHT_LEAN - lean))
+      .multiply(splayedAndTurned(turn)),
+  );
+}
+
+/**
+ * The same carry against the body instead of the hand, in the model's own
+ * frame (ahead along +Z, up along +Y): a quarter turn about the handle,
+ * which is how the upright carry measured standing still, then tipped
+ * forward to `lean` about the body's own side-to-side - splayed and turned
+ * the same as in the hand.
+ */
+function steadiedAt(lean: number, turn: THREE.Quaternion): THREE.Quaternion {
+  return new THREE.Quaternion()
+    .setFromAxisAngle(SIDE_TO_SIDE, lean)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(ALONG_THE_HANDLE, -Math.PI / 2))
+    .multiply(splayedAndTurned(turn));
+}
 
 /**
  * How a held item sits relative to the hand bone: `rotation`/`offset` place
@@ -161,46 +213,56 @@ interface HeldItemRest {
  * straight ahead as a chop lands - so `use` holds everything that way, a
  * little way up the handle. Carried like that, though, the axe sticks
  * straight out in front, so standing about keeps the upright carry that
- * was matched to Chris's screenshot.
+ * was matched to Chris's screenshot, leaned further forward.
  */
 interface HeldGrips {
   readonly carry: HeldItemRest;
   readonly use: HeldItemRest;
+  /**
+   * A long tool's carry held against the body rather than the hand, in the
+   * model's own frame: the wrist turns toward it as the arms swing with a
+   * walk or a run, so the tool doesn't swing back with every stride.
+   */
+  readonly steady?: THREE.Quaternion;
 }
-
-/**
- * The rod shares the upright carry the axe's grip was first matched to
- * rather than a fresh guess: both are long, one-handed tools whose model
- * sits with its base at the local origin (see `loadScaledModel`), gripped by
- * that same base end. Nobody has sampled this one against a real screenshot
- * yet the way the axe's numbers were - Chris can flag it from the PR preview
- * if the rod's angle looks wrong and it'll get the same treatment.
- */
-const TOOL_HELD_REST: HeldItemRest = { rotation: UPRIGHT_CARRY, offset: HELD_AXE_OFFSET };
 
 /** A long tool gripped the animation pack's way, a hand's width up from the end of its handle. */
 const TOOL_USE_GRIP: HeldItemRest = {
   rotation: new THREE.Euler(0, 0, 0),
   offset: new THREE.Vector3(0, -0.14, 0),
 };
-const TOOL_GRIPS: HeldGrips = { carry: TOOL_HELD_REST, use: TOOL_USE_GRIP };
+
+/**
+ * A long tool's grips, carried `lean` off vertical. Every one shares the
+ * same upright carry to start from: they are all long, one-handed tools
+ * whose model sits with its base at the local origin (see
+ * `loadScaledModel`), gripped by that same base end. `turn` is a turn about
+ * the handle, for a tool with a side that has to face the right way.
+ */
+function longToolGrips(lean: number, turn: THREE.Quaternion): HeldGrips {
+  return {
+    carry: { rotation: carriedAt(lean, turn), offset: HELD_AXE_OFFSET },
+    use: {
+      rotation: new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion().setFromEuler(TOOL_USE_GRIP.rotation).multiply(turn),
+      ),
+      offset: TOOL_USE_GRIP.offset,
+    },
+    steady: steadiedAt(lean, turn),
+  };
+}
 
 /**
  * The axe its own way round: blade first both carried and swung. Gripped
  * like every other tool, the blade trailed behind every blow - chop, combo
  * and charged strike alike - which measured as the edge pointing against
  * the way the head was travelling at each impact; the same half turn about
- * the handle puts it in front.
+ * the handle puts it in front (see decision 0058).
  */
-const AXE_GRIPS: HeldGrips = {
-  carry: { rotation: AXE_CARRY, offset: HELD_AXE_OFFSET },
-  use: {
-    rotation: new THREE.Euler().setFromQuaternion(
-      new THREE.Quaternion().setFromEuler(TOOL_USE_GRIP.rotation).multiply(ABOUT_THE_HANDLE),
-    ),
-    offset: TOOL_USE_GRIP.offset,
-  },
-};
+const AXE_GRIPS = longToolGrips(CARRY_LEAN.axe, ABOUT_THE_HANDLE);
+
+/** The shovel only ever comes out to dig, so is never seen carried. */
+const SHOVEL_GRIPS = longToolGrips(UPRIGHT_LEAN, NO_TURN);
 
 /**
  * Every food item shares one rest pose too: small enough, and round enough,
@@ -225,12 +287,8 @@ const FOOD_GRIPS: HeldGrips = { carry: FOOD_HELD_REST, use: FOOD_USE_GRIP };
 
 const HELD_ITEM_REST: Partial<Record<ItemId, HeldGrips>> = {
   axe: AXE_GRIPS,
-  rod: TOOL_GRIPS,
-  // Same grip as the rod, as a starting guess - it's the same shape
-  // of thing, a long tool held by its base. Unconfirmed against a real
-  // screenshot the way the axe's own numbers were; flag it from a PR preview
-  // if the torch looks wrong in hand.
-  torch: TOOL_GRIPS,
+  rod: longToolGrips(CARRY_LEAN.rod, NO_TURN),
+  torch: longToolGrips(CARRY_LEAN.torch, NO_TURN),
   perch: FOOD_GRIPS,
   trout: FOOD_GRIPS,
   goldenCarp: FOOD_GRIPS,
@@ -312,6 +370,8 @@ interface HeldModel {
   readonly use: THREE.Quaternion;
   readonly carryOffset: THREE.Vector3;
   readonly useOffset: THREE.Vector3;
+  /** Its carry held against the body (see `HeldGrips`), or null for none. */
+  readonly steady: THREE.Quaternion | null;
 }
 
 /** This thing's parts to put in a hand, or undefined to leave it showing nothing. */
@@ -445,15 +505,14 @@ function createAnimatedCharacter(
   // on the ground. All start hidden; at most one shows at a time.
   const heldItems = new Map<HeldThing, HeldModel>();
   // Lives only while a torch is actually part of the rig - `held.visible`
-  // already hides its light along with the rest of the group whenever some
-  // other item is equipped instead (three.js skips an invisible object's
-  // children, lights included, when it gathers what to render).
-  let torchFlicker: FlickerLight | undefined;
+  // already puts its glow out along with the rest of the group whenever
+  // some other item is equipped instead.
+  let torchGlow: FireGlow | undefined;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
     for (const thing of [...HELD_ITEM_IDS, 'shovel'] as const) {
       const parts = heldItemParts(thing);
-      const grips = thing === 'shovel' ? TOOL_GRIPS : HELD_ITEM_REST[thing];
+      const grips = thing === 'shovel' ? SHOVEL_GRIPS : HELD_ITEM_REST[thing];
       if (parts === undefined || grips === undefined) continue;
       const held = new THREE.Group();
       for (const part of parts) {
@@ -466,13 +525,9 @@ function createAnimatedCharacter(
       held.scale.setScalar(1 / MODEL_SCALE);
       held.visible = false;
       if (thing === 'torch') {
-        torchFlicker = createFlickerLight(
-          TORCH_LIGHT_COLOR,
-          TORCH_LIGHT_INTENSITY,
-          TORCH_LIGHT_DISTANCE,
-        );
-        torchFlicker.light.position.set(0, TORCH_FLAME_HEIGHT, 0);
-        held.add(torchFlicker.light);
+        torchGlow = createFireGlow(TORCH_LIGHT_COLOR, TORCH_LIGHT_INTENSITY, TORCH_LIGHT_DISTANCE);
+        torchGlow.anchor.position.set(0, TORCH_FLAME_HEIGHT, 0);
+        held.add(torchGlow.anchor);
       }
       handBone.add(held);
       heldItems.set(thing, {
@@ -482,6 +537,7 @@ function createAnimatedCharacter(
         use: new THREE.Quaternion().setFromEuler(grips.use.rotation),
         carryOffset: grips.carry.offset,
         useOffset: grips.use.offset,
+        steady: grips.steady ?? null,
       });
     }
   }
@@ -568,7 +624,7 @@ function createAnimatedCharacter(
     },
     update: (deltaSeconds, frame) => {
       clock += deltaSeconds;
-      torchFlicker?.update(deltaSeconds);
+      torchGlow?.update(deltaSeconds);
       digging = Math.max(0, digging - deltaSeconds);
       const playing = animatorFor();
       if (playing === null) return null;
@@ -581,9 +637,14 @@ function createAnimatedCharacter(
       // shovel is out for nothing but using.
       const target = digging > 0 ? 1 : playing.inUse;
       gripBlend += (target - gripBlend) * (1 - Math.exp(-GRIP_FOLLOW * deltaSeconds));
+      const steadying = playing.armSwing * WRIST_STEADY;
       for (const [thing, held] of heldItems) {
         if (!held.group.visible) continue;
-        held.group.quaternion.slerpQuaternions(held.carry, held.use, gripBlend);
+        carrying.copy(held.carry);
+        if (held.steady !== null && steadying > 0) {
+          carrying.slerp(steadyInHand(held.group, held.steady, model), steadying);
+        }
+        held.group.quaternion.slerpQuaternions(carrying, held.use, gripBlend);
         held.group.position.lerpVectors(held.carryOffset, held.useOffset, gripBlend);
         if (thing === eating && bites !== null) holdToMouth(held.group, model, bites.reach);
       }
@@ -597,6 +658,7 @@ function createAnimatedCharacter(
       // Geometry (and the template root it was cloned from) is shared across
       // every character instance, so only the per-instance materials are ours.
       nameplate.dispose();
+      torchGlow?.dispose();
     },
   };
 }
@@ -614,6 +676,23 @@ const MOUTHFUL_TURN = new THREE.Quaternion().setFromAxisAngle(
 );
 const wantedTurn = new THREE.Quaternion();
 const handTurn = new THREE.Quaternion();
+const carrying = new THREE.Quaternion();
+const steadied = new THREE.Quaternion();
+
+/**
+ * A carry held against the body - `steady`, in the model's own frame - as
+ * the hand holding `held` is turned right now.
+ */
+function steadyInHand(
+  held: THREE.Object3D,
+  steady: THREE.Quaternion,
+  model: THREE.Object3D,
+): THREE.Quaternion {
+  if (held.parent === null) return steadied.copy(steady);
+  model.getWorldQuaternion(wantedTurn).multiply(steady);
+  held.parent.getWorldQuaternion(handTurn);
+  return steadied.copy(handTurn.invert().multiply(wantedTurn));
+}
 
 /**
  * Turn food up at the mouth crosswise, centred in the hand - whichever way

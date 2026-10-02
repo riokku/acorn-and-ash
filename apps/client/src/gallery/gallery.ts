@@ -25,6 +25,7 @@ import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
 import { createHomeInterior } from '../scene/home-interior';
 import { addDaylight, type DaylightRig } from '../scene/lighting';
+import { FireLights } from '../scene/fire-light';
 import { createSatchel, createStickPileModel } from '../scene/pickup-models';
 import { createPond } from '../scene/pond';
 import { preloadPropModels } from '../scene/prop-models';
@@ -125,17 +126,18 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const scene = new THREE.Scene();
   const daylight = addDaylight(scene);
   daylight.update(Number.isFinite(time) ? time : 0.42);
+  const fireLights = new FireLights(scene);
 
   // The inside of a home is its own place (see decision 0055), shown the
   // way the game shows it: a dollhouse with the near walls cut away.
   if (focus === 'home') {
-    showHomeInside(renderer, scene, daylight, params, time);
+    showHomeInside(renderer, scene, fireLights, daylight, params, time);
     return;
   }
   if (focus === 'moves') {
     scene.add(createGalleryGround([]));
     const { showMoves } = await import('./moves');
-    await showMoves(renderer, scene, params);
+    await showMoves(renderer, scene, fireLights, params);
     return;
   }
 
@@ -206,6 +208,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     daylight.sun.target.position.copy(target);
     daylight.sun.target.updateMatrixWorld();
     for (const update of updaters) update(delta);
+    fireLights.update(camera.position);
     renderer.render(scene, camera);
     frames += 1;
     // For screenshots: say so once a few frames have settled.
@@ -217,6 +220,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
 function showHomeInside(
   renderer: RendererSetup['renderer'],
   scene: THREE.Scene,
+  fireLights: FireLights,
   daylight: DaylightRig,
   params: URLSearchParams,
   time: number,
@@ -271,6 +275,7 @@ function showHomeInside(
     camera.lookAt(target);
     inside.cutAway(camera.position.x, camera.position.z);
     inside.update(delta, daylightAmount);
+    fireLights.update(camera.position);
     renderer.render(scene, camera);
     frames += 1;
     if (frames === 8) document.body.dataset.galleryReady = 'true';

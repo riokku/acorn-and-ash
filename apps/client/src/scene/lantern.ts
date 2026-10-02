@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry, stoneGeometry } from '../art/shapes';
-import { createFlickerLight } from './fire-light';
+import { createFireGlow } from './fire-light';
 
 /**
  * A garden lantern (see decision 0053): a stained timber post set on a
@@ -103,17 +103,20 @@ export function createLantern(): Lantern {
   }
 
   const model = builder.build();
-  const fireLight = createFlickerLight(
+  const fireGlow = createFireGlow(
     LANTERN_LIGHT_COLOR,
     LANTERN_LIGHT_INTENSITY,
     LANTERN_LIGHT_DISTANCE,
   );
-  fireLight.light.position.set(HANG_X, GLASS_Y, 0);
-  model.group.add(fireLight.light);
+  fireGlow.anchor.position.set(HANG_X, GLASS_Y, 0);
+  model.group.add(fireGlow.anchor);
 
   return {
     group: model.group,
-    update: (deltaSeconds) => fireLight.update(deltaSeconds),
-    dispose: model.dispose,
+    update: (deltaSeconds) => fireGlow.update(deltaSeconds),
+    dispose: () => {
+      model.dispose();
+      fireGlow.dispose();
+    },
   };
 }
