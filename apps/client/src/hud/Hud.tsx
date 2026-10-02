@@ -11,6 +11,8 @@ import {
   RECIPE_ITEMS,
   canAfford,
   canCraft,
+  canCook,
+  cookedItemFor,
   hasItem,
   inventoryFromEntries,
   isDiscardable,
@@ -197,6 +199,7 @@ export function Hud({
         state.cacheNews !== null ||
         state.hungerNews !== null ||
         state.craftingNews !== null ||
+        state.cookingNews !== null ||
         state.huntingNews !== null ||
         state.discardNews !== null) ? (
         <p className="hud-news">
@@ -205,6 +208,7 @@ export function Hud({
             state.cacheNews ??
             state.hungerNews ??
             state.craftingNews ??
+            state.cookingNews ??
             state.huntingNews ??
             state.discardNews}
         </p>
@@ -564,7 +568,18 @@ export function hint(state: HudState): string {
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
-  if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
+  if (state.nearCampfire === 'lit') {
+    const raw = state.equippedItem;
+    const cooked = raw === null ? null : cookedItemFor(raw);
+    if (raw !== null && cooked !== null) {
+      const pack = inventoryFromEntries(state.carrying);
+      if (canCook(pack, raw)) {
+        return `Press E to roast the ${ITEM_KINDS[raw].displayName.toLowerCase()}`;
+      }
+      return `Your pack is full · no room for ${ITEM_KINDS[cooked].displayName.toLowerCase()}`;
+    }
+    return 'Press E to put out the campfire';
+  }
   // Doors - see decision 0055.
   if (state.door === 'enter') return 'Walk in, or press E, to go inside';
   if (state.door === 'visit') return 'Walk in, or press E, to visit';
