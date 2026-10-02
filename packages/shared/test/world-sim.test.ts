@@ -41,7 +41,7 @@ import { DAY_LENGTH_MS } from '../src/sim/day-night';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { patchRegrowDelayMs } from '../src/sim/gathering';
 import { overlapsWater } from '../src/world/water';
-import { addItem, countOf } from '../src/sim/inventory';
+import { addItem, countOf, roomFor } from '../src/sim/inventory';
 import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
 import {
   AXE_PICKUP_ID,
@@ -3988,14 +3988,16 @@ describe('building', () => {
     it('cooks one held raw food over a lit campfire without putting the fire out', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
-      addItem(sim.inventoryOf(1), 'trout');
-      expect(sim.useItem(1, 'trout')).toBe(true);
 
-      // First press lights it; release; the next press cooks at the lit fire.
+      // Light first, then choose the food: selecting food away from a lit fire
+      // deliberately keeps the old "select food = eat it" behaviour.
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
       sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
       sim.step(tickClock());
+
+      addItem(sim.inventoryOf(1), 'trout');
+      expect(sim.useItem(1, 'trout')).toBe(true);
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
@@ -4032,6 +4034,12 @@ describe('building', () => {
     it('does not extinguish a lit fire when held raw food cannot fit once cooked', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+
       const pack = sim.inventoryOf(1);
       addItem(pack, 'perch', 2);
       addItem(pack, 'log', 10);
@@ -4039,12 +4047,13 @@ describe('building', () => {
       addItem(pack, 'flower', 10);
       addItem(pack, 'trout', 10);
       addItem(pack, 'meat', 10);
+      addItem(pack, 'goldenCarp', 10);
+      addItem(pack, 'bone', 10);
+      addItem(pack, 'roastedTrout', 10);
+      addItem(pack, 'roastedGoldenCarp', 10);
+      expect(roomFor(pack, 'roastedPerch')).toBe(0);
       expect(sim.useItem(1, 'perch')).toBe(true);
 
-      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
-      sim.step(tickClock());
-      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
-      sim.step(tickClock());
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
