@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --write . && git diff -- README.md apps/client/src/scene/character.ts && exit 1",
+    "format:check": "prettier --check .",
     "test": "pnpm -r test",
     "check:assets": "node tools/check-asset-licenses.mjs",
     "bench:tick": "pnpm --filter @acorn/tools bench:tick",
