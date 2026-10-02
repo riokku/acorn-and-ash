@@ -83,32 +83,32 @@ The game is online-only. Every world runs on the server.
 
 ## Controls
 
-| Key                                  | Does                                                           |
-| ------------------------------------ | -------------------------------------------------------------- |
-| `W` `A` `S` `D` or the arrow keys    | Walk                                                           |
-| `Shift` (held)                       | Sprint                                                         |
-| `Space`                              | Jump                                                           |
-| `E`                                  | Pick up, gather, dig up a cache, use/cook at a campfire, eat   |
-| `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)           |
-| `1`–`6`                              | Equip the hotbar slot - eats it too if it's food               |
-| `C`                                  | Open the craft menu                                            |
-| `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                             |
-| `B`                                  | Open the build menu                                            |
-| `1`–`6` (build menu open)            | Pick a campfire, cabin, flower bed, lantern, fence or path     |
-| Left mouse (piece picked)            | Place it where its preview stands                              |
-| Mouse wheel (piece picked)           | Turn it                                                        |
-| `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence       |
-| `Esc` or right mouse tap             | Put the piece away                                             |
-| `I`, or the bag button               | Open or close your pack                                        |
-| Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                    |
-| `M`, or click the minimap            | Open or close the map                                          |
-| Walk into your door, or `E` there    | Go inside your home, or back out                               |
-| Left mouse (click)                   | Turn to face what you click, and chop, cast, hook or fight it  |
-| Left mouse (click as a swing lands)  | Carry on into the next swing, up to three in a row             |
-| Left mouse (held)                    | Charge a heavy attack                                          |
-| Right mouse (held), then drag        | Turn the camera                                                |
-| Left `Ctrl`                          | Dodge roll                                                     |
-| `Esc`                                | Close a panel, or pause                                        |
+| Key                                  | Does                                                          |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `W` `A` `S` `D` or the arrow keys    | Walk                                                          |
+| `Shift` (held)                       | Sprint                                                        |
+| `Space`                              | Jump                                                          |
+| `E`                                  | Pick up, gather, dig up a cache, use/cook at a campfire, eat  |
+| `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)          |
+| `1`–`6`                              | Equip the hotbar slot - eats it too if it's food              |
+| `C`                                  | Open the craft menu                                           |
+| `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                            |
+| `B`                                  | Open the build menu                                           |
+| `1`–`6` (build menu open)            | Pick a campfire, cabin, flower bed, lantern, fence or path    |
+| Left mouse (piece picked)            | Place it where its preview stands                             |
+| Mouse wheel (piece picked)           | Turn it                                                       |
+| `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence      |
+| `Esc` or right mouse tap             | Put the piece away                                            |
+| `I`, or the bag button               | Open or close your pack                                       |
+| Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                   |
+| `M`, or click the minimap            | Open or close the map                                         |
+| Walk into your door, or `E` there    | Go inside your home, or back out                              |
+| Left mouse (click)                   | Turn to face what you click, and chop, cast, hook or fight it |
+| Left mouse (click as a swing lands)  | Carry on into the next swing, up to three in a row            |
+| Left mouse (held)                    | Charge a heavy attack                                         |
+| Right mouse (held), then drag        | Turn the camera                                               |
+| Left `Ctrl`                          | Dodge roll                                                    |
+| `Esc`                                | Close a panel, or pause                                       |
 
 There is nothing to land on yet, so a jump is a hop in place.
 
