@@ -293,6 +293,10 @@ const HELD_ITEM_REST: Partial<Record<ItemId, HeldGrips>> = {
   trout: FOOD_GRIPS,
   goldenCarp: FOOD_GRIPS,
   meat: FOOD_GRIPS,
+  roastedPerch: FOOD_GRIPS,
+  roastedTrout: FOOD_GRIPS,
+  roastedGoldenCarp: FOOD_GRIPS,
+  roastedMeat: FOOD_GRIPS,
 };
 
 /** Warm torchlight - dimmer and closer than the campfire's (see fire-light.ts and campfire.ts). */
@@ -313,12 +317,22 @@ const FISH_TAIL_GEOMETRY = new THREE.ConeGeometry(0.07, 0.09, 4)
   .scale(0.3, 1, 1)
   .translate(0, 0, 0.16);
 
-function fishHeldParts(color: number): ModelPart[] {
+function fishHeldParts(color: number, roasted = false): ModelPart[] {
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true });
-  return [
+  const parts: ModelPart[] = [
     { geometry: FISH_BODY_GEOMETRY, material },
     { geometry: FISH_TAIL_GEOMETRY, material },
   ];
+  if (roasted) {
+    const char = new THREE.MeshStandardMaterial({ color: 0x4a2b20, roughness: 0.9, flatShading: true });
+    for (const z of [-0.045, 0.035]) {
+      parts.push({
+        geometry: new THREE.BoxGeometry(0.13, 0.012, 0.018).rotateY(0.45).translate(0, 0.055, z),
+        material: char,
+      });
+    }
+  }
+  return parts;
 }
 
 /** A meat placeholder: a rounded chunk with a bone end, the same "two simple shapes" idiom as the fish. */
@@ -338,6 +352,9 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
   perch: fishHeldParts(ITEM_KINDS.perch.placeholderColor),
   trout: fishHeldParts(ITEM_KINDS.trout.placeholderColor),
   goldenCarp: fishHeldParts(ITEM_KINDS.goldenCarp.placeholderColor),
+  roastedPerch: fishHeldParts(ITEM_KINDS.roastedPerch.placeholderColor, true),
+  roastedTrout: fishHeldParts(ITEM_KINDS.roastedTrout.placeholderColor, true),
+  roastedGoldenCarp: fishHeldParts(ITEM_KINDS.roastedGoldenCarp.placeholderColor, true),
   meat: [
     {
       geometry: MEAT_BODY_GEOMETRY,
@@ -352,6 +369,32 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
       material: new THREE.MeshStandardMaterial({
         color: MEAT_BONE_COLOR,
         roughness: 0.6,
+        flatShading: true,
+      }),
+    },
+  ],
+  roastedMeat: [
+    {
+      geometry: MEAT_BODY_GEOMETRY,
+      material: new THREE.MeshStandardMaterial({
+        color: ITEM_KINDS.roastedMeat.placeholderColor,
+        roughness: 0.9,
+        flatShading: true,
+      }),
+    },
+    {
+      geometry: MEAT_BONE_GEOMETRY,
+      material: new THREE.MeshStandardMaterial({
+        color: MEAT_BONE_COLOR,
+        roughness: 0.6,
+        flatShading: true,
+      }),
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.16, 0.012, 0.018).rotateZ(0.6).translate(0, 0.06, 0),
+      material: new THREE.MeshStandardMaterial({
+        color: 0x4a2b20,
+        roughness: 0.9,
         flatShading: true,
       }),
     },
