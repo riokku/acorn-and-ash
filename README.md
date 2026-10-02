@@ -88,7 +88,7 @@ The game is online-only. Every world runs on the server.
 | `W` `A` `S` `D` or the arrow keys    | Walk                                                           |
 | `Shift` (held)                       | Sprint                                                         |
 | `Space`                              | Jump                                                           |
-| `E`                                  | Pick up, gather, dig up a cache, light/put out a campfire, eat |
+| `E`                                  | Pick up, gather, dig up a cache, use/cook at a campfire, eat   |
 | `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)           |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food               |
 | `C`                                  | Open the craft menu                                            |
@@ -426,6 +426,18 @@ as it's the one you have equipped. See
 and [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for
 the torch itself.
 
+### Cooking
+
+A lit campfire is useful for more than light. Hold a perch, trout, golden carp
+or piece of meat while standing beside one and press `E` to roast one piece.
+The cooked version stays in your pack like any other food and restores more
+hunger when eaten. If there is no room for the cooked result, nothing is lost
+and the fire stays lit.
+
+Raw food is still perfectly edible. Cooking is a useful reason to return to a
+fire, not a punishment for eating on the trail. See
+[decision 0064](docs/decisions/0064-cooking-over-a-campfire.md).
+
 ### Hunger
 
 You get hungrier the longer you play. Press `E` and, if there is nothing at
@@ -493,10 +505,11 @@ itself away once placed. See
 
 - **Campfire** - four logs, exactly what felling the landmark oak by the axe
   stump pays out. Real modeled art, and you can light it: press `E` once
-  you're standing next to it for a genuinely animated fire, atmosphere only
-  for now. It burns for a while and goes out on its own, or put it out early
-  by pressing `E` again. A lit fire casts real, flickering light on
-  everything nearby, not just a flame that looks lit.
+  you're standing next to it for a genuinely animated fire. It burns for a
+  while and goes out on its own, or put it out early by pressing `E` again.
+  A lit fire casts real, flickering light on everything nearby, not just a
+  flame that looks lit. Hold raw fish or meat beside a lit one and press
+  `E` to roast one piece instead; cooked food restores more hunger.
 - **Cabin** - ten logs, one slot's worth. Capped at one
   per player. A little log cabin, with a shingled roof, a stone chimney, a
   window glowing warm and a woodpile by the wall - and you can go inside
