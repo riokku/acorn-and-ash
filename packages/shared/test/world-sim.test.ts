@@ -41,7 +41,7 @@ import { DAY_LENGTH_MS } from '../src/sim/day-night';
 import { regrowDueAtMs } from '../src/sim/regrowth';
 import { patchRegrowDelayMs } from '../src/sim/gathering';
 import { overlapsWater } from '../src/world/water';
-import { addItem, countOf } from '../src/sim/inventory';
+import { addItem, countOf, roomFor } from '../src/sim/inventory';
 import { PlayerButton, createInput, type PlayerInput } from '../src/sim/player';
 import {
   AXE_PICKUP_ID,
@@ -4047,6 +4047,11 @@ describe('building', () => {
       addItem(pack, 'flower', 10);
       addItem(pack, 'trout', 10);
       addItem(pack, 'meat', 10);
+      addItem(pack, 'goldenCarp', 10);
+      addItem(pack, 'bone', 10);
+      addItem(pack, 'roastedTrout', 10);
+      addItem(pack, 'roastedGoldenCarp', 10);
+      expect(roomFor(pack, 'roastedPerch')).toBe(0);
       expect(sim.useItem(1, 'perch')).toBe(true);
 
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
