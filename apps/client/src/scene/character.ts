@@ -324,10 +324,16 @@ function fishHeldParts(color: number, roasted = false): ModelPart[] {
     { geometry: FISH_TAIL_GEOMETRY, material },
   ];
   if (roasted) {
-    const char = new THREE.MeshStandardMaterial({ color: 0x4a2b20, roughness: 0.9, flatShading: true });
+    const char = new THREE.MeshStandardMaterial({
+      color: 0x4a2b20,
+      roughness: 0.9,
+      flatShading: true,
+    });
     for (const z of [-0.045, 0.035]) {
       parts.push({
-        geometry: new THREE.BoxGeometry(0.13, 0.012, 0.018).rotateY(0.45).translate(0, 0.055, z),
+        geometry: new THREE.BoxGeometry(0.13, 0.012, 0.018)
+          .rotateY(0.45)
+          .translate(0, 0.055, z),
         material: char,
       });
     }
@@ -391,7 +397,9 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
       }),
     },
     {
-      geometry: new THREE.BoxGeometry(0.16, 0.012, 0.018).rotateZ(0.6).translate(0, 0.06, 0),
+      geometry: new THREE.BoxGeometry(0.16, 0.012, 0.018)
+        .rotateZ(0.6)
+        .translate(0, 0.06, 0),
       material: new THREE.MeshStandardMaterial({
         color: 0x4a2b20,
         roughness: 0.9,
