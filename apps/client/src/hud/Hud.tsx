@@ -548,6 +548,10 @@ export function hint(state: HudState): string {
   // Settled in, E gets you up rather than doing anything else it would.
   if (state.resting === 'chair') return 'Sitting comfortably · move or press E to get up';
   if (state.resting === 'bed') return 'Snug in bed · move or press E to get up';
+  // A held raw food beside a lit campfire is deliberately saved for cooking
+  // even while hungry, so say what E will really do before the hunger nudge.
+  const cookingNow = campfireCookingHint(state);
+  if (cookingNow !== null) return cookingNow;
   // Empty is a clear nudge, so it beats everything but an actual bite: there
   // is nothing worse than being hungry yet, but it should not go unnoticed.
   if (state.hunger <= 0) return hungerHint(state);
@@ -568,18 +572,7 @@ export function hint(state: HudState): string {
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
-  if (state.nearCampfire === 'lit') {
-    const raw = state.equippedItem;
-    const cooked = raw === null ? null : cookedItemFor(raw);
-    if (raw !== null && cooked !== null) {
-      const pack = inventoryFromEntries(state.carrying);
-      if (canCook(pack, raw)) {
-        return `Press E to roast the ${ITEM_KINDS[raw].displayName.toLowerCase()}`;
-      }
-      return `Your pack is full · no room for ${ITEM_KINDS[cooked].displayName.toLowerCase()}`;
-    }
-    return 'Press E to put out the campfire';
-  }
+  if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
   // Doors - see decision 0055.
   if (state.door === 'enter') return 'Walk in, or press E, to go inside';
   if (state.door === 'visit') return 'Walk in, or press E, to visit';
@@ -647,6 +640,18 @@ function gatherHint(state: HudState, item: ItemId): string {
   const plural = ITEM_KINDS[item].pluralName.toLowerCase();
   if (roomFor(inventoryFromEntries(state.carrying), item) > 0) return `Press E to gather ${plural}`;
   return `Your pack is full · no room for more ${plural}`;
+}
+
+function campfireCookingHint(state: HudState): string | null {
+  if (state.nearCampfire !== 'lit' || state.equippedItem === null) return null;
+  const raw = state.equippedItem;
+  const cooked = cookedItemFor(raw);
+  if (cooked === null) return null;
+  const pack = inventoryFromEntries(state.carrying);
+  if (canCook(pack, raw)) {
+    return `Press E to roast the ${ITEM_KINDS[raw].displayName.toLowerCase()}`;
+  }
+  return `Your pack is full · no room for ${ITEM_KINDS[cooked].displayName.toLowerCase()}`;
 }
 
 function hungerHint(state: HudState): string {
