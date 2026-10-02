@@ -60,6 +60,21 @@ export const DODGE = {
   cooldown: DODGE_COOLDOWN_TICKS,
 } as const;
 
+/**
+ * How quickly a raider draws back before a combo's first swing (see
+ * `ActionKind.Windup`), as its `step`: steady, quick or heavy.
+ */
+export const WindupPace = { Steady: 0, Quick: 1, Heavy: 2 } as const;
+export type WindupPace = (typeof WindupPace)[keyof typeof WindupPace];
+
+/**
+ * How long each `WindupPace` holds the weapon back before the swing goes,
+ * in ticks. Never shorter than a player could see coming and roll away
+ * from: the quickest still gives the swing as long again as it takes to
+ * land, the rest well over half a second all told.
+ */
+export const WINDUP_TICKS: readonly [number, number, number] = [10, 7, 13];
+
 /** Taking a hit: a flinch that stops whatever you were doing. A dodge gets you out of it. */
 export const FLINCH = { planted: 4, end: 12 } as const;
 

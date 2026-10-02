@@ -1,8 +1,8 @@
-// Imports a single model from a CC0 pack - glTF or OBJ - drops any texture
+// Imports a single model from a CC0 pack - glTF, GLB or OBJ - drops any texture
 // slot whose image file wasn't shipped with it (we skip huge normal maps
 // when pulling assets down — see docs/decisions on the first art pass), and
 // writes an optimized, Meshopt-compressed .glb. Run with:
-// node tools/import-model.mjs <input.gltf|input.obj> <output.glb>
+// node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb>
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { dedup, prune, reorder, weld } from '@gltf-transform/functions';
@@ -13,7 +13,7 @@ import { dirname, resolve } from 'node:path';
 
 const [, , inputPath, outputPath] = process.argv;
 if (!inputPath || !outputPath) {
-  console.error('usage: node tools/import-model.mjs <input.gltf|input.obj> <output.glb>');
+  console.error('usage: node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb>');
   process.exit(1);
 }
 
@@ -31,6 +31,10 @@ if (inputPath.endsWith('.obj')) {
   // references one (via the .mtl's map_Kd, resolved relative to it) or it
   // doesn't, so none of the glTF placeholder-image handling below applies.
   document = await io.readBinary(await obj2gltf(inputPath, { binary: true }));
+} else if (inputPath.endsWith('.glb')) {
+  // A .glb carries its images inside it, so there is nothing on disk that
+  // could be missing.
+  document = await io.read(inputPath);
 } else {
   // A .gltf's external images all get loaded eagerly on read, so a texture
   // slot pointing at a file we didn't ship (a dropped normal map) needs a

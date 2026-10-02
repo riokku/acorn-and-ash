@@ -16,7 +16,17 @@ import {
   type ActionState,
   type ActionTick,
 } from '../src/sim/actions';
-import { CHARGE_TICKS, DODGE, FLINCH, LIGHT_COMBO, RISE, SETTLE, STRIKE } from '../src/data/moves';
+import {
+  CHARGE_TICKS,
+  DODGE,
+  FLINCH,
+  LIGHT_COMBO,
+  RISE,
+  SETTLE,
+  STRIKE,
+  WINDUP_TICKS,
+  WindupPace,
+} from '../src/data/moves';
 import { PlayerButton, createInput } from '../src/sim/player';
 import { CHARGE_WALK_SHARE } from '../src/constants';
 
@@ -283,6 +293,42 @@ describe('resting', () => {
     const still = footedInput(input, 'still', 0.5);
     expect(still).toMatchObject({ moveX: 0, moveZ: 0, aimYaw: 0.5 });
     expect(still.buttons & PlayerButton.Jump).toBe(0);
+  });
+});
+
+describe('a wind-up', () => {
+  it('draws back for its pace, then swings the light combo', () => {
+    for (const pace of [WindupPace.Steady, WindupPace.Quick, WindupPace.Heavy]) {
+      const { state, feed } = player();
+      beginAction(state, ActionKind.Windup, pace);
+      const ticks = WINDUP_TICKS[pace];
+      for (let i = 1; i < ticks; i++) {
+        expect(feed(0, 0, 1).footing).toBe('creeping');
+        expect(state.kind).toBe(ActionKind.Windup);
+      }
+      expect(feed().footing).toBe('planted');
+      expect(state).toMatchObject({ kind: ActionKind.Swing, step: 1 });
+    }
+  });
+
+  it('lands no blow of its own, only the swing it leads into', () => {
+    const { state, untilImpact } = player();
+    beginAction(state, ActionKind.Windup, WindupPace.Steady);
+    const { tick, after } = untilImpact();
+    expect(tick.impact).toEqual({ kind: 'swing', step: 1 });
+    expect(after).toBe(WINDUP_TICKS[WindupPace.Steady] + LIGHT_COMBO[0].impact);
+  });
+
+  it('takes longer for a heavy hitter than a quick one', () => {
+    expect(WINDUP_TICKS[WindupPace.Heavy]).toBeGreaterThan(WINDUP_TICKS[WindupPace.Steady]);
+    expect(WINDUP_TICKS[WindupPace.Steady]).toBeGreaterThan(WINDUP_TICKS[WindupPace.Quick]);
+  });
+
+  it('travels on the wire with its pace', () => {
+    const state = createActionState();
+    beginAction(state, ActionKind.Windup, WindupPace.Heavy);
+    const unpacked = unpackActionByte(packActionByte(state), createActionState());
+    expect(unpacked).toMatchObject({ kind: ActionKind.Windup, step: WindupPace.Heavy });
   });
 });
 

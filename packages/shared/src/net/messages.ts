@@ -5,6 +5,7 @@ import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
 import type { GatherPatchView } from '../sim/gathering';
 import type { DroppedPileView } from '../sim/dropping';
+import type { RaidNews, RaiderHit, RaiderView } from '../sim/raids';
 import type {
   AnimalCaught,
   BuiltProp,
@@ -59,6 +60,9 @@ export const ServerMessageType = {
   GatherPatches: 0x27,
   DroppedPiles: 0x28,
   Discarded: 0x29,
+  Raiders: 0x2a,
+  RaidNews: 0x2b,
+  RaiderHit: 0x2c,
 } as const;
 
 export const RejectReason = {
@@ -473,6 +477,33 @@ export interface DiscardedMessage {
   readonly event: DiscardedEvent;
 }
 
+/**
+ * Every skeleton raider in the world, sent whole (see decision 0063): which
+ * kind each one is and how many blows it has left. Where they are and what
+ * they are doing travels in snapshots like everybody else; this is what a
+ * snapshot does not carry. Sent on arrival, and to everybody whenever one
+ * turns up, is hit or is gone.
+ */
+export interface RaidersMessage {
+  readonly type: 'raiders';
+  readonly raiders: readonly RaiderView[];
+}
+
+/** A raid turned up, was fought off or gave up. Everybody hears about it. */
+export interface RaidNewsMessage {
+  readonly type: 'raidNews';
+  readonly news: RaidNews;
+}
+
+/**
+ * A player's blow landed on a raider, for every browser to show. Whoever
+ * threw it already did, so theirs only uses it to set the record straight.
+ */
+export interface RaiderHitMessage {
+  readonly type: 'raiderHit';
+  readonly hit: RaiderHit;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -499,4 +530,7 @@ export type ServerMessage =
   | GesturesMessage
   | GatherPatchesMessage
   | DroppedPilesMessage
-  | DiscardedMessage;
+  | DiscardedMessage
+  | RaidersMessage
+  | RaidNewsMessage
+  | RaiderHitMessage;

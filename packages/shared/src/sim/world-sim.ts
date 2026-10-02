@@ -40,6 +40,7 @@ import {
   PlayerTag,
   Position,
   Prop,
+  RaiderTag,
   StaticTag,
   Velocity,
 } from '../ecs/traits';
@@ -173,6 +174,14 @@ import {
   type Impact,
 } from './actions';
 import { DODGE, KNOCKED_OUT_TICKS, LIGHT_COMBO, STRIKE } from '../data/moves';
+import type { RaiderKindId } from '../data/raiders';
+import {
+  RaidDirector,
+  type RaidFighter,
+  type RaidNews,
+  type RaiderHit,
+  type RaiderView,
+} from './raids';
 
 export interface WorldSimulationOptions {
   readonly seed: number;
@@ -204,6 +213,12 @@ export interface WorldSimulationOptions {
    * rather than waited out. Left alone everywhere real.
    */
   readonly hungerEmptyAfterSeconds?: number;
+  /**
+   * The shortest time outdoors between skeleton raids, in seconds of
+   * daytime (see `RaidOptions`). Turned right down for previews and local
+   * runs, so a raid can be waited for rather than waited out.
+   */
+  readonly raidIntervalSeconds?: number;
 }
 
 /**
@@ -250,6 +265,12 @@ export const SnapshotFlag = {
    * same flag, never against each other.
    */
   Animal: 1 << 3,
+  /**
+   * A skeleton raider, not a player (see `sim/raids.ts`). Its id is its
+   * own, the same way an animal's is, and its move travels exactly as a
+   * player's does.
+   */
+  Raider: 1 << 4,
 } as const;
 
 /** A player's saved state, as it goes into and comes out of storage. */
@@ -780,6 +801,8 @@ export class WorldSimulation {
   readonly regrowMinSeconds: number;
   readonly patchRegrowMinSeconds: number;
   readonly hungerDrainPerSecond: number;
+  /** Every skeleton raid, and when the next one comes (see `sim/raids.ts`). */
+  readonly raids: RaidDirector;
 
   /** How many ticks have been simulated since the world was created. */
   tick = 0;
@@ -848,6 +871,8 @@ export class WorldSimulation {
   private spawnCounter = 0;
   /** Reused every tick so a busy world does not allocate per player. */
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
+  /** Every player, as a raid sees them - refreshed each tick, reused between them. */
+  private readonly fighters: RaidFighter[] = [];
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
@@ -884,6 +909,21 @@ export class WorldSimulation {
     for (const den of ANIMAL_DENS) {
       this.spawnAnimal(den, terrain);
     }
+
+    this.raids = new RaidDirector(
+      this.world,
+      options.seed,
+      {
+        collision: this.collision,
+        water: this.clearing.water,
+        fighters: () => this.fighters,
+        strikePlayer: (netId, damage, impactTick) =>
+          this.raiderStrikesPlayer(netId, damage, impactTick),
+        dropLoot: (item, count, position, facingYaw) =>
+          this.dropPile(item, count, position, facingYaw, this.nowMs),
+      },
+      { intervalMinSeconds: options.raidIntervalSeconds },
+    );
   }
 
   private spawnAnimal(den: AnimalDen, terrain: Terrain): void {
@@ -929,6 +969,7 @@ export class WorldSimulation {
   dispose(): void {
     this.players.clear();
     this.animals.clear();
+    this.raids.dispose();
     this.world.destroy();
   }
 
@@ -1041,6 +1082,7 @@ export class WorldSimulation {
     if (!runtime) return false;
     runtime.entity.destroy();
     this.players.delete(netId);
+    this.raids.forgetPlayer(netId);
     return true;
   }
 
@@ -1308,6 +1350,60 @@ export class WorldSimulation {
       });
 
     this.stepAnimals();
+    this.refreshFighters();
+    this.raids.step(this.tick, isNight(dayProgress(nowMs)));
+  }
+
+  /**
+   * Send a skeleton raid at a player right now, whatever their countdown
+   * says: these kinds, or a group drawn at random. Returns the raid's id,
+   * or null if it could not come. Used by tests.
+   */
+  startRaid(netId: number, kinds?: readonly RaiderKindId[]): number | null {
+    this.refreshFighters();
+    return this.raids.startRaid(netId, kinds, isNight(dayProgress(this.nowMs)));
+  }
+
+  /** Every player as a raid needs to see them, this tick. */
+  private refreshFighters(): void {
+    this.fighters.length = 0;
+    for (const runtime of this.players.values()) {
+      const position = runtime.entity.get(Position);
+      if (position === undefined) continue;
+      const { action } = runtime;
+      this.fighters.push({
+        netId: runtime.netId,
+        position,
+        aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
+        action,
+        outdoors: runtime.space === OUTDOORS,
+        down:
+          action.kind === ActionKind.KnockedOut ||
+          (action.kind === ActionKind.Rise && action.step !== RiseFrom.Chair),
+      });
+    }
+  }
+
+  /**
+   * A raider's blow settles on a player (see `sim/raids.ts`). A roll begun
+   * in time beats it: one whose untouchable stretch covers the moment it
+   * landed, or that began in the moment since - the player sees every
+   * raider a moment behind, so that is when they saw it coming.
+   */
+  private raiderStrikesPlayer(netId: number, damage: number, impactTick: number): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined || runtime.space !== OUTDOORS) return;
+    const sinceRoll = impactTick - runtime.dodgeStartedAtTick;
+    if (sinceRoll < DODGE.invulnerable && runtime.dodgeStartedAtTick <= this.tick) {
+      this.healthEvents.push({
+        netId,
+        health: Math.round(runtime.health),
+        knockedOut: false,
+        dodged: true,
+      });
+      return;
+    }
+    this.damagePlayer(runtime, damage);
   }
 
   /**
@@ -2217,6 +2313,16 @@ export class WorldSimulation {
     if (this.equippedItemOf(runtime.netId) === null) return;
     const charged = impact.kind === 'strike';
 
+    // Looking back to when the swing began, and a little before for the
+    // browser having shown it slightly in the past (see decision 0056).
+    const began =
+      impact.kind === 'strike' ? STRIKE.impact : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
+    const lookBack = began + LAG_COMPENSATION_TICKS;
+
+    // A skeleton in front comes before anything else: mid-fight, the swing
+    // was for it, not the tree beside it.
+    if (this.raids.blowLands(runtime.netId, position, aimYaw, impact, lookBack)) return;
+
     if (this.isActiveItem(runtime, 'axe')) {
       const tree = this.treeInReachOf(position, aimYaw);
       if (tree !== null) {
@@ -2225,11 +2331,7 @@ export class WorldSimulation {
       }
     }
 
-    // Looking back to when the swing began, and a little before for the
-    // browser having shown it slightly in the past (see decision 0056).
-    const began =
-      impact.kind === 'strike' ? STRIKE.impact : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
-    const animalTarget = this.animalInReachOf(position, aimYaw, began + LAG_COMPENSATION_TICKS);
+    const animalTarget = this.animalInReachOf(position, aimYaw, lookBack);
     if (animalTarget !== null) this.catchAnimal(runtime, animalTarget.id, charged);
   }
 
@@ -2832,6 +2934,26 @@ export class WorldSimulation {
   }
 
   /** Hand over every swing that landed on a threat without defeating it since this was last asked. */
+  /** Raids starting and ending, since this was last asked. */
+  drainRaidNews(): RaidNews[] {
+    return this.raids.drainNews();
+  }
+
+  /** Blows that landed on raiders, since this was last asked. */
+  drainRaiderHits(): RaiderHit[] {
+    return this.raids.drainHits();
+  }
+
+  /** Whether any raider turned up, was hit or went, since this was last asked. */
+  drainRaidersChanged(): boolean {
+    return this.raids.drainListChanged();
+  }
+
+  /** Every raider in the world, as the list every browser keeps reads. */
+  raidersList(): RaiderView[] {
+    return this.raids.raidersList();
+  }
+
   drainThreatHitEvents(): ThreatHit[] {
     return this.threatHitEvents.splice(0);
   }
@@ -3242,6 +3364,39 @@ export class WorldSimulation {
           actionHeading: 0,
         });
       });
+
+    // Raiders, the same as other players would be - only ever outdoors.
+    if (viewer.space === OUTDOORS) {
+      this.world
+        .query(RaiderTag, Position, Velocity, Facing, Grounded, NetworkId)
+        .readEach(([position, velocity, facing, grounded, networkId]) => {
+          const dx = position.x - viewerPosition.x;
+          const dz = position.z - viewerPosition.z;
+          if (dx * dx + dz * dz > radiusSquared) return;
+          const action = this.raids.actionOf(networkId.value);
+          const speedSquared = velocity.x * velocity.x + velocity.z * velocity.z;
+          let flags = SnapshotFlag.Raider;
+          if (speedSquared > 0.04) flags |= SnapshotFlag.Moving;
+          if (!grounded.value) flags |= SnapshotFlag.Airborne;
+          if (speedSquared > SPRINT_REPORTING_SPEED * SPRINT_REPORTING_SPEED) {
+            flags |= SnapshotFlag.Sprinting;
+          }
+          into.push({
+            netId: networkId.value,
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            vx: velocity.x,
+            vy: velocity.y,
+            vz: velocity.z,
+            yaw: facing.yaw,
+            flags,
+            action: action === null ? 0 : packActionByte(action),
+            actionAge: action?.age ?? 0,
+            actionHeading: action?.heading ?? 0,
+          });
+        });
+    }
 
     return into;
   }

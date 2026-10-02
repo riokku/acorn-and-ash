@@ -14,6 +14,9 @@ import {
   encodeUseItem,
   encodeDiscard,
   encodeDiscarded,
+  encodeRaiders,
+  encodeRaidNews,
+  encodeRaiderHit,
   encodeDroppedPiles,
   encodeGatherPatches,
   encodeEquipped,
@@ -1137,6 +1140,76 @@ describe('word that you dropped or destroyed something', () => {
 
   it('refuses one that has been cut short', () => {
     const encoded = encodeDiscarded({ netId: 1, item: 'stick', count: 1, destroyed: false });
+    expect(decodeServerMessage(encoded.slice(0, 6))).toBeNull();
+  });
+});
+
+describe('telling everybody which raiders there are', () => {
+  it('survives a round trip', () => {
+    const raiders = [
+      { id: 20000, kind: 'minion', hitsLeft: 4 },
+      { id: 20001, kind: 'warrior', hitsLeft: 7 },
+      { id: 20002, kind: 'mage', hitsLeft: 0 },
+    ] as const;
+    expect(decodeServerMessage(encodeRaiders(raiders))).toEqual({ type: 'raiders', raiders });
+  });
+
+  it('sends an empty list once the last one is gone', () => {
+    expect(decodeServerMessage(encodeRaiders([]))).toEqual({ type: 'raiders', raiders: [] });
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeRaiders([{ id: 20000, kind: 'rogue', hitsLeft: 3 }]);
+    expect(decodeServerMessage(encoded.slice(0, 5))).toBeNull();
+  });
+
+  it('refuses a kind of raider it has never heard of', () => {
+    const encoded = encodeRaiders([{ id: 20000, kind: 'rogue', hitsLeft: 3 }]);
+    new DataView(encoded).setUint8(4, 200);
+    expect(decodeServerMessage(encoded)).toBeNull();
+  });
+});
+
+describe('telling everybody what a raid did', () => {
+  it('survives a round trip, to the centimetre', () => {
+    for (const kind of ['incoming', 'foughtOff', 'gaveUp'] as const) {
+      const news = { kind, raidId: 3, targetNetId: 2, count: 3, x: -41.25, z: 87.5 };
+      expect(decodeServerMessage(encodeRaidNews(news))).toEqual({ type: 'raidNews', news });
+    }
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeRaidNews({
+      kind: 'incoming',
+      raidId: 1,
+      targetNetId: 1,
+      count: 1,
+      x: 0,
+      z: 0,
+    });
+    expect(decodeServerMessage(encoded.slice(0, 10))).toBeNull();
+  });
+});
+
+describe('telling everybody a raider was hit', () => {
+  it('survives a round trip', () => {
+    const hit = { raiderId: 20004, hitsLeft: 2, netId: 7, heavy: true, shrugged: false };
+    expect(decodeServerMessage(encodeRaiderHit(hit))).toEqual({ type: 'raiderHit', hit });
+  });
+
+  it('keeps a shrugged-off blow and one that was nobody in particular', () => {
+    const hit = { raiderId: 20004, hitsLeft: 6, netId: null, heavy: false, shrugged: true };
+    expect(decodeServerMessage(encodeRaiderHit(hit))).toEqual({ type: 'raiderHit', hit });
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeRaiderHit({
+      raiderId: 1,
+      hitsLeft: 1,
+      netId: 1,
+      heavy: false,
+      shrugged: false,
+    });
     expect(decodeServerMessage(encoded.slice(0, 6))).toBeNull();
   });
 });
