@@ -79,6 +79,7 @@ import {
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
+  type CookedEvent,
   type ActionContext,
   type DiscardedEvent,
   type DroppedPileView,
@@ -466,6 +467,8 @@ export interface GameDebug {
   healthNews(): string | null;
   /** The last thing said about what we crafted, if it is still on screen. */
   craftingNews(): string | null;
+  /** The last thing said about what we cooked, if it is still on screen. */
+  cookingNews(): string | null;
   /** The last thing said about what we caught, if it is still on screen. */
   huntingNews(): string | null;
   /** The last thing said about what we dropped or destroyed, if it is still on screen. */
@@ -634,6 +637,7 @@ export class Game {
   private health = HEALTH_MAX;
   private healthNews: { text: string; until: number } | null = null;
   private craftingNews: { text: string; until: number } | null = null;
+  private cookingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
   private cacheNews: { text: string; until: number } | null = null;
   private discardNews: { text: string; until: number } | null = null;
@@ -977,6 +981,7 @@ export class Game {
       health: () => this.health,
       healthNews: () => this.currentHealthNews(performance.now()),
       craftingNews: () => this.currentCraftingNews(performance.now()),
+      cookingNews: () => this.currentCookingNews(performance.now()),
       huntingNews: () => this.currentHuntingNews(performance.now()),
       discardNews: () => this.currentDiscardNews(performance.now()),
     };
@@ -1185,6 +1190,10 @@ export class Game {
       }
       case 'crafted': {
         this.hearAboutCrafting(message.event);
+        break;
+      }
+      case 'cooked': {
+        this.hearAboutCooking(message.event);
         break;
       }
       case 'caught': {
@@ -1421,6 +1430,19 @@ export class Game {
 
   private currentCraftingNews(now = performance.now()): string | null {
     const news = this.craftingNews;
+    return news !== null && now < news.until ? news.text : null;
+  }
+
+  /** Only ever about us: a small reward line for turning raw food into a better meal. */
+  private hearAboutCooking(event: CookedEvent): void {
+    const now = performance.now();
+    const name = ITEM_KINDS[event.cooked].displayName.toLowerCase();
+    this.cookingNews = { text: `You roasted ${article(name)} ${name}.`, until: now + NEWS_MS };
+    this.options.hud.publish({ cookingNews: this.currentCookingNews() });
+  }
+
+  private currentCookingNews(now = performance.now()): string | null {
+    const news = this.cookingNews;
     return news !== null && now < news.until ? news.text : null;
   }
 
@@ -3051,6 +3073,7 @@ export class Game {
       healthNews: this.currentHealthNews(now),
       charging: this.currentlyCharging(),
       craftingNews: this.currentCraftingNews(now),
+      cookingNews: this.currentCookingNews(now),
       huntingNews: this.currentHuntingNews(now),
       cacheNews: this.currentCacheNews(now),
       discardNews: this.currentDiscardNews(now),
