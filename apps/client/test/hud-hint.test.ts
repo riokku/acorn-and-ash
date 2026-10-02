@@ -47,6 +47,7 @@ const BASE_STATE: HudState = {
   healthNews: null,
   charging: false,
   craftingNews: null,
+  cookingNews: null,
   huntingNews: null,
   cacheNews: null,
   discardNews: null,
@@ -323,6 +324,43 @@ describe('the hint along the bottom', () => {
   it('offers to put out a lit campfire within reach', () => {
     const state: HudState = { ...BASE_STATE, nearCampfire: 'lit' };
     expect(hint(state)).toBe('Press E to put out the campfire');
+  });
+
+  it('offers to roast raw food held beside a lit campfire', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      nearCampfire: 'lit',
+      carrying: [{ item: 'trout', count: 1 }],
+      equippedItem: 'trout',
+    };
+    expect(hint(state)).toBe('Press E to roast the trout');
+  });
+
+  it('does not call already-roasted food cookable', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      nearCampfire: 'lit',
+      carrying: [{ item: 'roastedTrout', count: 1 }],
+      equippedItem: 'roastedTrout',
+    };
+    expect(hint(state)).toBe('Press E to put out the campfire');
+  });
+
+  it('warns instead of extinguishing when cooked food would not fit', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      nearCampfire: 'lit',
+      carrying: [
+        { item: 'perch', count: 2 },
+        { item: 'log', count: 10 },
+        { item: 'stick', count: 10 },
+        { item: 'flower', count: 10 },
+        { item: 'trout', count: 10 },
+        { item: 'meat', count: 10 },
+      ],
+      equippedItem: 'perch',
+    };
+    expect(hint(state)).toBe('Your pack is full · no room for roasted perch');
   });
 
   it('reaches for a buried cache of your own before a campfire, the same button', () => {
