@@ -3090,7 +3090,15 @@ export class WorldSimulation {
       this.equipEvents.push(netId);
       changed = true;
     }
-    if (isFood(item) && runtime.hunger < HUNGER_MAX) {
+    const savingForFire =
+      cookedItemFor(item) !== null &&
+      runtime.space === OUTDOORS &&
+      (() => {
+        const position = runtime.entity.get(Position);
+        const campfire = position === undefined ? null : nearestCampfire(position, this.builtProps);
+        return campfire?.lit === true;
+      })();
+    if (isFood(item) && runtime.hunger < HUNGER_MAX && !savingForFire) {
       this.eatItem(runtime, item);
       changed = true;
     }
