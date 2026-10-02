@@ -35,19 +35,17 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   perch: fish(),
   trout: fish(),
   goldenCarp: fish(),
+  roastedPerch: roastedFish(),
+  roastedTrout: roastedFish(),
+  roastedGoldenCarp: roastedFish(),
   stick: (
     <g transform="rotate(20 12 12)">
       <rect x="11" y="3" width="2" height="18" rx="1" />
       <rect x="11" y="9" width="5" height="1.6" rx="0.8" />
     </g>
   ),
-  meat: (
-    <>
-      <ellipse cx="9" cy="9" rx="7.5" ry="6.5" />
-      <rect x="14" y="13" width="3.2" height="9" rx="1.6" transform="rotate(15 15.6 17.5)" />
-      <circle cx="18.5" cy="21" r="2.6" />
-    </>
-  ),
+  meat: meat(),
+  roastedMeat: roastedMeat(),
   bone: (
     <g transform="rotate(-35 12 12)">
       <rect x="5" y="10.2" width="14" height="3.6" rx="1.4" />
@@ -119,6 +117,37 @@ function fish(): React.JSX.Element {
     <>
       <ellipse cx="10" cy="12" rx="7" ry="4" />
       <polygon points="17,12 22,8 22,16" />
+    </>
+  );
+}
+
+/** A cooked fish keeps the same silhouette, with two simple grill marks. */
+function roastedFish(): React.JSX.Element {
+  return (
+    <>
+      {fish()}
+      <rect x="7" y="8" width="1.4" height="8" rx="0.7" transform="rotate(25 7.7 12)" />
+      <rect x="11" y="8" width="1.4" height="8" rx="0.7" transform="rotate(25 11.7 12)" />
+    </>
+  );
+}
+
+function meat(): React.JSX.Element {
+  return (
+    <>
+      <ellipse cx="9" cy="9" rx="7.5" ry="6.5" />
+      <rect x="14" y="13" width="3.2" height="9" rx="1.6" transform="rotate(15 15.6 17.5)" />
+      <circle cx="18.5" cy="21" r="2.6" />
+    </>
+  );
+}
+
+function roastedMeat(): React.JSX.Element {
+  return (
+    <>
+      {meat()}
+      <rect x="5" y="5" width="1.4" height="9" rx="0.7" transform="rotate(35 5.7 9.5)" />
+      <rect x="9" y="4" width="1.4" height="10" rx="0.7" transform="rotate(35 9.7 9)" />
     </>
   );
 }
