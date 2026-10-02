@@ -48,6 +48,15 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <circle cx="18.5" cy="21" r="2.6" />
     </>
   ),
+  bone: (
+    <g transform="rotate(-35 12 12)">
+      <rect x="5" y="10.2" width="14" height="3.6" rx="1.4" />
+      <circle cx="4.6" cy="9.6" r="2.6" />
+      <circle cx="4.6" cy="14.4" r="2.6" />
+      <circle cx="19.4" cy="9.6" r="2.6" />
+      <circle cx="19.4" cy="14.4" r="2.6" />
+    </g>
+  ),
   flower: (
     <>
       <circle cx="12" cy="7" r="3.5" />

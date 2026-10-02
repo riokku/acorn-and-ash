@@ -33,6 +33,12 @@ export interface MapBuild extends MapPoint {
   readonly lit: boolean;
 }
 
+/** A skeleton raider (see decision 0063). */
+export interface MapRaider extends MapPoint {
+  /** Drawing back to swing, or swinging, right now. */
+  readonly attacking: boolean;
+}
+
 export class MapFeed {
   /** The painted world, once it has finished painting. */
   image: HTMLCanvasElement | null = null;
@@ -50,6 +56,8 @@ export class MapFeed {
   others: readonly MapPlayer[] = [];
   /** Your own campfires, lanterns, fences, path stones and flower bed. */
   builds: readonly MapBuild[] = [];
+  /** Every skeleton still standing, within sight. */
+  raiders: readonly MapRaider[] = [];
   isNight = false;
 
   /** The square the player was last in, so the local reveal only runs on stepping into a new one. */

@@ -89,27 +89,46 @@ function playRandom(urls: readonly string[], volume: number): void {
   });
 }
 
-let swooshContext: AudioContext | null = null;
-let swooshNoise: AudioBuffer | null = null;
+let effectsContext: AudioContext | null = null;
+let effectsNoise: AudioBuffer | null = null;
+
+/**
+ * The one WebAudio context every sound made on the spot plays through, woken
+ * if the browser had it asleep - or null where there is none to be had.
+ */
+export function soundContext(): AudioContext | null {
+  if (typeof AudioContext === 'undefined') return null;
+  try {
+    effectsContext ??= new AudioContext();
+  } catch (error) {
+    console.error('Could not start the sound of the game.', error);
+    return null;
+  }
+  if (effectsContext.state === 'suspended') void effectsContext.resume();
+  return effectsContext;
+}
+
+/** Half a second of hiss, made once, for anything made on the spot from noise. */
+export function noiseBuffer(context: AudioContext): AudioBuffer {
+  effectsNoise ??= makeNoise(context, 0.6);
+  return effectsNoise;
+}
+
+/** The Settings menu's sound effects slider, for sounds made on the spot. */
+export function effectsVolume(): number {
+  return sfxVolumeScale;
+}
 
 /**
  * The swish of something swung through the air, peaking `peakInSeconds` from
  * now, as the blow lands; `strength` above 1 for a charged strike, deeper
- * and longer. Made on the spot from a burst of hiss swept up and back down
+ * and longer, and `volume` below 1 for one further off. Made on the spot from a burst of hiss swept up and back down
  * through a filter, so it never sounds quite the same twice and needs no
  * recording of its own.
  */
-export function playSwoosh(peakInSeconds: number, strength = 1): void {
-  if (typeof AudioContext === 'undefined') return;
-  try {
-    swooshContext ??= new AudioContext();
-  } catch (error) {
-    console.error('Could not start the sound of swinging.', error);
-    return;
-  }
-  const context = swooshContext;
-  if (context.state === 'suspended') void context.resume();
-  swooshNoise ??= makeNoise(context, 0.6);
+export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): void {
+  const context = soundContext();
+  if (context === null) return;
 
   const rise = 0.13 * strength;
   const fall = 0.12 * strength;
@@ -119,7 +138,7 @@ export function playSwoosh(peakInSeconds: number, strength = 1): void {
   const pitch = (0.85 + Math.random() * 0.3) / strength;
 
   const source = context.createBufferSource();
-  source.buffer = swooshNoise;
+  source.buffer = noiseBuffer(context);
   const filter = context.createBiquadFilter();
   filter.type = 'bandpass';
   filter.Q.value = 1.4;
@@ -127,7 +146,7 @@ export function playSwoosh(peakInSeconds: number, strength = 1): void {
   filter.frequency.exponentialRampToValueAtTime(2300 * pitch, peak);
   filter.frequency.exponentialRampToValueAtTime(650 * pitch, end);
   const gain = context.createGain();
-  const loudest = SWOOSH_VOLUME * sfxVolumeScale * Math.min(1.4, strength);
+  const loudest = SWOOSH_VOLUME * sfxVolumeScale * Math.min(1.4, strength) * volume;
   gain.gain.setValueAtTime(0.0001, start);
   gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, loudest), peak);
   gain.gain.exponentialRampToValueAtTime(0.0001, end);

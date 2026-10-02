@@ -31,6 +31,7 @@ import {
   RISE,
   SETTLE,
   STRIKE,
+  WINDUP_TICKS,
   type ComboSwing,
 } from '../data/moves';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
@@ -58,6 +59,13 @@ export const ActionKind = {
   Sit: 8,
   /** Lying in bed. */
   Lie: 9,
+  /**
+   * A raider drawing back before the first swing of a combo, so it is plain
+   * to see coming; `step` says how quickly (see `WindupPace`). Creeping in,
+   * weapon raised, and then straight into that swing. Nothing a player does
+   * ever starts one: only a raider's own brain does (see `sim/raids.ts`).
+   */
+  Windup: 10,
 } as const;
 export type ActionKind = (typeof ActionKind)[keyof typeof ActionKind];
 
@@ -257,6 +265,14 @@ export function advanceAction(
       return FREE;
     }
 
+    case ActionKind.Windup:
+      // Committed, like a charge: only a hit stops it.
+      if (state.age >= windupTicks(state.step)) {
+        beginAction(state, ActionKind.Swing, 1);
+        return { footing: 'planted', impact: null, cast: false };
+      }
+      return { footing: 'creeping', impact: null, cast: false };
+
     case ActionKind.KnockedOut:
       return { footing: 'still', impact: null, cast: false };
 
@@ -314,6 +330,11 @@ function startFromIdle(
   }
   beginAction(state, ActionKind.Swing, 1);
   return { footing: 'planted', impact: null, cast: false };
+}
+
+/** How long a wind-up of this `step` (its `WindupPace`) lasts, in ticks. */
+export function windupTicks(step: number): number {
+  return WINDUP_TICKS[Math.min(Math.max(step, 0), WINDUP_TICKS.length - 1)] ?? WINDUP_TICKS[0];
 }
 
 function comboSwing(step: number): ComboSwing {
@@ -433,7 +454,7 @@ export function packActionByte(state: Readonly<ActionState>): number {
 
 export function unpackActionByte(byte: number, into: ActionState): ActionState {
   const kind = byte & 0x1f;
-  into.kind = kind <= ActionKind.Lie ? (kind as ActionKind) : ActionKind.Idle;
+  into.kind = kind <= ActionKind.Windup ? (kind as ActionKind) : ActionKind.Idle;
   into.step = (byte >> 5) & 0x3;
   into.queued = (byte & 0x80) !== 0;
   return into;

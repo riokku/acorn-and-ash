@@ -38,7 +38,9 @@ import { createRenderer, type RendererSetup } from '../scene/renderer';
  * a patch of painted ground, with no server and no Home screen - open the
  * game with `?gallery` to see it (see decision 0053).
  *
- * `?gallery=cabin` looks at one piece up close; `&time=0.3` picks a time of
+ * `?gallery=cabin` looks at one piece up close; `?gallery=moves` and
+ * `?gallery=raiders` play the characters' and the skeletons' moves (see
+ * moves.ts and raiders.ts); `&time=0.3` picks a time of
  * day from 0 (midnight) through 0.5 (noon); `&spin` turns the view slowly
  * round. Only ever used to look at the art: nothing here is part of playing.
  */
@@ -138,6 +140,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     scene.add(createGalleryGround([]));
     const { showMoves } = await import('./moves');
     await showMoves(renderer, scene, fireLights, params);
+    return;
+  }
+  if (focus === 'raiders') {
+    scene.add(createGalleryGround([]));
+    const { showRaiders } = await import('./raiders');
+    await showRaiders(renderer, scene, fireLights, params);
     return;
   }
 

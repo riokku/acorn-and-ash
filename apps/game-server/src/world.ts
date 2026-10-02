@@ -37,6 +37,9 @@ import {
   encodeGatherPatches,
   encodeHealth,
   encodeHunger,
+  encodeRaidNews,
+  encodeRaiderHit,
+  encodeRaiders,
   encodeRejected,
   encodeEquipped,
   encodeExplored,
@@ -196,6 +199,8 @@ export class World extends DurableObject<WorldEnv> {
     // Where every stick and flower patch is now, and what anybody dropped.
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
     server.send(encodeDroppedPiles(simulation.droppedPilesList()));
+    // Any skeletons already out there, so they show up with the right look.
+    server.send(encodeRaiders(simulation.raidersList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
       encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
@@ -375,6 +380,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceChopping(simulation);
     this.announceCatching(simulation);
     this.announceThreatHits(simulation);
+    this.announceRaids(simulation);
     this.announceBuilding(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
@@ -511,6 +517,22 @@ export class World extends DurableObject<WorldEnv> {
   private announceThreatHits(simulation: WorldSimulation): void {
     const events = simulation.drainThreatHitEvents();
     for (const event of events) this.broadcast(encodeThreatHit(event));
+  }
+
+  /**
+   * Tell everybody about skeleton raids (see decision 0063): the whole list
+   * of raiders whenever one turns up, is hit or is gone, every blow that
+   * landed on one, and every raid that turned up or ended. All of it goes to
+   * everybody, the same as a threat hit: a raid on somebody else nearby is
+   * worth knowing about too. None of it is saved - a raid only lasts while
+   * somebody is here to fight it.
+   */
+  private announceRaids(simulation: WorldSimulation): void {
+    if (simulation.drainRaidersChanged()) {
+      this.broadcast(encodeRaiders(simulation.raidersList()));
+    }
+    for (const hit of simulation.drainRaiderHits()) this.broadcast(encodeRaiderHit(hit));
+    for (const news of simulation.drainRaidNews()) this.broadcast(encodeRaidNews(news));
   }
 
   /**
@@ -979,6 +1001,7 @@ export class World extends DurableObject<WorldEnv> {
       regrowMinSeconds: this.regrowMinSeconds(),
       patchRegrowMinSeconds: this.patchRegrowMinSeconds(),
       hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
+      raidIntervalSeconds: this.raidIntervalSeconds(),
     });
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
@@ -1058,6 +1081,17 @@ export class World extends DurableObject<WorldEnv> {
    */
   private hungerEmptyAfterSeconds(): number | undefined {
     const configured = Number(this.env.WORLD_HUNGER_EMPTY_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
+  }
+
+  /**
+   * The shortest time outdoors between skeleton raids, if the environment
+   * says. Only honoured when it is a sensible positive number, so a typo in a
+   * dashboard variable cannot send raids every tick.
+   */
+  private raidIntervalSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_RAID_SECONDS);
     if (!Number.isFinite(configured) || configured <= 0) return undefined;
     return configured;
   }

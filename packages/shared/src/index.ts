@@ -29,6 +29,7 @@ export * from './data/animals';
 export * from './data/buildables';
 export * from './data/characters';
 export * from './data/moves';
+export * from './data/raiders';
 
 export * from './collision/capsule';
 
@@ -51,6 +52,7 @@ export * from './sim/day-night';
 export * from './sim/burying';
 export * from './sim/animals';
 export * from './sim/exploring';
+export * from './sim/raids';
 export * from './sim/world-sim';
 export * from './sim/identity';
 

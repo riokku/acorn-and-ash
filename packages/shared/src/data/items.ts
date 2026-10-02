@@ -16,7 +16,8 @@ export type ItemId =
   | 'meat'
   | 'flower'
   | 'bag'
-  | 'torch';
+  | 'torch'
+  | 'bone';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -200,6 +201,20 @@ export const ITEM_KINDS = {
     keepOnKnockout: true,
     equippable: true,
   },
+  bone: {
+    id: 'bone',
+    displayName: 'Bone',
+    pluralName: 'Bones',
+    // What a skeleton raider leaves behind once beaten (see decision 0063).
+    // Nothing uses it yet: a material waiting for its first recipe.
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xe8e0c8,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -220,6 +235,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'flower',
   'bag',
   'torch',
+  'bone',
 ];
 
 export function itemIndex(id: ItemId): number {

@@ -8,6 +8,7 @@ import type { HudStore } from './store';
 import type { HotbarPins } from './hotbar-layout';
 import type { Preferences } from '../preferences/preferences';
 import type { MapFeed } from '../map/map-feed';
+import type { CombatFeed } from './combat-feed';
 
 /**
  * The HUD is React, drawn as an HTML layer over the canvas. The 3D scene is
@@ -27,6 +28,7 @@ export function mountHud(
   onToggleMap: () => void,
   onSetDoorLock: (locked: boolean) => void,
   onDiscard: (item: ItemId, amount: number, destroy: boolean) => void,
+  combatFeed: CombatFeed,
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -43,6 +45,7 @@ export function mountHud(
         onToggleMap={onToggleMap}
         onSetDoorLock={onSetDoorLock}
         onDiscard={onDiscard}
+        combatFeed={combatFeed}
       />
     </StrictMode>,
   );

@@ -22,6 +22,7 @@ import {
   SETTLE,
   STRIKE,
   TICK_SECONDS,
+  windupTicks,
 } from '@acorn/shared';
 
 /** Every clip in the animation library, by the name the game gave it (see tools/import-animations.mjs). */
@@ -91,6 +92,15 @@ const STRIKE_LEAP_SECONDS = 0.3;
 /** Where a tucked-up roll holds: the crouch before a jump. */
 const ROLL_TUCK_SECONDS = 0.3;
 
+/**
+ * How far into the first swing's clip a raider's wind-up draws back to and
+ * holds: the weapon raised, just before it starts to come round. The swing
+ * that follows plays on from exactly here (see `MoveView.afterWindup`).
+ */
+export const WINDUP_PEAK_SECONDS = 0.26;
+/** How much of a wind-up is spent drawing back; the rest holds there, ready. */
+const WINDUP_DRAW_SHARE = 0.55;
+
 /** What a character's whole body is doing because of a move, rather than walking about. */
 export interface MovePose {
   /** The clip playing over the top of walking, or null for none. */
@@ -116,6 +126,16 @@ export interface MovePose {
    * going: creeping through a charge's wind-up (see `CHARGE_WALK_SHARE`).
    */
   readonly legsFree: boolean;
+  /**
+   * How far through a raider's wind-up, from 0 to 1, for the glow in its
+   * eyes that says a swing is coming; 0 for anything else.
+   */
+  readonly windup: number;
+  /**
+   * How far the body is twisted back and leaning away, from 0 to 1, coiled
+   * for a raider's first swing - and unwinding again as the swing goes.
+   */
+  readonly coil: number;
 }
 
 const NO_MOVE: MovePose = {
@@ -127,6 +147,8 @@ const NO_MOVE: MovePose = {
   charge: 0,
   handsFree: false,
   legsFree: false,
+  windup: 0,
+  coil: 0,
 };
 
 /** A move as it reaches the drawing code: the shared state, with `age` in fractional ticks. */
@@ -140,6 +162,11 @@ export interface MoveView {
   readonly flinchVariant: 0 | 1;
   /** Which way a dodge goes, as the character sees it. */
   readonly roll: 'forward' | 'backward' | 'left' | 'right';
+  /**
+   * A first swing straight out of a wind-up, which carries on from where the
+   * wind-up drew back to rather than starting over. Only raiders wind up.
+   */
+  readonly afterWindup?: boolean;
 }
 
 /** How long a whole-body move takes to take over from walking, and to hand back, in seconds. */
@@ -152,6 +179,8 @@ export function blendSeconds(kind: ActionKind): number {
       return 0.05;
     case ActionKind.Flinch:
       return 0.05;
+    case ActionKind.Windup:
+      return 0.1;
     default:
       return 0.18;
   }
@@ -173,7 +202,35 @@ export function movePose(move: MoveView): MovePose {
             ? 'attack2'
             : 'attack3';
       const impact = LIGHT_COMBO[step - 1]?.impact ?? 4;
-      return { ...NO_MOVE, clip, time: lineUp(clip, SWING_SPEED[clip], impact, move.age) };
+      // Out of a wind-up, the weapon is already raised: it comes round from
+      // there, still landing on the tick.
+      const unwinding = clip === 'attack1' && move.afterWindup === true;
+      const speed = unwinding
+        ? ((CLIP_BLOW_SECONDS.attack1 ?? 0.42) - WINDUP_PEAK_SECONDS) / (impact * TICK_SECONDS)
+        : SWING_SPEED[clip];
+      return {
+        ...NO_MOVE,
+        clip,
+        time: lineUp(clip, speed, impact, move.age),
+        // Untwisting into the blow, all the way round by the time it lands.
+        coil: unwinding ? 1 - smoothstep(0, impact, move.age) : 0,
+      };
+    }
+
+    case ActionKind.Windup: {
+      // A raider drawing back for the first swing of a combo, slowly enough
+      // to see coming, then holding there until it goes. Creeping in, the
+      // legs walk on underneath.
+      const ticks = windupTicks(move.step);
+      const drawn = smoothstep(0, ticks * WINDUP_DRAW_SHARE, move.age);
+      return {
+        ...NO_MOVE,
+        clip: 'attack1',
+        time: WINDUP_PEAK_SECONDS * drawn,
+        legsFree: true,
+        windup: Math.min(1, Math.max(0, move.age / ticks)),
+        coil: drawn,
+      };
     }
 
     case ActionKind.Charge:

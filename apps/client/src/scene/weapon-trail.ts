@@ -34,7 +34,8 @@ export class WeaponTrail {
   private readonly fades = new Float32Array(MAX_SAMPLES * 2);
   private readonly geometry = new THREE.BufferGeometry();
 
-  constructor() {
+  /** `color` is the streak's own: a skeleton's is a warning red rather than a player's pale gold. */
+  constructor(color: THREE.ColorRepresentation = TRAIL_COLOR) {
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
     this.geometry.setAttribute('fade', new THREE.BufferAttribute(this.fades, 1));
     const indices: number[] = [];
@@ -45,7 +46,7 @@ export class WeaponTrail {
     this.geometry.setIndex(indices);
     this.geometry.setDrawRange(0, 0);
     const material = new THREE.MeshBasicNodeMaterial({
-      color: TRAIL_COLOR,
+      color,
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,

@@ -27,6 +27,8 @@ import { GESTURE_COUNT, type Gesture, type GestureEvent } from '../sim/actions';
 import { EXPLORED_BYTES } from '../sim/exploring';
 import type { GatherPatchView } from '../sim/gathering';
 import { MAX_PILE_COUNT, type DroppedPileView } from '../sim/dropping';
+import { raiderKindFromIndex, raiderKindIndex } from '../data/raiders';
+import type { RaidNews, RaidNewsKind, RaiderHit, RaiderView } from '../sim/raids';
 import type {
   AnimalCaught,
   BuildRequest,
@@ -739,6 +741,114 @@ function decodeDiscarded(view: DataView): DiscardedEvent | null {
   };
 }
 
+/** id(2) + kind(1) + blows still needed(1) */
+const BYTES_PER_RAIDER = 4;
+/** A world holds at most `RAID.maxConcurrent` raids of three, well inside a one-byte count. */
+export const MAX_SENT_RAIDERS = 255;
+
+/** Every raider in the world, sent whole: which kind each is and how much it has left. */
+export function encodeRaiders(raiders: readonly RaiderView[]): ArrayBuffer {
+  const count = Math.min(raiders.length, MAX_SENT_RAIDERS);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_RAIDER);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Raiders);
+  view.setUint8(1, count);
+
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const raider = raiders[i];
+    if (raider === undefined) break;
+    view.setUint16(offset, raider.id & 0xffff, true);
+    view.setUint8(offset + 2, raiderKindIndex(raider.kind));
+    view.setUint8(offset + 3, clamp(Math.round(raider.hitsLeft), 0, 255));
+    offset += BYTES_PER_RAIDER;
+  }
+  return buffer;
+}
+
+function decodeRaiders(view: DataView): RaiderView[] | null {
+  if (view.byteLength < 2) return null;
+  const count = view.getUint8(1);
+  if (view.byteLength !== 2 + count * BYTES_PER_RAIDER) return null;
+  const raiders: RaiderView[] = [];
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const kind = raiderKindFromIndex(view.getUint8(offset + 2));
+    if (kind === null) return null;
+    raiders.push({
+      id: view.getUint16(offset, true),
+      kind,
+      hitsLeft: view.getUint8(offset + 3),
+    });
+    offset += BYTES_PER_RAIDER;
+  }
+  return raiders;
+}
+
+/** What a raid just did, as one byte. Only ever add to the end. */
+const RAID_NEWS_KINDS: readonly RaidNewsKind[] = ['incoming', 'foughtOff', 'gaveUp'];
+/** type(1) + kind(1) + raidId(2) + targetNetId(2) + count(1) + x(2) + z(2) */
+const RAID_NEWS_MESSAGE_BYTES = 11;
+
+/** A raid turned up, was fought off or gave up, in eleven bytes. Everybody is sent it. */
+export function encodeRaidNews(news: RaidNews): ArrayBuffer {
+  const buffer = new ArrayBuffer(RAID_NEWS_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.RaidNews);
+  view.setUint8(1, RAID_NEWS_KINDS.indexOf(news.kind));
+  view.setUint16(2, news.raidId & 0xffff, true);
+  view.setUint16(4, news.targetNetId & 0xffff, true);
+  view.setUint8(6, clamp(news.count, 0, 255));
+  view.setInt16(7, clamp(quantisePosition(news.x), INT16_MIN, INT16_MAX), true);
+  view.setInt16(9, clamp(quantisePosition(news.z), INT16_MIN, INT16_MAX), true);
+  return buffer;
+}
+
+function decodeRaidNews(view: DataView): RaidNews | null {
+  const kind = RAID_NEWS_KINDS[view.getUint8(1)];
+  if (kind === undefined) return null;
+  return {
+    kind,
+    raidId: view.getUint16(2, true),
+    targetNetId: view.getUint16(4, true),
+    count: view.getUint8(6),
+    x: dequantisePosition(view.getInt16(7, true)),
+    z: dequantisePosition(view.getInt16(9, true)),
+  };
+}
+
+const RAIDER_HIT_FLAG_HEAVY = 1 << 0;
+const RAIDER_HIT_FLAG_SHRUGGED = 1 << 1;
+/** type(1) + raiderId(2) + blows still needed(1) + whose blow(2) + flags(1) */
+const RAIDER_HIT_MESSAGE_BYTES = 7;
+
+/** A player's blow landed on a raider, in seven bytes. Everybody is sent it, like a threat hit. */
+export function encodeRaiderHit(hit: RaiderHit): ArrayBuffer {
+  const buffer = new ArrayBuffer(RAIDER_HIT_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.RaiderHit);
+  view.setUint16(1, hit.raiderId & 0xffff, true);
+  view.setUint8(3, clamp(Math.round(hit.hitsLeft), 0, 255));
+  view.setUint16(4, hit.netId === null ? NOBODY : hit.netId & 0xffff, true);
+  view.setUint8(
+    6,
+    (hit.heavy ? RAIDER_HIT_FLAG_HEAVY : 0) | (hit.shrugged ? RAIDER_HIT_FLAG_SHRUGGED : 0),
+  );
+  return buffer;
+}
+
+function decodeRaiderHit(view: DataView): RaiderHit {
+  const netId = view.getUint16(4, true);
+  const flags = view.getUint8(6);
+  return {
+    raiderId: view.getUint16(1, true),
+    hitsLeft: view.getUint8(3),
+    netId: netId === NOBODY ? null : netId,
+    heavy: (flags & RAIDER_HIT_FLAG_HEAVY) !== 0,
+    shrugged: (flags & RAIDER_HIT_FLAG_SHRUGGED) !== 0,
+  };
+}
+
 /**
  * Who everybody currently connected says they are, the same reconciling way
  * as built props and buried caches - sent whole rather than as a diff.
@@ -1245,6 +1355,19 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== DISCARDED_MESSAGE_BYTES) return null;
       const event = decodeDiscarded(view);
       return event === null ? null : { type: 'discarded', event };
+    }
+    case ServerMessageType.Raiders: {
+      const raiders = decodeRaiders(view);
+      return raiders === null ? null : { type: 'raiders', raiders };
+    }
+    case ServerMessageType.RaidNews: {
+      if (data.byteLength !== RAID_NEWS_MESSAGE_BYTES) return null;
+      const news = decodeRaidNews(view);
+      return news === null ? null : { type: 'raidNews', news };
+    }
+    case ServerMessageType.RaiderHit: {
+      if (data.byteLength !== RAIDER_HIT_MESSAGE_BYTES) return null;
+      return { type: 'raiderHit', hit: decodeRaiderHit(view) };
     }
     case ServerMessageType.TreeHit: {
       if (data.byteLength !== 6) return null;

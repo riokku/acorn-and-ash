@@ -50,9 +50,13 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // The e2e environment is local with skeleton raids put off for a day (see
+    // decision 0063): local worlds raid every minute or so, and one turning up
+    // mid-test would knock the player out and send them home, failing
+    // whatever the test was in the middle of.
     command:
       'pnpm --filter @acorn/client build && ' +
-      `pnpm --filter @acorn/web exec wrangler dev -c wrangler.jsonc -c ../game-server/wrangler.jsonc --port ${PORT} --ip 127.0.0.1`,
+      `pnpm --filter @acorn/web exec wrangler dev -c wrangler.jsonc -c ../game-server/wrangler.jsonc --env e2e --port ${PORT} --ip 127.0.0.1`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

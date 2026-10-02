@@ -358,8 +358,33 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
   ],
 };
 
-/** Anything that can be shown in a hand: what you carry, and the shovel that comes out to dig. */
-type HeldThing = ItemId | 'shovel';
+/**
+ * Anything that can be shown in a hand: what you carry, the shovel that
+ * comes out to dig, and a raider's own weapon.
+ */
+type HeldThing = ItemId | 'shovel' | 'weapon';
+
+/** Something a character always has in hand when nothing else is: a raider's weapon. */
+export interface CharacterWeapon {
+  /** Its parts, built along +Y from where the hand grips it, at the origin. */
+  readonly parts: readonly ModelPart[];
+  /** How far up it its far end is, in its own units, for the streak behind a swing. */
+  readonly length: number;
+}
+
+/** How a character built from a model looks: its colours and anything it is never without. */
+export interface CharacterLook {
+  /** A colour to tint the whole model, or null to keep its own colours. */
+  readonly tint: THREE.ColorRepresentation | null;
+  readonly weapon?: CharacterWeapon;
+}
+
+/**
+ * A raider's weapon, held like the axe: it is swung by the same moves, and
+ * a sword's edges run along its own X like the axe's blade, so either edge
+ * leads the blow.
+ */
+const WEAPON_GRIPS = longToolGrips(CARRY_LEAN.axe, NO_TURN);
 
 interface HeldModel {
   readonly group: THREE.Group;
@@ -375,7 +400,7 @@ interface HeldModel {
 }
 
 /** This thing's parts to put in a hand, or undefined to leave it showing nothing. */
-function heldItemParts(thing: HeldThing): ModelPart[] | undefined {
+function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined {
   if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
     return itemModelParts(thing);
   }
@@ -383,7 +408,7 @@ function heldItemParts(thing: HeldThing): ModelPart[] | undefined {
 }
 
 /** Where along a held thing its far end is: the full length of a tool, the middle of a fish. */
-function tipHeightOf(thing: HeldThing): number {
+function tipHeightOf(thing: ItemId | 'shovel'): number {
   if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
     return TARGET_HEIGHTS[thing];
   }
@@ -428,8 +453,16 @@ export function createCharacter(
   color: THREE.ColorRepresentation,
 ): Character {
   const template = characterModelTemplate(character);
-  if (template !== undefined) return createAnimatedCharacter(template, color);
+  if (template !== undefined) return createAnimatedCharacter(template, { tint: color });
   return createPlaceholderCharacter(color);
+}
+
+/**
+ * A character from any model on the same rig as the players' - a skeleton
+ * raider - playing every move the same way.
+ */
+export function createCharacterFromModel(template: AnimatedModel, look: CharacterLook): Character {
+  return createAnimatedCharacter(template, look);
 }
 
 /**
@@ -439,12 +472,15 @@ export function createCharacter(
 const ROLL_PIVOT_HEIGHT = 0.42;
 /** How high a roll hops at its top. */
 const ROLL_HOP = 0.1;
+/**
+ * How far a raider twists back to its weapon side, coiled to swing, and how
+ * far it leans away, in radians (see `MovePose.coil`).
+ */
+const COIL_TWIST = -0.42;
+const COIL_LEAN = 0.14;
 
 /** The real, rigged character, every move played by its animator (see decision 0056). */
-function createAnimatedCharacter(
-  template: AnimatedModel,
-  color: THREE.ColorRepresentation,
-): Character {
+function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): Character {
   const instance = instantiateAnimatedModel(template);
   const model = instance.root;
   // The template's own four clips only ever stand in until the animation
@@ -494,7 +530,7 @@ function createAnimatedCharacter(
     }
     child.material = next;
   });
-  for (const material of materials) material.color.set(color);
+  if (look.tint !== null) for (const material of materials) material.color.set(look.tint);
 
   // Every item that could ever be equipped gets its own group, parented
   // straight onto the hand bone - a real Object3D in the skeleton - so
@@ -510,9 +546,19 @@ function createAnimatedCharacter(
   let torchGlow: FireGlow | undefined;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
-    for (const thing of [...HELD_ITEM_IDS, 'shovel'] as const) {
-      const parts = heldItemParts(thing);
-      const grips = thing === 'shovel' ? SHOVEL_GRIPS : HELD_ITEM_REST[thing];
+    const things: readonly HeldThing[] = [
+      ...HELD_ITEM_IDS,
+      'shovel',
+      ...(look.weapon === undefined ? [] : ['weapon' as const]),
+    ];
+    for (const thing of things) {
+      const parts = thing === 'weapon' ? look.weapon?.parts : heldItemParts(thing);
+      const grips =
+        thing === 'shovel'
+          ? SHOVEL_GRIPS
+          : thing === 'weapon'
+            ? WEAPON_GRIPS
+            : HELD_ITEM_REST[thing];
       if (parts === undefined || grips === undefined) continue;
       const held = new THREE.Group();
       for (const part of parts) {
@@ -532,7 +578,7 @@ function createAnimatedCharacter(
       handBone.add(held);
       heldItems.set(thing, {
         group: held,
-        tipHeight: tipHeightOf(thing),
+        tipHeight: thing === 'weapon' ? (look.weapon?.length ?? 0) : tipHeightOf(thing),
         carry: new THREE.Quaternion().setFromEuler(grips.carry.rotation),
         use: new THREE.Quaternion().setFromEuler(grips.use.rotation),
         carryOffset: grips.carry.offset,
@@ -577,7 +623,7 @@ function createAnimatedCharacter(
             : null
           : handsFree
             ? null
-            : equipped;
+            : (equipped ?? (look.weapon === undefined ? null : 'weapon'));
     for (const [thing, held] of heldItems) {
       held.group.visible = thing === showing;
       held.group.scale.setScalar((1 / MODEL_SCALE) * (thing === eating ? left : 1));
@@ -750,6 +796,13 @@ function placeBody(
     // Tucked up small over the top of the roll.
     const tuck = 1 - 0.22 * arc;
     pivot.scale.set(tuck, tuck, tuck);
+  }
+
+  // Coiled for a swing: twisted back to the weapon side and leaning away
+  // from the blow to come, so it can be seen coming from any side.
+  if (pose.coil > 0) {
+    pivot.rotation.y += COIL_TWIST * pose.coil;
+    pivot.rotation.x += COIL_LEAN * pose.coil;
   }
 
   // Gathering power: a tremble that builds as the charge does.

@@ -9,6 +9,18 @@ import type { ToastView } from './toasts';
 /** Our own line: none out, waiting for a bite, or a fish on right now. */
 export type FishingPhase = 'waiting' | 'biting' | null;
 
+/**
+ * The big words across the top when a skeleton raid turns up, is fought
+ * off, or is over (see decision 0063). `key` is new for every banner, so
+ * one following straight on from another still plays in from the start.
+ */
+export interface RaidBanner {
+  readonly key: number;
+  readonly tone: 'danger' | 'victory' | 'calm';
+  readonly title: string;
+  readonly detail: string;
+}
+
 /** Everything the HUD shows. */
 export interface HudState {
   readonly connection: ConnectionState;
@@ -55,6 +67,17 @@ export interface HudState {
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
   readonly aimedAnimal: { readonly name: string; readonly hitsLeft?: number } | null;
+  /**
+   * The skeleton a swing would land on, if any, and how many blows it still
+   * needs. A skeleton in reach beats a tree or an animal (see decision 0063).
+   */
+  readonly aimedRaider: { readonly name: string; readonly hitsLeft: number } | null;
+  /** How many skeletons are still standing within sight of us. */
+  readonly raidersInSight: number;
+  /** Whether one is close enough to be worth fighting right now. */
+  readonly raidersClose: boolean;
+  /** A raid turning up, fought off or over, while it is still worth showing. */
+  readonly raidBanner: RaidBanner | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -138,6 +161,10 @@ const INITIAL: HudState = {
   nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,
+  aimedRaider: null,
+  raidersInSight: 0,
+  raidersClose: false,
+  raidBanner: null,
   canBuild: false,
   buildMenuOpen: false,
   placing: null,

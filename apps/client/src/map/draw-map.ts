@@ -16,6 +16,9 @@ const PAGE = `#${PARCHMENT.toString(16).padStart(6, '0')}`;
 const YOU = '#c0492f';
 const HOME_ROOF = '#a4553a';
 const STASH = '#a33a28';
+/** Skeleton raiders: a dark red, and a hot one while swinging (see decision 0063). */
+const RAIDER = '#7e1d14';
+const RAIDER_ATTACKING = '#ff3b2f';
 const LABEL_FONT = 'italic 600 13px Fraunces, Georgia, serif';
 
 /**
@@ -119,6 +122,11 @@ export function drawMinimap(
     if (Math.hypot(at.x, at.y) > radius - 3) continue;
     drawPlayerDot(context, centre + at.x, centre + at.y, other.color);
   }
+  for (const raider of feed.raiders) {
+    const at = place(raider.x, raider.z);
+    if (Math.hypot(at.x, at.y) > radius - 3) continue;
+    drawRaider(context, centre + at.x, centre + at.y, raider.attacking, 1);
+  }
   // Home and stash stay on the rim once they are too far to show, pointing
   // the way back.
   for (const stash of feed.stashes) {
@@ -213,6 +221,10 @@ export function drawBigMap(
     const at = place(other.x, other.z);
     drawPlayerDot(context, at.x, at.y, other.color);
     drawLabel(context, other.name, at.x, at.y + 15);
+  }
+  for (const raider of feed.raiders) {
+    const at = place(raider.x, raider.z);
+    drawRaider(context, at.x, at.y, raider.attacking, 1.2);
   }
   for (const stash of feed.stashes) {
     const at = place(stash.x, stash.z);
@@ -340,6 +352,31 @@ function drawPlayerDot(
   context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
   context.fill();
   context.lineWidth = 2.4;
+  context.strokeStyle = CREAM;
+  context.stroke();
+  context.lineWidth = 1;
+  context.strokeStyle = INK;
+  context.stroke();
+}
+
+/** A skeleton raider: a small red diamond, brighter while it is swinging. */
+function drawRaider(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  attacking: boolean,
+  scale: number,
+): void {
+  const size = 4.6 * scale;
+  context.beginPath();
+  context.moveTo(x, y - size);
+  context.lineTo(x + size, y);
+  context.lineTo(x, y + size);
+  context.lineTo(x - size, y);
+  context.closePath();
+  context.fillStyle = attacking ? RAIDER_ATTACKING : RAIDER;
+  context.fill();
+  context.lineWidth = 2.2;
   context.strokeStyle = CREAM;
   context.stroke();
   context.lineWidth = 1;

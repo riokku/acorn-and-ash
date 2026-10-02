@@ -39,3 +39,6 @@ export const StaticTag = trait();
 
 /** Marks a wild animal, as opposed to a player. */
 export const AnimalTag = trait();
+
+/** Marks a skeleton raider: fought like a player, driven by the server (see `sim/raids.ts`). */
+export const RaiderTag = trait();

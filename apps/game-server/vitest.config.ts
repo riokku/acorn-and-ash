@@ -15,11 +15,14 @@ export default defineConfig({
       // a tree that returns mid-chop would make the felling tests flaky.
       // Hunger empties in seconds too, for the same reason, and a picked-clean
       // stick or flower patch is back somewhere new in a couple of seconds.
+      // Skeleton raids never come at all: one turning up mid-chop would make
+      // every other test flaky.
       miniflare: {
         bindings: {
           WORLD_REGROW_SECONDS: '5',
           WORLD_HUNGER_EMPTY_SECONDS: '3',
           WORLD_PATCH_REGROW_SECONDS: '2',
+          WORLD_RAID_SECONDS: '86400',
         },
       },
     }),

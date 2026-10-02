@@ -1533,3 +1533,203 @@ body {
   font-size: 12px;
   line-height: 1.35;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Skeleton raids (decision 0063)                                           */
+/* ------------------------------------------------------------------------ */
+
+/* Arrows to skeletons out of sight, and red at the edges when hurt - drawn
+   on a canvas of its own, under every panel, since it belongs to the world. */
+.combat-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Health, bottom left, in the same warm material as the hotbar. */
+.health-bar {
+  position: absolute;
+  left: 16px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 10px;
+  border-radius: 999px;
+  background: rgba(251, 243, 223, 0.92);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  color: var(--ink-warm);
+}
+
+.health-bar-heart {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: #d9473a;
+  stroke: rgba(58, 42, 20, 0.5);
+  stroke-width: 1.2;
+}
+
+.health-bar-low .health-bar-heart {
+  animation: heart-beat 1s infinite;
+}
+
+.health-bar-track {
+  position: relative;
+  width: 180px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(58, 42, 20, 0.22);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+/* What the last blow took: waits a beat, then catches up. */
+.health-bar-trail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #f4d9a8;
+  transition: width 450ms ease-in 350ms;
+}
+
+.health-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, #ea6a52 0%, #c8382b 100%);
+  transition: width 140ms ease-out;
+}
+
+.health-bar-low .health-bar-fill {
+  background: linear-gradient(180deg, #ff5a42 0%, #b0241a 100%);
+}
+
+.health-bar-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: health-flash 280ms ease-out;
+}
+
+.health-bar-number {
+  min-width: 26px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@keyframes health-flash {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes heart-beat {
+  0%,
+  18%,
+  40%,
+  100% {
+    transform: scale(1);
+  }
+  8% {
+    transform: scale(1.22);
+  }
+  28% {
+    transform: scale(1.14);
+  }
+}
+
+/*
+ * A raid turning up, fought off, or over: big words on a band of colour
+ * that fades out at both ends, like a stroke of paint. Plays in, holds, and
+ * fades out again over the time the game keeps it on screen.
+ */
+.raid-banner {
+  --band: rgba(110, 16, 10, 0.86);
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 340px;
+  padding: 12px 40px 14px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--band) 18%,
+    var(--band) 82%,
+    transparent 100%
+  );
+  color: #fff4e4;
+  text-align: center;
+  white-space: nowrap;
+  animation: raid-banner 4.6s ease-out forwards;
+}
+
+.raid-banner-victory {
+  --band: rgba(122, 86, 18, 0.86);
+}
+
+.raid-banner-calm {
+  --band: rgba(36, 44, 40, 0.82);
+}
+
+.raid-banner-title {
+  margin: 0;
+  font:
+    700 30px/1.15 'Fraunces',
+    Georgia,
+    serif;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.raid-banner-detail {
+  margin: 4px 0 0;
+  color: #f2dfc4;
+  font-size: 14px;
+}
+
+@keyframes raid-banner {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.25);
+  }
+  7%,
+  86% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.98);
+  }
+}
+
+/* How many are still standing, once the banner has gone. */
+.raid-tracker {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 140, 120, 0.35);
+  border-radius: 999px;
+  background: rgba(70, 14, 10, 0.78);
+  color: #ffe9e2;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.raid-tracker-skull {
+  font-size: 15px;
+}

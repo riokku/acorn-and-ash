@@ -33,4 +33,13 @@ export interface WorldEnv extends Env {
    * waited out. Unset everywhere real, where it is twenty minutes.
    */
   readonly WORLD_HUNGER_EMPTY_SECONDS?: string;
+  /**
+   * The shortest time a player spends outdoors between skeleton raids, in
+   * seconds of daytime. Raids come somewhere between this and one and a half
+   * times it, twice as often at night.
+   *
+   * Set low on previews and local runs so a raid can be waited for in one
+   * sitting. Four minutes everywhere real.
+   */
+  readonly WORLD_RAID_SECONDS?: string;
 }

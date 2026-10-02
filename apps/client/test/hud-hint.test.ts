@@ -30,6 +30,10 @@ const BASE_STATE: HudState = {
   nearCampfire: null,
   aimedTree: null,
   aimedAnimal: null,
+  aimedRaider: null,
+  raidersInSight: 0,
+  raidersClose: false,
+  raidBanner: null,
   canBuild: false,
   buildMenuOpen: false,
   placing: null,
@@ -354,6 +358,61 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'axe', count: 1 }],
     };
     expect(hint(state)).toBe('Hurt badly - one more hit and you are down');
+  });
+
+  describe('in a fight with skeletons', () => {
+    const fighting: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'axe', count: 1 }],
+      equippedItem: 'axe',
+      raidersInSight: 2,
+      raidersClose: true,
+    };
+
+    it('says how many blows the one in front still needs, and how to get out of the way', () => {
+      expect(hint({ ...fighting, aimedRaider: { name: 'Skeleton Warrior', hitsLeft: 3 } })).toBe(
+        'Left click to fight the skeleton warrior · 3 hits left · Ctrl to roll',
+      );
+      expect(hint({ ...fighting, aimedRaider: { name: 'Skeleton Rogue', hitsLeft: 1 } })).toBe(
+        'Left click to fight the skeleton rogue · 1 hit left · Ctrl to roll',
+      );
+    });
+
+    it('beats a tree or an animal in reach, the same way the server picks', () => {
+      const state: HudState = {
+        ...fighting,
+        aimedRaider: { name: 'Skeleton Minion', hitsLeft: 4 },
+        aimedTree: { name: 'Oak', swingsLeft: 3 },
+        aimedAnimal: { name: 'Rabbit' },
+      };
+      expect(hint(state)).toMatch(/^Left click to fight the skeleton minion/);
+    });
+
+    it('says to turn and face one that is close but not in front', () => {
+      expect(hint(fighting)).toBe('Face a skeleton and left click to fight · Ctrl to roll');
+    });
+
+    it('says to get something in hand first, since a blow needs something to strike with', () => {
+      expect(hint({ ...fighting, equippedItem: null })).toBe(
+        'Skeletons! Pick something from your hotbar to fight back · Ctrl to roll',
+      );
+    });
+
+    it('beats being hungry, or something to pick up', () => {
+      expect(hint({ ...fighting, hunger: 0, nearbyItem: 'stick' })).toMatch(/skeleton/i);
+    });
+
+    it('still gives way to the warning that one more hit and you are down', () => {
+      expect(hint({ ...fighting, health: 20 })).toBe('Hurt badly - one more hit and you are down');
+    });
+
+    it('still gives way to a menu that was opened on purpose', () => {
+      expect(hint({ ...fighting, craftMenuOpen: true })).toBe('Pick one below, or C to close');
+    });
+
+    it('says nothing about skeletons once none are close', () => {
+      expect(hint({ ...fighting, raidersClose: false })).not.toMatch(/skeleton/i);
+    });
   });
 
   it('says so while a charged attack is winding up, ahead of what you are aimed at', () => {

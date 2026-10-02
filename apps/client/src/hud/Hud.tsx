@@ -22,8 +22,10 @@ import {
   type Recipe,
 } from '@acorn/shared';
 
-import type { HudStore, HudState } from './store';
+import type { HudStore, HudState, RaidBanner } from './store';
 import { BuildableIcon, ItemIcon } from './item-icons';
+import { CombatOverlay } from './CombatOverlay';
+import type { CombatFeed } from './combat-feed';
 import {
   InventoryPanel,
   PackButton,
@@ -57,6 +59,8 @@ interface HudProps {
   readonly onSetDoorLock: (locked: boolean) => void;
   /** Drop or destroy some of something in the pack - see decision 0061. */
   readonly onDiscard: (item: ItemId, amount: number, destroy: boolean) => void;
+  /** What the combat overlay draws - see decision 0063. */
+  readonly combatFeed: CombatFeed;
 }
 
 export function Hud({
@@ -72,6 +76,7 @@ export function Hud({
   onToggleMap,
   onSetDoorLock,
   onDiscard,
+  combatFeed,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
@@ -89,6 +94,8 @@ export function Hud({
 
   return (
     <>
+      {/* First, so it sits under everything else: it is part of the world, not a panel. */}
+      <CombatOverlay feed={combatFeed} />
       <div className="hud-panel">
         <p className="hud-title">Acorn &amp; Ash</p>
         <Row label="Server" value={<Connection state={state} />} />
@@ -136,6 +143,14 @@ export function Hud({
 
       {state.ready && state.playing && !state.mapOpen ? (
         <Minimap feed={mapFeed} fog={fog} onOpenMap={onToggleMap} />
+      ) : null}
+
+      {showingWorld ? <HealthBar health={state.health} /> : null}
+      {showingWorld && state.raidBanner !== null ? (
+        <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
+      ) : null}
+      {showingWorld && state.raidBanner === null && state.raidersInSight > 0 ? (
+        <RaidTracker count={state.raidersInSight} />
       ) : null}
       {state.ready && state.playing && !state.mapOpen ? (
         <>
@@ -275,6 +290,59 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
     <span className={className}>
       {Math.round(state.health)}/{HEALTH_MAX}
     </span>
+  );
+}
+
+/**
+ * How much health is left, in the bottom left corner where it is always in
+ * view (see decision 0063): the bar drops the moment a blow lands, a pale
+ * strip behind it shows what that blow took and catches up a beat later,
+ * and the whole thing flashes. Red and beating once there is little left.
+ */
+function HealthBar({ health }: { health: number }): React.JSX.Element {
+  const fraction = Math.min(1, Math.max(0, health / HEALTH_MAX));
+  const low = health <= HEALTH_LOW_THRESHOLD;
+  // Counts every blow taken, so the flash plays again for each one.
+  const [hits, setHits] = useState(0);
+  const [last, setLast] = useState(health);
+  if (health !== last) {
+    if (health < last) setHits(hits + 1);
+    setLast(health);
+  }
+  return (
+    <div className={low ? 'health-bar health-bar-low' : 'health-bar'} data-testid="health-bar">
+      <svg className="health-bar-heart" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20.5C6 16 2.5 12.5 2.5 8.6c0-2.8 2.2-4.8 4.8-4.8 1.9 0 3.6 1.1 4.7 2.8 1.1-1.7 2.8-2.8 4.7-2.8 2.6 0 4.8 2 4.8 4.8 0 3.9-3.5 7.4-9.5 11.9z" />
+      </svg>
+      <div className="health-bar-track">
+        <div className="health-bar-trail" style={{ width: `${fraction * 100}%` }} />
+        <div className="health-bar-fill" style={{ width: `${fraction * 100}%` }} />
+        {hits > 0 ? <div key={hits} className="health-bar-flash" /> : null}
+      </div>
+      <span className="health-bar-number">{Math.round(health)}</span>
+    </div>
+  );
+}
+
+/** A skeleton raid turning up, fought off, or over: big, then gone again (see decision 0063). */
+function RaidBannerView({ banner }: { banner: RaidBanner }): React.JSX.Element {
+  return (
+    <div className={`raid-banner raid-banner-${banner.tone}`} data-testid="raid-banner">
+      <p className="raid-banner-title">{banner.title}</p>
+      <p className="raid-banner-detail">{banner.detail}</p>
+    </div>
+  );
+}
+
+/** Once the banner has gone: how many are still standing, while any are. */
+function RaidTracker({ count }: { count: number }): React.JSX.Element {
+  return (
+    <div className="raid-tracker" data-testid="raid-tracker">
+      <span className="raid-tracker-skull" aria-hidden="true">
+        ☠
+      </span>
+      {count === 1 ? '1 skeleton left' : `${count} skeletons left`}
+    </div>
   );
 }
 
@@ -468,6 +536,11 @@ export function hint(state: HudState): string {
   // Real danger, unlike being hungry: one more hit like the last one and you
   // are knocked out, so this beats everything but an actual bite.
   if (state.health <= HEALTH_LOW_THRESHOLD) return 'Hurt badly - one more hit and you are down';
+  // A fight beats everything else that is merely useful, but not a menu
+  // the player opened on purpose, which says how to close itself.
+  const fighting =
+    state.buildMenuOpen || state.craftMenuOpen || state.placing !== null ? null : fightHint(state);
+  if (fighting !== null) return fighting;
   // Settled in, E gets you up rather than doing anything else it would.
   if (state.resting === 'chair') return 'Sitting comfortably · move or press E to get up';
   if (state.resting === 'bed') return 'Snug in bed · move or press E to get up';
@@ -581,6 +654,25 @@ function hungerHint(state: HudState): string {
 function chopHint(tree: NonNullable<HudState['aimedTree']>): string {
   const swings = tree.swingsLeft === 1 ? '1 swing left' : `${tree.swingsLeft} swings left`;
   return `Left click to chop the ${tree.name.toLowerCase()} · ${swings}`;
+}
+
+/**
+ * What to do about skeletons close by (see decision 0063): fight the one in
+ * front, turn to face one, or get something in hand first - a blow needs
+ * something to strike with. Always with the roll, the way out of a swing.
+ * Null with none close.
+ */
+function fightHint(state: HudState): string | null {
+  if (state.aimedRaider === null && !state.raidersClose) return null;
+  if (state.charging) return 'Charging a heavy blow · let go to strike';
+  if (state.equippedItem === null) {
+    return 'Skeletons! Pick something from your hotbar to fight back · Ctrl to roll';
+  }
+  const raider = state.aimedRaider;
+  if (raider === null) return 'Face a skeleton and left click to fight · Ctrl to roll';
+  const name = raider.name.toLowerCase();
+  const hits = raider.hitsLeft === 1 ? '1 hit left' : `${raider.hitsLeft} hits left`;
+  return `Left click to fight the ${name} · ${hits} · Ctrl to roll`;
 }
 
 function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {

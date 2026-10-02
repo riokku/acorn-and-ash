@@ -36,8 +36,13 @@ const UPPER_BODY_BONES = new Set([
   'handslotr',
 ]);
 
-/** Clips worth having in halves: walking about, and anything done with the hands on the move. */
+/**
+ * Clips worth having in halves: walking about, anything done with the hands
+ * on the move, and the first swing, which a raider draws back for while it
+ * creeps in (see the wind-up in character-moves.ts).
+ */
 const SPLIT_CLIPS: readonly MoveClip[] = [
+  'attack1',
   'idle',
   'walk',
   'run',
