@@ -48,6 +48,7 @@ export * from './sim/crafting';
 export * from './sim/regrowth';
 export * from './sim/fishing';
 export * from './sim/hunger';
+export * from './sim/cooking';
 export * from './sim/day-night';
 export * from './sim/burying';
 export * from './sim/animals';
