@@ -3988,14 +3988,16 @@ describe('building', () => {
     it('cooks one held raw food over a lit campfire without putting the fire out', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
-      addItem(sim.inventoryOf(1), 'trout');
-      expect(sim.useItem(1, 'trout')).toBe(true);
 
-      // First press lights it; release; the next press cooks at the lit fire.
+      // Light first, then choose the food: selecting food away from a lit fire
+      // deliberately keeps the old "select food = eat it" behaviour.
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
       sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
       sim.step(tickClock());
+
+      addItem(sim.inventoryOf(1), 'trout');
+      expect(sim.useItem(1, 'trout')).toBe(true);
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
@@ -4032,6 +4034,12 @@ describe('building', () => {
     it('does not extinguish a lit fire when held raw food cannot fit once cooked', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+
       const pack = sim.inventoryOf(1);
       addItem(pack, 'perch', 2);
       addItem(pack, 'log', 10);
@@ -4041,10 +4049,6 @@ describe('building', () => {
       addItem(pack, 'meat', 10);
       expect(sim.useItem(1, 'perch')).toBe(true);
 
-      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
-      sim.step(tickClock());
-      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
-      sim.step(tickClock());
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
