@@ -336,6 +336,17 @@ describe('the hint along the bottom', () => {
     expect(hint(state)).toBe('Press E to roast the trout');
   });
 
+  it('still says to cook when hungry, matching what the server will do at the fire', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      hunger: 0,
+      nearCampfire: 'lit',
+      carrying: [{ item: 'perch', count: 1 }],
+      equippedItem: 'perch',
+    };
+    expect(hint(state)).toBe('Press E to roast the perch');
+  });
+
   it('does not call already-roasted food cookable', () => {
     const state: HudState = {
       ...BASE_STATE,
