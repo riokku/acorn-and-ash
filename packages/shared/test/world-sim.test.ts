@@ -39,6 +39,7 @@ import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { DAY_LENGTH_MS } from '../src/sim/day-night';
 import { regrowDueAtMs } from '../src/sim/regrowth';
+import { TREE_BREAK_SECONDS } from '../src/sim/tree-fall';
 import { patchRegrowDelayMs } from '../src/sim/gathering';
 import { overlapsWater } from '../src/world/water';
 import { addItem, countOf, roomFor } from '../src/sim/inventory';
@@ -1619,7 +1620,10 @@ describe('dropping and destroying', () => {
     const saved = sim.droppedPilesList().map((pile) => sim.persistedPile(pile.id));
 
     const later = createWorld();
-    later.restoreDroppedPiles(saved.flatMap((pile) => (pile === null ? [] : [pile])));
+    later.restoreDroppedPiles(
+      saved.flatMap((pile) => (pile === null ? [] : [pile])),
+      clockMs,
+    );
     expect(later.droppedPilesList()).toEqual(sim.droppedPilesList());
     later.fadeDroppedPiles(droppedAt + DROPPED_PILE_SECONDS * 1000);
     expect(later.droppedPilesList()).toEqual([]);
@@ -1894,14 +1898,80 @@ describe('chopping a tree down', () => {
     expect(landed).toBe(1);
   });
 
-  it("puts the logs in the chopper's pack", () => {
+  it('leaves individual logs on the ground after the fall, for anybody to gather', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     const tree = findTree(sim, 'oak');
     standAt(sim, 1, tree);
     swingUntilFelled(sim, 1, tree.id);
 
-    expect(countOf(sim.inventoryOf(1), 'log')).toBe(choppingRuleFor(PROP_KINDS.oak)?.logs);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    expect(sim.droppedPilesList()).toEqual([]);
+    const felledAt = clockMs;
+    sim.step(felledAt + TREE_BREAK_SECONDS * 1000 - 1);
+    expect(sim.droppedPilesList()).toEqual([]);
+    sim.step(felledAt + TREE_BREAK_SECONDS * 1000);
+    const logs = sim.droppedPilesList();
+    expect(logs).toHaveLength(choppingRuleFor(PROP_KINDS.oak)?.logs ?? 0);
+    expect(logs.every((pile) => pile.item === 'log' && pile.count === 1)).toBe(true);
+    expect(logs.every((pile) => pile.z < tree.z)).toBe(true);
+    expect(logs.every((pile) => !overlapsWater(sim.clearing.water, pile.x, pile.z, 0))).toBe(true);
+    sim.addPlayer(2);
+    for (const [index, pile] of logs.entries()) {
+      sim.placePlayer(2, { x: pile.x, y: 0, z: pile.z }, 0);
+      sim.queueInput(2, createInput(index + 1, 0, 0, 0, PlayerButton.Interact));
+      sim.step(felledAt + (TREE_BREAK_SECONDS + 1) * 1000 + index * TICK_MILLISECONDS);
+    }
+    expect(sim.droppedPilesList()).toEqual([]);
+    expect(countOf(sim.inventoryOf(2), 'log')).toBe(logs.length);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+  });
+
+  it('keeps pending logs across a restart without revealing them early or creating duplicates', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+    swingUntilFelled(sim, 1, tree.id);
+    const trees = sim.persistableTrees();
+    const piles = sim.drainPileChanges().flatMap((id) => {
+      const pile = sim.persistedPile(id);
+      return pile === null ? [] : [pile];
+    });
+    const waking = createWorld();
+    waking.restoreTrees(trees);
+    waking.restoreDroppedPiles(piles, clockMs + 500);
+    expect(waking.changedTrees()).toEqual(sim.changedTrees());
+    expect(waking.droppedPilesList()).toEqual([]);
+    waking.fadeDroppedPiles(clockMs + TREE_BREAK_SECONDS * 1000);
+    expect(waking.droppedPilesList()).toHaveLength(4);
+    waking.fadeDroppedPiles(clockMs + TREE_BREAK_SECONDS * 1000 + 1000);
+    expect(waking.droppedPilesList()).toHaveLength(4);
+    waking.fadeDroppedPiles(clockMs + (TREE_BREAK_SECONDS + DROPPED_PILE_SECONDS) * 1000);
+    expect(waking.droppedPilesList()).toEqual([]);
+  });
+
+  it('uses the direction of the final cutter and never auto-awards wood from a strong strike', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    sim.addPlayer(2, withAxe(2));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+    swingOnce(sim, 1, 1);
+    sim.placePlayer(2, { x: tree.x - 2, y: 0, z: tree.z }, -Math.PI / 2);
+    sim.queueInput(2, createInput(1, 0, 0, -Math.PI / 2, PlayerButton.Charge));
+    sim.step(tickClock());
+    for (let seq = 2; seq < 50; seq++) {
+      sim.queueInput(2, createInput(seq, 0, 0, -Math.PI / 2, 0));
+      sim.step(tickClock());
+      if (sim.felledTreeIds().includes(tree.id)) break;
+    }
+    expect(sim.changedTrees().find((entry) => entry.treeId === tree.id)?.fall?.yaw).toBeCloseTo(
+      Math.PI / 2,
+    );
+    expect(countOf(sim.inventoryOf(2), 'log')).toBe(0);
+    sim.step(clockMs + TREE_BREAK_SECONDS * 1000);
+    expect(sim.droppedPilesList()).toHaveLength(4);
   });
 
   it('leaves the tree down and out of the way', () => {
@@ -1969,6 +2039,18 @@ describe('chopping a tree down', () => {
     expect(lastEvent?.swingsLeft).toBe(0);
     expect(lastEvent?.logsGained).toBe(0);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(90);
+    for (let tick = 0; tick < 40; tick++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+      sim.step(tickClock());
+    }
+    const logs = sim.droppedPilesList();
+    expect(logs).toHaveLength(choppingRuleFor(PROP_KINDS.birch)?.logs ?? 0);
+    const first = logs[0];
+    if (first === undefined) throw new Error('missing fallen logs');
+    sim.placePlayer(1, { x: first.x, y: 0, z: first.z }, 0);
+    sim.queueInput(1, createInput(1000, 0, 0, 0, PlayerButton.Interact));
+    sim.step(clockMs + (TREE_BREAK_SECONDS + 1) * 1000);
+    expect(sim.droppedPilesList()).toHaveLength(logs.length);
   });
 
   it('remembers half-chopped trees and felled ones across a restart', () => {

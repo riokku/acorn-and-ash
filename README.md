@@ -114,8 +114,8 @@ There is nothing to land on yet, so a jump is a hop in place.
 
 The mouse is free the rest of the time, the way it is in World of Warcraft:
 click on a tree, an animal or the water and your character turns to face it,
-and the same click chops, catches or casts; click the hotbar or your pack
-instead of only pressing a number. Only holding the right button and
+and the same click chops, catches or casts. A fishing click never also swings
+a weapon. Click the hotbar or your pack instead of only pressing a number. Only holding the right button and
 dragging turns the camera - a left click never moves it. Your character
 swings or casts whichever way it faces: the way you last clicked, or the way
 you are walking. See
@@ -456,6 +456,14 @@ same way tree regrowth is turned down. Staging and production use the real
 wait.
 
 ### Trees growing back
+
+The final axe blow tips a tree away from the cutter. After a brief fall, the
+trunk breaks into individual logs. Walk up and press **E** to gather them,
+just like sticks or flowers; chopping no longer puts wood straight in your
+pack. The total yield is unchanged. Falling trees cause no damage and do
+not block movement. Anyone can gather the logs, which fade after ten minutes.
+The fall and its pending loot survive reconnecting. See
+[decision 0065](docs/decisions/0065-falling-trees-and-fishing-input.md).
 
 A felled tree comes back on its own, somewhere between half an hour and an hour
 later, at a size of its own. It counts in real time rather than in ticks, so a

@@ -6,6 +6,9 @@ import {
   choppingRuleFor,
   stumpFor,
   treeAtGeneration,
+  TREE_BREAK_SECONDS,
+  treeFallAngle,
+  type TreeFall,
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
@@ -38,7 +41,7 @@ export interface ClearingScene {
    * Put the trees where the server says they are: felled ones as stumps, grown
    * ones back at whatever size this generation of them is.
    */
-  setTreeStates(states: ReadonlyMap<number, TreeAppearance>): void;
+  setTreeStates(states: ReadonlyMap<number, TreeAppearance>, serverNowMs?: number): void;
   /**
    * A blow landing on a tree: it shivers, tipping a little away along
    * `awayX`, `awayZ` - the way the blow was going - and settling back.
@@ -53,6 +56,7 @@ export interface ClearingScene {
 export interface TreeAppearance {
   readonly generation: number;
   readonly felled: boolean;
+  readonly fall?: TreeFall;
 }
 
 /**
@@ -133,6 +137,26 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const treeById = new Map(trees.map((tree) => [tree.id, tree]));
   /** Trees shivering from a blow, and how far into it. */
   const shaking = new Map<number, TreeShake>();
+  const falling = new Map<number, { tree: PlacedProp; axis: THREE.Vector3; beganAt: number }>();
+
+  const drawFall = (
+    treeId: number,
+    fall: { tree: PlacedProp; axis: THREE.Vector3; beganAt: number },
+  ): void => {
+    const slot = standing.get(treeId);
+    if (slot === undefined) return;
+    const age = Math.max(0, (performance.now() - fall.beganAt) / 1000);
+    const done = age >= TREE_BREAK_SECONDS;
+    const rotation = tilt.setFromAxisAngle(fall.axis, treeFallAngle(age));
+    for (const part of slot.parts) {
+      if (done) part.mesh.setMatrixAt(slot.index, HIDDEN_INSTANCE);
+      else placeOneInstance(part, slot.index, fall.tree, rotation);
+      part.mesh.instanceMatrix.needsUpdate = true;
+      // A crown can now move beyond the bounds of its standing instances.
+      part.mesh.boundingSphere = null;
+    }
+    if (done) falling.delete(treeId);
+  };
 
   /** Draw a standing tree tipped over by `tilt`, about its own foot. */
   const tipTree = (treeId: number, tilt: THREE.Quaternion): void => {
@@ -153,7 +177,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     setTakenPickups: (taken) => {
       for (const [id, model] of pickups) model.visible = !taken.has(id);
     },
-    setTreeStates: (states) => {
+    setTreeStates: (states, serverNowMs = Date.now()) => {
       let changed = false;
 
       for (const tree of trees) {
@@ -163,6 +187,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         changed = true;
 
         const grown = treeAtGeneration(clearing.seed, tree, want.generation);
+        shaking.delete(tree.id);
+        falling.delete(tree.id);
 
         const slot = standing.get(tree.id);
         if (slot !== undefined) {
@@ -171,6 +197,16 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
             else placeOneInstance(part, slot.index, grown);
             part.mesh.instanceMatrix.needsUpdate = true;
           }
+        }
+
+        if (want.felled && want.fall !== undefined) {
+          const fall = {
+            tree: grown,
+            axis: new THREE.Vector3(Math.cos(want.fall.yaw), 0, -Math.sin(want.fall.yaw)),
+            beganAt: performance.now() - Math.max(0, serverNowMs - want.fall.startedAtMs),
+          };
+          falling.set(tree.id, fall);
+          drawFall(tree.id, fall);
         }
 
         const stumpSlot = stumpSlotOf.get(tree.id);
@@ -207,6 +243,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
       });
     },
     update: (deltaSeconds) => {
+      for (const [treeId, fall] of falling) drawFall(treeId, fall);
       for (const [treeId, shake] of shaking) {
         shake.age += deltaSeconds;
         const done = shake.age >= TREE_SHAKE_SECONDS;

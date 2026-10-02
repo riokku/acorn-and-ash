@@ -38,6 +38,8 @@ export const PlayerButton = {
   Dodge: 1 << 5,
   /** Left mouse button, held past a short delay. Winds up a charged attack - see `WorldSimulation`'s charging fields. */
   Charge: 1 << 6,
+  /** Cast or attempt to hook a fish. Never becomes a weapon attack, even if the line just ended. */
+  Fish: 1 << 7,
 } as const;
 
 /**

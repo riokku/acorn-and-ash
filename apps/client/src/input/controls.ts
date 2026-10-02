@@ -81,7 +81,7 @@ export class Controls {
   /** When the left button last went down, so a hold can be told apart from a tap - see `CHARGE_HOLD_MS`. */
   private leftMouseDownAt: number | null = null;
   private leftChargeSent = false;
-  private leftSwingSent = false;
+  private leftFishingSent = false;
   /** Where the screen a left click landed, until `takeClickPoint` reads it. */
   private pendingClickPoint: { x: number; y: number } | null = null;
   /** Where the cursor last was over the game, for a piece being placed to follow. */
@@ -140,7 +140,7 @@ export class Controls {
    * holding it charges without first swinging. Fishing uses immediate clicks
    * so casting and reacting to a bite never wait for an attack decision.
    */
-  buttons(immediateSwing = false): number {
+  buttons(fishing = false): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
@@ -151,15 +151,22 @@ export class Controls {
 
     const leftHeldPastThreshold =
       this.leftMouseDownAt !== null && performance.now() - this.leftMouseDownAt >= CHARGE_HOLD_MS;
-    if (immediateSwing) {
+    if (fishing) {
       if (this.held.has(LEFT_MOUSE) || this.tapped.has(LEFT_MOUSE)) {
-        buttons |= PlayerButton.Swing;
-        this.leftSwingSent = true;
+        buttons |= PlayerButton.Fish;
+        this.leftFishingSent = true;
+        // A complete click can arrive between frames. Its release must not
+        // survive as a light attack after this input catches the fish.
+        this.tapped.delete(LIGHT_ATTACK);
+        this.tapped.delete(CHARGED_ATTACK);
       }
-    } else if (!this.leftSwingSent && (leftHeldPastThreshold || this.tapped.has(CHARGED_ATTACK))) {
+    } else if (
+      !this.leftFishingSent &&
+      (leftHeldPastThreshold || this.tapped.has(CHARGED_ATTACK))
+    ) {
       buttons |= PlayerButton.Charge;
       this.leftChargeSent = true;
-    } else if (this.tapped.has(LIGHT_ATTACK)) {
+    } else if (!this.leftFishingSent && this.tapped.has(LIGHT_ATTACK)) {
       buttons |= PlayerButton.Swing;
     }
     return buttons;
@@ -295,7 +302,7 @@ export class Controls {
     this.tapped.delete(CHARGED_ATTACK);
     this.leftMouseDownAt = null;
     this.leftChargeSent = false;
-    this.leftSwingSent = false;
+    this.leftFishingSent = false;
   }
 
   /** How far the mouse has moved since this was last asked, then reset. */
@@ -328,7 +335,7 @@ export class Controls {
     this.tapped.clear();
     this.leftMouseDownAt = null;
     this.leftChargeSent = false;
-    this.leftSwingSent = false;
+    this.leftFishingSent = false;
     this.pendingClickPoint = null;
   }
 
@@ -408,7 +415,7 @@ export class Controls {
     if (event.button === 0) {
       this.leftMouseDownAt = performance.now();
       this.leftChargeSent = false;
-      this.leftSwingSent = false;
+      this.leftFishingSent = false;
       this.pendingClickPoint = { x: event.clientX, y: event.clientY };
     }
   };
@@ -428,7 +435,7 @@ export class Controls {
     }
     this.held.delete(mouseCode(event.button));
     if (event.button === 0) {
-      if (this.leftMouseDownAt !== null && !this.leftChargeSent && !this.leftSwingSent) {
+      if (this.leftMouseDownAt !== null && !this.leftChargeSent && !this.leftFishingSent) {
         this.tapped.add(
           performance.now() - this.leftMouseDownAt < CHARGE_HOLD_MS ? LIGHT_ATTACK : CHARGED_ATTACK,
         );

@@ -1052,6 +1052,20 @@ describe('dropping and destroying', () => {
   });
 });
 
+/** Wait for a fallen trunk to break, then gather each loose log with E. */
+async function collectFallenLogs(client: TestClient): Promise<void> {
+  await waitFor('the fallen logs', () => client.droppedPiles().some((pile) => pile.item === 'log'));
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const log = client.droppedPiles().find((pile) => pile.item === 'log');
+    if (log === undefined) return;
+    await walkWithinReach(client, log);
+    client.walk(0, 0, 0, 1, PlayerButton.Interact);
+    client.walk(0, 0, 0, 1);
+    await client.caughtUp();
+  }
+  throw new Error('fallen logs were not collected');
+}
+
 describe('chopping a tree down', () => {
   /** The landmark oak, which happens to stand right beside the axe's stump. */
   function theOak(seed: number) {
@@ -1095,7 +1109,7 @@ describe('chopping a tree down', () => {
     client.close();
   });
 
-  it('fells the oak once you have the axe, and pays out logs', async () => {
+  it('fells the oak, then leaves logs to gather with E', async () => {
     const client = await TestClient.connect(nextWorldId(), 'the-woodcutter');
     await findTheBag(client);
     await walkToTheAxe(client);
@@ -1109,6 +1123,8 @@ describe('chopping a tree down', () => {
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
 
+    expect(client.inventory().some((entry) => entry.item === 'log')).toBe(false);
+    expect(client.treeStates().find((tree) => tree.treeId === oak.id)?.fall).toBeDefined();
     const swings = choppingRuleFor(PROP_KINDS.oak)?.swingsToFell ?? 0;
     const logs = choppingRuleFor(PROP_KINDS.oak)?.logs ?? 0;
 
@@ -1122,7 +1138,7 @@ describe('chopping a tree down', () => {
     // Whose swing it was, so only the chopper's own client plays its axe swinging back.
     expect(hits.every((hit) => hit.netId === client.welcome().netId)).toBe(true);
 
-    await waitFor('the logs', () => client.inventory().some((entry) => entry.item === 'log'));
+    await collectFallenLogs(client);
     expect(client.inventory()).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: logs },
@@ -1131,7 +1147,7 @@ describe('chopping a tree down', () => {
     client.close();
   });
 
-  it('leaves the stump there after logging out and coming back', async () => {
+  it('preserves the fall and its loose logs when everybody leaves mid-fall', async () => {
     const worldId = nextWorldId();
     const first = await TestClient.connect(worldId, 'comes-back');
     await findTheBag(first);
@@ -1145,7 +1161,8 @@ describe('chopping a tree down', () => {
 
     const oak = theOak(first.welcome().seed);
     await chopUntilFelled(first, oak, oak.id);
-    await waitFor('the logs', () => first.inventory().some((entry) => entry.item === 'log'));
+    const fall = first.treeStates().find((tree) => tree.treeId === oak.id)?.fall;
+    expect(fall).toBeDefined();
     first.close();
     await sleep(300);
 
@@ -1154,6 +1171,10 @@ describe('chopping a tree down', () => {
 
     // This is the Phase 1 promise: chop a tree, log out, come back, stump still there.
     expect(second.felledTrees()).toEqual([oak.id]);
+    expect(second.treeStates().find((tree) => tree.treeId === oak.id)?.fall).toEqual(fall);
+    expect(second.inventory().some((entry) => entry.item === 'log')).toBe(false);
+    await collectFallenLogs(second);
+    expect(second.droppedPiles()).toEqual([]);
     expect(second.inventory()).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: choppingRuleFor(PROP_KINDS.oak)?.logs },
@@ -1225,6 +1246,7 @@ describe('a world played before trees grew back', () => {
         .map((row) => row.name);
       expect(columns).toContain('felled_at_ms');
       expect(columns).toContain('generation');
+      expect(columns).toContain('fall_yaw');
 
       // The old stump is treated as freshly cut rather than as felled in 1970,
       // so it waits its turn instead of coming back the instant anybody joins.
@@ -1363,7 +1385,7 @@ describe('fishing', () => {
 
   /** A press and a release, carrying whatever else a browser would be saying. */
   function click(client: TestClient, extra = 0): void {
-    client.walk(0, 0, EAST, 1, PlayerButton.Swing | extra);
+    client.walk(0, 0, EAST, 1, PlayerButton.Fish | extra);
     client.walk(0, 0, EAST, 1, extra);
   }
 
@@ -1468,7 +1490,7 @@ describe('hunger', () => {
 
   /** A press and a release, carrying whatever else a browser would be saying. */
   function click(client: TestClient, extra = 0): void {
-    client.walk(0, 0, EAST, 1, PlayerButton.Swing | extra);
+    client.walk(0, 0, EAST, 1, PlayerButton.Fish | extra);
     client.walk(0, 0, EAST, 1, extra);
   }
 
@@ -1731,7 +1753,7 @@ describe('building', () => {
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
-    await waitFor('the logs', () => client.inventory().some((entry) => entry.item === 'log'));
+    await collectFallenLogs(client);
   }
 
   /** Walk back to open ground near spawn - clear of every landmark - to build on. */
@@ -1926,6 +1948,7 @@ describe('building', () => {
     for (const tree of treesNearTheOak(client.welcome().seed)) {
       await walkWithinReach(client, tree);
       await chopUntilFelled(client, tree, tree.id);
+      await collectFallenLogs(client);
     }
     await waitFor(
       'ten logs',

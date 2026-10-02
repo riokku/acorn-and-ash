@@ -844,6 +844,39 @@ test('you can drop sticks to pick up again, or destroy them for good', async ({ 
   expect(errors).toEqual([]);
 });
 
+async function collectFallenLogs(page: Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => window.acornDebug?.droppedPiles().filter((pile) => pile.item === 'log').length ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
+  const logs = await page.evaluate(
+    () => window.acornDebug?.droppedPiles().filter((pile) => pile.item === 'log') ?? [],
+  );
+  for (const log of logs) {
+    if (
+      !(await page.evaluate(
+        (id) => window.acornDebug?.droppedPiles().some((pile) => pile.id === id),
+        log.id,
+      ))
+    )
+      continue;
+    await walkOntoSpot(page, log.x, log.z);
+    await page.keyboard.down('KeyE');
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          (id) => window.acornDebug?.droppedPiles().some((pile) => pile.id === id),
+          log.id,
+        ),
+      )
+      .toBe(false);
+    await page.keyboard.up('KeyE');
+  }
+}
+
 /**
  * Swing at a tree until it comes down, in taps rather than one long hold.
  *
@@ -949,8 +982,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
   await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
 
   await chopUntilFelled(page, oak);
+  await collectFallenLogs(page);
 
-  // It is down, and the wood is ours.
+  // It is down, and the gathered wood is ours.
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
@@ -1012,6 +1046,7 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
     })
     .toBe(1);
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+  await collectFallenLogs(page);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
 });
@@ -1041,6 +1076,7 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
   await chopUntilFelled(page, oak);
+  await collectFallenLogs(page);
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
 
   // Walk well away: a tree will not grow through somebody standing on it.
@@ -1591,6 +1627,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
   await chopUntilFelled(page, oak);
+  await collectFallenLogs(page);
 
   const carriedLogs = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carriedLogs.find((entry) => entry.item === 'log')?.count).toBe(4);
@@ -1686,6 +1723,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
   await chopUntilFelled(page, oak);
+  await collectFallenLogs(page);
 
   await walkToward(page, spawnSpot);
   await page.evaluate(

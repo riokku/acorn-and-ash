@@ -105,7 +105,7 @@ import { clickAimYaw, type ClickCandidate } from './input/click-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
-import { buildClearingScene, type ClearingScene } from './scene/clearing';
+import { buildClearingScene, type ClearingScene, type TreeAppearance } from './scene/clearing';
 import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
@@ -616,7 +616,7 @@ export class Game {
    * What the server says about every tree that is not as the seed left it, and
    * how far along the one being chopped is.
    */
-  private readonly treeStates = new Map<number, { generation: number; felled: boolean }>();
+  private readonly treeStates = new Map<number, TreeAppearance>();
   private readonly swingsLeft = new Map<number, number>();
   /** Same idea as `swingsLeft`, for whichever wildlife fights back. */
   private readonly threatHitsLeft = new Map<number, number>();
@@ -1134,6 +1134,7 @@ export class Game {
           this.treeStates.set(tree.treeId, {
             generation: tree.generation,
             felled: tree.felled,
+            ...(tree.fall ? { fall: tree.fall } : {}),
           });
         }
         this.applyTreeStates();
@@ -1641,7 +1642,7 @@ export class Game {
    * tree that grew back starts blocking again at its new size.
    */
   private applyTreeStates(): void {
-    this.clearingScene?.setTreeStates(this.treeStates);
+    this.clearingScene?.setTreeStates(this.treeStates, this.estimatedServerTimeMs());
 
     const clearing = this.clearing;
     const collision = this.collision;
@@ -2402,7 +2403,8 @@ export class Game {
     // does not shorten it.
     // The left button places a piece while one is out, so it is never also
     // a swing or a charge then.
-    const placingMask = this.placing === null ? ~0 : ~(PlayerButton.Swing | PlayerButton.Charge);
+    const placingMask =
+      this.placing === null ? ~0 : ~(PlayerButton.Swing | PlayerButton.Charge | PlayerButton.Fish);
     const fishingClick =
       this.fishingPhase !== null ||
       this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)

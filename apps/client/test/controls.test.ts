@@ -79,14 +79,28 @@ describe('left-click attacks', () => {
 
   it('keeps fishing immediate without charging or sending another swing on release', () => {
     mouse(canvas, 'mousedown');
-    expect(controls.buttons(true)).toBe(PlayerButton.Swing);
+    expect(controls.buttons(true)).toBe(PlayerButton.Fish);
     controls.forgetTaps();
     now = 600;
-    expect(controls.buttons(true)).toBe(PlayerButton.Swing);
+    expect(controls.buttons(true)).toBe(PlayerButton.Fish);
     // Catching or cancelling the line during the same hold must not charge a weapon.
     expect(controls.buttons()).toBe(0);
     mouse(windowEvents, 'mouseup');
     expect(controls.buttons()).toBe(0);
+  });
+
+  it('consumes a complete fishing click between frames even when the catch clears the mode immediately', () => {
+    mouse(canvas, 'mousedown');
+    now = 80;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.buttons(true)).toBe(PlayerButton.Fish);
+    // Before a simulation tick forgets taps, the server can say the line ended.
+    expect(controls.buttons(false)).toBe(0);
+    controls.forgetTaps();
+    mouse(canvas, 'mousedown');
+    now = 150;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.buttons(false)).toBe(PlayerButton.Swing);
   });
 
   it.each(['blur', 'placement', 'pause'])(

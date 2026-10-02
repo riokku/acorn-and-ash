@@ -126,6 +126,7 @@ import {
 import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
+import { TREE_BREAK_SECONDS, treeFallYaw, treeLogSpots, type TreeFall } from './tree-fall';
 import { animalInReach, type CatchCandidate } from './hunting';
 import {
   buildableFootprint,
@@ -319,7 +320,7 @@ export interface TreeChopped {
   readonly treeId: number;
   /** Swings still to go. Zero means it came down. */
   readonly swingsLeft: number;
-  /** Logs that went into the chopper's pack, once it did. */
+  /** Kept for older event consumers; always zero now that wood lands as pickups. */
   readonly logsGained: number;
 }
 
@@ -524,6 +525,8 @@ export interface PersistedTree {
   readonly felledAtMs: number;
   /** How many times this spot has grown back. It decides the tree's size. */
   readonly generation: number;
+  /** Absent on old saves, whose wood was already awarded directly. */
+  readonly fallYaw?: number | null;
 }
 
 /**
@@ -649,6 +652,7 @@ interface TreeState {
   felled: boolean;
   felledAtMs: number;
   generation: number;
+  fallYaw: number | null;
 }
 
 interface PlayerRuntime {
@@ -846,6 +850,8 @@ export class WorldSimulation {
   private readonly patchChanges = new Set<number>();
   /** Everything lying where somebody dropped it, oldest first. */
   private readonly droppedPiles: DroppedPile[] = [];
+  /** Piles already saved, but hidden and uncollectible until the tree has finished falling. */
+  private readonly pendingPiles = new Set<number>();
   private nextDroppedPileId = 1;
   /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
   private readonly pileChanges = new Set<number>();
@@ -1139,6 +1145,7 @@ export class WorldSimulation {
    */
   step(nowMs: number): void {
     this.nowMs = nowMs;
+    this.revealLandedLogs(nowMs);
     this.tick += 1;
     const scratch = this.scratch;
 
@@ -1242,7 +1249,7 @@ export class WorldSimulation {
             const interactHeld = isHeld(input, PlayerButton.Interact);
             const freshInteract = interactHeld && !runtime.interactWasHeld;
             runtime.interactWasHeld = interactHeld;
-            const swingHeld = isHeld(input, PlayerButton.Swing);
+            const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
             // Reaching for things is only for somebody free to do it: not
@@ -1911,7 +1918,10 @@ export class WorldSimulation {
    * anything was picked up.
    */
   private tryPickUpPile(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
-    const pile = droppedPileInReach(position, this.droppedPiles);
+    const pile = droppedPileInReach(
+      position,
+      this.droppedPiles.filter((p) => !this.pendingPiles.has(p.id)),
+    );
     if (pile === null) return false;
     const taken = addItem(runtime.inventory, pile.item, pile.count);
     if (taken === 0) return false;
@@ -2079,7 +2089,13 @@ export class WorldSimulation {
     const x = landsInFront ? ahead.x : position.x;
     const z = landsInFront ? ahead.z : position.z;
 
-    const existing = pileToMergeInto(this.droppedPiles, item, count, x, z);
+    const existing = pileToMergeInto(
+      this.droppedPiles.filter((p) => !this.pendingPiles.has(p.id)),
+      item,
+      count,
+      x,
+      z,
+    );
     if (existing !== null) {
       existing.count += count;
       existing.droppedAtMs = nowMs;
@@ -2090,9 +2106,24 @@ export class WorldSimulation {
       return;
     }
 
+    this.addPile(item, count, x, z, nowMs);
+  }
+
+  /** Add a distinct pickup. Future timestamps are tree logs waiting to land. */
+  private addPile(
+    item: ItemId,
+    count: number,
+    x: number,
+    z: number,
+    availableAtMs: number,
+    pending = false,
+  ): void {
     if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
       const oldest = this.droppedPiles.shift();
-      if (oldest !== undefined) this.pileChanges.add(oldest.id);
+      if (oldest !== undefined) {
+        this.pileChanges.add(oldest.id);
+        this.pendingPiles.delete(oldest.id);
+      }
     }
     const pile: DroppedPile = {
       id: this.claimPileId(),
@@ -2100,10 +2131,19 @@ export class WorldSimulation {
       count,
       x,
       z,
-      droppedAtMs: nowMs,
+      droppedAtMs: availableAtMs,
     };
     this.droppedPiles.push(pile);
+    if (pending) this.pendingPiles.add(pile.id);
     this.pileChanges.add(pile.id);
+  }
+
+  private revealLandedLogs(nowMs: number): void {
+    for (const pile of this.droppedPiles) {
+      if (!this.pendingPiles.has(pile.id) || nowMs < pile.droppedAtMs) continue;
+      this.pendingPiles.delete(pile.id);
+      this.pileChanges.add(pile.id);
+    }
   }
 
   /**
@@ -2132,10 +2172,12 @@ export class WorldSimulation {
    * anything that should have faded while nobody was here is gone at once.
    */
   fadeDroppedPiles(nowMs: number): void {
+    this.revealLandedLogs(nowMs);
     for (let index = this.droppedPiles.length - 1; index >= 0; index--) {
       const pile = this.droppedPiles[index];
       if (pile === undefined || nowMs < pileFadesAtMs(pile)) continue;
       this.droppedPiles.splice(index, 1);
+      this.pendingPiles.delete(pile.id);
       this.pileChanges.add(pile.id);
     }
   }
@@ -2352,7 +2394,7 @@ export class WorldSimulation {
     if (this.isActiveItem(runtime, 'axe')) {
       const tree = this.treeInReachOf(position, aimYaw);
       if (tree !== null) {
-        this.chopTree(runtime, tree, charged);
+        this.chopTree(runtime, tree, charged, position);
         return;
       }
     }
@@ -2362,7 +2404,12 @@ export class WorldSimulation {
   }
 
   /** One blow of the axe into a tree, or the one that brings it down. */
-  private chopTree(runtime: PlayerRuntime, target: ChopTarget, charged: boolean): void {
+  private chopTree(
+    runtime: PlayerRuntime,
+    target: ChopTarget,
+    charged: boolean,
+    position: Readonly<Vec3>,
+  ): void {
     const state = this.treeState(target.prop.id);
     const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + 1;
     const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
@@ -2379,15 +2426,35 @@ export class WorldSimulation {
     }
 
     this.fellTree(target.prop.id, this.nowMs);
-    // A full pack means the wood stays on the ground. The tree still falls:
-    // you did chop it down, you just cannot carry what came off it.
-    const logsGained = addItem(runtime.inventory, 'log', target.rule.logs);
+    state.fallYaw = treeFallYaw(target.prop, position);
+    const landsAt = this.nowMs + TREE_BREAK_SECONDS * 1000;
+    for (const spot of treeLogSpots(target.prop, state.fallYaw)) {
+      const clear = this.reachableLogSpot(spot, position);
+      this.addPile('log', 1, clear.x, clear.z, landsAt, true);
+    }
     this.chopEvents.push({
       netId: runtime.netId,
       treeId: target.prop.id,
       swingsLeft: 0,
-      logsGained,
+      logsGained: 0,
     });
+  }
+
+  /** Nudge a piece out of water, trees or buildings so the wood can always be collected. */
+  private reachableLogSpot(
+    spot: { x: number; z: number },
+    cutter: Readonly<Vec3>,
+  ): { x: number; z: number } {
+    if (this.dropSpotIsClear(spot.x, spot.z)) return spot;
+    for (let radius = 0.5; radius <= 4; radius += 0.5) {
+      for (let direction = 0; direction < 12; direction++) {
+        const angle = (direction / 12) * Math.PI * 2;
+        const x = spot.x + Math.sin(angle) * radius;
+        const z = spot.z + Math.cos(angle) * radius;
+        if (this.dropSpotIsClear(x, z)) return { x, z };
+      }
+    }
+    return { x: cutter.x, z: cutter.z };
   }
 
   /** Whether nobody else is already in this chair, or in this bed. */
@@ -2714,6 +2781,7 @@ export class WorldSimulation {
    */
   private growTree(treeId: number, state: TreeState): void {
     state.felled = false;
+    state.fallYaw = null;
     state.swingsTaken = 0;
     state.generation = nextGeneration(state.generation);
 
@@ -2730,7 +2798,13 @@ export class WorldSimulation {
   private treeState(treeId: number): TreeState {
     const existing = this.trees.get(treeId);
     if (existing !== undefined) return existing;
-    const fresh: TreeState = { swingsTaken: 0, felled: false, felledAtMs: 0, generation: 0 };
+    const fresh: TreeState = {
+      swingsTaken: 0,
+      felled: false,
+      felledAtMs: 0,
+      generation: 0,
+      fallYaw: null,
+    };
     this.trees.set(treeId, fresh);
     return fresh;
   }
@@ -2837,11 +2911,19 @@ export class WorldSimulation {
   }
 
   /** What the client needs to draw the trees that are not as the seed left them. */
-  changedTrees(): Array<{ treeId: number; generation: number; felled: boolean }> {
-    const changed: Array<{ treeId: number; generation: number; felled: boolean }> = [];
+  changedTrees(): Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> {
+    const changed: Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> =
+      [];
     for (const [treeId, state] of this.trees) {
       if (!state.felled && state.generation === 0) continue;
-      changed.push({ treeId, generation: state.generation, felled: state.felled });
+      changed.push({
+        treeId,
+        generation: state.generation,
+        felled: state.felled,
+        ...(state.felled && state.fallYaw !== null
+          ? { fall: { yaw: state.fallYaw, startedAtMs: state.felledAtMs } }
+          : {}),
+      });
     }
     return changed;
   }
@@ -2857,6 +2939,7 @@ export class WorldSimulation {
         felled: state.felled,
         felledAtMs: state.felledAtMs,
         generation: state.generation,
+        fallYaw: state.fallYaw,
       });
     }
     return saved;
@@ -2868,6 +2951,7 @@ export class WorldSimulation {
       const state = this.treeState(tree.treeId);
       state.generation = tree.generation;
       state.swingsTaken = tree.swingsTaken;
+      state.fallYaw = tree.fallYaw ?? null;
 
       const index = this.clearing.indexById.get(tree.treeId);
       const original = index === undefined ? undefined : this.clearing.props[index];
@@ -3211,7 +3295,7 @@ export class WorldSimulation {
 
   /** Everything lying where somebody dropped it, as a browser is told it. */
   droppedPilesList(): DroppedPileView[] {
-    return this.droppedPiles.map(pileView);
+    return this.droppedPiles.filter((pile) => !this.pendingPiles.has(pile.id)).map(pileView);
   }
 
   /** One pile as it goes into storage, or null if it is gone - picked up or faded. */
@@ -3223,7 +3307,7 @@ export class WorldSimulation {
   }
 
   /** Put dropped piles back as they were after the world wakes from storage. */
-  restoreDroppedPiles(saved: Iterable<PersistedPile>): void {
+  restoreDroppedPiles(saved: Iterable<PersistedPile>, nowMs: number): void {
     const rows = [...saved].filter(
       (row) =>
         Number.isInteger(row.count) &&
@@ -3235,6 +3319,7 @@ export class WorldSimulation {
     rows.sort((a, b) => a.droppedAtMs - b.droppedAtMs);
     for (const row of rows.slice(-MAX_DROPPED_PILES)) {
       this.droppedPiles.push({ ...row });
+      if (row.droppedAtMs > nowMs) this.pendingPiles.add(row.id);
       this.nextDroppedPileId = Math.max(this.nextDroppedPileId, (row.id % 0xffff) + 1);
       // `claimPileId` steps over any id still in use, so wrapping here is safe.
     }

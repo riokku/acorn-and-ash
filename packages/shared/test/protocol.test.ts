@@ -47,7 +47,7 @@ import {
   MAX_ROSTER_ENTRIES,
   MAX_EQUIPPED_ENTRIES,
 } from '../src/net/protocol';
-import { createInput } from '../src/sim/player';
+import { createInput, PlayerButton } from '../src/sim/player';
 import type { GatherPatchView } from '../src/sim/gathering';
 import type { DroppedPileView } from '../src/sim/dropping';
 import type { EquippedEntry, RosterEntry } from '../src/net/messages';
@@ -70,7 +70,7 @@ describe('input bundles', () => {
     const inputs = [
       createInput(41, -1, 1, 0.5, 1),
       createInput(42, 0.25, -0.75, -2.1, 0, 1.2),
-      createInput(43, 0, 0, 3.0, 0, -0.4),
+      createInput(43, 0, 0, 3.0, PlayerButton.Fish | PlayerButton.SawBite, -0.4),
     ];
     const decoded = decodeClientMessage(encodeInputBundle(inputs));
 
@@ -368,6 +368,23 @@ describe('telling players how the trees stand', () => {
     expect(decoded.trees.find((tree) => tree.treeId === 17)?.generation).toBe(2);
   });
 
+  it('carries the fall direction and original time without losing clock precision', () => {
+    const fall = { yaw: Math.PI / 2, startedAtMs: 1_790_000_000_125 };
+    const message = decodeServerMessage(
+      encodeTreeStates([{ treeId: 3, generation: 2, felled: true, fall }]),
+    );
+    if (message?.type !== 'treeStates') throw new Error('expected tree states');
+    expect(message.trees[0]?.fall?.yaw).toBeCloseTo(fall.yaw);
+    expect(message.trees[0]?.fall?.startedAtMs).toBe(fall.startedAtMs);
+  });
+
+  it('rejects non-finite fall data', () => {
+    const message = encodeTreeStates([
+      { treeId: 3, generation: 0, felled: true, fall: { yaw: NaN, startedAtMs: 1000 } },
+    ]);
+    expect(decodeServerMessage(message)).toBeNull();
+  });
+
   it('will not let a generation past the one byte it travels in', () => {
     const decoded = decodeServerMessage(
       encodeTreeStates([{ treeId: 4, generation: MAX_TREE_GENERATION + 5, felled: false }]),
@@ -376,13 +393,13 @@ describe('telling players how the trees stand', () => {
     expect(decoded.trees[0]?.generation).toBe(MAX_TREE_GENERATION);
   });
 
-  it('carries a whole clearing of changed trees in under six hundred bytes', () => {
+  it('carries a whole clearing of changed trees including fall timing in under three kilobytes', () => {
     const everyTree = Array.from({ length: 141 }, (_, i) => ({
       treeId: i + 1,
       generation: 3,
       felled: i % 2 === 0,
     }));
-    expect(encodeTreeStates(everyTree).byteLength).toBeLessThan(600);
+    expect(encodeTreeStates(everyTree).byteLength).toBeLessThan(3000);
   });
 
   it('refuses a message that has been cut short', () => {

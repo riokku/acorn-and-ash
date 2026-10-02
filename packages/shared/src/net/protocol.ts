@@ -118,9 +118,10 @@ function encodeName(name: string): Uint8Array {
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
-/** treeId(2) + generation(1) + flags(1) */
-const BYTES_PER_TREE_STATE = 4;
+/** treeId(2) + generation(1) + flags(1) + fall yaw(4) + fall start milliseconds(8) */
+const BYTES_PER_TREE_STATE = 16;
 const TREE_FELLED_FLAG = 1;
+const TREE_FALL_FLAG = 2;
 /** id(2) + kind(1) + x(2) + z(2) + yaw(2) + flags(1) */
 const BYTES_PER_BUILT_PROP = 10;
 /** Only a campfire ever sets this, but the bit costs nothing on anything else. */
@@ -547,7 +548,10 @@ export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
     if (tree === undefined) break;
     view.setUint16(offset, tree.treeId & 0xffff, true);
     view.setUint8(offset + 2, clamp(Math.round(tree.generation), 0, MAX_TREE_GENERATION));
-    view.setUint8(offset + 3, tree.felled ? TREE_FELLED_FLAG : 0);
+    const fall = tree.felled ? tree.fall : undefined;
+    view.setUint8(offset + 3, (tree.felled ? TREE_FELLED_FLAG : 0) | (fall ? TREE_FALL_FLAG : 0));
+    view.setFloat32(offset + 4, fall?.yaw ?? 0, true);
+    view.setFloat64(offset + 8, fall?.startedAtMs ?? 0, true);
     offset += BYTES_PER_TREE_STATE;
   }
   return buffer;
@@ -1309,16 +1313,33 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.TreeStates: {
       if (data.byteLength < 2) return null;
       const count = view.getUint8(1);
-      if (data.byteLength !== 2 + count * BYTES_PER_TREE_STATE) return null;
+      // Old servers only sent the four-byte standing/stump state.
+      const stride =
+        data.byteLength === 2 + count * BYTES_PER_TREE_STATE ? BYTES_PER_TREE_STATE : 4;
+      if (data.byteLength !== 2 + count * stride) return null;
       const trees: TreeState[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
+        const hasFall =
+          stride === BYTES_PER_TREE_STATE && (view.getUint8(offset + 3) & TREE_FALL_FLAG) !== 0;
+        const fall = hasFall
+          ? {
+              yaw: view.getFloat32(offset + 4, true),
+              startedAtMs: view.getFloat64(offset + 8, true),
+            }
+          : undefined;
+        if (
+          fall &&
+          (!Number.isFinite(fall.yaw) || !Number.isFinite(fall.startedAtMs) || fall.startedAtMs < 0)
+        )
+          return null;
         trees.push({
           treeId: view.getUint16(offset, true),
           generation: view.getUint8(offset + 2),
           felled: (view.getUint8(offset + 3) & TREE_FELLED_FLAG) !== 0,
+          ...(fall ? { fall } : {}),
         });
-        offset += BYTES_PER_TREE_STATE;
+        offset += stride;
       }
       return { type: 'treeStates', trees };
     }

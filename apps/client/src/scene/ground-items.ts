@@ -8,7 +8,7 @@ import {
   type ItemId,
 } from '@acorn/shared';
 
-import { plainMaterial } from '../art/materials';
+import { paintedMaterial, plainMaterial } from '../art/materials';
 import { flowerModelParts } from './flower-models';
 import { createStickPatchModel } from './pickup-models';
 
@@ -91,6 +91,7 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
           group.add(drawn.model.group);
         }
         drawn.model.group.position.set(view.x, heightAt(view.x, view.z), view.z);
+        if (view.item === 'log') drawn.model.group.rotation.y = view.id * 2.399963;
         if (drawn.count !== view.count) {
           drawn.model.show(view.count);
           drawn.count = view.count;
@@ -125,7 +126,32 @@ function createPileModel(item: ItemId): GroundModel {
   if (item === 'stick') return createSticksModel(item);
   if (item === 'flower') return createFlowerModel(item);
   if (item === 'bone') return createBonesModel(item);
+  if (item === 'log') return createLogsModel();
   return createBundleModel(item);
+}
+
+/** Short bark-covered lengths with visible growth rings, lying on the grass. */
+function createLogsModel(): GroundModel {
+  const group = new THREE.Group();
+  const geometry = new THREE.CylinderGeometry(0.14, 0.17, 0.8, 9).rotateZ(Math.PI / 2);
+  const bark = paintedMaterial('bark', { roughness: 1 });
+  const end = paintedMaterial('logEnd', { roughness: 0.95 });
+  const logs: THREE.Mesh[] = [];
+  for (let index = 0; index < 5; index++) {
+    const log = new THREE.Mesh(geometry, [bark, end, end]);
+    log.position.set((index % 2) * 0.14, 0.16 + Math.floor(index / 3) * 0.24, (index % 3) * 0.25);
+    log.rotation.y = index * 0.16;
+    log.castShadow = true;
+    log.receiveShadow = true;
+    group.add(log);
+    logs.push(log);
+  }
+  return {
+    item: 'log',
+    group,
+    show: (count) => showFirst(group, logs, count),
+    dispose: () => geometry.dispose(),
+  };
 }
 
 /** Show the first `count` of these and hide the rest, hiding the lot when there are none. */
