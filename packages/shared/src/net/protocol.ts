@@ -36,6 +36,7 @@ import type {
   BuriedCacheView,
   CacheEvent,
   CraftedEvent,
+  CookedEvent,
   DiscardedEvent,
   DiscardRequest,
   FishingEvent,
@@ -168,6 +169,8 @@ const BUILD_MESSAGE_BYTES = 8;
 const USE_ITEM_MESSAGE_BYTES = 2;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
+/** type(1) + netId(2) + raw item(1) + cooked item(1) */
+const COOKED_MESSAGE_BYTES = 5;
 /** type(1) + which item(1) + how many(2) + flags(1) */
 const DISCARD_MESSAGE_BYTES = 5;
 /** type(1) + netId(2) + which item(1) + how many(2) + flags(1) */
@@ -1085,6 +1088,24 @@ function decodeCrafted(view: DataView): CraftedEvent | null {
   return { netId: view.getUint16(1, true), item };
 }
 
+/** One piece cooked over a campfire. Only that player is ever sent it. */
+export function encodeCooked(event: CookedEvent): ArrayBuffer {
+  const buffer = new ArrayBuffer(COOKED_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Cooked);
+  view.setUint16(1, event.netId & 0xffff, true);
+  view.setUint8(3, itemIndex(event.raw));
+  view.setUint8(4, itemIndex(event.cooked));
+  return buffer;
+}
+
+function decodeCooked(view: DataView): CookedEvent | null {
+  const raw = itemFromIndex(view.getUint8(3));
+  const cooked = itemFromIndex(view.getUint8(4));
+  if (raw === null || cooked === null) return null;
+  return { netId: view.getUint16(1, true), raw, cooked };
+}
+
 /**
  * What a player just caught, in five bytes. Only they are ever sent it.
  *
@@ -1391,6 +1412,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== CRAFTED_MESSAGE_BYTES) return null;
       const event = decodeCrafted(view);
       return event === null ? null : { type: 'crafted', event };
+    }
+    case ServerMessageType.Cooked: {
+      if (data.byteLength !== COOKED_MESSAGE_BYTES) return null;
+      const event = decodeCooked(view);
+      return event === null ? null : { type: 'cooked', event };
     }
     case ServerMessageType.Caught: {
       if (data.byteLength !== CAUGHT_MESSAGE_BYTES) return null;
