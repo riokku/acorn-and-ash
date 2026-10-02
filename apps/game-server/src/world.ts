@@ -470,12 +470,10 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.drainChopEvents();
     if (events.length === 0) return;
 
-    const choppers = new Set<number>();
     let anythingFell = false;
     for (const event of events) {
       this.broadcast(encodeTreeHit(event.treeId, event.swingsLeft, event.netId));
       if (event.swingsLeft === 0) anythingFell = true;
-      if (event.logsGained > 0) choppers.add(event.netId);
     }
 
     if (anythingFell) {
@@ -486,8 +484,6 @@ export class World extends DurableObject<WorldEnv> {
 
     // Only the trees that are down or part cut, which is a short list.
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);
-
-    this.sendPacks(simulation, choppers);
   }
 
   /**
@@ -1027,7 +1023,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreBuiltProps(this.loadBuiltProps());
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
     simulation.restorePatches(this.loadPatches());
-    simulation.restoreDroppedPiles(this.loadPiles());
+    simulation.restoreDroppedPiles(this.loadPiles(), Date.now());
 
     let highestNetId = 0;
     for (const ws of this.ctx.getWebSockets()) {
@@ -1192,6 +1188,7 @@ export class World extends DurableObject<WorldEnv> {
     // to them here.
     this.addColumn('trees', 'felled_at_ms', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('trees', 'generation', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('trees', 'fall_yaw', 'REAL');
     // A player saved before this release has no hunger on record. The default
     // above starts them full, same as anybody arriving fresh.
     this.addColumn('players', 'hunger', 'REAL NOT NULL DEFAULT 100');
@@ -1383,7 +1380,8 @@ export class World extends DurableObject<WorldEnv> {
         felled: number;
         felled_at_ms: number;
         generation: number;
-      }>('SELECT tree_id, swings_taken, felled, felled_at_ms, generation FROM trees')
+        fall_yaw: number | null;
+      }>('SELECT tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw FROM trees')
       .toArray()
       .map((row) => ({
         treeId: row.tree_id,
@@ -1391,21 +1389,23 @@ export class World extends DurableObject<WorldEnv> {
         felled: row.felled !== 0,
         felledAtMs: row.felled_at_ms,
         generation: row.generation,
+        fallYaw: row.fall_yaw,
       }));
   }
 
   private writeTree(tree: PersistedTree): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
+      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
         'swings_taken = excluded.swings_taken, felled = excluded.felled, ' +
         'felled_at_ms = excluded.felled_at_ms, generation = excluded.generation, ' +
-        'updated_at = excluded.updated_at',
+        'fall_yaw = excluded.fall_yaw, updated_at = excluded.updated_at',
       tree.treeId,
       tree.swingsTaken,
       tree.felled ? 1 : 0,
       tree.felledAtMs,
       tree.generation,
+      tree.fallYaw ?? null,
       Date.now(),
     );
   }

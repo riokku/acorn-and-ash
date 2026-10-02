@@ -27,7 +27,7 @@ export interface DroppedPile {
   count: number;
   readonly x: number;
   readonly z: number;
-  /** When something was last added to it, in real milliseconds. It fades a while after this. */
+  /** When it becomes available, in real milliseconds. Future times keep felled logs hidden until landing. */
   droppedAtMs: number;
 }
 

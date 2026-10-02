@@ -5,6 +5,7 @@ import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
 import type { GatherPatchView } from '../sim/gathering';
 import type { DroppedPileView } from '../sim/dropping';
+import type { TreeFall } from '../sim/tree-fall';
 import type { RaidNews, RaiderHit, RaiderView } from '../sim/raids';
 import type {
   AnimalCaught,
@@ -230,6 +231,8 @@ export interface TreeState {
   /** How many times this spot has grown back. It decides the tree's size. */
   readonly generation: number;
   readonly felled: boolean;
+  /** Timing and direction let observers, including late joiners, see the same fall. */
+  readonly fall?: TreeFall;
 }
 
 /**

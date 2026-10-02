@@ -150,6 +150,28 @@ describe('the rod at the water', () => {
   });
 });
 
+describe('a fishing-only click', () => {
+  it('casts at water, and never attacks on a late attempt or a held catch click', () => {
+    const { state, feed } = player(AT_THE_WATER);
+    expect(feed(PlayerButton.Fish).cast).toBe(true);
+    expect(state.kind).toBe(ActionKind.Idle);
+    for (let i = 0; i < 40; i++) {
+      const tick = feed(PlayerButton.Fish, 0, 0, ARMED);
+      expect(tick.impact).toBeNull();
+      expect(state.kind).toBe(ActionKind.Idle);
+    }
+    feed();
+    feed(PlayerButton.Swing, 0, 0, ARMED);
+    expect(state.kind).toBe(ActionKind.Swing);
+  });
+
+  it('gives fishing precedence if an input also contains weapon buttons', () => {
+    const { state, feed } = player(ARMED);
+    feed(PlayerButton.Fish | PlayerButton.Swing | PlayerButton.Charge);
+    expect(state.kind).toBe(ActionKind.Idle);
+  });
+});
+
 describe('a charged strike', () => {
   it('slows you to a creep while it winds up, then plants you to leap and land', () => {
     const { state, feed } = player();

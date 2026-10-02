@@ -159,6 +159,9 @@ export function advanceAction(
   previousButtons: number,
   context: ActionContext,
 ): ActionTick {
+  if ((input.buttons & PlayerButton.Fish) !== 0) {
+    input = { ...input, buttons: input.buttons & ~(PlayerButton.Swing | PlayerButton.Charge) };
+  }
   if (state.dodgeCooldown > 0) state.dodgeCooldown -= 1;
   if (state.kind !== ActionKind.Idle && state.age < MAX_ACTION_AGE) state.age += 1;
 
@@ -180,6 +183,10 @@ export function advanceAction(
 
     case ActionKind.Swing: {
       const swing = comboSwing(state.step);
+      if (fresh(PlayerButton.Fish) && context.castInstead && state.age > swing.impact) {
+        beginAction(state, ActionKind.Idle);
+        return { footing: 'free', impact: null, cast: true };
+      }
       if (fresh(PlayerButton.Swing)) {
         if (!context.castInstead) state.queued = true;
         else if (state.age > swing.impact) {
@@ -317,6 +324,10 @@ function startFromIdle(
   const dodged = tryDodge();
   if (dodged !== null) return dodged;
   if (!context.canAttack) return FREE;
+  if (held(PlayerButton.Fish)) {
+    const freshFish = (previousButtons & PlayerButton.Fish) === 0;
+    return freshFish && context.castInstead ? { footing: 'free', impact: null, cast: true } : FREE;
+  }
   if (held(PlayerButton.Charge)) {
     beginAction(state, ActionKind.Charge);
     return { footing: 'creeping', impact: null, cast: false };

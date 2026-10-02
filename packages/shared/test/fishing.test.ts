@@ -26,6 +26,7 @@ import {
   tickCast,
   type Cast,
 } from '../src/sim/fishing';
+import { ActionKind } from '../src/sim/actions';
 import { PlayerButton, createInput } from '../src/sim/player';
 import { WorldSimulation, type FishingEvent, type PersistedPlayer } from '../src/sim/world-sim';
 import { POND, ROD_PICKUP_ID, ROD_SPOT, buildTestClearing } from '../src/world/clearing';
@@ -344,7 +345,7 @@ function hold(
   down: boolean,
   sawBite = false,
 ): void {
-  const buttons = (down ? PlayerButton.Swing : 0) | (sawBite ? PlayerButton.SawBite : 0);
+  const buttons = (down ? PlayerButton.Fish : 0) | (sawBite ? PlayerButton.SawBite : 0);
   sim.queueInput(netId, createInput(seq, 0, 0, yaw, buttons));
   sim.step(tickClock());
 }
@@ -451,6 +452,21 @@ describe('fishing in the world', () => {
     expect(POND_FISH.map((row) => row.item)).toContain(caught.item);
     expect(sim.inventoryOf(1)[caught.item]).toBe(1);
     expect(sim.castOf(1)).toBeNull();
+  });
+
+  it('keeps a caught fish from turning the held catch click into a swift attack', () => {
+    const { sim, events, click, tick, waitFor } = atTheWater();
+    click();
+    waitFor('bite');
+    tick(true);
+    expect(events.some((event) => event.kind === 'caught')).toBe(true);
+    for (let i = 0; i < 40; i++) {
+      tick(true, WEST);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+    }
+    tick(false);
+    expect(sim.drainChopEvents()).toEqual([]);
+    expect(sim.drainCatchEvents()).toEqual([]);
   });
 
   it('loses it if you click too soon', () => {
