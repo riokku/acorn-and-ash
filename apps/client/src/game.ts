@@ -1436,8 +1436,8 @@ export class Game {
   /** Only ever about us: a small reward line for turning raw food into a better meal. */
   private hearAboutCooking(event: CookedEvent): void {
     const now = performance.now();
-    const name = ITEM_KINDS[event.cooked].displayName.toLowerCase();
-    this.cookingNews = { text: `You roasted ${article(name)} ${name}.`, until: now + NEWS_MS };
+    const name = ITEM_KINDS[event.cooked].displayName;
+    this.cookingNews = { text: `${name} ready.`, until: now + NEWS_MS };
     this.options.hud.publish({ cookingNews: this.currentCookingNews() });
   }
 
