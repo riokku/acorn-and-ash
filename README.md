@@ -348,6 +348,43 @@ creeping through it, and
 why it moved off the right mouse button, which now turns the camera
 instead.
 
+### Skeleton raids
+
+Every four to six minutes you spend outdoors - twice as often at night - a
+raid of one to three skeletons turns up about 35 metres away and comes for
+you. Nights bring bigger groups. A war horn sounds, and a banner says how
+many there are and which way to look ("Three skeletons, behind you"); after
+that a counter at the top of the screen says how many are left, and they
+show as red diamonds on the minimap.
+
+There are four kinds - minion, rogue, warrior and mage - and they fight with
+your own moves: the three-swing combo, the charged strike and the dodge
+roll. Only one attacks you at a time while the others circle, and every
+attack starts with a wind-up you can see, so a roll (`Ctrl`) or a step back
+always answers it. The rogue is quick and rolls out of the way a lot; the
+warrior is slow and tough, and a light swing does not stop it mid-attack,
+though a charged strike does. A click swings at the nearest skeleton in
+front of you, and a health bar shows over any skeleton that is hurt, close
+or aimed at.
+
+Skeletons out of sight get an arrow round your character, which turns red
+and pulses while that one winds up to swing. When a blow lands, the screen
+edges flash red with an arc on the side it came from, and badly hurt, the
+edges beat red.
+
+Go into your home and they wait by the door for a while, then give up.
+Being knocked out ends the raid too. Each skeleton you beat leaves a bone
+behind - press `E` to pick it up. How tough each kind is, how hard it hits
+and how often raids come all live in
+[`packages/shared/src/data/raiders.ts`](packages/shared/src/data/raiders.ts).
+Their weapons are simple stand-in shapes for now. See
+[decision 0063](docs/decisions/0063-skeleton-raids.md).
+
+`local` runs and preview links raid every minute or so instead, set by
+`WORLD_RAID_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
+production use the real wait.
+
 ### Fishing
 
 The rod lies on the bank of the pond. Face the water and left click to cast. The
@@ -562,6 +599,9 @@ character makes, over and over; `&demo=combo` (or `walk`, `run`, `chop`,
 `strike`, `roll-forward`, `flinch`, `knockout`, `sit`, `lie`, `eat`,
 `fishing` and so on) picks one, `&strip=7` lays it out as seven frozen
 moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
+`?gallery=raiders` does the same for the skeletons: every kind's moves,
+looping, with `&kind=warrior` (or `minion`, `rogue`, `mage`) for one of
+them, and `&demo=` and `&strip=` as above.
 
 ## Commands
 
@@ -588,7 +628,9 @@ separate steps - run both before pushing, since passing the first one alone
 does not mean the second will too.
 
 `pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
-then waits for it to grow back, and another waits at the pond for a bite.
+then waits for it to grow back, and another waits at the pond for a bite. It
+runs the world in the `e2e` environment, where skeleton raids are put off for
+a day so one cannot knock the test player out halfway through.
 
 ## Repository layout
 
@@ -628,6 +670,7 @@ why they agree.
 | Environment  | What it is                     | How it is deployed                |
 | ------------ | ------------------------------ | --------------------------------- |
 | `local`      | `wrangler dev` on your machine | —                                 |
+| `e2e`        | `local` without skeleton raids | Started by `pnpm test:e2e`        |
 | `staging`    | Where `main` lives             | Automatically, on merge to `main` |
 | `production` | The public game                | Automatically, on a `v*` tag      |
 

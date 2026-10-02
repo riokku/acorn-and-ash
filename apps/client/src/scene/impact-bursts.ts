@@ -3,12 +3,14 @@ import * as THREE from 'three/webgpu';
 /**
  * Little bits thrown off where a blow lands (see decision 0056): pale wood
  * chips and flecks of bark from a chopped tree, tufts of fur from a struck
- * animal, and a puff of dust where a charged strike slams into the ground.
+ * animal, a puff of dust where a charged strike slams into the ground,
+ * chips of bone off a skeleton, and sparks off one that took a blow
+ * without flinching (see decision 0063).
  *
  * Every bit of one kind is drawn by one instanced mesh, reused round and
  * round, so a flurry of blows costs nothing extra to draw.
  */
-export type BurstKind = 'wood' | 'fur' | 'dust';
+export type BurstKind = 'wood' | 'fur' | 'dust' | 'bone' | 'spark';
 
 interface BurstStyle {
   readonly geometry: THREE.BufferGeometry;
@@ -29,6 +31,8 @@ interface BurstStyle {
   readonly colors: readonly number[];
   /** See-through, for a puff rather than a solid thing. */
   readonly opacity?: number;
+  /** Lit from within, for a spark. */
+  readonly glow?: boolean;
 }
 
 const STYLES: Record<BurstKind, BurstStyle> = {
@@ -69,6 +73,31 @@ const STYLES: Record<BurstKind, BurstStyle> = {
     colors: [0xb8a78c, 0xa89878, 0xc7b89e],
     opacity: 0.7,
   },
+  bone: {
+    geometry: new THREE.TetrahedronGeometry(0.045, 0).scale(1, 0.55, 1.6),
+    count: 9,
+    speed: [1.8, 3.6],
+    lift: [1.4, 3.2],
+    gravity: 12,
+    drag: 0.5,
+    life: [0.5, 0.85],
+    spread: 1.2,
+    swell: 0,
+    colors: [0xf1e9d2, 0xe6dcc0, 0xd4c8a8, 0xfaf4e4],
+  },
+  spark: {
+    geometry: new THREE.BoxGeometry(0.012, 0.012, 0.09),
+    count: 10,
+    speed: [3, 6],
+    lift: [0.8, 2.6],
+    gravity: 9,
+    drag: 1.2,
+    life: [0.18, 0.34],
+    spread: 1.5,
+    swell: 0,
+    colors: [0xfff3c4, 0xffd36b, 0xffb347],
+    glow: true,
+  },
 };
 
 /** How many bits of each kind can be in the air at once. */
@@ -95,6 +124,10 @@ class BurstPool {
 
   constructor(private readonly style: BurstStyle) {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true });
+    if (style.glow === true) {
+      material.emissive.set(0xffc870);
+      material.emissiveIntensity = 2.2;
+    }
     if (style.opacity !== undefined) {
       material.transparent = true;
       material.opacity = style.opacity;
@@ -193,6 +226,8 @@ export class ImpactBursts {
       wood: new BurstPool(STYLES.wood),
       fur: new BurstPool(STYLES.fur),
       dust: new BurstPool(STYLES.dust),
+      bone: new BurstPool(STYLES.bone),
+      spark: new BurstPool(STYLES.spark),
     };
     for (const pool of Object.values(this.pools)) this.group.add(pool.mesh);
   }

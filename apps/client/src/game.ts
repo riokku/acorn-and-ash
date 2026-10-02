@@ -24,6 +24,7 @@ import {
   restingPlaceInReach,
   POND_FISH,
   PROP_KINDS,
+  RAIDER_KINDS,
   PlayerButton,
   RECIPE_ITEMS,
   SPAWN_POSITION,
@@ -64,6 +65,7 @@ import {
   unpackActionByte,
   createActionState,
   vec3,
+  wrapAngle,
   type AnimalCaught,
   type AnimalKind,
   type AnimalKindId,
@@ -85,8 +87,11 @@ import {
   type GestureEvent,
   type HealthEvent,
   type HungerEvent,
+  type Impact,
   type ItemId,
   type PlacedProp,
+  type RaidNews,
+  type RaiderHit,
   type RosterEntry,
   type ServerMessage,
   type SnapshotEntity,
@@ -108,6 +113,8 @@ import { preloadCampfireModels } from './scene/campfire-models';
 import { preloadItemModels } from './scene/item-models';
 import { preloadCharacterModels } from './scene/character-model';
 import { preloadCharacterAnimations } from './scene/character-animations';
+import { preloadRaiderModels } from './scene/raider-model';
+import { RaiderCrowd, type FlatPoint } from './scene/raiders';
 import { MoveMemory, restSpotFor, rollDirection } from './scene/character-driver';
 import {
   playSwoosh,
@@ -116,6 +123,7 @@ import {
   playTreeHit,
   startAmbientMusic,
 } from './audio/sound';
+import { playRaidHorn, playRaidOver, playVictory } from './audio/raid-sounds';
 import {
   colorForPlayer,
   createCharacter,
@@ -145,8 +153,10 @@ import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
 import { createHomeInterior, type HomeInterior } from './scene/home-interior';
 import { planPlacement, type PlacementPlan } from './building/placement';
-import type { FishingPhase, HudStore } from './hud/store';
-import { compassToOwnCache, type Compass } from './hud/cache-compass';
+import type { FishingPhase, HudStore, RaidBanner } from './hud/store';
+import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
+import { CombatFeed, type ThreatMark } from './hud/combat-feed';
+import { raidBannerFor } from './hud/raid-banner';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
@@ -226,12 +236,37 @@ const KNOCKOUT_DARKENS_AT_TICKS = 18;
 /** Camera-shake strength for taking damage ourselves - sharper than landing one. */
 const TOOK_DAMAGE_SHAKE = 0.55;
 /**
+ * Skeleton raids (see decision 0063): how far off somebody else's raid
+ * still gets the horn and a banner, and how long a banner stays up - the
+ * length of its own animation in styles.css.
+ */
+const RAID_HEARD_WITHIN = 60;
+const RAID_BANNER_MS = 4600;
+/** Closer than this, a skeleton is worth a hint about fighting it. */
+const RAIDER_CLOSE_WITHIN = 12;
+/** Further off than this, a skeleton out of sight gets no arrow pointing at it. */
+const THREAT_ARROWS_WITHIN = 60;
+/**
+ * How far a swing reaches round to find a skeleton, and how far either side
+ * of the way it was meant to go - so a fight is about timing, not about
+ * lining up the camera to the degree.
+ */
+const SOFT_LOCK_RANGE = 3.4;
+const SOFT_LOCK_HALF_ANGLE = 1.4;
+/** A blow from a skeleton swinging no further off than this counts as from it, for showing where it came from. */
+const HURT_FROM_WITHIN = 4;
+/** How much health a blow has to take to flash the screen at full strength. */
+const HURT_FULL_FLASH = 30;
+/**
  * How generous a click on a tree is. A trunk is only a hand or two across,
  * so it counts as at least this wide; a canopy counts as most of its drawn
  * width, leaving the ragged edge of the leaves to whatever is behind it.
  */
 const CLICK_TRUNK_MIN_RADIUS = 0.35;
 const CLICK_CANOPY_FRACTION = 0.8;
+/** How big a skeleton is to click on: about as wide and tall as one stands. */
+const CLICK_RAIDER_RADIUS = 0.45;
+const CLICK_RAIDER_HEIGHT = 1.5;
 /** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
 const CLICK_ANIMAL_RADIUS = 0.55;
 const CLICK_ANIMAL_HEIGHT = 0.9;
@@ -257,6 +292,11 @@ interface Placing {
 /** Wildlife rides in the same snapshot as everybody else; this is how to tell it apart. */
 function isAnimalEntity(entity: SnapshotEntity): boolean {
   return (entity.flags & SnapshotFlag.Animal) !== 0;
+}
+
+/** So do skeleton raiders (see decision 0063). */
+function isRaiderEntity(entity: SnapshotEntity): boolean {
+  return (entity.flags & SnapshotFlag.Raider) !== 0;
 }
 
 /** The placeholder model for whatever kind of thing somebody built. */
@@ -357,6 +397,12 @@ export interface GameDebug {
   aimedTree(): { name: string; swingsLeft: number } | null;
   /** The animal a swing would land on right now, if any. A tree in reach always wins. */
   aimedAnimal(): { name: string; hitsLeft?: number } | null;
+  /** Every skeleton raider in sight (see decision 0063), and how many blows each still needs. */
+  raiders(): Array<{ id: number; kind: string; x: number; z: number; hitsLeft: number }>;
+  /** The skeleton a swing would land on right now, if any. */
+  aimedRaider(): { name: string; hitsLeft: number } | null;
+  /** The raid banner showing right now, if any: its big words. */
+  raidBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -605,6 +651,18 @@ export class Game {
   private readonly scratchBlow = new THREE.Vector3();
   /** Chips, fur and dust thrown off where blows land (see decision 0056). */
   private readonly bursts = new ImpactBursts();
+  /** Every skeleton raider in sight (see decision 0063). */
+  private readonly raiders = new RaiderCrowd(this.outdoors, this.bursts);
+  /** The skeleton a swing of ours would land on, as last worked out. */
+  private aimedRaiderId: number | null = null;
+  private aimedRaider: { name: string; hitsLeft: number } | null = null;
+  /** Whether any skeleton is close enough to be worth a hint about fighting it. */
+  private raidersClose = false;
+  private raidBanner: { banner: RaidBanner; until: number } | null = null;
+  private raidBannersShown = 0;
+  /** What the combat overlay draws, every frame: see `updateCombatFeed`. */
+  readonly combatFeed = new CombatFeed();
+  private readonly scratchProject = new THREE.Vector3();
   /** The streak behind each character's swings, ours included, by netId. */
   private readonly trails = new Map<number, WeaponTrail>();
   /** Animals knocked back by a blow, and how far into it. */
@@ -648,6 +706,7 @@ export class Game {
     void preloadFoxModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
+    void preloadRaiderModels();
 
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
@@ -849,6 +908,23 @@ export class Game {
           .filter((tree) => tree.swingsToFell > 0),
       aimedTree: () => (this.aimedTree === null ? null : { ...this.aimedTree }),
       aimedAnimal: () => (this.aimedAnimal === null ? null : { ...this.aimedAnimal }),
+      raiders: () =>
+        this.raiders.markers().flatMap((marker) => {
+          const about = this.raiders.describe(marker.id);
+          return about === null
+            ? []
+            : [
+                {
+                  id: marker.id,
+                  kind: about.kind,
+                  x: marker.x,
+                  z: marker.z,
+                  hitsLeft: about.hitsLeft,
+                },
+              ];
+        }),
+      aimedRaider: () => (this.aimedRaider === null ? null : { ...this.aimedRaider }),
+      raidBanner: () => this.currentRaidBanner()?.title ?? null,
       canBuild: () => this.canBuild,
       buildMenuOpen: () => this.buildMenuOpen,
       craftMenuOpen: () => this.craftMenuOpen,
@@ -928,6 +1004,7 @@ export class Game {
     this.builtMeshes.clear();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
+    this.raiders.dispose();
     this.bursts.dispose();
     for (const trail of this.trails.values()) trail.dispose();
     this.trails.clear();
@@ -988,8 +1065,11 @@ export class Game {
         this.serverTick = message.tick;
         this.syncServerClock(message.serverTimeMs);
 
-        const playerEntities = message.entities.filter((entity) => !isAnimalEntity(entity));
+        const playerEntities = message.entities.filter(
+          (entity) => !isAnimalEntity(entity) && !isRaiderEntity(entity),
+        );
         const animalEntities = message.entities.filter(isAnimalEntity);
+        this.raiders.ingest(message.serverTimeMs, message.entities.filter(isRaiderEntity));
         this.playersOnline = playerEntities.length;
 
         const self = playerEntities.find((entity) => entity.netId === this.selfNetId);
@@ -1073,6 +1153,18 @@ export class Game {
           const from = this.remotePlayers.poseOf(message.event.netId);
           if (from !== undefined) this.showBlowOnAnimal(message.event.animalId, from, 1);
         }
+        break;
+      }
+      case 'raiders': {
+        this.raiders.setList(message.raiders);
+        break;
+      }
+      case 'raiderHit': {
+        this.hearAboutRaiderHit(message.hit);
+        break;
+      }
+      case 'raidNews': {
+        this.hearAboutRaid(message.news);
         break;
       }
       case 'gestures': {
@@ -1225,6 +1317,11 @@ export class Game {
     if (event.health < this.health) {
       this.camera?.shake(TOOK_DAMAGE_SHAKE);
       playTookDamage();
+      this.combatFeed.hurt(
+        (this.health - event.health) / HURT_FULL_FLASH,
+        this.hurtFromYaw(),
+        performance.now(),
+      );
     }
     this.health = event.health;
     if (event.knockedOut) {
@@ -1243,6 +1340,67 @@ export class Game {
   private currentHealthNews(now = performance.now()): string | null {
     const news = this.healthNews;
     return news !== null && now < news.until ? news.text : null;
+  }
+
+  /**
+   * Which way the blow that just hurt us came from, as a world heading, if
+   * a skeleton close by is mid-swing: the one most likely to have landed it.
+   */
+  private hurtFromYaw(): number | null {
+    const player = this.localPlayer;
+    if (player === null || this.space !== OUTDOORS) return null;
+    const at = player.motion.position;
+    const attacker = this.raiders.swingingNear(at, HURT_FROM_WITHIN);
+    if (attacker === null) return null;
+    return Math.atan2(-(attacker.x - at.x), -(attacker.z - at.z));
+  }
+
+  /**
+   * A blow landed on a skeleton (see decision 0063). Our own already showed
+   * itself as it landed here (see `showOwnBlow`); this only settles how many
+   * more it needs. Everybody else's shows now.
+   */
+  private hearAboutRaiderHit(hit: RaiderHit): void {
+    const ours = hit.netId === this.selfNetId;
+    const from = hit.netId === null || ours ? undefined : this.remotePlayers.poseOf(hit.netId);
+    this.raiders.confirmHit(hit, from, ours, this.listenerPoint());
+  }
+
+  /**
+   * A skeleton raid turned up, was fought off, or is over (see decision
+   * 0063): a banner, and the horn or a fanfare - for a raid on us, or on
+   * somebody close enough that it is everybody's fight.
+   */
+  private hearAboutRaid(news: RaidNews): void {
+    const ours = news.targetNetId === this.selfNetId;
+    const me = this.listenerPoint();
+    const near = me !== null && Math.hypot(news.x - me.x, news.z - me.z) < RAID_HEARD_WITHIN;
+    if (!ours && !near) return;
+    const banner = raidBannerFor(
+      news,
+      ours ? null : (this.roster.get(news.targetNetId)?.name ?? 'Somebody'),
+      me === null ? null : compassTo(me, news, this.camera?.look.yaw ?? 0).bearingDegrees,
+      (this.raidBannersShown += 1),
+    );
+    const now = performance.now();
+    this.raidBanner = { banner, until: now + RAID_BANNER_MS };
+    if (news.kind === 'incoming') playRaidHorn(ours ? 1 : 0.6);
+    else if (news.kind === 'foughtOff') playVictory();
+    else playRaidOver();
+    // Same reasoning as `hearFromTheWater`: straight to the HUD.
+    this.options.hud.publish({ raidBanner: banner });
+  }
+
+  private currentRaidBanner(now = performance.now()): RaidBanner | null {
+    const shown = this.raidBanner;
+    return shown !== null && now < shown.until ? shown.banner : null;
+  }
+
+  /** Where we are, for how loud things sound and what is close: only out of doors. */
+  private listenerPoint(): FlatPoint | null {
+    if (this.space !== OUTDOORS) return null;
+    const position = this.localPlayer?.motion.position;
+    return position === undefined ? null : { x: position.x, z: position.z };
   }
 
   /** Whether we are winding up a charged strike, rooted to the spot. */
@@ -1392,6 +1550,7 @@ export class Game {
       preloadFoxModel(),
       preloadCharacterModels(),
       preloadCharacterAnimations(),
+      preloadRaiderModels(),
       preloadArtTextures(),
     ]);
     if (this.clearingScene !== null) return;
@@ -1426,6 +1585,9 @@ export class Game {
     this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
     this.applyTreeStates();
     this.applyBuiltProps();
+    // Drawn once out of sight while loading, so the first raid turns up
+    // without the game freezing to learn how to draw a skeleton.
+    this.raiders.rehearse(SPAWN_POSITION);
 
     this.localCharacter = createCharacter(
       this.options.identity.character,
@@ -1740,6 +1902,7 @@ export class Game {
     this.updateLocalPlayer(deltaSeconds, camera);
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
+    this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
@@ -1765,8 +1928,90 @@ export class Game {
     this.fireLights?.update(camera.camera.position);
     setup.renderer.render(this.scene, camera.camera);
     this.updateMapFeed(camera);
+    this.updateCombatFeed(camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /**
+   * What the combat overlay draws this frame (see decision 0063): an arrow
+   * for every skeleton close enough to matter that is not on screen, and
+   * how much health is left. Being hurt is set as it happens, in
+   * `hearAboutHealth`.
+   */
+  private updateCombatFeed(camera: FollowCamera): void {
+    const feed = this.combatFeed;
+    const me = this.listenerPoint();
+    feed.showing = this.playing && !this.mapOpen && me !== null;
+    feed.health = this.health / HEALTH_MAX;
+    feed.cameraYaw = camera.look.yaw;
+    if (!feed.showing || me === null) {
+      feed.threats = [];
+      return;
+    }
+    const threats: ThreatMark[] = [];
+    for (const marker of this.raiders.markers()) {
+      const dx = marker.x - me.x;
+      const dz = marker.z - me.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > THREAT_ARROWS_WITHIN) continue;
+      if (this.inView(marker.x, marker.y, marker.z, camera)) continue;
+      const bearing = wrapAngle(camera.look.yaw - Math.atan2(-dx, -dz));
+      threats.push({ bearing, distance, attacking: marker.attacking });
+    }
+    feed.threats = threats;
+  }
+
+  /** Whether a point a skeleton's chest high above this spot is on screen right now. */
+  private inView(x: number, y: number, z: number, camera: FollowCamera): boolean {
+    const point = this.scratchProject.set(x, y + 1, z).project(camera.camera);
+    return point.z > -1 && point.z < 1 && Math.abs(point.x) < 0.92 && Math.abs(point.y) < 0.9;
+  }
+
+  /** Whether a click is starting an attack this frame, or one is already under way. */
+  private attackingOrAboutTo(buttons: number, kind: ActionKind): boolean {
+    if (this.space !== OUTDOORS || (this.equipped.get(this.selfNetId) ?? null) === null) {
+      return false;
+    }
+    return (
+      (buttons & (PlayerButton.Swing | PlayerButton.Charge)) !== 0 ||
+      kind === ActionKind.Swing ||
+      kind === ActionKind.Charge ||
+      kind === ActionKind.Strike
+    );
+  }
+
+  /**
+   * Which way to swing to find the skeleton best placed to be hit (see
+   * decision 0063): close by, and roughly the way the player is pushing,
+   * the camera looks, or the character already faces. Null with none.
+   */
+  private softLockYaw(
+    position: Readonly<Vec3>,
+    facingYaw: number,
+    intent: { readonly x: number; readonly z: number },
+    cameraYaw: number,
+  ): number | null {
+    const walk = worldMoveDirection(intent.x, intent.z, cameraYaw);
+    const meant = walk.x !== 0 || walk.z !== 0 ? Math.atan2(-walk.x, -walk.z) : cameraYaw;
+    let best: number | null = null;
+    let bestScore = Infinity;
+    for (const raider of this.raiders.targets()) {
+      const dx = raider.x - position.x;
+      const dz = raider.z - position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > SOFT_LOCK_RANGE || distance < 1e-3) continue;
+      const yaw = Math.atan2(-dx, -dz);
+      const off = Math.min(Math.abs(wrapAngle(yaw - meant)), Math.abs(wrapAngle(yaw - facingYaw)));
+      if (off > SOFT_LOCK_HALF_ANGLE) continue;
+      // A step further off is worth about forty degrees closer to the aim.
+      const score = distance + off * 1.5;
+      if (score < bestScore) {
+        bestScore = score;
+        best = yaw;
+      }
+    }
+    return best;
+  }
 
   /**
    * Where you are and which way the camera looks, for the maps, plus
@@ -1790,6 +2035,7 @@ export class Game {
     }
     feed.cameraYaw = camera.look.yaw;
     feed.isNight = isNight(dayProgress(this.estimatedServerTimeMs()));
+    feed.raiders = this.space !== OUTDOORS ? [] : this.raiders.markers();
     feed.others =
       this.space !== OUTDOORS
         ? []
@@ -2093,6 +2339,15 @@ export class Game {
         top: pose.y + CLICK_ANIMAL_HEIGHT,
       });
     }
+    for (const raider of this.raiders.targets()) {
+      candidates.push({
+        x: raider.x,
+        z: raider.z,
+        radius: CLICK_RAIDER_RADIUS,
+        bottom: raider.y,
+        top: raider.y + CLICK_RAIDER_HEIGHT,
+      });
+    }
     return candidates;
   }
 
@@ -2137,6 +2392,17 @@ export class Game {
     const kind = player.action.kind;
     const walksFreely = kind === ActionKind.Idle || kind === ActionKind.Charge;
     if ((intent.x !== 0 || intent.z !== 0) && walksFreely) this.aimYaw = null;
+    // Swinging at a skeleton close by turns to face it, and keeps facing it
+    // through the combo (see decision 0063).
+    if (this.attackingOrAboutTo(buttons, kind)) {
+      const locked = this.softLockYaw(
+        player.motion.position,
+        player.motion.facingYaw,
+        intent,
+        camera.look.yaw,
+      );
+      if (locked !== null) this.aimYaw = locked;
+    }
 
     const produced = player.advance(
       deltaSeconds,
@@ -2205,6 +2471,9 @@ export class Game {
       this.aimedTree = null;
       this.aimedAnimal = null;
       this.aimedAnimalId = null;
+      this.aimedRaider = null;
+      this.aimedRaiderId = null;
+      this.raidersClose = false;
       this.canCast = false;
       this.restingNearby = isFreeToInteract(action)
         ? (restingPlaceInReach(player.motion.position.x, player.motion.position.z)?.kind ?? null)
@@ -2254,7 +2523,23 @@ export class Game {
     const nearbyCampfire = nearestCampfire(player.motion.position, this.builtProps);
     this.nearCampfire = nearbyCampfire === null ? null : nearbyCampfire.lit ? 'lit' : 'unlit';
 
-    const target = this.treeAt(player.motion.position, aimYaw);
+    // A skeleton in reach beats anything else a swing could find, the same
+    // way the server's own `landBlow` decides it (see decision 0063).
+    const raiders = this.raiders.targets();
+    const raiderTarget = animalInReach(player.motion.position, aimYaw, raiders);
+    this.aimedRaiderId = raiderTarget?.id ?? null;
+    const described = raiderTarget === null ? null : this.raiders.describe(raiderTarget.id);
+    this.aimedRaider =
+      described === null
+        ? null
+        : { name: RAIDER_KINDS[described.kind].displayName, hitsLeft: described.hitsLeft };
+    this.raidersClose = raiders.some(
+      (raider) =>
+        Math.hypot(raider.x - player.motion.position.x, raider.z - player.motion.position.z) <
+        RAIDER_CLOSE_WITHIN,
+    );
+
+    const target = raiderTarget === null ? this.treeAt(player.motion.position, aimYaw) : null;
     this.aimedTree =
       target === null
         ? null
@@ -2267,7 +2552,7 @@ export class Game {
     // way the server's own `trySwing` decides it, so this is only worth
     // working out when there is no tree to claim the click first.
     const animalCandidates =
-      target === null || !this.isEquipped('axe')
+      raiderTarget === null && (target === null || !this.isEquipped('axe'))
         ? this.remoteAnimals.netIds().flatMap((id) => {
             const pose = this.remoteAnimals.poseOf(id);
             const kind = animalKindOf(id);
@@ -2376,6 +2661,7 @@ export class Game {
         this.remoteAnimals.remove(id);
         this.removeCritter(id);
       }
+      this.raiders.clear();
       this.stopPlacing();
       this.buildMenuOpen = false;
       this.aimYaw = null;
@@ -2514,7 +2800,7 @@ export class Game {
   private showOwnMoves(events: readonly PredictedEvent[]): void {
     for (const event of events) {
       if (event.kind === 'cast') this.setFishingPose(this.selfNetId, 'casting');
-      else if (event.kind === 'impact') this.showOwnBlow(event.impact.kind === 'strike');
+      else if (event.kind === 'impact') this.showOwnBlow(event.impact);
       else if (event.kind === 'began') this.swooshFor(event.action, event.step);
     }
   }
@@ -2536,13 +2822,18 @@ export class Game {
    * the sound and the chips or fur of it, straight away, the way it feels to
    * swing. The server's word follows and settles what it actually did.
    */
-  private showOwnBlow(strike: boolean): void {
+  private showOwnBlow(impact: Impact): void {
     const player = this.localPlayer;
     if (player === null) return;
+    const strike = impact.kind === 'strike';
     const from = player.motion.position;
     const aimYaw = this.aimYaw ?? player.motion.facingYaw;
     const strength = strike ? CHARGED_BLOW : 1;
     if (strike) this.showSlam();
+    if (this.aimedRaiderId !== null) {
+      this.showOwnBlowOnRaider(this.aimedRaiderId, impact);
+      return;
+    }
     const tree = this.isEquipped('axe') ? this.treeAt(from, aimYaw) : null;
     if (tree !== null) {
       this.showBlowOnTree(tree.prop, from, strength);
@@ -2555,6 +2846,25 @@ export class Game {
     }
     this.localCharacter?.hitStop(strike ? 0.14 : 0.07);
     this.camera?.shake(strike ? HIT_LANDED_SHAKE * 1.8 : HIT_LANDED_SHAKE);
+  }
+
+  /**
+   * One of our own blows landing on a skeleton (see decision 0063): a whiff
+   * if it is mid-roll, a clang and sparks off one that shrugs it off, or the
+   * crack of bone - each with a pause on the moment, longer and harder the
+   * heavier the blow, the way it feels in an action game.
+   */
+  private showOwnBlowOnRaider(raiderId: number, impact: Impact): void {
+    const player = this.localPlayer;
+    if (player === null) return;
+    const strike = impact.kind === 'strike';
+    const heavy = impact.kind === 'swing' && impact.step === 3;
+    const landed = this.raiders.predictBlow(raiderId, player.motion.position, heavy, strike);
+    if (landed === 'missed') return;
+    const weight = strike ? CHARGED_BLOW * 1.15 : heavy ? 1.4 : 1;
+    const shrugged = landed === 'shrugged';
+    this.localCharacter?.hitStop(shrugged ? 0.05 : 0.07 * weight);
+    this.camera?.shake(HIT_LANDED_SHAKE * weight * (shrugged ? 0.6 : 1));
   }
 
   /** A charged strike coming down: dust thrown up where it hits the ground. */
@@ -2715,6 +3025,10 @@ export class Game {
       nearCampfire: this.nearCampfire,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
+      aimedRaider: this.aimedRaider,
+      raidersInSight: this.space === OUTDOORS ? this.raiders.markers().length : 0,
+      raidersClose: this.raidersClose,
+      raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,
       placing:
         this.placing === null

@@ -59,7 +59,8 @@ function restingPlaceFor(kind: ActionKind, step: number): RestingPlace | null {
 /**
  * What one character's moves need remembering from frame to frame: whether
  * the swing under way is at a tree - decided once, as it starts, so a swing
- * never changes clip halfway through - and which of two flinches is next.
+ * never changes clip halfway through - which of two flinches is next, and
+ * whether a swing came straight out of a raider's wind-up.
  */
 export class MoveMemory {
   private kind: ActionKind = ActionKind.Idle;
@@ -67,6 +68,7 @@ export class MoveMemory {
   private age = 0;
   private atTree = false;
   private flinchVariant: 0 | 1 = 0;
+  private afterWindup = false;
 
   /**
    * This frame's move, for drawing. `atTreeNow` says whether a swing
@@ -83,10 +85,19 @@ export class MoveMemory {
     if (fresh) {
       if (kind === ActionKind.Swing) this.atTree = atTreeNow;
       if (kind === ActionKind.Flinch) this.flinchVariant = this.flinchVariant === 0 ? 1 : 0;
+      this.afterWindup = kind === ActionKind.Swing && this.kind === ActionKind.Windup;
     }
     this.kind = kind;
     this.step = step;
     this.age = age;
-    return { kind, step, age, atTree: this.atTree, flinchVariant: this.flinchVariant, roll };
+    return {
+      kind,
+      step,
+      age,
+      atTree: this.atTree,
+      flinchVariant: this.flinchVariant,
+      roll,
+      afterWindup: this.afterWindup,
+    };
   }
 }

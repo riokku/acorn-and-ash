@@ -77,6 +77,21 @@ describe('remembering a move from frame to frame', () => {
     expect(memory.view(ActionKind.Swing, 1, 0, true, 'forward').atTree).toBe(true);
   });
 
+  it('remembers a swing came straight out of a wind-up, for as long as it lasts', () => {
+    const memory = new MoveMemory();
+    memory.view(ActionKind.Windup, 0, 9, false, 'forward');
+    expect(memory.view(ActionKind.Swing, 1, 0, false, 'forward').afterWindup).toBe(true);
+    expect(memory.view(ActionKind.Swing, 1, 3, false, 'forward').afterWindup).toBe(true);
+    // The next swing of the combo starts from scratch, like anybody's.
+    expect(memory.view(ActionKind.Swing, 2, 0, false, 'forward').afterWindup).toBe(false);
+  });
+
+  it('never treats a player’s own swing as coming out of a wind-up', () => {
+    const memory = new MoveMemory();
+    memory.view(ActionKind.Idle, 0, 4, false, 'forward');
+    expect(memory.view(ActionKind.Swing, 1, 0, false, 'forward').afterWindup).toBe(false);
+  });
+
   it('alternates flinches, so two hits in a row do not look the same', () => {
     const memory = new MoveMemory();
     const first = memory.view(ActionKind.Flinch, 0, 0, false, 'forward').flinchVariant;

@@ -10,11 +10,14 @@ import {
   SETTLE,
   STRIKE,
   TICK_SECONDS,
+  WINDUP_TICKS,
+  WindupPace,
 } from '@acorn/shared';
 
 import {
   EAT_BITES,
   EAT_SECONDS,
+  WINDUP_PEAK_SECONDS,
   clipBlowSeconds,
   eatingPose,
   lineUp,
@@ -52,6 +55,43 @@ describe('drawing a swing', () => {
 
   it('never asks for a moment before a clip starts', () => {
     expect(lineUp('attack3', 3, 1, 0)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('drawing a raider’s wind-up', () => {
+  it('draws back to the raised weapon and holds there until the swing goes', () => {
+    const ticks = WINDUP_TICKS[WindupPace.Steady];
+    const start = movePose(view(ActionKind.Windup, 0, { step: WindupPace.Steady }));
+    const held = movePose(view(ActionKind.Windup, ticks * 0.7, { step: WindupPace.Steady }));
+    const ready = movePose(view(ActionKind.Windup, ticks - 0.01, { step: WindupPace.Steady }));
+    expect(start.clip).toBe('attack1');
+    expect(start.time).toBeCloseTo(0, 5);
+    expect(held.time).toBeCloseTo(WINDUP_PEAK_SECONDS, 5);
+    expect(ready.time).toBeCloseTo(WINDUP_PEAK_SECONDS, 5);
+  });
+
+  it('builds the glow that says a swing is coming, full just as it goes', () => {
+    const ticks = WINDUP_TICKS[WindupPace.Heavy];
+    const early = movePose(view(ActionKind.Windup, 1, { step: WindupPace.Heavy }));
+    const late = movePose(view(ActionKind.Windup, ticks, { step: WindupPace.Heavy }));
+    expect(early.windup).toBeGreaterThan(0);
+    expect(early.windup).toBeLessThan(0.2);
+    expect(late.windup).toBe(1);
+    expect(movePose(view(ActionKind.Swing, 2, { step: 1 })).windup).toBe(0);
+  });
+
+  it('lets the legs creep in underneath', () => {
+    expect(movePose(view(ActionKind.Windup, 3)).legsFree).toBe(true);
+  });
+
+  it('carries the swing on from the raised weapon, blow still on the tick', () => {
+    const [first] = LIGHT_COMBO;
+    const impact = first?.impact ?? 4;
+    const out = movePose(view(ActionKind.Swing, 0, { step: 1, afterWindup: true }));
+    const blow = movePose(view(ActionKind.Swing, impact, { step: 1, afterWindup: true }));
+    expect(out.clip).toBe('attack1');
+    expect(out.time).toBeCloseTo(WINDUP_PEAK_SECONDS, 5);
+    expect(blow.time).toBeCloseTo(clipBlowSeconds('attack1') ?? -1, 5);
   });
 });
 

@@ -124,6 +124,7 @@ function createPatchModel(item: ItemId): GroundModel {
 function createPileModel(item: ItemId): GroundModel {
   if (item === 'stick') return createSticksModel(item);
   if (item === 'flower') return createFlowerModel(item);
+  if (item === 'bone') return createBonesModel(item);
   return createBundleModel(item);
 }
 
@@ -220,6 +221,59 @@ function createFlowerModel(item: ItemId): GroundModel {
     show: (count) => showFirst(group, blooms, count),
     dispose: () => {
       for (const thing of owned) thing.dispose();
+    },
+  };
+}
+
+/** Where each bone of a pile lies, and which way: crossed over each other, one more for each there is. */
+const BONE_PLACES: readonly { x: number; z: number; yaw: number }[] = [
+  { x: 0, z: 0, yaw: 0.4 },
+  { x: 0.05, z: 0.06, yaw: -0.9 },
+  { x: -0.12, z: 0.1, yaw: 1.7 },
+];
+
+/**
+ * What a beaten skeleton leaves behind (see decision 0063): a bone or two
+ * lying in the grass, a shaft with a knuckle at each end - built from the
+ * same simple shapes as every other placeholder.
+ */
+function createBonesModel(item: ItemId): GroundModel {
+  const group = new THREE.Group();
+  const bones: THREE.Group[] = [];
+  const length = 0.34;
+  const shaftGeometry = new THREE.CylinderGeometry(0.022, 0.026, length, 6).rotateZ(Math.PI / 2);
+  const knuckleGeometry = new THREE.IcosahedronGeometry(0.038, 0);
+  // Shared with everything else of the same colour (see materials.ts), so
+  // never disposed here.
+  const material = plainMaterial(ITEM_KINDS[item].placeholderColor, {
+    roughness: 0.65,
+    flatShading: true,
+  });
+  for (const place of BONE_PLACES) {
+    const bone = new THREE.Group();
+    bone.position.set(place.x, 0.035, place.z);
+    bone.rotation.y = place.yaw;
+    const shaft = new THREE.Mesh(shaftGeometry, material);
+    shaft.castShadow = true;
+    bone.add(shaft);
+    for (const end of [-1, 1]) {
+      for (const side of [-1, 1]) {
+        const knuckle = new THREE.Mesh(knuckleGeometry, material);
+        knuckle.position.set((end * length) / 2, 0, side * 0.026);
+        knuckle.castShadow = true;
+        bone.add(knuckle);
+      }
+    }
+    bones.push(bone);
+    group.add(bone);
+  }
+  return {
+    item,
+    group,
+    show: (count) => showFirst(group, bones, count),
+    dispose: () => {
+      shaftGeometry.dispose();
+      knuckleGeometry.dispose();
     },
   };
 }
