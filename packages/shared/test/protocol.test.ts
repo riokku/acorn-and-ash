@@ -25,6 +25,7 @@ import {
   encodeCache,
   encodeCaught,
   encodeCrafted,
+  encodeCooked,
   encodeFishing,
   encodeHealth,
   encodeHello,
@@ -56,6 +57,7 @@ import type {
   BuriedCacheView,
   CacheEvent,
   CraftedEvent,
+  CookedEvent,
   FishingEvent,
   HealthEvent,
   HungerEvent,
@@ -679,6 +681,38 @@ describe('telling a player what they made', () => {
   it('refuses an item this build has never heard of', () => {
     const encoded = new Uint8Array(encodeCrafted({ netId: 1, item: 'axe' }).slice(0));
     encoded[3] = 200;
+    expect(decodeServerMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('telling a player what they cooked', () => {
+  const roundTrip = (event: CookedEvent): CookedEvent | null => {
+    const decoded = decodeServerMessage(encodeCooked(event));
+    return decoded?.type === 'cooked' ? decoded.event : null;
+  };
+
+  it('carries the raw and cooked item', () => {
+    expect(roundTrip({ netId: 7, raw: 'trout', cooked: 'roastedTrout' })).toEqual({
+      netId: 7,
+      raw: 'trout',
+      cooked: 'roastedTrout',
+    });
+  });
+
+  it('fits in five bytes', () => {
+    expect(encodeCooked({ netId: 1, raw: 'meat', cooked: 'roastedMeat' }).byteLength).toBe(5);
+  });
+
+  it('refuses one that has been cut short', () => {
+    const encoded = encodeCooked({ netId: 1, raw: 'perch', cooked: 'roastedPerch' });
+    expect(decodeServerMessage(encoded.slice(0, 4))).toBeNull();
+  });
+
+  it('refuses an item this build has never heard of', () => {
+    const encoded = new Uint8Array(
+      encodeCooked({ netId: 1, raw: 'perch', cooked: 'roastedPerch' }).slice(0),
+    );
+    encoded[4] = 200;
     expect(decodeServerMessage(encoded.buffer)).toBeNull();
   });
 });
