@@ -31,6 +31,7 @@ import {
   encodeCache,
   encodeCaught,
   encodeCrafted,
+  encodeCooked,
   encodeDiscarded,
   encodeDroppedPiles,
   encodeFishing,
@@ -384,6 +385,8 @@ export class World extends DurableObject<WorldEnv> {
     this.announceBuilding(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
+    this.announceCooking(simulation);
+    this.announceEquipped(simulation);
     this.announceHealth(simulation);
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
@@ -700,6 +703,21 @@ export class World extends DurableObject<WorldEnv> {
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
       if (event !== undefined) this.trySend(ws, encodeCrafted(event));
+    }
+    this.sendPacks(simulation, new Set(byNetId.keys()));
+  }
+
+  /** Tell only the cook what one raw item became, then persist their changed pack. */
+  private announceCooking(simulation: WorldSimulation): void {
+    const events = simulation.drainCookingEvents();
+    if (events.length === 0) return;
+
+    const byNetId = new Map(events.map((event) => [event.netId, event]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const event = byNetId.get(attachment.netId);
+      if (event !== undefined) this.trySend(ws, encodeCooked(event));
     }
     this.sendPacks(simulation, new Set(byNetId.keys()));
   }
