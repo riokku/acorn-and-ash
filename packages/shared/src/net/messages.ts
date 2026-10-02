@@ -12,6 +12,7 @@ import type {
   BuriedCacheView,
   CacheEvent,
   CraftedEvent,
+  CookedEvent,
   DiscardedEvent,
   FishingEvent,
   HealthEvent,
@@ -63,6 +64,7 @@ export const ServerMessageType = {
   Raiders: 0x2a,
   RaidNews: 0x2b,
   RaiderHit: 0x2c,
+  Cooked: 0x2d,
 } as const;
 
 export const RejectReason = {
@@ -291,6 +293,12 @@ export interface CraftedMessage {
   readonly event: CraftedEvent;
 }
 
+/** Word that this player cooked one piece of food at a campfire. */
+export interface CookedMessage {
+  readonly type: 'cooked';
+  readonly event: CookedEvent;
+}
+
 /**
  * Word that this player caught an animal, for a HUD toast.
  *
@@ -517,6 +525,7 @@ export type ServerMessage =
   | FishingMessage
   | HungerMessage
   | CraftedMessage
+  | CookedMessage
   | CaughtMessage
   | BuiltPropsMessage
   | ThreatHitMessage
