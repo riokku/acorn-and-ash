@@ -3960,6 +3960,75 @@ describe('building', () => {
       expect(sim.builtPropsList()[0]?.lit).toBe(false);
     });
 
+    it('cooks one held raw food over a lit campfire without putting the fire out', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      addItem(sim.inventoryOf(1), 'trout');
+      expect(sim.useItem(1, 'trout')).toBe(true);
+
+      // First press lights it; release; the next press cooks at the lit fire.
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(countOf(sim.inventoryOf(1), 'trout')).toBe(0);
+      expect(countOf(sim.inventoryOf(1), 'roastedTrout')).toBe(1);
+      expect(sim.drainCookingEvents()).toEqual([
+        { netId: 1, raw: 'trout', cooked: 'roastedTrout' },
+      ]);
+      expect(sim.equippedItemOf(1)).toBeNull();
+    });
+
+    it('cooks only what is actually held, not raw food elsewhere in the pack', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      addItem(sim.inventoryOf(1), 'perch');
+      addItem(sim.inventoryOf(1), 'axe');
+      expect(sim.useItem(1, 'axe')).toBe(true);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      // With the axe held, the second press keeps the old campfire behaviour.
+      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+      expect(countOf(sim.inventoryOf(1), 'roastedPerch')).toBe(0);
+      expect(sim.drainCookingEvents()).toEqual([]);
+    });
+
+    it('does not extinguish a lit fire when held raw food cannot fit once cooked', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1);
+      const pack = sim.inventoryOf(1);
+      addItem(pack, 'perch', 2);
+      addItem(pack, 'log', 10);
+      addItem(pack, 'stick', 10);
+      addItem(pack, 'flower', 10);
+      addItem(pack, 'trout', 10);
+      addItem(pack, 'meat', 10);
+      expect(sim.useItem(1, 'perch')).toBe(true);
+
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
+      sim.step(tickClock());
+      sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+
+      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(countOf(pack, 'perch')).toBe(2);
+      expect(countOf(pack, 'roastedPerch')).toBe(0);
+      expect(sim.drainCookingEvents()).toEqual([]);
+    });
+
     it('holding the button down toggles it once, not every tick it stays held', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
