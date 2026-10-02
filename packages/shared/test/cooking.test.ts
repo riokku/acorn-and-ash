@@ -8,12 +8,7 @@ import {
   isCookedFood,
   rawItemForCooked,
 } from '../src/sim/cooking';
-import {
-  addItem,
-  countOf,
-  createInventory,
-  slotsUsed,
-} from '../src/sim/inventory';
+import { addItem, countOf, createInventory, slotsUsed } from '../src/sim/inventory';
 
 describe('campfire cooking', () => {
   it('maps every raw food to its roasted counterpart', () => {
