@@ -139,6 +139,7 @@ import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
+import { FireLights } from './scene/fire-light';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
@@ -533,6 +534,8 @@ export class Game {
   private controls: Controls | null = null;
   private connection: WorldConnection | null = null;
   private daylight: DaylightRig | null = null;
+  /** The lights every campfire, lantern and torch borrows (see fire-light.ts). */
+  private fireLights: FireLights | null = null;
   /** The latest time the server told us, and our own clock when it told us - together, an estimate of the server's clock right now. */
   private latestServerTimeMs = Date.now();
   private latestServerTimeAtMs = performance.now();
@@ -652,6 +655,7 @@ export class Game {
     setup.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.daylight = addDaylight(this.scene);
+    this.fireLights = new FireLights(this.scene);
     this.scene.add(this.outdoors);
     this.scene.add(this.bursts.group);
     const fade = document.createElement('div');
@@ -1758,6 +1762,7 @@ export class Game {
       this.sceneFade?.classList.remove('scene-fade-dark');
     }
 
+    this.fireLights?.update(camera.camera.position);
     setup.renderer.render(this.scene, camera.camera);
     this.updateMapFeed(camera);
     this.updateHud(now, deltaSeconds);

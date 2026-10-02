@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { HOME_ROOM } from '@acorn/shared';
 
 import { triangleCount } from '../src/art/shapes';
+import { FireLights } from '../src/scene/fire-light';
 import { createHomeInterior } from '../src/scene/home-interior';
 
 describe('the room inside a home', () => {
@@ -46,17 +47,23 @@ describe('the room inside a home', () => {
   });
 
   it('brightens the fire and the lamp at night', () => {
-    let lampAtNoon = 0;
-    let lampAtMidnight = 0;
-    room.update(0.016, 1);
-    room.group.traverse((child) => {
-      if (child instanceof THREE.PointLight && child.distance === 5) lampAtNoon = child.intensity;
-    });
-    room.update(0.016, 0);
-    room.group.traverse((child) => {
-      if (child instanceof THREE.PointLight && child.distance === 5)
-        lampAtMidnight = child.intensity;
-    });
+    const scene = new THREE.Scene();
+    scene.add(room.group);
+    const fireLights = new FireLights(scene);
+    // The light the lamp has been given: the only one reaching 5 m.
+    const lampLight = (daylight: number): number => {
+      room.update(0.016, daylight);
+      fireLights.update(new THREE.Vector3());
+      let intensity = 0;
+      scene.traverse((child) => {
+        if (child instanceof THREE.PointLight && child.distance === 5) intensity = child.intensity;
+      });
+      return intensity;
+    };
+    const lampAtNoon = lampLight(1);
+    const lampAtMidnight = lampLight(0);
+    expect(lampAtNoon).toBeGreaterThan(0);
     expect(lampAtMidnight).toBeGreaterThan(lampAtNoon);
+    scene.remove(room.group);
   });
 });

@@ -4,7 +4,7 @@ import { BUILDABLE_KINDS } from '@acorn/shared';
 
 import { campfireModelParts, flameModelTemplate } from './campfire-models';
 import { instantiateAnimatedModel } from './model-loading';
-import { createFlickerLight, type FlickerLight } from './fire-light';
+import { createFireGlow } from './fire-light';
 
 /**
  * A campfire: real logs-and-base art once it has loaded (see
@@ -80,18 +80,20 @@ export function createCampfire(): Campfire {
 
   let mixer: THREE.AnimationMixer | undefined;
   let flameGroup: THREE.Group | undefined;
-  let fireLight: FlickerLight | undefined;
   let lit = false;
+  // Made once and only ever shown or hidden: see fire-light.ts for why a
+  // light coming and going is worth avoiding.
+  const fireGlow = createFireGlow(FIRE_LIGHT_COLOR, FIRE_LIGHT_INTENSITY, FIRE_LIGHT_DISTANCE);
+  fireGlow.anchor.position.set(0, FIRE_LIGHT_HEIGHT, 0);
+  fireGlow.anchor.visible = false;
+  group.add(fireGlow.anchor);
 
   function setLit(nextLit: boolean): void {
     if (nextLit === lit) return;
     lit = nextLit;
 
+    fireGlow.anchor.visible = lit;
     if (lit) {
-      fireLight = createFlickerLight(FIRE_LIGHT_COLOR, FIRE_LIGHT_INTENSITY, FIRE_LIGHT_DISTANCE);
-      fireLight.light.position.set(0, FIRE_LIGHT_HEIGHT, 0);
-      group.add(fireLight.light);
-
       const template = flameModelTemplate();
       if (template === undefined) return; // No flame model loaded; stays a lit-less fire.
       const instance = instantiateAnimatedModel(template);
@@ -100,10 +102,6 @@ export function createCampfire(): Campfire {
       for (const action of instance.actions) action.play();
       group.add(flameGroup);
     } else {
-      if (fireLight !== undefined) {
-        group.remove(fireLight.light);
-        fireLight = undefined;
-      }
       if (flameGroup !== undefined) {
         group.remove(flameGroup);
         mixer?.stopAllAction();
@@ -118,11 +116,12 @@ export function createCampfire(): Campfire {
     setLit,
     update: (deltaSeconds) => {
       mixer?.update(deltaSeconds);
-      fireLight?.update(deltaSeconds);
+      fireGlow.update(deltaSeconds);
     },
     dispose: () => {
       for (const disposable of disposables) disposable.dispose();
       mixer?.stopAllAction();
+      fireGlow.dispose();
     },
   };
 }

@@ -255,10 +255,14 @@ A lit campfire, a built lantern or a torch in hand are
 real light now, casting a warm, flickering glow on what's nearby rather than
 just looking lit, so it's worth having one of the three going before the sky
 gets dark - and now more than a matter of taste: see [Danger](#danger) below
-for what changes once night actually falls. See
-[decision 0027](docs/decisions/0027-a-day-and-night-cycle.md) and
+for what changes once night actually falls. The six fires nearest the
+camera light the scene at once; any further ones still glow, but light
+nothing round them. See
+[decision 0027](docs/decisions/0027-a-day-and-night-cycle.md),
 [decision 0047](docs/decisions/0047-a-torch-and-real-firelight.md) for the
-firelight itself.
+firelight itself and
+[decision 0062](docs/decisions/0062-tools-held-forward-and-firelight-without-a-freeze.md)
+for why lighting one never freezes the game.
 
 ### Wildlife
 
@@ -554,9 +558,10 @@ at one piece up close (also `fence`, `lantern`, `flowerBed`, `gardenPath`,
 night or `&spin` to turn slowly round. `?gallery=home` shows the room inside
 a home, on its own, and `?gallery=home&resting` has somebody sitting in the
 chair and somebody lying in the bed. `?gallery=moves` plays every move a
-character makes, over and over; `&demo=combo` (or `chop`, `strike`,
-`roll-forward`, `flinch`, `knockout`, `sit`, `lie`, `eat`, `fishing` and so
-on) picks one, and `&strip=7` lays it out as seven frozen moments.
+character makes, over and over; `&demo=combo` (or `walk`, `run`, `chop`,
+`strike`, `roll-forward`, `flinch`, `knockout`, `sit`, `lie`, `eat`,
+`fishing` and so on) picks one, `&strip=7` lays it out as seven frozen
+moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
 
 ## Commands
 

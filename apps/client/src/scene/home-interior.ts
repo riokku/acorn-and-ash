@@ -6,7 +6,7 @@ import { paintedMaterial, plainMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 import { flameModelTemplate } from './campfire-models';
-import { createFlickerLight } from './fire-light';
+import { createFireGlow } from './fire-light';
 import { ellipsoid } from './critter';
 import { instantiateAnimatedModel } from './model-loading';
 
@@ -451,9 +451,10 @@ export function createHomeInterior(): HomeInterior {
   group.add(keep(hearthModel.build()));
 
   // The fire itself: the campfire's own animated flame, and its light.
-  const fireLight = createFlickerLight(0xff8f45, 14, 9);
-  fireLight.light.position.set(front - 0.25, 0.55, hearth.z);
-  group.add(fireLight.light);
+  const fireGlow = createFireGlow(0xff8f45, 14, 9);
+  fireGlow.anchor.position.set(front - 0.25, 0.55, hearth.z);
+  group.add(fireGlow.anchor);
+  disposers.push(() => fireGlow.dispose());
   let flameMixer: THREE.AnimationMixer | null = null;
   const flameTemplate = flameModelTemplate();
   if (flameTemplate !== undefined) {
@@ -629,9 +630,11 @@ export function createHomeInterior(): HomeInterior {
       placed(table.x + 0.12, table.height + 0.05, table.z + 0.3),
     );
   group.add(keep(tableModel.build()));
-  const lampLight = new THREE.PointLight(0xffb866, 3, 5, 2);
-  lampLight.position.set(table.x + 0.05, table.height + 0.32, table.z - 0.25);
-  group.add(lampLight);
+  // A steady flame behind glass: no flicker.
+  const lampGlow = createFireGlow(0xffb866, 1, 5, 0);
+  lampGlow.anchor.position.set(table.x + 0.05, table.height + 0.32, table.z - 0.25);
+  group.add(lampGlow.anchor);
+  disposers.push(() => lampGlow.dispose());
 
   /* -------------------------------------------------------------------- */
   /* Shelf, woodbox, herbs and the rug                                    */
@@ -787,11 +790,11 @@ export function createHomeInterior(): HomeInterior {
     },
     update(deltaSeconds, daylight) {
       flameMixer?.update(deltaSeconds);
-      fireLight.update(deltaSeconds);
+      fireGlow.update(deltaSeconds);
       // The fire and the lamp matter far more once the windows go dark.
       const night = 1 - daylight;
-      fireLight.light.intensity *= 0.75 + night * 0.6;
-      lampLight.intensity = 1.2 + night * 3.2;
+      fireGlow.brightness = 0.75 + night * 0.6;
+      lampGlow.brightness = 1.2 + night * 3.2;
       windowGlass.emissive.setRGB(
         0.5 + daylight * 0.36,
         0.56 + daylight * 0.36,
