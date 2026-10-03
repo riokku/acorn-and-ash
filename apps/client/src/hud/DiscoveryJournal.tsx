@@ -4,20 +4,22 @@ import type { HudState } from './store';
 export function JournalTabs({
   selected,
   onChange,
+  hasGarden = false,
 }: {
-  selected: 'craft' | 'discoveries';
-  onChange?: (tab: 'craft' | 'discoveries') => void;
+  selected: 'craft' | 'discoveries' | 'garden';
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
+  hasGarden?: boolean;
 }) {
   return (
     <nav className="hud-journal-tabs" aria-label="Field journal pages">
-      {(['craft', 'discoveries'] as const).map((tab) => (
+      {(['craft', 'discoveries', ...(hasGarden ? ['garden' as const] : [])] as const).map((tab) => (
         <button
           key={tab}
           type="button"
           aria-pressed={selected === tab}
           onClick={() => onChange?.(tab)}
         >
-          {tab === 'craft' ? 'Crafting' : 'Discoveries'}
+          {tab === 'craft' ? 'Crafting' : tab === 'garden' ? 'Garden' : 'Discoveries'}
         </button>
       ))}
     </nav>
@@ -28,7 +30,7 @@ export function DiscoveryJournal({
   onChange,
 }: {
   state: HudState;
-  onChange?: (tab: 'craft' | 'discoveries') => void;
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
 }) {
   const found = DISCOVERIES.filter((d) => discoveryKnown(state.discoveriesFound, d.id)).length;
   return (
@@ -39,7 +41,11 @@ export function DiscoveryJournal({
           {found} / {DISCOVERIES.length} found · C to close
         </span>
       </div>
-      <JournalTabs selected="discoveries" onChange={onChange} />
+      <JournalTabs
+        selected="discoveries"
+        onChange={onChange}
+        hasGarden={state.garden.homeId !== 0}
+      />
       <p className="discovery-intro">
         Follow a lead, bring back a useful find, and make yourself at home.
       </p>

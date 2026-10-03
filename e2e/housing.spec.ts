@@ -5,6 +5,7 @@ import {
   decodeClientMessage,
   encodeBuiltProps,
   encodeHomeSkills,
+  encodeHomeSupplies,
   encodeHomeBuildFeedback,
   encodeInventory,
   encodeWelcome,
@@ -34,7 +35,8 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
   ]);
   sim.addPlayer(1, undefined, 'builder');
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
-  Object.assign(sim.inventoryOf(1), { teepeeBlueprint: 1, log: 4, stick: 8 });
+  Object.assign(sim.inventoryOf(1), { teepeeBlueprint: 1, log: 4, stick: 16 });
+  sim.restoreChest(7, [{ item: 'log', count: 8 }, ...Array(9).fill(null)]);
   const errors: string[] = [];
   page.on('pageerror', (error) => {
     errors.push(error.message);
@@ -48,6 +50,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
     send(encodeWelcome(1, DEFAULT_WORLD_SEED, 0, Date.now()));
     send(encodeBuiltProps(sim.builtPropsList(), () => true));
     send(encodeHomeSkills(0));
+    send(encodeHomeSupplies(sim.homeSuppliesOf(1)));
     send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
     send(encodeSpace(0, 0, 0, 0));
     send(encodeSnapshot(0, Date.now(), 0, sim.snapshotFor(1)));
@@ -83,6 +86,9 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
     await page.locator('.hud-curtain').click();
     await page.keyboard.press('KeyB');
     await expect(page.locator('.hud-journal')).toContainText('Teepee · blueprint needed');
+    await expect(page.locator('.hud-journal')).toContainText(
+      'Uses backpack first, then your private home chest',
+    );
     await expect(page.locator('.build-area-note')).toContainText('12 m radius');
     const noteBounds = await page.locator('.build-area-note').boundingBox();
     const journalBounds = await page.locator('.hud-journal').boundingBox();

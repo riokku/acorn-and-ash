@@ -104,8 +104,9 @@ export function startCast(
   tick: number,
   from: Readonly<Vec3>,
   float: FloatSpot,
+  delayMultiplier = 1,
 ): Cast {
-  const biteTick = tick + biteDelayTicks(worldSeed, castNumber, tick);
+  const biteTick = tick + Math.round(biteDelayTicks(worldSeed, castNumber, tick) * delayMultiplier);
   return {
     castNumber,
     float,

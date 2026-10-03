@@ -1,5 +1,5 @@
 import { createAnimalTracks } from './scene/animal-tracks';
-import { woodlandTrackHint } from '@acorn/shared';
+import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
 import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
 import { createGuardianTrophy } from './scene/guardian-trophy';
 import {
@@ -11,6 +11,8 @@ import {
 import { createBuildBoundary } from './scene/build-boundary';
 import { groundAlongRay } from './building/ground-ray';
 import { createDiscoveryLandmarks } from './scene/discovery-sites';
+import { homeFacilityInReach, toolKind } from '@acorn/shared';
+import { emptyGarden, type GardenRequest, type GardenState } from '@acorn/shared';
 import {
   DISCOVERIES,
   discoveryKnown,
@@ -578,6 +580,7 @@ export class Game {
     Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
   >();
   private builtProps: readonly BuiltPropView[] = [];
+  private homeStoredSupplies: HomeSupplies['items'] = [];
   private homeSkills = 0;
   private homeSkillsHeard = false;
   private interiorKind: HomeKind | null = null;
@@ -598,12 +601,20 @@ export class Game {
   private ownCacheCompass: Compass | null = null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   private nearCampfire: 'lit' | 'unlit' | null = null;
+  private nearWorkbench = false;
+  private nearGarden = false;
+  private garden: GardenState = {
+    homeId: 0,
+    yours: false,
+    plots: emptyGarden(),
+    reason: 'unavailable',
+  };
   private canBuild = false;
   private buildBoundary: ReturnType<typeof createBuildBoundary> | null = null;
   private protectedBuildSites: ProtectedBuildSite[] = [];
   private buildMenuOpen = false;
   private craftMenuOpen = false;
-  private journalTab: 'craft' | 'discoveries' = 'craft';
+  private journalTab: 'craft' | 'discoveries' | 'garden' = 'craft';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
@@ -929,6 +940,13 @@ export class Game {
   }
 
   private chestAt(point: { x: number; y: number }, camera: FollowCamera): boolean {
+    return this.interiorTargetAt(point, camera, this.homeInterior?.chest);
+  }
+  private interiorTargetAt(
+    point: { x: number; y: number },
+    camera: FollowCamera,
+    target?: THREE.Object3D,
+  ): boolean {
     const room = this.homeInterior;
     if (room === null || this.space === OUTDOORS) return false;
     this.clickNdc.set(
@@ -946,7 +964,7 @@ export class Game {
       object !== null;
       object = object.parent
     )
-      if (object === room.chest) return true;
+      if (object === target) return true;
     return false;
   }
 
@@ -1412,6 +1430,16 @@ export class Game {
         if (message.notice === 'full')
           this.showJournalNotice('Make room in your pack, then inspect again', performance.now());
         this.updateDiscoveryMarkers();
+        break;
+      }
+      case 'garden': {
+        this.garden = message;
+        if (message.homeId === this.space) this.homeInterior?.setGardenPlots(message.plots);
+        this.options.hud.publish({ garden: message });
+        break;
+      }
+      case 'homeSupplies': {
+        this.homeStoredSupplies = message.items;
         break;
       }
       case 'homeSkills': {
@@ -2340,6 +2368,17 @@ export class Game {
         ) {
           controls.swallowLeftPress();
           this.transferChest({ action: 'open' });
+        } else if (
+          !this.inventoryOpen &&
+          !this.mapOpen &&
+          !this.buildMenuOpen &&
+          !this.craftMenuOpen &&
+          this.currentHomeKind() === 'largeCabin' &&
+          this.interiorTargetAt(clickPoint, camera, this.homeInterior?.garden)
+        ) {
+          controls.swallowLeftPress();
+          this.craftMenuOpen = true;
+          this.setJournalTab('garden');
         } else this.aimTowardsClickPoint(clickPoint, camera);
       }
       // Only a piece being placed has any use for either; left over from
@@ -2729,6 +2768,7 @@ export class Game {
       player: player.motion.position,
       snap: !(this.controls?.isShiftHeld() ?? false),
       carrying: this.carrying,
+      storedSupplies: this.homeStoredSupplies,
       built: this.builtProps,
       pending: this.pendingPlacements.map((pending) => pending.request),
       scenery: this.sceneryFootprints(),
@@ -2795,9 +2835,13 @@ export class Game {
     this.options.hud.publish({ craftingNews: text });
   }
 
-  setJournalTab(tab: 'craft' | 'discoveries'): void {
+  setJournalTab(tab: 'craft' | 'discoveries' | 'garden'): void {
     this.journalTab = tab;
     this.options.hud.publish({ journalTab: tab });
+    if (tab === 'garden') this.connection?.sendGarden({ action: 'inspect' });
+  }
+  useGarden(request: GardenRequest): void {
+    this.connection?.sendGarden(request);
   }
 
   craftRecipe(index: number): void {
@@ -3197,7 +3241,23 @@ export class Game {
       this.nearGatherSpot = null;
       this.nearBuriedCache = false;
       this.ownCacheCompass = null;
-      this.nearCampfire = null;
+      this.nearCampfire = homeFacilityInReach(
+        this.currentHomeKind(),
+        'cooking',
+        player.motion.position,
+      )
+        ? 'lit'
+        : null;
+      this.nearWorkbench = homeFacilityInReach(
+        this.currentHomeKind(),
+        'workbench',
+        player.motion.position,
+      );
+      this.nearGarden = homeFacilityInReach(
+        this.currentHomeKind(),
+        'garden',
+        player.motion.position,
+      );
       this.aimedTree = null;
       this.aimedAnimal = null;
       this.aimedAnimalId = null;
@@ -3218,6 +3278,8 @@ export class Game {
     }
 
     this.hoveredChest = false;
+    this.nearWorkbench = false;
+    this.nearGarden = false;
     if (performance.now() >= this.hoverDueAt) {
       this.hoverDueAt = performance.now() + 80;
       const pointer = this.controls?.pointerPosition() ?? null;
@@ -3370,7 +3432,12 @@ export class Game {
     const canAfford = (kind: BuildableKindId): boolean =>
       BUILDABLE_KINDS[kind].costs.every(
         (cost) =>
-          (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
+          (combineHomeSupplies(
+            inventoryFromEntries(this.carrying),
+            isHomeKind(kind) && this.builtProps.some((prop) => prop.yours && isHomeKind(prop.kind))
+              ? this.homeStoredSupplies
+              : [],
+          )[cost.item] ?? 0) >= cost.amount,
       );
     this.canBuild =
       this.clearing !== null && this.space === OUTDOORS && BUILDABLE_KIND_ORDER.some(canAfford);
@@ -3427,6 +3494,9 @@ export class Game {
       this.scene.add(this.homeInterior.group);
     }
     if (this.homeInterior !== null) this.homeInterior.group.visible = inside;
+    this.homeInterior?.setGardenPlots(
+      this.garden.homeId === space ? this.garden.plots : emptyGarden(),
+    );
     this.daylight?.setIndoors(inside);
     // Coming out, the camera looks at you from out front, with your home
     // behind you: walking back towards the camera takes you out into the world.
@@ -3538,7 +3608,7 @@ export class Game {
     const canAttack = held !== null && this.space === OUTDOORS && this.fishingPhase === null;
     const castInstead =
       canAttack &&
-      held === 'rod' &&
+      toolKind(held) === 'rod' &&
       performance.now() >= this.castReadyAt &&
       this.clearing !== null &&
       castLanding(position, aimYaw, this.clearing.water) !== null;
@@ -3553,7 +3623,8 @@ export class Game {
     netId: number,
     pose: { x: number; y: number; z: number; yaw: number },
   ): boolean {
-    if (this.equipped.get(netId) !== 'axe' || this.space !== OUTDOORS) return false;
+    if (toolKind(this.equipped.get(netId) ?? null) !== 'axe' || this.space !== OUTDOORS)
+      return false;
     return this.treeAt(pose, pose.yaw) !== null;
   }
 
@@ -3861,6 +3932,9 @@ export class Game {
       nearBuriedCache: this.nearBuriedCache,
       ownCacheCompass: this.ownCacheCompass,
       nearCampfire: this.nearCampfire,
+      nearWorkbench: this.nearWorkbench,
+      nearGarden: this.nearGarden,
+      garden: this.garden,
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       aimedRaider: this.aimedRaider,
@@ -3869,6 +3943,7 @@ export class Game {
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,
       homeSkills: this.homeSkills,
+      homeStoredSupplies: this.homeStoredSupplies,
       discoveriesFound: this.discoveriesFound,
       discoveriesClaimed: this.discoveriesClaimed,
       discoverySites: this.discoverySites,

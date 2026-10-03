@@ -1,4 +1,14 @@
+import type { HomeSupplies } from '../sim/home-supplies';
 import { DISCOVERY_MASK, type DiscoveryState } from '../data/discoveries';
+import {
+  GARDEN_CROPS,
+  GARDEN_PLOTS,
+  GARDEN_GROW_TICKS,
+  GARDEN_REASONS,
+  gardenFromSaved,
+  type GardenRequest,
+  type GardenState,
+} from '../sim/garden';
 import {
   HOME_BUILD_REASONS,
   isHomeKind,
@@ -319,6 +329,28 @@ export function encodeChestRequest(request: ChestRequest): ArrayBuffer {
   view.setUint16(3, request.amount, true);
   return buffer;
 }
+
+export function encodeGardenRequest(request: GardenRequest): ArrayBuffer {
+  const actions = ['inspect', 'plant', 'harvest'];
+  return new Uint8Array([
+    ClientMessageType.Garden,
+    actions.indexOf(request.action),
+    request.action === 'inspect' ? 0 : request.plot,
+    request.action === 'plant' ? GARDEN_CROPS.indexOf(request.crop) + 1 : 0,
+  ]).buffer;
+}
+export function encodeGardenState(state: GardenState): ArrayBuffer {
+  const view = new DataView(new ArrayBuffer(7 + GARDEN_PLOTS * 3));
+  view.setUint8(0, ServerMessageType.Garden);
+  view.setUint32(1, state.homeId, true);
+  view.setUint8(5, state.yours ? 1 : 0);
+  view.setUint8(6, state.reason === null ? 0 : GARDEN_REASONS.indexOf(state.reason) + 1);
+  state.plots.forEach((plot, index) => {
+    view.setUint8(7 + index * 3, plot.crop === null ? 0 : GARDEN_CROPS.indexOf(plot.crop) + 1);
+    view.setUint16(8 + index * 3, plot.growTicks, true);
+  });
+  return view.buffer;
+}
 export function encodeChestState(result: ChestResult): ArrayBuffer {
   const buffer = new ArrayBuffer(6 + CHEST_SLOTS * 3);
   const view = new DataView(buffer);
@@ -388,6 +420,21 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   if (data.byteLength < 1) return null;
   const view = new DataView(data);
   const type = view.getUint8(0);
+
+  if (type === ClientMessageType.Garden) {
+    if (data.byteLength !== 4) return null;
+    const action = view.getUint8(1),
+      plot = view.getUint8(2),
+      crop = view.getUint8(3);
+    if (action > 2 || plot >= GARDEN_PLOTS || crop > GARDEN_CROPS.length) return null;
+    if (action === 0)
+      return plot === 0 && crop === 0 ? { type: 'garden', action: 'inspect' } : null;
+    if (action === 1)
+      return crop === 0
+        ? null
+        : { type: 'garden', action: 'plant', plot, crop: GARDEN_CROPS[crop - 1]! };
+    return crop === 0 ? { type: 'garden', action: 'harvest', plot } : null;
+  }
 
   if (type === ClientMessageType.InputBundle) {
     if (data.byteLength < INPUT_HEADER_BYTES) return null;
@@ -586,6 +633,19 @@ export function encodeHomeBuildFeedback(result: HomeBuildFeedback): ArrayBuffer 
 }
 export function encodeHomeSkills(skills: number): ArrayBuffer {
   return new Uint8Array([ServerMessageType.HomeSkills, skills & HOME_SKILL_MASK]).buffer;
+}
+
+export function encodeHomeSupplies(state: HomeSupplies): ArrayBuffer {
+  const data = new ArrayBuffer(6 + state.items.length * 3),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.HomeSupplies);
+  view.setUint32(1, state.homeId, true);
+  view.setUint8(5, state.items.length);
+  state.items.forEach((entry, index) => {
+    view.setUint8(6 + index * 3, itemIndex(entry.item));
+    view.setUint16(7 + index * 3, entry.count, true);
+  });
+  return data;
 }
 
 export function encodeInventory(
@@ -1359,6 +1419,31 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
   const type = view.getUint8(0);
 
   switch (type) {
+    case ServerMessageType.Garden: {
+      if (
+        data.byteLength !== 7 + GARDEN_PLOTS * 3 ||
+        view.getUint8(5) > 1 ||
+        view.getUint8(6) > GARDEN_REASONS.length
+      )
+        return null;
+      const values = [];
+      for (let index = 0; index < GARDEN_PLOTS; index++) {
+        const crop = view.getUint8(7 + index * 3),
+          growTicks = view.getUint16(8 + index * 3, true);
+        if (crop > GARDEN_CROPS.length || growTicks > GARDEN_GROW_TICKS) return null;
+        values.push({ crop: crop === 0 ? null : GARDEN_CROPS[crop - 1], growTicks });
+      }
+      const plots = gardenFromSaved(values);
+      if (plots === null) return null;
+      const reason = view.getUint8(6);
+      return {
+        type: 'garden',
+        homeId: view.getUint32(1, true),
+        yours: view.getUint8(5) === 1,
+        plots,
+        reason: reason === 0 ? null : GARDEN_REASONS[reason - 1]!,
+      };
+    }
     case ServerMessageType.Discoveries: {
       if (data.byteLength !== 4) return null;
       const found = view.getUint8(1),
@@ -1470,6 +1555,22 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.HomeSkills: {
       if (data.byteLength !== 2 || (view.getUint8(1) & ~HOME_SKILL_MASK) !== 0) return null;
       return { type: 'homeSkills', skills: view.getUint8(1) };
+    }
+    case ServerMessageType.HomeSupplies: {
+      if (data.byteLength < 6) return null;
+      const homeId = view.getUint32(1, true),
+        count = view.getUint8(5);
+      if (data.byteLength !== 6 + count * 3 || (homeId === 0 && count !== 0)) return null;
+      const items: { item: ItemId; count: number }[] = [],
+        seen = new Set<ItemId>();
+      for (let index = 0; index < count; index++) {
+        const item = itemFromIndex(view.getUint8(6 + index * 3)),
+          amount = view.getUint16(7 + index * 3, true);
+        if (item === null || amount === 0 || seen.has(item)) return null;
+        seen.add(item);
+        items.push({ item, count: amount });
+      }
+      return { type: 'homeSupplies', homeId, items };
     }
     case ServerMessageType.Inventory: {
       if (data.byteLength < 2) return null;

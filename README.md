@@ -905,3 +905,7 @@ hollow with E to collect it; a full backpack keeps the reward pending. These rew
 and journal entries persist per character in the current world. Place the trophy
 from Build inside your private home area. Elk and friendly raccoon encounters are
 separate from the existing hostile masked raccoons.
+
+### Useful homes
+
+Tent storage grows into teepee cooking, small-cabin workbenches, and a three-box larger-cabin garden. Use E at the cooker, C beside a workbench for improved tools, or click garden boxes to plant and harvest. Gardens grow during active world time and keep ready crops until collected. Only owners can tend them. Housing upgrades show their costs and use your backpack first, then your private chest; other crafting and building still use the backpack. See [housing facilities](docs/decisions/0076-housing-facilities.md).

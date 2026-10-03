@@ -1,4 +1,5 @@
 import { createDiscoveryLandmarks } from '../src/scene/discovery-sites';
+import { createHomeFacilities } from '../src/scene/home-facilities';
 import { createForageModel, createMealModel } from '../src/scene/forest-food';
 import { DISCOVERIES } from '@acorn/shared';
 import { createEncounterLandmarks } from '../src/scene/encounter-sites';
@@ -48,6 +49,11 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    ...(['teepee', 'cabin', 'largeCabin'] as const).map((kind) => ({
+      name: `${kind} facilities`,
+      budget: kind === 'largeCabin' ? PROP_BUDGET * 3 : PROP_BUDGET,
+      make: () => createHomeFacilities(kind),
+    })),
     ...DISCOVERIES.filter(
       (definition) => definition.id < 4 || definition.kind === 'raccoonHollow',
     ).map((definition) => ({

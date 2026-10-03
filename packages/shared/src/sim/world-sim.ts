@@ -1,3 +1,9 @@
+import {
+  combineHomeSupplies,
+  storedHomeSupplies,
+  payHomeUpgrade,
+  type HomeSupplies,
+} from './home-supplies';
 import { resolveCapsule } from '../collision/capsule';
 import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import {
@@ -116,6 +122,17 @@ import {
   type PlacedProp,
 } from '../world/clearing';
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
+import { homeFacilityInReach } from '../data/home-facilities';
+import { toolKind } from '../data/items';
+import {
+  emptyGarden,
+  gardenFromSaved,
+  useGarden,
+  type GardenPlot,
+  type GardenRequest,
+  type GardenState,
+  type GardenReason,
+} from './garden';
 import {
   HOME_ENTRY,
   homeSpot,
@@ -980,6 +997,7 @@ export class WorldSimulation {
   private readonly pileChanges = new Set<number>();
   private readonly blueprintProgressChanges = new Set<number>();
   private readonly discoveryChanges = new Map<number, DiscoveryNotice>();
+  private readonly homeGardens = new Map<number, GardenPlot[]>();
   private readonly discardEvents: DiscardedEvent[] = [];
   /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
   private readonly equipEvents: number[] = [];
@@ -1302,11 +1320,72 @@ export class WorldSimulation {
     return reply(reason, moved);
   }
 
+  homeSuppliesOf(netId: number): HomeSupplies {
+    const runtime = this.players.get(netId),
+      home = runtime?.playerKey == null ? null : this.homeOf(runtime.playerKey);
+    return home === null
+      ? { homeId: 0, items: [] }
+      : {
+          homeId: home.id,
+          items: storedHomeSupplies(this.homeChests.get(home.id) ?? emptyChest()),
+        };
+  }
+  chestSlots(homeId: number): readonly ChestSlot[] {
+    return (this.homeChests.get(homeId) ?? emptyChest()).map((slot) =>
+      slot === null ? null : { ...slot },
+    );
+  }
+
   restoreChest(homeId: number, saved: unknown): void {
     const slots = chestFromSaved(saved);
     const home = this.builtPropsById.get(homeId);
     if (slots !== null && home !== undefined && BUILDABLE_KINDS[home.kind].isHome)
       this.homeChests.set(homeId, slots);
+  }
+
+  gardenStateOf(netId: number, reason: GardenReason | null = null): GardenState {
+    const runtime = this.players.get(netId);
+    const homeId = runtime?.space ?? OUTDOORS;
+    if (runtime === undefined || homeId === OUTDOORS || this.kindOfHome(homeId) !== 'largeCabin')
+      return { homeId: 0, yours: false, plots: emptyGarden(), reason: reason ?? 'unavailable' };
+    return {
+      homeId,
+      yours: runtime.playerKey !== null && this.builtPropOwner(homeId) === runtime.playerKey,
+      plots: (this.homeGardens.get(homeId) ?? emptyGarden()).map((plot) => ({ ...plot })),
+      reason,
+    };
+  }
+
+  requestGarden(netId: number, request: GardenRequest): GardenState {
+    const state = this.gardenStateOf(netId),
+      runtime = this.players.get(netId);
+    if (state.homeId === 0 || runtime === undefined) return state;
+    if (request.action === 'inspect') return state;
+    const refuse = (reason: GardenReason) => this.gardenStateOf(netId, reason);
+    if (!state.yours) return refuse('private');
+    const position = runtime.entity.get(Position);
+    if (position === undefined || !homeFacilityInReach('largeCabin', 'garden', position))
+      return refuse('tooFar');
+    if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
+      return refuse('busy');
+    const plots = this.homeGardens.get(state.homeId) ?? emptyGarden();
+    const held = this.equippedItemOf(netId);
+    const reason = useGarden(plots, runtime.inventory, request);
+    if (reason === null) this.homeGardens.set(state.homeId, plots);
+    if (held !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+    return this.gardenStateOf(netId, reason);
+  }
+
+  savedGardens(): { homeId: number; plots: GardenPlot[] }[] {
+    return [...this.homeGardens].map(([homeId, plots]) => ({
+      homeId,
+      plots: plots.map((plot) => ({ ...plot })),
+    }));
+  }
+  restoreGarden(homeId: number, saved: unknown): void {
+    const plots = gardenFromSaved(saved),
+      home = this.builtPropsById.get(homeId);
+    if (plots !== null && home?.kind === 'largeCabin') this.homeGardens.set(homeId, plots);
   }
 
   /** Ask for a specific loot target, validated at the next simulation tick. */
@@ -1403,6 +1482,8 @@ export class WorldSimulation {
     this.nowMs = nowMs;
     this.revealLandedLogs(nowMs);
     this.tick += 1;
+    for (const plots of this.homeGardens.values())
+      for (const plot of plots) if (plot.crop !== null && plot.growTicks > 0) plot.growTicks--;
     const scratch = this.scratch;
 
     // Anybody who has been down long enough wakes up at home, before anybody
@@ -1574,7 +1655,9 @@ export class WorldSimulation {
             : null;
           const hungryWithFood =
             foodToEat(runtime.inventory, runtime.hunger, runtime.equippedItem) !== null;
-          if (!hungryWithFood && place !== null && this.isRestingPlaceFree(runtime, place)) {
+          if (this.tryUseHomeCooking(runtime, scratch.position, wantsToToggleCampfire)) {
+            // The cooking station claims E, including a full-pack cooking refusal.
+          } else if (!hungryWithFood && place !== null && this.isRestingPlaceFree(runtime, place)) {
             this.settleInto(runtime, scratch, place);
             aim.yaw = scratch.facingYaw;
           } else {
@@ -2499,7 +2582,7 @@ export class WorldSimulation {
 
     const wasHolding = this.equippedItemOf(netId);
     removeItem(runtime.inventory, item, count);
-    if (item === 'rod' && runtime.cast !== null && !hasItem(runtime.inventory, 'rod')) {
+    if (toolKind(item) === 'rod' && runtime.cast !== null && !this.isActiveItem(runtime, 'rod')) {
       this.endCast(runtime, { outcome: 'walkedAway' });
     }
     if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
@@ -2749,6 +2832,8 @@ export class WorldSimulation {
    * nothing here having to notice and clear the field itself.
    */
   private isActiveItem(runtime: PlayerRuntime, item: ItemId): boolean {
+    if (item === 'axe' || item === 'rod')
+      return toolKind(this.equippedItemOf(runtime.netId)) === item;
     return runtime.equippedItem === item && hasItem(runtime.inventory, item);
   }
 
@@ -2789,7 +2874,7 @@ export class WorldSimulation {
     const canAttack = held !== null && runtime.space === OUTDOORS && runtime.cast === null;
     const castInstead =
       canAttack &&
-      held === 'rod' &&
+      toolKind(held) === 'rod' &&
       runtime.swingCooldownTicks === 0 &&
       castLanding(position, aimYaw, this.clearing.water) !== null;
     return { canAttack, castInstead };
@@ -2844,7 +2929,8 @@ export class WorldSimulation {
     position: Readonly<Vec3>,
   ): void {
     const state = this.treeState(target.prop.id);
-    const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + 1;
+    const weight = this.equippedItemOf(runtime.netId) === 'refinedAxe' ? 2 : 1;
+    const swingsTaken = charged ? target.rule.swingsToFell : state.swingsTaken + weight;
     const swingsLeft = Math.max(0, target.rule.swingsToFell - swingsTaken);
 
     if (swingsLeft > 0) {
@@ -3084,7 +3170,14 @@ export class WorldSimulation {
     const spot = castLanding(position, aimYaw, this.clearing.water);
     if (spot === null) return;
 
-    runtime.cast = startCast(this.seed, this.castCounter++, this.tick, position, spot);
+    runtime.cast = startCast(
+      this.seed,
+      this.castCounter++,
+      this.tick,
+      position,
+      spot,
+      this.equippedItemOf(runtime.netId) === 'refinedRod' ? 0.75 : 1,
+    );
     this.fishingEvents.push({ kind: 'cast', netId: runtime.netId, x: spot.x, z: spot.z });
   }
 
@@ -3102,8 +3195,12 @@ export class WorldSimulation {
         this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: 0, reason });
     };
     if (runtime.swingCooldownTicks > 0) return refuse('busy');
-    if (!canAfford(runtime.inventory, buildable)) return refuse('materials');
     const ownedHome = runtime.playerKey === null ? null : this.homeOf(runtime.playerKey);
+    const available =
+      isHomeKind(kind) && ownedHome !== null
+        ? combineHomeSupplies(runtime.inventory, this.homeSuppliesOf(runtime.netId).items)
+        : runtime.inventory;
+    if (!canAfford(available, buildable)) return refuse('materials');
     const otherHomes = this.builtProps.filter(
       (prop) => isHomeKind(prop.kind) && prop.id !== ownedHome?.id,
     );
@@ -3155,7 +3252,9 @@ export class WorldSimulation {
           )
             return refuse('player');
         }
-        for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
+        const chest = this.homeChests.get(home.id) ?? emptyChest();
+        if (!payHomeUpgrade(runtime.inventory, chest, buildable.costs)) return refuse('materials');
+        this.homeChests.set(home.id, chest);
         runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
         const upgraded = { ...home, kind };
         const index = this.builtProps.indexOf(home);
@@ -3672,12 +3771,21 @@ export class WorldSimulation {
     if (runtime === undefined) return false;
     const recipe = recipeFor(item);
     if (
-      recipe?.discoveryId !== undefined &&
+      (recipe?.discoveryId !== undefined || recipe?.station !== undefined) &&
       (!isFreeToInteract(runtime.action) || runtime.health <= 0 || runtime.cast !== null)
     )
       return false;
     if (recipe?.station === 'campfire' && !this.nearCookingFireOf(netId)) return false;
+    if (recipe?.station === 'workbench' && !this.nearWorkbenchOf(netId)) return false;
     if (!craft(runtime.inventory, item, runtime.discoveriesClaimed)) return false;
+    if (
+      toolKind(item) !== null &&
+      runtime.equippedItem !== null &&
+      !hasItem(runtime.inventory, runtime.equippedItem)
+    ) {
+      runtime.equippedItem = item;
+      this.equipEvents.push(netId);
+    }
 
     this.craftEvents.push({ netId, item });
     return true;
@@ -3729,14 +3837,7 @@ export class WorldSimulation {
       this.equipEvents.push(netId);
       changed = true;
     }
-    const savingForFire =
-      cookedItemFor(item) !== null &&
-      runtime.space === OUTDOORS &&
-      (() => {
-        const position = runtime.entity.get(Position);
-        const campfire = position === undefined ? null : nearestCampfire(position, this.builtProps);
-        return campfire?.lit === true;
-      })();
+    const savingForFire = cookedItemFor(item) !== null && this.nearCookingFireOf(netId);
     if (isFood(item) && runtime.hunger < HUNGER_MAX && !savingForFire) {
       this.eatItem(runtime, item);
       changed = true;
@@ -3878,8 +3979,40 @@ export class WorldSimulation {
   nearCookingFireOf(netId: number): boolean {
     const runtime = this.players.get(netId),
       position = runtime?.entity.get(Position);
-    if (runtime === undefined || position === undefined || runtime.space !== OUTDOORS) return false;
+    if (runtime === undefined || position === undefined) return false;
+    if (runtime.space !== OUTDOORS)
+      return homeFacilityInReach(this.kindOfHome(runtime.space), 'cooking', position);
     return nearestCampfire(position, this.builtProps)?.lit === true;
+  }
+
+  nearWorkbenchOf(netId: number): boolean {
+    const runtime = this.players.get(netId),
+      position = runtime?.entity.get(Position);
+    return (
+      runtime !== undefined &&
+      position !== undefined &&
+      runtime.space !== OUTDOORS &&
+      homeFacilityInReach(this.kindOfHome(runtime.space), 'workbench', position)
+    );
+  }
+
+  private tryUseHomeCooking(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    fresh: boolean,
+  ): boolean {
+    if (!homeFacilityInReach(this.kindOfHome(runtime.space), 'cooking', position)) return false;
+    if (!fresh) return true;
+    const held = this.equippedItemOf(runtime.netId);
+    if (held !== null && cookedItemFor(held) !== null) {
+      const cooked = cookOne(runtime.inventory, held);
+      if (cooked !== null) {
+        this.cookingEvents.push({ netId: runtime.netId, raw: held, cooked });
+        this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: held });
+        this.equipEvents.push(runtime.netId);
+      }
+    }
+    return true;
   }
 
   drainDiscoveryChanges(): { netId: number; state: DiscoveryState }[] {

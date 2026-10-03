@@ -1,4 +1,4 @@
-import type { DiscoverySite } from '@acorn/shared';
+import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
 import type { PickupNotice } from './pickup-notice';
 import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } from '@acorn/shared';
 
@@ -80,6 +80,9 @@ export interface HudState {
   readonly ownCacheCompass: Compass | null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   readonly nearCampfire: 'lit' | 'unlit' | null;
+  readonly nearWorkbench: boolean;
+  readonly nearGarden: boolean;
+  readonly garden: GardenState;
   /** The tree a swing would land on, and how many more it needs. */
   readonly aimedTree: { readonly name: string; readonly swingsLeft: number } | null;
   /** The animal a swing would land on, if any. A tree in reach always wins. */
@@ -97,13 +100,14 @@ export interface HudState {
   readonly raidBanner: RaidBanner | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
+  readonly homeStoredSupplies: readonly { readonly item: ItemId; readonly count: number }[];
   readonly homeSkills: number;
   readonly discoveriesFound: number;
   readonly discoveriesClaimed: number;
   readonly discoverySites: readonly DiscoverySite[];
   readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;
-  readonly journalTab: 'craft' | 'discoveries';
+  readonly journalTab: 'craft' | 'discoveries' | 'garden';
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -196,6 +200,9 @@ const INITIAL: HudState = {
   nearBuriedCache: false,
   ownCacheCompass: null,
   nearCampfire: null,
+  nearWorkbench: false,
+  nearGarden: false,
+  garden: { homeId: 0, yours: false, plots: emptyGarden(), reason: 'unavailable' },
   aimedTree: null,
   aimedAnimal: null,
   aimedRaider: null,
@@ -204,6 +211,7 @@ const INITIAL: HudState = {
   raidBanner: null,
   canBuild: false,
   homeSkills: 0,
+  homeStoredSupplies: [],
   discoveriesFound: 0,
   discoveriesClaimed: 0,
   discoverySites: [],

@@ -1,6 +1,8 @@
+import { isHomeKind } from '@acorn/shared';
 import { encodeDiscoveries } from '@acorn/shared';
 import { DurableObject } from 'cloudflare:workers';
 
+import { encodeGardenState, TICK_HZ, type GardenState } from '@acorn/shared';
 import {
   CHARACTER_KINDS,
   CLOSE_PLAYING_ELSEWHERE,
@@ -25,6 +27,7 @@ import {
   decodeClientMessage,
   encodeInventory,
   encodeHomeSkills,
+  encodeHomeSupplies,
   encodeHomeBuildFeedback,
   encodeChestState,
   encodePickupsTaken,
@@ -201,6 +204,7 @@ export class World extends DurableObject<WorldEnv> {
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
+    server.send(encodeHomeSupplies(simulation.homeSuppliesOf(netId)));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
@@ -209,6 +213,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
     server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
     server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
+    server.send(encodeGardenState(simulation.gardenStateOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
@@ -270,6 +275,7 @@ export class World extends DurableObject<WorldEnv> {
       // waiting for the next step.
       simulation.craftItem(attachment.netId, decoded.item);
       this.announceCrafting(simulation);
+      this.announceEquipped(simulation);
       return;
     }
     if (decoded.type === 'loot') {
@@ -319,6 +325,23 @@ export class World extends DurableObject<WorldEnv> {
       this.announceFishing(simulation);
       return;
     }
+    if (decoded.type === 'garden') {
+      const result = simulation.requestGarden(attachment.netId, decoded);
+      if (result.reason === null && decoded.action !== 'inspect' && attachment.playerKey !== null) {
+        this.ctx.storage.transactionSync(() => {
+          this.savePlayer(simulation, attachment);
+          this.writeGarden(result);
+        });
+        this.trySend(
+          ws,
+          encodeInventory(inventoryEntries(simulation.inventoryOf(attachment.netId))),
+        );
+        this.announceEquipped(simulation);
+        this.announceGardens(simulation);
+      }
+      this.trySend(ws, encodeGardenState(result));
+      return;
+    }
     if (decoded.type === 'chest') {
       const result = simulation.requestChest(attachment.netId, decoded);
       if (result.moved > 0 && attachment.playerKey !== null) {
@@ -336,6 +359,7 @@ export class World extends DurableObject<WorldEnv> {
       }
       // Private, never broadcast to other players or visitors.
       ws.send(encodeChestState(result));
+      ws.send(encodeHomeSupplies(simulation.homeSuppliesOf(attachment.netId)));
       return;
     }
     if (decoded.type === 'setDoorLock') {
@@ -438,6 +462,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announcePiles(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
     this.announceSpaceChanges(simulation);
+    if (simulation.tick % TICK_HZ === 0) this.announceGardens(simulation);
     this.announceGestures(simulation);
     if (simulation.tick % EXPLORED_SEND_INTERVAL_TICKS === 0) this.announceExplored(simulation);
 
@@ -487,6 +512,7 @@ export class World extends DurableObject<WorldEnv> {
 
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
+      this.trySend(ws, encodeHomeSupplies(simulation.homeSuppliesOf(attachment.netId)));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
   }
@@ -651,6 +677,12 @@ export class World extends DurableObject<WorldEnv> {
     this.ctx.storage.transactionSync(() => {
       for (const event of events) {
         this.writeBuiltProp(event.prop, event.ownerKey);
+        if (isHomeKind(event.prop.kind))
+          this.ctx.storage.sql.exec(
+            'INSERT INTO home_chests (home_id, slots) VALUES (?, ?) ON CONFLICT(home_id) DO UPDATE SET slots = excluded.slots',
+            event.prop.id,
+            JSON.stringify(simulation.chestSlots(event.prop.id)),
+          );
         if (event.ownerKey !== null)
           this.writePlayerItems(
             event.ownerKey,
@@ -742,6 +774,7 @@ export class World extends DurableObject<WorldEnv> {
       for (const change of changes) {
         if (change.netId !== attachment.netId) continue;
         this.trySend(ws, encodeSpace(change.space, change.x, change.z, change.yaw));
+        this.trySend(ws, encodeGardenState(simulation.gardenStateOf(attachment.netId)));
       }
     }
   }
@@ -842,6 +875,7 @@ export class World extends DurableObject<WorldEnv> {
       if (attachment === null || !netIds.has(attachment.netId)) continue;
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
+      this.trySend(ws, encodeHomeSupplies(simulation.homeSuppliesOf(attachment.netId)));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
   }
@@ -1154,6 +1188,15 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
+    for (const row of this.ctx.storage.sql.exec<{ home_id: number; plots: string }>(
+      'SELECT home_id, plots FROM home_gardens',
+    )) {
+      try {
+        simulation.restoreGarden(row.home_id, JSON.parse(row.plots));
+      } catch {
+        console.error('Invalid saved garden', row.home_id);
+      }
+    }
     for (const row of this.ctx.storage.sql.exec<{ home_id: number; slots: string }>(
       'SELECT home_id, slots FROM home_chests',
     )) {
@@ -1210,6 +1253,22 @@ export class World extends DurableObject<WorldEnv> {
     this.announceCampfireLighting(simulation, Date.now());
     if (simulation.playerCount > 0) this.startTicking();
     return simulation;
+  }
+
+  private writeGarden(garden: Pick<GardenState, 'homeId' | 'plots'>): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO home_gardens (home_id, plots) VALUES (?, ?) ON CONFLICT(home_id) DO UPDATE SET plots=excluded.plots',
+      garden.homeId,
+      JSON.stringify(garden.plots),
+    );
+  }
+  private announceGardens(simulation: WorldSimulation): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const state = simulation.gardenStateOf(attachment.netId);
+      if (state.homeId !== 0) this.trySend(ws, encodeGardenState(state));
+    }
   }
 
   private seed(): number {
@@ -1335,6 +1394,9 @@ export class World extends DurableObject<WorldEnv> {
     )`);
     sql.exec(
       'CREATE TABLE IF NOT EXISTS home_chests (home_id INTEGER PRIMARY KEY, slots TEXT NOT NULL)',
+    );
+    sql.exec(
+      'CREATE TABLE IF NOT EXISTS home_gardens (home_id INTEGER PRIMARY KEY, plots TEXT NOT NULL)',
     );
     // Trees that are down, and trees somebody has started on. The clearing
     // itself comes from the seed, so only what has changed is stored.
@@ -2010,6 +2072,7 @@ export class World extends DurableObject<WorldEnv> {
 
   /** Write everything worth keeping: the tick count and where everyone is. */
   private save(simulation: WorldSimulation): void {
+    for (const garden of simulation.savedGardens()) this.writeGarden(garden);
     this.writeMeta('tick', String(simulation.tick));
     this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);

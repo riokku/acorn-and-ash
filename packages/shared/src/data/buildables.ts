@@ -69,9 +69,12 @@ export const BUILDABLE_KINDS = {
   cabin: {
     id: 'cabin',
     displayName: 'Small cabin',
-    // A single slot's worth of logs (see decision 0060) - one trip to the
-    // trees, however few slots are free, pays for it.
-    costs: [{ item: 'log', amount: 10 }],
+    // Later upgrades draw on supplies carried home over several expeditions.
+    costs: [
+      { item: 'log', amount: 40 },
+      { item: 'stick', amount: 24 },
+      { item: 'bone', amount: 8 },
+    ],
     footprintRadius: 3,
     isHome: true,
     capPerPlayer: true,
@@ -92,8 +95,8 @@ export const BUILDABLE_KINDS = {
     id: 'teepee',
     displayName: 'Teepee',
     costs: [
-      { item: 'stick', amount: 8 },
-      { item: 'log', amount: 4 },
+      { item: 'stick', amount: 16 },
+      { item: 'log', amount: 12 },
     ],
     footprintRadius: 2.65,
     isHome: true,
@@ -105,8 +108,9 @@ export const BUILDABLE_KINDS = {
     id: 'largeCabin',
     displayName: 'Larger cabin',
     costs: [
-      { item: 'log', amount: 20 },
-      { item: 'stick', amount: 8 },
+      { item: 'log', amount: 120 },
+      { item: 'stick', amount: 24 },
+      { item: 'bone', amount: 20 },
     ],
     footprintRadius: 3.8,
     isHome: true,

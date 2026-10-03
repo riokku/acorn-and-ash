@@ -54,7 +54,7 @@ function world(kind?: HomeKind, skills = 7): WorldSimulation {
     'owner',
   );
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
-  Object.assign(sim.inventoryOf(1), { log: 30, stick: 20 });
+  Object.assign(sim.inventoryOf(1), { log: 120, stick: 24, bone: 20 });
   return sim;
 }
 function build(sim: WorldSimulation, kind: HomeKind): void {

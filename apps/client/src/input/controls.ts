@@ -26,7 +26,17 @@ const CHARGED_ATTACK = 'ChargedAttack';
  * campfire/cabin/flower bed/lantern to fence and garden path (see decision
  * 0048), and crafting shares this same list rather than keys of its own.
  */
-const CRAFT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
+const CRAFT_KEYS = [
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7',
+  'Digit8',
+  'Digit9',
+] as const;
 /** Hotkeys for the hotbar, one per slot. Only live while neither menu is open. */
 const HOTBAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'] as const;
 /**
@@ -211,7 +221,7 @@ export class Controls {
    * while it is open rather than needing keys of its own.
    */
   takeBuildTaps(): number[] {
-    return this.takeCraftTaps();
+    return this.takeCraftTaps().filter((index) => index < 6);
   }
 
   /** Whether B was pressed since this was last asked, to toggle the build menu. */

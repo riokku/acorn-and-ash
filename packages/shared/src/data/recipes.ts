@@ -17,10 +17,28 @@ export interface Recipe {
   readonly result: ItemId;
   readonly costs: readonly RecipeCost[];
   readonly discoveryId?: number;
-  readonly station?: 'campfire';
+  readonly station?: 'campfire' | 'workbench';
 }
 
 export const RECIPES: Partial<Record<ItemId, Recipe>> = {
+  refinedAxe: {
+    result: 'refinedAxe',
+    station: 'workbench',
+    costs: [
+      { item: 'axe', amount: 1 },
+      { item: 'log', amount: 6 },
+      { item: 'bone', amount: 4 },
+    ],
+  },
+  refinedRod: {
+    result: 'refinedRod',
+    station: 'workbench',
+    costs: [
+      { item: 'rod', amount: 1 },
+      { item: 'stick', amount: 6 },
+      { item: 'bone', amount: 4 },
+    ],
+  },
   // Gathered by hand, no tool needed, so a brand new player - or a second
   // player in a world where somebody already has the one axe - can make
   // their very first one.

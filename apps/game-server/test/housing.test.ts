@@ -32,9 +32,13 @@ it('learns a blueprint atomically, upgrades the same saved home, and restores sk
         litUntilMs: null,
       },
     ]);
-    sim.restoreChest(7, [{ item: 'bone', count: 3 }, ...Array(9).fill(null)]);
+    sim.restoreChest(7, [
+      { item: 'bone', count: 3 },
+      { item: 'log', count: 8 },
+      ...Array(8).fill(null),
+    ]);
     sim.placePlayer(id, { x: 0, y: 0, z: 0 }, 0);
-    Object.assign(sim.inventoryOf(id), { teepeeBlueprint: 1, log: 4, stick: 8 });
+    Object.assign(sim.inventoryOf(id), { teepeeBlueprint: 1, log: 4, stick: 16 });
     state.storage.sql.exec(
       'INSERT INTO built_props (id,kind_index,x,z,yaw,built_at_ms,owner_key,locked) VALUES (?,?,?,?,?,?,?,?)',
       7,
@@ -49,7 +53,11 @@ it('learns a blueprint atomically, upgrades the same saved home, and restores sk
     state.storage.sql.exec(
       'INSERT INTO home_chests (home_id,slots) VALUES (?,?)',
       7,
-      JSON.stringify([{ item: 'bone', count: 3 }, ...Array(9).fill(null)]),
+      JSON.stringify([
+        { item: 'bone', count: 3 },
+        { item: 'log', count: 8 },
+        ...Array(8).fill(null),
+      ]),
     );
   });
   owner.useItem('teepeeBlueprint');
@@ -92,6 +100,10 @@ it('learns a blueprint atomically, upgrades the same saved home, and restores sk
         .exec<{ kind_index: number }>('SELECT kind_index FROM built_props WHERE id=7')
         .one().kind_index,
     ).toBe(buildableKindIndex('teepee'));
+    const savedChest = state.storage.sql
+      .exec<{ slots: string }>('SELECT slots FROM home_chests WHERE home_id=7')
+      .one();
+    expect(JSON.parse(savedChest.slots).slice(0, 2)).toEqual([{ item: 'bone', count: 3 }, null]);
     expect(
       state.storage.sql
         .exec('SELECT * FROM player_items WHERE player_key=?', 'housing-owner')

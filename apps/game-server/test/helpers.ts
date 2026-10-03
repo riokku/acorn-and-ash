@@ -5,6 +5,8 @@ import {
   decodeServerMessage,
   encodeBuild,
   encodeChestRequest,
+  encodeGardenRequest,
+  type GardenRequest,
   type ChestRequest,
   encodeCraft,
   encodeDiscard,
@@ -94,6 +96,10 @@ export class TestClient {
 
   loot(request: LootRequest): void {
     this.socket.send(encodeLoot(request));
+  }
+
+  garden(request: GardenRequest): void {
+    this.socket.send(encodeGardenRequest(request));
   }
 
   chest(request: ChestRequest): void {

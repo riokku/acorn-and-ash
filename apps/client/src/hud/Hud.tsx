@@ -1,5 +1,7 @@
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
-import { nextHome, knowsHome, isHomeKind } from '@acorn/shared';
+import { GardenJournal } from './GardenJournal';
+import type { GardenRequest } from '@acorn/shared';
+import { nextHome, knowsHome, isHomeKind, toolKind } from '@acorn/shared';
 import { PickupNotice } from './PickupNotice';
 import { LoadingScreen } from './LoadingScreen';
 import { ChestPanel } from './ChestPanel';
@@ -16,6 +18,7 @@ import {
   ITEM_KINDS,
   RECIPE_ITEMS,
   canAfford,
+  combineHomeSupplies,
   canCraft,
   canCook,
   cookedItemFor,
@@ -53,7 +56,8 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
-  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries') => void;
+  readonly onGardenUse?: (request: GardenRequest) => void;
+  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
   readonly onPickRecipe?: (index: number) => void;
   readonly store: HudStore;
   readonly onPlay: () => void;
@@ -96,6 +100,7 @@ export function Hud({
   onCloseChest,
   onJournalTabChange,
   onPickRecipe,
+  onGardenUse,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
@@ -134,7 +139,9 @@ export function Hud({
       </div>
 
       {state.craftMenuOpen ? (
-        state.journalTab === 'discoveries' ? (
+        state.journalTab === 'garden' ? (
+          <GardenJournal state={state} onChange={onJournalTabChange} onUse={onGardenUse} />
+        ) : state.journalTab === 'discoveries' ? (
           <DiscoveryJournal state={state} onChange={onJournalTabChange} />
         ) : (
           <JournalPanel
@@ -142,7 +149,13 @@ export function Hud({
             entries={craftEntries(state)}
             closeHint="Choose a recipe, or C to close"
             onPick={onPickRecipe}
-            navigation={<JournalTabs selected="craft" onChange={onJournalTabChange} />}
+            navigation={
+              <JournalTabs
+                selected="craft"
+                onChange={onJournalTabChange}
+                hasGarden={state.garden.homeId !== 0}
+              />
+            }
           />
         )
       ) : null}
@@ -478,6 +491,7 @@ interface RecipeEntry {
   readonly displayName: string;
   readonly costs: Recipe['costs'];
   readonly ready: boolean;
+  readonly supplyNote?: string;
 }
 
 /** Every recipe this player could pick, in menu order. */
@@ -503,12 +517,15 @@ function craftEntries(state: HudState): RecipeEntry[] {
             ? ' · discover its recipe'
             : recipe.station === 'campfire' && state.nearCampfire !== 'lit'
               ? ' · lit campfire needed'
-              : ''
+              : recipe.station === 'workbench' && !state.nearWorkbench
+                ? ' · cabin workbench needed'
+                : ''
         }`,
         costs: recipe.costs,
         ready:
           canCraft(inventory, item, state.discoveriesClaimed) &&
-          (recipe.station !== 'campfire' || state.nearCampfire === 'lit'),
+          (recipe.station !== 'campfire' || state.nearCampfire === 'lit') &&
+          (recipe.station !== 'workbench' || state.nearWorkbench),
       },
     ];
   });
@@ -534,8 +551,18 @@ function buildEntries(state: HudState): RecipeEntry[] {
       ),
       displayName: `${state.homeKind !== null && isHomeKind(kind) ? 'Upgrade to ' : ''}${buildable.displayName}${isHomeKind(kind) && !knowsHome(state.homeSkills, kind) ? ' · blueprint needed' : ''}`,
       costs: buildable.costs,
+      supplyNote:
+        isHomeKind(kind) && state.homeKind !== null
+          ? 'Uses backpack first, then your private home chest'
+          : undefined,
       ready:
-        canAfford(inventory, buildable) && (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)),
+        canAfford(
+          isHomeKind(kind) && state.homeKind !== null
+            ? combineHomeSupplies(inventory, state.homeStoredSupplies)
+            : inventory,
+          buildable,
+        ) &&
+        (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)),
     };
   });
 }
@@ -583,6 +610,7 @@ function JournalPanel({
             <div className="hud-journal-entry-name">
               {entry.index} · {entry.displayName}
             </div>
+            {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
             <div className="hud-journal-ingredients">
               {entry.costs.map((cost) => {
                 const costKind = ITEM_KINDS[cost.item];
@@ -652,7 +680,11 @@ export function hint(state: HudState): string {
   // The same goes for a piece picked from it and being placed.
   if (state.placing !== null) return placingHint(state.placing);
   if (state.craftMenuOpen)
-    return state.journalTab === 'discoveries' ? 'Follow a lead · C to close' : craftMenuHint();
+    return state.journalTab === 'garden'
+      ? 'Choose a garden box · C to close'
+      : state.journalTab === 'discoveries'
+        ? 'Follow a lead · C to close'
+        : craftMenuHint();
   if (state.charging) return 'Charging a heavy swing · release to strike';
   if (state.nearbyItem !== null) return pickupHint(state, state.nearbyItem);
   // The same order the server tries a press of E in: something lying in the
@@ -665,7 +697,12 @@ export function hint(state: HudState): string {
   if (state.nearbyDiscovery !== null)
     return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
-  if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
+  if (state.nearGarden) return 'Click a garden box, or open Garden in the C journal';
+  if (state.nearWorkbench) return 'Cabin workbench · C to refine your tools';
+  if (state.nearCampfire === 'lit')
+    return state.home === null
+      ? 'Press E to put out the campfire'
+      : 'Cooking station · C for learned recipes';
   // Doors - see decision 0055.
   if (state.door === 'enter') return 'Walk in, or press E, to go inside';
   if (state.door === 'visit') return 'Walk in, or press E, to visit';
@@ -682,7 +719,8 @@ export function hint(state: HudState): string {
   // item - carrying it is not enough, it has to be equipped. Anything in hand
   // takes a swing at an animal, though, even a fish (see decision 0056) -
   // unless it is the rod facing water, which casts instead.
-  if (state.aimedTree !== null && state.equippedItem === 'axe') return chopHint(state.aimedTree);
+  if (state.aimedTree !== null && toolKind(state.equippedItem) === 'axe')
+    return chopHint(state.aimedTree);
   if (state.canCast) return 'Left click to cast';
   if (state.aimedAnimal !== null && state.equippedItem !== null) {
     return catchHint(state.aimedAnimal);

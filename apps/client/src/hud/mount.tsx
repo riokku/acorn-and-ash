@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import type { BuildableKindId, ItemId, ChestRequest } from '@acorn/shared';
+import type { GardenRequest } from '@acorn/shared';
 
 import { Hud } from './Hud';
 import type { HudStore } from './store';
@@ -33,8 +34,9 @@ export function mountHud(
   onCloseChest: () => void,
   onSettingsOpenChange?: (open: boolean) => void,
   journalActions?: {
-    onTabChange: (tab: 'craft' | 'discoveries') => void;
+    onTabChange: (tab: 'craft' | 'discoveries' | 'garden') => void;
     onCraft: (index: number) => void;
+    onGarden?: (request: GardenRequest) => void;
   },
 ): void {
   createRoot(container).render(
@@ -58,6 +60,7 @@ export function mountHud(
         onCloseChest={onCloseChest}
         onJournalTabChange={journalActions?.onTabChange}
         onPickRecipe={journalActions?.onCraft}
+        onGardenUse={journalActions?.onGarden}
       />
     </StrictMode>,
   );

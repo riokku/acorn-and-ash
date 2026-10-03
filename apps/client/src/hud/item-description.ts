@@ -10,6 +10,10 @@ import {
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   guardianTrophy:
     'Earned by helping defeat the woodland guardian. Place it inside your home area from Build. Kept through a knockout.',
+  refinedAxe:
+    'Made at a cabin workbench. Chops twice as much per light swing; combat damage stays the same.',
+  refinedRod:
+    'Made at a cabin workbench. Fish bite 25% sooner; use the same click timing to catch them.',
   berry: 'Forage in woodland glades. Eat fresh or use in trail rations and berry tea.',
   mushroom: 'An edible forest cap. Gather in the grove and cook a filling stew.',
   trailRation: 'A wrapped meal for the trail. Learned at the forgotten camp.',
@@ -33,7 +37,7 @@ export function itemDescription(item: ItemId): string {
     return `Adds ${kind.extraSlots} pack slots. Your bag stays with you.`;
   if (kind.restoresHunger !== undefined) {
     const cooked = cookedItemFor(item);
-    return `${DESCRIPTIONS[item] === undefined ? '' : `${DESCRIPTIONS[item]} `}Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire and press E to roast it.' : ''}`;
+    return `${DESCRIPTIONS[item] === undefined ? '' : `${DESCRIPTIONS[item]} `}Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire or home cooker and press E to roast it.' : ''}`;
   }
   return DESCRIPTIONS[item] ?? 'A useful find from the woods.';
 }
