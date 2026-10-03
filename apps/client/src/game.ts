@@ -24,6 +24,7 @@ import {
   restingPlaceInReach,
   POND_FISH,
   PROP_KINDS,
+  treeLogSpots,
   RAIDER_KINDS,
   PlayerButton,
   RECIPE_ITEMS,
@@ -105,7 +106,15 @@ import { clickAimYaw, type ClickCandidate } from './input/click-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
-import { buildClearingScene, type ClearingScene, type TreeAppearance } from './scene/clearing';
+import { TreeLandingEffects } from './scene/tree-landing';
+import { PickupNoticeShelf } from './hud/pickup-notice';
+import { playPickupRefused, playTreeLanding } from './audio/feedback';
+import {
+  buildClearingScene,
+  type ClearingScene,
+  type TreeLanding,
+  type TreeAppearance,
+} from './scene/clearing';
 import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { preloadPropModels } from './scene/prop-models';
@@ -612,6 +621,7 @@ export class Game {
    */
   private packHeardFrom = false;
   private readonly toastShelf = new ToastShelf();
+  private readonly pickupNotices = new PickupNoticeShelf();
   /**
    * What the server says about every tree that is not as the seed left it, and
    * how far along the one being chopped is.
@@ -655,6 +665,7 @@ export class Game {
   private readonly scratchBlow = new THREE.Vector3();
   /** Chips, fur and dust thrown off where blows land (see decision 0056). */
   private readonly bursts = new ImpactBursts();
+  private readonly treeLandingEffects = new TreeLandingEffects();
   /** Every skeleton raider in sight (see decision 0063). */
   private readonly raiders = new RaiderCrowd(this.outdoors, this.bursts);
   /** The skeleton a swing of ours would land on, as last worked out. */
@@ -721,6 +732,7 @@ export class Game {
     this.fireLights = new FireLights(this.scene);
     this.scene.add(this.outdoors);
     this.scene.add(this.bursts.group);
+    this.outdoors.add(this.treeLandingEffects.group);
     const fade = document.createElement('div');
     fade.className = 'scene-fade';
     this.options.canvas.insertAdjacentElement('afterend', fade);
@@ -1011,6 +1023,7 @@ export class Game {
     this.buriedCacheMeshes.clear();
     this.raiders.dispose();
     this.bursts.dispose();
+    this.treeLandingEffects.dispose();
     for (const trail of this.trails.values()) trail.dispose();
     this.trails.clear();
   }
@@ -1116,6 +1129,12 @@ export class Game {
       case 'droppedPiles': {
         this.droppedPiles = message.piles;
         this.groundItems?.setDroppedPiles(this.droppedPiles);
+        break;
+      }
+      case 'pickupRefused': {
+        const now = performance.now();
+        if (this.pickupNotices.show(message.item, message.reason, now)) playPickupRefused();
+        this.options.hud.publish({ pickupNotice: this.pickupNotices.current(now) });
         break;
       }
       case 'discarded': {
@@ -1928,6 +1947,10 @@ export class Game {
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
+    for (const landing of this.clearingScene?.drainLandings() ?? []) {
+      this.showTreeLanding(landing, camera);
+    }
+    this.treeLandingEffects.update(deltaSeconds, camera.camera);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
     this.daylight?.update(dayProgress(this.estimatedServerTimeMs()));
     // Only campfires animate right now; the `in` check skips the other
@@ -1954,6 +1977,31 @@ export class Game {
     this.updateCombatFeed(camera);
     this.updateHud(now, deltaSeconds);
   };
+
+  /** One ground-contact event drives all the feedback, so it cannot drift from the fall. */
+  private showTreeLanding({ tree, yaw }: TreeLanding, camera: FollowCamera): void {
+    if (this.space !== OUTDOORS) return;
+    this.treeLandingEffects.burst(tree, yaw);
+    const spots = treeLogSpots(tree, yaw);
+    for (const spot of spots) {
+      this.bursts.burst(
+        'wood',
+        new THREE.Vector3(spot.x, (tree.y ?? 0) + 0.18, spot.z),
+        Math.sin(yaw),
+        Math.cos(yaw),
+        0.65,
+      );
+    }
+    const listener = this.listenerPoint();
+    const center = spots[Math.floor(spots.length / 2)] ?? tree;
+    if (listener !== null) {
+      const volume =
+        Math.max(0, 1 - Math.hypot(listener.x - center.x, listener.z - center.z) / 24) ** 2;
+      playTreeLanding(volume);
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+        camera.shake(volume * 0.16);
+    }
+  }
 
   /**
    * What the combat overlay draws this frame (see decision 0063): an arrow
@@ -3084,6 +3132,7 @@ export class Game {
       cacheNews: this.currentCacheNews(now),
       discardNews: this.currentDiscardNews(now),
       toasts: this.toastShelf.current(now),
+      pickupNotice: this.pickupNotices.current(now),
       canDrop: this.space === OUTDOORS,
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
       mapOpen: this.mapOpen,

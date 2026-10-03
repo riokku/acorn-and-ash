@@ -21,7 +21,15 @@ export function treeFallYaw(
 
 /** Tipping accelerates from upright and settles flat on the ground. */
 export function treeFallAngle(ageSeconds: number): number {
-  const t = Math.min(1, Math.max(0, ageSeconds / TREE_FALL_SECONDS));
+  if (ageSeconds >= TREE_FALL_SECONDS) {
+    const t = Math.min(
+      1,
+      (ageSeconds - TREE_FALL_SECONDS) / (TREE_BREAK_SECONDS - TREE_FALL_SECONDS),
+    );
+    // A small rebound loses energy quickly and settles before the trunk breaks.
+    return Math.PI / 2 - Math.sin(t * Math.PI * 2) ** 2 * 0.055 * (1 - t);
+  }
+  const t = Math.max(0, ageSeconds / TREE_FALL_SECONDS);
   return (Math.PI / 2) * t * t;
 }
 

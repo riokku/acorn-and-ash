@@ -96,6 +96,7 @@ import {
   addItem,
   countOf,
   hasItem,
+  roomFor,
   removeItem,
   createInventory,
   inventoryEntries,
@@ -312,6 +313,13 @@ export interface PickupTaken {
   readonly netId: number;
   readonly pickupId: number;
   readonly item: ItemId;
+}
+
+/** Private feedback when an attempted pickup cannot fit. */
+export interface PickupRefusal {
+  readonly netId: number;
+  readonly item: ItemId;
+  readonly reason: 'full' | 'limit';
 }
 
 /** A swing landed on a tree. */
@@ -682,6 +690,7 @@ interface PlayerRuntime {
    * actual fresh press or holding the button would flicker it on and off.
    */
   interactWasHeld: boolean;
+  pickupRefused: boolean;
   /**
    * What to build on the next tick, and where, or null when nothing is
    * waiting. A discrete request rather than a held button - like crafting,
@@ -844,6 +853,7 @@ export class WorldSimulation {
   private readonly cookingEvents: CookedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
+  private readonly pickupRefusals: PickupRefusal[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
   /** Patches gathered from, grown back or moved since this was last asked, by id. */
@@ -1044,6 +1054,7 @@ export class WorldSimulation {
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
+      pickupRefused: false,
       pendingBuild: null,
       cast: null,
       lastProcessedSeq: 0,
@@ -1090,6 +1101,7 @@ export class WorldSimulation {
     runtime.previousButtons = 0;
     runtime.swingWasHeld = false;
     runtime.interactWasHeld = false;
+    runtime.pickupRefused = false;
   }
 
   removePlayer(netId: number): boolean {
@@ -1249,6 +1261,7 @@ export class WorldSimulation {
             const interactHeld = isHeld(input, PlayerButton.Interact);
             const freshInteract = interactHeld && !runtime.interactWasHeld;
             runtime.interactWasHeld = interactHeld;
+            if (freshInteract) runtime.pickupRefused = false;
             const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
@@ -1890,9 +1903,9 @@ export class WorldSimulation {
   /**
    * Take whatever this player is standing next to.
    *
-   * Nothing happens if there is nothing in reach or their pack is already full,
+   * Nothing happens if there is nothing in reach. A full pack reports the refusal,
    * and a pickup only ever leaves the world once however many people reach for
-   * it in the same tick. Returns whether it happened, so the caller can fall
+   * it in the same tick. Returns whether it claimed the interaction, so the caller can fall
    * back to something else the same button might mean.
    */
   private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
@@ -1900,7 +1913,8 @@ export class WorldSimulation {
       this.takenPickups.has(id),
     );
     if (pickup === null) return false;
-    if (addItem(runtime.inventory, pickup.item) === 0) return false;
+    if (addItem(runtime.inventory, pickup.item) === 0)
+      return this.refusePickup(runtime, pickup.item);
 
     this.takenPickups.add(pickup.id);
     this.pickupEvents.push({
@@ -1915,7 +1929,7 @@ export class WorldSimulation {
   /**
    * Pick up the nearest pile somebody dropped, if there is one in reach - as
    * much of it as fits, leaving the rest lying there. Returns whether
-   * anything was picked up.
+   * the pile claimed the interaction, including a capacity refusal.
    */
   private tryPickUpPile(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
     const pile = droppedPileInReach(
@@ -1924,9 +1938,10 @@ export class WorldSimulation {
     );
     if (pile === null) return false;
     const taken = addItem(runtime.inventory, pile.item, pile.count);
-    if (taken === 0) return false;
+    if (taken === 0) return this.refusePickup(runtime, pile.item);
 
     pile.count -= taken;
+    if (pile.count > 0) this.refusePickup(runtime, pile.item);
     if (pile.count === 0) this.droppedPiles.splice(this.droppedPiles.indexOf(pile), 1);
     this.pileChanges.add(pile.id);
     this.gatherEvents.push(runtime.netId);
@@ -1939,13 +1954,14 @@ export class WorldSimulation {
    * if there is one in reach with any left and this player is not still
    * catching their breath from a swing, a cast or a gather of their own.
    * Taking the last one leaves the patch picked clean until it grows back
-   * somewhere else (see `regrowPatches`). Returns whether it happened.
+   * somewhere else (see `regrowPatches`). A nearby patch claims E even on cooldown.
    */
   private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
-    if (runtime.swingCooldownTicks > 0) return false;
     const patch = gatherSpotInReach(position, this.patches);
     if (patch === null) return false;
-    if (addItem(runtime.inventory, patch.item) === 0) return false;
+    if (roomFor(runtime.inventory, patch.item) === 0) return this.refusePickup(runtime, patch.item);
+    if (runtime.swingCooldownTicks > 0) return true;
+    addItem(runtime.inventory, patch.item);
 
     patch.remaining -= 1;
     if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
@@ -1954,6 +1970,21 @@ export class WorldSimulation {
     this.gatherEvents.push(runtime.netId);
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: patch.item });
     return true;
+  }
+
+  /** A blocked target claims E, so reaching for a log cannot eat food or toggle a fire. */
+  private refusePickup(runtime: PlayerRuntime, item: ItemId): true {
+    if (!runtime.pickupRefused) {
+      const reason =
+        ITEM_KINDS[item].maxCarry === 1 && hasItem(runtime.inventory, item) ? 'limit' : 'full';
+      this.pickupRefusals.push({ netId: runtime.netId, item, reason });
+      runtime.pickupRefused = true;
+    }
+    return true;
+  }
+
+  drainPickupRefusals(): PickupRefusal[] {
+    return this.pickupRefusals.splice(0);
   }
 
   /**

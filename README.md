@@ -462,7 +462,15 @@ trunk breaks into individual logs. Walk up and press **E** to gather them,
 just like sticks or flowers; chopping no longer puts wood straight in your
 pack. The total yield is unchanged. Falling trees cause no damage and do
 not block movement. Anyone can gather the logs, which fade after ten minutes.
-The fall and its pending loot survive reconnecting. See
+The fall and its pending loot survive reconnecting. On ground contact, the
+trunk settles with soft dirt billows, bark fragments and a low, distance-scaled
+thump. The dust fades around the new log pickups.
+
+Trying to collect a log, tool, stick or flower without room shows an
+**Inventory full** notice with an **Open pack** shortcut and a short sound.
+The item stays on the ground, and holding E does not repeat the warning.
+All feedback sounds follow the sound-effects volume setting. See
+[decision 0066](docs/decisions/0066-tree-landings-and-pickup-feedback.md) and
 [decision 0065](docs/decisions/0065-falling-trees-and-fishing-input.md).
 
 A felled tree comes back on its own, somewhere between half an hour and an hour

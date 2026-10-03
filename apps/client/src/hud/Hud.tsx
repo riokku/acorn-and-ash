@@ -1,3 +1,4 @@
+import { PickupNotice } from './PickupNotice';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import {
@@ -177,6 +178,14 @@ export function Hud({
         </>
       ) : null}
 
+      {showingWorld && !state.inventoryOpen && state.pickupNotice !== null ? (
+        <PickupNotice
+          notice={state.pickupNotice}
+          onOpenPack={() => {
+            if (!state.inventoryOpen) onToggleInventory();
+          }}
+        />
+      ) : null}
       {showingWorld && state.toasts.length > 0 ? <Toasts toasts={state.toasts} /> : null}
 
       {state.ready && !state.playing ? (

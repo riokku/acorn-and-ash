@@ -66,6 +66,7 @@ export const ServerMessageType = {
   RaidNews: 0x2b,
   RaiderHit: 0x2c,
   Cooked: 0x2d,
+  PickupRefused: 0x2e,
 } as const;
 
 export const RejectReason = {
@@ -515,7 +516,14 @@ export interface RaiderHitMessage {
   readonly hit: RaiderHit;
 }
 
+export interface PickupRefusedMessage {
+  readonly type: 'pickupRefused';
+  readonly item: ItemId;
+  readonly reason: 'full' | 'limit';
+}
+
 export type ServerMessage =
+  | PickupRefusedMessage
   | WelcomeMessage
   | SnapshotMessage
   | PlayerLeftMessage

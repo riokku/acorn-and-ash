@@ -42,10 +42,18 @@ describe('a falling tree', () => {
       expect(up().normalize().y).toBeLessThan(1);
       now = TREE_FALL_SECONDS * 1000;
       scene.update(0.7);
+      expect(scene.drainLandings()).toEqual([{ tree, yaw }]);
+      scene.update(0);
+      expect(scene.drainLandings()).toEqual([]);
       const flat = up().normalize();
       expect(flat.y).toBeCloseTo(0);
       expect(flat.x).toBeCloseTo(Math.sin(yaw));
       expect(flat.z).toBeCloseTo(Math.cos(yaw));
+      now = (TREE_FALL_SECONDS + 0.1) * 1000;
+      scene.update(0.1);
+      expect(up().normalize().y).toBeGreaterThan(0);
+      expect(up().normalize().y).toBeLessThan(0.06);
+      expect(scene.drainLandings()).toEqual([]);
       now = TREE_BREAK_SECONDS * 1000;
       scene.update(0.4);
       expect(up().length()).toBe(0);
@@ -81,6 +89,7 @@ describe('a falling tree', () => {
       10_000,
     );
     expect(up().length()).toBe(0);
+    expect(scene.drainLandings()).toEqual([]);
     scene.dispose();
   });
 });

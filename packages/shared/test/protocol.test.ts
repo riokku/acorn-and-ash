@@ -14,6 +14,7 @@ import {
   encodeUseItem,
   encodeDiscard,
   encodeDiscarded,
+  encodePickupRefused,
   encodeRaiders,
   encodeRaidNews,
   encodeRaiderHit,
@@ -1262,5 +1263,25 @@ describe('telling everybody a raider was hit', () => {
       shrugged: false,
     });
     expect(decodeServerMessage(encoded.slice(0, 6))).toBeNull();
+  });
+});
+
+describe('private pickup refusal messages', () => {
+  it.each(['full', 'limit'] as const)('round-trips %s', (reason) => {
+    expect(decodeServerMessage(encodePickupRefused('log', reason))).toEqual({
+      type: 'pickupRefused',
+      item: 'log',
+      reason,
+    });
+  });
+  it('rejects truncation, unknown items and unknown reasons', () => {
+    const message = encodePickupRefused('log', 'full');
+    expect(decodeServerMessage(message.slice(0, 2))).toBeNull();
+    const bytes = new Uint8Array(message);
+    bytes[2] = 2;
+    expect(decodeServerMessage(message)).toBeNull();
+    bytes[2] = 0;
+    bytes[1] = 255;
+    expect(decodeServerMessage(message)).toBeNull();
   });
 });

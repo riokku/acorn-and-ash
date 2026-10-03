@@ -679,6 +679,13 @@ describe('picking the axe up', () => {
     expect(sim.takenPickupIds()).toEqual([]);
   });
 
+  it('explains why a tool stays on the ground when the pack is full', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, { ...withBag(1), items: [{ item: 'stick', count: 60 }] });
+    reachForTheAxe(sim, 1);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: 'axe', reason: 'full' }]);
+  });
+
   it('hands over the axe to a player who reaches for it', () => {
     const sim = createWorld();
     sim.addPlayer(1, withBag(1));
@@ -1242,7 +1249,7 @@ describe('gathering sticks', () => {
     expect(sim.hungerOf(1)).toBe(50);
   });
 
-  it('falls through to eating once there is no room for another stick', () => {
+  it('reports a full pack without eating equipped food instead of gathering', () => {
     const sim = createWorld();
     sim.addPlayer(1, {
       netId: 1,
@@ -1263,8 +1270,9 @@ describe('gathering sticks', () => {
     sim.queueInput(1, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
 
-    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
-    expect(sim.hungerOf(1)).toBeGreaterThan(50);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: 'stick', reason: 'full' }]);
+    expect(sim.hungerOf(1)).toBe(50);
   });
 });
 
@@ -1457,6 +1465,70 @@ describe('dropping and destroying', () => {
     ]);
   });
 
+  it('reports a full pack once per press, leaves the log, and never eats equipped food instead', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      ...OPEN_GROUND,
+      facingYaw: 0,
+      hunger: 30,
+      equippedItem: 'perch',
+      items: [
+        { item: 'log', count: 50 },
+        { item: 'perch', count: 10 },
+      ],
+    });
+    sim.restoreDroppedPiles(
+      [{ id: 1, item: 'log', count: 1, x: OPEN_GROUND.x, z: OPEN_GROUND.z, droppedAtMs: clockMs }],
+      clockMs,
+    );
+    drive(sim, 1, 0, 0, 40, 1, PlayerButton.Interact);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: 'log', reason: 'full' }]);
+    expect(sim.droppedPilesList()).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(10);
+    // The final held sample and release can share a network bundle. Releasing
+    // must not produce a second refusal for that same press.
+    sim.queueInput(1, createInput(41, 0, 0, 0, PlayerButton.Interact));
+    sim.queueInput(1, createInput(42, 0, 0, 0, 0));
+    sim.step(tickClock());
+    sim.step(tickClock());
+    expect(sim.drainPickupRefusals()).toEqual([]);
+    drive(sim, 1, 0, 0, 1, 43, PlayerButton.Interact);
+    expect(sim.drainPickupRefusals()).toHaveLength(1);
+    sim.discardItem(1, { item: 'log', amount: 10, destroy: true }, clockMs);
+    drive(sim, 1, 0, 0, 1, 44, PlayerButton.Interact);
+    expect(sim.droppedPilesList()).toEqual([]);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(41);
+    expect(sim.drainPickupRefusals()).toEqual([]);
+  });
+
+  it('distinguishes a duplicate tool from a full pack', () => {
+    const sim = setUp([{ item: 'axe', count: 1 }]);
+    sim.restoreDroppedPiles(
+      [{ id: 1, item: 'axe', count: 1, x: OPEN_GROUND.x, z: OPEN_GROUND.z, droppedAtMs: clockMs }],
+      clockMs,
+    );
+    drive(sim, 1, 0, 0, 1, 1, PlayerButton.Interact);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: 'axe', reason: 'limit' }]);
+    expect(sim.droppedPilesList()).toHaveLength(1);
+  });
+
+  it('reports no room when gathering a patch without consuming the patch', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      ...OPEN_GROUND,
+      facingYaw: 0,
+      hunger: HUNGER_MAX,
+      items: [{ item: 'log', count: 60 }],
+    });
+    const patch = sim.gatherPatchesList()[0]!;
+    sim.placePlayer(1, { x: patch.x, y: 0, z: patch.z }, 0);
+    drive(sim, 1, 0, 0, 2, 1, PlayerButton.Interact);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: patch.item, reason: 'full' }]);
+    expect(sim.gatherPatchesList()[0]?.remaining).toBe(patch.remaining);
+  });
+
   it('adds more of the same, dropped in the same place, to the one pile', () => {
     const sim = setUp([{ item: 'stick', count: 5 }]);
     sim.discardItem(1, { item: 'stick', amount: 2, destroy: false }, clockMs);
@@ -1576,6 +1648,7 @@ describe('dropping and destroying', () => {
     sim.step(tickClock());
 
     expect(countOf(sim.inventoryOf(2), 'stick')).toBe(ITEM_KINDS.stick.stackSize);
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 2, item: 'stick', reason: 'full' }]);
     expect(sim.droppedPilesList()).toEqual([expect.objectContaining({ count: 3 })]);
   });
 

@@ -726,6 +726,15 @@ function decodeDroppedPiles(view: DataView): DroppedPileView[] | null {
 }
 
 /** Word that a player dropped or destroyed something. Only they are ever sent it. */
+/** Only sent to the player whose pickup was refused. */
+export function encodePickupRefused(item: ItemId, reason: 'full' | 'limit'): ArrayBuffer {
+  return new Uint8Array([
+    ServerMessageType.PickupRefused,
+    itemIndex(item),
+    reason === 'full' ? 0 : 1,
+  ]).buffer;
+}
+
 export function encodeDiscarded(event: DiscardedEvent): ArrayBuffer {
   const buffer = new ArrayBuffer(DISCARDED_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -1392,6 +1401,13 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.DroppedPiles: {
       const piles = decodeDroppedPiles(view);
       return piles === null ? null : { type: 'droppedPiles', piles };
+    }
+    case ServerMessageType.PickupRefused: {
+      if (data.byteLength !== 3) return null;
+      const item = itemFromIndex(view.getUint8(1));
+      const reason = view.getUint8(2);
+      if (item === null || reason > 1) return null;
+      return { type: 'pickupRefused', item, reason: reason === 0 ? 'full' : 'limit' };
     }
     case ServerMessageType.Discarded: {
       if (data.byteLength !== DISCARDED_MESSAGE_BYTES) return null;
