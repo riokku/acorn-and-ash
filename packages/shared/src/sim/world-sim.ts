@@ -1,3 +1,14 @@
+import {
+  emptyChest,
+  chestFromSaved,
+  depositInChest,
+  withdrawFromChest,
+  validTransferAmount,
+  type ChestSlot,
+  type ChestRequest,
+  type ChestResult,
+  type ChestReason,
+} from './chest';
 import { createWorld, type Entity, type World } from 'koota';
 import type { LootRequest } from '../net/messages';
 
@@ -54,7 +65,7 @@ import {
 } from '../data/animals';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import { colliderFootprintRadius } from '../world/colliders';
-import { isFood, ITEM_KINDS, TOOL_ITEMS, type ItemId } from '../data/items';
+import { isFood, isPack, ITEM_KINDS, TOOL_ITEMS, type ItemId } from '../data/items';
 import { replaceCollider } from '../collision/capsule';
 import { horizontalDistance, type Vec3 } from '../math/vec3';
 import {
@@ -68,6 +79,7 @@ import {
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
 import {
   HOME_ENTRY,
+  HOME_FURNITURE,
   HOME_ROOM,
   HOME_WAKE_SPOT,
   cabinCollider,
@@ -843,6 +855,7 @@ export class WorldSimulation {
   /** Real time as of the tick being simulated, supplied by the caller. */
   private nowMs = 0;
 
+  private readonly homeChests = new Map<number, ChestSlot[]>();
   private readonly players = new Map<number, PlayerRuntime>();
   private readonly animals = new Map<number, AnimalRuntime>();
   /** Pickups that somebody has already taken, by id. */
@@ -1091,6 +1104,65 @@ export class WorldSimulation {
       space: home?.id ?? OUTDOORS,
       doorCooldownTicks: 0,
     });
+  }
+
+  /** Every request is checked against the server's current room, owner and reach. */
+  requestChest(netId: number, request: ChestRequest): ChestResult {
+    const runtime = this.players.get(netId);
+    const unavailable = (reason: ChestReason): ChestResult => ({
+      homeId: 0,
+      slots: emptyChest(),
+      moved: 0,
+      reason,
+    });
+    if (runtime === undefined || runtime.space === OUTDOORS) return unavailable('unavailable');
+    const home = this.builtPropsById.get(runtime.space);
+    if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) return unavailable('unavailable');
+    if (runtime.playerKey === null || this.builtPropOwner(home.id) !== runtime.playerKey)
+      return unavailable('private');
+    const slots = this.homeChests.get(home.id) ?? emptyChest();
+    const reply = (reason: ChestReason | null, moved = 0): ChestResult => ({
+      homeId: home.id,
+      slots: slots.map((slot) => (slot === null ? null : { ...slot })),
+      moved,
+      reason,
+    });
+    const position = runtime.entity.get(Position);
+    const chest = HOME_FURNITURE.chest;
+    if (position === undefined || Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
+      return reply('tooFar');
+    if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
+      return reply('busy');
+    if (request.action === 'open') return reply(null);
+    if (!validTransferAmount(request.amount)) return reply('invalid');
+    const wasHolding = this.equippedItemOf(netId);
+    let moved: number;
+    let reason: ChestReason | null = null;
+    if (request.action === 'deposit') {
+      if (!Object.hasOwn(ITEM_KINDS, request.item) || isPack(request.item)) return reply('invalid');
+      const wanted = Math.min(request.amount, countOf(runtime.inventory, request.item));
+      if (wanted === 0) return reply('empty');
+      moved = depositInChest(slots, runtime.inventory, request.item, request.amount);
+      if (moved < wanted) reason = 'chestFull';
+    } else {
+      if (!Number.isInteger(request.slot) || request.slot < 0 || request.slot >= slots.length)
+        return reply('invalid');
+      const stack = slots[request.slot];
+      if (stack == null) return reply('empty');
+      const wanted = Math.min(request.amount, stack.count);
+      moved = withdrawFromChest(slots, runtime.inventory, request.slot, request.amount);
+      if (moved < wanted) reason = 'packFull';
+    }
+    if (moved > 0) this.homeChests.set(home.id, slots);
+    if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+    return reply(reason, moved);
+  }
+
+  restoreChest(homeId: number, saved: unknown): void {
+    const slots = chestFromSaved(saved);
+    const home = this.builtPropsById.get(homeId);
+    if (slots !== null && home !== undefined && BUILDABLE_KINDS[home.kind].isHome)
+      this.homeChests.set(homeId, slots);
   }
 
   /** Ask for a specific loot target, validated at the next simulation tick. */

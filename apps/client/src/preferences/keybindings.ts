@@ -28,6 +28,8 @@ export const KEYBINDINGS = [
       ['I / Bag button', 'Open or close your pack'],
       ['Drag an item to the hotbar', 'Pin it to that slot'],
       ['Drag from hotbar to pack', 'Unpin that slot'],
+      ['Left mouse on your cabin chest', 'Open your private storage'],
+      ['Click / Shift-click a storage stack', 'Move the stack / move one item'],
       ['Right mouse on a slot', 'Drop one, drop all, or destroy an item'],
       ['C', 'Open or close crafting'],
       ['B', 'Open or close building'],

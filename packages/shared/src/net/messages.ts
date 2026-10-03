@@ -1,3 +1,4 @@
+import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
 import type { CharacterId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
@@ -34,6 +35,7 @@ export const ClientMessageType = {
   SetDoorLock: 0x07,
   Discard: 0x08,
   Loot: 0x09,
+  Chest: 0x0a,
 } as const;
 
 /** What the server says back. */
@@ -70,6 +72,7 @@ export const ServerMessageType = {
   Cooked: 0x2d,
   PickupRefused: 0x2e,
   Collected: 0x2f,
+  Chest: 0x30,
 } as const;
 
 export const RejectReason = {
@@ -174,7 +177,11 @@ export interface LootMessage extends LootRequest {
   readonly type: 'loot';
 }
 
+export type ChestMessage = ChestRequest & { readonly type: 'chest' };
+export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
+
 export type ClientMessage =
+  | ChestMessage
   | InputBundleMessage
   | PingMessage
   | CraftMessage
@@ -541,6 +548,7 @@ export interface CollectedMessage {
 }
 
 export type ServerMessage =
+  | ChestStateMessage
   | CollectedMessage
   | PickupRefusedMessage
   | WelcomeMessage

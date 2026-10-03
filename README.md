@@ -248,6 +248,14 @@ wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
 
+### Wind in the grass
+
+Nearby clearings and sunny forest patches now have moving grass blades, with
+rolling gusts and a little flutter. Water, bare ground, spawn traffic, paths and
+building footprints stay clear. The distant painted ground remains in place.
+Settings → General includes a grass-density slider; zero turns blades off, and
+reduced-motion preferences stop their wind animation.
+
 ### The map
 
 A round minimap in the top right shows the land around you, turned so that
@@ -597,6 +605,19 @@ campfire's real art, its animated fire and lighting it,
 real light the campfire and lantern both cast now, and
 [decision 0048](docs/decisions/0048-a-fence-and-a-garden-path.md) for the
 fence and the garden path stone.
+
+### Storage chest
+
+The chest at the foot of your cabin bed holds ten stacks and is private to you.
+Hover it for feedback and left-click when close enough to open it. Click a stack
+to move it between your pack and the chest, or Shift-click to move one item.
+Escape or the close button shuts the panel. The lid opens while you use it.
+
+The server checks ownership, room, reach and available space for every transfer.
+Only what fits moves; the rest stays where it was. Stored tools can be taken out
+when your pack permits, while worn bags remain active pack upgrades. Contents
+keep their slot positions after reconnecting or the world going to sleep, and
+the pack and chest are saved together immediately after a transfer.
 
 ## Running it locally
 

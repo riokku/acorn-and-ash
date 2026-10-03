@@ -143,6 +143,8 @@ export const HOME_ROOM = {
 export const HOME_FURNITURE = {
   /** Headboard against the back wall, along the -X wall. */
   bed: { x: -2.75, z: -1.95, halfWidth: 0.58, halfLength: 0.98, height: 0.48 },
+  /** The existing chest at the foot of the bed. */
+  chest: { x: -2.75, z: -0.64, halfWidth: 0.47, halfDepth: 0.25, height: 0.51 },
   /** A stone fireplace in the +X wall, under the chimney you see outside. */
   hearth: { x: 3.02, z: -0.9, halfDepth: 0.48, halfWidth: 0.9, height: 1.35 },
   /** Under the side window. */
@@ -241,7 +243,7 @@ export function homeRoomColliders(): Collider[] {
   const height = wallHeight / 2;
   const doorLeft = doorX - doorHalfWidth;
   const doorRight = doorX + doorHalfWidth;
-  const { bed, hearth, table, chair, shelf } = HOME_FURNITURE;
+  const { bed, chest, hearth, table, chair, shelf } = HOME_FURNITURE;
   return [
     // Back, left and right walls.
     box(0, height, -halfDepth - wall, outerX, height, wall),
@@ -255,6 +257,7 @@ export function homeRoomColliders(): Collider[] {
     box(doorX, height, halfDepth + wallThickness + 0.1, doorHalfWidth + 0.1, height, 0.1),
     // Furniture.
     box(bed.x, bed.height / 2, bed.z, bed.halfWidth, bed.height / 2, bed.halfLength),
+    box(chest.x, chest.height / 2, chest.z, chest.halfWidth, chest.height / 2, chest.halfDepth),
     box(
       hearth.x,
       hearth.height / 2,

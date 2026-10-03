@@ -23,6 +23,7 @@ import {
   characterIndex,
   decodeClientMessage,
   encodeInventory,
+  encodeChestState,
   encodePickupsTaken,
   encodePlayerLeft,
   encodePong,
@@ -302,6 +303,25 @@ export class World extends DurableObject<WorldEnv> {
       this.announcePiles(simulation, Date.now());
       this.announceEquipped(simulation);
       this.announceFishing(simulation);
+      return;
+    }
+    if (decoded.type === 'chest') {
+      const result = simulation.requestChest(attachment.netId, decoded);
+      if (result.moved > 0 && attachment.playerKey !== null) {
+        // Save both sides atomically: reconnecting after a transfer cannot duplicate or lose items.
+        this.ctx.storage.transactionSync(() => {
+          this.savePlayer(simulation, attachment);
+          this.ctx.storage.sql.exec(
+            'INSERT INTO home_chests (home_id, slots) VALUES (?, ?) ON CONFLICT(home_id) DO UPDATE SET slots = excluded.slots',
+            result.homeId,
+            JSON.stringify(result.slots),
+          );
+        });
+        ws.send(encodeInventory(inventoryEntries(simulation.inventoryOf(attachment.netId))));
+        this.announceEquipped(simulation);
+      }
+      // Private, never broadcast to other players or visitors.
+      ws.send(encodeChestState(result));
       return;
     }
     if (decoded.type === 'setDoorLock') {
@@ -1050,6 +1070,15 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
+    for (const row of this.ctx.storage.sql.exec<{ home_id: number; slots: string }>(
+      'SELECT home_id, slots FROM home_chests',
+    )) {
+      try {
+        simulation.restoreChest(row.home_id, JSON.parse(row.slots));
+      } catch {
+        console.error('Invalid saved chest', row.home_id);
+      }
+    }
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
     simulation.restorePatches(this.loadPatches());
     simulation.restoreDroppedPiles(this.loadPiles(), Date.now());
@@ -1198,6 +1227,9 @@ export class World extends DurableObject<WorldEnv> {
       net_id INTEGER NOT NULL,
       taken_at INTEGER NOT NULL
     )`);
+    sql.exec(
+      'CREATE TABLE IF NOT EXISTS home_chests (home_id INTEGER PRIMARY KEY, slots TEXT NOT NULL)',
+    );
     // Trees that are down, and trees somebody has started on. The clearing
     // itself comes from the seed, so only what has changed is stored.
     sql.exec(`CREATE TABLE IF NOT EXISTS trees (

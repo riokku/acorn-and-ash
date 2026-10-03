@@ -4,6 +4,7 @@ declare global {
   interface Window {
     acornDebug?: {
       selfNetId(): number;
+      grassClumps(): number;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;

@@ -67,6 +67,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     ...(settings.serverUrl === undefined ? {} : { serverUrlOverride: settings.serverUrl }),
     forceWebGL: settings.forceWebGL,
     lookSensitivity: preferencesNow.lookSensitivity,
+    grassDensity: preferencesNow.grassDensity,
   });
 
   mountHud(
@@ -86,12 +87,15 @@ const enterWorld = (identity: PlayerIdentity): void => {
       // Sensitivity has nowhere else to apply to - unlike volume, which the
       // audio module already picks up live on its own.
       game.setLookSensitivity(preferences.lookSensitivity);
+      game.setGrassDensity(preferences.grassDensity);
     },
     game.mapFeed,
     () => game.toggleMap(),
     (locked) => game.setDoorLocked(locked),
     (item, amount, destroy) => game.discard(item, amount, destroy),
     game.combatFeed,
+    (request) => game.transferChest(request),
+    () => game.closeChest(),
   );
   window.acornDebug = game.debug();
 

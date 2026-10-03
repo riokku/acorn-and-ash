@@ -9,6 +9,9 @@ import {
   CLEARING_TREE_LINE_INNER,
   DOORWAY_REACH,
   HOME_ROOM,
+  HOME_FURNITURE,
+  type ChestRequest,
+  type ChestReason,
   OUTDOORS,
   ActionKind,
   CAST_COOLDOWN_SECONDS,
@@ -170,6 +173,7 @@ import { FireLights } from './scene/fire-light';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
+import { createGrass, type GrassScene } from './scene/grass';
 import { createHomeInterior, type HomeInterior } from './scene/home-interior';
 import { planPlacement, type PlacementPlan } from './building/placement';
 import type { FishingPhase, HudStore, RaidBanner } from './hud/store';
@@ -377,6 +381,7 @@ const HOME_CAMERA_BLOCKER_HEIGHT = 5;
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
+  grassClumps(): number;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
   /** What the Equipped list says one particular connected player has in hand, if anything. */
@@ -504,6 +509,7 @@ export interface GameOptions {
   readonly forceWebGL: boolean;
   /** A multiplier on `BASE_MOUSE_SENSITIVITY`, from the Settings menu. */
   readonly lookSensitivity: number;
+  readonly grassDensity: number;
 }
 
 /** Everything that makes up a running game. */
@@ -511,6 +517,9 @@ export class Game {
   private readonly options: GameOptions;
   /** Live-adjustable from the Settings menu - see `setLookSensitivity`. */
   private lookSensitivity: number;
+  private grassDensity: number;
+  private grass: GrassScene | null = null;
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly scene = new THREE.Scene();
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
@@ -621,6 +630,9 @@ export class Game {
   private nearbyItem: ItemId | null = null;
   private hoveredLoot: LootTarget | null = null;
   private hoverDueAt = 0;
+  private chestOpen = false;
+  private chestPending = false;
+  private hoveredChest = false;
   private interactionNote: string | null = null;
   private interactionNoteUntil = 0;
   private nearGatherSpot: ItemId | null = null;
@@ -731,6 +743,7 @@ export class Game {
   constructor(options: GameOptions) {
     this.options = options;
     this.lookSensitivity = options.lookSensitivity;
+    this.grassDensity = options.grassDensity;
   }
 
   async start(): Promise<void> {
@@ -802,7 +815,8 @@ export class Game {
    */
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
-    if (this.mapOpen) this.mapOpen = false;
+    if (this.chestOpen || this.chestPending) this.closeChest();
+    else if (this.mapOpen) this.mapOpen = false;
     else if (this.placing !== null) this.stopPlacing();
     else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
@@ -812,7 +826,8 @@ export class Game {
 
   private setPlaying(playing: boolean): void {
     this.playing = playing;
-    this.controls?.setGameplayEnabled(playing);
+    if (!playing) this.closeChest();
+    this.controls?.setGameplayEnabled(playing && !this.chestOpen);
     this.forestAudio.update(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
@@ -831,8 +846,61 @@ export class Game {
     });
   }
 
+  transferChest(request: ChestRequest): void {
+    if (this.chestPending || !this.playing) return;
+    if (this.connectionState !== 'connected') {
+      this.interactionNote = 'Reconnect to use your chest.';
+      this.interactionNoteUntil = performance.now() + 2800;
+      return;
+    }
+    this.chestPending = true;
+    this.options.hud.publish({ chestPending: true });
+    this.connection?.sendChest(request);
+  }
+
+  closeChest(): void {
+    if (!this.chestOpen && !this.chestPending) return;
+    this.chestOpen = false;
+    this.chestPending = false;
+    this.homeInterior?.setChestOpen(false);
+    this.controls?.setGameplayEnabled(this.playing);
+    this.options.hud.publish({ chestSlots: null, chestPending: false, chestNote: null });
+  }
+
+  private chestAt(point: { x: number; y: number }, camera: FollowCamera): boolean {
+    const room = this.homeInterior;
+    if (room === null || this.space === OUTDOORS) return false;
+    this.clickNdc.set(
+      (point.x / window.innerWidth) * 2 - 1,
+      (-point.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const hit = this.clickRaycaster.intersectObject(room.group, true).find((hit) => {
+      for (let object: THREE.Object3D | null = hit.object; object !== null; object = object.parent)
+        if (!object.visible) return false;
+      return true;
+    });
+    for (
+      let object: THREE.Object3D | null = hit?.object ?? null;
+      object !== null;
+      object = object.parent
+    )
+      if (object === room.chest) return true;
+    return false;
+  }
+
+  private chestHoverDetail(): string {
+    if (this.homeHere()?.yours !== true) return 'Private · belongs to the cabin owner';
+    const chest = HOME_FURNITURE.chest;
+    const position = this.motionOrOrigin();
+    if (Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
+      return 'Too far away · move closer';
+    return 'Left-click to open · 10 storage slots';
+  }
+
   /** Called from the HUD's own bag button - the mouse-first way to open the inventory panel. */
   toggleInventory(): void {
+    this.closeChest();
     this.inventoryOpen = !this.inventoryOpen;
     if (this.inventoryOpen) {
       this.stopPlacing();
@@ -852,6 +920,7 @@ export class Game {
    * steps aside for it; walking carries on underneath (see decision 0054).
    */
   toggleMap(): void {
+    this.closeChest();
     this.mapOpen = !this.mapOpen;
     if (this.mapOpen) {
       this.stopPlacing();
@@ -902,6 +971,11 @@ export class Game {
   }
 
   /** Called from the Settings menu's sensitivity slider - takes effect on the very next frame. */
+  setGrassDensity(value: number): void {
+    this.grassDensity = value;
+    this.grass?.setDensity(value);
+  }
+
   setLookSensitivity(multiplier: number): void {
     this.lookSensitivity = multiplier;
   }
@@ -915,6 +989,7 @@ export class Game {
   debug(): GameDebug {
     return {
       selfNetId: () => this.selfNetId,
+      grassClumps: () => this.grass?.mesh.count ?? 0,
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
         this.remotePlayers.netIds().map((netId) => {
@@ -1053,6 +1128,7 @@ export class Game {
     this.forestAudio.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
+    this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
@@ -1084,6 +1160,7 @@ export class Game {
       onMessage: (message) => this.handleMessage(message),
       onStateChange: (state, detail) => {
         this.connectionState = state;
+        if (state !== 'connected') this.closeChest();
         this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
         // Playing in another tab now: the curtain comes down here, and
         // clicking it is how to play in this one again (see `resume`).
@@ -1095,6 +1172,45 @@ export class Game {
 
   private handleMessage(message: ServerMessage): void {
     switch (message.type) {
+      case 'chest': {
+        if (!this.chestPending) break;
+        this.chestPending = false;
+        const text =
+          message.reason === null
+            ? message.moved > 0
+              ? `${message.moved} item${message.moved === 1 ? '' : 's'} moved.`
+              : null
+            : chestReasonText(message.reason);
+        if (
+          message.reason === null ||
+          message.reason === 'chestFull' ||
+          message.reason === 'packFull' ||
+          message.reason === 'empty' ||
+          message.reason === 'invalid'
+        ) {
+          this.chestOpen = true;
+          this.inventoryOpen = false;
+          this.buildMenuOpen = false;
+          this.craftMenuOpen = false;
+          this.mapOpen = false;
+          this.controls?.setGameplayEnabled(false);
+          this.homeInterior?.setChestOpen(true);
+          this.options.hud.publish({
+            chestSlots: message.slots,
+            chestPending: false,
+            chestNote: text,
+            inventoryOpen: false,
+            buildMenuOpen: false,
+            craftMenuOpen: false,
+            mapOpen: false,
+          });
+        } else {
+          this.closeChest();
+          this.interactionNote = text;
+          this.interactionNoteUntil = performance.now() + 3200;
+        }
+        break;
+      }
       case 'welcome': {
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
@@ -1268,6 +1384,7 @@ export class Game {
       }
       case 'builtProps': {
         this.builtProps = message.props;
+        this.grass?.setBuildings(message.props);
         // Anything just placed that has now come back as built stops being
         // pending - it is in the list for real.
         this.pendingPlacements = this.pendingPlacements.filter(
@@ -1676,6 +1793,10 @@ export class Game {
 
       this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
       this.outdoors.add(this.wildernessScene.group);
+      this.grass = createGrass(terrain, clearing, wilderness);
+      this.grass.setDensity(this.grassDensity);
+      this.grass.setBuildings(this.builtProps);
+      this.outdoors.add(this.grass.mesh);
 
       this.outdoors.add(this.floats.group);
 
@@ -1998,7 +2119,18 @@ export class Game {
       this.turnPiece(controls.takeWheelSteps());
       if (rightTap) this.stopPlacing();
     } else {
-      if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
+      if (clickPoint !== null && this.playing && !this.chestOpen) {
+        if (
+          !this.inventoryOpen &&
+          !this.mapOpen &&
+          !this.buildMenuOpen &&
+          !this.craftMenuOpen &&
+          this.chestAt(clickPoint, camera)
+        ) {
+          controls.swallowLeftPress();
+          this.transferChest({ action: 'open' });
+        } else this.aimTowardsClickPoint(clickPoint, camera);
+      }
       // Only a piece being placed has any use for either; left over from
       // before one was picked, they would act on it the moment it was.
       controls.takeWheelSteps();
@@ -2060,6 +2192,12 @@ export class Game {
     }
     if (this.localPlayer !== null)
       this.wildernessScene?.update(deltaSeconds, this.localPlayer.motion.position);
+    if (this.localPlayer !== null && this.space === OUTDOORS)
+      this.grass?.update(
+        deltaSeconds,
+        this.localPlayer.motion.position,
+        this.reducedMotion.matches,
+      );
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
@@ -2094,6 +2232,7 @@ export class Game {
     // Keep the simulation and network alive; only paused drawing is throttled.
     const viewingMenu =
       !this.playing ||
+      this.chestOpen ||
       this.inventoryOpen ||
       this.craftMenuOpen ||
       this.buildMenuOpen ||
@@ -2760,9 +2899,25 @@ export class Game {
 
     if (this.space !== OUTDOORS) {
       // Nothing out in the world is within reach from in here.
-      this.gatheringFocus.setTarget(null);
       this.hoveredLoot = null;
-      this.options.canvas.style.cursor = '';
+      const pointer = this.controls?.pointerPosition() ?? null;
+      this.hoveredChest =
+        this.playing &&
+        !this.chestOpen &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen &&
+        !this.controls?.isPointerLocked &&
+        pointer !== null &&
+        document.elementFromPoint(pointer.x, pointer.y) === this.options.canvas &&
+        this.chestAt(pointer, camera);
+      this.options.canvas.style.cursor = this.hoveredChest ? 'pointer' : '';
+      this.gatheringFocus.setTarget(
+        this.hoveredChest ? (this.homeInterior?.chest ?? null) : null,
+        0.65,
+        this.homeHere()?.yours !== true,
+      );
       this.nearbyItem = null;
       this.nearbyPile = null;
       this.nearGatherSpot = null;
@@ -2784,6 +2939,7 @@ export class Game {
       return;
     }
 
+    this.hoveredChest = false;
     if (performance.now() >= this.hoverDueAt) {
       this.hoverDueAt = performance.now() + 80;
       const pointer = this.controls?.pointerPosition() ?? null;
@@ -2970,6 +3126,7 @@ export class Game {
     if (player === null) return;
     const inside = space !== OUTDOORS;
     const changed = space !== this.space;
+    if (changed) this.closeChest();
     this.space = space;
 
     this.outdoors.visible = !inside;
@@ -3370,20 +3527,28 @@ export class Game {
       equippedItem: this.equipped.get(this.selfNetId) ?? null,
       nearbyItem: this.nearbyItem,
       hoveredLoot:
-        this.hoveredLoot === null ||
-        !this.playing ||
-        this.inventoryOpen ||
-        this.mapOpen ||
-        this.placing !== null ||
-        this.controls?.isPointerLocked
-          ? null
-          : {
-              name: ITEM_KINDS[this.hoveredLoot.item].displayName,
-              count: this.hoveredLoot.count,
-              detail: this.lootDetail(this.hoveredLoot),
+        this.hoveredChest && !this.chestOpen
+          ? {
+              name: 'Storage chest',
+              count: 0,
+              detail: this.chestHoverDetail(),
               x: this.controls?.pointerPosition()?.x ?? 0,
               y: this.controls?.pointerPosition()?.y ?? 0,
-            },
+            }
+          : this.hoveredLoot === null ||
+              !this.playing ||
+              this.inventoryOpen ||
+              this.mapOpen ||
+              this.placing !== null ||
+              this.controls?.isPointerLocked
+            ? null
+            : {
+                name: ITEM_KINDS[this.hoveredLoot.item].displayName,
+                count: this.hoveredLoot.count,
+                detail: this.lootDetail(this.hoveredLoot),
+                x: this.controls?.pointerPosition()?.x ?? 0,
+                y: this.controls?.pointerPosition()?.y ?? 0,
+              },
       interactionNote: now < this.interactionNoteUntil ? this.interactionNote : null,
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
@@ -3471,4 +3636,18 @@ function newsFor(event: FishingEvent): string {
 /** "a" or "an", for a lower-cased item name. Good enough for everything the item table holds. */
 function article(name: string): string {
   return /^[aeiou]/i.test(name) ? 'an' : 'a';
+}
+
+function chestReasonText(reason: ChestReason): string {
+  const messages: Record<ChestReason, string> = {
+    unavailable: 'Your chest is inside your cabin.',
+    private: 'This chest belongs to the cabin owner.',
+    tooFar: 'Move closer to the chest.',
+    busy: 'Finish your current action first.',
+    chestFull: 'Chest full. Only items that fit were moved.',
+    packFull: 'Your pack cannot carry any more of that item. Only items that fit were moved.',
+    empty: 'That stack is already empty.',
+    invalid: 'That item cannot be stored here.',
+  };
+  return messages[reason];
 }

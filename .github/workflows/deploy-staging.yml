@@ -52,3 +52,16 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
           command: deploy --env staging
+
+      - name: Verify the live game
+        env:
+          GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
+        run: |
+          curl --fail --silent --show-error --retry 3 "$GAME_URL/api/health" | jq -e '.ok == true and .service == "web"'
+          curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e '(.tick | type) == "number" and (.seed | type) == "number"'
+          curl --fail --silent --show-error --retry 3 "$GAME_URL/" -o /tmp/acorn-live-index.html
+          cmp apps/client/dist/index.html /tmp/acorn-live-index.html
+          for asset in apps/client/dist/assets/index-*.js apps/client/dist/assets/index-*.css apps/client/dist/assets/entering-the-woods-*.webp; do
+            curl --fail --silent --show-error --retry 3 "$GAME_URL/assets/${asset##*/}" -o /tmp/acorn-live-asset
+            cmp "$asset" /tmp/acorn-live-asset
+          done

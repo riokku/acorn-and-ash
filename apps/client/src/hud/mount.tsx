@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import type { BuildableKindId, ItemId } from '@acorn/shared';
+import type { BuildableKindId, ItemId, ChestRequest } from '@acorn/shared';
 
 import { Hud } from './Hud';
 import type { HudStore } from './store';
@@ -29,6 +29,8 @@ export function mountHud(
   onSetDoorLock: (locked: boolean) => void,
   onDiscard: (item: ItemId, amount: number, destroy: boolean) => void,
   combatFeed: CombatFeed,
+  onChestTransfer: (request: ChestRequest) => void,
+  onCloseChest: () => void,
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -46,6 +48,8 @@ export function mountHud(
         onSetDoorLock={onSetDoorLock}
         onDiscard={onDiscard}
         combatFeed={combatFeed}
+        onChestTransfer={onChestTransfer}
+        onCloseChest={onCloseChest}
       />
     </StrictMode>,
   );
