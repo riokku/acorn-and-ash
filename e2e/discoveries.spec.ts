@@ -57,7 +57,7 @@ test('records a discovery, inspects its personal reward and crafts the learned r
     await page.keyboard.press('KeyC');
     await page.getByRole('button', { name: 'Discoveries', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Discovery journal' })).toContainText(
-      '1 / 4 found',
+      '1 / 7 found',
     );
     await expect(page.locator('.discovery-entry-found')).toContainText('Marked on your map');
     await page.keyboard.press('Digit1');

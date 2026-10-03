@@ -892,3 +892,16 @@ independent protected housing-blueprint rewards. Each missed eligible kill raise
 the chance from 30% by 15 percentage points, guaranteeing the sixth; progress and
 reward ownership persist per character/world. See decision 0074. Art previews:
 `?gallery=ruins` and `?gallery=patrolTrail`.
+
+### Wildlife trails
+
+Follow split elk hoofprints northwest, tiny raccoon pawprints southeast, or heavy
+root furrows southwest. Nearby tracks offer a short hint. Observe the elk quietly
+for a journal sketch, inspect the raccoon hollow for a personal supply cache, and
+help defeat the woodland guardian to earn a branch-crowned home trophy.
+
+Each living nearby guardian helper earns their own reward eligibility. Inspect the
+hollow with E to collect it; a full backpack keeps the reward pending. These rewards
+and journal entries persist per character in the current world. Place the trophy
+from Build inside your private home area. Elk and friendly raccoon encounters are
+separate from the existing hostile masked raccoons.

@@ -1,3 +1,7 @@
+import { createAnimalTracks } from './scene/animal-tracks';
+import { woodlandTrackHint } from '@acorn/shared';
+import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
+import { createGuardianTrophy } from './scene/guardian-trophy';
 import {
   WOODLAND_ENCOUNTERS,
   homeBuildArea,
@@ -372,11 +376,13 @@ function createBuiltMesh(
       return createFence();
     case 'gardenPath':
       return createGardenPath();
+    case 'guardianTrophy':
+      return createGuardianTrophy();
   }
 }
 
 /** The placeholder model for whichever kind of wildlife this happens to be. */
-function createCritterFor(kind: AnimalKindId): Critter | Raccoon | Fox {
+function createCritterFor(kind: AnimalKindId): Critter | Raccoon | Fox | WoodlandCreature {
   switch (kind) {
     case 'rabbit':
       return createCritter();
@@ -384,6 +390,10 @@ function createCritterFor(kind: AnimalKindId): Critter | Raccoon | Fox {
       return createRaccoon();
     case 'fox':
       return createFox();
+    case 'elk':
+    case 'curiousRaccoon':
+    case 'woodlandGuardian':
+      return createWoodlandCreature(kind);
   }
 }
 
@@ -562,7 +572,7 @@ export class Game {
   /** What the server's Equipped list says everybody currently has in hand, including ourselves. */
   private readonly equipped = new Map<number, ItemId | null>();
   private readonly remoteAnimals = new InterpolatedEntities();
-  private readonly critters = new Map<number, Critter | Raccoon | Fox>();
+  private readonly critters = new Map<number, Critter | Raccoon | Fox | WoodlandCreature>();
   private readonly builtMeshes = new Map<
     number,
     Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
@@ -597,6 +607,7 @@ export class Game {
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
+  private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
   private receivedDiscoveryState = false;
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
@@ -1196,6 +1207,7 @@ export class Game {
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
+    this.animalTracks?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -1390,6 +1402,13 @@ export class Game {
         this.discoveriesClaimed = message.claimed;
         if (message.notice === 'guarded')
           this.showJournalNotice('Clear the nearby skeletons before inspecting', performance.now());
+        if (message.notice === 'quiet')
+          this.showJournalNotice(
+            'Give the animal room to settle, then inspect again',
+            performance.now(),
+          );
+        if (message.notice === 'guardian')
+          this.showJournalNotice('Help defeat the guardian to earn your trophy', performance.now());
         if (message.notice === 'full')
           this.showJournalNotice('Make room in your pack, then inspect again', performance.now());
         this.updateDiscoveryMarkers();
@@ -1920,7 +1939,7 @@ export class Game {
       const encounterSites = buildEncounterSites(
         seed,
         terrain,
-        [...clearing.colliders, ...wilderness.colliders],
+        [...clearing.colliders, ...wilderness.siteColliders],
         clearing.water,
       );
       this.discoverySites = buildDiscoverySites(encounterSites);
@@ -1939,6 +1958,13 @@ export class Game {
       this.updateDiscoveryMarkers();
       this.discoveryLandmarks = createDiscoveryLandmarks(this.discoverySites, terrain);
       this.outdoors.add(this.discoveryLandmarks.group);
+      this.animalTracks = createAnimalTracks(seed, terrain, [
+        ...clearing.colliders,
+        ...wilderness.colliders,
+        ...encounterColliders(encounterSites, terrain),
+        ...discoveryColliders(this.discoverySites, terrain),
+      ]);
+      this.outdoors.add(this.animalTracks.group);
       this.encounterLandmarks = createEncounterLandmarks(encounterSites, terrain);
       this.outdoors.add(this.encounterLandmarks.group);
 
@@ -1956,7 +1982,7 @@ export class Game {
 
       this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
       this.outdoors.add(this.wildernessScene.group);
-      this.grass = createGrass(terrain, clearing, wilderness);
+      this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);
       this.outdoors.add(this.grass.mesh);
@@ -2255,7 +2281,7 @@ export class Game {
     this.critters.delete(animalId);
   }
 
-  private critterFor(animalId: number): Critter | Raccoon | Fox {
+  private critterFor(animalId: number): Critter | Raccoon | Fox | WoodlandCreature {
     const existing = this.critters.get(animalId);
     if (existing !== undefined) return existing;
 
@@ -3761,6 +3787,15 @@ export class Game {
       const critter = this.critterFor(animalId);
       critter.group.position.set(pose.x, pose.y, pose.z);
       critter.group.rotation.set(0, pose.yaw, 0, 'YXZ');
+      if ('update' in critter)
+        critter.update(deltaSeconds, {
+          speed: pose.action & 8 ? 0 : pose.speed,
+          alert: (pose.action & 4) !== 0,
+          windup: (pose.action & 3) === 1,
+          attacking: (pose.action & 3) === 2 && pose.actionAge < 5,
+          defeated: (pose.action & 8) !== 0,
+          hurt: this.animalJolts.has(animalId),
+        });
       const jolt = this.animalJolts.get(animalId);
       if (jolt === undefined) continue;
       jolt.age += deltaSeconds;
@@ -3838,6 +3873,19 @@ export class Game {
       discoveriesClaimed: this.discoveriesClaimed,
       discoverySites: this.discoverySites,
       journalTab: this.journalTab,
+      trackHint:
+        this.space === OUTDOORS && player !== null
+          ? (() => {
+              const track = this.animalTracks?.tracks.find(
+                (track) =>
+                  Math.hypot(
+                    player.motion.position.x - track.x,
+                    player.motion.position.z - track.z,
+                  ) < 2.2,
+              );
+              return track === undefined ? null : woodlandTrackHint(track.kind);
+            })()
+          : null,
       nearbyDiscovery:
         this.space === OUTDOORS && this.localPlayer !== null
           ? (this.discoverySites.find(

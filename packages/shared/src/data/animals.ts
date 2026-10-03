@@ -10,7 +10,8 @@
 import { CHOP_REACH, PLAYER_SPRINT_SPEED, PLAYER_WALK_SPEED } from '../constants';
 import type { ItemId } from './items';
 
-export type AnimalKindId = 'rabbit' | 'maskedRaccoon' | 'fox';
+export type AnimalKindId =
+  'rabbit' | 'maskedRaccoon' | 'fox' | 'elk' | 'curiousRaccoon' | 'woodlandGuardian';
 
 /**
  * How a threat fights, once it has closed in. Present only on a kind that
@@ -73,6 +74,46 @@ export interface AnimalKind {
 }
 
 export const ANIMAL_KINDS = {
+  elk: {
+    id: 'elk',
+    displayName: 'Roosevelt elk',
+    wanderSpeed: 0.85,
+    fleeSpeed: 6.2,
+    alertRadius: 4,
+    safeRadius: 8,
+    leashRadius: 7,
+    catchItem: 'meat',
+    triangleBudget: 5000,
+    placeholderColor: 0x9d8162,
+  },
+  curiousRaccoon: {
+    id: 'curiousRaccoon',
+    displayName: 'Curious raccoon',
+    wanderSpeed: 0.65,
+    alertRadius: 4,
+    safeRadius: 6,
+    leashRadius: 4,
+    triangleBudget: 5000,
+    placeholderColor: 0x8d8981,
+  },
+  woodlandGuardian: {
+    id: 'woodlandGuardian',
+    displayName: 'Woodland guardian',
+    wanderSpeed: 0.65,
+    alertRadius: 9,
+    safeRadius: 16,
+    leashRadius: 7,
+    triangleBudget: 5000,
+    placeholderColor: 0x535338,
+    threat: {
+      chaseSpeed: PLAYER_WALK_SPEED * 0.9,
+      attackRadius: CHOP_REACH,
+      windupSeconds: 1.1,
+      attackCooldownSeconds: 2.3,
+      damage: 20,
+      hitsToDefeat: 6,
+    },
+  },
   rabbit: {
     id: 'rabbit',
     displayName: 'Rabbit',

@@ -31,7 +31,17 @@ export function createGrass(
   terrain: Terrain,
   clearing: Clearing,
   wilderness: Wilderness,
+  flattenedSpots: readonly { readonly x: number; readonly z: number }[] = [],
 ): GrassScene {
+  const spoor = new Map<string, (typeof flattenedSpots)[number][]>();
+  for (const spot of flattenedSpots)
+    for (let x = Math.floor((spot.x - 0.5) / 8); x <= Math.floor((spot.x + 0.5) / 8); x++)
+      for (let z = Math.floor((spot.z - 0.5) / 8); z <= Math.floor((spot.z + 0.5) / 8); z++) {
+        const key = `${x},${z}`;
+        const bucket = spoor.get(key);
+        if (bucket === undefined) spoor.set(key, [spot]);
+        else bucket.push(spot);
+      }
   const shader = createGroundShader({
     water: clearing.water,
     props: [...clearing.props, ...wilderness.props],
@@ -167,7 +177,11 @@ export function createGrass(
             )
           )
             continue;
-          matrix.makeScale(width, size, depth);
+          const trampled =
+            spoor
+              .get(`${Math.floor(x / 8)},${Math.floor(z / 8)}`)
+              ?.some((spot) => Math.hypot(x - spot.x, z - spot.z) < 0.5) ?? false;
+          matrix.makeScale(width, trampled ? size * 0.05 : size, depth);
           matrix.setPosition(x, y - 0.012, z);
           mesh.setMatrixAt(count, matrix);
           roots.set([x, y, z], count * 3);

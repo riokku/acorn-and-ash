@@ -167,8 +167,8 @@ describe('personal discoveries and useful rewards', () => {
     });
     for (const bytes of [
       [0x33, 1, 2, 0],
-      [0x33, 16, 0, 0],
-      [0x33, 1, 0, 3],
+      [0x33, 128, 0, 0],
+      [0x33, 1, 0, 5],
       [0x33, 1, 0],
     ])
       expect(decodeServerMessage(new Uint8Array(bytes).buffer)).toBeNull();

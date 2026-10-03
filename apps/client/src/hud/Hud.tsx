@@ -660,6 +660,8 @@ export function hint(state: HudState): string {
   if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
+  if (state.nearbyDiscovery === 'The elk grove')
+    return 'Press E to sketch the elk · give it room to settle';
   if (state.nearbyDiscovery !== null)
     return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
@@ -685,6 +687,8 @@ export function hint(state: HudState): string {
   if (state.aimedAnimal !== null && state.equippedItem !== null) {
     return catchHint(state.aimedAnimal);
   }
+
+  if (state.trackHint !== null) return state.trackHint;
 
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);

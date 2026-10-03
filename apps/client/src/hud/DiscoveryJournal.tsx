@@ -57,9 +57,13 @@ export function DiscoveryJournal({
               <p>{known ? discovery.note : discovery.clue}</p>
               <span className="discovery-status">
                 {claimed
-                  ? discovery.recipe === null
-                    ? 'Supplies collected'
-                    : `Learned: ${ITEM_KINDS[discovery.recipe].displayName}`
+                  ? discovery.kind === 'elkGrove'
+                    ? 'Sketch recorded'
+                    : discovery.kind === 'guardianHollow'
+                      ? 'Trophy collected'
+                      : discovery.recipe === null
+                        ? 'Supplies collected'
+                        : `Learned: ${ITEM_KINDS[discovery.recipe].displayName}`
                   : known
                     ? 'Marked on your map · inspect with E for your reward'
                     : 'A lead to follow'}
@@ -84,7 +88,19 @@ function Sketch({ kind }: { kind: DiscoveryKind }) {
       strokeLinejoin="round"
     >
       <path d="M5 54Q40 49 75 54M11 58L26 57M52 58L69 59" />
-      {kind === 'camp' ? (
+      {kind === 'elkGrove' ? (
+        <>
+          <path d="M25 52L25 41L33 34L49 34L56 41L56 52M33 34L28 21L20 15L17 5M28 21L33 10L30 4M49 34L55 21L65 15L69 5M55 21L49 10L52 4M34 40L47 40L43 47L39 47Z" />
+        </>
+      ) : kind === 'raccoonHollow' ? (
+        <>
+          <path d="M15 30L18 14L30 22L50 22L62 14L66 30L60 48L40 55L20 48Z M23 33L34 37L28 43L20 39ZM57 33L46 37L52 43L60 39ZM35 47H45L40 51Z" />
+        </>
+      ) : kind === 'guardianHollow' ? (
+        <>
+          <path d="M24 48V31L31 24H49L56 31V48L40 55ZM28 31L35 35M52 31L45 35M35 44H45M31 24L24 14L15 11L12 3M49 24L56 14L65 11L69 3M24 14L29 5M56 14L51 5" />
+        </>
+      ) : kind === 'camp' ? (
         <>
           <path d="M16 50L37 16L61 50Z M37 16L43 50M23 48L31 32L37 48M57 33L64 24L71 33" />
           <path d="M52 49L68 45M56 42L65 51" />

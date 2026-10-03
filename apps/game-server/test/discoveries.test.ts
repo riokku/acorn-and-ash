@@ -62,3 +62,45 @@ it('saves personal discovery rewards, recipe knowledge and inventory together an
   });
   returning.close();
 }, 30_000);
+
+it('persists the elk sketch without an inventory payout and restores it after world sleep', async () => {
+  const worldId = `elk-sketch-${Date.now()}`;
+  const observer = await TestClient.connect(worldId, 'elk-observer');
+  await waitFor('observer connected', () => observer.snapshots().length > 0);
+  const stub = env.WORLD.get(env.WORLD.idFromName(worldId));
+  await runInDurableObject(stub, (instance) => {
+    const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
+    const site = sim.discoverySites.find((site) => site.id === 4)!;
+    sim.placePlayer(
+      observer.welcome().netId,
+      { x: site.x, y: sim.collision.terrain.heightAt(site.x, site.z), z: site.z },
+      0,
+    );
+    sim.placeAnimal(1008, { x: site.x + 8.5, y: 0, z: site.z });
+  });
+  observer.walk(0, 0, 0, 2, PlayerButton.Interact);
+  await waitFor('sketch recorded', () =>
+    observer.received.some(
+      (message) => message.type === 'discoveries' && (message.claimed & 16) !== 0,
+    ),
+  );
+  await runInDurableObject(stub, (_instance, state) => {
+    expect(
+      state.storage.sql
+        .exec<{ found: number; claimed: number }>(
+          'SELECT found, claimed FROM player_discoveries WHERE player_key=?',
+          'elk-observer',
+        )
+        .one(),
+    ).toMatchObject({ found: 16, claimed: 16 });
+  });
+  observer.close();
+  await sleep(300);
+  const returning = await TestClient.connect(worldId, 'elk-observer');
+  await waitFor('saved sketch', () =>
+    returning.received.some(
+      (message) => message.type === 'discoveries' && (message.claimed & 16) !== 0,
+    ),
+  );
+  returning.close();
+}, 30_000);
