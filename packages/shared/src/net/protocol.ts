@@ -910,7 +910,15 @@ function decodeRaiders(view: DataView): RaiderView[] | null {
 }
 
 /** What a raid just did, as one byte. Only ever add to the end. */
-const RAID_NEWS_KINDS: readonly RaidNewsKind[] = ['incoming', 'foughtOff', 'gaveUp'];
+const RAID_NEWS_KINDS: readonly RaidNewsKind[] = [
+  'incoming',
+  'foughtOff',
+  'gaveUp',
+  'wanderer',
+  'ruins',
+  'patrol',
+  'encounterCleared',
+];
 /** type(1) + kind(1) + raidId(2) + targetNetId(2) + count(1) + x(2) + z(2) */
 const RAID_NEWS_MESSAGE_BYTES = 11;
 

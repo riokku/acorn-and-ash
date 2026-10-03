@@ -29,6 +29,8 @@ export interface DroppedPile {
   readonly z: number;
   /** When it becomes available, in real milliseconds. Future times keep felled logs hidden until landing. */
   droppedAtMs: number;
+  /** Protected encounter rewards; omitted for ordinary, shareable drops. */
+  readonly ownerKey?: string;
 }
 
 /** What a browser is told about a pile: what, how many and where. */

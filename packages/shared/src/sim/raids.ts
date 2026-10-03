@@ -46,6 +46,7 @@ import {
 import { Facing, Grounded, NetworkId, Position, RaiderTag, Velocity } from '../ecs/traits';
 import { TAU, angleDelta, rotateToward } from '../math/angles';
 import type { Vec3 } from '../math/vec3';
+import { ENCOUNTER_RULES, ENCOUNTER_LINEUPS, type EncounterSite } from '../world/encounters';
 import { createRng, hashSeed, type Rng } from '../rng';
 import { overlapsWater, type WaterCircle } from '../world/water';
 import {
@@ -78,7 +79,8 @@ export const RAIDER_ID_FIRST = 20000;
 export const RAIDER_ID_LAST = 60000;
 
 /** What a raid just did, for everybody to hear about (see `RaidDirector.drainNews`). */
-export type RaidNewsKind = 'incoming' | 'foughtOff' | 'gaveUp';
+export type RaidNewsKind =
+  'incoming' | 'foughtOff' | 'gaveUp' | 'wanderer' | 'ruins' | 'patrol' | 'encounterCleared';
 
 export interface RaidNews {
   readonly kind: RaidNewsKind;
@@ -149,6 +151,7 @@ export interface RaidOptions {
    * for previews, so one can be waited for rather than waited out.
    */
   readonly intervalMinSeconds?: number;
+  readonly encounterSites?: readonly EncounterSite[];
 }
 
 /**
@@ -212,6 +215,7 @@ interface RaiderRuntime {
   aimYaw: number;
   /** Blows taken, weighted (see `RAIDER_BLOW_WEIGHT`). */
   damageTaken: number;
+  readonly contributors: Set<number>;
   mode: RaiderMode;
   /** Ticks since `mode` last changed. */
   modeTicks: number;
@@ -255,10 +259,11 @@ interface RaiderRuntime {
 
 interface Raid {
   readonly id: number;
-  readonly targetNetId: number;
+  targetNetId: number;
+  readonly encounter?: EncounterSite;
   readonly raiderIds: number[];
   readonly size: number;
-  readonly startedAtTick: number;
+  startedAtTick: number;
   beaten: number;
   /** Ticks the player it came for has been indoors. */
   waitingTicks: number;
@@ -314,6 +319,8 @@ export class RaidDirector {
   private draws = 0;
   private listChanged = false;
   private tick = 0;
+  private readonly encounterRestUntil = new Map<number, number>();
+  private readonly encounterSites: readonly EncounterSite[];
 
   constructor(
     private readonly world: World,
@@ -322,6 +329,18 @@ export class RaidDirector {
     options: RaidOptions = {},
   ) {
     this.intervalMinSeconds = options.intervalMinSeconds ?? RAID.intervalSeconds.min;
+    this.encounterSites = options.encounterSites ?? [];
+  }
+
+  encounterRestState(): [number, number][] {
+    return [...this.encounterRestUntil];
+  }
+
+  restoreEncounterRest(saved: readonly [number, number][]): void {
+    for (const [id, tick] of saved) {
+      if (Number.isInteger(id) && Number.isFinite(tick) && tick >= 0)
+        this.encounterRestUntil.set(id, tick);
+    }
   }
 
   /** How many raiders are out in the world right now. */
@@ -335,6 +354,7 @@ export class RaidDirector {
     this.fighterById.clear();
     for (const fighter of this.host.fighters()) this.fighterById.set(fighter.netId, fighter);
 
+    this.wakeEncounters(night);
     this.countDown(night);
     for (const raid of this.raids.values()) this.updateRaid(raid);
     for (const raider of [...this.raiders.values()]) this.stepRaider(raider);
@@ -347,17 +367,26 @@ export class RaidDirector {
    * null if there was nowhere for it to turn up. Used by tests, and by
    * `step` once a countdown runs out.
    */
-  startRaid(targetNetId: number, kinds?: readonly RaiderKindId[], night = false): number | null {
-    const target = this.fighterById.get(targetNetId) ?? this.findFighter(targetNetId);
+  startRaid(
+    targetNetId: number,
+    kinds?: readonly RaiderKindId[],
+    night = false,
+    encounter?: EncounterSite,
+  ): number | null {
+    const target =
+      encounter === undefined
+        ? (this.fighterById.get(targetNetId) ?? this.findFighter(targetNetId))
+        : { outdoors: true, position: { x: encounter.x, y: 0, z: encounter.z } };
     if (target === undefined || !target.outdoors) return null;
     const rng = this.nextRng('raid');
     const lineup = kinds ?? drawLineup(rng, drawGroupSize(rng, night));
-    const centre = this.spawnCentre(target.position, rng);
+    const centre = encounter ?? this.spawnCentre(target.position, rng);
     if (centre === null) return null;
 
     const raid: Raid = {
       id: this.nextRaidId++,
       targetNetId,
+      ...(encounter === undefined ? {} : { encounter }),
       raiderIds: [],
       size: lineup.length,
       startedAtTick: this.tick,
@@ -369,8 +398,10 @@ export class RaidDirector {
       lastSeenZ: target.position.z,
     };
     // Stood in a shallow arc, side by side, facing the player.
-    const towardX = target.position.x - centre.x;
-    const towardZ = target.position.z - centre.z;
+    const towardX =
+      encounter === undefined ? target.position.x - centre.x : Math.sin(encounter.yaw);
+    const towardZ =
+      encounter === undefined ? target.position.z - centre.z : Math.cos(encounter.yaw);
     const length = Math.hypot(towardX, towardZ) || 1;
     const sideX = -towardZ / length;
     const sideZ = towardX / length;
@@ -388,6 +419,7 @@ export class RaidDirector {
       raid.raiderIds.push(raider.id);
     }
     this.raids.set(raid.id, raid);
+    if (encounter !== undefined) return raid.id;
     this.countdowns.delete(targetNetId);
     this.news.push({
       kind: 'incoming',
@@ -445,6 +477,10 @@ export class RaidDirector {
           ? RAIDER_BLOW_WEIGHT.finisher
           : RAIDER_BLOW_WEIGHT.swing;
     raider.damageTaken += weight;
+    raider.contributors.add(attackerNetId);
+    const encounterRaid = this.raids.get(raider.raidId);
+    if (encounterRaid?.encounter !== undefined && encounterRaid.targetNetId === 0)
+      this.engageEncounter(encounterRaid, attackerNetId);
     const hitsLeft = Math.max(0, kind.toughness - raider.damageTaken);
     const heavy = weight > RAIDER_BLOW_WEIGHT.swing;
 
@@ -475,12 +511,17 @@ export class RaidDirector {
     }
 
     if (hitsLeft === 0) {
-      this.host.defeated?.(
-        attackerNetId,
-        raider.id,
-        raider.motion.position,
-        raider.motion.facingYaw,
-      );
+      for (const netId of raider.contributors) {
+        const fighter = this.fighterById.get(netId) ?? this.findFighter(netId);
+        if (
+          fighter === undefined ||
+          !isFightable(fighter) ||
+          distanceTo(fighter.position, raider.motion.position) >
+            ENCOUNTER_RULES.nearbyContributorRadius
+        )
+          continue;
+        this.host.defeated?.(netId, raider.id, raider.motion.position, raider.motion.facingYaw);
+      }
       this.defeat(raider);
     } else if (raider.mode === 'leave') {
       // Already giving up: staggered, but it keeps on going.
@@ -702,6 +743,7 @@ export class RaidDirector {
       previousButtons: 0,
       aimYaw: facingYaw,
       damageTaken: 0,
+      contributors: new Set(),
       mode: 'march',
       modeTicks: 0,
       targetNetId: null,
@@ -751,8 +793,138 @@ export class RaidDirector {
   // ---------------------------------------------------------------------------
   // How a raid goes.
 
+  private wakeEncounters(night: boolean): void {
+    if (this.tick % TICK_HZ !== 0) return;
+    let active = [...this.raids.values()].filter((raid) => raid.encounter !== undefined).length;
+    for (const site of this.encounterSites) {
+      const existing = [...this.raids.values()].find((raid) => raid.encounter?.id === site.id);
+      if (existing !== undefined) {
+        if (
+          existing.targetNetId === 0 &&
+          ((site.kind === 'patrol' && !night) ||
+            ![...this.fighterById.values()].some(
+              (f) => f.outdoors && Math.hypot(f.position.x - site.x, f.position.z - site.z) < 95,
+            ))
+        )
+          this.giveUp(existing);
+        continue;
+      }
+      if (active >= ENCOUNTER_RULES.maxActive) continue;
+      // Keep one exploration slot available for a night patrol.
+      if (
+        site.kind !== 'patrol' &&
+        [...this.raids.values()].filter(
+          (raid) => raid.encounter !== undefined && raid.encounter.kind !== 'patrol',
+        ).length >= 2
+      )
+        continue;
+      if (
+        (site.kind === 'patrol' && !night) ||
+        this.tick < (this.encounterRestUntil.get(site.id) ?? 0)
+      )
+        continue;
+      const nearby = [...this.fighterById.values()].some(
+        (f) =>
+          isFightable(f) &&
+          Math.hypot(f.position.x - site.x, f.position.z - site.z) < ENCOUNTER_RULES.wakeRadius,
+      );
+      if (!nearby) continue;
+      // A new camp must never appear on somebody standing in it, nor in a built home.
+      if (
+        [...this.fighterById.values()].some(
+          (f) => f.outdoors && Math.hypot(f.position.x - site.x, f.position.z - site.z) < 14,
+        )
+      )
+        continue;
+      const here = {
+        x: site.x,
+        y: this.host.collision.terrain.heightAt(site.x, site.z),
+        z: site.z,
+      };
+      const blocked =
+        resolveCapsule(here, PLAYER_RADIUS, PLAYER_HEIGHT, this.host.collision) ||
+        this.host.collision.colliders.some(
+          (c) =>
+            c.shape === 'box' &&
+            Math.hypot(c.x - site.x, c.z - site.z) < Math.hypot(c.halfX, c.halfZ) + 2,
+        );
+      if (blocked) continue;
+      if (this.startRaid(0, ENCOUNTER_LINEUPS[site.kind], night, site) !== null) active++;
+    }
+  }
+
+  private engageEncounter(raid: Raid, netId: number): void {
+    raid.targetNetId = netId;
+    raid.startedAtTick = this.tick;
+    const site = raid.encounter;
+    if (site === undefined) return;
+    this.news.push({
+      kind: site.kind,
+      raidId: raid.id,
+      targetNetId: netId,
+      count: raid.raiderIds.length,
+      x: site.x,
+      z: site.z,
+    });
+  }
+
+  private walkEncounter(raider: RaiderRuntime, site: EncounterSite): PlayerInput {
+    const phase = this.tick / TICK_HZ;
+    const index = Math.floor(phase / (site.kind === 'patrol' ? 9 : 14));
+    const angle = site.yaw + (index * Math.PI) / 2 + (raider.id % 3) * 0.3;
+    const radius = site.kind === 'ruins' ? 0.9 : site.kind === 'wanderer' ? 2.5 : 5;
+    const spot = {
+      x: site.x + Math.cos(angle) * radius,
+      y: 0,
+      z: site.z + Math.sin(angle) * radius,
+    };
+    if (distanceTo(raider.motion.position, spot) < 0.6) return this.standStill(raider);
+    if (overlapsWater(this.host.water, spot.x, spot.z, PLAYER_RADIUS))
+      return this.standStill(raider);
+    return this.goToward(raider, spot, site.kind === 'patrol' ? 2 : 1.1);
+  }
+
   private updateRaid(raid: Raid): void {
     if (raid.leaving) return;
+    if (raid.encounter !== undefined) {
+      if (raid.targetNetId === 0) {
+        for (const fighter of this.fighterById.values()) {
+          if (!isFightable(fighter)) continue;
+          const close = raid.raiderIds.some((id) => {
+            const at = this.raiders.get(id)?.motion.position;
+            return (
+              at !== undefined && distanceTo(at, fighter.position) < ENCOUNTER_RULES.noticeRadius
+            );
+          });
+          if (close) {
+            this.engageEncounter(raid, fighter.netId);
+            break;
+          }
+        }
+        return;
+      }
+      const fighter = this.fighterById.get(raid.targetNetId);
+      const site = raid.encounter;
+      if (
+        fighter === undefined ||
+        !isFightable(fighter) ||
+        Math.hypot(fighter.position.x - site.x, fighter.position.z - site.z) >
+          ENCOUNTER_RULES.leashRadius
+      ) {
+        raid.targetNetId = 0;
+        for (const id of raid.raiderIds) {
+          const raider = this.raiders.get(id);
+          if (raider === undefined || raider.mode === 'down') continue;
+          this.releaseTurn(raider);
+          raider.targetNetId = null;
+          this.setMode(raider, 'wait');
+        }
+        return;
+      }
+      raid.lastSeenX = fighter.position.x;
+      raid.lastSeenZ = fighter.position.z;
+      return;
+    }
     const target = this.fighterById.get(raid.targetNetId);
     const ageSeconds = (this.tick - raid.startedAtTick) * TICK_SECONDS;
     if (target === undefined || ageSeconds > RAID.maxSeconds) {
@@ -788,6 +960,7 @@ export class RaidDirector {
   }
 
   private giveUp(raid: Raid): void {
+    if (raid.leaving) return;
     raid.leaving = true;
     for (const id of raid.raiderIds) {
       const raider = this.raiders.get(id);
@@ -799,9 +972,19 @@ export class RaidDirector {
 
   private endRaid(raid: Raid, x: number, z: number): void {
     this.raids.delete(raid.id);
+    if (raid.encounter !== undefined)
+      this.encounterRestUntil.set(
+        raid.encounter.id,
+        this.tick + ENCOUNTER_RULES.restSeconds * TICK_HZ,
+      );
     const foughtOff = raid.beaten === raid.size;
+    if (raid.encounter !== undefined && raid.targetNetId === 0 && !foughtOff) return;
     this.news.push({
-      kind: foughtOff ? 'foughtOff' : 'gaveUp',
+      kind: foughtOff
+        ? raid.encounter === undefined
+          ? 'foughtOff'
+          : 'encounterCleared'
+        : 'gaveUp',
       raidId: raid.id,
       targetNetId: raid.targetNetId,
       count: raid.beaten,
@@ -837,6 +1020,10 @@ export class RaidDirector {
       return;
     }
 
+    if (raid?.encounter !== undefined && raid.targetNetId === 0) {
+      this.move(raider, this.walkEncounter(raider, raid.encounter));
+      return;
+    }
     const target = this.chooseTarget(raider, raid);
     if (target === null) {
       raider.targetNetId = null;
@@ -865,6 +1052,12 @@ export class RaidDirector {
     let nearestDistance = Infinity;
     for (const fighter of this.fighterById.values()) {
       if (!isFightable(fighter)) continue;
+      if (
+        raid?.encounter !== undefined &&
+        Math.hypot(fighter.position.x - raid.encounter.x, fighter.position.z - raid.encounter.z) >
+          ENCOUNTER_RULES.leashRadius
+      )
+        continue;
       const distance = distanceTo(here, fighter.position);
       if (distance < nearestDistance) {
         nearest = fighter;

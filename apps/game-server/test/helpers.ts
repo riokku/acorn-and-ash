@@ -13,6 +13,8 @@ import {
   encodePing,
   encodeSetDoorLock,
   encodeUseItem,
+  encodeLoot,
+  type LootRequest,
   createInput,
   type AnimalCaught,
   type BuildableKindId,
@@ -84,6 +86,10 @@ export class TestClient {
     const socket = response.webSocket;
     if (socket === null) throw new Error(`No WebSocket in the response (${response.status})`);
     return new TestClient(socket);
+  }
+
+  loot(request: LootRequest): void {
+    this.socket.send(encodeLoot(request));
   }
 
   chest(request: ChestRequest): void {

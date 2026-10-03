@@ -1,3 +1,5 @@
+import { createFlatTerrain } from '@acorn/shared';
+import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -65,6 +67,25 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
+  {
+    name: 'ruins',
+    x: 15,
+    z: 10,
+    view: 9,
+    create: () =>
+      createEncounterLandmarks([{ id: 1, kind: 'ruins', x: 0, z: 0, yaw: 0 }], createFlatTerrain()),
+  },
+  {
+    name: 'patrolTrail',
+    x: 15,
+    z: 17,
+    view: 7,
+    create: () =>
+      createEncounterLandmarks(
+        [{ id: 1, kind: 'patrol', x: -2.8, z: -2.7, yaw: 0 }],
+        createFlatTerrain(),
+      ),
+  },
   { name: 'tent', x: -15, z: 7, view: 7, create: () => createShelter('tent') },
   { name: 'teepee', x: -8, z: 9, view: 8, create: () => createShelter('teepee') },
   { name: 'largeCabin', x: 2, z: 10, view: 12, create: createLargeCabin },

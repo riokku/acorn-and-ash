@@ -1,3 +1,5 @@
+import { buildEncounterSites, encounterColliders } from '@acorn/shared';
+import { createEncounterLandmarks } from './scene/encounter-sites';
 import {
   knowsHome,
   blueprintHome,
@@ -642,6 +644,7 @@ export class Game {
 
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
+  private encounterLandmarks: ReturnType<typeof createEncounterLandmarks> | null = null;
   private clearing: Clearing | null = null;
   /** What the server says is gone, and what it says we carry. Never guessed. */
   private readonly takenPickups = new Set<number>();
@@ -1161,6 +1164,7 @@ export class Game {
     this.forestAudio.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
+    this.encounterLandmarks?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -1648,8 +1652,8 @@ export class Game {
     const now = performance.now();
     this.raidBanner = { banner, until: now + RAID_BANNER_MS };
     if (news.kind === 'incoming') playRaidHorn(ours ? 1 : 0.6);
-    else if (news.kind === 'foughtOff') playVictory();
-    else playRaidOver();
+    else if (news.kind === 'foughtOff' || news.kind === 'encounterCleared') playVictory();
+    else if (news.kind === 'gaveUp') playRaidOver();
     // Same reasoning as `hearFromTheWater`: straight to the HUD.
     this.options.hud.publish({ raidBanner: banner });
   }
@@ -1849,6 +1853,14 @@ export class Game {
       const terrain = createWildernessTerrain(seed);
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
+      const encounterSites = buildEncounterSites(
+        seed,
+        terrain,
+        [...clearing.colliders, ...wilderness.colliders],
+        clearing.water,
+      );
+      this.encounterLandmarks = createEncounterLandmarks(encounterSites, terrain);
+      this.outdoors.add(this.encounterLandmarks.group);
 
       this.clearing = clearing;
       this.clearingScene = buildClearingScene(clearing);
@@ -1874,6 +1886,7 @@ export class Game {
       const collision = createCollisionWorld(terrain, [
         ...clearing.colliders,
         ...wilderness.colliders,
+        ...encounterColliders(encounterSites, terrain),
       ]);
       this.collision = collision;
       this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);

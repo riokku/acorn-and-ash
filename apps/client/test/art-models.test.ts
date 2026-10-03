@@ -1,4 +1,11 @@
-import { ANIMAL_KINDS, BUILDABLE_KINDS, PROP_KINDS, SPAWN_POSITION } from '@acorn/shared';
+import { createEncounterLandmarks } from '../src/scene/encounter-sites';
+import {
+  ANIMAL_KINDS,
+  BUILDABLE_KINDS,
+  PROP_KINDS,
+  SPAWN_POSITION,
+  createFlatTerrain,
+} from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 
@@ -38,6 +45,12 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    ...(['ruins', 'patrol', 'wanderer'] as const).map((kind) => ({
+      name: `${kind} landmark`,
+      budget: PROP_BUDGET,
+      make: () =>
+        createEncounterLandmarks([{ id: 1, kind, x: 0, z: 0, yaw: 0 }], createFlatTerrain()),
+    })),
     {
       name: 'tent',
       make: () => createShelter('tent'),

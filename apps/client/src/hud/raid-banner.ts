@@ -34,6 +34,30 @@ export function raidBannerFor(
         detail: `${how}${where}`,
       };
     }
+    case 'wanderer':
+    case 'ruins':
+    case 'patrol':
+      return {
+        key,
+        tone: 'danger',
+        title:
+          news.kind === 'wanderer'
+            ? 'A skeleton spotted you'
+            : news.kind === 'ruins'
+              ? 'The ruins are guarded'
+              : 'Night patrol!',
+        detail:
+          news.kind === 'wanderer'
+            ? 'Fight or retreat toward home'
+            : `${countWord(news.count)} skeletons · retreat to leave them behind`,
+      };
+    case 'encounterCleared':
+      return {
+        key,
+        tone: 'victory',
+        title: 'The glade is quiet again',
+        detail: 'Collect your finds and head home',
+      };
     case 'foughtOff':
       return {
         key,

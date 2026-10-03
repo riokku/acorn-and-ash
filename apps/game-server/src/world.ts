@@ -206,7 +206,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
     // Where every stick and flower patch is now, and what anybody dropped.
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
-    server.send(encodeDroppedPiles(simulation.droppedPilesList()));
+    server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
@@ -587,8 +587,18 @@ export class World extends DurableObject<WorldEnv> {
    * worth knowing about too. None of it is saved - a raid only lasts while
    * somebody is here to fight it.
    */
+  private savedEncounterRest = '[]';
+
   private announceRaids(simulation: WorldSimulation): void {
     if (simulation.drainRaidersChanged()) {
+      const rest = JSON.stringify(simulation.encounterRestState());
+      if (rest !== this.savedEncounterRest) {
+        this.ctx.storage.transactionSync(() => {
+          this.writeMeta('encounterRest', rest);
+          this.writeMeta('tick', String(simulation.tick));
+        });
+        this.savedEncounterRest = rest;
+      }
       this.broadcast(encodeRaiders(simulation.raidersList()));
     }
     for (const hit of simulation.drainRaiderHits()) this.broadcast(encodeRaiderHit(hit));
@@ -858,14 +868,30 @@ export class World extends DurableObject<WorldEnv> {
   private announcePiles(simulation: WorldSimulation, nowMs: number): void {
     simulation.fadeDroppedPiles(nowMs);
     const changed = simulation.drainPileChanges();
+    const progress = new Set(simulation.drainBlueprintProgressChanges());
+    if (changed.length === 0 && progress.size === 0) return;
+    // A generated reward and the reset/missed roll save together before sending.
+    this.ctx.storage.transactionSync(() => {
+      for (const id of changed) {
+        const pile = simulation.persistedPile(id);
+        if (pile === null) this.deletePile(id);
+        else this.writePile(pile);
+      }
+      for (const ws of this.ctx.getWebSockets()) {
+        const attachment = this.attachmentFor(ws);
+        if (attachment?.playerKey != null && progress.has(attachment.netId))
+          this.writeBlueprintProgress(
+            attachment.playerKey,
+            simulation.blueprintMissesOf(attachment.netId),
+          );
+      }
+    });
     if (changed.length === 0) return;
-
-    for (const id of changed) {
-      const pile = simulation.persistedPile(id);
-      if (pile === null) this.deletePile(id);
-      else this.writePile(pile);
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment !== null)
+        this.trySend(ws, encodeDroppedPiles(simulation.droppedPilesList(attachment.netId)));
     }
-    this.broadcast(encodeDroppedPiles(simulation.droppedPilesList()));
   }
 
   /**
@@ -1099,6 +1125,7 @@ export class World extends DurableObject<WorldEnv> {
       patchRegrowMinSeconds: this.patchRegrowMinSeconds(),
       hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
       raidIntervalSeconds: this.raidIntervalSeconds(),
+      forestEncounters: (this.raidIntervalSeconds() ?? 240) < 86400,
     });
     this.simulation = simulation;
     simulation.restoreTakenPickups(this.loadTakenPickups());
@@ -1115,6 +1142,25 @@ export class World extends DurableObject<WorldEnv> {
     }
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
     simulation.restorePatches(this.loadPatches());
+    const encounterRest = this.readMeta('encounterRest');
+    this.savedEncounterRest = encounterRest ?? '[]';
+    if (encounterRest !== null) {
+      try {
+        const parsed: unknown = JSON.parse(encounterRest);
+        if (
+          Array.isArray(parsed) &&
+          parsed.every(
+            (row) =>
+              Array.isArray(row) &&
+              row.length === 2 &&
+              row.every((value) => typeof value === 'number'),
+          )
+        )
+          simulation.restoreEncounterRest(parsed as [number, number][]);
+      } catch {
+        /* An older or damaged metadata row must not prevent joining. */
+      }
+    }
     simulation.restoreDroppedPiles(this.loadPiles(), Date.now());
 
     let highestNetId = 0;
@@ -1357,6 +1403,9 @@ export class World extends DurableObject<WorldEnv> {
       generation INTEGER NOT NULL,
       emptied_at_ms INTEGER NOT NULL
     )`);
+    sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_blueprint_progress (player_key TEXT PRIMARY KEY, misses INTEGER NOT NULL)',
+    );
     // Whatever anybody dropped, until it is picked up or fades.
     sql.exec(`CREATE TABLE IF NOT EXISTS dropped_piles (
       id INTEGER PRIMARY KEY,
@@ -1366,6 +1415,7 @@ export class World extends DurableObject<WorldEnv> {
       z REAL NOT NULL,
       dropped_at_ms INTEGER NOT NULL
     )`);
+    this.addColumn('dropped_piles', 'owner_key', 'TEXT');
   }
 
   /** Add a column to an existing table, unless it is already there. */
@@ -1434,6 +1484,13 @@ export class World extends DurableObject<WorldEnv> {
             playerKey,
           )
           .toArray()[0]?.skills ?? 0,
+      blueprintMisses:
+        this.ctx.storage.sql
+          .exec<{ misses: number }>(
+            'SELECT misses FROM player_blueprint_progress WHERE player_key = ?',
+            playerKey,
+          )
+          .toArray()[0]?.misses ?? 0,
       hunger: row.hunger,
       health: row.health,
       equippedItem:
@@ -1703,7 +1760,8 @@ export class World extends DurableObject<WorldEnv> {
         x: number;
         z: number;
         dropped_at_ms: number;
-      }>('SELECT id, item_index, count, x, z, dropped_at_ms FROM dropped_piles')
+        owner_key: string | null;
+      }>('SELECT id, item_index, count, x, z, dropped_at_ms, owner_key FROM dropped_piles')
       .toArray();
     const piles: PersistedPile[] = [];
     for (const row of rows) {
@@ -1717,6 +1775,7 @@ export class World extends DurableObject<WorldEnv> {
         x: row.x,
         z: row.z,
         droppedAtMs: row.dropped_at_ms,
+        ...(row.owner_key === null ? {} : { ownerKey: row.owner_key }),
       });
     }
     return piles;
@@ -1724,17 +1783,18 @@ export class World extends DurableObject<WorldEnv> {
 
   private writePile(pile: PersistedPile): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO dropped_piles (id, item_index, count, x, z, dropped_at_ms) ' +
-        'VALUES (?, ?, ?, ?, ?, ?) ' +
+      'INSERT INTO dropped_piles (id, item_index, count, x, z, dropped_at_ms, owner_key) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET item_index = excluded.item_index, ' +
         'count = excluded.count, x = excluded.x, z = excluded.z, ' +
-        'dropped_at_ms = excluded.dropped_at_ms',
+        'dropped_at_ms = excluded.dropped_at_ms, owner_key = excluded.owner_key',
       pile.id,
       itemIndex(pile.item),
       pile.count,
       pile.x,
       pile.z,
       pile.droppedAtMs,
+      pile.ownerKey ?? null,
     );
   }
 
@@ -1773,8 +1833,20 @@ export class World extends DurableObject<WorldEnv> {
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
     this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
+    this.writeBlueprintProgress(
+      attachment.playerKey,
+      simulation.blueprintMissesOf(attachment.netId),
+    );
     const explored = simulation.exploredMapOf(attachment.netId);
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
+  }
+
+  private writeBlueprintProgress(playerKey: string, misses: number): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_blueprint_progress (player_key, misses) VALUES (?, ?) ON CONFLICT(player_key) DO UPDATE SET misses = excluded.misses',
+      playerKey,
+      misses,
+    );
   }
 
   private writeHomeSkills(playerKey: string, skills: number): void {
@@ -1894,6 +1966,7 @@ export class World extends DurableObject<WorldEnv> {
   /** Write everything worth keeping: the tick count and where everyone is. */
   private save(simulation: WorldSimulation): void {
     this.writeMeta('tick', String(simulation.tick));
+    this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
     for (const tree of simulation.persistableTrees()) this.writeTree(tree);
 
     const byNetId = new Map<number, ConnectionAttachment>();
@@ -1919,6 +1992,7 @@ export class World extends DurableObject<WorldEnv> {
       );
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
+      this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
       if (player.explored != null) this.writePlayerExplored(attachment.playerKey, player.explored);
     }
   }
@@ -1968,6 +2042,7 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec('DELETE FROM player_items');
     sql.exec('DELETE FROM players');
     sql.exec('DELETE FROM player_home_skills');
+    sql.exec('DELETE FROM player_blueprint_progress');
     sql.exec('DELETE FROM pickups_taken');
     return { ok: true, clearedPlayers };
   }
