@@ -26,4 +26,6 @@ benefits and home cooking stations follow in their authorized roadmap stages.
 Discovery knowledge survives reconnects and world sleep independently for each
 character. Existing item and recipe wire indices remain stable. New SQLite state
 is additive; existing homes, scenery, chests and learned housing tiers survive.
+Food patches reserve IDs 200–207 within the existing one-byte patch protocol;
+round-trip and actual right-click pickup tests guard that compatibility.
 Landmarks and foods use original painted low-poly geometry within prop budgets.
