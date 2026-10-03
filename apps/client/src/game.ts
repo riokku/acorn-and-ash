@@ -110,6 +110,9 @@ import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { GatheringFocus } from './scene/gathering-focus';
+import { ForestAtmosphere } from './audio/forest-atmosphere';
+import { ForestAudio } from './audio/forest-sounds';
+import { createForestEnvironment, type ForestEnvironment } from './audio/forest-environment';
 import { TreeLandingEffects } from './scene/tree-landing';
 import { PickupNoticeShelf } from './hud/pickup-notice';
 import { playPickupRefused, playTreeLanding, playCollection } from './audio/feedback';
@@ -617,6 +620,10 @@ export class Game {
   private gatherPatches: readonly GatherPatchView[] = [];
   private droppedPiles: readonly DroppedPileView[] = [];
   private groundItems: GroundItems | null = null;
+  private readonly forestAudio = new ForestAudio();
+  private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
+  private forestEnvironment: ForestEnvironment | null = null;
+  private wildernessProps: readonly PlacedProp[] = [];
   private readonly gatheringFocus = new GatheringFocus();
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
@@ -752,6 +759,7 @@ export class Game {
       playerName: this.options.identity.name,
     });
     window.addEventListener('resize', this.handleResize);
+    document.addEventListener('visibilitychange', this.handleForestVisibility);
 
     this.offlineFallbackAt = performance.now() + OFFLINE_FALLBACK_MS;
     this.connect();
@@ -789,6 +797,7 @@ export class Game {
 
   private setPlaying(playing: boolean): void {
     this.playing = playing;
+    this.forestAudio.update(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
       this.controls?.releaseAll();
@@ -1011,11 +1020,13 @@ export class Game {
 
   stop(): void {
     window.removeEventListener('resize', this.handleResize);
+    document.removeEventListener('visibilitychange', this.handleForestVisibility);
     this.setup?.renderer.setAnimationLoop(null);
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
     this.gatheringFocus.dispose();
+    this.forestAudio.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.floats.dispose();
@@ -1611,6 +1622,7 @@ export class Game {
     const clearing = buildTestClearing(seed);
     const terrain = createWildernessTerrain(seed);
     const wilderness = buildWilderness(seed, terrain);
+    this.wildernessProps = wilderness.props;
 
     this.clearing = clearing;
     this.clearingScene = buildClearingScene(clearing);
@@ -1693,6 +1705,12 @@ export class Game {
       );
     }
     this.standingProps = standing;
+    this.forestEnvironment = createForestEnvironment(
+      [...clearing.props, ...this.wildernessProps],
+      clearing.water,
+      collision.terrain,
+      [...standing.filter((prop) => !this.isFelled(prop.id)), ...this.wildernessProps],
+    );
   }
 
   private isFelled(treeId: number): boolean {
@@ -1890,6 +1908,10 @@ export class Game {
   /* The frame                                                               */
   /* ---------------------------------------------------------------------- */
 
+  private readonly handleForestVisibility = (): void => {
+    this.forestAudio.update(this.playing && !document.hidden);
+  };
+
   private readonly frame = (): void => {
     const setup = this.setup;
     const camera = this.camera;
@@ -1953,6 +1975,23 @@ export class Game {
     }
 
     this.updateLocalPlayer(deltaSeconds, camera);
+    const forestActive = this.playing && !document.hidden;
+    this.forestAudio.update(forestActive);
+    if (this.localPlayer !== null) {
+      this.forestAtmosphere.update(
+        deltaSeconds,
+        {
+          x: this.localPlayer.motion.position.x,
+          z: this.localPlayer.motion.position.z,
+          grounded: this.localPlayer.motion.grounded,
+          indoors: this.space !== OUTDOORS,
+          active: forestActive,
+          night: isNight(dayProgress(this.estimatedServerTimeMs())),
+          cameraYaw: camera.look.yaw,
+        },
+        this.forestEnvironment,
+      );
+    }
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
