@@ -24,7 +24,12 @@ export type ItemId =
   | 'roastedMeat'
   | 'teepeeBlueprint'
   | 'cabinBlueprint'
-  | 'largeCabinBlueprint';
+  | 'largeCabinBlueprint'
+  | 'berry'
+  | 'mushroom'
+  | 'trailRation'
+  | 'forestStew'
+  | 'berryTea';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -306,6 +311,66 @@ export const ITEM_KINDS = {
     keepOnKnockout: true,
     equippable: false,
   },
+  berry: {
+    id: 'berry',
+    displayName: 'Forest berries',
+    pluralName: 'Forest berries',
+    stackSize: 8,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 9261925,
+    restoresHunger: 8,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  mushroom: {
+    id: 'mushroom',
+    displayName: 'Forest mushroom',
+    pluralName: 'Forest mushrooms',
+    stackSize: 8,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 13213040,
+    restoresHunger: 6,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  trailRation: {
+    id: 'trailRation',
+    displayName: 'Trail ration',
+    pluralName: 'Trail rations',
+    stackSize: 8,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 11960661,
+    restoresHunger: 32,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  forestStew: {
+    id: 'forestStew',
+    displayName: 'Forest stew',
+    pluralName: 'Forest stews',
+    stackSize: 8,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 12090186,
+    restoresHunger: 42,
+    keepOnKnockout: false,
+    equippable: true,
+  },
+  berryTea: {
+    id: 'berryTea',
+    displayName: 'Berry tea',
+    pluralName: 'Berry teas',
+    stackSize: 8,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 8412535,
+    restoresHunger: 18,
+    keepOnKnockout: false,
+    equippable: true,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -335,6 +400,11 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'teepeeBlueprint',
   'cabinBlueprint',
   'largeCabinBlueprint',
+  'berry',
+  'mushroom',
+  'trailRation',
+  'forestStew',
+  'berryTea',
 ];
 
 export function itemIndex(id: ItemId): number {

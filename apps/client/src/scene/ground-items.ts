@@ -1,3 +1,4 @@
+import { createForageModel, createMealModel } from './forest-food';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -128,6 +129,7 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
 
 /** A stick or flower patch, built to hold as many as any patch ever can. */
 function createPatchModel(item: ItemId): GroundModel {
+  if (item === 'berry' || item === 'mushroom') return createForageModel(item);
   return item === 'flower' ? createFlowerModel('flower') : createSticksModel(item);
 }
 
@@ -137,6 +139,9 @@ function createPatchModel(item: ItemId): GroundModel {
  * bundle in its own colour until it has a model of its own.
  */
 function createPileModel(item: ItemId): GroundModel {
+  if (item === 'berry' || item === 'mushroom') return createForageModel(item);
+  if (item === 'trailRation' || item === 'forestStew' || item === 'berryTea')
+    return createMealModel(item);
   if (blueprintHome(item) !== null) return createBlueprintModel(item);
   if (item === 'stick') return createSticksModel(item);
   if (item === 'flower') return createFlowerModel(item);

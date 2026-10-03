@@ -53,6 +53,7 @@ export class MapFeed {
   cameraYaw = 0;
   home: (MapPoint & { readonly yaw: number }) | null = null;
   stashes: readonly MapPoint[] = [];
+  discoveries: readonly (MapPoint & { name: string })[] = [];
   others: readonly MapPlayer[] = [];
   /** Your own campfires, lanterns, fences, path stones and flower bed. */
   builds: readonly MapBuild[] = [];

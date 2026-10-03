@@ -1,3 +1,4 @@
+import { encodeDiscoveries } from '@acorn/shared';
 import { DurableObject } from 'cloudflare:workers';
 
 import {
@@ -207,6 +208,7 @@ export class World extends DurableObject<WorldEnv> {
     // Where every stick and flower patch is now, and what anybody dropped.
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
     server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
+    server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
@@ -417,6 +419,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.step(startedAt);
     this.announcePickups(simulation);
     this.announceGathering(simulation);
+    this.announceDiscoveries(simulation);
     this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
     this.announceChopping(simulation);
@@ -513,6 +516,26 @@ export class World extends DurableObject<WorldEnv> {
    * tick what is in their pack now. What that did to the patch or the pile
    * is everybody's news, told by `announcePatches` and `announcePiles`.
    */
+  private announceDiscoveries(simulation: WorldSimulation): void {
+    const events = simulation.drainDiscoveryChanges();
+    if (events.length === 0) return;
+    this.ctx.storage.transactionSync(() => {
+      for (const ws of this.ctx.getWebSockets()) {
+        const attachment = this.attachmentFor(ws);
+        if (attachment === null || !events.some((e) => e.netId === attachment.netId)) continue;
+        this.savePlayer(simulation, attachment);
+      }
+    });
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      for (const event of events)
+        if (event.netId === attachment?.netId) {
+          this.trySend(ws, encodeDiscoveries(event.state));
+          this.trySend(ws, encodeInventory(inventoryEntries(simulation.inventoryOf(event.netId))));
+        }
+    }
+  }
+
   private announceGathering(simulation: WorldSimulation): void {
     const netIds = simulation.drainGatherEvents();
     if (netIds.length === 0) return;
@@ -1404,6 +1427,9 @@ export class World extends DurableObject<WorldEnv> {
       emptied_at_ms INTEGER NOT NULL
     )`);
     sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_discoveries (player_key TEXT PRIMARY KEY, found INTEGER NOT NULL, claimed INTEGER NOT NULL)',
+    );
+    sql.exec(
       'CREATE TABLE IF NOT EXISTS player_blueprint_progress (player_key TEXT PRIMARY KEY, misses INTEGER NOT NULL)',
     );
     // Whatever anybody dropped, until it is picked up or fades.
@@ -1470,7 +1496,15 @@ export class World extends DurableObject<WorldEnv> {
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
+    const discoveries = this.ctx.storage.sql
+      .exec<{ found: number; claimed: number }>(
+        'SELECT found, claimed FROM player_discoveries WHERE player_key = ?',
+        playerKey,
+      )
+      .toArray()[0];
     return {
+      discoveriesFound: discoveries?.found ?? 0,
+      discoveriesClaimed: discoveries?.claimed ?? 0,
       netId: 0,
       x: row.x,
       y: row.y,
@@ -1837,8 +1871,19 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       simulation.blueprintMissesOf(attachment.netId),
     );
+    const discoveries = simulation.discoveryStateOf(attachment.netId);
+    this.writeDiscoveries(attachment.playerKey, discoveries.found, discoveries.claimed);
     const explored = simulation.exploredMapOf(attachment.netId);
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
+  }
+
+  private writeDiscoveries(playerKey: string, found: number, claimed: number): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_discoveries (player_key, found, claimed) VALUES (?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET found = excluded.found, claimed = excluded.claimed',
+      playerKey,
+      found,
+      claimed,
+    );
   }
 
   private writeBlueprintProgress(playerKey: string, misses: number): void {
@@ -1993,6 +2038,11 @@ export class World extends DurableObject<WorldEnv> {
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
+      this.writeDiscoveries(
+        attachment.playerKey,
+        player.discoveriesFound ?? 0,
+        player.discoveriesClaimed ?? 0,
+      );
       if (player.explored != null) this.writePlayerExplored(attachment.playerKey, player.explored);
     }
   }
@@ -2043,6 +2093,7 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec('DELETE FROM players');
     sql.exec('DELETE FROM player_home_skills');
     sql.exec('DELETE FROM player_blueprint_progress');
+    sql.exec('DELETE FROM player_discoveries');
     sql.exec('DELETE FROM pickups_taken');
     return { ok: true, clearedPlayers };
   }

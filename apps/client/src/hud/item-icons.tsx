@@ -14,6 +14,38 @@ type IconId = ItemId | BuildableKindId;
  * plain square.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
+  berry: (
+    <>
+      <circle cx="8" cy="14" r="4" />
+      <circle cx="16" cy="14" r="4" />
+      <path d="M8 8L12 3L16 8Z" />
+    </>
+  ),
+  mushroom: (
+    <>
+      <path d="M2 12C3 1 21 1 22 12Z" />
+      <rect x="9" y="12" width="6" height="10" rx="2" />
+    </>
+  ),
+  trailRation: (
+    <>
+      <rect x="4" y="6" width="16" height="14" rx="3" />
+      <path d="M11 4H13V22H11Z" />
+    </>
+  ),
+  forestStew: (
+    <>
+      <path d="M3 11H21C21 24 3 24 3 11Z" />
+      <path d="M7 3H9V8H7ZM15 2H17V8H15Z" />
+    </>
+  ),
+  berryTea: (
+    <>
+      <path d="M4 8H17V20H4Z" />
+      <path d="M17 10H22V17H17V14H19V12H17Z" />
+      <path d="M9 2H11V6H9Z" />
+    </>
+  ),
   axe: (
     <g transform="rotate(32 12 12)">
       <rect x="10.5" y="6" width="3" height="16" rx="1.5" />

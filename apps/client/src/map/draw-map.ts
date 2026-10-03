@@ -133,6 +133,10 @@ export function drawMinimap(
     const at = clampToRim(place(stash.x, stash.z), radius - 8);
     drawStash(context, centre + at.x, centre + at.y, at.onRim ? 0.75 : 1);
   }
+  for (const discovery of feed.discoveries) {
+    const at = place(discovery.x, discovery.z);
+    if (Math.hypot(at.x, at.y) <= radius - 7) drawDiscovery(context, centre + at.x, centre + at.y);
+  }
   if (feed.home !== null) {
     const at = clampToRim(place(feed.home.x, feed.home.z), radius - 9);
     drawHome(context, centre + at.x, centre + at.y, at.onRim ? 0.8 : 1);
@@ -235,6 +239,11 @@ export function drawBigMap(
     const at = place(feed.home.x, feed.home.z);
     drawHome(context, at.x, at.y, 1.3);
     drawLabel(context, names.home, at.x, at.y + 19);
+  }
+  for (const discovery of feed.discoveries) {
+    const at = place(discovery.x, discovery.z);
+    drawDiscovery(context, at.x, at.y);
+    drawLabel(context, discovery.name, at.x, at.y + 17);
   }
   const you = place(feed.player.x, feed.player.z);
   drawYou(context, you.x, you.y, arrowTurn(feed.player.facingYaw, 0), 1.25);
@@ -446,4 +455,25 @@ function drawBuild(
     default:
       return;
   }
+}
+
+function drawDiscovery(context: CanvasRenderingContext2D, x: number, y: number): void {
+  context.save();
+  context.translate(x, y);
+  context.fillStyle = '#758f7e';
+  context.strokeStyle = '#354d43';
+  context.lineWidth = 1.5;
+  context.beginPath();
+  context.moveTo(0, -7);
+  context.lineTo(6, 0);
+  context.lineTo(0, 7);
+  context.lineTo(-6, 0);
+  context.closePath();
+  context.fill();
+  context.stroke();
+  context.fillStyle = '#f4ecd8';
+  context.beginPath();
+  context.arc(0, 0, 1.7, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
 }

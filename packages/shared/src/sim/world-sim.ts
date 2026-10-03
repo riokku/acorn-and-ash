@@ -1,3 +1,14 @@
+import {
+  buildDiscoverySites,
+  discoveryForageSpots,
+  discoveryColliders,
+  DISCOVERY_MASK,
+  discoveryKnown,
+  type DiscoveryState,
+  type DiscoverySite,
+  type DiscoveryNotice,
+} from '../data/discoveries';
+import { recipeFor } from '../data/recipes';
 import { createRng, hashSeed } from '../rng';
 import {
   blueprintDropChance,
@@ -342,6 +353,8 @@ export interface PersistedPlayer {
   readonly explored?: Uint8Array | null;
   readonly homeSkills?: number;
   readonly blueprintMisses?: number;
+  readonly discoveriesFound?: number;
+  readonly discoveriesClaimed?: number;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -723,6 +736,8 @@ interface PlayerRuntime {
   readonly inventory: Inventory;
   homeSkills: number;
   blueprintMisses: number;
+  discoveriesFound: number;
+  discoveriesClaimed: number;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -860,6 +875,7 @@ export class WorldSimulation {
    */
   readonly wilderness: Wilderness;
   readonly encounterSites: readonly EncounterSite[];
+  readonly discoverySites: readonly DiscoverySite[];
   readonly collision: CollisionWorld;
   /**
    * Inside a home. Every room is laid out the same, so one set of walls and
@@ -952,6 +968,7 @@ export class WorldSimulation {
   /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
   private readonly pileChanges = new Set<number>();
   private readonly blueprintProgressChanges = new Set<number>();
+  private readonly discoveryChanges = new Map<number, DiscoveryNotice>();
   private readonly discardEvents: DiscardedEvent[] = [];
   /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
   private readonly equipEvents: number[] = [];
@@ -1003,10 +1020,14 @@ export class WorldSimulation {
       [...this.clearing.colliders, ...this.wilderness.colliders],
       this.clearing.water,
     );
+    this.discoverySites = buildDiscoverySites(this.encounterSites);
+    for (const spot of discoveryForageSpots(this.discoverySites))
+      this.patches.push(freshPatch(this.seed, spot));
     this.collision = createCollisionWorld(terrain, [
       ...this.clearing.colliders,
       ...this.wilderness.colliders,
       ...encounterColliders(this.encounterSites, terrain),
+      ...discoveryColliders(this.discoverySites, terrain),
     ]);
     this.standing = [...this.clearing.props];
     this.world = createWorld();
@@ -1185,6 +1206,9 @@ export class WorldSimulation {
       blueprintMisses: Number.isFinite(saved?.blueprintMisses)
         ? Math.min(BLUEPRINT_MAX_MISSES, Math.max(0, Math.floor(saved?.blueprintMisses ?? 0)))
         : 0,
+      discoveriesFound:
+        ((saved?.discoveriesFound ?? 0) | (saved?.discoveriesClaimed ?? 0)) & DISCOVERY_MASK,
+      discoveriesClaimed: (saved?.discoveriesClaimed ?? 0) & DISCOVERY_MASK,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -1512,6 +1536,8 @@ export class WorldSimulation {
         // and the bed, and your own pack, to eat from. Food picked out and
         // room for it comes first, even beside them: that is what it was
         // picked out for.
+        if (runtime.space === OUTDOORS && runtime.health > 0)
+          this.findDiscoveries(runtime, scratch.position);
         const loot = runtime.pendingLoot;
         runtime.pendingLoot = null;
         if (loot !== null) {
@@ -1542,6 +1568,8 @@ export class WorldSimulation {
           } else {
             this.tryEat(runtime);
           }
+        } else if (wantsToToggleCampfire && this.tryInspectDiscovery(runtime, scratch.position)) {
+          // A deliberate inspect claims the button, including a guarded/full refusal.
         } else if (wantsToInteract) {
           // The same button reaches for what is at your feet first - a tool
           // lying there, then anything somebody dropped - then for a patch
@@ -2283,7 +2311,7 @@ export class WorldSimulation {
     for (const patch of this.patches) {
       if (!patchIsDue(this.seed, patch, nowMs, this.patchRegrowMinSeconds)) continue;
       const generation = patch.generation + 1;
-      this.movePatch(patch, generation);
+      if (!this.movePatch(patch, generation, nowMs)) continue;
       patch.remaining = patchCount(this.seed, patch.id, generation);
       patch.emptiedAtMs = 0;
     }
@@ -2294,7 +2322,30 @@ export class WorldSimulation {
    * generation, or back where the clearing first laid it if somehow none of
    * them is.
    */
-  private movePatch(patch: GatherPatch, generation: number): void {
+  private movePatch(patch: GatherPatch, generation: number, nowMs = this.nowMs): boolean {
+    const forage = discoveryForageSpots(this.discoverySites).find((s) => s.id === patch.id);
+    if (forage !== undefined) {
+      const footprints = this.buildFootprints();
+      const rng = createRng(hashSeed(this.seed, 'forest-forage', patch.id, generation));
+      let chosen = { x: forage.x, z: forage.z };
+      for (let attempt = 0; attempt < 64; attempt++) {
+        if (this.patchSpotIsClear(patch.id, chosen.x, chosen.z, footprints)) break;
+        const angle = rng.nextRange(0, Math.PI * 2),
+          radius = rng.nextRange(1, 8);
+        chosen = { x: forage.x + Math.cos(angle) * radius, z: forage.z + Math.sin(angle) * radius };
+      }
+      const clear = this.patchSpotIsClear(patch.id, chosen.x, chosen.z, footprints);
+      if (clear) {
+        patch.x = chosen.x;
+        patch.z = chosen.z;
+      } else {
+        patch.remaining = 0;
+        patch.emptiedAtMs = nowMs;
+      }
+      patch.generation = generation;
+      this.patchChanges.add(patch.id);
+      return clear;
+    }
     const footprints = this.buildFootprints();
     const spot =
       patchRegrowSpot(this.seed, patch.id, generation, (x, z) =>
@@ -2306,6 +2357,7 @@ export class WorldSimulation {
     }
     patch.generation = generation;
     this.patchChanges.add(patch.id);
+    return true;
   }
 
   /**
@@ -3506,7 +3558,14 @@ export class WorldSimulation {
   craftItem(netId: number, item: ItemId): boolean {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return false;
-    if (!craft(runtime.inventory, item)) return false;
+    const recipe = recipeFor(item);
+    if (
+      recipe?.discoveryId !== undefined &&
+      (!isFreeToInteract(runtime.action) || runtime.health <= 0 || runtime.cast !== null)
+    )
+      return false;
+    if (recipe?.station === 'campfire' && !this.nearCookingFireOf(netId)) return false;
+    if (!craft(runtime.inventory, item, runtime.discoveriesClaimed)) return false;
 
     this.craftEvents.push({ netId, item });
     return true;
@@ -3695,6 +3754,75 @@ export class WorldSimulation {
     return runtime.playerKey ?? `session:${runtime.netId}`;
   }
 
+  discoveryStateOf(netId: number): DiscoveryState {
+    const runtime = this.players.get(netId);
+    return {
+      found: runtime?.discoveriesFound ?? 0,
+      claimed: runtime?.discoveriesClaimed ?? 0,
+      notice: 'none',
+    };
+  }
+
+  nearCookingFireOf(netId: number): boolean {
+    const runtime = this.players.get(netId),
+      position = runtime?.entity.get(Position);
+    if (runtime === undefined || position === undefined || runtime.space !== OUTDOORS) return false;
+    return nearestCampfire(position, this.builtProps)?.lit === true;
+  }
+
+  drainDiscoveryChanges(): { netId: number; state: DiscoveryState }[] {
+    const events = [...this.discoveryChanges].map(([netId, notice]) => ({
+      netId,
+      state: { ...this.discoveryStateOf(netId), notice },
+    }));
+    this.discoveryChanges.clear();
+    return events;
+  }
+
+  private findDiscoveries(runtime: PlayerRuntime, position: Readonly<Vec3>): void {
+    for (const site of this.discoverySites) {
+      if (
+        discoveryKnown(runtime.discoveriesFound, site.id) ||
+        Math.hypot(position.x - site.x, position.z - site.z) > 6
+      )
+        continue;
+      runtime.discoveriesFound |= 1 << site.id;
+      this.discoveryChanges.set(runtime.netId, 'none');
+    }
+  }
+
+  private tryInspectDiscovery(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    const site = this.discoverySites.find(
+      (s) =>
+        !discoveryKnown(runtime.discoveriesClaimed, s.id) &&
+        Math.hypot(position.x - s.x, position.z - s.z) < 2.7,
+    );
+    if (site === undefined || runtime.cast !== null || runtime.health <= 0) return false;
+    const guarded = this.raids.raidersList().some((r) => {
+      const at = this.raids.positionOf(r.id);
+      return r.hitsLeft > 0 && at !== null && Math.hypot(at.x - site.x, at.z - site.z) < 12;
+    });
+    if (guarded) {
+      this.discoveryChanges.set(runtime.netId, 'guarded');
+      return true;
+    }
+    const after = { ...runtime.inventory };
+    if (site.reward.some((reward) => addItem(after, reward.item, reward.count) !== reward.count)) {
+      this.discoveryChanges.set(runtime.netId, 'full');
+      return true;
+    }
+    Object.assign(runtime.inventory, after);
+    runtime.discoveriesFound |= 1 << site.id;
+    runtime.discoveriesClaimed |= 1 << site.id;
+    this.discoveryChanges.set(runtime.netId, 'none');
+    this.gestureEvents.push({
+      netId: runtime.netId,
+      gesture: Gesture.PickUp,
+      item: site.reward[0]?.item ?? 'log',
+    });
+    return true;
+  }
+
   encounterRestState(): [number, number][] {
     return this.raids.encounterRestState();
   }
@@ -3822,6 +3950,8 @@ export class WorldSimulation {
         explored: runtime.explored,
         homeSkills: runtime.homeSkills,
         blueprintMisses: runtime.blueprintMisses,
+        discoveriesFound: runtime.discoveriesFound,
+        discoveriesClaimed: runtime.discoveriesClaimed,
       });
     }
     return saved;
