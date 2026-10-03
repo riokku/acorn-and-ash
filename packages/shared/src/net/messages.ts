@@ -1,4 +1,6 @@
+import type { HomeSupplies } from '../sim/home-supplies';
 import type { DiscoveryState } from '../data/discoveries';
+import type { GardenRequest, GardenState } from '../sim/garden';
 import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
@@ -38,6 +40,7 @@ export const ClientMessageType = {
   Discard: 0x08,
   Loot: 0x09,
   Chest: 0x0a,
+  Garden: 0x0b,
 } as const;
 
 /** What the server says back. */
@@ -78,6 +81,8 @@ export const ServerMessageType = {
   HomeSkills: 0x31,
   HomeBuildFeedback: 0x32,
   Discoveries: 0x33,
+  Garden: 0x34,
+  HomeSupplies: 0x35,
 } as const;
 
 export const RejectReason = {
@@ -186,6 +191,7 @@ export type ChestMessage = ChestRequest & { readonly type: 'chest' };
 export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
 
 export type ClientMessage =
+  | (GardenRequest & { readonly type: 'garden' })
   | ChestMessage
   | InputBundleMessage
   | PingMessage
@@ -559,7 +565,11 @@ export interface HomeSkillsMessage {
 
 export type HomeBuildFeedbackMessage = HomeBuildFeedback & { readonly type: 'homeBuildFeedback' };
 export type DiscoveriesMessage = DiscoveryState & { readonly type: 'discoveries' };
+export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies' };
+
 export type ServerMessage =
+  | HomeSuppliesMessage
+  | (GardenState & { readonly type: 'garden' })
   | DiscoveriesMessage
   | HomeBuildFeedbackMessage
   | HomeSkillsMessage

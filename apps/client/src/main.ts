@@ -97,7 +97,11 @@ const enterWorld = (identity: PlayerIdentity): void => {
     (request) => game.transferChest(request),
     () => game.closeChest(),
     (open) => game.setSettingsOpen(open),
-    { onTabChange: (tab) => game.setJournalTab(tab), onCraft: (index) => game.craftRecipe(index) },
+    {
+      onTabChange: (tab) => game.setJournalTab(tab),
+      onCraft: (index) => game.craftRecipe(index),
+      onGarden: (request) => game.useGarden(request),
+    },
   );
   window.acornDebug = game.debug();
 

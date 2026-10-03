@@ -1,4 +1,6 @@
 import * as THREE from 'three/webgpu';
+import { createHomeFacilities } from './home-facilities';
+import type { GardenPlot } from '@acorn/shared';
 
 import { HOME_FURNITURE, HOME_ROOM, homeRoomScale, type HomeKind } from '@acorn/shared';
 
@@ -25,6 +27,8 @@ import { instantiateAnimatedModel } from './model-loading';
 export interface HomeInterior {
   readonly group: THREE.Group;
   readonly chest: THREE.Group;
+  readonly garden: THREE.Group;
+  setGardenPlots(plots: readonly GardenPlot[]): void;
   setChestOpen(open: boolean): void;
   /** Cut down whichever walls the camera, at this spot in the room's own coordinates, is looking in through. */
   cutAway(cameraX: number, cameraZ: number): void;
@@ -74,6 +78,8 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     disposers.push(built.dispose);
     return built.group;
   };
+  const facilities = createHomeFacilities(kind);
+  group.add(keep(facilities));
 
   const materials = {
     logs: paintedMaterial('wood', { tint: 0xf0dcc0, roughness: 0.85 }),
@@ -910,6 +916,8 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   return {
     group,
     chest,
+    garden: facilities.garden,
+    setGardenPlots: facilities.setGardenPlots,
     setChestOpen(open) {
       chestOpen = open;
     },

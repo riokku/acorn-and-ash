@@ -324,6 +324,12 @@ function showHomeInside(
   const inside = createHomeInterior(
     requested !== null && isHomeKind(requested) ? requested : 'cabin',
   );
+  if (requested === 'largeCabin')
+    inside.setGardenPlots([
+      { crop: 'berry', growTicks: 0 },
+      { crop: 'mushroom', growTicks: 0 },
+      { crop: 'flower', growTicks: 0 },
+    ]);
   scene.add(inside.group);
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 100);
   // `&x=` and `&z=` look somewhere else in the room, up close.

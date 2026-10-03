@@ -1,4 +1,6 @@
 import {
+  encodeGardenRequest,
+  type GardenRequest,
   CLOSE_PLAYING_ELSEWHERE,
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
@@ -184,6 +186,11 @@ export class WorldConnection {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.flush();
     this.socket.send(encodeChestRequest(request));
+  }
+  sendGarden(request: GardenRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.flush();
+    this.socket.send(encodeGardenRequest(request));
   }
 
   sendDiscard(request: DiscardRequest): void {

@@ -293,6 +293,9 @@ body {
  * entries, never the styling.
  */
 .hud-journal {
+  pointer-events: auto;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
   position: absolute;
   left: 50%;
   bottom: 150px;
@@ -2255,6 +2258,33 @@ body {
 
 .legend-discovery {
   color: #758f7e;
+}
+
+.garden-box {
+  border-top: 1px solid #b5ad91;
+  padding: 0.8rem 0;
+}
+.garden-box h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+.garden-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.garden-box button {
+  border: 1px solid #7e886c;
+  border-radius: 6px;
+  background: #dbe0c9;
+  color: #344932;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+  cursor: pointer;
+}
+.garden-box button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Keep the gear beside the minimap while exploring. */

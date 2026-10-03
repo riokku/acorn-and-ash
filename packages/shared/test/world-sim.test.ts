@@ -3749,8 +3749,12 @@ describe('building', () => {
       hunger: HUNGER_MAX,
     });
 
-    it('costs ten logs and is marked as a home', () => {
-      expect(BUILDABLE_KINDS.cabin.costs).toEqual([{ item: 'log', amount: 10 }]);
+    it('requires expedition supplies and is marked as a home', () => {
+      expect(BUILDABLE_KINDS.cabin.costs).toEqual([
+        { item: 'log', amount: 40 },
+        { item: 'stick', amount: 24 },
+        { item: 'bone', amount: 8 },
+      ]);
       expect(BUILDABLE_KINDS.cabin.isHome).toBe(true);
       expect(BUILDABLE_KINDS.campfire.isHome).toBe(false);
     });

@@ -16,6 +16,7 @@ import type { BuildableKindId } from '../data/buildables';
 import { homeOuterScale, homeRoomScale, type HomeKind } from '../data/housing';
 import { PLAYER_RADIUS } from '../constants';
 import { box, cylinder, type Collider } from './colliders';
+import { HOME_FACILITIES } from '../data/home-facilities';
 
 /** A flat point with the way something faces, in the same yaw convention as everything else. */
 export interface PlacedSpot {
@@ -331,26 +332,37 @@ export function homeChestSpot(kind: HomeKind = 'cabin'): { x: number; z: number 
 export function homeRoomColliders(kind: HomeKind = 'cabin'): Collider[] {
   const scale = homeRoomScale(kind);
   // The base room lists six wall/door colliders, then bed, chest, hearth, table, chair and shelf.
-  return cabinRoomColliders()
-    .filter((_, index) => {
+  const extra: Collider[] = [];
+  if (kind === 'teepee') {
+    const spot = HOME_FACILITIES.cooking;
+    extra.push(cylinder(spot.x, spot.z, 0.36, 0.45));
+  }
+  if (kind === 'largeCabin') {
+    const spot = HOME_FACILITIES.garden;
+    for (let index = 0; index < 3; index++)
+      extra.push(box(spot.x + (index - 1) * 0.65, 0.15, spot.z, 0.28, 0.15, 0.28));
+  }
+  return [
+    ...cabinRoomColliders().filter((_, index) => {
       if (kind === 'tent') return ![8, 9, 10, 11].includes(index);
       if (kind === 'teepee') return ![8, 11].includes(index);
       return true;
-    })
-    .map((collider) =>
-      collider.shape === 'box'
-        ? {
-            ...collider,
-            x: collider.x * scale,
-            z: collider.z * scale,
-            halfX: collider.halfX * scale,
-            halfZ: collider.halfZ * scale,
-          }
-        : {
-            ...collider,
-            x: collider.x * scale,
-            z: collider.z * scale,
-            radius: collider.radius * scale,
-          },
-    );
+    }),
+    ...extra,
+  ].map((collider) =>
+    collider.shape === 'box'
+      ? {
+          ...collider,
+          x: collider.x * scale,
+          z: collider.z * scale,
+          halfX: collider.halfX * scale,
+          halfZ: collider.halfZ * scale,
+        }
+      : {
+          ...collider,
+          x: collider.x * scale,
+          z: collider.z * scale,
+          radius: collider.radius * scale,
+        },
+  );
 }

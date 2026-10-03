@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { plainMaterial } from '../art/materials';
 
 import {
   Gesture,
@@ -487,7 +488,21 @@ interface HeldModel {
 }
 
 /** This thing's parts to put in a hand, or undefined to leave it showing nothing. */
+const REFINED_HELD_PARTS = new Map<ItemId, ModelPart[]>();
 function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined {
+  if (thing === 'refinedAxe' || thing === 'refinedRod') {
+    const existing = REFINED_HELD_PARTS.get(thing);
+    if (existing !== undefined) return existing;
+    const base = itemModelParts(thing === 'refinedAxe' ? 'axe' : 'rod');
+    if (base === undefined) return undefined;
+    const band = new THREE.CylinderGeometry(0.025, 0.025, 0.08, 8).translate(0, 0.27, 0);
+    const parts = [
+      ...base,
+      { geometry: band, material: plainMaterial(0x86aaa0, { roughness: 0.6 }) },
+    ];
+    REFINED_HELD_PARTS.set(thing, parts);
+    return parts;
+  }
   if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
     return itemModelParts(thing);
   }
@@ -496,6 +511,8 @@ function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined {
 
 /** Where along a held thing its far end is: the full length of a tool, the middle of a fish. */
 function tipHeightOf(thing: ItemId | 'shovel'): number {
+  if (thing === 'refinedAxe') return TARGET_HEIGHTS.axe;
+  if (thing === 'refinedRod') return TARGET_HEIGHTS.rod;
   if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
     return TARGET_HEIGHTS[thing];
   }
@@ -645,7 +662,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
           ? SHOVEL_GRIPS
           : thing === 'weapon'
             ? WEAPON_GRIPS
-            : HELD_ITEM_REST[thing];
+            : HELD_ITEM_REST[
+                thing === 'refinedAxe' ? 'axe' : thing === 'refinedRod' ? 'rod' : thing
+              ];
       if (parts === undefined || grips === undefined) continue;
       const held = new THREE.Group();
       for (const part of parts) {

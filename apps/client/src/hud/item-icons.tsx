@@ -14,6 +14,24 @@ type IconId = ItemId | BuildableKindId;
  * plain square.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
+  refinedAxe: (
+    <>
+      <g transform="rotate(32 12 12)">
+        <rect x="10.5" y="6" width="3" height="16" rx="1.5" />
+        <polygon points="6,3 18,3 12,10" />
+      </g>
+      <path d="M19 14L20 17L23 18L20 19L19 22L18 19L15 18L18 17Z" />
+    </>
+  ),
+  refinedRod: (
+    <>
+      <g transform="rotate(25 12 12)">
+        <rect x="11" y="2" width="2" height="20" rx="1" />
+        <circle cx="12" cy="7" r="2.2" />
+      </g>
+      <path d="M19 14L20 17L23 18L20 19L19 22L18 19L15 18L18 17Z" />
+    </>
+  ),
   guardianTrophy: (
     <>
       <path d="M4 21H20V18H4ZM9 18V12L4 7V2H6V6L10 9H14L18 6V2H20V7L15 12V18Z" />

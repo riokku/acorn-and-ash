@@ -72,3 +72,7 @@ export * from './data/discoveries';
 export * from './sim/build-areas';
 
 export * from './data/tracking';
+export * from './data/home-facilities';
+export * from './sim/garden';
+
+export * from './sim/home-supplies';

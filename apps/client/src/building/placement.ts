@@ -13,6 +13,9 @@
 
 import {
   BUILDABLE_KINDS,
+  combineHomeSupplies,
+  inventoryFromEntries,
+  inventoryEntries,
   homeBuildArea,
   checkHomeBuildArea,
   checkPieceBuildArea,
@@ -52,6 +55,7 @@ export interface PlacementInputs {
   readonly player: Readonly<Vec3>;
   /** False while Shift is held, to put a fence down freely instead of joining it on. */
   readonly snap: boolean;
+  readonly storedSupplies?: readonly { readonly item: ItemId; readonly count: number }[];
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   readonly built: readonly BuiltPropView[];
   /** Placed by this player a moment ago, and not yet back from the server as built. */
@@ -76,7 +80,7 @@ export function planPlacement(inputs: PlacementInputs): PlacementPlan {
   const { kind, mouse, player } = inputs;
   const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind));
   const upgrading = isHomeKind(kind) && home !== undefined;
-  const affordable = missingCosts(kind, inputs.carrying) === null;
+  const affordable = missingCosts(kind, availableSupplies(inputs)) === null;
   if (mouse === null && !upgrading)
     return { spot: null, refusal: null, snapped: false, affordable };
 
@@ -126,9 +130,6 @@ function refusalFor(
 ): string | null {
   const buildable = BUILDABLE_KINDS[inputs.kind];
 
-  const missing = missingCosts(inputs.kind, inputs.carrying);
-  if (missing !== null) return `Need ${missing}`;
-
   if (isHomeKind(inputs.kind)) {
     const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind));
     if (inputs.kind !== nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null))
@@ -136,6 +137,9 @@ function refusalFor(
     if (!knowsHome(inputs.homeSkills ?? 0, inputs.kind))
       return `Learn the ${buildable.displayName.toLowerCase()} blueprint first · found on skeletons`;
   }
+  const missing = missingCosts(inputs.kind, availableSupplies(inputs));
+  if (missing !== null) return `Need ${missing}`;
+
   if (buildable.capPerPlayer && !buildable.isHome) {
     const alreadyHave =
       inputs.built.some((prop) => prop.yours && prop.kind === inputs.kind) ||
@@ -199,4 +203,14 @@ export function describeRefusal(refusal: BuildRefusal): string {
     case 'tooClose':
       return `Too close to the ${refusal.what}`;
   }
+}
+
+function availableSupplies(inputs: PlacementInputs) {
+  const upgrading =
+    isHomeKind(inputs.kind) && inputs.built.some((prop) => prop.yours && isHomeKind(prop.kind));
+  return upgrading
+    ? inventoryEntries(
+        combineHomeSupplies(inventoryFromEntries(inputs.carrying), inputs.storedSupplies ?? []),
+      )
+    : inputs.carrying;
 }

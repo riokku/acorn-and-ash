@@ -148,3 +148,27 @@ describe('describing a refusal', () => {
     expect(describeRefusal({ reason: 'tooFar' })).toBe('Too far away');
   });
 });
+
+it('uses private chest supplies for upgrades only', () => {
+  const inputs: PlacementInputs = {
+    ...BASE,
+    kind: 'teepee',
+    homeSkills: 1,
+    carrying: [{ item: 'stick', count: 16 }],
+    storedSupplies: [{ item: 'log', count: 12 }],
+    built: [built({ kind: 'tent', x: 0, z: -4.2, yours: true })],
+  };
+  expect(planPlacement(inputs).refusal).toBeNull();
+  expect(planPlacement(inputs).affordable).toBe(true);
+  expect(planPlacement({ ...inputs, kind: 'campfire' }).affordable).toBe(false);
+  expect(planPlacement({ ...inputs, kind: 'tent', built: [] }).affordable).toBe(true);
+  expect(
+    planPlacement({
+      ...inputs,
+      kind: 'tent',
+      built: [],
+      carrying: [],
+      storedSupplies: [{ item: 'stick', count: 6 }],
+    }).affordable,
+  ).toBe(false);
+});
