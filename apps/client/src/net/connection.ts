@@ -7,6 +7,8 @@ import {
   encodeCraft,
   encodeDiscard,
   encodeLoot,
+  encodeChestRequest,
+  type ChestRequest,
   type LootRequest,
   encodeHello,
   encodeInputBundle,
@@ -176,6 +178,12 @@ export class WorldConnection {
     // Flush preceding movement so reach is judged after the walk that led here.
     this.flush();
     this.socket.send(encodeLoot(request));
+  }
+
+  sendChest(request: ChestRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.flush();
+    this.socket.send(encodeChestRequest(request));
   }
 
   sendDiscard(request: DiscardRequest): void {

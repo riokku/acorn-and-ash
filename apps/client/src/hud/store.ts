@@ -1,5 +1,5 @@
 import type { PickupNotice } from './pickup-notice';
-import { HEALTH_MAX, HUNGER_MAX, type ItemId } from '@acorn/shared';
+import { HEALTH_MAX, HUNGER_MAX, type ItemId, type ChestSlot } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
@@ -51,6 +51,9 @@ export interface HudState {
   readonly hotbarSlots: HotbarPins;
   /** Whether the inventory panel (opened with I, or its own bag button) is currently showing. */
   readonly inventoryOpen: boolean;
+  readonly chestSlots: readonly ChestSlot[] | null;
+  readonly chestPending: boolean;
+  readonly chestNote: string | null;
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
   readonly hoveredLoot: {
@@ -172,6 +175,9 @@ const INITIAL: HudState = {
   equippedItem: null,
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
+  chestSlots: null,
+  chestPending: false,
+  chestNote: null,
   nearbyItem: null,
   hoveredLoot: null,
   interactionNote: null,

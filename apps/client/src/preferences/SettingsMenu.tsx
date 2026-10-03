@@ -126,6 +126,13 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
                   onChange={(value) => change({ sfxVolume: value })}
                 />
                 <SliderRow
+                  label="Grass density"
+                  value={preferences.grassDensity}
+                  min={0}
+                  max={1}
+                  onChange={(value) => change({ grassDensity: value })}
+                />
+                <SliderRow
                   label="Mouse sensitivity"
                   value={preferences.lookSensitivity}
                   min={MIN_SENSITIVITY}

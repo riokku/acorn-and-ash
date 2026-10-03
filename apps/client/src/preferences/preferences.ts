@@ -14,16 +14,19 @@ export interface Preferences {
   readonly sfxVolume: number;
   /** A multiplier on the base mouse-look speed - see `MIN_SENSITIVITY`/`MAX_SENSITIVITY`. */
   readonly lookSensitivity: number;
+  /** 0 disables grass; 1 is the fullest cover. */
+  readonly grassDensity: number;
 }
 
 /**
- * Nobody has touched a slider yet: every value is 1, so the game sounds and
- * feels exactly as it did before the Settings menu existed.
+ * Volumes and sensitivity start at their tuned levels, with a fuller but
+ * bounded grass cover. Saved preferences from before grass use this default.
  */
 export const DEFAULT_PREFERENCES: Preferences = {
   musicVolume: 1,
   sfxVolume: 1,
   lookSensitivity: 1,
+  grassDensity: 0.75,
 };
 
 const clampVolume = (value: number): number => clamp(value, 0, 1);
@@ -37,9 +40,16 @@ export function readPreferences(storage: Storage): Preferences {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return DEFAULT_PREFERENCES;
-    const { musicVolume, sfxVolume, lookSensitivity } = parsed as Record<string, unknown>;
+    const { musicVolume, sfxVolume, lookSensitivity, grassDensity } = parsed as Record<
+      string,
+      unknown
+    >;
 
     return {
+      grassDensity:
+        typeof grassDensity === 'number' && Number.isFinite(grassDensity)
+          ? clamp(grassDensity, 0, 1)
+          : DEFAULT_PREFERENCES.grassDensity,
       musicVolume:
         typeof musicVolume === 'number'
           ? clampVolume(musicVolume)

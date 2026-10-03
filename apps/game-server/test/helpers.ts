@@ -4,6 +4,8 @@ import {
   BUILDABLE_KINDS,
   decodeServerMessage,
   encodeBuild,
+  encodeChestRequest,
+  type ChestRequest,
   encodeCraft,
   encodeDiscard,
   encodeHello,
@@ -81,6 +83,10 @@ export class TestClient {
     const socket = response.webSocket;
     if (socket === null) throw new Error(`No WebSocket in the response (${response.status})`);
     return new TestClient(socket);
+  }
+
+  chest(request: ChestRequest): void {
+    this.socket.send(encodeChestRequest(request));
   }
 
   /** Send a run of identical inputs, as a real client bundles them. */

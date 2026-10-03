@@ -9,6 +9,14 @@
  * 20:1: one message carrying three inputs costs a twentieth of three messages.
  */
 
+import {
+  CHEST_SLOTS,
+  CHEST_REASONS,
+  emptyChest,
+  chestFromSaved,
+  type ChestRequest,
+  type ChestResult,
+} from '../sim/chest';
 import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
 import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
@@ -294,6 +302,31 @@ export function encodeSetDoorLock(locked: boolean): ArrayBuffer {
 /** Drop or destroy some of one thing (see decision 0061). */
 const LOOT_KINDS = ['pickup', 'pile', 'patch'] as const;
 
+export function encodeChestRequest(request: ChestRequest): ArrayBuffer {
+  if (request.action === 'open') return new Uint8Array([ClientMessageType.Chest, 0]).buffer;
+  const buffer = new ArrayBuffer(5);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Chest);
+  view.setUint8(1, request.action === 'deposit' ? 1 : 2);
+  view.setUint8(2, request.action === 'deposit' ? itemIndex(request.item) : request.slot);
+  view.setUint16(3, request.amount, true);
+  return buffer;
+}
+export function encodeChestState(result: ChestResult): ArrayBuffer {
+  const buffer = new ArrayBuffer(6 + CHEST_SLOTS * 3);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Chest);
+  view.setUint16(1, result.homeId, true);
+  view.setUint8(3, result.reason === null ? 0 : CHEST_REASONS.indexOf(result.reason) + 1);
+  view.setUint16(4, result.moved, true);
+  for (let i = 0; i < CHEST_SLOTS; i++) {
+    const slot = result.slots[i];
+    view.setUint8(6 + i * 3, slot == null ? 255 : itemIndex(slot.item));
+    view.setUint16(7 + i * 3, slot?.count ?? 0, true);
+  }
+  return buffer;
+}
+
 export function encodeLoot(request: LootRequest): ArrayBuffer {
   const buffer = new ArrayBuffer(4);
   const view = new DataView(buffer);
@@ -372,6 +405,21 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     return { type: 'input', inputs };
   }
 
+  if (type === ClientMessageType.Chest) {
+    if (data.byteLength === 2 && view.getUint8(1) === 0) return { type: 'chest', action: 'open' };
+    if (data.byteLength !== 5) return null;
+    const action = view.getUint8(1),
+      source = view.getUint8(2),
+      amount = view.getUint16(3, true);
+    if (amount === 0) return null;
+    if (action === 1) {
+      const item = itemFromIndex(source);
+      return item === null ? null : { type: 'chest', action: 'deposit', item, amount };
+    }
+    if (action === 2 && source < CHEST_SLOTS)
+      return { type: 'chest', action: 'withdraw', slot: source, amount };
+    return null;
+  }
   if (type === ClientMessageType.Ping) {
     if (data.byteLength !== 5) return null;
     return { type: 'ping', clientTimeMs: view.getUint32(1, true) };
@@ -1330,6 +1378,31 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         type: 'pong',
         clientTimeMs: view.getUint32(1, true),
         serverTimeMs: view.getUint32(5, true),
+      };
+    }
+    case ServerMessageType.Chest: {
+      if (data.byteLength !== 6 + CHEST_SLOTS * 3) return null;
+      const reasonCode = view.getUint8(3);
+      if (reasonCode > CHEST_REASONS.length) return null;
+      const slots = emptyChest();
+      for (let i = 0; i < CHEST_SLOTS; i++) {
+        const source = view.getUint8(6 + i * 3),
+          count = view.getUint16(7 + i * 3, true);
+        if (source === 255) {
+          if (count !== 0) return null;
+          continue;
+        }
+        const item = itemFromIndex(source);
+        if (item === null) return null;
+        slots[i] = { item, count };
+      }
+      if (chestFromSaved(slots) === null) return null;
+      return {
+        type: 'chest',
+        homeId: view.getUint16(1, true),
+        slots,
+        moved: view.getUint16(4, true),
+        reason: reasonCode === 0 ? null : CHEST_REASONS[reasonCode - 1]!,
       };
     }
     case ServerMessageType.Inventory: {

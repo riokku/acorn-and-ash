@@ -23,6 +23,8 @@ import { instantiateAnimatedModel } from './model-loading';
  */
 export interface HomeInterior {
   readonly group: THREE.Group;
+  readonly chest: THREE.Group;
+  setChestOpen(open: boolean): void;
   /** Cut down whichever walls the camera, at this spot in the room's own coordinates, is looking in through. */
   cutAway(cameraX: number, cameraZ: number): void;
   /** Firelight, lamplight and the windows; `daylight` runs from 0 (midnight) to 1 (noon). */
@@ -531,25 +533,29 @@ export function createHomeInterior(): HomeInterior {
     )
     // A plump pillow at the head.
     .add(materials.linen, ellipsoid(0.34, 0.08, 0.19, 12, 8), placed(bed.x, 0.54, head + 0.28));
-  // A rag rug beside the bed, and a chest at its foot.
-  bedModel
-    .add(
-      materials.darkWood,
-      plankGeometry(0.9, 0.45, 0.46, 'x', 1, 482),
-      placed(bed.x, 0.225, foot + 0.33),
-    )
-    .add(
-      materials.darkWood,
-      plankGeometry(0.94, 0.06, 0.5, 'x', 1, 483),
-      placed(bed.x, 0.48, foot + 0.33),
-    )
-    .add(
-      materials.iron,
-      plankGeometry(0.94, 0.04, 0.02, 'x', 1, 0),
-      placed(bed.x, 0.32, foot + 0.57),
-    )
-    .add(materials.brass, new THREE.BoxGeometry(0.08, 0.1, 0.03), placed(bed.x, 0.4, foot + 0.575));
   group.add(keep(bedModel.build()));
+  const chest = new THREE.Group();
+  chest.name = 'storage-chest';
+  const chestShape = HOME_FURNITURE.chest;
+  chest.position.set(chestShape.x, 0, chestShape.z);
+  const chestBody = new ModelBuilder();
+  chestBody
+    .add(materials.darkWood, plankGeometry(0.9, 0.45, 0.46, 'x', 1, 482), placed(0, 0.225, 0))
+    .add(materials.iron, plankGeometry(0.94, 0.04, 0.02, 'x', 1, 0), placed(0, 0.32, 0.24))
+    .add(materials.brass, new THREE.BoxGeometry(0.08, 0.1, 0.03), placed(0, 0.4, 0.245));
+  chest.add(keep(chestBody.build()));
+  const lid = new THREE.Group();
+  lid.position.set(0, 0.45, -0.25);
+  const lidModel = new ModelBuilder();
+  lidModel.add(
+    materials.darkWood,
+    plankGeometry(0.94, 0.06, 0.5, 'x', 1, 483),
+    placed(0, 0.03, 0.25),
+  );
+  lid.add(keep(lidModel.build()));
+  chest.add(lid);
+  group.add(chest);
+  let chestOpen = false;
 
   /* -------------------------------------------------------------------- */
   /* Table, chair and lamp                                                */
@@ -780,6 +786,10 @@ export function createHomeInterior(): HomeInterior {
 
   return {
     group,
+    chest,
+    setChestOpen(open) {
+      chestOpen = open;
+    },
     cutAway(cameraX, cameraZ) {
       const length = Math.hypot(cameraX, cameraZ) || 1;
       for (const [side, wall] of walls) {
@@ -789,6 +799,8 @@ export function createHomeInterior(): HomeInterior {
       }
     },
     update(deltaSeconds, daylight) {
+      lid.rotation.x +=
+        ((chestOpen ? -0.95 : 0) - lid.rotation.x) * (1 - Math.exp(-deltaSeconds * 9));
       flameMixer?.update(deltaSeconds);
       fireGlow.update(deltaSeconds);
       // The fire and the lamp matter far more once the windows go dark.

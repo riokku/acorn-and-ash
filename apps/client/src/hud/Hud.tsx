@@ -1,5 +1,7 @@
 import { PickupNotice } from './PickupNotice';
 import { LoadingScreen } from './LoadingScreen';
+import { ChestPanel } from './ChestPanel';
+import type { ChestRequest } from '@acorn/shared';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import {
@@ -66,6 +68,8 @@ interface HudProps {
   readonly onDiscard: (item: ItemId, amount: number, destroy: boolean) => void;
   /** What the combat overlay draws - see decision 0063. */
   readonly combatFeed: CombatFeed;
+  readonly onChestTransfer: (request: ChestRequest) => void;
+  readonly onCloseChest: () => void;
 }
 
 export function Hud({
@@ -82,12 +86,14 @@ export function Hud({
   onSetDoorLock,
   onDiscard,
   combatFeed,
+  onChestTransfer,
+  onCloseChest,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
   const [fog] = useState(() => new FogCache());
   const [slotMenu, setSlotMenu] = useState<SlotMenuTarget | null>(null);
-  const showingWorld = state.ready && state.playing && !state.mapOpen;
+  const showingWorld = state.ready && state.playing && !state.mapOpen && state.chestSlots === null;
   // Gone the moment there is nothing left of it to drop - used up, eaten, or
   // dropped already from the other copy of the same slot.
   const menuTarget =
@@ -146,10 +152,20 @@ export function Hud({
         <CacheCompass compass={state.ownCacheCompass} />
       ) : null}
 
-      {state.ready && state.playing && !state.mapOpen ? (
+      {state.ready && state.playing && !state.mapOpen && state.chestSlots === null ? (
         <Minimap feed={mapFeed} fog={fog} onOpenMap={onToggleMap} />
       ) : null}
 
+      {state.ready && state.playing && state.chestSlots !== null ? (
+        <ChestPanel
+          slots={state.chestSlots}
+          carrying={state.carrying}
+          pending={state.chestPending}
+          note={state.chestNote}
+          onTransfer={onChestTransfer}
+          onClose={onCloseChest}
+        />
+      ) : null}
       {showingWorld ? <HealthBar health={state.health} /> : null}
       {showingWorld && state.raidBanner !== null ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
@@ -157,7 +173,7 @@ export function Hud({
       {showingWorld && state.raidBanner === null && state.raidersInSight > 0 ? (
         <RaidTracker count={state.raidersInSight} />
       ) : null}
-      {state.ready && state.playing && !state.mapOpen ? (
+      {state.ready && state.playing && !state.mapOpen && state.chestSlots === null ? (
         <>
           {state.inventoryOpen ? <div className="inventory-scrim" /> : null}
           <Hotbar

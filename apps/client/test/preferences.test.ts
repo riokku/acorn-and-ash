@@ -29,7 +29,12 @@ describe('remembering the Settings menu', () => {
 
   it('round-trips a real choice', () => {
     const storage = fakeStorage();
-    const preferences = { musicVolume: 0.4, sfxVolume: 0.7, lookSensitivity: 1.5 };
+    const preferences = {
+      grassDensity: 0.75,
+      musicVolume: 0.4,
+      sfxVolume: 0.7,
+      lookSensitivity: 1.5,
+    };
     writePreferences(storage, preferences);
     expect(readPreferences(storage)).toEqual(preferences);
   });
