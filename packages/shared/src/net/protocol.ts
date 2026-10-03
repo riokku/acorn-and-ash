@@ -37,6 +37,7 @@ import type {
   CacheEvent,
   CraftedEvent,
   CookedEvent,
+  CollectedEvent,
   DiscardedEvent,
   DiscardRequest,
   FishingEvent,
@@ -725,7 +726,28 @@ function decodeDroppedPiles(view: DataView): DroppedPileView[] | null {
   return piles;
 }
 
-/** Word that a player dropped or destroyed something. Only they are ever sent it. */
+/** Confirmed collections are bounded so bursts fit in a single binary packet. */
+export const MAX_COLLECTIONS_PER_MESSAGE = 255;
+/** netId(2), item(1), count(2), x/z(8), depleted(1). */
+export function encodeCollected(events: readonly CollectedEvent[]): ArrayBuffer {
+  const count = Math.min(events.length, MAX_COLLECTIONS_PER_MESSAGE);
+  const buffer = new ArrayBuffer(2 + count * 14);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Collected);
+  view.setUint8(1, count);
+  for (let i = 0; i < count; i++) {
+    const event = events[i]!;
+    const offset = 2 + i * 14;
+    view.setUint16(offset, event.netId, true);
+    view.setUint8(offset + 2, itemIndex(event.item));
+    view.setUint16(offset + 3, event.count, true);
+    view.setFloat32(offset + 5, event.x, true);
+    view.setFloat32(offset + 9, event.z, true);
+    view.setUint8(offset + 13, event.depleted ? 1 : 0);
+  }
+  return buffer;
+}
+
 /** Only sent to the player whose pickup was refused. */
 export function encodePickupRefused(item: ItemId, reason: 'full' | 'limit'): ArrayBuffer {
   return new Uint8Array([
@@ -1401,6 +1423,37 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.DroppedPiles: {
       const piles = decodeDroppedPiles(view);
       return piles === null ? null : { type: 'droppedPiles', piles };
+    }
+    case ServerMessageType.Collected: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * 14) return null;
+      const events: CollectedEvent[] = [];
+      for (let i = 0; i < count; i++) {
+        const offset = 2 + i * 14;
+        const item = itemFromIndex(view.getUint8(offset + 2));
+        const amount = view.getUint16(offset + 3, true);
+        const x = view.getFloat32(offset + 5, true);
+        const z = view.getFloat32(offset + 9, true);
+        const flags = view.getUint8(offset + 13);
+        if (
+          item === null ||
+          amount === 0 ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(z) ||
+          flags > 1
+        )
+          return null;
+        events.push({
+          netId: view.getUint16(offset, true),
+          item,
+          count: amount,
+          x,
+          z,
+          depleted: flags === 1,
+        });
+      }
+      return { type: 'collected', events };
     }
     case ServerMessageType.PickupRefused: {
       if (data.byteLength !== 3) return null;

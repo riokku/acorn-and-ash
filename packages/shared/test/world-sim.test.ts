@@ -131,6 +131,27 @@ function inFront(kind: BuildableKindId): number {
 }
 
 describe('the world simulation', () => {
+  it('moves at walking pace while a swift attack remains active', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: -10,
+      y: 0,
+      z: 4,
+      facingYaw: 0,
+      hunger: HUNGER_MAX,
+      equippedItem: 'axe',
+      items: [{ item: 'axe', count: 1 }],
+    });
+    for (let seq = 1; seq <= 5; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 1, 0, seq === 1 ? PlayerButton.Swing : 0));
+      sim.step(tickClock());
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Swing);
+    }
+    const self = sim.snapshotFor(1).find((entity) => entity.netId === 1)!;
+    expect(self.z).toBeLessThan(3);
+  });
+
   it('starts with the clearing built and nobody in it', () => {
     const sim = createWorld();
     expect(sim.playerCount).toBe(0);
@@ -1527,6 +1548,43 @@ describe('dropping and destroying', () => {
     drive(sim, 1, 0, 0, 2, 1, PlayerButton.Interact);
     expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: patch.item, reason: 'full' }]);
     expect(sim.gatherPatchesList()[0]?.remaining).toBe(patch.remaining);
+  });
+
+  it('reports confirmed material collections and only flourishes when the pile is emptied', () => {
+    const sim = setUp([{ item: 'stick', count: 2 }]);
+    sim.discardItem(1, { item: 'stick', amount: 2, destroy: false }, clockMs);
+    const pile = sim.droppedPilesList()[0]!;
+    sim.addPlayer(2, {
+      netId: 2,
+      x: pile.x,
+      y: 0,
+      z: pile.z,
+      facingYaw: 0,
+      hunger: HUNGER_MAX,
+      items: [
+        { item: 'log', count: 50 },
+        { item: 'stick', count: 9 },
+      ],
+    });
+    drive(sim, 2, 0, 0, 1, 1, PlayerButton.Interact);
+    expect(sim.drainCollectionEvents()).toEqual([
+      { netId: 2, item: 'stick', count: 1, x: pile.x, z: pile.z, depleted: false },
+    ]);
+    drive(sim, 2, 0, 0, 1, 2, PlayerButton.Interact);
+    expect(sim.drainCollectionEvents()).toEqual([]);
+    sim.discardItem(2, { item: 'log', amount: 10, destroy: true }, clockMs);
+    drive(sim, 2, 0, 0, 1, 3, PlayerButton.Interact);
+    expect(sim.drainCollectionEvents()).toEqual([
+      { netId: 2, item: 'stick', count: 1, x: pile.x, z: pile.z, depleted: true },
+    ]);
+    expect(sim.droppedPilesList()).toEqual([]);
+  });
+
+  it('does not celebrate piles disappearing through expiry', () => {
+    const sim = setUp([{ item: 'stick', count: 1 }]);
+    sim.discardItem(1, { item: 'stick', amount: 1, destroy: false }, clockMs);
+    sim.fadeDroppedPiles(clockMs + (DROPPED_PILE_SECONDS + 1) * 1000);
+    expect(sim.drainCollectionEvents()).toEqual([]);
   });
 
   it('adds more of the same, dropped in the same place, to the one pile', () => {

@@ -10,7 +10,7 @@ import * as THREE from 'three/webgpu';
  * Every bit of one kind is drawn by one instanced mesh, reused round and
  * round, so a flurry of blows costs nothing extra to draw.
  */
-export type BurstKind = 'wood' | 'fur' | 'dust' | 'bone' | 'spark';
+export type BurstKind = 'wood' | 'fur' | 'dust' | 'bone' | 'spark' | 'gather';
 
 interface BurstStyle {
   readonly geometry: THREE.BufferGeometry;
@@ -36,6 +36,19 @@ interface BurstStyle {
 }
 
 const STYLES: Record<BurstKind, BurstStyle> = {
+  gather: {
+    geometry: new THREE.OctahedronGeometry(0.035, 0),
+    count: 7,
+    speed: [0.25, 0.65],
+    lift: [0.6, 1.1],
+    gravity: 0.25,
+    drag: 1.8,
+    life: [0.45, 0.75],
+    spread: Math.PI,
+    swell: 0.15,
+    colors: [0xffe3a1, 0xf9ce79, 0xfff0c8],
+    glow: true,
+  },
   wood: {
     geometry: new THREE.BoxGeometry(0.07, 0.025, 0.045),
     count: 9,
@@ -223,6 +236,7 @@ export class ImpactBursts {
 
   constructor() {
     this.pools = {
+      gather: new BurstPool(STYLES.gather),
       wood: new BurstPool(STYLES.wood),
       fur: new BurstPool(STYLES.fur),
       dust: new BurstPool(STYLES.dust),

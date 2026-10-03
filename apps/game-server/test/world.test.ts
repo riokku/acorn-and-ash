@@ -968,6 +968,15 @@ describe('patches running out', () => {
       Array.from({ length: held + 1 }, (_, taken) => held - taken),
     );
     expect(gatherer.inventory()).toEqual([{ item: 'stick', count: held }]);
+    const collections = watcher.received.flatMap((message) =>
+      message.type === 'collected' ? message.events : [],
+    );
+    expect(collections).toHaveLength(held);
+    expect(collections.map((event) => event.depleted)).toEqual(
+      Array.from({ length: held }, (_, index) => index === held - 1),
+    );
+    expect(collections.every((event) => event.item === 'stick' && event.count === 1)).toBe(true);
+
     gatherer.close();
     watcher.close();
   });

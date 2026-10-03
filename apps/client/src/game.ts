@@ -24,6 +24,9 @@ import {
   restingPlaceInReach,
   POND_FISH,
   PROP_KINDS,
+  roomFor,
+  inventoryFromEntries,
+  type CollectedEvent,
   treeLogSpots,
   RAIDER_KINDS,
   PlayerButton,
@@ -106,9 +109,10 @@ import { clickAimYaw, type ClickCandidate } from './input/click-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
+import { GatheringFocus } from './scene/gathering-focus';
 import { TreeLandingEffects } from './scene/tree-landing';
 import { PickupNoticeShelf } from './hud/pickup-notice';
-import { playPickupRefused, playTreeLanding } from './audio/feedback';
+import { playPickupRefused, playTreeLanding, playCollection } from './audio/feedback';
 import {
   buildClearingScene,
   type ClearingScene,
@@ -613,6 +617,7 @@ export class Game {
   private gatherPatches: readonly GatherPatchView[] = [];
   private droppedPiles: readonly DroppedPileView[] = [];
   private groundItems: GroundItems | null = null;
+  private readonly gatheringFocus = new GatheringFocus();
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
    * Whether `carrying` is this connection's first word on the pack yet. The
@@ -733,6 +738,7 @@ export class Game {
     this.scene.add(this.outdoors);
     this.scene.add(this.bursts.group);
     this.outdoors.add(this.treeLandingEffects.group);
+    this.outdoors.add(this.gatheringFocus.group);
     const fade = document.createElement('div');
     fade.className = 'scene-fade';
     this.options.canvas.insertAdjacentElement('afterend', fade);
@@ -1009,6 +1015,7 @@ export class Game {
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
+    this.gatheringFocus.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.floats.dispose();
@@ -1190,6 +1197,10 @@ export class Game {
       }
       case 'raidNews': {
         this.hearAboutRaid(message.news);
+        break;
+      }
+      case 'collected': {
+        for (const event of message.events) this.showCollection(event);
         break;
       }
       case 'gestures': {
@@ -2538,6 +2549,7 @@ export class Game {
 
     if (this.space !== OUTDOORS) {
       // Nothing out in the world is within reach from in here.
+      this.gatheringFocus.setTarget(null);
       this.nearbyItem = null;
       this.nearbyPile = null;
       this.nearGatherSpot = null;
@@ -2571,8 +2583,27 @@ export class Game {
     const pile = droppedPileInReach(player.motion.position, this.droppedPiles);
     this.nearbyPile = pile === null ? null : { item: pile.item, count: pile.count };
 
-    this.nearGatherSpot =
-      gatherSpotInReach(player.motion.position, this.gatherPatches)?.item ?? null;
+    const patch = gatherSpotInReach(player.motion.position, this.gatherPatches);
+    this.nearGatherSpot = patch?.item ?? null;
+    const gatherObject =
+      reachable !== null
+        ? clearing.pickupObject(reachable.id)
+        : pile !== null
+          ? (this.groundItems?.target('pile', pile.id) ?? null)
+          : patch !== null
+            ? (this.groundItems?.target('patch', patch.id) ?? null)
+            : null;
+    const targetItem = reachable?.item ?? pile?.item ?? patch?.item;
+    const blocked =
+      targetItem !== undefined && roomFor(inventoryFromEntries(this.carrying), targetItem) === 0;
+    this.gatheringFocus.setTarget(
+      isFreeToInteract(action) && this.playing && !this.inventoryOpen && !this.mapOpen
+        ? gatherObject
+        : null,
+      pile !== null && reachable === null ? 0.6 : 0.28,
+      blocked,
+    );
+    this.gatheringFocus.update(deltaSeconds);
 
     // Only a hint here too: the server decides whether it is really this
     // player's to dig up.
@@ -2857,6 +2888,18 @@ export class Game {
       this.knockoutDark = false;
       fade.classList.remove('scene-fade-dark');
       window.setTimeout(() => fade.classList.remove('scene-fade-slow'), 900);
+    }
+  }
+
+  private showCollection(event: CollectedEvent): void {
+    const listener = this.listenerPoint();
+    if (listener === null) return;
+    const distance = Math.hypot(listener.x - event.x, listener.z - event.z);
+    const volume = event.netId === this.selfNetId ? 1 : Math.max(0, 1 - distance / 12) ** 2 * 0.45;
+    playCollection(event.item, event.depleted, volume);
+    if (event.depleted && distance < 24) {
+      const y = this.collision?.terrain.heightAt(event.x, event.z) ?? 0;
+      this.bursts.burst('gather', new THREE.Vector3(event.x, y + 0.18, event.z), 0, 0);
     }
   }
 

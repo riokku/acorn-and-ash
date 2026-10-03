@@ -21,8 +21,6 @@ export interface ComboSwing {
   readonly impact: number;
   /** From here a click already waiting goes straight on to the next swing. */
   readonly chain: number;
-  /** Feet stay put until here. After it, walking off cuts the follow-through short. */
-  readonly planted: number;
   /** When it is over. */
   readonly end: number;
 }
@@ -35,9 +33,9 @@ export interface ComboSwing {
  * when each finishes, which is how holding it chops a tree down.
  */
 export const LIGHT_COMBO: readonly [ComboSwing, ComboSwing, ComboSwing] = [
-  { impact: 4, chain: 6, planted: 7, end: 10 },
-  { impact: 4, chain: 6, planted: 7, end: 10 },
-  { impact: 5, chain: 14, planted: 10, end: 14 },
+  { impact: 4, chain: 6, end: 10 },
+  { impact: 4, chain: 6, end: 10 },
+  { impact: 5, chain: 14, end: 14 },
 ];
 
 /** Minimum wind-up before a released charge can strike: see `CHARGE_SECONDS`. */

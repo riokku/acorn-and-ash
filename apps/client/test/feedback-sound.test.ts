@@ -54,7 +54,7 @@ vi.mock('../src/audio/sound', () => ({
   soundContext: audio.getContext,
   noiseBuffer: () => null,
 }));
-import { playPickupRefused, playTreeLanding } from '../src/audio/feedback';
+import { playCollection, playPickupRefused, playTreeLanding } from '../src/audio/feedback';
 
 beforeEach(() => {
   audio.peaks.length = 0;
@@ -64,12 +64,30 @@ beforeEach(() => {
 });
 
 describe('feedback audio', () => {
+  it('scales collection sounds by distance and releases their voices', () => {
+    for (const item of ['log', 'stick', 'flower'] as const) {
+      audio.peaks.length = 0;
+      playCollection(item, true);
+      const loud = [...audio.peaks];
+      audio.peaks.length = 0;
+      playCollection(item, true, 0.25);
+      expect(audio.peaks.length).toBe(loud.length);
+      audio.peaks.forEach((value, index) => expect(value).toBeCloseTo(loud[index]! * 0.25));
+    }
+    for (const voice of audio.ended) {
+      voice.onended?.();
+      expect(voice.disconnect).toHaveBeenCalled();
+    }
+  });
+
   it('keeps muted effects and distant landings silent without creating voices', () => {
     audio.volume.mockReturnValue(0);
     playPickupRefused();
     playTreeLanding(1);
+    playCollection('log', true);
     audio.volume.mockReturnValue(1);
     playTreeLanding(0);
+    playCollection('flower', true, 0);
     expect(audio.getContext).not.toHaveBeenCalled();
     expect(audio.ended).toHaveLength(0);
   });

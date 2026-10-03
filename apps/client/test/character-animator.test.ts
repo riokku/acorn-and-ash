@@ -75,3 +75,36 @@ describe('fishing animation', () => {
     animator.dispose();
   });
 });
+
+describe('moving swift attacks', () => {
+  it('keeps the walking pose on the legs while the hands finish a swing', () => {
+    const root = new THREE.Object3D();
+    const hand = new THREE.Object3D();
+    hand.name = 'hand';
+    const foot = new THREE.Object3D();
+    foot.name = 'foot';
+    root.add(hand, foot);
+    const track = (bone: string, value: number) =>
+      new THREE.NumberKeyframeTrack(`${bone}.position[x]`, [0, 2], [value, value]);
+    const animator = new CharacterAnimator(root, {
+      whole: new Map([
+        ['attack1', new THREE.AnimationClip('attack1', 2, [track('hand', 5), track('foot', 9)])],
+      ]),
+      upper: new Map([
+        ['attack1', new THREE.AnimationClip('attack1-upper', 2, [track('hand', 5)])],
+      ]),
+      lower: new Map([['walk', new THREE.AnimationClip('walk-lower', 2, [track('foot', 2)])]]),
+    });
+    for (let frame = 0; frame < 30; frame++) {
+      animator.update(
+        1 / 60,
+        { ...idle, kind: ActionKind.Swing, step: 1, age: frame / 3 },
+        { speed: 3, airborne: false },
+      );
+    }
+    expect(hand.position.x).toBeCloseTo(5);
+    // The gait blends in smoothly, rather than snapping to the attack’s foot pose.
+    expect(foot.position.x).toBeCloseTo(2, 1);
+    animator.dispose();
+  });
+});

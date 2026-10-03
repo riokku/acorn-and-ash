@@ -15,6 +15,7 @@ import {
   encodeDiscard,
   encodeDiscarded,
   encodePickupRefused,
+  encodeCollected,
   encodeRaiders,
   encodeRaidNews,
   encodeRaiderHit,
@@ -1283,5 +1284,24 @@ describe('private pickup refusal messages', () => {
     bytes[2] = 0;
     bytes[1] = 255;
     expect(decodeServerMessage(message)).toBeNull();
+  });
+});
+
+describe('confirmed collections', () => {
+  const events = [
+    { netId: 7, item: 'log' as const, count: 3, x: -10.25, z: 4.5, depleted: false },
+    { netId: 8, item: 'flower' as const, count: 1, x: 3, z: -5, depleted: true },
+  ];
+  it('round-trips multiple collectors, counts and cleared targets', () => {
+    expect(decodeServerMessage(encodeCollected(events))).toEqual({ type: 'collected', events });
+  });
+  it('rejects truncated packets, unknown items and invalid locations', () => {
+    const message = encodeCollected(events);
+    expect(decodeServerMessage(message.slice(0, -1))).toBeNull();
+    const bytes = new Uint8Array(message);
+    bytes[4] = 255;
+    expect(decodeServerMessage(message)).toBeNull();
+    const invalid = encodeCollected([{ ...events[0]!, x: Number.NaN }]);
+    expect(decodeServerMessage(invalid)).toBeNull();
   });
 });

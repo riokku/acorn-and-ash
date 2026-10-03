@@ -14,6 +14,7 @@ import type {
   CacheEvent,
   CraftedEvent,
   CookedEvent,
+  CollectedEvent,
   DiscardedEvent,
   FishingEvent,
   HealthEvent,
@@ -67,6 +68,7 @@ export const ServerMessageType = {
   RaiderHit: 0x2c,
   Cooked: 0x2d,
   PickupRefused: 0x2e,
+  Collected: 0x2f,
 } as const;
 
 export const RejectReason = {
@@ -522,7 +524,13 @@ export interface PickupRefusedMessage {
   readonly reason: 'full' | 'limit';
 }
 
+export interface CollectedMessage {
+  readonly type: 'collected';
+  readonly events: readonly CollectedEvent[];
+}
+
 export type ServerMessage =
+  | CollectedMessage
   | PickupRefusedMessage
   | WelcomeMessage
   | SnapshotMessage

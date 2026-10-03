@@ -315,6 +315,16 @@ export interface PickupTaken {
   readonly item: ItemId;
 }
 
+/** A confirmed collection, used for material sounds and a cleared-pile flourish. */
+export interface CollectedEvent {
+  readonly netId: number;
+  readonly item: ItemId;
+  readonly count: number;
+  readonly x: number;
+  readonly z: number;
+  readonly depleted: boolean;
+}
+
 /** Private feedback when an attempted pickup cannot fit. */
 export interface PickupRefusal {
   readonly netId: number;
@@ -853,6 +863,7 @@ export class WorldSimulation {
   private readonly cookingEvents: CookedEvent[] = [];
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
+  private readonly collectionEvents: CollectedEvent[] = [];
   private readonly pickupRefusals: PickupRefusal[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
@@ -1917,6 +1928,14 @@ export class WorldSimulation {
       return this.refusePickup(runtime, pickup.item);
 
     this.takenPickups.add(pickup.id);
+    this.collectionEvents.push({
+      netId: runtime.netId,
+      item: pickup.item,
+      count: 1,
+      x: pickup.x,
+      z: pickup.z,
+      depleted: true,
+    });
     this.pickupEvents.push({
       netId: runtime.netId,
       pickupId: pickup.id,
@@ -1944,6 +1963,14 @@ export class WorldSimulation {
     if (pile.count > 0) this.refusePickup(runtime, pile.item);
     if (pile.count === 0) this.droppedPiles.splice(this.droppedPiles.indexOf(pile), 1);
     this.pileChanges.add(pile.id);
+    this.collectionEvents.push({
+      netId: runtime.netId,
+      item: pile.item,
+      count: taken,
+      x: pile.x,
+      z: pile.z,
+      depleted: pile.count === 0,
+    });
     this.gatherEvents.push(runtime.netId);
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: pile.item });
     return true;
@@ -1966,6 +1993,14 @@ export class WorldSimulation {
     patch.remaining -= 1;
     if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
     this.patchChanges.add(patch.id);
+    this.collectionEvents.push({
+      netId: runtime.netId,
+      item: patch.item,
+      count: 1,
+      x: patch.x,
+      z: patch.z,
+      depleted: patch.remaining === 0,
+    });
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     this.gatherEvents.push(runtime.netId);
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: patch.item });
@@ -1981,6 +2016,10 @@ export class WorldSimulation {
       runtime.pickupRefused = true;
     }
     return true;
+  }
+
+  drainCollectionEvents(): CollectedEvent[] {
+    return this.collectionEvents.splice(0);
   }
 
   drainPickupRefusals(): PickupRefusal[] {

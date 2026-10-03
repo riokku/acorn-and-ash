@@ -211,6 +211,7 @@ export function movePose(move: MoveView): MovePose {
       return {
         ...NO_MOVE,
         clip,
+        legsFree: move.afterWindup !== true,
         time: lineUp(clip, speed, impact, move.age),
         // Untwisting into the blow, all the way round by the time it lands.
         coil: unwinding ? 1 - smoothstep(0, impact, move.age) : 0,

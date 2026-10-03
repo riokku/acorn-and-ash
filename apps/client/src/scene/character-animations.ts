@@ -43,6 +43,9 @@ const UPPER_BODY_BONES = new Set([
  */
 const SPLIT_CLIPS: readonly MoveClip[] = [
   'attack1',
+  'attack2',
+  'attack3',
+  'chop',
   'idle',
   'walk',
   'run',

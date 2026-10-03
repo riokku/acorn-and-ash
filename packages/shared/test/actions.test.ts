@@ -66,23 +66,30 @@ describe('a swing of the light combo', () => {
     expect(state.kind).toBe(ActionKind.Idle);
   });
 
-  it('plants your feet and lands partway in', () => {
+  it('leaves movement free and lands partway in', () => {
     const { state, feed, untilImpact } = player();
-    expect(feed(PlayerButton.Swing).footing).toBe('planted');
+    expect(feed(PlayerButton.Swing).footing).toBe('free');
     expect(state).toMatchObject({ kind: ActionKind.Swing, step: 1, age: 0 });
     const landed = untilImpact();
     expect(landed.after).toBe(LIGHT_COMBO[0].impact);
     expect(landed.tick.impact).toEqual({ kind: 'swing', step: 1 });
   });
 
-  it('keeps your feet planted while you hold a direction, until the follow-through', () => {
-    const { feed } = player();
-    feed(PlayerButton.Swing);
-    const footing: string[] = [];
-    for (let i = 1; i < LIGHT_COMBO[0].planted; i++) footing.push(feed(0, 0, 1).footing);
-    expect(new Set(footing)).toEqual(new Set(['planted']));
-    // Past the planted part, walking off cuts the follow-through short.
-    expect(feed(0, 0, 1).footing).toBe('free');
+  it('keeps movement free for the full swing without cancelling its impact or follow-through', () => {
+    const { state, feed } = player();
+    expect(feed(PlayerButton.Swing, 0, 1).footing).toBe('free');
+    let hits = 0;
+    for (let age = 1; age < LIGHT_COMBO[0].end; age++) {
+      const tick = feed(0, 0, 1);
+      expect(tick.footing).toBe('free');
+      expect(state.kind).toBe(ActionKind.Swing);
+      if (tick.impact !== null) hits++;
+      const input = createInput(age, 0, 1, 0, PlayerButton.Sprint);
+      expect(footedInput(input, tick.footing, 0)).toEqual(input);
+    }
+    expect(hits).toBe(1);
+    feed(0, 0, 1);
+    expect(state.kind).toBe(ActionKind.Idle);
   });
 
   it('chains three swings from three clicks, then starts over', () => {

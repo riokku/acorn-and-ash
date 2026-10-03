@@ -38,6 +38,7 @@ export interface ClearingScene {
   cameraBlockers: THREE.Mesh;
   /** Hide whatever the server says has already been picked up. */
   setTakenPickups(taken: ReadonlySet<number>): void;
+  pickupObject(id: number): THREE.Object3D | null;
   /**
    * Put the trees where the server says they are: felled ones as stumps, grown
    * ones back at whatever size this generation of them is.
@@ -190,6 +191,10 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const scene: ClearingScene = {
     group,
     cameraBlockers,
+    pickupObject: (id) => {
+      const pickup = pickups.get(id);
+      return pickup?.visible ? pickup : null;
+    },
     setTakenPickups: (taken) => {
       for (const [id, model] of pickups) model.visible = !taken.has(id);
     },
