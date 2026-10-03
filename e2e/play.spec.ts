@@ -258,6 +258,8 @@ test('shows whether it is day or night', async ({ page }) => {
 test('walking moves the player, and the server agrees', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
+  // Connecting can precede model loading; the loading curtain has no play handler.
+  await expect(page.locator('.hud-curtain')).toContainText('Click to play', { timeout: 120_000 });
 
   const before = positionOf(await hudValue(page, 'Position'));
   await page.locator('.hud-curtain').click();
