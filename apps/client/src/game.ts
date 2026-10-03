@@ -1,3 +1,11 @@
+import {
+  WOODLAND_ENCOUNTERS,
+  homeBuildArea,
+  HOME_BUILD_RADII,
+  type ProtectedBuildSite,
+} from '@acorn/shared';
+import { createBuildBoundary } from './scene/build-boundary';
+import { groundAlongRay } from './building/ground-ray';
 import { createDiscoveryLandmarks } from './scene/discovery-sites';
 import {
   DISCOVERIES,
@@ -26,7 +34,6 @@ import {
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
   BUILD_ROTATION_STEP,
-  CLEARING_TREE_LINE_INNER,
   DOORWAY_REACH,
   HOME_ROOM,
   type ChestRequest,
@@ -386,8 +393,8 @@ function animalKindOf(animalId: number): AnimalKindId | undefined {
 }
 
 /** The cabin's block as a box the camera can bump into - see `homeCameraBlockers`. */
-function homeCameraBlocker(home: BuiltPropView): THREE.Mesh {
-  const collider = cabinCollider(home);
+function homeCameraBlocker(home: BuiltPropView, groundY = 0): THREE.Mesh {
+  const collider = cabinCollider(home, groundY);
   const box = new THREE.Mesh(
     new THREE.BoxGeometry(
       collider.shape === 'box' ? collider.halfX * 2 : 5,
@@ -395,7 +402,7 @@ function homeCameraBlocker(home: BuiltPropView): THREE.Mesh {
       collider.shape === 'box' ? collider.halfZ * 2 : 4,
     ),
   );
-  box.position.set(collider.x, HOME_CAMERA_BLOCKER_HEIGHT / 2, collider.z);
+  box.position.set(collider.x, groundY + HOME_CAMERA_BLOCKER_HEIGHT / 2, collider.z);
   box.rotation.y = home.yaw;
   box.updateMatrixWorld(true);
   return box;
@@ -408,6 +415,7 @@ const HOME_CAMERA_BLOCKER_HEIGHT = 5;
 export interface GameDebug {
   selfNetId(): number;
   grassClumps(): number;
+  buildBoundaryVisible(): boolean;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
   /** What the Equipped list says one particular connected player has in hand, if anything. */
@@ -581,6 +589,8 @@ export class Game {
   /** Whether a campfire is close enough right now to light or put out, and which. */
   private nearCampfire: 'lit' | 'unlit' | null = null;
   private canBuild = false;
+  private buildBoundary: ReturnType<typeof createBuildBoundary> | null = null;
+  private protectedBuildSites: ProtectedBuildSite[] = [];
   private buildMenuOpen = false;
   private craftMenuOpen = false;
   private journalTab: 'craft' | 'discoveries' = 'craft';
@@ -640,8 +650,6 @@ export class Game {
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
   /** The clearing's ground, which is flat at zero everywhere a piece can be placed. */
-  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  private readonly groundHit = new THREE.Vector3();
 
   private enteringWorld = false;
   private firstWorldFrame: (() => void) | null = null;
@@ -1045,6 +1053,7 @@ export class Game {
   debug(): GameDebug {
     return {
       selfNetId: () => this.selfNetId,
+      buildBoundaryVisible: () => this.buildBoundary?.group.visible ?? false,
       grassClumps: () => this.grass?.mesh.count ?? 0,
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
@@ -1184,6 +1193,7 @@ export class Game {
     this.forestAudio.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
+    this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
     this.grass?.dispose();
@@ -1341,6 +1351,8 @@ export class Game {
           blocked: 'The larger home needs more clear space around it.',
           player: 'Someone is standing where the larger home will go.',
           busy: 'Wait a moment before building.',
+          area: 'This home boundary needs more room away from other homes and protected sites.',
+          ground: 'Choose more level ground for your home.',
         };
         this.craftingNews = {
           text:
@@ -1912,6 +1924,18 @@ export class Game {
         clearing.water,
       );
       this.discoverySites = buildDiscoverySites(encounterSites);
+      this.protectedBuildSites = [
+        ...WOODLAND_ENCOUNTERS,
+        ...this.discoverySites.map((site) => ({
+          x: site.x,
+          z: site.z,
+          radius: 8,
+          name: site.kind,
+        })),
+        ...encounterSites.map((site) => ({ x: site.x, z: site.z, radius: 12, name: site.kind })),
+      ];
+      this.buildBoundary = createBuildBoundary(terrain);
+      this.outdoors.add(this.buildBoundary.group);
       this.updateDiscoveryMarkers();
       this.discoveryLandmarks = createDiscoveryLandmarks(this.discoverySites, terrain);
       this.outdoors.add(this.discoveryLandmarks.group);
@@ -2070,7 +2094,11 @@ export class Game {
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
       if ('setLit' in built) built.setLit(prop.lit);
-      built.group.position.set(prop.x, 0, prop.z);
+      built.group.position.set(
+        prop.x,
+        this.collision?.terrain.heightAt(prop.x, prop.z) ?? 0,
+        prop.z,
+      );
       built.group.rotation.y = prop.yaw;
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
@@ -2091,10 +2119,11 @@ export class Game {
       this.homeCameraBlockers.length = 0;
       for (const prop of this.builtProps)
         if (isHomeKind(prop.kind)) {
-          const collider = cabinCollider(prop);
+          const groundY = this.collision.terrain.heightAt(prop.x, prop.z);
+          const collider = cabinCollider(prop, groundY);
           this.collision.colliders.push(collider);
           this.solidHomes.set(prop.id, collider);
-          this.homeCameraBlockers.push(homeCameraBlocker(prop));
+          this.homeCameraBlockers.push(homeCameraBlocker(prop, groundY));
         }
     }
     this.updateMapBuilds();
@@ -2665,6 +2694,9 @@ export class Game {
 
     placing.plan = planPlacement({
       kind: placing.kind,
+      enforceHomeArea: true,
+      terrain: this.collision!.terrain,
+      protectedSites: this.protectedBuildSites,
       homeSkills: this.homeSkills,
       yaw: placing.yaw,
       mouse: this.groundUnderPointer(camera),
@@ -2687,7 +2719,14 @@ export class Game {
 
     const { spot, refusal } = placing.plan;
     if (spot === null) placing.ghost.hide();
-    else placing.ghost.show(spot.x, spot.z, spot.yaw, refusal === null);
+    else
+      placing.ghost.show(
+        spot.x,
+        spot.z,
+        spot.yaw,
+        refusal === null,
+        this.collision?.terrain.heightAt(spot.x, spot.z) ?? 0,
+      );
   }
 
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
@@ -2699,13 +2738,15 @@ export class Game {
       -(pointer.y / window.innerHeight) * 2 + 1,
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
-    const hit = this.clickRaycaster.ray.intersectPlane(this.groundPlane, this.groundHit);
-    return hit === null ? null : { x: hit.x, z: hit.z };
+    const ray = this.clickRaycaster.ray;
+    return this.collision === null
+      ? null
+      : groundAlongRay(ray.origin, ray.direction, this.collision.terrain);
   }
 
   /** Every tree, rock and stump, as the same footprints the server checks a build against. */
   private sceneryFootprints(): Footprint[] {
-    return this.standingProps.map((prop) =>
+    return [...this.standingProps, ...this.wildernessProps].map((prop) =>
       roundFootprint(
         prop.x,
         prop.z,
@@ -3077,6 +3118,26 @@ export class Game {
         : [],
     );
     this.updatePlacement(camera, player);
+    const ownHome = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
+    let area = ownHome === undefined ? null : homeBuildArea(ownHome);
+    const proposal = this.placing?.plan.spot;
+    if (
+      this.placing !== null &&
+      isHomeKind(this.placing.kind) &&
+      proposal !== null &&
+      proposal !== undefined
+    )
+      area = homeBuildArea({ id: ownHome?.id ?? 0, kind: this.placing.kind, ...proposal });
+    this.mapFeed.buildArea =
+      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+        ? area
+        : null;
+    this.buildBoundary?.show(
+      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+        ? area
+        : null,
+      this.placing?.plan.refusal !== null && this.placing?.plan.refusal !== undefined,
+    );
 
     // Walking into a door darkens the screen straight away, ahead of the
     // server's own word that we are through - see decision 0055.
@@ -3286,9 +3347,7 @@ export class Game {
           (this.carrying.find((entry) => entry.item === cost.item)?.count ?? 0) >= cost.amount,
       );
     this.canBuild =
-      this.clearing !== null &&
-      Math.hypot(player.motion.position.x, player.motion.position.z) < CLEARING_TREE_LINE_INNER &&
-      BUILDABLE_KIND_ORDER.some(canAfford);
+      this.clearing !== null && this.space === OUTDOORS && BUILDABLE_KIND_ORDER.some(canAfford);
 
     this.centreSunOn(position);
   }
@@ -3790,6 +3849,13 @@ export class Game {
                 ) < 2.7,
             )?.name ?? null)
           : null,
+      buildAreaRadius: (() => {
+        const kind =
+          this.placing !== null && isHomeKind(this.placing.kind)
+            ? this.placing.kind
+            : this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
+        return kind !== undefined && isHomeKind(kind) ? HOME_BUILD_RADII[kind] : null;
+      })(),
       homeKind: (() => {
         const kind = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
         return kind !== undefined && isHomeKind(kind) ? kind : null;

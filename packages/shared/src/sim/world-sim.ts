@@ -1,3 +1,11 @@
+import { WOODLAND_ENCOUNTERS } from '../data/tracking';
+import {
+  homeBuildArea,
+  checkHomeBuildArea,
+  checkPieceBuildArea,
+  buildGroundIsLevel,
+  type ProtectedBuildSite,
+} from './build-areas';
 import {
   buildDiscoverySites,
   discoveryForageSpots,
@@ -905,7 +913,7 @@ export class WorldSimulation {
   private readonly homeSolids = new Map<number, ReturnType<typeof cabinCollider>>();
   private readonly roomWorlds = new Map<HomeKind, CollisionWorld>();
   private addHomeSolid(prop: BuiltProp): void {
-    const solid = cabinCollider(prop);
+    const solid = cabinCollider(prop, this.collision.terrain.heightAt(prop.x, prop.z));
     this.homeSolids.set(prop.id, solid);
     this.collision.colliders.push(solid);
   }
@@ -3019,6 +3027,24 @@ export class WorldSimulation {
     };
     if (runtime.swingCooldownTicks > 0) return refuse('busy');
     if (!canAfford(runtime.inventory, buildable)) return refuse('materials');
+    const ownedHome = runtime.playerKey === null ? null : this.homeOf(runtime.playerKey);
+    const otherHomes = this.builtProps.filter(
+      (prop) => isHomeKind(prop.kind) && prop.id !== ownedHome?.id,
+    );
+    const proposedPiece = buildableFootprint(kind, request.x, request.z, request.yaw);
+    if (!buildGroundIsLevel(proposedPiece, this.collision.terrain)) return refuse('ground');
+    if (isHomeKind(kind)) {
+      const area = homeBuildArea({ id: ownedHome?.id ?? 0, kind, x: request.x, z: request.z });
+      if (
+        area === null ||
+        checkHomeBuildArea(area, otherHomes, this.protectedBuildSites()) !== null
+      )
+        return refuse('area');
+    } else if (
+      checkPieceBuildArea(proposedPiece, ownedHome, otherHomes, this.protectedBuildSites()) !== null
+    )
+      return;
+
     if (buildable.isHome) {
       if (runtime.playerKey === null || !isHomeKind(kind)) return refuse('identity');
       if (!knowsHome(runtime.homeSkills, kind)) return refuse('blueprint');
@@ -3039,7 +3065,8 @@ export class WorldSimulation {
             position,
             BUILD_REACH + BUILD_REACH_SLACK,
             this.clearing.water,
-            this.buildFootprints(home.id),
+            this.buildFootprints(home.id, true),
+            true,
           ) !== null
         )
           return refuse('blocked');
@@ -3089,7 +3116,8 @@ export class WorldSimulation {
       position,
       BUILD_REACH + BUILD_REACH_SLACK,
       this.clearing.water,
-      this.buildFootprints(),
+      this.buildFootprints(undefined, true),
+      true,
     );
     if (refusal !== null) return refuse('blocked');
 
@@ -3108,7 +3136,7 @@ export class WorldSimulation {
     this.builtPropsById.set(prop.id, prop);
     if (buildable.isHome) this.addHomeSolid(prop);
     this.movePatchesFrom(piece);
-    const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
+    const ownerKey = runtime.playerKey;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
     if (isHomeKind(kind))
@@ -3117,9 +3145,17 @@ export class WorldSimulation {
   }
 
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
-  private buildFootprints(excludeId?: number): Footprint[] {
+  private protectedBuildSites(): ProtectedBuildSite[] {
     return [
-      ...this.standing.map((prop) =>
+      ...WOODLAND_ENCOUNTERS,
+      ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
+      ...this.encounterSites.map((site) => ({ x: site.x, z: site.z, radius: 12, name: site.kind })),
+    ];
+  }
+
+  private buildFootprints(excludeId?: number, includeWilderness = false): Footprint[] {
+    return [
+      ...[...this.standing, ...(includeWilderness ? this.wilderness.props : [])].map((prop) =>
         roundFootprint(
           prop.x,
           prop.z,

@@ -2277,3 +2277,19 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.build-area-note {
+  position: fixed;
+  top: 8px;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 20px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+}

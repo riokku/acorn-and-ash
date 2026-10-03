@@ -66,13 +66,13 @@ function toWorld(home: HomePlacement, localX: number, localZ: number): { x: numb
 }
 
 /** What stops you walking through a cabin's walls. */
-export function cabinCollider(home: HomePlacement): Collider {
+export function cabinCollider(home: HomePlacement, groundY = 0): Collider {
   const scale = homeOuterScale(home.kind);
   const centre = toWorld(home, CABIN_BLOCK.centreX * scale, 0);
   // Collision boxes turn the other way round from Three.js models.
   return box(
     centre.x,
-    (CABIN_BLOCK.height * scale) / 2,
+    groundY + (CABIN_BLOCK.height * scale) / 2,
     centre.z,
     CABIN_BLOCK.halfX * scale,
     (CABIN_BLOCK.height * scale) / 2,

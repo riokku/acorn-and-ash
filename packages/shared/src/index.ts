@@ -68,3 +68,7 @@ export * from './data/housing';
 export * from './world/encounters';
 
 export * from './data/discoveries';
+
+export * from './sim/build-areas';
+
+export * from './data/tracking';

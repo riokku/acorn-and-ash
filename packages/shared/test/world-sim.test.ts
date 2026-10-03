@@ -1391,15 +1391,31 @@ describe('a picked-clean patch growing back', () => {
   it('moves out from under anything built on top of it, keeping what it had left', () => {
     const sim = createWorld();
     const before = patchNamed(sim, 1);
-    sim.addPlayer(1, {
-      netId: 1,
-      x: 0,
-      y: 0,
-      z: 0,
-      facingYaw: 0,
-      items: [{ item: 'log', count: 10 }],
-      hunger: HUNGER_MAX,
-    });
+    sim.restoreBuiltProps([
+      {
+        id: 60000,
+        kind: 'cabin',
+        x: before.x,
+        z: before.z + 10,
+        yaw: 0,
+        lit: false,
+        ownerKey: 'patch-builder',
+        litUntilMs: null,
+      },
+    ]);
+    sim.addPlayer(
+      1,
+      {
+        netId: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        facingYaw: 0,
+        items: [{ item: 'log', count: 10 }],
+        hunger: HUNGER_MAX,
+      },
+      'patch-builder',
+    );
     sim.placePlayer(1, { x: before.x + 2, y: 0, z: before.z }, 0);
     sim.drainPatchChanges();
 
@@ -1407,7 +1423,7 @@ describe('a picked-clean patch growing back', () => {
     sim.queueInput(1, createInput(1, 0, 0, 0, 0));
     sim.step(tickClock());
 
-    expect(sim.builtPropsList()).toHaveLength(1);
+    expect(sim.builtPropsList().filter((prop) => prop.kind === 'campfire')).toHaveLength(1);
     const after = patchNamed(sim, 1);
     expect(after.remaining).toBe(before.remaining);
     expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeGreaterThan(1);
@@ -3529,6 +3545,11 @@ describe('building', () => {
     hunger: HUNGER_MAX,
   });
   const FACE_OUT = 0;
+  function giveBuildArea(sim: WorldSimulation, ownerKey = 'builder-1'): void {
+    sim.restoreBuiltProps([
+      { id: 60000, kind: 'cabin', x: 0, z: 15, yaw: 0, lit: false, ownerKey, litUntilMs: null },
+    ]);
+  }
 
   /** Idle ticks, so the shared cooldown from a previous swing or build clears. */
   function waitOutCooldown(sim: WorldSimulation, netId: number, seq: number): number {
@@ -3563,7 +3584,8 @@ describe('building', () => {
 
   it('places a campfire in front of you, and spends the logs', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     requestAndStep(sim, 1, 'campfire', 1);
@@ -3573,24 +3595,26 @@ describe('building', () => {
     expect(events[0]?.netId).toBe(1);
     expect(events[0]?.prop.kind).toBe('campfire');
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
-    expect(sim.builtPropsList()).toEqual([events[0]?.prop]);
+    expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)).toEqual([events[0]?.prop]);
   });
 
   it('refuses without enough logs, and spends nothing', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1, 3));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1, 3), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     requestAndStep(sim, 1, 'campfire', 1);
 
     expect(sim.drainBuildEvents()).toEqual([]);
-    expect(sim.builtPropsList()).toEqual([]);
+    expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)).toEqual([]);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(3);
   });
 
-  it('refuses a spot out past the tree line', () => {
+  it('refuses a spot outside the home building area', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: -(CLEARING_TREE_LINE_INNER - 1) }, FACE_OUT);
 
     requestAndStep(sim, 1, 'campfire', 1);
@@ -3601,21 +3625,23 @@ describe('building', () => {
 
   it('builds exactly where it was asked to, turned the way it was asked', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     sim.requestBuild(1, { kind: 'campfire', x: 1.5, z: -3, yaw: 0.75 });
     sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
     sim.step(tickClock());
 
-    expect(sim.builtPropsList()).toEqual([
+    expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)).toEqual([
       expect.objectContaining({ kind: 'campfire', x: 1.5, z: -3, yaw: 0.75 }),
     ]);
   });
 
   it('refuses a spot out of reach, and spends nothing', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     const tooFar = BUILD_REACH + BUILD_REACH_SLACK + 0.5;
@@ -3629,7 +3655,8 @@ describe('building', () => {
 
   it('refuses a spot right on top of a tree, whatever the client asked for', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     const tree = sim.clearing.props.find((prop) => PROP_KINDS[prop.kind].shape.family === 'tree');
     if (tree === undefined) throw new Error('no tree in the clearing');
     sim.placePlayer(1, { x: tree.x, y: 0, z: tree.z + 2 }, FACE_OUT);
@@ -3643,7 +3670,8 @@ describe('building', () => {
 
   it('will not stack a second campfire on top of the first', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1, 8));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1, 8), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     requestAndStep(sim, 1, 'campfire', 1);
@@ -3655,13 +3683,14 @@ describe('building', () => {
     // Blocked by the campfire already sitting there, so the second attempt
     // never happened and never spent the logs it would have needed.
     expect(sim.drainBuildEvents()).toEqual([]);
-    expect(sim.builtPropsList()).toHaveLength(1);
+    expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)).toHaveLength(1);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(4);
   });
 
   it('a second request before the cooldown clears does nothing', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1, 12));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1, 12), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
     requestAndStep(sim, 1, 'campfire', 1);
@@ -3675,24 +3704,29 @@ describe('building', () => {
 
   it('restores what was built after the world wakes from storage', () => {
     const sim = createWorld();
-    sim.addPlayer(1, withLogs(1));
+    giveBuildArea(sim, 'builder-1');
+    sim.addPlayer(1, withLogs(1), 'builder-1');
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
     requestAndStep(sim, 1, 'campfire', 1);
-    const built = sim.builtPropsList();
+    const built = sim.builtPropsList().filter((prop) => prop.id !== 60000);
     expect(built).toHaveLength(1);
 
     const restored = createWorld();
     restored.restoreBuiltProps(
       built.map((prop) => ({ ...prop, ownerKey: null, litUntilMs: null })),
     );
-    expect(restored.builtPropsList()).toEqual(built);
+    expect(restored.builtPropsList().filter((prop) => prop.id !== 60000)).toEqual(built);
 
     // A fresh build in the restored world gets its own id, never one already
     // taken by something restored from storage.
-    restored.addPlayer(2, withLogs(2));
+    giveBuildArea(restored, 'builder-2');
+    restored.addPlayer(2, withLogs(2), 'builder-2');
     restored.placePlayer(2, { x: 15, y: 0, z: 0 }, FACE_OUT);
     requestAndStep(restored, 2, 'campfire', 1);
-    const ids = restored.builtPropsList().map((prop) => prop.id);
+    const ids = restored
+      .builtPropsList()
+      .filter((prop) => prop.id !== 60000)
+      .map((prop) => prop.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -3740,7 +3774,7 @@ describe('building', () => {
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       sim.addPlayer(2, withTenLogs(2), 'someone-else');
-      sim.placePlayer(2, { x: -10, y: 0, z: 0 }, FACE_OUT);
+      sim.placePlayer(2, { x: -26, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 2, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
     });
@@ -3764,7 +3798,10 @@ describe('building', () => {
 
       const back = createWorld();
       back.restoreBuiltProps(
-        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+        sim
+          .builtPropsList()
+          .filter((prop) => prop.id !== 60000)
+          .map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       back.addPlayer(9, undefined, 'chris');
       expect(back.spaceOf(9)).toBe(home?.id);
@@ -3787,7 +3824,10 @@ describe('building', () => {
       // Walk out of the room: you come out on the side the door now faces.
       const back = createWorld();
       back.restoreBuiltProps(
-        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+        sim
+          .builtPropsList()
+          .filter((prop) => prop.id !== 60000)
+          .map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       back.addPlayer(9, undefined, 'chris');
       back.placePlayer(9, { x: HOME_ENTRY.x, y: 0, z: HOME_ENTRY.z }, 0, home.id);
@@ -3871,7 +3911,12 @@ describe('building', () => {
         sim.addPlayer(2, undefined, 'visitor');
         expect(sim.setHomeLocked(2, true)).toBeNull();
         expect(sim.setHomeLocked(1, true)?.id).toBe(home.id);
-        expect(sim.builtPropsList().find((prop) => prop.id === home.id)?.locked).toBe(true);
+        expect(
+          sim
+            .builtPropsList()
+            .filter((prop) => prop.id !== 60000)
+            .find((prop) => prop.id === home.id)?.locked,
+        ).toBe(true);
         // Already locked: nothing changed, nothing to say.
         expect(sim.setHomeLocked(1, true)).toBeNull();
         expect(sim.setHomeLocked(1, false)?.locked).toBe(false);
@@ -3938,7 +3983,10 @@ describe('building', () => {
 
       const fresh = createWorld();
       fresh.restoreBuiltProps(
-        sim.builtPropsList().map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
+        sim
+          .builtPropsList()
+          .filter((prop) => prop.id !== 60000)
+          .map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       // A different key: this player owns nothing here, home or otherwise.
       fresh.addPlayer(2, undefined, 'somebody-else');
@@ -3973,6 +4021,7 @@ describe('building', () => {
 
     it('refuses a second flower bed for somebody who already has one', () => {
       const sim = createWorld();
+      giveBuildArea(sim, 'chris');
       sim.addPlayer(1, withFlowers(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'flowerBed', 1);
@@ -3988,6 +4037,7 @@ describe('building', () => {
 
     it('owning a flower bed does not stop the same player building a lantern too', () => {
       const sim = createWorld();
+      giveBuildArea(sim, 'chris');
       sim.addPlayer(1, withFlowers(1, 10), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'flowerBed', 1);
@@ -4031,18 +4081,18 @@ describe('building', () => {
       expect(sim.drainBuildEvents()).toHaveLength(1);
     });
 
-    it('a guest with no persistent key is never capped', () => {
+    it('refuses building without an established private home, without spending', () => {
       const sim = createWorld();
       sim.addPlayer(1, withFlowers(1));
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'flowerBed', 1);
-      expect(sim.drainBuildEvents()).toHaveLength(1);
+      expect(sim.drainBuildEvents()).toHaveLength(0);
 
       addItem(sim.inventoryOf(1), 'flower', 6);
       const seq = waitOutCooldown(sim, 1, 2);
       sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'flowerBed', seq);
-      expect(sim.drainBuildEvents()).toHaveLength(1);
+      expect(sim.drainBuildEvents()).toHaveLength(0);
     });
   });
 
@@ -4071,7 +4121,8 @@ describe('building', () => {
 
     it('lets the same player line up as many fence segments as they can afford', () => {
       const sim = createWorld();
-      sim.addPlayer(1, withLogs(1, 6));
+      giveBuildArea(sim, 'builder-1');
+      sim.addPlayer(1, withLogs(1, 6), 'builder-1');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'fence', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
@@ -4088,7 +4139,8 @@ describe('building', () => {
 
     it('joins fence pieces end to end into one line', () => {
       const sim = createWorld();
-      sim.addPlayer(1, withLogs(1, 6));
+      giveBuildArea(sim, 'builder-1');
+      sim.addPlayer(1, withLogs(1, 6), 'builder-1');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       const length = BUILDABLE_KINDS.fence.footprintHalfLength * 2;
 
@@ -4100,13 +4152,19 @@ describe('building', () => {
         seq = waitOutCooldown(sim, 1, seq);
       }
 
-      expect(sim.builtPropsList().filter((prop) => prop.kind === 'fence')).toHaveLength(3);
+      expect(
+        sim
+          .builtPropsList()
+          .filter((prop) => prop.id !== 60000)
+          .filter((prop) => prop.kind === 'fence'),
+      ).toHaveLength(3);
       expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
     });
 
     it('lets the same player lay down more than one garden path stone', () => {
       const sim = createWorld();
-      sim.addPlayer(1, withSticks(1, 4));
+      giveBuildArea(sim, 'builder-1');
+      sim.addPlayer(1, withSticks(1, 4), 'builder-1');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'gardenPath', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
@@ -4120,7 +4178,8 @@ describe('building', () => {
 
     it('refuses a garden path stone without enough sticks, and spends nothing', () => {
       const sim = createWorld();
-      sim.addPlayer(1, withSticks(1, 1));
+      giveBuildArea(sim, 'builder-1');
+      sim.addPlayer(1, withSticks(1, 1), 'builder-1');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
 
       requestAndStep(sim, 1, 'gardenPath', 1);
@@ -4137,7 +4196,8 @@ describe('building', () => {
       netId: number,
       hunger = HUNGER_MAX,
     ): BuiltProp {
-      sim.addPlayer(netId, { ...withLogs(netId), hunger });
+      giveBuildArea(sim, `builder-${netId}`);
+      sim.addPlayer(netId, { ...withLogs(netId), hunger }, `builder-${netId}`);
       sim.placePlayer(netId, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, netId, 'campfire', 1);
       const built = sim.drainBuildEvents()[0]?.prop;
@@ -4154,7 +4214,7 @@ describe('building', () => {
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
       // Atmosphere only, per the design: nothing was spent to light it.
       expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
     });
@@ -4165,7 +4225,7 @@ describe('building', () => {
 
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
 
       // Released, then pressed again - a fresh edge, not the same held button.
       sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));
@@ -4173,7 +4233,7 @@ describe('building', () => {
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
-      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(false);
     });
 
     it('lets a hungry player equip raw food beside a lit fire instead of eating it immediately', () => {
@@ -4213,7 +4273,7 @@ describe('building', () => {
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
       expect(countOf(sim.inventoryOf(1), 'trout')).toBe(0);
       expect(countOf(sim.inventoryOf(1), 'roastedTrout')).toBe(1);
       expect(sim.drainCookingEvents()).toEqual([
@@ -4237,7 +4297,7 @@ describe('building', () => {
       sim.step(tickClock());
 
       // With the axe held, the second press keeps the old campfire behaviour.
-      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(false);
       expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
       expect(countOf(sim.inventoryOf(1), 'roastedPerch')).toBe(0);
       expect(sim.drainCookingEvents()).toEqual([]);
@@ -4269,7 +4329,7 @@ describe('building', () => {
       sim.queueInput(1, createInput(4, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
       expect(countOf(pack, 'perch')).toBe(2);
       expect(countOf(pack, 'roastedPerch')).toBe(0);
       expect(sim.drainCookingEvents()).toEqual([]);
@@ -4286,12 +4346,13 @@ describe('building', () => {
 
       // If holding it flickered the state on every tick, ten ticks (an even
       // count) would land back on unlit rather than staying lit.
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
     });
 
     it('does nothing to a campfire out of reach', () => {
       const sim = createWorld();
-      sim.addPlayer(1, withLogs(1));
+      giveBuildArea(sim, 'builder-1');
+      sim.addPlayer(1, withLogs(1), 'builder-1');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       requestAndStep(sim, 1, 'campfire', 1);
       // Still exactly where building leaves you: past PICKUP_REACH from the
@@ -4300,7 +4361,7 @@ describe('building', () => {
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
-      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(false);
     });
 
     it('burns out on its own after CAMPFIRE_BURN_SECONDS', () => {
@@ -4308,7 +4369,7 @@ describe('building', () => {
       buildAndStandNextToIt(sim, 1);
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
-      const propId = sim.builtPropsList()[0]!.id;
+      const propId = sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]!.id;
       const litUntilMs = sim.campfireLitUntilMsFor(propId);
       expect(litUntilMs).not.toBeNull();
       if (litUntilMs === null) return;
@@ -4319,10 +4380,10 @@ describe('building', () => {
       expect(sim.extinguishBurnedOutCampfires(tickClock())).toEqual([{ propId, lit: true }]);
 
       expect(sim.extinguishBurnedOutCampfires(litUntilMs - 1)).toEqual([]);
-      expect(sim.builtPropsList()[0]?.lit).toBe(true);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
 
       expect(sim.extinguishBurnedOutCampfires(litUntilMs)).toEqual([{ propId, lit: false }]);
-      expect(sim.builtPropsList()[0]?.lit).toBe(false);
+      expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(false);
       expect(sim.campfireLitUntilMsFor(propId)).toBeNull();
     });
 
@@ -4331,7 +4392,7 @@ describe('building', () => {
       buildAndStandNextToIt(sim, 1);
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
-      const built = sim.builtPropsList()[0];
+      const built = sim.builtPropsList().filter((prop) => prop.id !== 60000)[0];
       const litUntilMs = built === undefined ? null : sim.campfireLitUntilMsFor(built.id);
       expect(built).toBeDefined();
       expect(litUntilMs).not.toBeNull();
@@ -4339,14 +4400,14 @@ describe('building', () => {
 
       const restored = createWorld();
       restored.restoreBuiltProps([{ ...built, ownerKey: null, litUntilMs }]);
-      expect(restored.builtPropsList()[0]?.lit).toBe(true);
+      expect(restored.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
 
       // Woken long after it should have burned out - the same real-time
       // catch-up regrowth gets when a world wakes from storage.
       expect(restored.extinguishBurnedOutCampfires(litUntilMs + 1)).toEqual([
         { propId: built.id, lit: false },
       ]);
-      expect(restored.builtPropsList()[0]?.lit).toBe(false);
+      expect(restored.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(false);
     });
   });
 });

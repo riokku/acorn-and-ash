@@ -67,6 +67,8 @@ export const HOME_BUILD_REASONS = [
   'blocked',
   'player',
   'busy',
+  'area',
+  'ground',
 ] as const;
 export type HomeBuildReason = (typeof HOME_BUILD_REASONS)[number];
 export interface HomeBuildFeedback {

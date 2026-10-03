@@ -30,9 +30,11 @@ import {
   STICK_PATCHES,
   TICK_HZ,
   buildTestClearing,
+  buildableKindIndex,
   choppingRuleFor,
   isExploredAt,
   HOME_WAKE_SPOT,
+  HOME_ENTRY,
   recipeFor,
   type ItemId,
   type WorldSimulation,
@@ -1783,6 +1785,43 @@ describe('catching wildlife', () => {
 });
 
 describe('building', () => {
+  /** These material/lighting tests begin with an existing owner's home. */
+  async function existingBuildArea(client: TestClient): Promise<void> {
+    if (client.playerKey === undefined) throw new Error('building fixture needs an owner');
+    const stub = env.WORLD.get(env.WORLD.idFromName(client.worldId));
+    const inside = await runInDurableObject(stub, (instance, state) => {
+      const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
+      if (!sim.builtPropsList().some((prop) => prop.id === 60000)) {
+        sim.restoreBuiltProps([
+          {
+            id: 60000,
+            kind: 'cabin',
+            x: 0,
+            z: 15,
+            yaw: 0,
+            lit: false,
+            ownerKey: client.playerKey!,
+            litUntilMs: null,
+          },
+        ]);
+        state.storage.sql.exec(
+          'INSERT INTO built_props (id,kind_index,x,z,yaw,built_at_ms,owner_key) VALUES (?,?,?,?,?,?,?)',
+          60000,
+          buildableKindIndex('cabin'),
+          0,
+          15,
+          0,
+          Date.now(),
+          client.playerKey!,
+        );
+      }
+      return sim.spaceOf(client.welcome().netId) !== 0;
+    });
+    if (inside) await walkWithinReach(client, { x: 0, z: HOME_ENTRY.z + 5 });
+    client.walk(0, 0, 0, 1);
+    await waitFor('outdoors at the established home', () => client.latestSpace()?.space === 0);
+  }
+
   /** The landmark oak, which happens to stand right beside the axe's stump. */
   function theOak(seed: number) {
     const tree = buildTestClearing(seed).props.find((prop) => prop.kind === 'oak');
@@ -1810,6 +1849,7 @@ describe('building', () => {
 
   /** Fell the landmark oak: exactly enough logs for one campfire, no more. */
   async function getLogsForACampfire(client: TestClient): Promise<void> {
+    await existingBuildArea(client);
     await findTheBag(client);
     await walkToTheAxe(client);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
@@ -1835,7 +1875,7 @@ describe('building', () => {
   async function buildCampfire(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
-      if (client.builtProps().length > 0) return;
+      if (client.builtProps().filter((prop) => prop.id !== 60000).length > 0) return;
       const here = client.positionOf(netId);
       const yaw =
         here === undefined
@@ -1862,7 +1902,7 @@ describe('building', () => {
     await walkToOpenGround(client);
     await buildCampfire(client);
 
-    const props = client.builtProps();
+    const props = client.builtProps().filter((prop) => prop.id !== 60000);
     expect(props).toHaveLength(1);
     expect(props[0]?.kind).toBe('campfire');
     expect(client.inventory()).toEqual([
@@ -1885,8 +1925,21 @@ describe('building', () => {
     await walkToOpenGround(builder);
     await buildCampfire(builder);
 
-    await waitFor('the watcher to see it too', () => watcher.builtProps().length > 0);
-    expect(watcher.builtProps()).toEqual(builder.builtProps());
+    await waitFor(
+      'the watcher to see it too',
+      () => watcher.builtProps().filter((prop) => prop.id !== 60000).length > 0,
+    );
+    expect(
+      watcher
+        .builtProps()
+        .filter((prop) => prop.id !== 60000)
+        .map((prop) => ({ ...prop, yours: false })),
+    ).toEqual(
+      builder
+        .builtProps()
+        .filter((prop) => prop.id !== 60000)
+        .map((prop) => ({ ...prop, yours: false })),
+    );
     builder.close();
     watcher.close();
   }, 30_000);
@@ -1911,7 +1964,7 @@ describe('building', () => {
       await sleep(100);
     }
 
-    expect(client.builtProps()).toEqual([]);
+    expect(client.builtProps().filter((prop) => prop.id !== 60000)).toEqual([]);
     expect(client.inventory()).toEqual([]);
     client.close();
   });
@@ -1922,14 +1975,14 @@ describe('building', () => {
     await getLogsForACampfire(first);
     await walkToOpenGround(first);
     await buildCampfire(first);
-    const built = first.builtProps();
+    const built = first.builtProps().filter((prop) => prop.id !== 60000);
     expect(built).toHaveLength(1);
     first.close();
     await sleep(300);
 
     const second = await TestClient.connect(worldId, 'comes-back-to-build');
     await waitFor('the opening built props', () => second.countOfMessages('builtProps') > 0);
-    expect(second.openingBuiltProps()).toEqual(built);
+    expect(second.openingBuiltProps().filter((prop) => prop.id !== 60000)).toEqual(built);
     second.close();
   }, 30_000);
 
@@ -1958,13 +2011,16 @@ describe('building', () => {
     await getLogsForACampfire(client);
     await walkToOpenGround(client);
     await buildCampfire(client);
-    const built = client.builtProps()[0];
+    const built = client.builtProps().filter((prop) => prop.id !== 60000)[0];
     expect(built?.lit).toBe(false);
     if (built === undefined) return;
 
     await walkOntoCampfire(client, built);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the campfire to light', () => client.builtProps()[0]?.lit === true);
+    await waitFor(
+      'the campfire to light',
+      () => client.builtProps().filter((prop) => prop.id !== 60000)[0]?.lit === true,
+    );
     client.close();
   }, 30_000);
 
@@ -1974,19 +2030,22 @@ describe('building', () => {
     await getLogsForACampfire(first);
     await walkToOpenGround(first);
     await buildCampfire(first);
-    const built = first.builtProps()[0];
+    const built = first.builtProps().filter((prop) => prop.id !== 60000)[0];
     expect(built).toBeDefined();
     if (built === undefined) return;
 
     await walkOntoCampfire(first, built);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the campfire to light', () => first.builtProps()[0]?.lit === true);
+    await waitFor(
+      'the campfire to light',
+      () => first.builtProps().filter((prop) => prop.id !== 60000)[0]?.lit === true,
+    );
     first.close();
     await sleep(300);
 
     const second = await TestClient.connect(worldId, 'comes-back-to-a-lit-fire');
     await waitFor('the opening built props', () => second.countOfMessages('builtProps') > 0);
-    expect(second.openingBuiltProps()[0]?.lit).toBe(true);
+    expect(second.openingBuiltProps().find((prop) => prop.kind === 'campfire')?.lit).toBe(true);
     second.close();
   }, 30_000);
 
@@ -1994,7 +2053,13 @@ describe('building', () => {
   async function buildTent(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
-      if (client.builtProps().some((prop) => prop.kind === 'tent')) return;
+      if (
+        client
+          .builtProps()
+          .filter((prop) => prop.id !== 60000)
+          .some((prop) => prop.kind === 'tent')
+      )
+        return;
       const here = client.positionOf(netId);
       const yaw =
         here === undefined
@@ -2015,7 +2080,10 @@ describe('building', () => {
     await walkToOpenGround(owner);
     await buildTent(owner);
 
-    const home = owner.builtProps().find((prop) => prop.kind === 'tent');
+    const home = owner
+      .builtProps()
+      .filter((prop) => prop.id !== 60000)
+      .find((prop) => prop.kind === 'tent');
     expect(home).toBeDefined();
     if (home === undefined) throw new Error('no cabin was built');
 
@@ -2042,12 +2110,20 @@ describe('building', () => {
     returning.setDoorLock(true);
     await waitFor(
       'the door to be locked',
-      () => returning.builtProps().find((prop) => prop.id === home.id)?.locked === true,
+      () =>
+        returning
+          .builtProps()
+          .filter((prop) => prop.id !== 60000)
+          .find((prop) => prop.id === home.id)?.locked === true,
     );
     returning.setDoorLock(false);
     await waitFor(
       'the door to be open again',
-      () => returning.builtProps().find((prop) => prop.id === home.id)?.locked === false,
+      () =>
+        returning
+          .builtProps()
+          .filter((prop) => prop.id !== 60000)
+          .find((prop) => prop.id === home.id)?.locked === false,
     );
     returning.close();
   }, 60_000);
@@ -2060,6 +2136,7 @@ describe('building', () => {
   });
 
   async function gatherFlowers(client: TestClient, count: number): Promise<void> {
+    await existingBuildArea(client);
     await gatherFromPatches(client, 'flower', count);
   }
 
@@ -2067,7 +2144,13 @@ describe('building', () => {
   async function buildLantern(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
-      if (client.builtProps().some((prop) => prop.kind === 'lantern')) return;
+      if (
+        client
+          .builtProps()
+          .filter((prop) => prop.id !== 60000)
+          .some((prop) => prop.kind === 'lantern')
+      )
+        return;
       const here = client.positionOf(netId);
       const yaw =
         here === undefined
@@ -2091,7 +2174,12 @@ describe('building', () => {
     await gatherFlowers(owner, 4);
     await walkToOpenGround(owner);
     await buildLantern(owner);
-    expect(owner.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
+    expect(
+      owner
+        .builtProps()
+        .filter((prop) => prop.id !== 60000)
+        .filter((prop) => prop.kind === 'lantern'),
+    ).toHaveLength(1);
     owner.close();
     await sleep(300);
 
@@ -2103,7 +2191,12 @@ describe('building', () => {
       'a first snapshot',
       () => returning.positionOf(returning.welcome().netId) !== undefined,
     );
-    expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
+    expect(
+      returning
+        .builtProps()
+        .filter((prop) => prop.id !== 60000)
+        .filter((prop) => prop.kind === 'lantern'),
+    ).toHaveLength(1);
 
     // Whichever flower patches have any left - or have grown back since -
     // with nothing about which ones were whose to remember.
@@ -2114,7 +2207,12 @@ describe('building', () => {
       returning.buildInFront('lantern', 0);
       await sleep(100);
     }
-    expect(returning.builtProps().filter((prop) => prop.kind === 'lantern')).toHaveLength(1);
+    expect(
+      returning
+        .builtProps()
+        .filter((prop) => prop.id !== 60000)
+        .filter((prop) => prop.kind === 'lantern'),
+    ).toHaveLength(1);
     returning.close();
   }, 60_000);
 });

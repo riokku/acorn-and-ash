@@ -103,6 +103,7 @@ export interface HudState {
   readonly discoverySites: readonly DiscoverySite[];
   readonly nearbyDiscovery: string | null;
   readonly journalTab: 'craft' | 'discoveries';
+  readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
   readonly buildMenuOpen: boolean;
@@ -208,6 +209,7 @@ const INITIAL: HudState = {
   nearbyDiscovery: null,
   journalTab: 'craft',
   homeKind: null,
+  buildAreaRadius: null,
   buildMenuOpen: false,
   placing: null,
   craftMenuOpen: false,

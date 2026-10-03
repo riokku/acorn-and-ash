@@ -13,6 +13,7 @@ import {
   mergeExplored,
   revealAround,
   type BuildableKindId,
+  type BuildArea,
 } from '@acorn/shared';
 
 export interface MapPoint {
@@ -51,6 +52,7 @@ export class MapFeed {
   ready = false;
   player = { x: 0, z: 0, facingYaw: 0 };
   cameraYaw = 0;
+  buildArea: BuildArea | null = null;
   home: (MapPoint & { readonly yaw: number }) | null = null;
   stashes: readonly MapPoint[] = [];
   discoveries: readonly (MapPoint & { name: string })[] = [];

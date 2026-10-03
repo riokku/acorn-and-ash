@@ -13,6 +13,13 @@
 
 import {
   BUILDABLE_KINDS,
+  homeBuildArea,
+  checkHomeBuildArea,
+  checkPieceBuildArea,
+  buildGroundIsLevel,
+  describeBuildAreaRefusal,
+  type Terrain,
+  type ProtectedBuildSite,
   isHomeKind,
   nextHome,
   knowsHome,
@@ -34,6 +41,9 @@ import {
 
 export interface PlacementInputs {
   readonly kind: BuildableKindId;
+  readonly terrain?: Terrain;
+  readonly protectedSites?: readonly ProtectedBuildSite[];
+  readonly enforceHomeArea?: boolean;
   readonly homeSkills?: number;
   /** Which way the mouse wheel has turned it. A fence snapped onto another ignores this. */
   readonly yaw: number;
@@ -133,12 +143,27 @@ function refusalFor(
     if (alreadyHave) return `You already have a ${buildable.displayName.toLowerCase()}`;
   }
 
+  const piece = buildableFootprint(inputs.kind, spot.x, spot.z, spot.yaw);
+  if (inputs.enforceHomeArea) {
+    const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind)) ?? null;
+    const others = inputs.built.filter((prop) => isHomeKind(prop.kind) && prop.id !== home?.id);
+    const area = homeBuildArea({ id: home?.id ?? 0, kind: inputs.kind, ...spot });
+    const areaRefusal =
+      isHomeKind(inputs.kind) && area !== null
+        ? checkHomeBuildArea(area, others, inputs.protectedSites ?? [])
+        : checkPieceBuildArea(piece, home, others, inputs.protectedSites ?? []);
+    if (areaRefusal !== null) return describeBuildAreaRefusal(areaRefusal);
+    if (inputs.terrain !== undefined && !buildGroundIsLevel(piece, inputs.terrain))
+      return 'Choose more level ground for this piece';
+  }
+
   const refusal = checkBuildSpot(
     buildableFootprint(inputs.kind, spot.x, spot.z, spot.yaw),
     inputs.player,
     BUILD_REACH,
     inputs.water,
     [...inputs.scenery, ...everythingBuilt],
+    inputs.enforceHomeArea ?? false,
   );
   return refusal === null ? null : describeRefusal(refusal);
 }
@@ -165,6 +190,8 @@ export function describeRefusal(refusal: BuildRefusal): string {
       return 'Too far away';
     case 'onPlayer':
       return "You're in the way - step back";
+    case 'worldEdge':
+      return 'Outside the world boundary';
     case 'pastTreeLine':
       return 'Only inside the clearing';
     case 'water':
