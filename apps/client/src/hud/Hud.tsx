@@ -62,6 +62,7 @@ interface HudProps {
   readonly onPickBuildable: (kind: BuildableKindId) => void;
   readonly onHotbarSlotsChange: (next: HotbarPins) => void;
   readonly initialPreferences: Preferences;
+  readonly onSettingsOpenChange?: (open: boolean) => void;
   readonly onSettingsChange: (preferences: Preferences) => void;
   /** What the minimap and the big map draw - see decision 0054. */
   readonly mapFeed: MapFeed;
@@ -85,6 +86,7 @@ export function Hud({
   onHotbarSlotsChange,
   initialPreferences,
   onSettingsChange,
+  onSettingsOpenChange,
   mapFeed,
   onToggleMap,
   onSetDoorLock,
@@ -238,9 +240,18 @@ export function Hud({
       ) : null}
       {showingWorld && state.toasts.length > 0 ? <Toasts toasts={state.toasts} /> : null}
 
+      {state.ready ? (
+        <div className={state.playing ? 'game-settings' : undefined}>
+          <SettingsMenu
+            initial={initialPreferences}
+            onChange={onSettingsChange}
+            onOpenChange={onSettingsOpenChange}
+          />
+        </div>
+      ) : null}
+
       {state.ready && !state.playing ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
-          <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
           <p>{curtainMessage(state)}</p>
           <p>Find your controls in Settings → Keybindings.</p>

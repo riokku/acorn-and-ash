@@ -31,6 +31,7 @@ export function mountHud(
   combatFeed: CombatFeed,
   onChestTransfer: (request: ChestRequest) => void,
   onCloseChest: () => void,
+  onSettingsOpenChange?: (open: boolean) => void,
   journalActions?: {
     onTabChange: (tab: 'craft' | 'discoveries') => void;
     onCraft: (index: number) => void;
@@ -47,6 +48,7 @@ export function mountHud(
         onHotbarSlotsChange={onHotbarSlotsChange}
         initialPreferences={initialPreferences}
         onSettingsChange={onSettingsChange}
+        onSettingsOpenChange={onSettingsOpenChange}
         mapFeed={mapFeed}
         onToggleMap={onToggleMap}
         onSetDoorLock={onSetDoorLock}

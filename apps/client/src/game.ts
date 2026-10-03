@@ -591,6 +591,7 @@ export class Game {
   private receivedDiscoveryState = false;
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
   private playing = false;
+  private settingsOpen = false;
   private inventoryOpen = false;
   /** Whether the big map (M) is open - see decision 0054. */
   private mapOpen = false;
@@ -860,10 +861,15 @@ export class Game {
     else this.setPlaying(false);
   }
 
+  setSettingsOpen(open: boolean): void {
+    this.settingsOpen = open;
+    this.controls?.setGameplayEnabled(this.playing && !this.chestOpen && !open);
+  }
+
   private setPlaying(playing: boolean): void {
     this.playing = playing;
     if (!playing) this.closeChest();
-    this.controls?.setGameplayEnabled(playing && !this.chestOpen);
+    this.controls?.setGameplayEnabled(playing && !this.chestOpen && !this.settingsOpen);
     this.forestAudio.update(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
@@ -899,7 +905,7 @@ export class Game {
     this.chestOpen = false;
     this.chestPending = false;
     this.homeInterior?.setChestOpen(false);
-    this.controls?.setGameplayEnabled(this.playing);
+    this.controls?.setGameplayEnabled(this.playing && !this.settingsOpen);
     this.options.hud.publish({ chestSlots: null, chestPending: false, chestNote: null });
   }
 
