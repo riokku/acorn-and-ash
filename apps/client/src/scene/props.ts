@@ -26,9 +26,9 @@ export interface PropPart {
   dispose(): void;
 }
 
-export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
+export function createPropMeshes(kind: PropKind, count: number, distant = false): PropPart[] {
   if (kind.shape.family === 'tree') {
-    const realParts = realModelPartsFor(kind.id);
+    const realParts = realModelPartsFor(kind.id, distant);
     if (realParts !== undefined) {
       // Already scaled and grounded to this kind's design height (see
       // prop-models.ts), so it needs no offset beyond the usual placement.
@@ -66,7 +66,7 @@ export function createPropMeshes(kind: PropKind, count: number): PropPart[] {
     ];
   }
 
-  const realParts = realModelPartsFor(kind.id);
+  const realParts = realModelPartsFor(kind.id, distant);
   if (realParts !== undefined) {
     return realParts.map((part) => instanced(part.geometry, part.material, count, 0, false));
   }

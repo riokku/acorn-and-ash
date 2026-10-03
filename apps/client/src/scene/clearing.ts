@@ -6,8 +6,7 @@ import {
   choppingRuleFor,
   stumpFor,
   treeAtGeneration,
-  TREE_BREAK_SECONDS,
-  TREE_FALL_SECONDS,
+  treeFallTimes,
   treeFallAngle,
   type TreeFall,
   type Clearing,
@@ -158,13 +157,14 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     const slot = standing.get(treeId);
     if (slot === undefined) return;
     const age = Math.max(0, (performance.now() - fall.beganAt) / 1000);
-    const done = age >= TREE_BREAK_SECONDS;
-    if (!fall.landed && age >= TREE_FALL_SECONDS) {
+    const timing = treeFallTimes(fall.tree);
+    const done = age >= timing.break;
+    if (!fall.landed && age >= timing.fall) {
       fall.landed = true;
       // A resumed background tab must not play impacts that happened long ago.
-      if (age < TREE_BREAK_SECONDS + 0.15) landings.push({ tree: fall.tree, yaw: fall.yaw });
+      if (age < timing.break + 0.15) landings.push({ tree: fall.tree, yaw: fall.yaw });
     }
-    const rotation = tilt.setFromAxisAngle(fall.axis, treeFallAngle(age));
+    const rotation = tilt.setFromAxisAngle(fall.axis, treeFallAngle(age, timing.fall));
     for (const part of slot.parts) {
       if (done) part.mesh.setMatrixAt(slot.index, HIDDEN_INSTANCE);
       else placeOneInstance(part, slot.index, fall.tree, rotation);
@@ -224,7 +224,9 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
           const fall = {
             tree: grown,
             yaw: want.fall.yaw,
-            landed: serverNowMs - want.fall.startedAtMs >= TREE_FALL_SECONDS * 1000,
+            landed:
+              serverNowMs - want.fall.startedAtMs >=
+              treeFallTimes(treeAtGeneration(clearing.seed, tree, want.generation)).fall * 1000,
             axis: new THREE.Vector3(Math.cos(want.fall.yaw), 0, -Math.sin(want.fall.yaw)),
             beganAt: performance.now() - Math.max(0, serverNowMs - want.fall.startedAtMs),
           };

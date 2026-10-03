@@ -2,6 +2,7 @@ import { CLEARING_TREE_LINE_INNER, CLEARING_TREE_LINE_OUTER, SPAWN_POSITION } fr
 import { createRng } from '../rng';
 import { PROP_KINDS, propHeight, stumpScaleFor, type PropKindId } from '../data/props';
 import type { ItemId } from '../data/items';
+import { forestTreeScale } from './tree-stature';
 import { cylinder, type Collider } from './colliders';
 import { overlapsWater, waterColliders, type WaterCircle } from './water';
 
@@ -75,7 +76,7 @@ export interface Clearing {
 }
 
 /**
- * Where the first axe is waiting: sunk into an old stump beside the big oak.
+ * Where the first axe is waiting: sunk into an old stump beside the tall spruce.
  *
  * It is far enough from the spawn point that you have to look around for it,
  * and next to the landmark you can actually navigate by.
@@ -178,7 +179,9 @@ export function buildTestClearing(seed: number): Clearing {
     const angle = (i / ringCount) * Math.PI * 2 + rng.nextRange(-0.012, 0.012);
     const radius = rng.nextRange(TREE_LINE_INNER, TREE_LINE_OUTER);
     const kind = rng.pick(TREE_KINDS);
-    add(kind, Math.cos(angle) * radius, Math.sin(angle) * radius, rng.nextRange(0.85, 1.3));
+    const x = Math.cos(angle) * radius,
+      z = Math.sin(angle) * radius;
+    add(kind, x, z, forestTreeScale(seed, x, z, rng.nextRange(0.85, 1.3)));
   }
 
   // Rocks scattered across the open ground, kept away from the spawn point.

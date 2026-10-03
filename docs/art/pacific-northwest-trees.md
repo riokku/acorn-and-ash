@@ -11,7 +11,12 @@ than simply making every tree greener.
 | Western redcedar | Flared reddish trunk, broad drooping branches, flattened hanging foliage sprays                             | Damp hollows and sheltered edges; the most distinctive new shape |
 | Sitka spruce     | Dense narrow crown, long horizontal lower branches and a pointed top                                        | Cooler, wetter stretches and a varied background skyline         |
 
-**Recommended approach:** build or commission a small matching three-species
+**Current implementation:** Original fir, cedar and spruce models now follow this
+direction, with 12–16 metre base heights and a mature mix reaching 32 metres.
+Each has a cheaper distant mesh, painted bark and layered needle sprays.
+The legacy tree IDs remain stable for existing worlds.
+
+**Recommended approach for future refinement:** build or commission a small matching three-species
 set using our painted bark and foliage palette. Start with Douglas-fir plus
 cedar; add spruce once their silhouettes are distinct at gameplay distance.
 Each species needs two or three shapes, rather than many texture variants.
@@ -36,3 +41,7 @@ Taller trees will need explicit height and fall-duration tuning together.
 Future moss, ferns, fallen branches, mist and elevation can reinforce this
 direction. The atmosphere pass already samples actual terrain slope and uses
 standing-tree positions, so those changes can extend the soundscape naturally.
+
+![Douglas-fir, western redcedar and Sitka spruce beside a 1.8m scale marker](pnw-tree-lineup.png)
+
+![The shipped trees viewed upward from player height](pnw-forest-view.png)

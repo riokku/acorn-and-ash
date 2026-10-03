@@ -61,13 +61,13 @@ export type PropKindId = 'pine' | 'birch' | 'oak' | 'boulder' | 'mossyRock' | 's
 export const PROP_KINDS = {
   pine: {
     id: 'pine',
-    displayName: 'Pine',
+    displayName: 'Douglas-fir',
     shape: {
       family: 'tree',
-      trunkRadius: 0.22,
-      trunkHeight: 2.4,
-      canopyRadius: 1.7,
-      canopyHeight: 4.6,
+      trunkRadius: 0.3,
+      trunkHeight: 3.8,
+      canopyRadius: 2.6,
+      canopyHeight: 10.2,
     },
     chopping: { swingsToFell: 4, logs: 3 },
     colliderRadius: 0.5,
@@ -76,13 +76,13 @@ export const PROP_KINDS = {
   },
   birch: {
     id: 'birch',
-    displayName: 'Birch',
+    displayName: 'Western redcedar',
     shape: {
       family: 'tree',
-      trunkRadius: 0.16,
-      trunkHeight: 3.1,
-      canopyRadius: 1.35,
-      canopyHeight: 3.2,
+      trunkRadius: 0.34,
+      trunkHeight: 2.8,
+      canopyRadius: 2.8,
+      canopyHeight: 9.2,
     },
     chopping: { swingsToFell: 3, logs: 2 },
     colliderRadius: 0.42,
@@ -91,13 +91,13 @@ export const PROP_KINDS = {
   },
   oak: {
     id: 'oak',
-    displayName: 'Oak',
+    displayName: 'Sitka spruce',
     shape: {
       family: 'tree',
-      trunkRadius: 0.34,
-      trunkHeight: 2.2,
-      canopyRadius: 2.5,
-      canopyHeight: 3.4,
+      trunkRadius: 0.4,
+      trunkHeight: 3,
+      canopyRadius: 2.4,
+      canopyHeight: 13,
     },
     chopping: { swingsToFell: 5, logs: 4 },
     colliderRadius: 0.72,
@@ -129,6 +129,8 @@ export const PROP_KINDS = {
     placeholderColor: 0x6b5336,
   },
 } as const satisfies Record<PropKindId, PropKind>;
+
+/** Legacy keys pine/birch/oak remain stable for saves and network indices; their art and labels are now PNW species. */
 
 /** A stable order, so a prop kind can be sent over the wire as a small number. */
 export const PROP_KIND_ORDER: readonly PropKindId[] = [

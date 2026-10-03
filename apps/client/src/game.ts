@@ -1992,6 +1992,8 @@ export class Game {
         this.forestEnvironment,
       );
     }
+    if (this.localPlayer !== null)
+      this.wildernessScene?.update(deltaSeconds, this.localPlayer.motion.position);
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
