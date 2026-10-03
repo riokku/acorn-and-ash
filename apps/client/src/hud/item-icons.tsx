@@ -14,6 +14,11 @@ type IconId = ItemId | BuildableKindId;
  * plain square.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
+  guardianTrophy: (
+    <>
+      <path d="M4 21H20V18H4ZM9 18V12L4 7V2H6V6L10 9H14L18 6V2H20V7L15 12V18Z" />
+    </>
+  ),
   berry: (
     <>
       <circle cx="8" cy="14" r="4" />

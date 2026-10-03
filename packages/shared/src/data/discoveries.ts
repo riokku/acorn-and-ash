@@ -1,10 +1,12 @@
+import { WOODLAND_ENCOUNTERS } from './tracking';
 import type { Terrain } from '../world/terrain';
 import { box, cylinder, type Collider } from '../world/colliders';
 import type { ItemId } from './items';
 import type { EncounterSite } from '../world/encounters';
 import type { GatherSpot } from '../world/clearing';
 
-export type DiscoveryKind = 'camp' | 'logging' | 'grove' | 'shrine';
+export type DiscoveryKind =
+  'camp' | 'logging' | 'grove' | 'shrine' | 'elkGrove' | 'raccoonHollow' | 'guardianHollow';
 export interface DiscoveryDefinition {
   readonly id: number;
   readonly kind: DiscoveryKind;
@@ -57,8 +59,38 @@ export const DISCOVERIES: readonly DiscoveryDefinition[] = [
       { item: 'flower', count: 2 },
     ],
   },
+  {
+    id: 4,
+    kind: 'elkGrove',
+    name: 'The elk grove',
+    clue: 'Split hoofprints lead northwest. Approach quietly and give the elk room.',
+    note: 'A Roosevelt elk grazes beneath its branching crown. Its silhouette belongs in these pages.',
+    recipe: null,
+    reward: [],
+  },
+  {
+    id: 5,
+    kind: 'raccoonHollow',
+    name: 'The raccoon hollow',
+    clue: 'Tiny hand-shaped prints wind southeast. A curious neighbor knows a hidden cache.',
+    note: 'A ring-tailed guide has gathered a little stash beneath a fallen root.',
+    recipe: null,
+    reward: [
+      { item: 'berry', count: 4 },
+      { item: 'mushroom', count: 3 },
+    ],
+  },
+  {
+    id: 6,
+    kind: 'guardianHollow',
+    name: 'The guardian hollow',
+    clue: 'Heavy root-shaped furrows lead southwest. Something ancient keeps watch among the moss.',
+    note: 'You helped overcome the woodland guardian. A branch-crowned trophy awaits at its hollow.',
+    recipe: null,
+    reward: [{ item: 'guardianTrophy', count: 1 }],
+  },
 ];
-export const DISCOVERY_MASK = 15;
+export const DISCOVERY_MASK = 127;
 export interface DiscoverySite extends DiscoveryDefinition {
   readonly x: number;
   readonly z: number;
@@ -69,6 +101,7 @@ export function buildDiscoverySites(encounters: readonly EncounterSite[]): Disco
     encounters.find((s) => s.kind === 'ruins'),
     encounters.find((s) => s.kind === 'patrol'),
     encounters.filter((s) => s.kind === 'ruins')[1],
+    ...WOODLAND_ENCOUNTERS,
   ];
   return DISCOVERIES.flatMap((definition, index) => {
     const source = sources[index];
@@ -87,7 +120,7 @@ export function discoveryForageSpots(sites: readonly DiscoverySite[]): GatherSpo
       { id: 201 + site.id * 2, x: site.x + 1.8, z: site.z + 1.5, item: 'mushroom' as const },
     ]);
 }
-export type DiscoveryNotice = 'none' | 'guarded' | 'full';
+export type DiscoveryNotice = 'none' | 'guarded' | 'full' | 'quiet' | 'guardian';
 export interface DiscoveryState {
   readonly found: number;
   readonly claimed: number;
@@ -99,6 +132,13 @@ export function discoveryColliders(sites: readonly DiscoverySite[], terrain: Ter
     const x = site.x + 1.6,
       z = site.z - 1.6,
       y = terrain.heightAt(x, z);
+    if (site.kind === 'raccoonHollow') {
+      const floor = terrain.heightAt(site.x + 0.75, site.z);
+      return [
+        box(site.x + 0.75, floor + 0.24, site.z, 0.75, 0.24, 0.22, 0.7),
+        box(site.x + 0.3, floor + 0.1, site.z + 0.45, 0.175, 0.1, 0.15),
+      ];
+    }
     if (site.kind === 'camp')
       return [
         box(site.x - 0.8, terrain.heightAt(site.x - 0.8, site.z) + 0.12, site.z, 0.19, 0.12, 0.15),

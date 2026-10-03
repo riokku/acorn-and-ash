@@ -8,6 +8,8 @@ import {
 } from '@acorn/shared';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  guardianTrophy:
+    'Earned by helping defeat the woodland guardian. Place it inside your home area from Build. Kept through a knockout.',
   berry: 'Forage in woodland glades. Eat fresh or use in trail rations and berry tea.',
   mushroom: 'An edible forest cap. Gather in the grove and cook a filling stew.',
   trailRation: 'A wrapped meal for the trail. Learned at the forgotten camp.',

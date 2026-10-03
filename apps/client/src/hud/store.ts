@@ -101,6 +101,7 @@ export interface HudState {
   readonly discoveriesFound: number;
   readonly discoveriesClaimed: number;
   readonly discoverySites: readonly DiscoverySite[];
+  readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;
   readonly journalTab: 'craft' | 'discoveries';
   readonly buildAreaRadius: number | null;
@@ -206,6 +207,7 @@ const INITIAL: HudState = {
   discoveriesFound: 0,
   discoveriesClaimed: 0,
   discoverySites: [],
+  trackHint: null,
   nearbyDiscovery: null,
   journalTab: 'craft',
   homeKind: null,

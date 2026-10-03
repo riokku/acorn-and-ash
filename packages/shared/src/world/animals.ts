@@ -8,6 +8,7 @@
  * world would realistically hand out, and never collides with one.
  */
 
+import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import type { AnimalKindId } from '../data/animals';
 
 export interface AnimalDen {
@@ -28,4 +29,5 @@ export const ANIMAL_DENS: readonly AnimalDen[] = [
   // from either - well past its own leashRadius (16). A chase only happens
   // if wandering happens to carry them together; see decision 0035.
   { id: 1007, kind: 'fox', x: 22, z: -18 },
+  ...WOODLAND_ENCOUNTERS,
 ];

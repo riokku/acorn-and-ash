@@ -29,7 +29,8 @@ export type ItemId =
   | 'mushroom'
   | 'trailRation'
   | 'forestStew'
-  | 'berryTea';
+  | 'berryTea'
+  | 'guardianTrophy';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -371,6 +372,18 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: true,
   },
+  guardianTrophy: {
+    id: 'guardianTrophy',
+    displayName: 'Guardian trophy',
+    pluralName: 'Guardian trophies',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8baf6e,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -405,6 +418,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'trailRation',
   'forestStew',
   'berryTea',
+  'guardianTrophy',
 ];
 
 export function itemIndex(id: ItemId): number {

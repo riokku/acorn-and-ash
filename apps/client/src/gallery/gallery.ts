@@ -1,3 +1,5 @@
+import { createGuardianTrophy } from '../scene/guardian-trophy';
+import { createWoodlandCreature } from '../scene/woodland-creatures';
 import { createDiscoveryLandmarks } from '../scene/discovery-sites';
 import { createForageModel, createMealModel } from '../scene/forest-food';
 import { DISCOVERIES } from '@acorn/shared';
@@ -70,13 +72,39 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
-  ...DISCOVERIES.map((definition, index) => ({
-    name: `discovery-${definition.kind}`,
-    x: 22,
-    z: -10 + index * 5,
-    view: 4,
-    create: () => createDiscoveryLandmarks([{ ...definition, x: 0, z: 0 }], createFlatTerrain()),
+  { name: 'guardian-trophy', x: 26, z: 16, view: 2.3, create: createGuardianTrophy },
+  ...(['elk', 'curiousRaccoon', 'woodlandGuardian'] as const).map((kind, index) => ({
+    name: kind,
+    x: 27,
+    z: -5 + index * 5,
+    view: kind === 'curiousRaccoon' ? 1.8 : kind === 'elk' ? 6 : 5.5,
+    yaw: Math.PI,
+    create: () => {
+      const model = createWoodlandCreature(kind);
+      const motion = new URLSearchParams(window.location.search).get('motion') ?? 'idle';
+      return {
+        group: model.group,
+        update: (delta: number) =>
+          model.update(delta, {
+            speed: motion === 'walk' ? 1.2 : motion === 'run' ? 5 : 0,
+            alert: motion === 'alert',
+            windup: motion === 'windup',
+            attacking: motion === 'attack',
+            hurt: motion === 'hurt',
+            defeated: motion === 'defeat',
+          }),
+      };
+    },
   })),
+  ...DISCOVERIES.filter((definition) => definition.id !== 4 && definition.id !== 6).map(
+    (definition, index) => ({
+      name: `discovery-${definition.kind}`,
+      x: 22,
+      z: -10 + index * 5,
+      view: 4,
+      create: () => createDiscoveryLandmarks([{ ...definition, x: 0, z: 0 }], createFlatTerrain()),
+    }),
+  ),
   {
     name: 'forest-food',
     x: 24,
@@ -219,7 +247,8 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   addScenery(scene, scenery);
 
   const updaters: Array<(deltaSeconds: number) => void> = [];
-  for (const exhibit of EXHIBITS) {
+  const focusedExhibits = EXHIBITS.filter((exhibit) => exhibit.name === focus);
+  for (const exhibit of focusedExhibits.length > 0 ? focusedExhibits : EXHIBITS) {
     const made = exhibit.create();
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;

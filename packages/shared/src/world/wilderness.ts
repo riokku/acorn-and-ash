@@ -9,6 +9,7 @@
  * remember.
  */
 
+import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import { forestTreeScale } from './tree-stature';
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { hashSeed, createRng } from '../rng';
@@ -29,6 +30,8 @@ const DENSITY_SEED_OFFSET = 7919;
 export interface Wilderness {
   readonly props: readonly PlacedProp[];
   readonly colliders: readonly Collider[];
+  /** Original scenery keeps previously discovered encounter sites stable. */
+  readonly siteColliders: readonly Collider[];
 }
 
 /**
@@ -95,5 +98,15 @@ export function buildWilderness(seed: number, terrain: Terrain): Wilderness {
     }
   }
 
-  return { props, colliders: props.map(colliderForProp) };
+  const kept = props.filter(
+    (prop) =>
+      !WOODLAND_ENCOUNTERS.some(
+        (site) => Math.hypot(prop.x - site.x, prop.z - site.z) < site.radius + 2,
+      ),
+  );
+  return {
+    props: kept,
+    colliders: kept.map(colliderForProp),
+    siteColliders: props.map(colliderForProp),
+  };
 }

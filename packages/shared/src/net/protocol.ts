@@ -1349,7 +1349,7 @@ export function encodeDiscoveries(state: DiscoveryState): ArrayBuffer {
     ServerMessageType.Discoveries,
     state.found,
     state.claimed,
-    ['none', 'guarded', 'full'].indexOf(state.notice),
+    ['none', 'guarded', 'full', 'quiet', 'guardian'].indexOf(state.notice),
   ]).buffer;
 }
 
@@ -1364,12 +1364,12 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const found = view.getUint8(1),
         claimed = view.getUint8(2),
         reason = view.getUint8(3);
-      if (found & ~DISCOVERY_MASK || claimed & ~found || reason > 2) return null;
+      if (found & ~DISCOVERY_MASK || claimed & ~found || reason > 4) return null;
       return {
         type: 'discoveries',
         found,
         claimed,
-        notice: reason === 1 ? 'guarded' : reason === 2 ? 'full' : 'none',
+        notice: (['none', 'guarded', 'full', 'quiet', 'guardian'] as const)[reason]!,
       };
     }
     case ServerMessageType.Welcome: {

@@ -2448,7 +2448,9 @@ describe('wildlife', () => {
     const entities = sim.snapshotFor(1);
     const animals = entities.filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
     expect(animals.map((entity) => entity.netId).sort()).toEqual(
-      ANIMAL_DENS.map((den) => den.id).sort(),
+      ANIMAL_DENS.filter((den) => Math.hypot(den.x, den.z) <= 100)
+        .map((den) => den.id)
+        .sort(),
     );
     // The one player in this snapshot is not mistaken for wildlife.
     expect(entities.filter((entity) => (entity.flags & SnapshotFlag.Animal) === 0)).toHaveLength(1);
@@ -2511,7 +2513,9 @@ describe('wildlife', () => {
     const animals = sim
       .snapshotFor(1)
       .filter((entity) => (entity.flags & SnapshotFlag.Animal) !== 0);
-    expect(animals).toEqual([]);
+    expect(animals.map((animal) => animal.netId)).toEqual(
+      ANIMAL_DENS.filter((den) => Math.hypot(den.x - 140, den.z - 140) <= 100).map((den) => den.id),
+    );
   });
 });
 

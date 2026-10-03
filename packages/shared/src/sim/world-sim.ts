@@ -1,3 +1,4 @@
+import { resolveCapsule } from '../collision/capsule';
 import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import {
   homeBuildArea,
@@ -52,6 +53,7 @@ import {
   ANIMAL_RESPAWN_SECONDS,
   BUILD_REACH,
   PLAYER_RADIUS,
+  PLAYABLE_HALF_EXTENT,
   BUILD_REACH_SLACK,
   CAMPFIRE_BURN_SECONDS,
   GATHER_PATCH_MAX_COUNT,
@@ -860,6 +862,7 @@ interface AnimalRuntime {
   readonly trailZ: Float32Array;
   trailHead: number;
   trailCount: number;
+  readonly damageHelpers: Set<number>;
 }
 
 /** How many ticks of an animal's recent path are kept for a blow to look back over. */
@@ -1025,7 +1028,7 @@ export class WorldSimulation {
     this.encounterSites = buildEncounterSites(
       options.seed,
       terrain,
-      [...this.clearing.colliders, ...this.wilderness.colliders],
+      [...this.clearing.colliders, ...this.wilderness.siteColliders],
       this.clearing.water,
     );
     this.discoverySites = buildDiscoverySites(this.encounterSites);
@@ -1133,6 +1136,7 @@ export class WorldSimulation {
       trailZ: new Float32Array(ANIMAL_TRAIL_TICKS),
       trailHead: 0,
       trailCount: 0,
+      damageHelpers: new Set(),
     });
   }
 
@@ -1890,6 +1894,7 @@ export class WorldSimulation {
           runtime.trailCount = 0;
           runtime.engaged = false;
           runtime.attackState = 'none';
+          runtime.damageHelpers.clear();
           runtime.targetX = runtime.denX;
           runtime.targetZ = runtime.denZ;
           position.x = runtime.denX;
@@ -1944,7 +1949,15 @@ export class WorldSimulation {
 
         let direction: Direction2D;
         let speed: number;
-        if (runtime.engaged && alarmPosition !== null) {
+        if (runtime.kind === 'curiousRaccoon' && runtime.engaged && nearestPosition !== null) {
+          direction = towardDirection(position.x, position.z, runtime.denX, runtime.denZ);
+          speed = Math.hypot(position.x - runtime.denX, position.z - runtime.denZ) > 1.2 ? 0.85 : 0;
+          if (speed === 0)
+            facing.yaw = Math.atan2(
+              -(nearestPosition.x - position.x),
+              -(nearestPosition.z - position.z),
+            );
+        } else if (runtime.engaged && alarmPosition !== null) {
           direction = fleeDirection(position.x, position.z, alarmPosition.x, alarmPosition.z);
           speed = kind.fleeSpeed ?? 0;
         } else if (kind.preysOn !== undefined) {
@@ -1958,6 +1971,7 @@ export class WorldSimulation {
         velocity.z = direction.z * speed;
         position.x += velocity.x * TICK_SECONDS;
         position.z += velocity.z * TICK_SECONDS;
+        this.resolveWoodlandAnimal(runtime, position);
         position.y = this.collision.terrain.heightAt(position.x, position.z);
         // Standing still keeps whichever way it was last facing, rather than
         // snapping to face the den the instant it stops.
@@ -1982,6 +1996,28 @@ export class WorldSimulation {
    * attack is plainly telegraphed - before landing a hit if they are still
    * this close when it resolves.
    */
+  private resolveWoodlandAnimal(
+    runtime: AnimalRuntime,
+    position: { x: number; y: number; z: number },
+  ): void {
+    if (!WOODLAND_ENCOUNTERS.some((site) => site.kind === runtime.kind)) return;
+    position.x = Math.max(
+      -PLAYABLE_HALF_EXTENT + 0.5,
+      Math.min(PLAYABLE_HALF_EXTENT - 0.5, position.x),
+    );
+    position.z = Math.max(
+      -PLAYABLE_HALF_EXTENT + 0.5,
+      Math.min(PLAYABLE_HALF_EXTENT - 0.5, position.z),
+    );
+    const small = runtime.kind === 'curiousRaccoon';
+    resolveCapsule(
+      position,
+      small ? 0.17 : runtime.kind === 'elk' ? 0.35 : 0.45,
+      small ? 0.5 : runtime.kind === 'elk' ? 1.8 : 2.8,
+      this.collision,
+    );
+  }
+
   private stepThreatAnimal(
     runtime: AnimalRuntime,
     kind: AnimalKind,
@@ -1993,6 +2029,24 @@ export class WorldSimulation {
     nearestPosition: Readonly<Vec3> | null,
     nearestDistance: number,
   ): void {
+    if (
+      runtime.kind === 'woodlandGuardian' &&
+      (Math.hypot(position.x - runtime.denX, position.z - runtime.denZ) > 18 ||
+        (nearestPosition !== null &&
+          Math.hypot(nearestPosition.x - runtime.denX, nearestPosition.z - runtime.denZ) > 18))
+    ) {
+      runtime.engaged = false;
+      runtime.attackState = 'none';
+      const direction = towardDirection(position.x, position.z, runtime.denX, runtime.denZ);
+      velocity.x = direction.x * kind.wanderSpeed;
+      velocity.z = direction.z * kind.wanderSpeed;
+      position.x += velocity.x * TICK_SECONDS;
+      position.z += velocity.z * TICK_SECONDS;
+      this.resolveWoodlandAnimal(runtime, position);
+      position.y = this.collision.terrain.heightAt(position.x, position.z);
+      facing.yaw = Math.atan2(-direction.x, -direction.z);
+      return;
+    }
     if (runtime.attackState !== 'none') {
       velocity.x = 0;
       velocity.z = 0;
@@ -2048,6 +2102,7 @@ export class WorldSimulation {
     velocity.z = direction.z * speed;
     position.x += velocity.x * TICK_SECONDS;
     position.z += velocity.z * TICK_SECONDS;
+    this.resolveWoodlandAnimal(runtime, position);
     position.y = this.collision.terrain.heightAt(position.x, position.z);
     if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
   }
@@ -2881,11 +2936,11 @@ export class WorldSimulation {
    */
   private catchAnimal(runtime: PlayerRuntime, animalId: number, charged: boolean): void {
     const animal = this.animals.get(animalId);
-    if (animal === undefined) return;
+    if (animal === undefined || animal.caught || animal.kind === 'curiousRaccoon') return;
     const kind: AnimalKind = ANIMAL_KINDS[animal.kind];
-
-    if (kind.threat !== undefined && !charged) {
-      animal.hitsTaken += 1;
+    animal.damageHelpers.add(runtime.netId);
+    if (kind.threat !== undefined && (!charged || animal.kind === 'woodlandGuardian')) {
+      animal.hitsTaken += charged ? 2 : 1;
       const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
       if (hitsLeft > 0) {
         this.threatHitEvents.push({ animalId: animal.id, hitsLeft, netId: runtime.netId });
@@ -2896,6 +2951,27 @@ export class WorldSimulation {
     animal.caught = true;
     animal.respawnAtMs = this.nowMs + ANIMAL_RESPAWN_SECONDS * 1000;
     animal.hitsTaken = 0;
+    if (animal.kind === 'woodlandGuardian') {
+      const at = animal.entity.get(Position);
+      for (const netId of animal.damageHelpers) {
+        const helper = this.players.get(netId),
+          helperAt = helper?.entity.get(Position);
+        if (
+          helper === undefined ||
+          helperAt === undefined ||
+          at === undefined ||
+          helper.space !== OUTDOORS ||
+          helper.health <= 0 ||
+          horizontalDistance(at, helperAt) > 24
+        )
+          continue;
+        // The persistent found bit is proof of participation. Visiting the hollow
+        // alone never sets this bit, and claiming remains atomic with inventory.
+        helper.discoveriesFound |= 1 << 6;
+        this.discoveryChanges.set(netId, 'none');
+      }
+    }
+    animal.damageHelpers.clear();
 
     const item = kind.catchItem;
     // A full pack means it was still caught - the den stays empty for the
@@ -3326,7 +3402,7 @@ export class WorldSimulation {
   animalInReachOf(position: Readonly<Vec3>, aimYaw: number, ticksBack = 0): CatchTarget | null {
     const candidates: CatchCandidate[] = [];
     for (const runtime of this.animals.values()) {
-      if (runtime.caught) continue;
+      if (runtime.caught || runtime.kind === 'curiousRaccoon') continue;
       const animalPosition = runtime.entity.get(Position);
       if (animalPosition === undefined) continue;
       candidates.push({ id: runtime.id, x: animalPosition.x, z: animalPosition.z });
@@ -3818,6 +3894,7 @@ export class WorldSimulation {
   private findDiscoveries(runtime: PlayerRuntime, position: Readonly<Vec3>): void {
     for (const site of this.discoverySites) {
       if (
+        site.kind === 'guardianHollow' ||
         discoveryKnown(runtime.discoveriesFound, site.id) ||
         Math.hypot(position.x - site.x, position.z - site.z) > 6
       )
@@ -3834,6 +3911,24 @@ export class WorldSimulation {
         Math.hypot(position.x - s.x, position.z - s.z) < 2.7,
     );
     if (site === undefined || runtime.cast !== null || runtime.health <= 0) return false;
+    if (site.kind === 'guardianHollow' && !discoveryKnown(runtime.discoveriesFound, site.id)) {
+      this.discoveryChanges.set(runtime.netId, 'guardian');
+      return true;
+    }
+    if (site.kind === 'elkGrove' || site.kind === 'raccoonHollow') {
+      const animal = this.animals.get(site.kind === 'elkGrove' ? 1008 : 1009),
+        at = animal?.entity.get(Position);
+      if (
+        animal === undefined ||
+        animal.caught ||
+        at === undefined ||
+        horizontalDistance(position, at) > 10 ||
+        (site.kind === 'elkGrove' && animal.engaged)
+      ) {
+        this.discoveryChanges.set(runtime.netId, 'quiet');
+        return true;
+      }
+    }
     const guarded = this.raids.raidersList().some((r) => {
       const at = this.raids.positionOf(r.id);
       return r.hitsLeft > 0 && at !== null && Math.hypot(at.x - site.x, at.z - site.z) < 12;
@@ -3853,8 +3948,8 @@ export class WorldSimulation {
     this.discoveryChanges.set(runtime.netId, 'none');
     this.gestureEvents.push({
       netId: runtime.netId,
-      gesture: Gesture.PickUp,
-      item: site.reward[0]?.item ?? 'log',
+      gesture: site.reward.length === 0 ? Gesture.Reach : Gesture.PickUp,
+      item: site.reward[0]?.item ?? null,
     });
     return true;
   }
@@ -4047,7 +4142,13 @@ export class WorldSimulation {
         // A caught animal is gone until it respawns: left out of every
         // viewer's snapshot entirely, the same as a pickup nobody can see
         // once it is taken. And there is no wildlife indoors.
-        if (this.animals.get(networkId.value)?.caught === true) return;
+        const animal = this.animals.get(networkId.value);
+        if (
+          animal?.caught === true &&
+          (animal.kind !== 'woodlandGuardian' ||
+            this.nowMs >= animal.respawnAtMs - ANIMAL_RESPAWN_SECONDS * 1000 + 1000)
+        )
+          return;
         if (viewer.space !== OUTDOORS) return;
 
         const dx = position.x - viewerPosition.x;
@@ -4065,8 +4166,26 @@ export class WorldSimulation {
           vz: velocity.z,
           yaw: facing.yaw,
           flags: SnapshotFlag.Animal | (speedSquared > 0.04 ? SnapshotFlag.Moving : 0),
-          action: 0,
-          actionAge: 0,
+          action: animal?.caught
+            ? 8
+            : (animal?.engaged ? 4 : 0) |
+              (animal?.attackState === 'windup' ? 1 : animal?.attackState === 'cooldown' ? 2 : 0),
+          actionAge:
+            animal?.attackState === 'cooldown'
+              ? Math.min(
+                  255,
+                  Math.max(
+                    0,
+                    Math.round(
+                      (this.nowMs -
+                        (animal.attackStateEndsAtMs -
+                          (ANIMAL_KINDS[animal.kind] as AnimalKind).threat!.attackCooldownSeconds *
+                            1000)) /
+                        50,
+                    ),
+                  ),
+                )
+              : 0,
           actionHeading: 0,
         });
       });

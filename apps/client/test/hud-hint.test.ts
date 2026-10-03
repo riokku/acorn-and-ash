@@ -46,6 +46,7 @@ const BASE_STATE: HudState = {
   discoveriesFound: 0,
   discoveriesClaimed: 0,
   discoverySites: [],
+  trackHint: null,
   nearbyDiscovery: null,
   journalTab: 'craft',
   homeKind: null,

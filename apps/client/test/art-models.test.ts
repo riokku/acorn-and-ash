@@ -48,7 +48,9 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
-    ...DISCOVERIES.map((definition) => ({
+    ...DISCOVERIES.filter(
+      (definition) => definition.id < 4 || definition.kind === 'raccoonHollow',
+    ).map((definition) => ({
       name: `${definition.kind} discovery`,
       budget: PROP_BUDGET,
       make: () => createDiscoveryLandmarks([{ ...definition, x: 0, z: 0 }], createFlatTerrain()),

@@ -14,6 +14,30 @@ export function createDiscoveryLandmarks(sites: readonly DiscoverySite[], terrai
   const trim = paintedMaterial('wood', { tint: 0x79664b, roughness: 1 });
   const moss = paintedMaterial('stone', { tint: 0xadc394, roughness: 1 });
   for (const site of sites) {
+    if (site.kind === 'elkGrove' || site.kind === 'guardianHollow') continue;
+    if (site.kind === 'raccoonHollow') {
+      const y = terrain.heightAt(site.x + 0.75, site.z);
+      const fallen = logGeometry(1.5, 0.22, { seed: 1009, sides: 8 });
+      const matrix = placed(site.x + 0.75, y + 0.24, site.z, { y: 0.7 });
+      builder.add(bark, fallen.side, matrix).add(cut, fallen.ends, matrix);
+      builder.add(
+        wood,
+        new THREE.BoxGeometry(0.35, 0.19, 0.3),
+        placed(site.x + 0.3, y + 0.1, site.z + 0.45),
+      );
+      for (const dx of [-0.11, 0.11])
+        builder.add(
+          trim,
+          new THREE.BoxGeometry(0.025, 0.2, 0.31),
+          placed(site.x + 0.3 + dx, y + 0.11, site.z + 0.45),
+        );
+      builder.add(
+        linen,
+        new THREE.BoxGeometry(0.31, 0.04, 0.26),
+        placed(site.x + 0.3, y + 0.22, site.z + 0.45, { z: 0.06 }),
+      );
+      continue;
+    }
     const x = site.x + 1.6,
       z = site.z - 1.6,
       y = terrain.heightAt(x, z);

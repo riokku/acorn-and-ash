@@ -16,7 +16,7 @@ it('keeps each wilderness tree in exactly one detail level as the player moves',
     scale: 1,
   }));
   const scene = buildWildernessScene(
-    { props, colliders: [] },
+    { props, colliders: [], siteColliders: [] },
     createFlatTerrain(),
     buildTestClearing(1),
   );
