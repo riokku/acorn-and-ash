@@ -11,7 +11,13 @@ import {
 
 import { createGroundShader, type GroundShader } from '../art/ground-shading';
 import { createGroundMaterial } from '../art/materials';
-import { blockerGeometry, createCameraBlockers, createPropMeshes, placeInstance } from './props';
+import {
+  type PropPart,
+  blockerGeometry,
+  createCameraBlockers,
+  createPropMeshes,
+  placeInstance,
+} from './props';
 
 /** How finely the hills are meshed. Small enough that slopes read as curves, not facets. */
 const GROUND_SEGMENT_SIZE = 2.5;
@@ -31,6 +37,8 @@ export interface WildernessScene {
    * chopped or picked up.
    */
   readonly cameraBlockers: THREE.Mesh;
+  /** Switch trees between detailed and distant meshes as the player explores. */
+  update(deltaSeconds: number, position: { x: number; z: number }): void;
   dispose(): void;
 }
 
@@ -68,6 +76,7 @@ export function buildWildernessScene(
     else existing.push(prop);
   }
 
+  const treeDraws: Array<{ props: PlacedProp[]; near: PropPart[]; far: PropPart[] }> = [];
   for (const [kindId, props] of byKind) {
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
     const parts = createPropMeshes(kind, props.length);
@@ -77,6 +86,15 @@ export function buildWildernessScene(
     }
     props.forEach((prop, index) => placeInstance(parts, index, prop));
     for (const part of parts) part.mesh.instanceMatrix.needsUpdate = true;
+    if (kind.shape.family === 'tree') {
+      const far = createPropMeshes(kind, props.length, true);
+      for (const part of far) {
+        part.mesh.count = 0;
+        group.add(part.mesh);
+        disposables.push(part);
+      }
+      treeDraws.push({ props, near: parts, far });
+    }
   }
 
   const cameraBlockers = createCameraBlockers(
@@ -86,9 +104,38 @@ export function buildWildernessScene(
   cameraBlockers.visible = false;
   group.add(cameraBlockers);
 
+  let sinceDetailUpdate = 1;
+  let lastX = Number.POSITIVE_INFINITY,
+    lastZ = Number.POSITIVE_INFINITY;
   return {
     group,
     cameraBlockers,
+    update(deltaSeconds, position) {
+      sinceDetailUpdate += deltaSeconds;
+      if (sinceDetailUpdate < 0.5 || Math.hypot(position.x - lastX, position.z - lastZ) < 4) return;
+      sinceDetailUpdate = 0;
+      lastX = position.x;
+      lastZ = position.z;
+      for (const draw of treeDraws) {
+        let near = 0,
+          far = 0;
+        for (const prop of draw.props) {
+          if (Math.hypot(prop.x - position.x, prop.z - position.z) < 80)
+            placeInstance(draw.near, near++, prop);
+          else placeInstance(draw.far, far++, prop);
+        }
+        for (const part of draw.near) {
+          part.mesh.count = near;
+          part.mesh.instanceMatrix.needsUpdate = true;
+          part.mesh.computeBoundingSphere();
+        }
+        for (const part of draw.far) {
+          part.mesh.count = far;
+          part.mesh.instanceMatrix.needsUpdate = true;
+          part.mesh.computeBoundingSphere();
+        }
+      }
+    },
     dispose: () => {
       for (const item of disposables) item.dispose();
       cameraBlockers.geometry.dispose();

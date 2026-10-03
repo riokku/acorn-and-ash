@@ -7,7 +7,7 @@
   "scripts": {
     "build": "echo \"@acorn/tools has nothing to build\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "echo \"@acorn/tools has no tests\"",
+    "test": "node check-pnw-trees.mjs",
     "bench:tick": "tsx load-test/tick-bench.ts",
     "loadtest": "tsx load-test/bots.ts"
   },

@@ -7,7 +7,7 @@ cabin you can upgrade and decorate.
 The game is online-only. Every world runs on the server.
 
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
-> real birch, oak and pine trees, real rocks and a pond,
+> Douglas-fir, western redcedar and Sitka spruce trees, real rocks and a pond,
 > surrounded by generated wilderness you can walk out into, a real animated
 > character you walk, sprint and jump around, a
 > third-person camera, and a server that decides where everybody is. Your
@@ -507,7 +507,7 @@ Press `B` to open a small menu of what you can place anywhere in the
 clearing, then a number to pick one - or click it. A see-through preview of
 it then follows your mouse across the ground, up to five metres from you,
 with an outline of the room it needs: green where it fits, red where it
-doesn't, and the hint along the bottom says why ("Too close to the oak",
+doesn't, and the hint along the bottom says why ("Too close to the Sitka spruce",
 "Need 2 more logs"). Roll the mouse wheel to turn it, and click to place
 it. A fence piece snaps onto the end of one you have already built, so a
 line joins up cleanly and a corner comes out square - hold `Shift` to place
@@ -519,7 +519,7 @@ stone the preview stays out for the next, until you run out or press `Esc`
 itself away once placed. See
 [decision 0052](docs/decisions/0052-a-build-preview-that-follows-the-mouse.md).
 
-- **Campfire** - four logs, exactly what felling the landmark oak by the axe
+- **Campfire** - four logs, exactly what felling the landmark spruce by the axe
   stump pays out. Real modeled art, and you can light it: press `E` once
   you're standing next to it for a genuinely animated fire. It burns for a
   while and goes out on its own, or put it out early by pressing `E` again.
@@ -789,3 +789,8 @@ worn soil and indoor wood. Nearby trees carry occasional daytime birds and
 quiet canopy rustles with directional sound. Sound effects settings also
 control this atmosphere. The [Pacific Northwest tree direction](docs/art/pacific-northwest-trees.md)
 recommends fir, cedar and spruce silhouettes for a future art pass.
+
+The woodland now uses Douglas-fir, western redcedar and Sitka spruce models.
+Most trees are 10–21 metres tall, with a mature mix reaching 32 metres in the
+clearing's tree line and wilderness. Taller trees take longer to fall;
+their wood still drops within reach. Faraway trees use simpler meshes.

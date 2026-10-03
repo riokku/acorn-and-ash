@@ -1,4 +1,9 @@
-import { buildTestClearing, TREE_BREAK_SECONDS, TREE_FALL_SECONDS } from '@acorn/shared';
+import {
+  buildTestClearing,
+  treeFallTimes,
+  TREE_BREAK_SECONDS,
+  TREE_FALL_SECONDS,
+} from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,10 +12,11 @@ import { buildClearingScene } from '../src/scene/clearing';
 
 installBvhRaycasting();
 
-function oneTree() {
+function oneTree(scale?: number) {
   const clearing = buildTestClearing(123);
-  const tree = clearing.props.find((prop) => prop.kind === 'oak');
-  if (tree === undefined) throw new Error('missing oak');
+  const original = clearing.props.find((prop) => prop.kind === 'oak');
+  if (original === undefined) throw new Error('missing spruce');
+  const tree = scale === undefined ? original : { ...original, scale };
   const scene = buildClearingScene({ ...clearing, props: [tree], pickups: [] });
   const trunk = scene.group.children.find((child) => child instanceof THREE.InstancedMesh);
   if (!(trunk instanceof THREE.InstancedMesh)) throw new Error('missing trunk');
@@ -25,6 +31,28 @@ function oneTree() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('a falling tree', () => {
+  it('gives a mature crown its full fall before breaking into loot', () => {
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const { scene, tree, up } = oneTree(2);
+    const timing = treeFallTimes(tree);
+    scene.setTreeStates(
+      new Map([[tree.id, { generation: 0, felled: true, fall: { yaw: 0, startedAtMs: 1000 } }]]),
+      1000,
+    );
+    now = TREE_FALL_SECONDS * 1000;
+    scene.update(1.4);
+    expect(up().normalize().y).toBeGreaterThan(0);
+    expect(scene.drainLandings()).toEqual([]);
+    now = timing.fall * 1000 + 1;
+    scene.update(0.4);
+    expect(scene.drainLandings()).toEqual([{ tree, yaw: 0 }]);
+    now = timing.break * 1000 + 1;
+    scene.update(0.4);
+    expect(up().length()).toBe(0);
+    scene.dispose();
+  });
+
   it.each([0, Math.PI / 2, Math.PI, -Math.PI / 2])(
     'tips along yaw %s, then disappears into its logs',
     (yaw) => {

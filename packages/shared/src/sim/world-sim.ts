@@ -127,7 +127,7 @@ import {
 import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
-import { TREE_BREAK_SECONDS, treeFallYaw, treeLogSpots, type TreeFall } from './tree-fall';
+import { treeFallTimes, treeFallYaw, treeLogSpots, type TreeFall } from './tree-fall';
 import { animalInReach, type CatchCandidate } from './hunting';
 import {
   buildableFootprint,
@@ -2497,7 +2497,7 @@ export class WorldSimulation {
 
     this.fellTree(target.prop.id, this.nowMs);
     state.fallYaw = treeFallYaw(target.prop, position);
-    const landsAt = this.nowMs + TREE_BREAK_SECONDS * 1000;
+    const landsAt = this.nowMs + treeFallTimes(target.prop).break * 1000;
     for (const spot of treeLogSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('log', 1, clear.x, clear.z, landsAt, true);

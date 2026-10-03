@@ -9,6 +9,7 @@
  * remember.
  */
 
+import { forestTreeScale } from './tree-stature';
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { hashSeed, createRng } from '../rng';
 import { lerp } from '../math/vec3';
@@ -86,7 +87,10 @@ export function buildWilderness(seed: number, terrain: Terrain): Wilderness {
         z,
         y: terrain.heightAt(x, z),
         rotationY: cellRng.nextRange(0, Math.PI * 2),
-        scale: cellRng.nextRange(0.75, 1.35),
+        // An independent stream changes stature without reshuffling any seeded positions.
+        scale: isRock
+          ? cellRng.nextRange(0.75, 1.35)
+          : forestTreeScale(seed, x, z, cellRng.nextRange(0.75, 1.35)),
       });
     }
   }
