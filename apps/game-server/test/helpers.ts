@@ -131,6 +131,16 @@ export class TestClient {
     await waitFor('every input simulated', () => this.latestSnapshot().ackSeq >= sent);
   }
 
+  /** Wait for queued walking and the player's braking to finish before comparing positions. */
+  async stoppedMoving(): Promise<void> {
+    await this.caughtUp();
+    const netId = this.welcome().netId;
+    await waitFor('the player to stop moving', () => {
+      const entity = this.latestSnapshot().entities.find((item) => item.netId === netId);
+      return entity !== undefined && entity.vx === 0 && entity.vz === 0;
+    });
+  }
+
   /** Drop some of something on the ground, or destroy it outright. */
   discard(item: ItemId, amount: number, destroy = false): void {
     this.socket.send(encodeDiscard({ item, amount, destroy }));

@@ -233,6 +233,9 @@ describe('remembering where a player was', () => {
       6000,
     );
 
+    // A snapshot showing movement can still have more walking inputs queued.
+    // Compare the position after braking, not one sampled mid-walk.
+    await first.stoppedMoving();
     const before = first.positionOf(firstId);
     if (before === undefined) throw new Error('lost the player');
     first.close();
@@ -265,7 +268,7 @@ describe('one of you per world', () => {
       },
       6000,
     );
-    await sleep(200);
+    await client.stoppedMoving();
     const here = client.positionOf(netId);
     if (here === undefined) throw new Error('lost the player');
     return here;
