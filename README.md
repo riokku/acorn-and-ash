@@ -94,8 +94,11 @@ recipes survive reconnecting and the world sleeping. See
 ## Controls
 
 The in-game guide lives in **Settings → Keybindings**, on the Home screen or
-while paused. Exploration keeps contextual action and danger prompts, with no
-persistent movement or building tutorial. These are the current fixed bindings.
+during normal play or while paused. The gear beside the minimap opens Settings
+without leaving the game; movement and action inputs stop while the panel is open.
+Keybindings uses two columns on wider screens and one on smaller screens.
+Exploration keeps contextual action and danger prompts, with no persistent
+movement or building tutorial. These are the current fixed bindings.
 
 Starting play shows a Pacific Northwest dawn landscape and “Entering the woods…”
 while a progress bar follows completed loading stages, including the first drawn

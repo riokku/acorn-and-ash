@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KEYBINDINGS } from './keybindings';
 
 import { MAX_SENSITIVITY, MIN_SENSITIVITY, type Preferences } from './preferences';
@@ -15,6 +15,7 @@ interface SettingsMenuProps {
    * the same file as whatever renders it.
    */
   readonly onChange: (preferences: Preferences) => void;
+  readonly onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -23,8 +24,19 @@ interface SettingsMenuProps {
  * identity - so both the Home screen and the in-game curtain can drop it in
  * with just the two props above.
  */
-export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JSX.Element {
+export function SettingsMenu({
+  initial,
+  onChange,
+  onOpenChange,
+}: SettingsMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const gear = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const changeOpen = (next: boolean): void => {
+    onOpenChange?.(next);
+    setOpen(next);
+    if (!next) gear.current?.focus();
+  };
   const [section, setSection] = useState<'general' | 'keybindings'>('general');
   const [preferences, setPreferences] = useState<Preferences>(initial);
 
@@ -34,27 +46,31 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
     onChange(next);
   };
 
-  // A window listener rather than an onKeyDown on the panel itself: right
-  // after opening, focus is still on the gear button that opened it, which
-  // sits outside the panel, so a handler on the panel alone would miss it.
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
+    closeButton.current?.focus();
+    const closeWithEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onOpenChange?.(false);
+      setOpen(false);
+      gear.current?.focus();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
+    window.addEventListener('keydown', closeWithEscape, true);
+    return () => window.removeEventListener('keydown', closeWithEscape, true);
+  }, [open, onOpenChange]);
 
   return (
     <>
       <button
         type="button"
         className="settings-button"
+        ref={gear}
         aria-label="Settings"
         onClick={(event) => {
           event.stopPropagation();
-          setOpen(true);
+          changeOpen(true);
         }}
       >
         <GearIcon />
@@ -66,11 +82,31 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
           role="presentation"
           onClick={(event) => {
             event.stopPropagation();
-            setOpen(false);
+            changeOpen(false);
           }}
         >
           <div
-            className="settings-card"
+            className={`settings-card${section === 'keybindings' ? ' settings-card-keybindings' : ''}`}
+            aria-modal="true"
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                changeOpen(false);
+              } else if (event.key === 'Tab') {
+                const buttons = event.currentTarget.querySelectorAll<HTMLElement>('button, input');
+                const first = buttons[0];
+                const last = buttons[buttons.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault();
+                  last?.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault();
+                  first?.focus();
+                }
+              }
+            }}
+            onKeyUp={(event) => event.stopPropagation()}
             role="dialog"
             aria-label="Settings"
             onClick={(event) => event.stopPropagation()}
@@ -80,8 +116,9 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
               <button
                 type="button"
                 className="settings-close"
+                ref={closeButton}
                 aria-label="Close settings"
-                onClick={() => setOpen(false)}
+                onClick={() => changeOpen(false)}
               >
                 ×
               </button>
@@ -150,19 +187,21 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
                 <p className="keybindings-intro">
                   Your guide to the woods. These are the current controls.
                 </p>
-                {KEYBINDINGS.map((group) => (
-                  <section key={group.title}>
-                    <h3>{group.title}</h3>
-                    <dl>
-                      {group.bindings.map(([key, action]) => (
-                        <div key={key}>
-                          <dt>{key}</dt>
-                          <dd>{action}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </section>
-                ))}
+                <div className="keybindings-groups">
+                  {KEYBINDINGS.map((group) => (
+                    <section key={group.title}>
+                      <h3>{group.title}</h3>
+                      <dl>
+                        {group.bindings.map(([key, action]) => (
+                          <div key={key}>
+                            <dt>{key}</dt>
+                            <dd>{action}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  ))}
+                </div>
               </div>
             )}
           </div>
