@@ -112,6 +112,11 @@ export function drawMinimap(
     return { x: offset.x * pixelsPerMetre, y: offset.y * pixelsPerMetre };
   };
 
+  if (feed.buildArea !== null) {
+    const at = place(feed.buildArea.x, feed.buildArea.z);
+    drawBuildArea(context, centre + at.x, centre + at.y, feed.buildArea.radius * pixelsPerMetre);
+  }
+
   for (const build of feed.builds) {
     const at = place(build.x, build.z);
     if (Math.hypot(at.x, at.y) > radius) continue;
@@ -216,6 +221,11 @@ export function drawBigMap(
 
   const place = (x: number, z: number): { x: number; y: number } =>
     bigMapPoint(x, z, view, width, height);
+
+  if (feed.buildArea !== null) {
+    const at = place(feed.buildArea.x, feed.buildArea.z);
+    drawBuildArea(context, at.x, at.y, feed.buildArea.radius * view.pixelsPerMetre);
+  }
 
   for (const build of feed.builds) {
     const at = place(build.x, build.z);
@@ -475,5 +485,23 @@ function drawDiscovery(context: CanvasRenderingContext2D, x: number, y: number):
   context.beginPath();
   context.arc(0, 0, 1.7, 0, Math.PI * 2);
   context.fill();
+  context.restore();
+}
+
+function drawBuildArea(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+): void {
+  context.save();
+  context.beginPath();
+  context.arc(x, y, radius, 0, Math.PI * 2);
+  context.fillStyle = 'rgba(71, 123, 91, 0.12)';
+  context.fill();
+  context.strokeStyle = '#326548';
+  context.lineWidth = 1.5;
+  context.setLineDash([4, 3]);
+  context.stroke();
   context.restore();
 }

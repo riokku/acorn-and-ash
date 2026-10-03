@@ -146,6 +146,13 @@ export function Hud({
           />
         )
       ) : null}
+      {state.ready && state.playing && (state.buildMenuOpen || state.placing !== null) ? (
+        <p className="build-area-note" role="status">
+          {state.buildAreaRadius === null
+            ? 'Place your first tent to establish a 12 m building area'
+            : `Your home boundary · ${state.buildAreaRadius} m radius`}
+        </p>
+      ) : null}
       {state.buildMenuOpen ? (
         <JournalPanel
           title="Things I can build"

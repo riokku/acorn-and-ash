@@ -14,7 +14,7 @@ import { isFireGlow } from './fire-light';
 export interface BuildGhost {
   readonly group: THREE.Group;
   /** Stand it here, turned this way, coloured for whether it fits. */
-  show(x: number, z: number, yaw: number, fits: boolean): void;
+  show(x: number, z: number, yaw: number, fits: boolean, groundY?: number): void;
   hide(): void;
   dispose(): void;
 }
@@ -106,8 +106,8 @@ export function createBuildGhost(source: GhostSource, footprint: GhostFootprint)
 
   return {
     group,
-    show: (x, z, yaw, fits) => {
-      group.position.set(x, 0, z);
+    show: (x, z, yaw, fits, groundY = 0) => {
+      group.position.set(x, groundY, z);
       group.rotation.y = yaw;
       group.visible = true;
       if (fits === showingFits) return;

@@ -16,7 +16,7 @@ import {
 
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
-test('learns a carried blueprint and upgrades the existing tent from the build journal', async ({
+test('learns a blueprint, previews the larger home boundary and upgrades in place', async ({
   page,
 }) => {
   const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
@@ -36,7 +36,13 @@ test('learns a carried blueprint and upgrades the existing tent from the build j
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
   Object.assign(sim.inventoryOf(1), { teepeeBlueprint: 1, log: 4, stick: 8 });
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.error('Housing page error:', error.message);
+  });
+  await page.route('https://fonts.googleapis.com/**', (route) =>
+    route.fulfill({ body: '', contentType: 'text/css' }),
+  );
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     const send = (data: ArrayBuffer) => socket.send(Buffer.from(data));
     send(encodeWelcome(1, DEFAULT_WORLD_SEED, 0, Date.now()));
@@ -77,6 +83,13 @@ test('learns a carried blueprint and upgrades the existing tent from the build j
     await page.locator('.hud-curtain').click();
     await page.keyboard.press('KeyB');
     await expect(page.locator('.hud-journal')).toContainText('Teepee · blueprint needed');
+    await expect(page.locator('.build-area-note')).toContainText('12 m radius');
+    const noteBounds = await page.locator('.build-area-note').boundingBox();
+    const journalBounds = await page.locator('.hud-journal').boundingBox();
+    expect(noteBounds!.y + noteBounds!.height).toBeLessThan(journalBounds!.y);
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.buildBoundaryVisible()))
+      .toBe(true);
     await page.keyboard.press('KeyI');
     await page.getByRole('button', { name: /Teepee blueprint, 1/ }).click();
     await expect.poll(() => sim.homeSkillsOf(1)).toBe(1);
@@ -84,6 +97,8 @@ test('learns a carried blueprint and upgrades the existing tent from the build j
     await expect(page.locator('.hud-journal')).toContainText('Upgrade to Teepee');
     await expect(page.locator('.hud-journal')).not.toContainText('blueprint needed');
     await page.locator('.hud-journal-entry').filter({ hasText: 'Upgrade to Teepee' }).click();
+    await expect(page.locator('.hud-journal')).toHaveCount(0);
+    await expect(page.locator('.build-area-note')).toContainText('18 m radius');
     const point = await page.evaluate(() => window.acornDebug?.screenPoint(0, 0, -4.2));
     if (point == null) throw new Error('home is off screen');
     await page.mouse.move(point.x, point.y);
@@ -96,6 +111,23 @@ test('learns a carried blueprint and upgrades the existing tent from the build j
         page.evaluate(() => window.acornDebug?.builtProps().find((prop) => prop.id === 7)?.kind),
       )
       .toBe('teepee');
+    await page.keyboard.down('KeyB');
+    await expect.poll(() => page.evaluate(() => window.acornDebug?.buildMenuOpen())).toBe(true);
+    await page.keyboard.up('KeyB');
+    await expect(page.locator('.build-area-note')).toContainText('18 m radius');
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.buildBoundaryVisible()))
+      .toBe(true);
+    await page.screenshot({
+      path: process.env.CI
+        ? 'test-results/homestead-boundary.png'
+        : '/workspace/acorn-homestead-boundary.png',
+    });
+    await page.keyboard.press('KeyB');
+    await expect(page.locator('.build-area-note')).toHaveCount(0);
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.buildBoundaryVisible()))
+      .toBe(false);
     expect(sim.inventoryOf(1).teepeeBlueprint ?? 0).toBe(0);
     expect(sim.inventoryOf(1).log ?? 0).toBe(0);
     expect(sim.inventoryOf(1).stick ?? 0).toBe(0);

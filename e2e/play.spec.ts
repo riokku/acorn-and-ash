@@ -5,6 +5,7 @@ declare global {
     acornDebug?: {
       selfNetId(): number;
       grassClumps(): number;
+      buildBoundaryVisible(): boolean;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;

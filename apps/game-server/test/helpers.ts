@@ -58,7 +58,11 @@ export class TestClient {
   private readonly socket: WebSocket;
   private sequence = 0;
 
-  private constructor(socket: WebSocket) {
+  private constructor(
+    socket: WebSocket,
+    readonly worldId: string,
+    readonly playerKey?: string,
+  ) {
     this.socket = socket;
     // Binary frames arrive as Blobs unless we ask for buffers.
     socket.binaryType = 'arraybuffer';
@@ -85,7 +89,7 @@ export class TestClient {
     });
     const socket = response.webSocket;
     if (socket === null) throw new Error(`No WebSocket in the response (${response.status})`);
-    return new TestClient(socket);
+    return new TestClient(socket, worldId, playerKey);
   }
 
   loot(request: LootRequest): void {

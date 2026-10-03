@@ -91,6 +91,19 @@ recipes survive reconnecting and the world sleeping. See
 > click to place it, and fence pieces snap together end to end.
 > See [the roadmap](#roadmap).
 
+### Your homestead
+
+Your first tent establishes a private building area. Its radius grows with your
+home: **12 m** for a tent, **18 m** for a teepee, **26 m** for a small cabin and
+**36 m** for a larger cabin. Open B or select a building piece to see a ground
+boundary, minimap outline and radius label. Upgrades preview the larger area.
+The whole object must fit inside your plot; visitors cannot build there.
+
+Homes can be established in suitable wilderness clearings. New plots and upgrades
+keep clear of other homes, discoveries and encounter sites. Water, trees, rocks,
+uneven foundations and the world edge also prevent placement. Existing homes and
+placed objects remain intact. See [decision 0077](docs/decisions/0077-private-wilderness-homesteads.md).
+
 ## Controls
 
 The in-game guide lives in **Settings → Keybindings**, on the Home screen or

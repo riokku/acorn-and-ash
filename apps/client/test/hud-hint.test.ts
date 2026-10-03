@@ -49,6 +49,7 @@ const BASE_STATE: HudState = {
   nearbyDiscovery: null,
   journalTab: 'craft',
   homeKind: null,
+  buildAreaRadius: null,
   canBuild: false,
   buildMenuOpen: false,
   placing: null,

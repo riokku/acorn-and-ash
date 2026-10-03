@@ -18,6 +18,7 @@ import {
   FENCE_SNAP_RADIUS,
   PICKUP_REACH,
   PLAYER_RADIUS,
+  PLAYABLE_HALF_EXTENT,
 } from '../constants';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import type { Vec3 } from '../math/vec3';
@@ -44,6 +45,7 @@ export type BuildRefusal =
   | { readonly reason: 'tooFar' }
   | { readonly reason: 'onPlayer' }
   | { readonly reason: 'pastTreeLine' }
+  | { readonly reason: 'worldEdge' }
   | { readonly reason: 'water' }
   | { readonly reason: 'tooClose'; readonly what: string };
 
@@ -104,6 +106,7 @@ export function checkBuildSpot(
   reach: number,
   water: readonly WaterCircle[],
   others: readonly Footprint[],
+  allowWilderness = false,
 ): BuildRefusal | null {
   if (Math.hypot(piece.x - player.x, piece.z - player.z) > reach) return { reason: 'tooFar' };
   // Nothing built stops anybody walking yet, but a cabin going up around
@@ -115,7 +118,13 @@ export function checkBuildSpot(
   // Building is a clearing thing, not a wilderness one.
   const ends = footprintEnds(piece);
   for (const end of ends) {
-    if (Math.hypot(end.x, end.z) + piece.radius >= CLEARING_TREE_LINE_INNER) {
+    if (allowWilderness) {
+      if (
+        Math.abs(end.x) + piece.radius > PLAYABLE_HALF_EXTENT ||
+        Math.abs(end.z) + piece.radius > PLAYABLE_HALF_EXTENT
+      )
+        return { reason: 'worldEdge' };
+    } else if (Math.hypot(end.x, end.z) + piece.radius >= CLEARING_TREE_LINE_INNER) {
       return { reason: 'pastTreeLine' };
     }
   }
