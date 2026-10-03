@@ -6,6 +6,8 @@ import {
   encodeBuild,
   encodeCraft,
   encodeDiscard,
+  encodeLoot,
+  type LootRequest,
   encodeHello,
   encodeInputBundle,
   encodePing,
@@ -169,6 +171,13 @@ export class WorldConnection {
    * 0061). Sent straight away, the same as using an item: rare and
    * deliberate, nothing the input bundle needs to batch up.
    */
+  sendLoot(request: LootRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    // Flush preceding movement so reach is judged after the walk that led here.
+    this.flush();
+    this.socket.send(encodeLoot(request));
+  }
+
   sendDiscard(request: DiscardRequest): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeDiscard(request));

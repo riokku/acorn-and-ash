@@ -1,4 +1,5 @@
 import { PickupNotice } from './PickupNotice';
+import { LoadingScreen } from './LoadingScreen';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import {
@@ -40,6 +41,7 @@ import { Tooltip } from './Tooltip';
 import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { amountOf, gainedLabel } from './item-words';
+import { itemDescription, itemUseHint } from './item-description';
 import type { ToastView } from './toasts';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
@@ -178,6 +180,26 @@ export function Hud({
         </>
       ) : null}
 
+      {showingWorld && !state.inventoryOpen && state.hoveredLoot !== null ? (
+        <div
+          className="loot-hover"
+          style={{
+            left: Math.max(8, Math.min(state.hoveredLoot.x + 18, window.innerWidth - 260)),
+            top: Math.max(8, Math.min(state.hoveredLoot.y + 18, window.innerHeight - 110)),
+          }}
+        >
+          <strong>
+            {state.hoveredLoot.name}
+            {state.hoveredLoot.count > 1 ? ` ×${state.hoveredLoot.count}` : ''}
+          </strong>
+          <span>{state.hoveredLoot.detail}</span>
+        </div>
+      ) : null}
+      {showingWorld && state.interactionNote !== null ? (
+        <p className="interaction-note" role="status">
+          {state.interactionNote}
+        </p>
+      ) : null}
       {showingWorld && !state.inventoryOpen && state.pickupNotice !== null ? (
         <PickupNotice
           notice={state.pickupNotice}
@@ -193,10 +215,7 @@ export function Hud({
           <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
           <h1>Acorn &amp; Ash</h1>
           <p>{curtainMessage(state)}</p>
-          <p>
-            WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · M
-            for the map · Esc to pause
-          </p>
+          <p>Find your controls in Settings → Keybindings.</p>
         </div>
       ) : null}
 
@@ -223,7 +242,11 @@ export function Hud({
         </p>
       ) : null}
 
-      {state.ready && state.playing && !state.mapOpen ? (
+      {state.ready &&
+      state.playing &&
+      !state.mapOpen &&
+      !state.inventoryOpen &&
+      hint(state) !== '' ? (
         <p
           className={
             state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
@@ -252,12 +275,7 @@ export function Hud({
         <WorldMap feed={mapFeed} fog={fog} onClose={onToggleMap} />
       ) : null}
 
-      {!state.ready ? (
-        <div className="hud-curtain">
-          <h1>Acorn &amp; Ash</h1>
-          <p>{loadingMessage(state)}</p>
-        </div>
-      ) : null}
+      {!state.ready ? <LoadingScreen state={state} /> : null}
     </>
   );
 }
@@ -601,7 +619,7 @@ export function hint(state: HudState): string {
   if (state.aimedAnimal !== null && state.equippedItem !== null) {
     return catchHint(state.aimedAnimal);
   }
-  if (state.canBuild) return 'Press B to build';
+
   // A gentler reminder once nothing more useful is going on.
   if (state.hunger < HUNGER_LOW_THRESHOLD) return hungerHint(state);
   if (state.home !== null) {
@@ -609,10 +627,7 @@ export function hint(state: HudState): string {
       ? 'Home, sweet home · the door out is behind you'
       : 'Visiting · the door out is behind you';
   }
-  return (
-    'WASD to walk · Shift to sprint · Space to jump · right mouse (held) to look around · ' +
-    'C to craft · B to build · I for your pack'
-  );
+  return '';
 }
 
 /**
@@ -624,7 +639,7 @@ function pickupHint(state: HudState, item: ItemId): string {
   const kind = ITEM_KINDS[item];
   const name = kind.displayName.toLowerCase();
   const pack = inventoryFromEntries(state.carrying);
-  if (roomFor(pack, item) > 0) return `Press E to pick up the ${name}`;
+  if (roomFor(pack, item) > 0) return `Right-click or press E to pick up the ${name}`;
   if (kind.maxCarry === 1 && hasItem(pack, item)) return `You can only carry one ${name}`;
   return `Your pack is full · no room for the ${name}`;
 }
@@ -636,7 +651,8 @@ function pickupHint(state: HudState, item: ItemId): string {
 function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): string {
   const kind = ITEM_KINDS[pile.item];
   const pack = inventoryFromEntries(state.carrying);
-  if (roomFor(pack, pile.item) > 0) return `Press E to pick up ${amountOf(pile.item, pile.count)}`;
+  if (roomFor(pack, pile.item) > 0)
+    return `Right-click or press E to pick up ${amountOf(pile.item, pile.count)}`;
   const name = kind.displayName.toLowerCase();
   if (kind.maxCarry === 1 && hasItem(pack, pile.item)) return `You can only carry one ${name}`;
   return `Your pack is full · no room for ${amountOf(pile.item, pile.count)}`;
@@ -645,7 +661,8 @@ function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): s
 /** What E would do beside a patch: gather from it, or nothing until a slot frees up. */
 function gatherHint(state: HudState, item: ItemId): string {
   const plural = ITEM_KINDS[item].pluralName.toLowerCase();
-  if (roomFor(inventoryFromEntries(state.carrying), item) > 0) return `Press E to gather ${plural}`;
+  if (roomFor(inventoryFromEntries(state.carrying), item) > 0)
+    return `Right-click or press E to gather ${plural}`;
   return `Your pack is full · no room for more ${plural}`;
 }
 
@@ -805,8 +822,10 @@ function HotbarSlot({
     ) : (
       <>
         <strong>{kind.displayName}</strong>
-        {usable ? ` · click, drag, or press ${slotNumber}` : null}
-        {count > 0 && isDiscardable(kind.id) ? ' · right-click to drop' : null}
+        <span className="item-tooltip-detail">{itemDescription(kind.id)}</span>
+        <span className="item-tooltip-action">
+          {count > 0 ? itemUseHint(kind.id) : 'Not in your pack · find more to use this slot'}
+        </span>
       </>
     );
 
@@ -1028,11 +1047,4 @@ export function curtainMessage(state: HudState): string {
     return 'You are playing in another tab or window. Click to play here instead';
   }
   return state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play';
-}
-
-function loadingMessage(state: HudState): string {
-  if (state.connection === 'offline') return 'Cannot reach the world server. Retrying…';
-  if (state.connection === 'rejected') return 'This world is full. Try again in a moment.';
-  if (state.connection === 'elsewhere') return 'You are playing in another tab or window.';
-  return 'Waking the forest…';
 }

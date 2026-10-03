@@ -31,7 +31,7 @@ const REQUIRED_VALUES = ['file', 'source_url', 'author', 'license', 'date_added'
 /** Notes and the licence file itself are not assets. */
 const IGNORED_FILES = new Set(['LICENSES.csv', 'README.md', '.gitkeep']);
 
-const ALLOWED_AI_TOOLS = new Set(['', 'Meshy', 'Tripo']);
+const ALLOWED_AI_TOOLS = new Set(['', 'Meshy', 'Tripo', 'OpenAI']);
 const BANNED_AI_TOOLS = new Set(['Hunyuan3D', 'hunyuan3d', 'Hunyuan']);
 
 const problems = [];

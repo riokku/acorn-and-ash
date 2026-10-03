@@ -21,6 +21,8 @@ export function Tooltip({
       className="hud-tooltip-anchor"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
     >
       {children}
       {hovered ? <div className="hud-tooltip">{label}</div> : null}

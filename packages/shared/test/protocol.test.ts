@@ -13,6 +13,7 @@ import {
   encodeCraft,
   encodeUseItem,
   encodeDiscard,
+  encodeLoot,
   encodeDiscarded,
   encodePickupRefused,
   encodeCollected,
@@ -1303,5 +1304,24 @@ describe('confirmed collections', () => {
     expect(decodeServerMessage(message)).toBeNull();
     const invalid = encodeCollected([{ ...events[0]!, x: Number.NaN }]);
     expect(decodeServerMessage(invalid)).toBeNull();
+  });
+});
+
+describe('targeted loot messages', () => {
+  it.each(['pickup', 'pile', 'patch'] as const)('round trips a %s target', (kind) => {
+    expect(decodeClientMessage(encodeLoot({ kind, id: 65000 }))).toEqual({
+      type: 'loot',
+      kind,
+      id: 65000,
+    });
+  });
+  it('rejects truncated, oversized, and unknown-kind requests', () => {
+    const valid = encodeLoot({ kind: 'pickup', id: 1 });
+    expect(decodeClientMessage(valid.slice(0, 3))).toBeNull();
+    const oversized = new Uint8Array(5);
+    oversized.set(new Uint8Array(valid));
+    expect(decodeClientMessage(oversized.buffer)).toBeNull();
+    new DataView(valid).setUint8(1, 3);
+    expect(decodeClientMessage(valid)).toBeNull();
   });
 });

@@ -116,3 +116,86 @@ describe('left-click attacks', () => {
     },
   );
 });
+
+describe('right-click loot gestures', () => {
+  let canvas: EventTarget & { requestPointerLock: ReturnType<typeof vi.fn> };
+  let windowEvents: EventTarget;
+  let controls: Controls;
+  let now: number;
+  beforeEach(() => {
+    now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    canvas = Object.assign(new EventTarget(), { requestPointerLock: vi.fn() });
+    windowEvents = new EventTarget();
+    vi.stubGlobal('window', windowEvents);
+    vi.stubGlobal(
+      'document',
+      Object.assign(new EventTarget(), { exitPointerLock: vi.fn(), pointerLockElement: null }),
+    );
+    controls = new Controls(canvas as unknown as HTMLCanvasElement);
+  });
+  afterEach(() => {
+    controls.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  function mouse(target: EventTarget, type: string, movementX = 0): void {
+    target.dispatchEvent(
+      Object.assign(new Event(type), {
+        button: 2,
+        clientX: 120,
+        clientY: 240,
+        movementX,
+        movementY: 0,
+      }),
+    );
+  }
+  it('keeps settings and loading input idle until gameplay resumes', () => {
+    controls.setGameplayEnabled(false);
+    mouse(canvas, 'mousedown');
+    now = 100;
+    mouse(windowEvents, 'mouseup');
+    for (const code of ['KeyW', 'KeyE', 'Space', 'KeyI'])
+      windowEvents.dispatchEvent(Object.assign(new Event('keydown'), { code }));
+    expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
+    expect(controls.buttons()).toBe(0);
+    expect(controls.takeInventoryToggle()).toBe(false);
+    expect(controls.takeRightClickPoint()).toBeNull();
+    windowEvents.dispatchEvent(Object.assign(new Event('keydown'), { code: 'Escape' }));
+    expect(controls.takeEscapeToggle()).toBe(true);
+    controls.setGameplayEnabled(true);
+    windowEvents.dispatchEvent(Object.assign(new Event('keydown'), { code: 'KeyW' }));
+    expect(controls.moveIntent().z).toBe(1);
+  });
+
+  it('returns the point from a short tap once, without attacking or interacting', () => {
+    mouse(canvas, 'mousedown');
+    now = 100;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickTap()).toBe(true);
+    expect(controls.takeRightClickPoint()).toEqual({ x: 120, y: 240 });
+    expect(controls.takeRightClickPoint()).toBeNull();
+    expect(controls.buttons()).toBe(0);
+  });
+  it('does not loot after a camera drag even when pointer capture is unavailable', () => {
+    mouse(canvas, 'mousedown');
+    mouse(canvas, 'mousemove', 15);
+    now = 100;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickTap()).toBe(false);
+    expect(controls.takeRightClickPoint()).toBeNull();
+    expect(controls.takeMouseDelta()).toEqual({ x: 15, y: 0 });
+  });
+  it('does not loot on a held camera gesture or after a blur', () => {
+    mouse(canvas, 'mousedown');
+    now = 600;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickPoint()).toBeNull();
+    mouse(canvas, 'mousedown');
+    windowEvents.dispatchEvent(new Event('blur'));
+    now += 100;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickTap()).toBe(false);
+    expect(controls.takeRightClickPoint()).toBeNull();
+  });
+});

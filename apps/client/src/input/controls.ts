@@ -66,6 +66,7 @@ const GAME_KEYS = new Set([
 ]);
 
 export class Controls {
+  private gameplayEnabled = true;
   private readonly held = new Set<string>();
   /**
    * Keys pressed since the last tick was built.
@@ -90,6 +91,8 @@ export class Controls {
   private rightDownAt: number | null = null;
   private rightTravelPx = 0;
   private rightTapped = false;
+  private rightPressPoint: { x: number; y: number } | null = null;
+  private rightClickPoint: { x: number; y: number } | null = null;
   /** Wheel movement not yet turned into whole steps, and the steps not yet read. */
   private wheelRemainder = 0;
   private wheelSteps = 0;
@@ -113,6 +116,12 @@ export class Controls {
     // Not passive: the page itself must not scroll or zoom while the wheel
     // turns a piece being placed.
     canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+  }
+
+  /** Paused and loading menus accept Escape, while gameplay inputs remain idle. */
+  setGameplayEnabled(enabled: boolean): void {
+    this.gameplayEnabled = enabled;
+    if (!enabled) this.releaseAll();
   }
 
   get isPointerLocked(): boolean {
@@ -283,7 +292,14 @@ export class Controls {
     return steps;
   }
 
-  /** Whether the right button was tapped, rather than held to drag the camera, since this was last asked. */
+  /** The original cursor position of a looting tap, read once. */
+  takeRightClickPoint(): { x: number; y: number } | null {
+    const point = this.rightClickPoint;
+    this.rightClickPoint = null;
+    return point;
+  }
+
+  /** Whether the right button was tapped, rather than dragged, since this was last asked. */
   takeRightClickTap(): boolean {
     const tapped = this.rightTapped;
     this.rightTapped = false;
@@ -337,6 +353,15 @@ export class Controls {
     this.leftChargeSent = false;
     this.leftFishingSent = false;
     this.pendingClickPoint = null;
+    this.rightDownAt = null;
+    this.rightPressPoint = null;
+    this.rightClickPoint = null;
+    this.rightTapped = false;
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
+    this.wheelRemainder = 0;
+    this.wheelSteps = 0;
+    if (this.pointerLocked) document.exitPointerLock();
   }
 
   dispose(): void {
@@ -352,6 +377,7 @@ export class Controls {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented || (!this.gameplayEnabled && event.code !== 'Escape')) return;
     if (GAME_KEYS.has(event.code)) event.preventDefault();
     this.held.add(event.code);
     this.tapped.add(event.code);
@@ -373,6 +399,8 @@ export class Controls {
    */
   private readonly handlePointerLockChange = (): void => {
     this.pointerLocked = document.pointerLockElement === this.canvas;
+    // A delayed lock grant may arrive after a quick looting tap was released.
+    if (this.pointerLocked && this.rightDownAt === null) document.exitPointerLock();
   };
 
   /**
@@ -381,14 +409,16 @@ export class Controls {
    * track of where the cursor is.
    */
   private readonly handleMouseMove = (event: MouseEvent): void => {
-    if (!this.pointerLocked) {
-      this.pointer = { x: event.clientX, y: event.clientY };
-      return;
-    }
-    this.mouseDeltaX += event.movementX;
-    this.mouseDeltaY += event.movementY;
     if (this.rightDownAt !== null) {
       this.rightTravelPx += Math.abs(event.movementX) + Math.abs(event.movementY);
+    }
+    if (!this.pointerLocked) {
+      this.pointer = { x: event.clientX, y: event.clientY };
+      if (this.rightDownAt === null) return;
+    }
+    if (this.rightDownAt !== null) {
+      this.mouseDeltaX += event.movementX;
+      this.mouseDeltaY += event.movementY;
     }
   };
 
@@ -403,10 +433,12 @@ export class Controls {
    * see decision 0050.
    */
   private readonly handleMouseDown = (event: MouseEvent): void => {
+    if (!this.gameplayEnabled) return;
     this.pointer = { x: event.clientX, y: event.clientY };
     if (event.button === 2) {
       this.rightDownAt = performance.now();
       this.rightTravelPx = 0;
+      this.rightPressPoint = { x: event.clientX, y: event.clientY };
       this.requestPointerLock();
       return;
     }
@@ -429,8 +461,10 @@ export class Controls {
         this.rightTravelPx < RIGHT_TAP_MAX_TRAVEL_PX
       ) {
         this.rightTapped = true;
+        this.rightClickPoint = this.rightPressPoint;
       }
       this.rightDownAt = null;
+      this.rightPressPoint = null;
       return;
     }
     this.held.delete(mouseCode(event.button));
@@ -446,11 +480,16 @@ export class Controls {
 
   /** Ask the browser to capture the mouse, for a right-button camera drag. */
   private requestPointerLock(): void {
-    void this.canvas.requestPointerLock();
+    const requested = this.canvas.requestPointerLock();
+    if (requested !== undefined)
+      void requested.catch(() => {
+        // Camera drag still works without capture while the cursor stays over the canvas.
+      });
   }
 
   /** Adds up wheel movement into whole steps - see `WHEEL_STEP_PX`. */
   private readonly handleWheel = (event: WheelEvent): void => {
+    if (!this.gameplayEnabled) return;
     event.preventDefault();
     // Lines and pages are rare, but some mice report them instead of pixels.
     const scale =

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { KEYBINDINGS } from './keybindings';
 
 import { MAX_SENSITIVITY, MIN_SENSITIVITY, type Preferences } from './preferences';
 
@@ -24,6 +25,7 @@ interface SettingsMenuProps {
  */
 export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [section, setSection] = useState<'general' | 'keybindings'>('general');
   const [preferences, setPreferences] = useState<Preferences>(initial);
 
   const change = (changes: Partial<Preferences>): void => {
@@ -85,27 +87,77 @@ export function SettingsMenu({ initial, onChange }: SettingsMenuProps): React.JS
               </button>
             </div>
 
-            <SliderRow
-              label="Music volume"
-              value={preferences.musicVolume}
-              min={0}
-              max={1}
-              onChange={(value) => change({ musicVolume: value })}
-            />
-            <SliderRow
-              label="Sound effects volume"
-              value={preferences.sfxVolume}
-              min={0}
-              max={1}
-              onChange={(value) => change({ sfxVolume: value })}
-            />
-            <SliderRow
-              label="Mouse sensitivity"
-              value={preferences.lookSensitivity}
-              min={MIN_SENSITIVITY}
-              max={MAX_SENSITIVITY}
-              onChange={(value) => change({ lookSensitivity: value })}
-            />
+            <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+              <button
+                id="settings-general-tab"
+                type="button"
+                role="tab"
+                aria-selected={section === 'general'}
+                aria-controls="settings-general"
+                onClick={() => setSection('general')}
+              >
+                General
+              </button>
+              <button
+                id="settings-keybindings-tab"
+                type="button"
+                role="tab"
+                aria-selected={section === 'keybindings'}
+                aria-controls="settings-keybindings"
+                onClick={() => setSection('keybindings')}
+              >
+                Keybindings
+              </button>
+            </div>
+            {section === 'general' ? (
+              <div id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab">
+                <SliderRow
+                  label="Music volume"
+                  value={preferences.musicVolume}
+                  min={0}
+                  max={1}
+                  onChange={(value) => change({ musicVolume: value })}
+                />
+                <SliderRow
+                  label="Sound effects volume"
+                  value={preferences.sfxVolume}
+                  min={0}
+                  max={1}
+                  onChange={(value) => change({ sfxVolume: value })}
+                />
+                <SliderRow
+                  label="Mouse sensitivity"
+                  value={preferences.lookSensitivity}
+                  min={MIN_SENSITIVITY}
+                  max={MAX_SENSITIVITY}
+                  onChange={(value) => change({ lookSensitivity: value })}
+                />
+              </div>
+            ) : (
+              <div
+                id="settings-keybindings"
+                className="keybindings-reference"
+                role="tabpanel"
+                aria-labelledby="settings-keybindings-tab"
+              >
+                <p className="keybindings-intro">
+                  Your guide to the woods. These are the current controls.
+                </p>
+                {KEYBINDINGS.map((group) => (
+                  <section key={group.title}>
+                    <h3>{group.title}</h3>
+                    <dl>
+                      {group.bindings.map(([key, action]) => (
+                        <div key={key}>
+                          <dt>{key}</dt>
+                          <dd>{action}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : null}

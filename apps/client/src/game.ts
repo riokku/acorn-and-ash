@@ -16,6 +16,7 @@ import {
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
+  PICKUP_REACH,
   ITEM_KINDS,
   LIGHT_COMBO,
   STRIKE,
@@ -105,7 +106,8 @@ import {
 
 import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
-import { clickAimYaw, type ClickCandidate } from './input/click-target';
+import { clickAimYaw, yawTowards, type ClickCandidate } from './input/click-target';
+import { lootUnderRay, type LootTarget } from './input/loot-target';
 import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
@@ -465,6 +467,8 @@ export interface GameDebug {
    * Smoke tests use it so they can walk somewhere without steering by hand.
    */
   faceTowards(x: number, z: number): void;
+  /** Project a world point for browser interaction tests, without changing game state. */
+  screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
   /** The pond, as the circles it is made of. */
   pond(): Array<{ x: number; z: number; radius: number }>;
   /** Whether a click right now would cast. */
@@ -594,6 +598,9 @@ export class Game {
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly groundHit = new THREE.Vector3();
 
+  private enteringWorld = false;
+  private firstWorldFrame: (() => void) | null = null;
+  private lastRenderedAt = 0;
   private setup: RendererSetup | null = null;
   private camera: FollowCamera | null = null;
   private controls: Controls | null = null;
@@ -612,6 +619,10 @@ export class Game {
   private readonly takenPickups = new Set<number>();
   private carrying: readonly { item: ItemId; count: number }[] = [];
   private nearbyItem: ItemId | null = null;
+  private hoveredLoot: LootTarget | null = null;
+  private hoverDueAt = 0;
+  private interactionNote: string | null = null;
+  private interactionNoteUntil = 0;
   private nearGatherSpot: ItemId | null = null;
   /**
    * Every stick and flower patch, and everything dropped, as the server last
@@ -723,6 +734,7 @@ export class Game {
   }
 
   async start(): Promise<void> {
+    this.options.hud.publish({ loadingProgress: 5, loadingStage: 'Preparing the view' });
     installBvhRaycasting();
     // Kicked off now rather than in enterWorld, so they have the whole time
     // it takes to set up the renderer and reach the server to finish loading.
@@ -752,8 +764,11 @@ export class Game {
     this.sceneFade = fade;
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
     this.controls = new Controls(this.options.canvas);
+    this.controls.setGameplayEnabled(false);
 
     this.options.hud.publish({
+      loadingProgress: 15,
+      loadingStage: 'Finding your forest',
       backend: setup.backend,
       forcedFallback: setup.forcedFallback,
       playerName: this.options.identity.name,
@@ -797,10 +812,10 @@ export class Game {
 
   private setPlaying(playing: boolean): void {
     this.playing = playing;
+    this.controls?.setGameplayEnabled(playing);
     this.forestAudio.update(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
-      this.controls?.releaseAll();
       this.stopPlacing();
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
@@ -988,6 +1003,15 @@ export class Game {
         this.toastShelf
           .current(performance.now())
           .map((toast) => ({ item: toast.item, count: toast.count })),
+      screenPoint: (x, y, z) => {
+        if (this.camera === null) return null;
+        this.scratchProject.set(x, y, z).project(this.camera.camera);
+        if (this.scratchProject.z < -1 || this.scratchProject.z > 1) return null;
+        return {
+          x: ((this.scratchProject.x + 1) * window.innerWidth) / 2,
+          y: ((1 - this.scratchProject.y) * window.innerHeight) / 2,
+        };
+      },
       faceTowards: (x, z) => {
         const camera = this.camera;
         if (camera === null) return;
@@ -1600,82 +1624,113 @@ export class Game {
    * server and in every browser.
    */
   private async enterWorld(seed: number): Promise<void> {
-    if (this.clearingScene !== null) return;
+    if (this.clearingScene !== null || this.enteringWorld) return;
+    this.enteringWorld = true;
+    try {
+      let loaded = 0;
+      const assetReady = (): void => {
+        loaded += 1;
+        this.options.hud.publish({
+          loadingProgress: 15 + Math.round((loaded / 9) * 55),
+          loadingStage: 'Gathering the forest’s details',
+        });
+      };
 
-    // Resolves immediately once loaded; only actually waits if the world is
-    // entered before the fetch kicked off in start() has finished. A flower
-    // bed can be built well after this, but never before, so loading it here
-    // covers every place the game ever draws a flower.
-    await Promise.all([
-      preloadPropModels(),
-      preloadFlowerModel(),
-      preloadCampfireModels(),
-      preloadItemModels(),
-      preloadFoxModel(),
-      preloadCharacterModels(),
-      preloadCharacterAnimations(),
-      preloadRaiderModels(),
-      preloadArtTextures(),
-    ]);
-    if (this.clearingScene !== null) return;
+      // Resolves immediately once loaded; only actually waits if the world is
+      // entered before the fetch kicked off in start() has finished. A flower
+      // bed can be built well after this, but never before, so loading it here
+      // covers every place the game ever draws a flower.
+      await Promise.all(
+        [
+          preloadPropModels(),
+          preloadFlowerModel(),
+          preloadCampfireModels(),
+          preloadItemModels(),
+          preloadFoxModel(),
+          preloadCharacterModels(),
+          preloadCharacterAnimations(),
+          preloadRaiderModels(),
+          preloadArtTextures(),
+        ].map((asset) => asset.then(assetReady)),
+      );
+      this.options.hud.publish({ loadingProgress: 75, loadingStage: 'Growing your clearing' });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (this.clearingScene !== null) return;
 
-    const clearing = buildTestClearing(seed);
-    const terrain = createWildernessTerrain(seed);
-    const wilderness = buildWilderness(seed, terrain);
-    this.wildernessProps = wilderness.props;
+      const clearing = buildTestClearing(seed);
+      const terrain = createWildernessTerrain(seed);
+      const wilderness = buildWilderness(seed, terrain);
+      this.wildernessProps = wilderness.props;
 
-    this.clearing = clearing;
-    this.clearingScene = buildClearingScene(clearing);
-    this.clearingScene.setTakenPickups(this.takenPickups);
-    this.outdoors.add(this.clearingScene.group);
+      this.clearing = clearing;
+      this.clearingScene = buildClearingScene(clearing);
+      this.clearingScene.setTakenPickups(this.takenPickups);
+      this.outdoors.add(this.clearingScene.group);
 
-    // Word of where the patches are, and anything dropped, usually beats the
-    // world itself to it on arrival.
-    this.groundItems = createGroundItems((x, z) => terrain.heightAt(x, z));
-    this.groundItems.setGatherPatches(this.gatherPatches);
-    this.groundItems.setDroppedPiles(this.droppedPiles);
-    this.outdoors.add(this.groundItems.group);
+      // Word of where the patches are, and anything dropped, usually beats the
+      // world itself to it on arrival.
+      this.groundItems = createGroundItems((x, z) => terrain.heightAt(x, z));
+      this.groundItems.setGatherPatches(this.gatherPatches);
+      this.groundItems.setDroppedPiles(this.droppedPiles);
+      this.outdoors.add(this.groundItems.group);
 
-    this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
-    this.outdoors.add(this.wildernessScene.group);
+      this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
+      this.outdoors.add(this.wildernessScene.group);
 
-    this.outdoors.add(this.floats.group);
+      this.outdoors.add(this.floats.group);
 
-    const collision = createCollisionWorld(terrain, [
-      ...clearing.colliders,
-      ...wilderness.colliders,
-    ]);
-    this.collision = collision;
-    this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
-    this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
-    this.applyTreeStates();
-    this.applyBuiltProps();
-    // Drawn once out of sight while loading, so the first raid turns up
-    // without the game freezing to learn how to draw a skeleton.
-    this.raiders.rehearse(SPAWN_POSITION);
+      const collision = createCollisionWorld(terrain, [
+        ...clearing.colliders,
+        ...wilderness.colliders,
+      ]);
+      this.collision = collision;
+      this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
+      this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
+      this.applyTreeStates();
+      this.applyBuiltProps();
+      // Drawn once out of sight while loading, so the first raid turns up
+      // without the game freezing to learn how to draw a skeleton.
+      this.raiders.rehearse(SPAWN_POSITION);
 
-    this.localCharacter = createCharacter(
-      this.options.identity.character,
-      TINT_COLORS[this.options.identity.color].hex,
-    );
-    this.localCharacter.setName(this.options.identity.name);
-    this.scene.add(this.localCharacter.group);
-    // Word of where we are can beat the world to it on arrival: waking up
-    // inside our own home, say.
-    const arrived = this.pendingSpace;
-    this.pendingSpace = null;
-    if (arrived !== null) this.moveToSpace(arrived.space, arrived.x, arrived.z, arrived.yaw);
+      this.localCharacter = createCharacter(
+        this.options.identity.character,
+        TINT_COLORS[this.options.identity.color].hex,
+      );
+      this.localCharacter.setName(this.options.identity.name);
+      this.scene.add(this.localCharacter.group);
+      // Word of where we are can beat the world to it on arrival: waking up
+      // inside our own home, say.
+      const arrived = this.pendingSpace;
+      this.pendingSpace = null;
+      if (arrived !== null) this.moveToSpace(arrived.space, arrived.x, arrived.z, arrived.yaw);
 
-    this.mapFeed.ready = true;
-    // Painted in a worker while the player gets their bearings; the minimap
-    // shows blank parchment for the moment it takes.
-    paintWorldMapImage(seed)
-      .then((image) => {
-        this.mapFeed.image = image;
-      })
-      .catch((error: unknown) => console.warn('Could not paint the map', error));
+      this.mapFeed.ready = true;
+      // Painted in a worker while the player gets their bearings; the minimap
+      // shows blank parchment for the moment it takes.
+      paintWorldMapImage(seed)
+        .then((image) => {
+          this.mapFeed.image = image;
+        })
+        .catch((error: unknown) => console.warn('Could not paint the map', error));
 
-    this.options.hud.publish({ ready: true });
+      this.options.hud.publish({ loadingProgress: 90, loadingStage: 'Letting the light through' });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      // Readiness follows an actual rendered world frame. Rendering and a
+      // separate shader compilation must not overlap on the same renderer.
+      await new Promise<void>((resolve) => {
+        this.firstWorldFrame = resolve;
+      });
+      this.options.hud.publish({
+        ready: true,
+        loadingProgress: 100,
+        loadingStage: 'Your forest is ready',
+      });
+    } catch (error: unknown) {
+      console.error('Could not prepare the forest', error);
+      this.options.hud.publish({
+        loadingError: 'The forest couldn’t finish loading. Please try again.',
+      });
+    }
   }
 
   /**
@@ -1932,6 +1987,8 @@ export class Game {
     // face whatever is under the cursor, before the tap that comes with it is
     // read below as a swing or a cast. See decision 0051. While a piece is
     // being placed, the same click places it instead, and is never a swing.
+    const rightTap = controls.takeRightClickTap();
+    const rightPoint = controls.takeRightClickPoint();
     const clickPoint = controls.takeClickPoint();
     if (this.placing !== null) {
       if (clickPoint !== null) {
@@ -1939,13 +1996,22 @@ export class Game {
         this.placePiece();
       }
       this.turnPiece(controls.takeWheelSteps());
-      if (controls.takeRightClickTap()) this.stopPlacing();
+      if (rightTap) this.stopPlacing();
     } else {
       if (clickPoint !== null) this.aimTowardsClickPoint(clickPoint, camera);
       // Only a piece being placed has any use for either; left over from
       // before one was picked, they would act on it the moment it was.
       controls.takeWheelSteps();
-      controls.takeRightClickTap();
+      if (
+        rightTap &&
+        rightPoint !== null &&
+        this.playing &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen
+      )
+        this.lootAt(rightPoint, camera);
     }
 
     // Read ahead of anything below that might forget taps for a produced
@@ -2024,7 +2090,21 @@ export class Game {
     }
 
     this.fireLights?.update(camera.camera.position);
-    setup.renderer.render(this.scene, camera.camera);
+    // Menus remain responsive without repeatedly drawing an unchanged view.
+    // Keep the simulation and network alive; only paused drawing is throttled.
+    const viewingMenu =
+      !this.playing ||
+      this.inventoryOpen ||
+      this.craftMenuOpen ||
+      this.buildMenuOpen ||
+      this.mapOpen;
+    if (!viewingMenu || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
+      setup.renderer.render(this.scene, camera.camera);
+      this.lastRenderedAt = now;
+      const rendered = this.firstWorldFrame;
+      this.firstWorldFrame = null;
+      rendered?.();
+    }
     this.updateMapFeed(camera);
     this.updateCombatFeed(camera);
     this.updateHud(now, deltaSeconds);
@@ -2381,14 +2461,104 @@ export class Game {
     }
   }
 
-  /**
-   * Turn the character - not the camera - to face whatever is under a
-   * screen-space click: the first tree or animal under the cursor, or else
-   * the patch of ground or water it lands on. The same thing the debug
-   * `faceTowards` does for the smoke tests, just aimed from a real click.
-   * A click that lands on nothing at all (open sky, say) or right at the
-   * character's own feet keeps whatever heading it already had.
-   */
+  /** The visible loot under a cursor ray, including solid scenery occlusion. */
+  private lootTargetAt(
+    point: { x: number; y: number },
+    camera: FollowCamera,
+  ): typeof this.hoveredLoot {
+    if (this.space !== OUTDOORS || this.clearingScene === null || this.clearing === null)
+      return null;
+    const candidates: NonNullable<typeof this.hoveredLoot>[] = [];
+    for (const pickup of this.clearing.pickups) {
+      if (this.takenPickups.has(pickup.id)) continue;
+      const object = this.clearingScene.pickupObject(pickup.id);
+      if (object !== null)
+        candidates.push({
+          request: { kind: 'pickup', id: pickup.id },
+          item: pickup.item,
+          count: 1,
+          object,
+          x: pickup.x,
+          z: pickup.z,
+        });
+    }
+    for (const pile of this.droppedPiles) {
+      const object = this.groundItems?.target('pile', pile.id) ?? null;
+      if (object !== null)
+        candidates.push({
+          request: { kind: 'pile', id: pile.id },
+          item: pile.item,
+          count: pile.count,
+          object,
+          x: pile.x,
+          z: pile.z,
+        });
+    }
+    for (const patch of this.gatherPatches) {
+      if (patch.remaining <= 0) continue;
+      const object = this.groundItems?.patchObject(patch.id) ?? null;
+      if (object !== null)
+        candidates.push({
+          request: { kind: 'patch', id: patch.id },
+          item: patch.item,
+          count: patch.remaining,
+          object,
+          x: patch.x,
+          z: patch.z,
+        });
+    }
+    this.clickNdc.set(
+      (point.x / window.innerWidth) * 2 - 1,
+      -(point.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    return lootUnderRay(this.clickRaycaster, candidates, [
+      this.clearingScene.cameraBlockers,
+      ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraBlockers]),
+      ...this.homeCameraBlockers,
+    ]);
+  }
+
+  private lootDetail(target: LootTarget): string {
+    return (
+      this.lootProblem(target) ??
+      (target.request.kind === 'patch' ? 'Right-click to gather' : 'Right-click to loot')
+    );
+  }
+
+  private lootProblem(target: LootTarget): string | null {
+    const position = this.motionOrOrigin();
+    if (Math.hypot(position.x - target.x, position.z - target.z) > PICKUP_REACH)
+      return 'Too far away · move closer';
+    if (
+      this.localPlayer !== null &&
+      (!isFreeToInteract(this.localPlayer.action) || this.fishingPhase !== null)
+    )
+      return 'Finish your current action first';
+    const pack = inventoryFromEntries(this.carrying);
+    const kind = ITEM_KINDS[target.item];
+    if (roomFor(pack, target.item) === 0)
+      return kind.maxCarry === 1 &&
+        this.carrying.some((entry) => entry.item === target.item && entry.count > 0)
+        ? `You can only carry one ${kind.displayName.toLowerCase()}`
+        : 'Pack full · make room in your pack';
+    return null;
+  }
+
+  private lootAt(point: { x: number; y: number }, camera: FollowCamera): void {
+    const target = this.lootTargetAt(point, camera);
+    if (target === null) return;
+    const problem = this.lootProblem(target);
+    if (problem !== null) {
+      this.interactionNote = problem;
+      this.interactionNoteUntil = performance.now() + 2800;
+      return;
+    }
+    this.aimYaw = yawTowards(this.motionOrOrigin(), target);
+    this.connection?.sendLoot(target.request);
+  }
+
+  /** Turn the character toward a clicked target, keeping the camera heading. */
   private aimTowardsClickPoint(point: { x: number; y: number }, camera: FollowCamera): void {
     const from = this.motionOrOrigin();
 
@@ -2591,6 +2761,8 @@ export class Game {
     if (this.space !== OUTDOORS) {
       // Nothing out in the world is within reach from in here.
       this.gatheringFocus.setTarget(null);
+      this.hoveredLoot = null;
+      this.options.canvas.style.cursor = '';
       this.nearbyItem = null;
       this.nearbyPile = null;
       this.nearGatherSpot = null;
@@ -2612,6 +2784,25 @@ export class Game {
       return;
     }
 
+    if (performance.now() >= this.hoverDueAt) {
+      this.hoverDueAt = performance.now() + 80;
+      const pointer = this.controls?.pointerPosition() ?? null;
+      const overWorld =
+        pointer !== null && document.elementFromPoint(pointer.x, pointer.y) === this.options.canvas;
+      this.hoveredLoot =
+        overWorld &&
+        pointer !== null &&
+        this.playing &&
+        !this.controls?.isPointerLocked &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen &&
+        this.placing === null
+          ? this.lootTargetAt(pointer, camera)
+          : null;
+      this.options.canvas.style.cursor = this.hoveredLoot === null ? '' : 'pointer';
+    }
     // Only a hint. The server decides who actually gets it.
     const reachable =
       this.clearing === null
@@ -2639,10 +2830,10 @@ export class Game {
       targetItem !== undefined && roomFor(inventoryFromEntries(this.carrying), targetItem) === 0;
     this.gatheringFocus.setTarget(
       isFreeToInteract(action) && this.playing && !this.inventoryOpen && !this.mapOpen
-        ? gatherObject
+        ? (this.hoveredLoot?.object ?? gatherObject)
         : null,
       pile !== null && reachable === null ? 0.6 : 0.28,
-      blocked,
+      this.hoveredLoot !== null ? this.lootProblem(this.hoveredLoot) !== null : blocked,
     );
     this.gatheringFocus.update(deltaSeconds);
 
@@ -3178,6 +3369,22 @@ export class Game {
       carrying: this.carrying,
       equippedItem: this.equipped.get(this.selfNetId) ?? null,
       nearbyItem: this.nearbyItem,
+      hoveredLoot:
+        this.hoveredLoot === null ||
+        !this.playing ||
+        this.inventoryOpen ||
+        this.mapOpen ||
+        this.placing !== null ||
+        this.controls?.isPointerLocked
+          ? null
+          : {
+              name: ITEM_KINDS[this.hoveredLoot.item].displayName,
+              count: this.hoveredLoot.count,
+              detail: this.lootDetail(this.hoveredLoot),
+              x: this.controls?.pointerPosition()?.x ?? 0,
+              y: this.controls?.pointerPosition()?.y ?? 0,
+            },
+      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : null,
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,

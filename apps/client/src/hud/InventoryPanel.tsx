@@ -3,7 +3,6 @@ import {
   PACK_ITEMS,
   hasItem,
   inventoryFromEntries,
-  isDiscardable,
   packSlots,
   packStacks,
   slotsUsed,
@@ -13,6 +12,7 @@ import {
 
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
+import { itemDescription, itemUseHint } from './item-description';
 
 /**
  * A slot right-clicked to drop or destroy what is in it: what, how many -
@@ -245,8 +245,8 @@ function PackSlot({
       label={
         <>
           <strong>{kind.displayName}</strong>
-          {kind.equippable ? ' · click or drag to a hotbar slot' : null}
-          {isDiscardable(item) ? ' · right-click to drop' : null}
+          <span className="item-tooltip-detail">{itemDescription(item)}</span>
+          <span className="item-tooltip-action">{itemUseHint(item)}</span>
         </>
       }
     >
@@ -256,7 +256,18 @@ function PackSlot({
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', item);
         }}
-        onClick={() => onUseItem(item)}
+        role="button"
+        tabIndex={0}
+        aria-label={`${kind.displayName}, ${count}. ${itemDescription(item)}`}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (kind.equippable) onUseItem(item);
+          }
+        }}
+        onClick={() => {
+          if (kind.equippable) onUseItem(item);
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           onOpenSlotMenu({ item, count, x: event.clientX, y: event.clientY });
