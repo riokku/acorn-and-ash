@@ -1,3 +1,9 @@
+import {
+  HOME_BUILD_REASONS,
+  isHomeKind,
+  type HomeBuildFeedback,
+  HOME_SKILL_MASK,
+} from '../data/housing';
 /**
  * The binary wire format.
  *
@@ -566,6 +572,19 @@ export function encodePong(clientTimeMs: number, serverTimeMs: number): ArrayBuf
   view.setUint32(1, clientTimeMs >>> 0, true);
   view.setUint32(5, serverTimeMs >>> 0, true);
   return buffer;
+}
+
+export function encodeHomeBuildFeedback(result: HomeBuildFeedback): ArrayBuffer {
+  const data = new ArrayBuffer(5);
+  const view = new DataView(data);
+  view.setUint8(0, ServerMessageType.HomeBuildFeedback);
+  view.setUint8(1, buildableKindIndex(result.kind));
+  view.setUint16(2, result.homeId, true);
+  view.setUint8(4, result.reason === null ? 0 : HOME_BUILD_REASONS.indexOf(result.reason) + 1);
+  return data;
+}
+export function encodeHomeSkills(skills: number): ArrayBuffer {
+  return new Uint8Array([ServerMessageType.HomeSkills, skills & HOME_SKILL_MASK]).buffer;
 }
 
 export function encodeInventory(
@@ -1404,6 +1423,22 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         moved: view.getUint16(4, true),
         reason: reasonCode === 0 ? null : CHEST_REASONS[reasonCode - 1]!,
       };
+    }
+    case ServerMessageType.HomeBuildFeedback: {
+      if (data.byteLength !== 5) return null;
+      const kind = buildableKindFromIndex(view.getUint8(1)),
+        reason = view.getUint8(4);
+      if (kind === null || !isHomeKind(kind) || reason > HOME_BUILD_REASONS.length) return null;
+      return {
+        type: 'homeBuildFeedback',
+        kind,
+        homeId: view.getUint16(2, true),
+        reason: reason === 0 ? null : HOME_BUILD_REASONS[reason - 1]!,
+      };
+    }
+    case ServerMessageType.HomeSkills: {
+      if (data.byteLength !== 2 || (view.getUint8(1) & ~HOME_SKILL_MASK) !== 0) return null;
+      return { type: 'homeSkills', skills: view.getUint8(1) };
     }
     case ServerMessageType.Inventory: {
       if (data.byteLength < 2) return null;

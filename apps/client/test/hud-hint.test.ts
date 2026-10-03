@@ -42,6 +42,8 @@ const BASE_STATE: HudState = {
   raidersInSight: 0,
   raidersClose: false,
   raidBanner: null,
+  homeSkills: 0,
+  homeKind: null,
   canBuild: false,
   buildMenuOpen: false,
   placing: null,

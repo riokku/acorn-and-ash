@@ -1,3 +1,13 @@
+import {
+  knowsHome,
+  blueprintHome,
+  HOME_TIERS,
+  homeChestSpot,
+  homeRoomScale,
+  isHomeKind,
+  nextHome,
+  type HomeKind,
+} from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -9,7 +19,6 @@ import {
   CLEARING_TREE_LINE_INNER,
   DOORWAY_REACH,
   HOME_ROOM,
-  HOME_FURNITURE,
   type ChestRequest,
   type ChestReason,
   OUTDOORS,
@@ -157,6 +166,8 @@ import { ImpactBursts } from './scene/impact-bursts';
 import { WeaponTrail } from './scene/weapon-trail';
 import { createCampfire, type Campfire } from './scene/campfire';
 import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-cache';
+import { createShelter } from './scene/shelter';
+import { createLargeCabin } from './scene/large-cabin';
 import { createCabin, type Cabin } from './scene/cabin';
 import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
@@ -331,6 +342,11 @@ function createBuiltMesh(
       return createCampfire();
     case 'cabin':
       return createCabin();
+    case 'tent':
+    case 'teepee':
+      return createShelter(kind);
+    case 'largeCabin':
+      return createLargeCabin();
     case 'flowerBed':
       return createFlowerBed();
     case 'lantern':
@@ -534,6 +550,9 @@ export class Game {
     Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
   >();
   private builtProps: readonly BuiltPropView[] = [];
+  private homeSkills = 0;
+  private homeSkillsHeard = false;
+  private interiorKind: HomeKind | null = null;
   /** The piece being placed, if any - see decision 0052. */
   private placing: Placing | null = null;
   /**
@@ -571,13 +590,13 @@ export class Game {
   /** The room inside a home, built the first time anybody goes in. */
   private homeInterior: HomeInterior | null = null;
   /** The walls and furniture of a room, shared by every home, in its own coordinates. */
-  private readonly roomCollision = createCollisionWorld(
+  private roomCollision = createCollisionWorld(
     createFlatTerrain(0),
     homeRoomColliders(),
     HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
   );
   /** Homes already made solid in `collision`, so a resent list never adds one twice. */
-  private readonly solidHomes = new Set<number>();
+  private readonly solidHomes = new Map<number, ReturnType<typeof cabinCollider>>();
   /**
    * A plain box the size of each home, never drawn: only there so the
    * camera pulls in rather than ending up inside somebody's walls.
@@ -890,8 +909,8 @@ export class Game {
   }
 
   private chestHoverDetail(): string {
-    if (this.homeHere()?.yours !== true) return 'Private · belongs to the cabin owner';
-    const chest = HOME_FURNITURE.chest;
+    if (this.homeHere()?.yours !== true) return 'Private · belongs to the home owner';
+    const chest = homeChestSpot(this.currentHomeKind());
     const position = this.motionOrOrigin();
     if (Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
       return 'Too far away · move closer';
@@ -945,7 +964,15 @@ export class Game {
    * player can see what they pinned, but there is nothing yet to equip.
    */
   useItem(item: ItemId): void {
-    if (!ITEM_KINDS[item].equippable) return;
+    const home = blueprintHome(item);
+    if (home !== null && knowsHome(this.homeSkills, home)) {
+      this.craftingNews = {
+        text: 'You already learned this home blueprint.',
+        until: performance.now() + NEWS_MS,
+      };
+      return;
+    }
+    if (!ITEM_KINDS[item].equippable && blueprintHome(item) === null) return;
     if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
     this.connection?.sendUseItem(item);
   }
@@ -966,6 +993,12 @@ export class Game {
    * build menu open - called when an entry in that menu is clicked.
    */
   pickBuildable(kind: BuildableKindId): void {
+    if (kind === 'cabin') {
+      const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
+      const target = nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null);
+      if (target === null) return;
+      kind = target;
+    }
     this.buildMenuOpen = false;
     this.startPlacing(kind);
   }
@@ -1270,6 +1303,44 @@ export class Game {
         this.remotePlayers.remove(message.netId);
         this.removeRemote(message.netId);
         this.floats.reelIn(message.netId);
+        break;
+      }
+      case 'homeBuildFeedback': {
+        const descriptions = {
+          materials: 'You need more building materials.',
+          identity: 'Reconnect to build a home.',
+          blueprint: 'Learn this home blueprint first.',
+          tier: 'Upgrade your home one tier at a time.',
+          moved: 'Upgrade your existing home in place.',
+          occupied: 'Everyone must leave the home before upgrading.',
+          blocked: 'The larger home needs more clear space around it.',
+          player: 'Someone is standing where the larger home will go.',
+          busy: 'Wait a moment before building.',
+        };
+        this.craftingNews = {
+          text:
+            message.reason === null
+              ? `${BUILDABLE_KINDS[message.kind].displayName} ready. Welcome home.`
+              : descriptions[message.reason],
+          until: performance.now() + NEWS_MS,
+        };
+        this.pendingPlacements = [];
+        break;
+      }
+      case 'homeSkills': {
+        if (this.homeSkillsHeard && message.skills !== this.homeSkills) {
+          const learned = HOME_TIERS.filter(
+            (_, index) =>
+              index > 0 && (message.skills & ~this.homeSkills & (1 << (index - 1))) !== 0,
+          );
+          if (learned.length > 0)
+            this.craftingNews = {
+              text: `Learned ${learned.map((kind) => BUILDABLE_KINDS[kind].displayName.toLowerCase()).join(', ')} building.`,
+              until: performance.now() + NEWS_MS,
+            };
+        }
+        this.homeSkillsHeard = true;
+        this.homeSkills = message.skills;
         break;
       }
       case 'inventory': {
@@ -1906,7 +1977,11 @@ export class Game {
     const present = new Set(this.builtProps.map((prop) => prop.id));
 
     for (const [id, built] of this.builtMeshes) {
-      if (present.has(id)) continue;
+      if (
+        present.has(id) &&
+        this.builtProps.find((prop) => prop.id === id)?.kind === built.group.userData.builtKind
+      )
+        continue;
       this.outdoors.remove(built.group);
       built.dispose();
       this.builtMeshes.delete(id);
@@ -1928,18 +2003,29 @@ export class Game {
       built.group.position.set(prop.x, 0, prop.z);
       built.group.rotation.y = prop.yaw;
       this.outdoors.add(built.group);
-      // A home is solid, apart from its door (see decision 0055) - the same
-      // walls the server holds everybody to, so walking into one predicts right.
-      if (
-        BUILDABLE_KINDS[prop.kind].isHome &&
-        this.collision !== null &&
-        !this.solidHomes.has(prop.id)
-      ) {
-        this.collision.colliders.push(cabinCollider(prop));
-        this.solidHomes.add(prop.id);
-        this.homeCameraBlockers.push(homeCameraBlocker(prop));
-      }
+      built.group.userData.builtKind = prop.kind;
       this.builtMeshes.set(prop.id, built);
+    }
+    if (this.collision !== null) {
+      const old = new Set(this.solidHomes.values());
+      this.collision.colliders.splice(
+        0,
+        this.collision.colliders.length,
+        ...this.collision.colliders.filter((collider) => !old.has(collider)),
+      );
+      this.solidHomes.clear();
+      for (const blocker of this.homeCameraBlockers) {
+        blocker.geometry.dispose();
+        (blocker.material as THREE.Material).dispose();
+      }
+      this.homeCameraBlockers.length = 0;
+      for (const prop of this.builtProps)
+        if (isHomeKind(prop.kind)) {
+          const collider = cabinCollider(prop);
+          this.collision.colliders.push(collider);
+          this.solidHomes.set(prop.id, collider);
+          this.homeCameraBlockers.push(homeCameraBlocker(prop));
+        }
     }
     this.updateMapBuilds();
   }
@@ -2418,7 +2504,14 @@ export class Game {
     }
     if (!this.buildMenuOpen && this.placing === null) return;
     for (const index of controls.takeBuildTaps()) {
-      const kind = BUILDABLE_KIND_ORDER[index];
+      const original = BUILDABLE_KIND_ORDER[index];
+      const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
+      const kind =
+        original === 'cabin'
+          ? nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null)
+          : original;
+      if (kind === null || (original !== 'cabin' && original !== undefined && isHomeKind(original)))
+        continue;
       if (kind === undefined) continue;
       this.buildMenuOpen = false;
       this.startPlacing(kind);
@@ -2502,6 +2595,7 @@ export class Game {
 
     placing.plan = planPlacement({
       kind: placing.kind,
+      homeSkills: this.homeSkills,
       yaw: placing.yaw,
       mouse: this.groundUnderPointer(camera),
       player: player.motion.position,
@@ -2874,7 +2968,9 @@ export class Game {
     );
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
-    character.setRestSpot(restSpotFor(action.kind, action.step, this.space));
+    character.setRestSpot(
+      restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+    );
     const pose = character.update(deltaSeconds, {
       move,
       locomotion: { speed: Math.hypot(velocity.x, velocity.z), airborne: !player.motion.grounded },
@@ -2932,7 +3028,11 @@ export class Game {
       this.raidersClose = false;
       this.canCast = false;
       this.restingNearby = isFreeToInteract(action)
-        ? (restingPlaceInReach(player.motion.position.x, player.motion.position.z)?.kind ?? null)
+        ? (restingPlaceInReach(
+            player.motion.position.x,
+            player.motion.position.z,
+            this.currentHomeKind(),
+          )?.kind ?? null)
         : null;
       this.canBuild = false;
       this.centreSunOn(position);
@@ -3121,6 +3221,11 @@ export class Game {
    * out there is hidden or shown in one go, the room is built the first
    * time it is needed, and the camera looks in like a dollhouse.
    */
+  private currentHomeKind(): HomeKind {
+    const kind = this.builtProps.find((prop) => prop.id === this.space)?.kind;
+    return kind !== undefined && isHomeKind(kind) ? kind : 'cabin';
+  }
+
   private moveToSpace(space: number, x: number, z: number, yaw: number): void {
     const player = this.localPlayer;
     if (player === null) return;
@@ -3130,8 +3235,19 @@ export class Game {
     this.space = space;
 
     this.outdoors.visible = !inside;
-    if (inside && this.homeInterior === null) {
-      this.homeInterior = createHomeInterior();
+    const kind = this.currentHomeKind();
+    if (inside && (this.homeInterior === null || this.interiorKind !== kind)) {
+      if (this.homeInterior !== null) {
+        this.scene.remove(this.homeInterior.group);
+        this.homeInterior.dispose();
+      }
+      this.interiorKind = kind;
+      this.roomCollision = createCollisionWorld(
+        createFlatTerrain(0),
+        homeRoomColliders(kind),
+        (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+      );
+      this.homeInterior = createHomeInterior(kind);
       this.scene.add(this.homeInterior.group);
     }
     if (this.homeInterior !== null) this.homeInterior.group.visible = inside;
@@ -3168,7 +3284,8 @@ export class Game {
   /** Whether walking this way, from here, is about to take us through a door. */
   private walkingThroughADoor(position: Readonly<Vec3>, walkX: number, walkZ: number): boolean {
     if (walkX === 0 && walkZ === 0) return false;
-    if (this.space !== OUTDOORS) return isLeavingRoom(position.x, position.z, walkX, walkZ, false);
+    if (this.space !== OUTDOORS)
+      return isLeavingRoom(position.x, position.z, walkX, walkZ, false, this.currentHomeKind());
     return this.builtProps.some(
       (prop) =>
         BUILDABLE_KINDS[prop.kind].isHome &&
@@ -3186,7 +3303,9 @@ export class Game {
 
   private doorHintAt(position: Readonly<Vec3>): 'enter' | 'visit' | 'locked' | 'leave' | null {
     if (this.space !== OUTDOORS) {
-      return position.z > HOME_ROOM.halfDepth - 1.4 && Math.abs(position.x - HOME_ROOM.doorX) < 1.3
+      const scale = homeRoomScale(this.currentHomeKind());
+      return position.z / scale > HOME_ROOM.halfDepth - 1.4 &&
+        Math.abs(position.x / scale - HOME_ROOM.doorX) < 1.3
         ? 'leave'
         : null;
     }
@@ -3471,7 +3590,9 @@ export class Game {
         rollDirection(pose.actionHeading, pose.yaw),
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
-      character.setRestSpot(restSpotFor(action.kind, action.step, this.space));
+      character.setRestSpot(
+        restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+      );
       const drawn = character.update(deltaSeconds, {
         move,
         locomotion: { speed: pose.speed, airborne: pose.airborne },
@@ -3562,6 +3683,11 @@ export class Game {
       raidersClose: this.raidersClose,
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,
+      homeSkills: this.homeSkills,
+      homeKind: (() => {
+        const kind = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
+        return kind !== undefined && isHomeKind(kind) ? kind : null;
+      })(),
       placing:
         this.placing === null
           ? null
@@ -3640,8 +3766,8 @@ function article(name: string): string {
 
 function chestReasonText(reason: ChestReason): string {
   const messages: Record<ChestReason, string> = {
-    unavailable: 'Your chest is inside your cabin.',
-    private: 'This chest belongs to the cabin owner.',
+    unavailable: 'Your chest is inside your home.',
+    private: 'This chest belongs to the home owner.',
     tooFar: 'Move closer to the chest.',
     busy: 'Finish your current action first.',
     chestFull: 'Chest full. Only items that fit were moved.',

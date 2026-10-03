@@ -3,6 +3,8 @@ import * as THREE from 'three/webgpu';
 import {
   PROP_KINDS,
   dayBrightness,
+  isHomeKind,
+  type BuildableKindId,
   type PlacedProp,
   type PropKindId,
   type WaterCircle,
@@ -12,6 +14,8 @@ import { createGroundShader } from '../art/ground-shading';
 import { createGroundMaterial } from '../art/materials';
 import { preloadArtTextures } from '../art/textures';
 import { createBuriedCacheMound } from '../scene/buried-cache';
+import { createShelter } from '../scene/shelter';
+import { createLargeCabin } from '../scene/large-cabin';
 import { createCabin } from '../scene/cabin';
 import { createCampfire } from '../scene/campfire';
 import { preloadCampfireModels } from '../scene/campfire-models';
@@ -61,6 +65,9 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
+  { name: 'tent', x: -15, z: 7, view: 7, create: () => createShelter('tent') },
+  { name: 'teepee', x: -8, z: 9, view: 8, create: () => createShelter('teepee') },
+  { name: 'largeCabin', x: 2, z: 10, view: 12, create: createLargeCabin },
   { name: 'cabin', x: -11, z: -1, yaw: 0.35, view: 11, create: createCabin },
   { name: 'fence', x: -4.9, z: 0, view: 4.5, create: createFence },
   { name: 'fence', x: -3.5, z: 0, view: 4.5, create: createFence },
@@ -234,7 +241,10 @@ function showHomeInside(
   time: number,
 ): void {
   daylight.setIndoors(true);
-  const inside = createHomeInterior();
+  const requested = params.get('tier') as BuildableKindId | null;
+  const inside = createHomeInterior(
+    requested !== null && isHomeKind(requested) ? requested : 'cabin',
+  );
   scene.add(inside.group);
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 100);
   // `&x=` and `&z=` look somewhere else in the room, up close.

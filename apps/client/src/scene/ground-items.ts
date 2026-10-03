@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {
   GATHER_PATCH_MAX_COUNT,
   ITEM_KINDS,
+  blueprintHome,
   type DroppedPileView,
   type GatherPatchView,
   type ItemId,
@@ -136,6 +137,7 @@ function createPatchModel(item: ItemId): GroundModel {
  * bundle in its own colour until it has a model of its own.
  */
 function createPileModel(item: ItemId): GroundModel {
+  if (blueprintHome(item) !== null) return createBlueprintModel(item);
   if (item === 'stick') return createSticksModel(item);
   if (item === 'flower') return createFlowerModel(item);
   if (item === 'bone') return createBonesModel(item);
@@ -356,5 +358,43 @@ function createBundleModel(item: ItemId): GroundModel {
     group,
     show: (count) => showFirst(group, lumps, count),
     dispose: () => lumpGeometry.dispose(),
+  };
+}
+
+/** A rolled blueprint with pale paper edges and a blue drafting sheet. */
+function createBlueprintModel(item: ItemId): GroundModel {
+  const group = new THREE.Group();
+  const paper = paintedMaterial('burlap', { tint: 0xffedca, roughness: 1 });
+  const ink = plainMaterial(0x63858e, { roughness: 0.9 });
+  const geometries: THREE.BufferGeometry[] = [];
+  const add = (
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    x: number,
+    y: number,
+    z: number,
+  ): void => {
+    geometries.push(geometry);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  };
+  add(new THREE.BoxGeometry(0.36, 0.02, 0.26), ink, 0, 0.055, 0);
+  for (const x of [-0.2, 0.2])
+    add(new THREE.CylinderGeometry(0.055, 0.055, 0.3, 8).rotateX(Math.PI / 2), paper, x, 0.075, 0);
+  for (const x of [-0.08, 0, 0.08])
+    add(new THREE.BoxGeometry(0.008, 0.006, 0.2), paper, x, 0.07, 0);
+  add(new THREE.BoxGeometry(0.27, 0.006, 0.008), paper, 0, 0.07, 0);
+  return {
+    item,
+    group,
+    show(count) {
+      group.visible = count > 0;
+    },
+    dispose() {
+      for (const geometry of geometries) geometry.dispose();
+    },
   };
 }

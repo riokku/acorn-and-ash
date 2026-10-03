@@ -12,6 +12,8 @@
  * and the browser (which predicts walking about in there, and draws it).
  */
 
+import type { BuildableKindId } from '../data/buildables';
+import { homeOuterScale, homeRoomScale, type HomeKind } from '../data/housing';
 import { PLAYER_RADIUS } from '../constants';
 import { box, cylinder, type Collider } from './colliders';
 
@@ -25,6 +27,7 @@ export interface PlacedSpot {
 
 /** Where a cabin stands, and which way it is turned. */
 export interface HomePlacement {
+  readonly kind?: BuildableKindId | undefined;
   readonly x: number;
   readonly z: number;
   readonly yaw: number;
@@ -64,15 +67,16 @@ function toWorld(home: HomePlacement, localX: number, localZ: number): { x: numb
 
 /** What stops you walking through a cabin's walls. */
 export function cabinCollider(home: HomePlacement): Collider {
-  const centre = toWorld(home, CABIN_BLOCK.centreX, 0);
+  const scale = homeOuterScale(home.kind);
+  const centre = toWorld(home, CABIN_BLOCK.centreX * scale, 0);
   // Collision boxes turn the other way round from Three.js models.
   return box(
     centre.x,
-    CABIN_BLOCK.height / 2,
+    (CABIN_BLOCK.height * scale) / 2,
     centre.z,
-    CABIN_BLOCK.halfX,
-    CABIN_BLOCK.height / 2,
-    CABIN_BLOCK.halfZ,
+    CABIN_BLOCK.halfX * scale,
+    (CABIN_BLOCK.height * scale) / 2,
+    CABIN_BLOCK.halfZ * scale,
     -home.yaw,
   );
 }
@@ -87,13 +91,15 @@ export function cabinDoorway(home: HomePlacement): {
   readonly inwardX: number;
   readonly inwardZ: number;
 } {
-  const spot = toWorld(home, CABIN_DOOR_X, CABIN_BLOCK.halfZ + PLAYER_RADIUS + 0.1);
+  const scale = homeOuterScale(home.kind);
+  const spot = toWorld(home, CABIN_DOOR_X * scale, CABIN_BLOCK.halfZ * scale + PLAYER_RADIUS + 0.1);
   return { ...spot, inwardX: -Math.sin(home.yaw), inwardZ: -Math.cos(home.yaw) };
 }
 
 /** Where you come out of a cabin: a step in front of the door, facing away from it. */
 export function cabinDoorstep(home: HomePlacement): PlacedSpot {
-  const spot = toWorld(home, CABIN_DOOR_X, CABIN_BLOCK.halfZ + 0.9);
+  const scale = homeOuterScale(home.kind);
+  const spot = toWorld(home, CABIN_DOOR_X * scale, CABIN_BLOCK.halfZ * scale + 0.9);
   return { ...spot, yaw: home.yaw + Math.PI };
 }
 
@@ -226,17 +232,25 @@ export const HOME_BED: RestingPlace = {
 const RESTING_REACH = 0.85;
 
 /** The chair or the bed, if you are close enough to either to sit or lie down. */
-export function restingPlaceInReach(x: number, z: number): RestingPlace | null {
+export function restingPlaceInReach(
+  x: number,
+  z: number,
+  kind: HomeKind = 'cabin',
+): RestingPlace | null {
+  const scale = homeRoomScale(kind);
+  x /= scale;
+  z /= scale;
   const { chair, bed } = HOME_FURNITURE;
-  if (Math.hypot(x - chair.x, z - chair.z) <= chair.radius + RESTING_REACH) return HOME_CHAIR;
+  if (kind !== 'tent' && Math.hypot(x - chair.x, z - chair.z) <= chair.radius + RESTING_REACH)
+    return homeRestingPlace(HOME_CHAIR, kind);
   const outsideX = Math.max(0, Math.abs(x - bed.x) - bed.halfWidth);
   const outsideZ = Math.max(0, Math.abs(z - bed.z) - bed.halfLength);
-  if (Math.hypot(outsideX, outsideZ) <= RESTING_REACH) return HOME_BED;
+  if (Math.hypot(outsideX, outsideZ) <= RESTING_REACH) return homeRestingPlace(HOME_BED, kind);
   return null;
 }
 
 /** Everything you bump into inside, in the room's own coordinates. */
-export function homeRoomColliders(): Collider[] {
+function cabinRoomColliders(): Collider[] {
   const { halfWidth, halfDepth, wallHeight, wallThickness, doorX, doorHalfWidth } = HOME_ROOM;
   const outerX = halfWidth + wallThickness;
   const wall = wallThickness / 2;
@@ -285,7 +299,11 @@ export function isLeavingRoom(
   walkX: number,
   walkZ: number,
   interacting: boolean,
+  kind: HomeKind = 'cabin',
 ): boolean {
+  const scale = homeRoomScale(kind);
+  x /= scale;
+  z /= scale;
   if (z < EXIT_DEPTH) return false;
   if (Math.abs(x - HOME_ROOM.doorX) > HOME_ROOM.doorHalfWidth + 0.15) return false;
   if (interacting) return true;
@@ -293,4 +311,46 @@ export function isLeavingRoom(
   if (length === 0) return false;
   // Out through the door is +Z, in the room's own coordinates.
   return walkZ / length >= DOORWAY_FACING_COSINE;
+}
+
+export function homeSpot(spot: PlacedSpot, kind: HomeKind = 'cabin'): PlacedSpot {
+  const scale = homeRoomScale(kind);
+  return { x: spot.x * scale, z: spot.z * scale, yaw: spot.yaw };
+}
+export function homeRestingPlace(place: RestingPlace, kind: HomeKind = 'cabin'): RestingPlace {
+  return {
+    kind: place.kind,
+    stand: homeSpot(place.stand, kind),
+    rest: { ...homeSpot(place.rest, kind), y: place.rest.y },
+  };
+}
+export function homeChestSpot(kind: HomeKind = 'cabin'): { x: number; z: number } {
+  const scale = homeRoomScale(kind);
+  return { x: HOME_FURNITURE.chest.x * scale, z: HOME_FURNITURE.chest.z * scale };
+}
+export function homeRoomColliders(kind: HomeKind = 'cabin'): Collider[] {
+  const scale = homeRoomScale(kind);
+  // The base room lists six wall/door colliders, then bed, chest, hearth, table, chair and shelf.
+  return cabinRoomColliders()
+    .filter((_, index) => {
+      if (kind === 'tent') return ![8, 9, 10, 11].includes(index);
+      if (kind === 'teepee') return ![8, 11].includes(index);
+      return true;
+    })
+    .map((collider) =>
+      collider.shape === 'box'
+        ? {
+            ...collider,
+            x: collider.x * scale,
+            z: collider.z * scale,
+            halfX: collider.halfX * scale,
+            halfZ: collider.halfZ * scale,
+          }
+        : {
+            ...collider,
+            x: collider.x * scale,
+            z: collider.z * scale,
+            radius: collider.radius * scale,
+          },
+    );
 }

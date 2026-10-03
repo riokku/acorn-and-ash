@@ -1,5 +1,5 @@
 import type { PickupNotice } from './pickup-notice';
-import { HEALTH_MAX, HUNGER_MAX, type ItemId, type ChestSlot } from '@acorn/shared';
+import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
@@ -96,6 +96,8 @@ export interface HudState {
   readonly raidBanner: RaidBanner | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
+  readonly homeSkills: number;
+  readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
   readonly buildMenuOpen: boolean;
   /**
@@ -193,6 +195,8 @@ const INITIAL: HudState = {
   raidersClose: false,
   raidBanner: null,
   canBuild: false,
+  homeSkills: 0,
+  homeKind: null,
   buildMenuOpen: false,
   placing: null,
   craftMenuOpen: false,

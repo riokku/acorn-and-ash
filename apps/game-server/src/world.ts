@@ -23,6 +23,8 @@ import {
   characterIndex,
   decodeClientMessage,
   encodeInventory,
+  encodeHomeSkills,
+  encodeHomeBuildFeedback,
   encodeChestState,
   encodePickupsTaken,
   encodePlayerLeft,
@@ -197,6 +199,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
+    server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
@@ -286,7 +289,16 @@ export class World extends DurableObject<WorldEnv> {
     if (decoded.type === 'useItem') {
       // Not aimed at anything, the same as crafting: settled the moment it
       // arrives rather than waiting for the next tick.
+      const before = simulation.homeSkillsOf(attachment.netId);
       simulation.useItem(attachment.netId, decoded.item);
+      if (simulation.homeSkillsOf(attachment.netId) !== before) {
+        this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+        this.trySend(ws, encodeHomeSkills(simulation.homeSkillsOf(attachment.netId)));
+        this.trySend(
+          ws,
+          encodeInventory(inventoryEntries(simulation.inventoryOf(attachment.netId))),
+        );
+      }
       this.announceHunger(simulation);
       this.announceEquipped(simulation);
       return;
@@ -593,11 +605,33 @@ export class World extends DurableObject<WorldEnv> {
    */
   private announceBuilding(simulation: WorldSimulation): void {
     const events = simulation.drainBuildEvents();
-    if (events.length === 0) return;
+    const feedback = simulation.drainHomeBuildFeedback();
+    if (events.length === 0) {
+      for (const ws of this.ctx.getWebSockets()) {
+        const netId = this.attachmentFor(ws)?.netId;
+        for (const result of feedback)
+          if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
+      }
+      return;
+    }
 
-    for (const event of events) this.writeBuiltProp(event.prop, event.ownerKey);
+    this.ctx.storage.transactionSync(() => {
+      for (const event of events) {
+        this.writeBuiltProp(event.prop, event.ownerKey);
+        if (event.ownerKey !== null)
+          this.writePlayerItems(
+            event.ownerKey,
+            inventoryEntries(simulation.inventoryOf(event.netId)),
+          );
+      }
+    });
     this.broadcastBuiltProps(simulation);
     this.sendPacks(simulation, new Set(events.map((event) => event.netId)));
+    for (const ws of this.ctx.getWebSockets()) {
+      const netId = this.attachmentFor(ws)?.netId;
+      for (const result of feedback)
+        if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
+    }
   }
 
   /**
@@ -1197,6 +1231,9 @@ export class World extends DurableObject<WorldEnv> {
 
   private createSchema(): void {
     const sql = this.ctx.storage.sql;
+    sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_home_skills (player_key TEXT PRIMARY KEY, skills INTEGER NOT NULL)',
+    );
     sql.exec(`CREATE TABLE IF NOT EXISTS world_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -1390,6 +1427,13 @@ export class World extends DurableObject<WorldEnv> {
       z: row.z,
       facingYaw: row.facing_yaw,
       items: this.loadPlayerItems(playerKey),
+      homeSkills:
+        this.ctx.storage.sql
+          .exec<{ skills: number }>(
+            'SELECT skills FROM player_home_skills WHERE player_key = ?',
+            playerKey,
+          )
+          .toArray()[0]?.skills ?? 0,
       hunger: row.hunger,
       health: row.health,
       equippedItem:
@@ -1516,15 +1560,13 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
-   * A built prop's identity (kind, x, z, yaw) is never updated once placed,
-   * so this is always a fresh insert - whether a campfire is currently lit
-   * is a separate, mutable fact, updated afterwards by
-   * `writeCampfireLitState`.
+   * Keep placement, ownership and lock intact when upgrading a home's kind.
+   * Campfire lighting is saved separately by `writeCampfireLitState`.
    */
   private writeBuiltProp(prop: BuiltProp, ownerKey: string | null): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO built_props (id, kind_index, x, z, yaw, built_at_ms, owner_key) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET kind_index = excluded.kind_index',
       prop.id,
       buildableKindIndex(prop.kind),
       prop.x,
@@ -1730,8 +1772,17 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
+    this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
     const explored = simulation.exploredMapOf(attachment.netId);
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
+  }
+
+  private writeHomeSkills(playerKey: string, skills: number): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_home_skills (player_key, skills) VALUES (?, ?) ON CONFLICT(player_key) DO UPDATE SET skills = excluded.skills',
+      playerKey,
+      skills,
+    );
   }
 
   private writePlayer(
@@ -1867,6 +1918,7 @@ export class World extends DurableObject<WorldEnv> {
         player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
+      this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       if (player.explored != null) this.writePlayerExplored(attachment.playerKey, player.explored);
     }
   }
@@ -1915,6 +1967,7 @@ export class World extends DurableObject<WorldEnv> {
       .toArray().length;
     sql.exec('DELETE FROM player_items');
     sql.exec('DELETE FROM players');
+    sql.exec('DELETE FROM player_home_skills');
     sql.exec('DELETE FROM pickups_taken');
     return { ok: true, clearedPlayers };
   }

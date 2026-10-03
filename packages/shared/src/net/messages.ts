@@ -1,3 +1,4 @@
+import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
 import type { CharacterId, TintColorId } from '../data/characters';
@@ -73,6 +74,8 @@ export const ServerMessageType = {
   PickupRefused: 0x2e,
   Collected: 0x2f,
   Chest: 0x30,
+  HomeSkills: 0x31,
+  HomeBuildFeedback: 0x32,
 } as const;
 
 export const RejectReason = {
@@ -547,7 +550,15 @@ export interface CollectedMessage {
   readonly events: readonly CollectedEvent[];
 }
 
+export interface HomeSkillsMessage {
+  readonly type: 'homeSkills';
+  readonly skills: number;
+}
+
+export type HomeBuildFeedbackMessage = HomeBuildFeedback & { readonly type: 'homeBuildFeedback' };
 export type ServerMessage =
+  | HomeBuildFeedbackMessage
+  | HomeSkillsMessage
   | ChestStateMessage
   | CollectedMessage
   | PickupRefusedMessage

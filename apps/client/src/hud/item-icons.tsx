@@ -72,6 +72,12 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
     </>
   ),
   campfire: <polygon points="12,2 15,9 18,8 15,15 17,20 12,23 7,20 9,15 6,8 9,9" />,
+  tent: <polygon points="12,3 23,21 1,21 9,16 12,8 15,16" />,
+  teepee: <polygon points="10,1 12,5 14,1 15,2 13,7 22,22 14,22 12,15 10,22 2,22 11,7 9,2" />,
+  largeCabin: <polygon points="8,3 15,9 15,13 20,8 24,13 24,21 2,21 2,9" />,
+  teepeeBlueprint: blueprint(),
+  cabinBlueprint: blueprint(),
+  largeCabinBlueprint: blueprint(),
   cabin: <polygon points="12,3 21,10 21,21 3,21 3,10" />,
   flowerBed: (
     <>
@@ -190,4 +196,18 @@ export function BuildableIcon({
   className?: string;
 }): React.JSX.Element {
   return <GameIcon id={kind} color={color} className={className} />;
+}
+
+function blueprint(): React.JSX.Element {
+  return (
+    <g>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path
+        d="M6 12 L12 7 L18 12 M8 12 V18 H16 V12"
+        fill="none"
+        stroke="#f5edda"
+        strokeWidth="1.3"
+      />
+    </g>
+  );
 }

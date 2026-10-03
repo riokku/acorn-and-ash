@@ -9,6 +9,8 @@
 import {
   ActionKind,
   HOME_BED,
+  homeRestingPlace,
+  type HomeKind,
   HOME_CHAIR,
   OUTDOORS,
   RiseFrom,
@@ -40,10 +42,15 @@ export function rollDirection(heading: number, facingYaw: number): RollDirection
  * bed's mattress - or null when it stays where it stands. Rooms are all
  * laid out alike (see `world/home.ts`), so the spot needs nothing else.
  */
-export function restSpotFor(kind: ActionKind, step: number, space: number): RestSpot | null {
+export function restSpotFor(
+  kind: ActionKind,
+  step: number,
+  space: number,
+  homeKind: HomeKind = 'cabin',
+): RestSpot | null {
   if (space === OUTDOORS) return null;
   const place = restingPlaceFor(kind, step);
-  return place === null ? null : place.rest;
+  return place === null ? null : homeRestingPlace(place, homeKind).rest;
 }
 
 function restingPlaceFor(kind: ActionKind, step: number): RestingPlace | null {

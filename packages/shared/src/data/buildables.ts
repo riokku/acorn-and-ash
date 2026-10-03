@@ -9,7 +9,15 @@
 import type { RecipeCost } from './recipes';
 
 export type BuildableKindId =
-  'campfire' | 'cabin' | 'flowerBed' | 'lantern' | 'fence' | 'gardenPath';
+  | 'campfire'
+  | 'cabin'
+  | 'flowerBed'
+  | 'lantern'
+  | 'fence'
+  | 'gardenPath'
+  | 'tent'
+  | 'teepee'
+  | 'largeCabin';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -59,7 +67,7 @@ export const BUILDABLE_KINDS = {
   },
   cabin: {
     id: 'cabin',
-    displayName: 'Cabin',
+    displayName: 'Small cabin',
     // A single slot's worth of logs (see decision 0060) - one trip to the
     // trees, however few slots are free, pays for it.
     costs: [{ item: 'log', amount: 10 }],
@@ -68,6 +76,42 @@ export const BUILDABLE_KINDS = {
     capPerPlayer: true,
     triangleBudget: 6000,
     placeholderColor: 0x8a6642,
+  },
+  tent: {
+    id: 'tent',
+    displayName: 'Tent',
+    costs: [{ item: 'stick', amount: 6 }],
+    footprintRadius: 2.2,
+    isHome: true,
+    capPerPlayer: true,
+    triangleBudget: 3000,
+    placeholderColor: 0xc6a574,
+  },
+  teepee: {
+    id: 'teepee',
+    displayName: 'Teepee',
+    costs: [
+      { item: 'stick', amount: 8 },
+      { item: 'log', amount: 4 },
+    ],
+    footprintRadius: 2.65,
+    isHome: true,
+    capPerPlayer: true,
+    triangleBudget: 3500,
+    placeholderColor: 0xdbc6a0,
+  },
+  largeCabin: {
+    id: 'largeCabin',
+    displayName: 'Larger cabin',
+    costs: [
+      { item: 'log', amount: 20 },
+      { item: 'stick', amount: 8 },
+    ],
+    footprintRadius: 3.8,
+    isHome: true,
+    capPerPlayer: true,
+    triangleBudget: 9000,
+    placeholderColor: 0x9b7046,
   },
   flowerBed: {
     id: 'flowerBed',
@@ -130,6 +174,9 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'lantern',
   'fence',
   'gardenPath',
+  'tent',
+  'teepee',
+  'largeCabin',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

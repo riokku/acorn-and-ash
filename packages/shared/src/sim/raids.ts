@@ -138,6 +138,7 @@ export interface RaidHost {
    */
   strikePlayer(netId: number, damage: number, impactTick: number): void;
   /** Leave something on the ground where a raider fell. */
+  defeated?(netId: number, raiderId: number, position: Readonly<Vec3>, facingYaw: number): void;
   dropLoot(item: ItemId, count: number, position: Readonly<Vec3>, facingYaw: number): void;
 }
 
@@ -474,6 +475,12 @@ export class RaidDirector {
     }
 
     if (hitsLeft === 0) {
+      this.host.defeated?.(
+        attackerNetId,
+        raider.id,
+        raider.motion.position,
+        raider.motion.facingYaw,
+      );
       this.defeat(raider);
     } else if (raider.mode === 'leave') {
       // Already giving up: staggered, but it keeps on going.

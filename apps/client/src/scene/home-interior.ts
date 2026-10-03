@@ -1,10 +1,11 @@
 import * as THREE from 'three/webgpu';
 
-import { HOME_FURNITURE, HOME_ROOM } from '@acorn/shared';
+import { HOME_FURNITURE, HOME_ROOM, homeRoomScale, type HomeKind } from '@acorn/shared';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
+import { createCanvasMaterial, fabricTriangle } from './shelter';
 import { flameModelTemplate } from './campfire-models';
 import { createFireGlow } from './fire-light';
 import { ellipsoid } from './critter';
@@ -62,9 +63,12 @@ interface Opening {
   readonly top: number;
 }
 
-export function createHomeInterior(): HomeInterior {
+export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
+  const canvasHome = kind === 'tent' || kind === 'teepee';
   const group = new THREE.Group();
   group.name = 'home-interior';
+  const scale = homeRoomScale(kind);
+  group.scale.set(scale, 1, scale);
   const disposers: Array<() => void> = [];
   const keep = (built: { group: THREE.Group; dispose(): void }): THREE.Group => {
     disposers.push(built.dispose);
@@ -163,6 +167,77 @@ export function createHomeInterior(): HomeInterior {
     placeWall(wall, side);
     group.add(wall);
     walls.set(side, { low: lowGroup, high: highGroup });
+    if (canvasHome) {
+      for (const child of [...lowGroup.children, ...highGroup.children]) child.visible = false;
+      const extent = side === 'back' || side === 'front' ? halfDepth : halfWidth;
+      const top = kind === 'teepee' ? 3.5 : wallHeight;
+      const cloth = createCanvasMaterial(kind === 'tent' ? 'tent' : 'teepee');
+      disposers.push(() => cloth.dispose());
+      const skirt = new ModelBuilder();
+      const spans =
+        side === 'front'
+          ? [
+              [-length / 2, doorX - doorHalfWidth],
+              [doorX + doorHalfWidth, length / 2],
+            ]
+          : [[-length / 2, length / 2]];
+      for (const [from, to] of spans) {
+        skirt.add(
+          cloth,
+          new THREE.PlaneGeometry(to! - from!, 0.7),
+          placed((from! + to!) / 2, 0.35, 0),
+        );
+        skirt.add(
+          materials.darkWood,
+          new THREE.CylinderGeometry(0.04, 0.05, 1.1, 6),
+          placed(from!, 0.55, 0),
+        );
+      }
+      lowGroup.add(keep(skirt.build()));
+      const panels = new ModelBuilder();
+      if (kind === 'tent' && (side === 'left' || side === 'right')) {
+        panels.add(
+          cloth,
+          fabricTriangle([-length / 2, 0.05, 0], [length / 2, 0.05, 0], [length / 2, top, -extent]),
+        );
+        panels.add(
+          cloth,
+          fabricTriangle(
+            [-length / 2, 0.05, 0],
+            [length / 2, top, -extent],
+            [-length / 2, top, -extent],
+          ),
+        );
+      } else if (side === 'front') {
+        // Folded canvas flaps, with an open doorway matching the exit trigger.
+        panels.add(
+          cloth,
+          fabricTriangle(
+            [-length / 2, 0.05, 0],
+            [doorX - doorHalfWidth, 0.05, 0],
+            [0, top, -extent],
+          ),
+        );
+        panels.add(
+          cloth,
+          fabricTriangle(
+            [doorX + doorHalfWidth, 0.05, 0],
+            [length / 2, 0.05, 0],
+            [0, top, -extent],
+          ),
+        );
+      } else {
+        panels.add(
+          cloth,
+          fabricTriangle(
+            [-length / 2, 0.05, 0],
+            [length / 2, 0.05, 0],
+            [0, top, kind === 'teepee' ? -extent : 0],
+          ),
+        );
+      }
+      highGroup.add(keep(panels.build()));
+    }
   };
 
   /** Stand a wall built along X up along its own side of the room, logs facing in. */
@@ -234,7 +309,7 @@ export function createHomeInterior(): HomeInterior {
   }
   // A ceiling beam across the back of the room to hang herbs from - only the
   // one, so nothing crosses the dollhouse view of the room.
-  for (const z of [HERB_BEAM_Z]) {
+  for (const z of canvasHome ? [] : [HERB_BEAM_Z]) {
     const beam = logGeometry(halfWidth * 2 + 0.4, 0.13, {
       sides: 8,
       seed: 420 + z * 10,
@@ -253,6 +328,7 @@ export function createHomeInterior(): HomeInterior {
     bottom: number,
     top: number,
   ): void => {
+    if (canvasHome) return;
     const frame = new ModelBuilder();
     const width = halfWidthOfWindow * 2;
     const height = top - bottom;
@@ -353,7 +429,7 @@ export function createHomeInterior(): HomeInterior {
     );
   const doorGroup = keep(door.build());
   doorGroup.position.set(doorX, 0, halfDepth + LOG_RADIUS);
-  walls.get('front')?.high.add(holderInWallSpace(doorGroup, 'front'));
+  if (!canvasHome) walls.get('front')?.high.add(holderInWallSpace(doorGroup, 'front'));
 
   /* -------------------------------------------------------------------- */
   /* The hearth                                                           */
@@ -450,16 +526,17 @@ export function createHomeInterior(): HomeInterior {
         placed(front + 0.1, hearth.height + 0.25, hearth.z + side * 0.72),
       );
   }
-  group.add(keep(hearthModel.build()));
+  const hearthGroup = keep(hearthModel.build());
+  if (!canvasHome) group.add(hearthGroup);
 
   // The fire itself: the campfire's own animated flame, and its light.
   const fireGlow = createFireGlow(0xff8f45, 14, 9);
   fireGlow.anchor.position.set(front - 0.25, 0.55, hearth.z);
-  group.add(fireGlow.anchor);
+  if (!canvasHome) group.add(fireGlow.anchor);
   disposers.push(() => fireGlow.dispose());
   let flameMixer: THREE.AnimationMixer | null = null;
   const flameTemplate = flameModelTemplate();
-  if (flameTemplate !== undefined) {
+  if (!canvasHome && flameTemplate !== undefined) {
     const flame = instantiateAnimatedModel(flameTemplate);
     flame.root.position.set(hearth.x - 0.02, 0.06, hearth.z);
     flame.root.scale.setScalar(0.7);
@@ -533,7 +610,29 @@ export function createHomeInterior(): HomeInterior {
     )
     // A plump pillow at the head.
     .add(materials.linen, ellipsoid(0.34, 0.08, 0.19, 12, 8), placed(bed.x, 0.54, head + 0.28));
-  group.add(keep(bedModel.build()));
+  const bedGroup = keep(bedModel.build());
+  if (!canvasHome) group.add(bedGroup);
+  else {
+    // A padded bedroll on a low travel cot; resting height stays the same.
+    const roll = new ModelBuilder();
+    roll.add(
+      materials.darkWood,
+      plankGeometry(bedWidth, 0.16, bed.halfLength * 2, 'z', 1, 1200),
+      placed(bed.x, 0.1, bed.z),
+    );
+    roll.add(
+      materials.quilt,
+      plankGeometry(bedWidth, 0.28, bed.halfLength * 2, 'z', 0.8, 1201),
+      placed(bed.x, 0.36, bed.z),
+    );
+    roll.add(materials.linen, ellipsoid(0.34, 0.07, 0.18, 10, 6), placed(bed.x, 0.54, head + 0.3));
+    roll.add(
+      materials.linen,
+      new THREE.CylinderGeometry(0.13, 0.13, bedWidth - 0.12, 10).rotateZ(Math.PI / 2),
+      placed(bed.x, 0.55, foot - 0.14),
+    );
+    group.add(keep(roll.build()));
+  }
   const chest = new THREE.Group();
   chest.name = 'storage-chest';
   const chestShape = HOME_FURNITURE.chest;
@@ -635,11 +734,33 @@ export function createHomeInterior(): HomeInterior {
       new THREE.CylinderGeometry(0.045, 0.04, 0.1, 10),
       placed(table.x + 0.12, table.height + 0.05, table.z + 0.3),
     );
-  group.add(keep(tableModel.build()));
+  const tableGroup = keep(tableModel.build());
+  if (kind !== 'tent') group.add(tableGroup);
   // A steady flame behind glass: no flicker.
   const lampGlow = createFireGlow(0xffb866, 1, 5, 0);
-  lampGlow.anchor.position.set(table.x + 0.05, table.height + 0.32, table.z - 0.25);
+  lampGlow.anchor.position.set(
+    table.x + 0.05,
+    kind === 'tent' ? 0.5 : table.height + 0.32,
+    table.z - 0.25,
+  );
   group.add(lampGlow.anchor);
+  if (kind === 'tent') {
+    const lantern = new ModelBuilder();
+    const x = table.x + 0.05,
+      z = table.z - 0.25;
+    lantern.add(
+      materials.darkWood,
+      new THREE.CylinderGeometry(0.22, 0.25, 0.24, 8),
+      placed(x, 0.12, z),
+    );
+    lantern.add(materials.lampGlass, new THREE.BoxGeometry(0.15, 0.22, 0.15), placed(x, 0.36, z));
+    lantern.add(
+      materials.iron,
+      new THREE.ConeGeometry(0.17, 0.1, 4),
+      placed(x, 0.51, z, { y: Math.PI / 4 }),
+    );
+    group.add(keep(lantern.build()));
+  }
   disposers.push(() => lampGlow.dispose());
 
   /* -------------------------------------------------------------------- */
@@ -752,7 +873,8 @@ export function createHomeInterior(): HomeInterior {
         placed(x, wallHeight - drop - 0.12, HERB_BEAM_Z, { x: Math.PI }),
       );
   }
-  group.add(keep(shelfModel.build()));
+  const shelfGroup = keep(shelfModel.build());
+  if (!canvasHome) group.add(shelfGroup);
 
   const rugMesh = new THREE.Mesh(new THREE.CircleGeometry(1, 48), materials.rug);
   rugMesh.rotation.x = -Math.PI / 2;
@@ -782,7 +904,8 @@ export function createHomeInterior(): HomeInterior {
       placed(front - 0.62, 0.02, hearth.z - 0.7 + stone * 0.46),
     );
   }
-  group.add(keep(pebbles.build()));
+  const pebbleGroup = keep(pebbles.build());
+  if (!canvasHome) group.add(pebbleGroup);
 
   return {
     group,
@@ -795,7 +918,7 @@ export function createHomeInterior(): HomeInterior {
       for (const [side, wall] of walls) {
         const normal = WALL_NORMALS[side];
         const facing = (normal.x * cameraX + normal.z * cameraZ) / length;
-        wall.high.visible = facing < CUTAWAY_COSINE;
+        wall.high.visible = !canvasHome && facing < CUTAWAY_COSINE;
       }
     },
     update(deltaSeconds, daylight) {
