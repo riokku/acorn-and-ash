@@ -29,9 +29,14 @@ export function canAfford(
  * the pack can afford it, and there is room for the result once the makings
  * are spent - two sticks used up can free the very slot a torch goes in.
  */
-export function canCraft(inventory: Inventory, item: ItemId): boolean {
+export function canCraft(inventory: Inventory, item: ItemId, discoveries = 0): boolean {
   const recipe = recipeFor(item);
-  if (recipe === null || !canAfford(inventory, recipe)) return false;
+  if (
+    recipe === null ||
+    !canAfford(inventory, recipe) ||
+    (recipe.discoveryId !== undefined && !(discoveries & (1 << recipe.discoveryId)))
+  )
+    return false;
 
   const afterSpending = { ...inventory };
   for (const cost of recipe.costs) removeItem(afterSpending, cost.item, cost.amount);
@@ -45,9 +50,9 @@ export function canCraft(inventory: Inventory, item: ItemId): boolean {
  * of your only axe to a full pack would be a nasty surprise. Returns whether
  * it happened.
  */
-export function craft(inventory: Inventory, item: ItemId): boolean {
+export function craft(inventory: Inventory, item: ItemId, discoveries = 0): boolean {
   const recipe = recipeFor(item);
-  if (recipe === null || !canCraft(inventory, item)) return false;
+  if (recipe === null || !canCraft(inventory, item, discoveries)) return false;
 
   for (const cost of recipe.costs) removeItem(inventory, cost.item, cost.amount);
   addItem(inventory, item);

@@ -164,6 +164,9 @@ export function WorldMap({
         <footer className="world-map-footer">
           <ul className="world-map-legend">
             <li>
+              <span className="legend-discovery">◆</span> Discovered place
+            </li>
+            <li>
               <span className="legend-you" /> You
             </li>
             <li>

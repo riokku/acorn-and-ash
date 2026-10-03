@@ -6,6 +6,15 @@ cabin you can upgrade and decorate.
 
 The game is online-only. Every world runs on the server.
 
+The **C journal** now includes Discoveries: clues and sketches lead to a forgotten
+camp, an old logging site, a mushroom grove and a mossy shrine. Locations appear
+on your map once found. Clear nearby guards and press **E** to inspect for your
+own once-per-character supplies and recipe; a full pack keeps the reward waiting.
+Berries and mushrooms are shared forage. Learned recipes make trail rations,
+forest stew and berry tea; stew and tea need a lit campfire. Your discoveries and
+recipes survive reconnecting and the world sleeping. See
+[decision 0075](docs/decisions/0075-discoveries-and-forest-food.md).
+
 > **Phase 4 — Danger.** Right now there is a hand-built home clearing with
 > Douglas-fir, western redcedar and Sitka spruce trees, real rocks and a pond,
 > surrounded by generated wilderness you can walk out into, a real animated

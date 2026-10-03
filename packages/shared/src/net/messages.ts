@@ -1,3 +1,4 @@
+import type { DiscoveryState } from '../data/discoveries';
 import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
@@ -76,6 +77,7 @@ export const ServerMessageType = {
   Chest: 0x30,
   HomeSkills: 0x31,
   HomeBuildFeedback: 0x32,
+  Discoveries: 0x33,
 } as const;
 
 export const RejectReason = {
@@ -556,7 +558,9 @@ export interface HomeSkillsMessage {
 }
 
 export type HomeBuildFeedbackMessage = HomeBuildFeedback & { readonly type: 'homeBuildFeedback' };
+export type DiscoveriesMessage = DiscoveryState & { readonly type: 'discoveries' };
 export type ServerMessage =
+  | DiscoveriesMessage
   | HomeBuildFeedbackMessage
   | HomeSkillsMessage
   | ChestStateMessage

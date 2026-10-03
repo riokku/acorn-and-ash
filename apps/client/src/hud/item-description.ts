@@ -8,6 +8,11 @@ import {
 } from '@acorn/shared';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  berry: 'Forage in woodland glades. Eat fresh or use in trail rations and berry tea.',
+  mushroom: 'An edible forest cap. Gather in the grove and cook a filling stew.',
+  trailRation: 'A wrapped meal for the trail. Learned at the forgotten camp.',
+  forestStew: 'A hearty meal of roasted meat and woodland mushrooms. Learned in the grove.',
+  berryTea: 'A fragrant berry infusion. Learned at the mossy shrine.',
   axe: 'Equip to chop trees and fight. Hold left click for a heavy swing.',
   rod: 'Equip beside water to fish. Click when the float goes under.',
   torch: 'Equip for firelight and protection from prowling raccoons at night.',
@@ -26,7 +31,7 @@ export function itemDescription(item: ItemId): string {
     return `Adds ${kind.extraSlots} pack slots. Your bag stays with you.`;
   if (kind.restoresHunger !== undefined) {
     const cooked = cookedItemFor(item);
-    return `Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire and press E to roast it.' : ''}`;
+    return `${DESCRIPTIONS[item] === undefined ? '' : `${DESCRIPTIONS[item]} `}Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire and press E to roast it.' : ''}`;
   }
   return DESCRIPTIONS[item] ?? 'A useful find from the woods.';
 }

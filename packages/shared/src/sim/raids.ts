@@ -846,6 +846,7 @@ export class RaidDirector {
         this.host.collision.colliders.some(
           (c) =>
             c.shape === 'box' &&
+            c.halfY * 2 > 1.4 &&
             Math.hypot(c.x - site.x, c.z - site.z) < Math.hypot(c.halfX, c.halfZ) + 2,
         );
       if (blocked) continue;

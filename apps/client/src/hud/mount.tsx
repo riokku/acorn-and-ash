@@ -31,6 +31,10 @@ export function mountHud(
   combatFeed: CombatFeed,
   onChestTransfer: (request: ChestRequest) => void,
   onCloseChest: () => void,
+  journalActions?: {
+    onTabChange: (tab: 'craft' | 'discoveries') => void;
+    onCraft: (index: number) => void;
+  },
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -50,6 +54,8 @@ export function mountHud(
         combatFeed={combatFeed}
         onChestTransfer={onChestTransfer}
         onCloseChest={onCloseChest}
+        onJournalTabChange={journalActions?.onTabChange}
+        onPickRecipe={journalActions?.onCraft}
       />
     </StrictMode>,
   );

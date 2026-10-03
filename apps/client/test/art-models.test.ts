@@ -1,3 +1,6 @@
+import { createDiscoveryLandmarks } from '../src/scene/discovery-sites';
+import { createForageModel, createMealModel } from '../src/scene/forest-food';
+import { DISCOVERIES } from '@acorn/shared';
 import { createEncounterLandmarks } from '../src/scene/encounter-sites';
 import {
   ANIMAL_KINDS,
@@ -45,6 +48,21 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    ...DISCOVERIES.map((definition) => ({
+      name: `${definition.kind} discovery`,
+      budget: PROP_BUDGET,
+      make: () => createDiscoveryLandmarks([{ ...definition, x: 0, z: 0 }], createFlatTerrain()),
+    })),
+    ...(['berry', 'mushroom'] as const).map((item) => ({
+      name: `${item} forage`,
+      budget: PROP_BUDGET,
+      make: () => createForageModel(item),
+    })),
+    ...(['trailRation', 'forestStew', 'berryTea'] as const).map((item) => ({
+      name: `${item} meal`,
+      budget: PROP_BUDGET,
+      make: () => createMealModel(item),
+    })),
     ...(['ruins', 'patrol', 'wanderer'] as const).map((kind) => ({
       name: `${kind} landmark`,
       budget: PROP_BUDGET,

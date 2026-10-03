@@ -2191,3 +2191,68 @@ body {
     padding: 18px;
   }
 }
+
+/* Field notes share the existing parchment journal instead of adding HUD clutter. */
+.hud-journal-tabs {
+  pointer-events: auto;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem 0 0.9rem;
+}
+.hud-journal-tabs button {
+  border: 1px solid #7e886c;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5944;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  font: inherit;
+}
+.hud-journal-tabs button[aria-pressed='true'] {
+  background: #dbe0c9;
+  color: #344932;
+}
+.hud-discoveries {
+  pointer-events: auto;
+  max-height: calc(100vh - 10rem);
+  overflow-y: auto;
+  width: min(560px, calc(100vw - 3rem));
+}
+.discovery-intro {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin: 0 0 0.6rem;
+}
+.discovery-entry {
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid #b5ad91;
+}
+.discovery-entry h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.discovery-entry p {
+  margin: 0 0 0.35rem;
+  font-size: 0.87rem;
+  line-height: 1.4;
+}
+.discovery-sketch {
+  width: 78px;
+  min-width: 78px;
+  color: #7b725a;
+  align-self: center;
+}
+.discovery-entry-found .discovery-sketch {
+  color: #547254;
+}
+.discovery-status {
+  font-size: 0.77rem;
+  color: #65754b;
+}
+
+.legend-discovery {
+  color: #758f7e;
+}

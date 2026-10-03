@@ -1,3 +1,11 @@
+import { createDiscoveryLandmarks } from './scene/discovery-sites';
+import {
+  DISCOVERIES,
+  discoveryKnown,
+  buildDiscoverySites,
+  discoveryColliders,
+  type DiscoverySite,
+} from '@acorn/shared';
 import { buildEncounterSites, encounterColliders } from '@acorn/shared';
 import { createEncounterLandmarks } from './scene/encounter-sites';
 import {
@@ -575,6 +583,12 @@ export class Game {
   private canBuild = false;
   private buildMenuOpen = false;
   private craftMenuOpen = false;
+  private journalTab: 'craft' | 'discoveries' = 'craft';
+  private discoveriesFound = 0;
+  private discoveriesClaimed = 0;
+  private discoverySites: readonly DiscoverySite[] = [];
+  private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
+  private receivedDiscoveryState = false;
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
   private playing = false;
   private inventoryOpen = false;
@@ -1165,6 +1179,7 @@ export class Game {
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.encounterLandmarks?.dispose();
+    this.discoveryLandmarks?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -1329,6 +1344,37 @@ export class Game {
           until: performance.now() + NEWS_MS,
         };
         this.pendingPlacements = [];
+        break;
+      }
+      case 'discoveries': {
+        if (this.receivedDiscoveryState) {
+          for (const definition of DISCOVERIES) {
+            if (
+              discoveryKnown(message.claimed, definition.id) &&
+              !discoveryKnown(this.discoveriesClaimed, definition.id)
+            )
+              this.showJournalNotice(
+                `${definition.name}: ${definition.recipe === null ? 'supplies collected' : 'recipe learned'}`,
+                performance.now(),
+              );
+            else if (
+              discoveryKnown(message.found, definition.id) &&
+              !discoveryKnown(this.discoveriesFound, definition.id)
+            )
+              this.showJournalNotice(
+                `Found ${definition.name.toLowerCase()} · noted in your journal`,
+                performance.now(),
+              );
+          }
+        }
+        this.receivedDiscoveryState = true;
+        this.discoveriesFound = message.found;
+        this.discoveriesClaimed = message.claimed;
+        if (message.notice === 'guarded')
+          this.showJournalNotice('Clear the nearby skeletons before inspecting', performance.now());
+        if (message.notice === 'full')
+          this.showJournalNotice('Make room in your pack, then inspect again', performance.now());
+        this.updateDiscoveryMarkers();
         break;
       }
       case 'homeSkills': {
@@ -1859,6 +1905,10 @@ export class Game {
         [...clearing.colliders, ...wilderness.colliders],
         clearing.water,
       );
+      this.discoverySites = buildDiscoverySites(encounterSites);
+      this.updateDiscoveryMarkers();
+      this.discoveryLandmarks = createDiscoveryLandmarks(this.discoverySites, terrain);
+      this.outdoors.add(this.discoveryLandmarks.group);
       this.encounterLandmarks = createEncounterLandmarks(encounterSites, terrain);
       this.outdoors.add(this.encounterLandmarks.group);
 
@@ -1887,6 +1937,7 @@ export class Game {
         ...clearing.colliders,
         ...wilderness.colliders,
         ...encounterColliders(encounterSites, terrain),
+        ...discoveryColliders(this.discoverySites, terrain),
       ]);
       this.collision = collision;
       this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
@@ -2666,6 +2717,27 @@ export class Game {
    * is common and nothing about a craft needs a fresh aim the way a
    * placement does.
    */
+  private showJournalNotice(text: string, now: number): void {
+    this.craftingNews = { text, until: now + NEWS_MS };
+    this.options.hud.publish({ craftingNews: text });
+  }
+
+  setJournalTab(tab: 'craft' | 'discoveries'): void {
+    this.journalTab = tab;
+    this.options.hud.publish({ journalTab: tab });
+  }
+
+  craftRecipe(index: number): void {
+    const item = RECIPE_ITEMS[index - 1];
+    if (item !== undefined) this.connection?.sendCraft(item);
+  }
+
+  private updateDiscoveryMarkers(): void {
+    this.mapFeed.discoveries = this.discoverySites
+      .filter((site) => discoveryKnown(this.discoveriesFound, site.id))
+      .map((site) => ({ x: site.x, z: site.z, name: site.name }));
+  }
+
   private handleCraftMenuInput(controls: Controls): void {
     if (controls.takeCraftMenuToggle()) {
       this.craftMenuOpen = !this.craftMenuOpen;
@@ -2677,7 +2749,7 @@ export class Game {
     if (!this.craftMenuOpen) return;
     for (const index of controls.takeCraftTaps()) {
       const item = RECIPE_ITEMS[index];
-      if (item !== undefined) this.connection?.sendCraft(item);
+      if (item !== undefined && this.journalTab === 'craft') this.connection?.sendCraft(item);
     }
   }
 
@@ -3697,6 +3769,21 @@ export class Game {
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,
       homeSkills: this.homeSkills,
+      discoveriesFound: this.discoveriesFound,
+      discoveriesClaimed: this.discoveriesClaimed,
+      discoverySites: this.discoverySites,
+      journalTab: this.journalTab,
+      nearbyDiscovery:
+        this.space === OUTDOORS && this.localPlayer !== null
+          ? (this.discoverySites.find(
+              (site) =>
+                !discoveryKnown(this.discoveriesClaimed, site.id) &&
+                Math.hypot(
+                  this.localPlayer!.motion.position.x - site.x,
+                  this.localPlayer!.motion.position.z - site.z,
+                ) < 2.7,
+            )?.name ?? null)
+          : null,
       homeKind: (() => {
         const kind = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
         return kind !== undefined && isHomeKind(kind) ? kind : null;

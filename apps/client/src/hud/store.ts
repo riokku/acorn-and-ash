@@ -1,3 +1,4 @@
+import type { DiscoverySite } from '@acorn/shared';
 import type { PickupNotice } from './pickup-notice';
 import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } from '@acorn/shared';
 
@@ -97,6 +98,11 @@ export interface HudState {
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
   readonly homeSkills: number;
+  readonly discoveriesFound: number;
+  readonly discoveriesClaimed: number;
+  readonly discoverySites: readonly DiscoverySite[];
+  readonly nearbyDiscovery: string | null;
+  readonly journalTab: 'craft' | 'discoveries';
   readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
   readonly buildMenuOpen: boolean;
@@ -196,6 +202,11 @@ const INITIAL: HudState = {
   raidBanner: null,
   canBuild: false,
   homeSkills: 0,
+  discoveriesFound: 0,
+  discoveriesClaimed: 0,
+  discoverySites: [],
+  nearbyDiscovery: null,
+  journalTab: 'craft',
   homeKind: null,
   buildMenuOpen: false,
   placing: null,

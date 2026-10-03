@@ -66,3 +66,5 @@ export * from './sim/chest';
 export * from './data/housing';
 
 export * from './world/encounters';
+
+export * from './data/discoveries';

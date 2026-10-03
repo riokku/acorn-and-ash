@@ -1436,6 +1436,7 @@ describe('a picked-clean patch growing back', () => {
 
   it('ignores a saved patch that makes no sense, rather than handing out a hundred sticks', () => {
     const sim = createWorld();
+    const freshPatchCount = sim.gatherPatchesList().length;
     const fresh = patchNamed(sim, 1);
     sim.restorePatches([
       { ...savedPatch(sim, 1), remaining: 100 },
@@ -1443,7 +1444,7 @@ describe('a picked-clean patch growing back', () => {
       { id: 999, x: 0, z: 0, remaining: 3, generation: 0, emptiedAtMs: 0 },
     ]);
     expect(patchNamed(sim, 1)).toEqual(fresh);
-    expect(sim.gatherPatchesList()).toHaveLength(STICK_PATCHES.length + FLOWER_PATCHES.length);
+    expect(sim.gatherPatchesList()).toHaveLength(freshPatchCount);
   });
 });
 

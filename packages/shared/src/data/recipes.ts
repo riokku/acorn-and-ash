@@ -16,12 +16,37 @@ export interface RecipeCost {
 export interface Recipe {
   readonly result: ItemId;
   readonly costs: readonly RecipeCost[];
+  readonly discoveryId?: number;
+  readonly station?: 'campfire';
 }
 
 export const RECIPES: Partial<Record<ItemId, Recipe>> = {
   // Gathered by hand, no tool needed, so a brand new player - or a second
   // player in a world where somebody already has the one axe - can make
   // their very first one.
+  trailRation: {
+    result: 'trailRation',
+    discoveryId: 0,
+    costs: [
+      { item: 'roastedMeat', amount: 1 },
+      { item: 'berry', amount: 2 },
+    ],
+  },
+  forestStew: {
+    result: 'forestStew',
+    discoveryId: 2,
+    station: 'campfire',
+    costs: [
+      { item: 'roastedMeat', amount: 1 },
+      { item: 'mushroom', amount: 3 },
+    ],
+  },
+  berryTea: {
+    result: 'berryTea',
+    discoveryId: 3,
+    station: 'campfire',
+    costs: [{ item: 'berry', amount: 3 }],
+  },
   axe: { result: 'axe', costs: [{ item: 'stick', amount: 3 }] },
   // By the time a second rod is worth making, chopping has already put logs
   // in the pack.

@@ -930,11 +930,20 @@ describe('patches running out', () => {
   if (stickPatch === undefined) throw new Error('no stick patch to test against');
 
   it('tells a new player where every patch is and how many each holds', async () => {
-    const client = await TestClient.connect(nextWorldId(), 'patch-looker');
+    const worldId = nextWorldId();
+    const client = await TestClient.connect(worldId, 'patch-looker');
     await waitFor('the patches', () => client.countOfMessages('gatherPatches') > 0);
 
     const patches = client.gatherPatches();
-    expect(patches).toHaveLength(STICK_PATCHES.length + FLOWER_PATCHES.length);
+    await runInDurableObject(env.WORLD.get(env.WORLD.idFromName(worldId)), (instance) => {
+      const expectedIds = (instance as unknown as { simulation: WorldSimulation }).simulation
+          .gatherPatchesList()
+          .map((patch) => patch.id),
+        actualIds = patches.map((patch) => patch.id);
+      expect(actualIds.sort()).toEqual(expectedIds.sort());
+    });
+    expect(patches.filter((patch) => patch.item === 'stick')).toHaveLength(STICK_PATCHES.length);
+    expect(patches.filter((patch) => patch.item === 'flower')).toHaveLength(FLOWER_PATCHES.length);
     for (const patch of patches) {
       expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
       expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);

@@ -1,3 +1,4 @@
+import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { nextHome, knowsHome, isHomeKind } from '@acorn/shared';
 import { PickupNotice } from './PickupNotice';
 import { LoadingScreen } from './LoadingScreen';
@@ -52,6 +53,8 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
+  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries') => void;
+  readonly onPickRecipe?: (index: number) => void;
   readonly store: HudStore;
   readonly onPlay: () => void;
   readonly onToggleInventory: () => void;
@@ -89,6 +92,8 @@ export function Hud({
   combatFeed,
   onChestTransfer,
   onCloseChest,
+  onJournalTabChange,
+  onPickRecipe,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
@@ -127,11 +132,17 @@ export function Hud({
       </div>
 
       {state.craftMenuOpen ? (
-        <JournalPanel
-          title="Things I can make"
-          entries={craftEntries(state)}
-          closeHint="Pick one below, or C to close"
-        />
+        state.journalTab === 'discoveries' ? (
+          <DiscoveryJournal state={state} onChange={onJournalTabChange} />
+        ) : (
+          <JournalPanel
+            title="Field journal · Crafting"
+            entries={craftEntries(state)}
+            closeHint="Choose a recipe, or C to close"
+            onPick={onPickRecipe}
+            navigation={<JournalTabs selected="craft" onChange={onJournalTabChange} />}
+          />
+        )
       ) : null}
       {state.buildMenuOpen ? (
         <JournalPanel
@@ -468,9 +479,18 @@ function craftEntries(state: HudState): RecipeEntry[] {
             className="hud-journal-stamp-icon"
           />
         ),
-        displayName: kind.displayName,
+        displayName: `${kind.displayName}${
+          recipe.discoveryId !== undefined &&
+          !(state.discoveriesClaimed & (1 << recipe.discoveryId))
+            ? ' · discover its recipe'
+            : recipe.station === 'campfire' && state.nearCampfire !== 'lit'
+              ? ' · lit campfire needed'
+              : ''
+        }`,
         costs: recipe.costs,
-        ready: canCraft(inventory, item),
+        ready:
+          canCraft(inventory, item, state.discoveriesClaimed) &&
+          (recipe.station !== 'campfire' || state.nearCampfire === 'lit'),
       },
     ];
   });
@@ -513,7 +533,9 @@ function JournalPanel({
   entries,
   closeHint,
   onPick,
+  navigation,
 }: {
+  navigation?: React.ReactNode;
   title: string;
   entries: readonly RecipeEntry[];
   closeHint: string;
@@ -526,6 +548,7 @@ function JournalPanel({
         <span className="hud-journal-title">{title}</span>
         <span className="hud-journal-closehint">{closeHint}</span>
       </div>
+      {navigation}
       {entries.map((entry) => (
         <div
           className={
@@ -610,7 +633,8 @@ export function hint(state: HudState): string {
   if (state.buildMenuOpen) return buildMenuHint();
   // The same goes for a piece picked from it and being placed.
   if (state.placing !== null) return placingHint(state.placing);
-  if (state.craftMenuOpen) return craftMenuHint();
+  if (state.craftMenuOpen)
+    return state.journalTab === 'discoveries' ? 'Follow a lead · C to close' : craftMenuHint();
   if (state.charging) return 'Charging a heavy swing · release to strike';
   if (state.nearbyItem !== null) return pickupHint(state, state.nearbyItem);
   // The same order the server tries a press of E in: something lying in the
@@ -618,6 +642,8 @@ export function hint(state: HudState): string {
   if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
+  if (state.nearbyDiscovery !== null)
+    return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
   if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
   if (state.nearCampfire === 'lit') return 'Press E to put out the campfire';
   // Doors - see decision 0055.

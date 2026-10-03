@@ -1,3 +1,4 @@
+import { DISCOVERY_MASK, type DiscoveryState } from '../data/discoveries';
 import {
   HOME_BUILD_REASONS,
   isHomeKind,
@@ -1343,12 +1344,34 @@ export function encodeRejected(reason: RejectReasonCode): ArrayBuffer {
   return buffer;
 }
 
+export function encodeDiscoveries(state: DiscoveryState): ArrayBuffer {
+  return new Uint8Array([
+    ServerMessageType.Discoveries,
+    state.found,
+    state.claimed,
+    ['none', 'guarded', 'full'].indexOf(state.notice),
+  ]).buffer;
+}
+
 export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
   if (data.byteLength < 1) return null;
   const view = new DataView(data);
   const type = view.getUint8(0);
 
   switch (type) {
+    case ServerMessageType.Discoveries: {
+      if (data.byteLength !== 4) return null;
+      const found = view.getUint8(1),
+        claimed = view.getUint8(2),
+        reason = view.getUint8(3);
+      if (found & ~DISCOVERY_MASK || claimed & ~found || reason > 2) return null;
+      return {
+        type: 'discoveries',
+        found,
+        claimed,
+        notice: reason === 1 ? 'guarded' : reason === 2 ? 'full' : 'none',
+      };
+    }
     case ServerMessageType.Welcome: {
       if (data.byteLength !== 17) return null;
       return {

@@ -1,3 +1,6 @@
+import { createDiscoveryLandmarks } from '../scene/discovery-sites';
+import { createForageModel, createMealModel } from '../scene/forest-food';
+import { DISCOVERIES } from '@acorn/shared';
 import { createFlatTerrain } from '@acorn/shared';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
@@ -67,6 +70,32 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
+  ...DISCOVERIES.map((definition, index) => ({
+    name: `discovery-${definition.kind}`,
+    x: 22,
+    z: -10 + index * 5,
+    view: 4,
+    create: () => createDiscoveryLandmarks([{ ...definition, x: 0, z: 0 }], createFlatTerrain()),
+  })),
+  {
+    name: 'forest-food',
+    x: 24,
+    z: 12,
+    view: 2,
+    create: () => {
+      const group = new THREE.Group();
+      for (const [index, item] of (
+        ['berry', 'mushroom', 'trailRation', 'forestStew', 'berryTea'] as const
+      ).entries()) {
+        const model =
+          item === 'berry' || item === 'mushroom' ? createForageModel(item) : createMealModel(item);
+        model.show(item === 'berry' || item === 'mushroom' ? 4 : 1);
+        model.group.position.x = (index - 2) * 0.4;
+        group.add(model.group);
+      }
+      return { group };
+    },
+  },
   {
     name: 'ruins',
     x: 15,

@@ -352,7 +352,47 @@ const MEAT_BONE_COLOR = 0xe8ddc0;
  * looked up fresh each time a character is built rather than cached here,
  * since a model that failed to load can still succeed on a later retry.
  */
+function forestHeldParts(
+  item: 'berry' | 'mushroom' | 'trailRation' | 'forestStew' | 'berryTea',
+): ModelPart[] {
+  const material = new THREE.MeshStandardMaterial({
+    color: ITEM_KINDS[item].placeholderColor,
+    roughness: 0.9,
+    flatShading: true,
+  });
+  if (item === 'berry')
+    return [-0.035, 0.035].map((x) => ({
+      geometry: new THREE.IcosahedronGeometry(0.05, 0).translate(x, 0.06, 0),
+      material,
+    }));
+  if (item === 'mushroom')
+    return [
+      {
+        geometry: new THREE.CylinderGeometry(0.026, 0.035, 0.12, 6).translate(0, 0.06, 0),
+        material: new THREE.MeshStandardMaterial({ color: 0xf0ddba, roughness: 1 }),
+      },
+      { geometry: new THREE.ConeGeometry(0.12, 0.055, 10).translate(0, 0.13, 0), material },
+    ];
+  if (item === 'trailRation')
+    return [{ geometry: new THREE.BoxGeometry(0.2, 0.07, 0.15), material }];
+  return [
+    { geometry: new THREE.CylinderGeometry(0.12, 0.08, 0.1, 10), material },
+    {
+      geometry: new THREE.CircleGeometry(0.105, 12).rotateX(-Math.PI / 2).translate(0, 0.051, 0),
+      material: new THREE.MeshStandardMaterial({
+        color: item === 'forestStew' ? 0xb78b4f : 0x92576d,
+        roughness: 0.45,
+      }),
+    },
+  ];
+}
+
 const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
+  berry: forestHeldParts('berry'),
+  mushroom: forestHeldParts('mushroom'),
+  trailRation: forestHeldParts('trailRation'),
+  forestStew: forestHeldParts('forestStew'),
+  berryTea: forestHeldParts('berryTea'),
   perch: fishHeldParts(ITEM_KINDS.perch.placeholderColor),
   trout: fishHeldParts(ITEM_KINDS.trout.placeholderColor),
   goldenCarp: fishHeldParts(ITEM_KINDS.goldenCarp.placeholderColor),

@@ -14,7 +14,10 @@ export const KEYBINDINGS = [
     title: 'Gathering & survival',
     bindings: [
       ['Right mouse (tap)', 'Loot the item under your cursor; gather from a patch'],
-      ['E', 'Pick up nearby loot, gather, dig up your stash, use a campfire, or eat equipped food'],
+      [
+        'E',
+        'Pick up nearby loot, gather, inspect discoveries, dig up your stash, use a campfire, or eat equipped food',
+      ],
       ['E near a chair / bed', 'Sit / lie down; move or press E to get up'],
       ['Left mouse', 'Face your target; chop, fight, cast or hook a fish'],
       ['Left mouse (hold, release)', 'Charge a heavy attack'],
@@ -31,7 +34,7 @@ export const KEYBINDINGS = [
       ['Left mouse on your cabin chest', 'Open your private storage'],
       ['Click / Shift-click a storage stack', 'Move the stack / move one item'],
       ['Right mouse on a slot', 'Drop one, drop all, or destroy an item'],
-      ['C', 'Open or close crafting'],
+      ['C', 'Open the field journal: crafting and discoveries'],
       ['B', 'Open or close building'],
       ['1–6 with a menu open', 'Choose a recipe or building piece'],
       ['M / Click the minimap', 'Open or close the map'],
