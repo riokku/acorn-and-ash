@@ -52,6 +52,7 @@ const BASE_STATE: HudState = {
   cacheNews: null,
   discardNews: null,
   toasts: [],
+  pickupNotice: null,
   canDrop: true,
   isNight: false,
   mapOpen: false,

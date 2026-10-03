@@ -1,3 +1,4 @@
+import type { PickupNotice } from './pickup-notice';
 import { HEALTH_MAX, HUNGER_MAX, type ItemId } from '@acorn/shared';
 
 import type { RenderBackend } from '../scene/renderer';
@@ -121,6 +122,7 @@ export interface HudState {
   readonly discardNews: string | null;
   /** Everything just gained, for the toasts down the side (see decision 0061). */
   readonly toasts: readonly ToastView[];
+  readonly pickupNotice: PickupNotice | null;
   /** Whether dropping something would work here: out of doors, where it has somewhere to land. */
   readonly canDrop: boolean;
   /** Whether it is currently night out. */
@@ -185,6 +187,7 @@ const INITIAL: HudState = {
   cacheNews: null,
   discardNews: null,
   toasts: [],
+  pickupNotice: null,
   canDrop: true,
   isNight: false,
   mapOpen: false,

@@ -35,6 +35,7 @@ import {
   HOME_WAKE_SPOT,
   recipeFor,
   type ItemId,
+  type WorldSimulation,
 } from '@acorn/shared';
 
 import { sleep, TestClient, waitFor } from './helpers';
@@ -973,6 +974,52 @@ describe('patches running out', () => {
 });
 
 describe('dropping and destroying', () => {
+  it('sends inventory-full feedback only to the blocked collector and leaves the log available', async () => {
+    const worldId = nextWorldId();
+    const first = await TestClient.connect(worldId, 'full-pack');
+    const watcher = await TestClient.connect(worldId, 'watcher');
+    const netId = first.welcome().netId;
+    const stub = env.WORLD.get(env.WORLD.idFromName(worldId));
+    await runInDurableObject(stub, (instance) => {
+      const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
+      sim.removePlayer(netId);
+      sim.addPlayer(netId, {
+        netId,
+        x: -10,
+        y: 0,
+        z: 4,
+        facingYaw: 0,
+        hunger: HUNGER_MAX,
+        items: [{ item: 'log', count: 60 }],
+      });
+      sim.restoreDroppedPiles(
+        [{ id: 1, item: 'log', count: 1, x: -10, z: 4, droppedAtMs: Date.now() }],
+        Date.now(),
+      );
+    });
+    first.walk(0, 0, 0, 4, PlayerButton.Interact);
+    await waitFor('the capacity notice', () =>
+      first.received.some((message) => message.type === 'pickupRefused'),
+    );
+    expect(first.received.filter((message) => message.type === 'pickupRefused')).toEqual([
+      { type: 'pickupRefused', item: 'log', reason: 'full' },
+    ]);
+    expect(watcher.received.some((message) => message.type === 'pickupRefused')).toBe(false);
+    first.walk(0, 0, 0, 12, PlayerButton.Interact);
+    await first.caughtUp();
+    expect(first.received.filter((message) => message.type === 'pickupRefused')).toHaveLength(1);
+    first.discard('log', 10, true);
+    await waitFor('room in the pack', () =>
+      first.inventory().some((entry) => entry.item === 'log' && entry.count === 50),
+    );
+    first.walk(0, 0, 0, 1, PlayerButton.Interact);
+    await waitFor('the saved log', () =>
+      first.inventory().some((entry) => entry.item === 'log' && entry.count === 51),
+    );
+    first.close();
+    watcher.close();
+  });
+
   async function withSticks(client: TestClient): Promise<number> {
     await walkWithinReach(client, STICK_PATCHES[0] ?? { x: 0, z: 0 });
     client.walk(0, 0, 0, 3, PlayerButton.Interact);

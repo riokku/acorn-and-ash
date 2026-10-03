@@ -33,6 +33,7 @@ import {
   encodeCrafted,
   encodeCooked,
   encodeDiscarded,
+  encodePickupRefused,
   encodeDroppedPiles,
   encodeFishing,
   encodeGatherPatches,
@@ -378,6 +379,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.step(startedAt);
     this.announcePickups(simulation);
     this.announceGathering(simulation);
+    this.announcePickupRefusals(simulation);
     this.announceChopping(simulation);
     this.announceCatching(simulation);
     this.announceThreatHits(simulation);
@@ -444,6 +446,19 @@ export class World extends DurableObject<WorldEnv> {
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
+    }
+  }
+
+  /** Capacity feedback belongs only to the player who tried to pick something up. */
+  private announcePickupRefusals(simulation: WorldSimulation): void {
+    const events = simulation.drainPickupRefusals();
+    if (events.length === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      for (const event of events) {
+        if (event.netId === attachment?.netId)
+          this.trySend(ws, encodePickupRefused(event.item, event.reason));
+      }
     }
   }
 

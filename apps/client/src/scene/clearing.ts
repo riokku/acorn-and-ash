@@ -7,6 +7,7 @@ import {
   stumpFor,
   treeAtGeneration,
   TREE_BREAK_SECONDS,
+  TREE_FALL_SECONDS,
   treeFallAngle,
   type TreeFall,
   type Clearing,
@@ -49,7 +50,19 @@ export interface ClearingScene {
   shakeTree(treeId: number, awayX: number, awayZ: number, strength?: number): void;
   /** Moves anything shaking along. */
   update(deltaSeconds: number): void;
+  drainLandings(): TreeLanding[];
   dispose(): void;
+}
+
+export interface TreeLanding {
+  readonly tree: PlacedProp;
+  readonly yaw: number;
+}
+
+interface FallingTree extends TreeLanding {
+  readonly axis: THREE.Vector3;
+  readonly beganAt: number;
+  landed: boolean;
 }
 
 /** What the server says about one tree that is not as the seed left it. */
@@ -137,16 +150,19 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const treeById = new Map(trees.map((tree) => [tree.id, tree]));
   /** Trees shivering from a blow, and how far into it. */
   const shaking = new Map<number, TreeShake>();
-  const falling = new Map<number, { tree: PlacedProp; axis: THREE.Vector3; beganAt: number }>();
+  const falling = new Map<number, FallingTree>();
+  const landings: TreeLanding[] = [];
 
-  const drawFall = (
-    treeId: number,
-    fall: { tree: PlacedProp; axis: THREE.Vector3; beganAt: number },
-  ): void => {
+  const drawFall = (treeId: number, fall: FallingTree): void => {
     const slot = standing.get(treeId);
     if (slot === undefined) return;
     const age = Math.max(0, (performance.now() - fall.beganAt) / 1000);
     const done = age >= TREE_BREAK_SECONDS;
+    if (!fall.landed && age >= TREE_FALL_SECONDS) {
+      fall.landed = true;
+      // A resumed background tab must not play impacts that happened long ago.
+      if (age < TREE_BREAK_SECONDS + 0.15) landings.push({ tree: fall.tree, yaw: fall.yaw });
+    }
     const rotation = tilt.setFromAxisAngle(fall.axis, treeFallAngle(age));
     for (const part of slot.parts) {
       if (done) part.mesh.setMatrixAt(slot.index, HIDDEN_INSTANCE);
@@ -202,6 +218,8 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         if (want.felled && want.fall !== undefined) {
           const fall = {
             tree: grown,
+            yaw: want.fall.yaw,
+            landed: serverNowMs - want.fall.startedAtMs >= TREE_FALL_SECONDS * 1000,
             axis: new THREE.Vector3(Math.cos(want.fall.yaw), 0, -Math.sin(want.fall.yaw)),
             beganAt: performance.now() - Math.max(0, serverNowMs - want.fall.startedAtMs),
           };
@@ -257,6 +275,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
         if (done) shaking.delete(treeId);
       }
     },
+    drainLandings: () => landings.splice(0),
     dispose: () => {
       for (const item of disposables) item.dispose();
       cameraBlockers.geometry.dispose();
