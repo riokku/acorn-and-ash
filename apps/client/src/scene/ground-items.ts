@@ -25,6 +25,8 @@ export interface GroundItems {
   setGatherPatches(patches: readonly GatherPatchView[]): void;
   /** Draw every pile that is still lying about, and nothing that has since been picked up or faded. */
   setDroppedPiles(piles: readonly DroppedPileView[]): void;
+  /** A patch highlights the last visible piece, which is the next one gathering removes. */
+  target(kind: 'patch' | 'pile', id: number): THREE.Object3D | null;
   dispose(): void;
 }
 
@@ -102,6 +104,12 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
         remove(drawn.model);
         piles.delete(id);
       }
+    },
+    target: (kind, id) => {
+      const model = kind === 'patch' ? patches.get(id) : piles.get(id)?.model;
+      if (model === undefined || !model.group.visible) return null;
+      if (kind === 'pile') return model.group;
+      return model.group.children.findLast((child) => child.visible) ?? null;
     },
     dispose: () => {
       for (const model of patches.values()) remove(model);

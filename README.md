@@ -213,8 +213,8 @@ charged strike, a tumble for a dodge, a stagger when something hits you,
 falling down when you're knocked out and getting back up, chopping at a tree
 like a woodcutter, casting, waiting and reeling at the pond, bending down to
 pick things up, digging with a shovel, lifting food to your mouth a bite at
-a time, and sitting and lying down at home. Your feet stay planted while you
-swing, until you walk off. Everybody else sees the same moves on you.
+a time, and sitting and lying down at home. Swift attacks keep your feet free to walk or run through the whole swing.
+Charged strikes still plant your feet. Everybody else sees the same moves on you.
 
 Blows land on the very moment the animation does, and feel like it: a brief
 pause on the hit, a little camera kick, chips of wood flying out of a tree

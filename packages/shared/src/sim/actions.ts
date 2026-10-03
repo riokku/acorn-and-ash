@@ -207,23 +207,19 @@ export function advanceAction(
         state.age === swing.impact ? { kind: 'swing', step: swingStep(state.step) } : null;
       if (state.queued && state.step < 3 && state.age >= swing.chain) {
         beginAction(state, ActionKind.Swing, state.step + 1);
-        return { footing: 'planted', impact, cast: false };
+        return { footing: 'free', impact, cast: false };
       }
       if (state.age >= swing.end) {
         // A button still held, or a click during the finishing chop, carries
         // straight on; otherwise the combo is over.
         if ((held(PlayerButton.Swing) || state.queued) && context.canAttack) {
           beginAction(state, ActionKind.Swing, state.step < 3 ? state.step + 1 : 1);
-          return { footing: 'planted', impact, cast: false };
+          return { footing: 'free', impact, cast: false };
         }
         beginAction(state, ActionKind.Idle);
         return { footing: 'free', impact, cast: false };
       }
-      if (state.age >= swing.planted && moving) {
-        beginAction(state, ActionKind.Idle);
-        return { footing: 'free', impact, cast: false };
-      }
-      return { footing: state.age < swing.planted ? 'planted' : 'free', impact, cast: false };
+      return { footing: 'free', impact, cast: false };
     }
 
     case ActionKind.Charge:
@@ -340,7 +336,7 @@ function startFromIdle(
     return freshSwing ? { footing: 'free', impact: null, cast: true } : FREE;
   }
   beginAction(state, ActionKind.Swing, 1);
-  return { footing: 'planted', impact: null, cast: false };
+  return { footing: 'free', impact: null, cast: false };
 }
 
 /** How long a wind-up of this `step` (its `WindupPace`) lasts, in ticks. */

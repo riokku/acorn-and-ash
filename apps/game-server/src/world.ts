@@ -34,6 +34,8 @@ import {
   encodeCooked,
   encodeDiscarded,
   encodePickupRefused,
+  encodeCollected,
+  MAX_COLLECTIONS_PER_MESSAGE,
   encodeDroppedPiles,
   encodeFishing,
   encodeGatherPatches,
@@ -379,6 +381,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.step(startedAt);
     this.announcePickups(simulation);
     this.announceGathering(simulation);
+    this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
     this.announceChopping(simulation);
     this.announceCatching(simulation);
@@ -446,6 +449,13 @@ export class World extends DurableObject<WorldEnv> {
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
       this.trySend(ws, encodeInventory(items));
       if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
+    }
+  }
+
+  private announceCollections(simulation: WorldSimulation): void {
+    const events = simulation.drainCollectionEvents();
+    for (let start = 0; start < events.length; start += MAX_COLLECTIONS_PER_MESSAGE) {
+      this.broadcast(encodeCollected(events.slice(start, start + MAX_COLLECTIONS_PER_MESSAGE)));
     }
   }
 
