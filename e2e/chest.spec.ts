@@ -21,7 +21,7 @@ test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 test('opens the bed chest by clicking its model and moves saved stacks both ways', async ({
   page,
-}) => {
+}, testInfo) => {
   const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
   const home = { id: 7, kind: 'cabin' as const, x: 0, z: -20, yaw: 0, lit: false };
   sim.restoreBuiltProps([{ ...home, ownerKey: 'chest-owner', litUntilMs: null }]);
@@ -74,7 +74,11 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
       .getByRole('button', { name: 'Take 10 Log', exact: true })
       .click({ modifiers: ['Shift'] });
     await expect(page.getByRole('button', { name: 'Take 9 Log', exact: true })).toBeVisible();
-    await page.screenshot({ path: '/workspace/acorn-storage-chest.png' });
+    await page.screenshot({
+      path: process.env.CI
+        ? testInfo.outputPath('storage-chest.png')
+        : '/workspace/acorn-storage-chest.png',
+    });
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     await page.mouse.click(point.x, point.y);

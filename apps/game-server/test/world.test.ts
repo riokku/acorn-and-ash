@@ -1981,65 +1981,32 @@ describe('building', () => {
     second.close();
   }, 30_000);
 
-  /** The oak plus every other hand-placed tree near it: enough logs for a cabin. */
-  function treesNearTheOak(seed: number) {
-    const props = buildTestClearing(seed).props;
-    const oak = props.find((prop) => prop.kind === 'oak');
-    const pine = props.find((prop) => prop.kind === 'pine');
-    const birches = props.filter((prop) => prop.kind === 'birch');
-    if (oak === undefined || pine === undefined || birches.length < 2) {
-      throw new Error('expected the clearing to have an oak, a pine and two birches');
-    }
-    return [oak, pine, birches[0]!, birches[1]!];
-  }
-
-  /** Fell four trees for ten logs - the most a pack can hold, and a cabin's cost. */
-  async function getLogsForACabin(client: TestClient): Promise<void> {
-    await findTheBag(client);
-    await walkToTheAxe(client);
-    client.walk(0, 0, 0, 3, PlayerButton.Interact);
-    await waitFor('the axe', () => client.inventory().some((entry) => entry.item === 'axe'));
-    client.useItem('axe');
-    await waitFor('the axe to be equipped', () =>
-      client.equipped().some((entry) => entry.item === 'axe'),
-    );
-
-    for (const tree of treesNearTheOak(client.welcome().seed)) {
-      await walkWithinReach(client, tree);
-      await chopUntilFelled(client, tree, tree.id);
-      await collectFallenLogs(client);
-    }
-    await waitFor(
-      'ten logs',
-      () => (client.inventory().find((entry) => entry.item === 'log')?.count ?? 0) >= 10,
-    );
-  }
-
   /** Face the middle of the clearing and ask to build a cabin until one appears. */
-  async function buildCabin(client: TestClient): Promise<void> {
+  async function buildTent(client: TestClient): Promise<void> {
     const netId = client.welcome().netId;
     for (let step = 0; step < 20; step++) {
-      if (client.builtProps().some((prop) => prop.kind === 'cabin')) return;
+      if (client.builtProps().some((prop) => prop.kind === 'tent')) return;
       const here = client.positionOf(netId);
       const yaw =
         here === undefined
           ? 0
           : Math.atan2(-(SPAWN_POSITION.x - here.x), -(SPAWN_POSITION.z - here.z));
       client.walk(0, 0, yaw, 4);
-      client.buildInFront('cabin', yaw);
+      client.buildInFront('tent', yaw);
       await sleep(120);
     }
     throw new Error('never built a cabin');
   }
 
-  it('a cabin is capped at one, and is where its owner starts next time', async () => {
+  it('a starter tent is capped at one, and is where its owner starts next time', async () => {
     const worldId = nextWorldId();
     const owner = await TestClient.connect(worldId, 'has-a-cabin');
-    await getLogsForACabin(owner);
+    await waitFor('owner first snapshot', () => owner.snapshots().length > 0);
+    await gatherFromPatches(owner, 'stick', 6);
     await walkToOpenGround(owner);
-    await buildCabin(owner);
+    await buildTent(owner);
 
-    const home = owner.builtProps().find((prop) => prop.kind === 'cabin');
+    const home = owner.builtProps().find((prop) => prop.kind === 'tent');
     expect(home).toBeDefined();
     if (home === undefined) throw new Error('no cabin was built');
 
@@ -2059,8 +2026,8 @@ describe('building', () => {
     const returning = await TestClient.connect(worldId, 'has-a-cabin');
     await waitFor('word of where they are', () => returning.latestSpace() !== undefined);
     expect(returning.latestSpace()?.space).toBe(home.id);
-    expect(returning.latestSpace()?.x).toBeCloseTo(HOME_WAKE_SPOT.x, 1);
-    expect(returning.latestSpace()?.z).toBeCloseTo(HOME_WAKE_SPOT.z, 1);
+    expect(returning.latestSpace()?.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 1);
+    expect(returning.latestSpace()?.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 1);
 
     // Their own door locks and unlocks, and everybody hears about it.
     returning.setDoorLock(true);

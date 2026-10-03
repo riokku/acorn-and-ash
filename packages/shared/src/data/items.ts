@@ -21,7 +21,10 @@ export type ItemId =
   | 'roastedPerch'
   | 'roastedTrout'
   | 'roastedGoldenCarp'
-  | 'roastedMeat';
+  | 'roastedMeat'
+  | 'teepeeBlueprint'
+  | 'cabinBlueprint'
+  | 'largeCabinBlueprint';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -267,6 +270,42 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: true,
   },
+  teepeeBlueprint: {
+    id: 'teepeeBlueprint',
+    displayName: 'Teepee blueprint',
+    pluralName: 'Teepee blueprints',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x6f8f9a,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
+  cabinBlueprint: {
+    id: 'cabinBlueprint',
+    displayName: 'Small cabin blueprint',
+    pluralName: 'Small cabin blueprints',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x6f8f9a,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
+  largeCabinBlueprint: {
+    id: 'largeCabinBlueprint',
+    displayName: 'Larger cabin blueprint',
+    pluralName: 'Larger cabin blueprints',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x6f8f9a,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -293,6 +332,9 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'roastedTrout',
   'roastedGoldenCarp',
   'roastedMeat',
+  'teepeeBlueprint',
+  'cabinBlueprint',
+  'largeCabinBlueprint',
 ];
 
 export function itemIndex(id: ItemId): number {

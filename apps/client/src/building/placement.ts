@@ -13,6 +13,9 @@
 
 import {
   BUILDABLE_KINDS,
+  isHomeKind,
+  nextHome,
+  knowsHome,
   BUILD_REACH,
   BUILD_ROTATION_STEP,
   ITEM_KINDS,
@@ -31,6 +34,7 @@ import {
 
 export interface PlacementInputs {
   readonly kind: BuildableKindId;
+  readonly homeSkills?: number;
   /** Which way the mouse wheel has turned it. A fence snapped onto another ignores this. */
   readonly yaw: number;
   /** The spot on the ground under the mouse, or null if it points at the sky. */
@@ -60,11 +64,16 @@ export interface PlacementPlan {
 
 export function planPlacement(inputs: PlacementInputs): PlacementPlan {
   const { kind, mouse, player } = inputs;
+  const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind));
+  const upgrading = isHomeKind(kind) && home !== undefined;
   const affordable = missingCosts(kind, inputs.carrying) === null;
-  if (mouse === null) return { spot: null, refusal: null, snapped: false, affordable };
+  if (mouse === null && !upgrading)
+    return { spot: null, refusal: null, snapped: false, affordable };
 
   const everythingBuilt: Footprint[] = [
-    ...inputs.built.map((prop) => buildableFootprint(prop.kind, prop.x, prop.z, prop.yaw)),
+    ...inputs.built
+      .filter((prop) => !upgrading || prop.id !== home?.id)
+      .map((prop) => buildableFootprint(prop.kind, prop.x, prop.z, prop.yaw)),
     ...inputs.pending.map((request) =>
       buildableFootprint(request.kind, request.x, request.z, request.yaw),
     ),
@@ -72,9 +81,12 @@ export function planPlacement(inputs: PlacementInputs): PlacementPlan {
 
   const snap =
     kind === 'fence' && inputs.snap
-      ? snapFence(clampToReach(mouse, player), everythingBuilt, BUILD_ROTATION_STEP)
+      ? snapFence(clampToReach(mouse!, player), everythingBuilt, BUILD_ROTATION_STEP)
       : null;
-  const spot = snap ?? { ...clampToReach(mouse, player), yaw: inputs.yaw };
+  const spot =
+    upgrading && home !== undefined
+      ? { x: home.x, z: home.z, yaw: home.yaw }
+      : (snap ?? { ...clampToReach(mouse!, player), yaw: inputs.yaw });
 
   return {
     spot,
@@ -107,7 +119,14 @@ function refusalFor(
   const missing = missingCosts(inputs.kind, inputs.carrying);
   if (missing !== null) return `Need ${missing}`;
 
-  if (buildable.capPerPlayer) {
+  if (isHomeKind(inputs.kind)) {
+    const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind));
+    if (inputs.kind !== nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null))
+      return 'Upgrade your home one tier at a time';
+    if (!knowsHome(inputs.homeSkills ?? 0, inputs.kind))
+      return `Learn the ${buildable.displayName.toLowerCase()} blueprint first · found on skeletons`;
+  }
+  if (buildable.capPerPlayer && !buildable.isHome) {
     const alreadyHave =
       inputs.built.some((prop) => prop.yours && prop.kind === inputs.kind) ||
       inputs.pending.some((request) => request.kind === inputs.kind);

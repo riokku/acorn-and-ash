@@ -1,3 +1,4 @@
+import { nextHome, knowsHome, isHomeKind } from '@acorn/shared';
 import { PickupNotice } from './PickupNotice';
 import { LoadingScreen } from './LoadingScreen';
 import { ChestPanel } from './ChestPanel';
@@ -478,7 +479,11 @@ function craftEntries(state: HudState): RecipeEntry[] {
 /** Every buildable kind this player could pick, in menu order. */
 function buildEntries(state: HudState): RecipeEntry[] {
   const inventory = inventoryFromEntries(state.carrying);
-  return BUILDABLE_KIND_ORDER.map((kind, index) => {
+  return BUILDABLE_KIND_ORDER.flatMap((original, index) => {
+    if (isHomeKind(original) && original !== 'cabin') return [];
+    const target = nextHome(state.homeKind);
+    if (original === 'cabin' && target === null) return [];
+    const kind = original === 'cabin' ? target! : original;
     const buildable = BUILDABLE_KINDS[kind];
     return {
       index: index + 1,
@@ -489,9 +494,10 @@ function buildEntries(state: HudState): RecipeEntry[] {
           className="hud-journal-stamp-icon"
         />
       ),
-      displayName: buildable.displayName,
+      displayName: `${state.homeKind !== null && isHomeKind(kind) ? 'Upgrade to ' : ''}${buildable.displayName}${isHomeKind(kind) && !knowsHome(state.homeSkills, kind) ? ' · blueprint needed' : ''}`,
       costs: buildable.costs,
-      ready: canAfford(inventory, buildable),
+      ready:
+        canAfford(inventory, buildable) && (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)),
     };
   });
 }

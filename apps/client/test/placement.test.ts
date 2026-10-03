@@ -102,13 +102,14 @@ describe('why a piece will not go where it is pointed', () => {
       mouse: { x: 0, z: -4 },
       built: [built({ kind: 'cabin', x: 20, z: 20, yours: true })],
     });
-    expect(plan.refusal).toBe('You already have a cabin');
+    expect(plan.refusal).toBe('Upgrade your home one tier at a time');
   });
 
   it("does not count somebody else's cabin as yours", () => {
     const plan = planPlacement({
       ...BASE,
-      kind: 'cabin',
+      kind: 'tent',
+      carrying: [{ item: 'stick', count: 6 }],
       mouse: { x: 0, z: -4 },
       built: [built({ kind: 'cabin', x: 20, z: 20, yours: false })],
     });

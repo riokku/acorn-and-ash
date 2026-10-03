@@ -1653,7 +1653,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   await expect(page.locator('.hud-hint')).not.toContainText('Press B to build');
 
   // Opening the menu with only four logs offers the campfire but not the
-  // cabin (which costs ten). Picking the unaffordable one still shows its
+  // starter tent (which costs six sticks). Picking the unaffordable one still shows its
   // preview, red, saying what is missing (decision 0052) - and a click
   // then places nothing. The journal panel itself lists every option now
   // (decision 0043); the hint line beneath it just says how to close the menu.
@@ -1662,7 +1662,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   await page.keyboard.press('Digit2');
   expect(await page.evaluate(() => window.acornDebug?.buildMenuOpen() ?? true)).toBe(false);
   await centerMouse(page);
-  await expect(page.locator('.hud-hint')).toContainText('Need 6 more logs');
+  await expect(page.locator('.hud-hint')).toContainText('Need 6 more sticks');
   await page.mouse.down();
   await page.mouse.up();
   await page.waitForTimeout(300);

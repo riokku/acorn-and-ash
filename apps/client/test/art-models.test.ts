@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { createGroundShader } from '../src/art/ground-shading';
 import { triangleCount } from '../src/art/shapes';
 import { createBuriedCacheMound } from '../src/scene/buried-cache';
+import { createShelter } from '../src/scene/shelter';
+import { createLargeCabin } from '../src/scene/large-cabin';
 import { createCabin } from '../src/scene/cabin';
 import { createCritter } from '../src/scene/critter';
 import { createFence } from '../src/scene/fence';
@@ -36,6 +38,21 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    {
+      name: 'tent',
+      make: () => createShelter('tent'),
+      budget: BUILDABLE_KINDS.tent.triangleBudget,
+    },
+    {
+      name: 'teepee',
+      make: () => createShelter('teepee'),
+      budget: BUILDABLE_KINDS.teepee.triangleBudget,
+    },
+    {
+      name: 'large cabin',
+      make: createLargeCabin,
+      budget: BUILDABLE_KINDS.largeCabin.triangleBudget,
+    },
     { name: 'cabin', make: createCabin, budget: BUILDABLE_KINDS.cabin.triangleBudget },
     { name: 'fence', make: createFence, budget: BUILDABLE_KINDS.fence.triangleBudget },
     { name: 'flower bed', make: createFlowerBed, budget: BUILDABLE_KINDS.flowerBed.triangleBudget },

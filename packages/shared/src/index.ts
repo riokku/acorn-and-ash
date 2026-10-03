@@ -62,3 +62,5 @@ export * from './net/messages';
 export * from './net/protocol';
 
 export * from './sim/chest';
+
+export * from './data/housing';

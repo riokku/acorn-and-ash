@@ -25,8 +25,9 @@ The game is online-only. Every world runs on the server.
 > play, and eating a fish tops you back up. Rabbits live out in the
 > wilderness - walk up on one and it bolts, but catch it with the same axe
 > that fells a tree and it pays out meat, worth even more than a fish. Chop
-> enough logs and you can build a campfire, or a cabin of your own - once you
-> have one, that is where you start next time, instead of the open clearing.
+> enough logs and you can build a campfire. Gather sticks for a tent, then
+> learn skeleton-dropped blueprints to upgrade through a teepee and two cabin
+> sizes. Your home is where you start next time, instead of the open clearing.
 > Gather flowers the same way as sticks and plant a flower bed or a lantern
 > to decorate the place. A masked raccoon lives out there too, and it is not
 > shy - it comes after you, and enough hits knock you out. You wake up safe
@@ -109,7 +110,7 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `C`                                  | Open the craft menu                                                      |
 | `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                                       |
 | `B`                                  | Open the build menu                                                      |
-| `1`–`6` (build menu open)            | Pick a campfire, cabin, flower bed, lantern, fence or path               |
+| `1`–`6` (build menu open)            | Pick a campfire, next home tier, flower bed, lantern, fence or path      |
 | Left mouse (piece picked)            | Place it where its preview stands                                        |
 | Mouse wheel (piece picked)           | Turn it                                                                  |
 | `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence                 |
@@ -396,8 +397,10 @@ edges flash red with an arc on the side it came from, and badly hurt, the
 edges beat red.
 
 Go into your home and they wait by the door for a while, then give up.
-Being knocked out ends the raid too. Each skeleton you beat leaves a bone
-behind - press `E` to pick it up. How tough each kind is, how hard it hits
+Being knocked out ends the raid too. Each skeleton you beat leaves bones
+behind, and has a 30% chance to drop the next housing blueprint you have not
+learned. Right-click the loot, then click a blueprint in your inventory to
+learn it permanently in this world. Learning does not award XP. How tough each kind is, how hard it hits
 and how often raids come all live in
 [`packages/shared/src/data/raiders.ts`](packages/shared/src/data/raiders.ts).
 Their weapons are simple stand-in shapes for now. See
@@ -549,10 +552,10 @@ itself away once placed. See
   A lit fire casts real, flickering light on everything nearby, not just a
   flame that looks lit. Hold raw fish or meat beside a lit one and press
   `E` to roast one piece instead; cooked food restores more hunger.
-- **Cabin** - ten logs, one slot's worth. Capped at one
-  per player. A little log cabin, with a shingled roof, a stone chimney, a
-  window glowing warm and a woodpile by the wall - and you can go inside
-  (see below).
+- **Home** - one per player, upgraded in place: tent (6 sticks), teepee
+  (8 sticks + 4 logs), small cabin (10 logs), larger cabin (20 logs + 8 sticks).
+  A tent is known from the start; each upgrade requires its learned blueprint.
+  Existing cabins stay small cabins and retain earlier building knowledge.
 - **Flower bed** - six flowers, gathered by hand from a patch the same way
   as sticks. Capped at one per player.
 - **Lantern** - four flowers. Also capped at one per player, independently
@@ -570,9 +573,29 @@ itself away once placed. See
 What each one costs lives in
 [`packages/shared/src/data/buildables.ts`](packages/shared/src/data/buildables.ts).
 
+### Blueprint housing progression
+
+The second entry in the Build journal always shows your next home tier. A new
+home begins as a tent. After learning the appropriate blueprint, stand outside
+near your home, choose the upgrade and click its preview. It remains fixed to
+the original home position and heading. The server checks the larger footprint,
+materials, ownership and that everyone has left the room before changing it;
+a refusal keeps the materials and explains what prevented the upgrade.
+
+Upgrades preserve the home ID, ownership, door lock, chest contents and exact
+storage slots. The canvas shelters have travel beds and warm lanterns; the
+teepee adds a table and chair. Cabins have the furnished log room and hearth;
+the larger cabin expands the room and adds an exterior porch. Interiors use the
+same tier dimensions for rendering, resting, doors and collision. Canvas roofs
+lift away in the indoor view so they cannot hide the bed or chest.
+
+Blueprint learning and pack consumption save together immediately. Character
+knowledge lives in this world's SQLite database. Existing numeric item/build
+IDs stay unchanged. See [decision 0073](docs/decisions/0073-learning-to-build-a-home.md).
+
 ### Your home
 
-Walk into your cabin's front door, or press `E` at it, and the screen fades
+Walk into your home's entrance, or press `E` at it, and the screen fades
 into the room inside: bigger than the outside suggests, seen from above like
 a dollhouse with the near walls cut away. There's a bed, a stone hearth with
 a real fire, a table and chair by the window with an oil lamp, a shelf of
@@ -608,7 +631,7 @@ fence and the garden path stone.
 
 ### Storage chest
 
-The chest at the foot of your cabin bed holds ten stacks and is private to you.
+The chest beside your home's bed or bedroll holds ten stacks and is private to you.
 Hover it for feedback and left-click when close enough to open it. Click a stack
 to move it between your pack and the chest, or Shift-click to move one item.
 Escape or the close button shuts the panel. The lid opens while you use it.
@@ -652,6 +675,10 @@ Add these to the end of the URL:
 | `?renderer=webgl2` | Force the WebGL 2 fallback, even where WebGPU works |
 | `?world=some-name` | Join a different world                              |
 | `?gallery`         | Look at all of the game's own art, in daylight      |
+
+The gallery also includes `?gallery=tent`, `?gallery=teepee`, and
+`?gallery=largeCabin`; `?gallery=home&tier=tent` (or another home kind) shows
+the matching interior.
 
 The gallery needs no server and skips the Home screen. `?gallery=cabin` looks
 at one piece up close (also `fence`, `lantern`, `flowerBed`, `gardenPath`,

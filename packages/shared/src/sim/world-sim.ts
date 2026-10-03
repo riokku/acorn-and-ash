@@ -1,3 +1,19 @@
+import { createRng, hashSeed } from '../rng';
+import {
+  BLUEPRINT_DROP_CHANCE,
+  HOME_SKILL_MASK,
+  HOME_TIERS,
+  blueprintHome,
+  isHomeKind,
+  knowsHome,
+  learnHome,
+  nextHome,
+  nextBlueprint,
+  homeRoomScale,
+  type HomeBuildReason,
+  type HomeBuildFeedback,
+  type HomeKind,
+} from '../data/housing';
 import {
   emptyChest,
   chestFromSaved,
@@ -15,6 +31,7 @@ import type { LootRequest } from '../net/messages';
 import {
   ANIMAL_RESPAWN_SECONDS,
   BUILD_REACH,
+  PLAYER_RADIUS,
   BUILD_REACH_SLACK,
   CAMPFIRE_BURN_SECONDS,
   GATHER_PATCH_MAX_COUNT,
@@ -79,7 +96,8 @@ import {
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
 import {
   HOME_ENTRY,
-  HOME_FURNITURE,
+  homeSpot,
+  homeChestSpot,
   HOME_ROOM,
   HOME_WAKE_SPOT,
   cabinCollider,
@@ -319,6 +337,7 @@ export interface PersistedPlayer {
    * size, starts a fresh map.
    */
   readonly explored?: Uint8Array | null;
+  readonly homeSkills?: number;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -697,6 +716,7 @@ interface PlayerRuntime {
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
+  homeSkills: number;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -855,6 +875,39 @@ export class WorldSimulation {
   /** Real time as of the tick being simulated, supplied by the caller. */
   private nowMs = 0;
 
+  private readonly homeBuildFeedback: (HomeBuildFeedback & { netId: number })[] = [];
+  drainHomeBuildFeedback(): (HomeBuildFeedback & { netId: number })[] {
+    return this.homeBuildFeedback.splice(0);
+  }
+  private readonly homeSolids = new Map<number, ReturnType<typeof cabinCollider>>();
+  private readonly roomWorlds = new Map<HomeKind, CollisionWorld>();
+  private addHomeSolid(prop: BuiltProp): void {
+    const solid = cabinCollider(prop);
+    this.homeSolids.set(prop.id, solid);
+    this.collision.colliders.push(solid);
+  }
+  private kindOfHome(space: number): HomeKind {
+    const kind = this.builtPropsById.get(space)?.kind;
+    return kind !== undefined && isHomeKind(kind) ? kind : 'cabin';
+  }
+  private roomFor(space: number): CollisionWorld {
+    const kind = this.kindOfHome(space);
+    if (kind === 'cabin') return this.roomCollision;
+    let room = this.roomWorlds.get(kind);
+    if (room === undefined) {
+      room = createCollisionWorld(
+        createFlatTerrain(0),
+        homeRoomColliders(kind),
+        (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+      );
+      this.roomWorlds.set(kind, room);
+    }
+    return room;
+  }
+  homeSkillsOf(netId: number): number {
+    return this.players.get(netId)?.homeSkills ?? 0;
+  }
+
   private readonly homeChests = new Map<number, ChestSlot[]>();
   private readonly players = new Map<number, PlayerRuntime>();
   private readonly animals = new Map<number, AnimalRuntime>();
@@ -970,6 +1023,18 @@ export class WorldSimulation {
         fighters: () => this.fighters,
         strikePlayer: (netId, damage, impactTick) =>
           this.raiderStrikesPlayer(netId, damage, impactTick),
+        defeated: (netId, raiderId, position, facingYaw) => {
+          const runtime = this.players.get(netId);
+          if (runtime === undefined) return;
+          const item = nextBlueprint(runtime.homeSkills);
+          if (
+            item === null ||
+            createRng(hashSeed(this.seed, 'home-blueprint', this.tick, raiderId)).nextFloat() >=
+              BLUEPRINT_DROP_CHANCE
+          )
+            return;
+          this.dropPile(item, 1, position, facingYaw, this.nowMs);
+        },
         dropLoot: (item, count, position, facingYaw) =>
           this.dropPile(item, count, position, facingYaw, this.nowMs),
       },
@@ -1050,9 +1115,13 @@ export class WorldSimulation {
     // shared clearing, but waking up at home, by their own bed, beats that
     // too, every time (see decision 0055).
     const home = playerKey !== null ? this.homeOf(playerKey) : null;
+    const wake = homeSpot(
+      HOME_WAKE_SPOT,
+      home !== null && isHomeKind(home.kind) ? home.kind : 'cabin',
+    );
     const spawn =
       home !== null
-        ? { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z }
+        ? { x: wake.x, y: 0, z: wake.z }
         : saved
           ? { x: saved.x, y: saved.y, z: saved.z }
           : this.nextSpawnPosition();
@@ -1077,6 +1146,10 @@ export class WorldSimulation {
       entity,
       queue: [],
       inventory,
+      homeSkills:
+        ((saved?.homeSkills ?? 0) |
+          (home !== null && isHomeKind(home.kind) ? (1 << HOME_TIERS.indexOf(home.kind)) - 1 : 0)) &
+        HOME_SKILL_MASK,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -1128,7 +1201,7 @@ export class WorldSimulation {
       reason,
     });
     const position = runtime.entity.get(Position);
-    const chest = HOME_FURNITURE.chest;
+    const chest = homeChestSpot(isHomeKind(home.kind) ? home.kind : 'cabin');
     if (position === undefined || Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
       return reply('tooFar');
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
@@ -1304,7 +1377,7 @@ export class WorldSimulation {
         // Inside a home only its own walls and furniture are there to bump
         // into, and nothing out in the world is in reach.
         const outdoors = runtime.space === OUTDOORS;
-        const collision = outdoors ? this.collision : this.roomCollision;
+        const collision = outdoors ? this.collision : this.roomFor(runtime.space);
 
         // A line in the water keeps its own time: the fish bites when it bites,
         // and wandering off brings the line in, whether or not inputs arrived.
@@ -1420,7 +1493,11 @@ export class WorldSimulation {
           }
         } else if (wantsToInteract && runtime.space !== OUTDOORS) {
           const place = wantsToToggleCampfire
-            ? restingPlaceInReach(scratch.position.x, scratch.position.z)
+            ? restingPlaceInReach(
+                scratch.position.x,
+                scratch.position.z,
+                this.kindOfHome(runtime.space),
+              )
             : null;
           const hungryWithFood =
             foodToEat(runtime.inventory, runtime.hunger, runtime.equippedItem) !== null;
@@ -1564,7 +1641,17 @@ export class WorldSimulation {
   ): boolean {
     const { position } = motion;
     if (runtime.space !== OUTDOORS) {
-      if (!isLeavingRoom(position.x, position.z, walkX, walkZ, freshInteract)) return false;
+      if (
+        !isLeavingRoom(
+          position.x,
+          position.z,
+          walkX,
+          walkZ,
+          freshInteract,
+          this.kindOfHome(runtime.space),
+        )
+      )
+        return false;
       const home = this.builtPropsById.get(runtime.space);
       const out =
         home === undefined
@@ -1582,7 +1669,12 @@ export class WorldSimulation {
       if (home.locked === true && this.ownedBuiltProps.get(home.id) !== runtime.playerKey) {
         return false;
       }
-      this.moveBetweenSpaces(runtime, motion, home.id, HOME_ENTRY);
+      this.moveBetweenSpaces(
+        runtime,
+        motion,
+        home.id,
+        homeSpot(HOME_ENTRY, isHomeKind(home.kind) ? home.kind : 'cabin'),
+      );
       return true;
     }
     return false;
@@ -2786,18 +2878,14 @@ export class WorldSimulation {
     const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
     if (home !== null) {
       runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
-      this.placePlayer(
-        runtime.netId,
-        { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z },
-        HOME_WAKE_SPOT.yaw,
-        home.id,
-      );
+      const wake = homeSpot(HOME_WAKE_SPOT, isHomeKind(home.kind) ? home.kind : 'cabin');
+      this.placePlayer(runtime.netId, { x: wake.x, y: 0, z: wake.z }, wake.yaw, home.id);
       this.spaceChanges.push({
         netId: runtime.netId,
         space: home.id,
-        x: HOME_WAKE_SPOT.x,
-        z: HOME_WAKE_SPOT.z,
-        yaw: HOME_WAKE_SPOT.yaw,
+        x: wake.x,
+        z: wake.z,
+        yaw: wake.yaw,
       });
       beginAction(runtime.action, ActionKind.Rise, RiseFrom.Bed);
     } else {
@@ -2831,10 +2919,68 @@ export class WorldSimulation {
    * that kind.
    */
   private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
-    if (runtime.swingCooldownTicks > 0) return;
     const { kind } = request;
     const buildable = BUILDABLE_KINDS[kind];
-    if (!canAfford(runtime.inventory, buildable)) return;
+    const refuse = (reason: HomeBuildReason): void => {
+      if (isHomeKind(kind))
+        this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: 0, reason });
+    };
+    if (runtime.swingCooldownTicks > 0) return refuse('busy');
+    if (!canAfford(runtime.inventory, buildable)) return refuse('materials');
+    if (buildable.isHome) {
+      if (runtime.playerKey === null || !isHomeKind(kind)) return refuse('identity');
+      if (!knowsHome(runtime.homeSkills, kind)) return refuse('blueprint');
+      const home = this.homeOf(runtime.playerKey);
+      if (home !== null) {
+        if (!isHomeKind(home.kind) || nextHome(home.kind) !== kind) return refuse('tier');
+        if (
+          Math.hypot(request.x - home.x, request.z - home.z) > 0.05 ||
+          Math.abs(request.yaw - home.yaw) > 0.01
+        )
+          return refuse('moved');
+        if ([...this.players.values()].some((player) => player.space === home.id))
+          return refuse('occupied');
+        const piece = buildableFootprint(kind, home.x, home.z, home.yaw);
+        if (
+          checkBuildSpot(
+            piece,
+            position,
+            BUILD_REACH + BUILD_REACH_SLACK,
+            this.clearing.water,
+            this.buildFootprints(home.id),
+          ) !== null
+        )
+          return refuse('blocked');
+        for (const other of this.players.values()) {
+          if (other.space !== OUTDOORS || other === runtime) continue;
+          const at = other.entity.get(Position);
+          if (
+            at !== undefined &&
+            Math.hypot(at.x - home.x, at.z - home.z) < piece.radius + PLAYER_RADIUS
+          )
+            return refuse('player');
+        }
+        for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
+        runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+        const upgraded = { ...home, kind };
+        const index = this.builtProps.indexOf(home);
+        this.builtProps[index] = upgraded;
+        this.builtPropsById.set(home.id, upgraded);
+        const oldCollider = this.homeSolids.get(home.id);
+        if (oldCollider !== undefined)
+          this.collision.colliders.splice(this.collision.colliders.indexOf(oldCollider), 1);
+        this.addHomeSolid(upgraded);
+        this.movePatchesFrom(piece);
+        this.buildEvents.push({
+          netId: runtime.netId,
+          prop: upgraded,
+          ownerKey: runtime.playerKey,
+        });
+        this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: home.id, reason: null });
+        return;
+      }
+      if (kind !== 'tent') return refuse('tier');
+    }
     // Capped kinds are capped per kind, not shared across all of them: a
     // cabin does not block a flower bed, and one flower bed does not block a
     // second, different, capped decoration.
@@ -2853,7 +2999,7 @@ export class WorldSimulation {
       this.clearing.water,
       this.buildFootprints(),
     );
-    if (refusal !== null) return;
+    if (refusal !== null) return refuse('blocked');
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
@@ -2868,16 +3014,18 @@ export class WorldSimulation {
     };
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
-    if (buildable.isHome) this.collision.colliders.push(cabinCollider(prop));
+    if (buildable.isHome) this.addHomeSolid(prop);
     this.movePatchesFrom(piece);
     const ownerKey = buildable.capPerPlayer ? runtime.playerKey : null;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
     this.buildEvents.push({ netId: runtime.netId, prop, ownerKey });
+    if (isHomeKind(kind))
+      this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: prop.id, reason: null });
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: null });
   }
 
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
-  private buildFootprints(): Footprint[] {
+  private buildFootprints(excludeId?: number): Footprint[] {
     return [
       ...this.standing.map((prop) =>
         roundFootprint(
@@ -2887,9 +3035,9 @@ export class WorldSimulation {
           PROP_KINDS[prop.kind].displayName.toLowerCase(),
         ),
       ),
-      ...this.builtProps.map((built) =>
-        buildableFootprint(built.kind, built.x, built.z, built.yaw),
-      ),
+      ...this.builtProps
+        .filter((built) => built.id !== excludeId)
+        .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),
     ];
   }
 
@@ -3172,7 +3320,7 @@ export class WorldSimulation {
     for (const { ownerKey, litUntilMs, ...prop } of props) {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
-      if (BUILDABLE_KINDS[prop.kind].isHome) this.collision.colliders.push(cabinCollider(prop));
+      if (BUILDABLE_KINDS[prop.kind].isHome) this.addHomeSolid(prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
       if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);
@@ -3352,7 +3500,17 @@ export class WorldSimulation {
   useItem(netId: number, item: ItemId): boolean {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return false;
-    if (!ITEM_KINDS[item].equippable || !hasItem(runtime.inventory, item)) return false;
+    if (!hasItem(runtime.inventory, item)) return false;
+    const home = blueprintHome(item);
+    if (home !== null) {
+      if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
+        return false;
+      if (knowsHome(runtime.homeSkills, home)) return false;
+      runtime.homeSkills = learnHome(runtime.homeSkills, home);
+      removeItem(runtime.inventory, item, 1);
+      return true;
+    }
+    if (!ITEM_KINDS[item].equippable) return false;
 
     let changed = false;
     if (runtime.equippedItem !== item) {
@@ -3592,6 +3750,7 @@ export class WorldSimulation {
         health: runtime.health,
         equippedItem: runtime.equippedItem,
         explored: runtime.explored,
+        homeSkills: runtime.homeSkills,
       });
     }
     return saved;

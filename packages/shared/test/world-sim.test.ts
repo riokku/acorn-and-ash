@@ -975,6 +975,7 @@ describe('equipping', () => {
       withItems(1, [
         { item: 'bag', count: 1 },
         { item: 'log', count: 10 },
+        { item: 'stick', count: 6 },
       ]),
     );
     expect(sim.useItem(1, 'log')).toBe(false);
@@ -2998,13 +2999,14 @@ describe('threats', () => {
           items: [
             { item: 'bag', count: 1 },
             { item: 'log', count: 10 },
+            { item: 'stick', count: 6 },
           ],
           hunger: HUNGER_MAX,
         },
         'chris',
       );
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
-      sim.requestBuild(1, { kind: 'cabin', x: 0, z: -inFront('cabin'), yaw: 0 });
+      sim.requestBuild(1, { kind: 'tent', x: 0, z: -inFront('tent'), yaw: 0 });
       sim.queueInput(1, createInput(1, 0, 0, 0, 0));
       sim.step(tickClock());
       const home = sim.drainBuildEvents()[0]?.prop;
@@ -3020,8 +3022,8 @@ describe('threats', () => {
       const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
       expect(position).toBeDefined();
       if (position === undefined) return;
-      expect(position.x).toBeCloseTo(HOME_WAKE_SPOT.x, 1);
-      expect(position.z).toBeCloseTo(HOME_WAKE_SPOT.z, 1);
+      expect(position.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 1);
+      expect(position.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 1);
       expect(sim.drainSpaceChanges().some((change) => change.space === home.id)).toBe(true);
     });
 
@@ -3703,6 +3705,7 @@ describe('building', () => {
       items: [
         { item: 'bag', count: 1 },
         { item: 'log', count: 10 },
+        { item: 'stick', count: 6 },
       ],
       hunger: HUNGER_MAX,
     });
@@ -3717,14 +3720,14 @@ describe('building', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
+      requestAndStep(sim, 1, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       // Far enough away that footprint overlap is not what blocks this one -
       // already owning a home is.
       const seq = waitOutCooldown(sim, 1, 2);
       sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', seq);
+      requestAndStep(sim, 1, 'tent', seq);
       expect(sim.drainBuildEvents()).toEqual([]);
     });
 
@@ -3732,38 +3735,29 @@ describe('building', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
+      requestAndStep(sim, 1, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       sim.addPlayer(2, withTenLogs(2), 'someone-else');
       sim.placePlayer(2, { x: -10, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 2, 'cabin', 1);
+      requestAndStep(sim, 2, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
     });
 
-    it('a guest with no persistent key can still build one, just not one that is remembered as theirs', () => {
+    it('refuses a home without an identity, without spending its materials', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1));
-      sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
-      expect(sim.drainBuildEvents()).toHaveLength(1);
-
-      // Ten logs is also the most a pack can ever hold, so a second cabin
-      // needs a fresh ten gathered in between - topped up directly here,
-      // the same as a trip back to the woods would in a real session.
-      addItem(sim.inventoryOf(1), 'log', 10);
-      const seq = waitOutCooldown(sim, 1, 2);
-      sim.placePlayer(1, { x: -10, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', seq);
-      // Nothing to say this guest already has one, so a second is allowed.
-      expect(sim.drainBuildEvents()).toHaveLength(1);
+      requestAndStep(sim, 1, 'tent', 1);
+      expect(sim.drainBuildEvents()).toHaveLength(0);
+      expect(sim.inventoryOf(1).stick).toBe(6);
+      expect(sim.drainHomeBuildFeedback()[0]?.reason).toBe('identity');
     });
 
     it('wakes its owner up inside, by their own bed, next time', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
+      requestAndStep(sim, 1, 'tent', 1);
       const home = sim.drainBuildEvents()[0]?.prop;
       expect(home).toBeDefined();
 
@@ -3774,8 +3768,8 @@ describe('building', () => {
       back.addPlayer(9, undefined, 'chris');
       expect(back.spaceOf(9)).toBe(home?.id);
       const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
-      expect(position?.x).toBeCloseTo(HOME_WAKE_SPOT.x, 5);
-      expect(position?.z).toBeCloseTo(HOME_WAKE_SPOT.z, 5);
+      expect(position?.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 5);
+      expect(position?.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 5);
     });
 
     it('puts the front door on whichever side the cabin was turned to face', () => {
@@ -3783,7 +3777,7 @@ describe('building', () => {
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
       // A quarter turn: the door, on the model's +Z side, now faces +X.
-      sim.requestBuild(1, { kind: 'cabin', x: 0, z: -inFront('cabin'), yaw: Math.PI / 2 });
+      sim.requestBuild(1, { kind: 'tent', x: 0, z: -inFront('tent'), yaw: Math.PI / 2 });
       sim.queueInput(1, createInput(1, 0, 0, FACE_OUT, 0));
       sim.step(tickClock());
       const home = sim.drainBuildEvents()[0]?.prop;
@@ -3938,7 +3932,7 @@ describe('building', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
+      requestAndStep(sim, 1, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       const fresh = createWorld();
@@ -4019,6 +4013,7 @@ describe('building', () => {
           items: [
             { item: 'bag', count: 1 },
             { item: 'log', count: 10 },
+            { item: 'stick', count: 6 },
             { item: 'flower', count: 6 },
           ],
           hunger: HUNGER_MAX,
@@ -4026,7 +4021,7 @@ describe('building', () => {
         'chris',
       );
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
-      requestAndStep(sim, 1, 'cabin', 1);
+      requestAndStep(sim, 1, 'tent', 1);
       expect(sim.drainBuildEvents()).toHaveLength(1);
 
       const seq = waitOutCooldown(sim, 1, 2);

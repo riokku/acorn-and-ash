@@ -16,6 +16,7 @@ import {
   createInput,
   type AnimalCaught,
   type BuildableKindId,
+  type BuildRequest,
   type BuiltPropsMessage,
   type BuriedCachesMessage,
   type CacheEvent,
@@ -122,6 +123,10 @@ export class TestClient {
         yaw: 0,
       }),
     );
+  }
+
+  build(request: BuildRequest): void {
+    this.socket.send(encodeBuild(request));
   }
 
   useItem(item: ItemId): void {
