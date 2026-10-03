@@ -39,6 +39,10 @@ export interface HudState {
   /** Whether the curtain has been dismissed - gates the HUD the same way `pointerLocked` used to. */
   readonly playing: boolean;
   readonly ready: boolean;
+  /** Completed loading milestones, not an estimate of time remaining. */
+  readonly loadingProgress: number;
+  readonly loadingStage: string;
+  readonly loadingError: string | null;
   /** What the server says this player is carrying. */
   readonly carrying: readonly { readonly item: ItemId; readonly count: number }[];
   /** What the server's Equipped list says this player currently has in hand. */
@@ -49,6 +53,14 @@ export interface HudState {
   readonly inventoryOpen: boolean;
   /** What is within reach right now, if anything. */
   readonly nearbyItem: ItemId | null;
+  readonly hoveredLoot: {
+    readonly name: string;
+    readonly count: number;
+    readonly detail: string;
+    readonly x: number;
+    readonly y: number;
+  } | null;
+  readonly interactionNote: string | null;
   /** Something somebody dropped, if any is within reach right now: what, and how many. */
   readonly nearbyPile: { readonly item: ItemId; readonly count: number } | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
@@ -153,11 +165,16 @@ const INITIAL: HudState = {
   correctionCm: 0,
   playing: false,
   ready: false,
+  loadingProgress: 0,
+  loadingStage: 'Preparing your journey',
+  loadingError: null,
   carrying: [],
   equippedItem: null,
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
   nearbyItem: null,
+  hoveredLoot: null,
+  interactionNote: null,
   nearbyPile: null,
   nearGatherSpot: null,
   nearBuriedCache: false,

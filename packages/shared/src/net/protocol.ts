@@ -52,6 +52,7 @@ import {
   ServerMessageType,
   type BuiltPropView,
   type ClientMessage,
+  type LootRequest,
   type EquippedEntry,
   type RejectReasonCode,
   type RosterEntry,
@@ -291,6 +292,17 @@ export function encodeSetDoorLock(locked: boolean): ArrayBuffer {
 }
 
 /** Drop or destroy some of one thing (see decision 0061). */
+const LOOT_KINDS = ['pickup', 'pile', 'patch'] as const;
+
+export function encodeLoot(request: LootRequest): ArrayBuffer {
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Loot);
+  view.setUint8(1, LOOT_KINDS.indexOf(request.kind));
+  view.setUint16(2, request.id, true);
+  return buffer;
+}
+
 export function encodeDiscard(request: DiscardRequest): ArrayBuffer {
   const buffer = new ArrayBuffer(DISCARD_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -408,6 +420,13 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
       amount,
       destroy: (view.getUint8(4) & DISCARD_DESTROY_FLAG) !== 0,
     };
+  }
+
+  if (type === ClientMessageType.Loot) {
+    if (data.byteLength !== 4) return null;
+    const kind = LOOT_KINDS[view.getUint8(1)];
+    if (kind === undefined) return null;
+    return { type: 'loot', kind, id: view.getUint16(2, true) };
   }
 
   if (type === ClientMessageType.Hello) {

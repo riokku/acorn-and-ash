@@ -97,7 +97,11 @@ const enterWorld = (identity: PlayerIdentity): void => {
 
   game.start().catch((error: unknown) => {
     console.error('Could not start the game', error);
-    hud.publish({ connection: 'offline', connectionDetail: String(error) });
+    hud.publish({
+      connection: 'offline',
+      connectionDetail: String(error),
+      loadingError: 'The view couldn’t start. Please try again.',
+    });
   });
 };
 

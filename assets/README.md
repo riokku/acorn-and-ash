@@ -15,11 +15,13 @@ file. The columns are:
 | `license`       | e.g. `CC0-1.0`, `CC BY 4.0`                                          |
 | `date_added`    | `YYYY-MM-DD`                                                         |
 | `modifications` | What we changed, or `none`                                           |
-| `ai_tool`       | `Meshy`, `Tripo`, or empty when no AI tool was involved              |
+| `ai_tool`       | `Meshy`, `Tripo`, `OpenAI`, or empty when no AI tool was involved    |
 | `ai_plan`       | `paid` or `free`, or empty                                           |
 
 Allowed sources: CC0 packs (Quaternius, KayKit, Kenney); Meshy on a paid plan,
-or on the free plan with a CC BY 4.0 credit; Tripo on a paid plan only.
+or on the free plan with a CC BY 4.0 credit; Tripo on a paid plan only. The
+user-requested loading illustration uses OpenAI image generation, recorded under
+the OpenAI Terms of Use.
 
 Not allowed: Hunyuan3D, or anything whose terms are unclear. This repository is
 public, so never commit source files whose license forbids redistribution.

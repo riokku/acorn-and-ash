@@ -4,6 +4,7 @@ declare global {
   interface Window {
     acornDebug?: {
       selfNetId(): number;
+      screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };
       remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
       remoteEquippedItem(netId: number): string | null;
@@ -580,7 +581,9 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   await walkWithinReachOf(page, axe.x, axe.z);
 
   // Standing next to it, the game offers it.
-  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up the axe');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Right-click or press E to pick up the axe',
+  );
 
   await page.keyboard.press('KeyE');
   await expect
@@ -709,7 +712,7 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
   if (spot === undefined) throw new Error('no gather spot in the clearing');
 
   await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
-  await expect(page.locator('.hud-hint')).toContainText('Press E to gather sticks');
+  await expect(page.locator('.hud-hint')).toContainText('Right-click or press E to gather sticks');
 
   // One stick taken, one fewer left in the patch, and a toast to say so.
   const before = spot.remaining;
@@ -822,7 +825,9 @@ test('you can drop sticks to pick up again, or destroy them for good', async ({ 
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.nearbyPile() ?? null))
     .toEqual({ item: 'stick', count: 1 });
-  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up 1 stick');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Right-click or press E to pick up 1 stick',
+  );
   await page.keyboard.press('KeyE');
   await expect.poll(async () => countHeld(page, 'stick')).toBe(held);
   await expect
@@ -1130,7 +1135,9 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
   const rod = pickups.find((entry) => entry.item === 'rod');
   if (rod === undefined) throw new Error('no rod in the clearing');
   await walkWithinReachOf(page, rod.x, rod.z);
-  await expect(page.locator('.hud-hint')).toContainText('Press E to pick up the fishing rod');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Right-click or press E to pick up the fishing rod',
+  );
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1642,7 +1649,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     [spawnSpot.x, spawnSpot.z],
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
-  await expect(page.locator('.hud-hint')).toContainText('Press B to build');
+  await expect(page.locator('.hud-hint')).not.toContainText('Press B to build');
 
   // Opening the menu with only four logs offers the campfire but not the
   // cabin (which costs ten). Picking the unaffordable one still shows its
@@ -1785,7 +1792,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   if (spot === undefined) throw new Error('no flower patch in the clearing');
 
   await walkWithinReachOfGatherSpot(page, spot.x, spot.z);
-  await expect(page.locator('.hud-hint')).toContainText('Press E to gather flowers');
+  await expect(page.locator('.hud-hint')).toContainText('Right-click or press E to gather flowers');
 
   // A lantern is the cheaper of the two decorations, at four - more than
   // one patch may hold, so this walks on to the next once one runs out.
@@ -1826,4 +1833,104 @@ test('you can gather flowers and plant something pretty for the garden', async (
 
   // Nothing thrown while gathering, walking back or planting the lantern.
   expect(errors).toEqual([]);
+});
+
+test.describe('woods interaction polish', () => {
+  // A small drawing buffer keeps interaction checks useful on software-rendered CI.
+  test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
+  test.setTimeout(180_000);
+  test('keeps the controls guide under Settings > Keybindings', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Keybindings' }).click();
+    await expect(page.getByRole('tabpanel')).toContainText('Loot the item under your cursor');
+    await expect(page.getByRole('tabpanel')).toContainText('Dodge roll');
+    await expect(page.getByRole('tabpanel')).toContainText('Cancel placement');
+    await page.getByRole('tab', { name: 'General' }).click();
+    await expect(page.getByRole('tabpanel')).toContainText('Music volume');
+  });
+
+  test('shows a landscape and honest progress before the world is ready', async ({ page }) => {
+    await page.route('**/*.glb', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await route.continue();
+    });
+    await page.goto(`/?renderer=webgl2&world=polish-${Date.now()}`);
+    await page.locator('#home-name').fill('Woodland Wanderer');
+    await page.locator('.home-play').click();
+    const loading = page.getByTestId('loading-screen');
+    await expect(loading).toBeVisible();
+    await expect(loading).toContainText('Entering the woods…');
+    await expect(loading.locator('img')).toBeVisible();
+    const bar = loading.getByRole('progressbar');
+    const progress = Number(await bar.getAttribute('aria-valuenow'));
+    expect(progress).toBeGreaterThanOrEqual(0);
+    expect(progress).toBeLessThan(100);
+    await expect(loading).toBeHidden({ timeout: 120_000 });
+    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Woodland Wanderer');
+    await expect(page.locator('.hud-curtain')).not.toContainText('WASD');
+  });
+
+  test('right-clicks world loot and keeps camera drags from looting', async ({ page }) => {
+    await page.goto(`/?renderer=webgl2&world=polish-${Date.now()}`);
+    await waitForConnected(page);
+    await page.locator('.hud-curtain').click();
+    const bag = await page.evaluate(() =>
+      window.acornDebug?.pickups().find((pickup) => pickup.item === 'bag'),
+    );
+    if (bag === undefined) throw new Error('No bag in the clearing');
+    await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [bag.x, bag.z]);
+    await walkWithinReachOf(page, bag.x, bag.z);
+    const point = await page.evaluate(
+      ([x, z]) => window.acornDebug?.screenPoint(x!, 0.12, z!),
+      [bag.x, bag.z],
+    );
+    if (point == null) throw new Error('Bag is off screen');
+    await page.mouse.move(point.x, point.y);
+    await expect(page.locator('.loot-hover')).toContainText('Right-click to loot');
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(point.x + 30, point.y, { steps: 3 });
+    await page.mouse.up({ button: 'right' });
+    expect(await countHeld(page, 'bag')).toBe(0);
+    await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [bag.x, bag.z]);
+    await page.waitForTimeout(250);
+    const restoredPoint = await page.evaluate(
+      ([x, z]) => window.acornDebug?.screenPoint(x!, 0.12, z!),
+      [bag.x, bag.z],
+    );
+    if (restoredPoint == null) throw new Error('Bag is off screen after turning the camera');
+    await page.mouse.move(restoredPoint.x, restoredPoint.y);
+    await expect(page.locator('.loot-hover')).toContainText('Right-click to loot');
+    await page.mouse.click(restoredPoint.x, restoredPoint.y, { button: 'right' });
+    await expect.poll(() => countHeld(page, 'bag')).toBe(1);
+    await expect(page.locator('.loot-hover')).toBeHidden();
+  });
+
+  test('preserves inventory right-click menus', async ({ page }) => {
+    await page.goto(`/?renderer=webgl2&world=inventory-polish-${Date.now()}`);
+    await waitForConnected(page);
+    await page.locator('.hud-curtain').click();
+    const patch = await page.evaluate(() =>
+      window.acornDebug?.gatherSpots().find((spot) => spot.item === 'stick' && spot.remaining > 0),
+    );
+    if (patch === undefined) throw new Error('No stick patch in the clearing');
+    await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [patch.x, patch.z]);
+    // Hold through rendered frames on slow software GPUs, rather than sending
+    // movement taps that can both arrive between two animation frames.
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('KeyE');
+    try {
+      await expect
+        .poll(() => countHeld(page, 'stick'), { timeout: 60_000, intervals: [1000] })
+        .toBeGreaterThan(0);
+    } finally {
+      await page.keyboard.up('KeyW');
+      await page.keyboard.up('KeyE');
+    }
+    await page.keyboard.press('KeyI');
+    await page.getByTestId('pack-slot-stick').click({ button: 'right' });
+    await expect(page.locator('.slot-menu')).toBeVisible();
+    await expect(page.getByTestId('slot-menu-drop-one')).toBeVisible();
+    await expect(page.getByTestId('slot-menu-destroy')).toBeVisible();
+  });
 });

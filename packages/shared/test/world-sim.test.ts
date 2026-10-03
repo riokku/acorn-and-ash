@@ -4523,3 +4523,110 @@ describe('moves in the world', () => {
     expect(sim.drainGestureEvents()).toEqual([{ netId: 1, gesture: Gesture.PickUp, item: 'bag' }]);
   });
 });
+
+describe('targeted right-click looting', () => {
+  const OPEN_GROUND = { x: 8, z: 8 };
+  it('takes the clicked pile even when another pile is closer', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: OPEN_GROUND.x, y: 0, z: OPEN_GROUND.z }, 0);
+    sim.restoreDroppedPiles(
+      [
+        {
+          id: 10,
+          item: 'stick',
+          count: 1,
+          x: OPEN_GROUND.x,
+          z: OPEN_GROUND.z,
+          droppedAtMs: clockMs,
+        },
+        {
+          id: 11,
+          item: 'log',
+          count: 3,
+          x: OPEN_GROUND.x + 1,
+          z: OPEN_GROUND.z,
+          droppedAtMs: clockMs,
+        },
+      ],
+      clockMs,
+    );
+    sim.requestLoot(1, { kind: 'pile', id: 11 });
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(3);
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(0);
+    expect(sim.droppedPilesList().map((pile) => pile.id)).toEqual([10]);
+  });
+  it('never falls back to nearby loot for an unknown or distant target', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: AXE_STUMP.x, y: 0, z: AXE_STUMP.z }, 0);
+    sim.requestLoot(1, { kind: 'pickup', id: 65535 });
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+    sim.placePlayer(1, { x: OPEN_GROUND.x, y: 0, z: OPEN_GROUND.z }, 0);
+    sim.requestLoot(1, { kind: 'pickup', id: AXE_PICKUP_ID });
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+  });
+  it('collects a world pickup only once across competing players', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.addPlayer(2);
+    for (const id of [1, 2]) {
+      sim.placePlayer(id, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+      sim.requestLoot(id, { kind: 'pickup', id: AXE_PICKUP_ID });
+    }
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'axe') + countOf(sim.inventoryOf(2), 'axe')).toBe(1);
+    expect(sim.drainPickupEvents()).toHaveLength(1);
+  });
+  it('gathers exactly one from a clicked patch and respects gathering cooldown', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    const patch = sim.gatherPatchesList().find((entry) => entry.item === 'stick')!;
+    sim.placePlayer(1, { x: patch.x, y: 0, z: patch.z }, 0);
+    sim.requestLoot(1, { kind: 'patch', id: patch.id });
+    sim.step(tickClock());
+    sim.requestLoot(1, { kind: 'patch', id: patch.id });
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'stick')).toBe(1);
+    expect(sim.gatherPatchesList().find((entry) => entry.id === patch.id)?.remaining).toBe(
+      patch.remaining - 1,
+    );
+  });
+  it('reports a full pack without eating equipped food or collecting nearby loot', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      netId: 1,
+      x: OPEN_GROUND.x,
+      y: 0,
+      z: OPEN_GROUND.z,
+      facingYaw: 0,
+      hunger: 30,
+      equippedItem: 'perch',
+      items: [
+        { item: 'log', count: 50 },
+        { item: 'perch', count: 10 },
+      ],
+    });
+    sim.restoreDroppedPiles(
+      [{ id: 10, item: 'log', count: 1, x: OPEN_GROUND.x, z: OPEN_GROUND.z, droppedAtMs: clockMs }],
+      clockMs,
+    );
+    sim.requestLoot(1, { kind: 'pile', id: 10 });
+    sim.step(tickClock());
+    expect(sim.drainPickupRefusals()).toEqual([{ netId: 1, item: 'log', reason: 'full' }]);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(10);
+    expect(sim.droppedPilesList()).toHaveLength(1);
+  });
+  it('forgets queued loot when control is handed to a new connection', () => {
+    const sim = createWorld();
+    sim.addPlayer(1);
+    sim.placePlayer(1, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+    sim.requestLoot(1, { kind: 'pickup', id: AXE_PICKUP_ID });
+    sim.handOver(1);
+    sim.step(tickClock());
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
+  });
+});

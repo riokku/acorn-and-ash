@@ -1,4 +1,5 @@
 import { createWorld, type Entity, type World } from 'koota';
+import type { LootRequest } from '../net/messages';
 
 import {
   ANIMAL_RESPAWN_SECONDS,
@@ -708,6 +709,7 @@ interface PlayerRuntime {
    * to track here the way there is for a swing.
    */
   pendingBuild: BuildRequest | null;
+  pendingLoot: LootRequest | null;
   /** Their line in the water, if they have one out. */
   cast: Cast | null;
   lastProcessedSeq: number;
@@ -1067,6 +1069,7 @@ export class WorldSimulation {
       interactWasHeld: false,
       pickupRefused: false,
       pendingBuild: null,
+      pendingLoot: null,
       cast: null,
       lastProcessedSeq: 0,
       droppedInputs: 0,
@@ -1088,6 +1091,19 @@ export class WorldSimulation {
       space: home?.id ?? OUTDOORS,
       doorCooldownTicks: 0,
     });
+  }
+
+  /** Ask for a specific loot target, validated at the next simulation tick. */
+  requestLoot(netId: number, request: LootRequest): void {
+    const runtime = this.players.get(netId);
+    if (
+      runtime === undefined ||
+      !Number.isInteger(request.id) ||
+      request.id < 0 ||
+      request.id > 65535
+    )
+      return;
+    runtime.pendingLoot = request;
   }
 
   /** Ask to build something at a particular spot, next tick. */
@@ -1113,6 +1129,7 @@ export class WorldSimulation {
     runtime.swingWasHeld = false;
     runtime.interactWasHeld = false;
     runtime.pickupRefused = false;
+    runtime.pendingLoot = null;
   }
 
   removePlayer(netId: number): boolean {
@@ -1315,7 +1332,21 @@ export class WorldSimulation {
         // and the bed, and your own pack, to eat from. Food picked out and
         // room for it comes first, even beside them: that is what it was
         // picked out for.
-        if (wantsToInteract && runtime.space !== OUTDOORS) {
+        const loot = runtime.pendingLoot;
+        runtime.pendingLoot = null;
+        if (loot !== null) {
+          if (
+            runtime.space === OUTDOORS &&
+            isFreeToInteract(runtime.action) &&
+            runtime.cast === null &&
+            runtime.health > 0
+          ) {
+            runtime.pickupRefused = false;
+            if (loot.kind === 'pickup') this.tryPickup(runtime, scratch.position, loot.id);
+            if (loot.kind === 'pile') this.tryPickUpPile(runtime, scratch.position, loot.id);
+            if (loot.kind === 'patch') this.tryGather(runtime, scratch.position, loot.id);
+          }
+        } else if (wantsToInteract && runtime.space !== OUTDOORS) {
           const place = wantsToToggleCampfire
             ? restingPlaceInReach(scratch.position.x, scratch.position.z)
             : null;
@@ -1919,9 +1950,13 @@ export class WorldSimulation {
    * it in the same tick. Returns whether it claimed the interaction, so the caller can fall
    * back to something else the same button might mean.
    */
-  private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
-    const pickup = pickupInReach(position, this.clearing.pickups, (id) =>
-      this.takenPickups.has(id),
+  private tryPickup(runtime: PlayerRuntime, position: Readonly<Vec3>, targetId?: number): boolean {
+    const pickup = pickupInReach(
+      position,
+      targetId === undefined
+        ? this.clearing.pickups
+        : this.clearing.pickups.filter((pickup) => pickup.id === targetId),
+      (id) => this.takenPickups.has(id),
     );
     if (pickup === null) return false;
     if (addItem(runtime.inventory, pickup.item) === 0)
@@ -1950,10 +1985,16 @@ export class WorldSimulation {
    * much of it as fits, leaving the rest lying there. Returns whether
    * the pile claimed the interaction, including a capacity refusal.
    */
-  private tryPickUpPile(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+  private tryPickUpPile(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    targetId?: number,
+  ): boolean {
     const pile = droppedPileInReach(
       position,
-      this.droppedPiles.filter((p) => !this.pendingPiles.has(p.id)),
+      this.droppedPiles.filter(
+        (p) => !this.pendingPiles.has(p.id) && (targetId === undefined || p.id === targetId),
+      ),
     );
     if (pile === null) return false;
     const taken = addItem(runtime.inventory, pile.item, pile.count);
@@ -1983,8 +2024,11 @@ export class WorldSimulation {
    * Taking the last one leaves the patch picked clean until it grows back
    * somewhere else (see `regrowPatches`). A nearby patch claims E even on cooldown.
    */
-  private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
-    const patch = gatherSpotInReach(position, this.patches);
+  private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>, targetId?: number): boolean {
+    const patch = gatherSpotInReach(
+      position,
+      targetId === undefined ? this.patches : this.patches.filter((patch) => patch.id === targetId),
+    );
     if (patch === null) return false;
     if (roomFor(runtime.inventory, patch.item) === 0) return this.refusePickup(runtime, patch.item);
     if (runtime.swingCooldownTicks > 0) return true;

@@ -39,7 +39,7 @@ export default defineConfig({
         launchOptions: {
           // Software rendering, because CI machines have no GPU. The point of
           // these tests is that the game runs, not how fast it draws.
-          args: ['--enable-unsafe-swiftshader', '--use-gl=swiftshader'],
+          args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'],
           // Escape hatch for machines that already have a browser installed
           // somewhere Playwright would not look for it.
           ...(process.env.PLAYWRIGHT_CHROMIUM_PATH

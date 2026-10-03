@@ -33,6 +33,7 @@ export const ClientMessageType = {
   UseItem: 0x06,
   SetDoorLock: 0x07,
   Discard: 0x08,
+  Loot: 0x09,
 } as const;
 
 /** What the server says back. */
@@ -164,6 +165,15 @@ export interface DiscardMessage {
   readonly destroy: boolean;
 }
 
+export interface LootRequest {
+  readonly kind: 'pickup' | 'pile' | 'patch';
+  readonly id: number;
+}
+
+export interface LootMessage extends LootRequest {
+  readonly type: 'loot';
+}
+
 export type ClientMessage =
   | InputBundleMessage
   | PingMessage
@@ -172,7 +182,8 @@ export type ClientMessage =
   | HelloMessage
   | UseItemMessage
   | SetDoorLockMessage
-  | DiscardMessage;
+  | DiscardMessage
+  | LootMessage;
 
 export interface WelcomeMessage {
   readonly type: 'welcome';

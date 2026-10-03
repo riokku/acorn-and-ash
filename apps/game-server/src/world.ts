@@ -266,6 +266,10 @@ export class World extends DurableObject<WorldEnv> {
       this.announceCrafting(simulation);
       return;
     }
+    if (decoded.type === 'loot') {
+      simulation.requestLoot(attachment.netId, decoded);
+      return;
+    }
     if (decoded.type === 'build') {
       // Unlike crafting this still depends on where the player is - the spot
       // has to be in reach - so it waits for the next tick rather than

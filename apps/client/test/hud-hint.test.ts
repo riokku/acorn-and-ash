@@ -18,11 +18,16 @@ const BASE_STATE: HudState = {
   correctionCm: 0,
   playing: true,
   ready: true,
+  loadingProgress: 100,
+  loadingStage: 'Your forest is ready',
+  loadingError: null,
   carrying: [],
   equippedItem: null,
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
   nearbyItem: null,
+  hoveredLoot: null,
+  interactionNote: null,
   nearbyPile: null,
   nearGatherSpot: null,
   nearBuriedCache: false,
@@ -117,7 +122,7 @@ describe('the hint along the bottom', () => {
     };
     // Two buildable kinds exist now, so the hint no longer picks one by name -
     // the menu is where that choice happens.
-    expect(hint(state)).toBe('Press B to build');
+    expect(hint(state)).toBe('');
   });
 
   it('walks you through the build menu once it is open, ahead of everything else', () => {
@@ -175,7 +180,7 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'bag', count: 1 }],
       nearGatherSpot: 'stick',
     };
-    expect(hint(state)).toBe('Press E to gather sticks');
+    expect(hint(state)).toBe('Right-click or press E to gather sticks');
   });
 
   it('names flowers when a flower patch is the one within reach', () => {
@@ -184,17 +189,17 @@ describe('the hint along the bottom', () => {
       carrying: [{ item: 'bag', count: 1 }],
       nearGatherSpot: 'flower',
     };
-    expect(hint(state)).toBe('Press E to gather flowers');
+    expect(hint(state)).toBe('Right-click or press E to gather flowers');
   });
 
   it('offers a patch with no bag at all - six slots come before any bag', () => {
     const state: HudState = { ...BASE_STATE, carrying: [], nearGatherSpot: 'stick' };
-    expect(hint(state)).toBe('Press E to gather sticks');
+    expect(hint(state)).toBe('Right-click or press E to gather sticks');
   });
 
   it('offers a pickup with no bag at all', () => {
     const state: HudState = { ...BASE_STATE, carrying: [], nearbyItem: 'axe' };
-    expect(hint(state)).toBe('Press E to pick up the axe');
+    expect(hint(state)).toBe('Right-click or press E to pick up the axe');
   });
 
   it('says the pack is full, rather than offering a pickup there is no slot for', () => {
@@ -227,7 +232,7 @@ describe('the hint along the bottom', () => {
       ],
       nearGatherSpot: 'stick',
     };
-    expect(hint(state)).toBe('Press E to gather sticks');
+    expect(hint(state)).toBe('Right-click or press E to gather sticks');
   });
 
   it('says only one is ever carried, rather than offering a second axe', () => {
@@ -248,22 +253,22 @@ describe('the hint along the bottom', () => {
       ],
       nearbyItem: 'axe',
     };
-    expect(hint(state)).toBe('Press E to pick up the axe');
+    expect(hint(state)).toBe('Right-click or press E to pick up the axe');
   });
 
   it('offers to pick up something dropped, saying how many', () => {
     const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'stick', count: 3 } };
-    expect(hint(state)).toBe('Press E to pick up 3 sticks');
+    expect(hint(state)).toBe('Right-click or press E to pick up 3 sticks');
   });
 
   it('names one dropped thing the same way the toast does', () => {
     const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'flower', count: 1 } };
-    expect(hint(state)).toBe('Press E to pick up 1 flower');
+    expect(hint(state)).toBe('Right-click or press E to pick up 1 flower');
   });
 
   it('calls a dropped tool "the" tool, since there is only ever one', () => {
     const state: HudState = { ...BASE_STATE, nearbyPile: { item: 'axe', count: 1 } };
-    expect(hint(state)).toBe('Press E to pick up the axe');
+    expect(hint(state)).toBe('Right-click or press E to pick up the axe');
   });
 
   it('reaches for something dropped before a patch, the same order as the server', () => {
@@ -272,7 +277,7 @@ describe('the hint along the bottom', () => {
       nearbyPile: { item: 'flower', count: 2 },
       nearGatherSpot: 'stick',
     };
-    expect(hint(state)).toBe('Press E to pick up 2 flowers');
+    expect(hint(state)).toBe('Right-click or press E to pick up 2 flowers');
   });
 
   it('reaches for something lying in the clearing before anything dropped', () => {
@@ -281,7 +286,7 @@ describe('the hint along the bottom', () => {
       nearbyItem: 'rod',
       nearbyPile: { item: 'stick', count: 2 },
     };
-    expect(hint(state)).toBe('Press E to pick up the fishing rod');
+    expect(hint(state)).toBe('Right-click or press E to pick up the fishing rod');
   });
 
   it('says the pack is full, rather than offering a pile there is no slot for', () => {
@@ -314,7 +319,7 @@ describe('the hint along the bottom', () => {
       nearBuriedCache: true,
       nearGatherSpot: 'stick',
     };
-    expect(hint(state)).toBe('Press E to gather sticks');
+    expect(hint(state)).toBe('Right-click or press E to gather sticks');
   });
 
   it('offers to light an unlit campfire within reach', () => {
