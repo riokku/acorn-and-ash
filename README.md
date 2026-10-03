@@ -783,3 +783,9 @@ licence forbids redistribution.
 | **P4 Danger**  | Combat, creatures, knockout and buried items                              | Nights feel tense but fair                                                     |
 | P5 Together    | Multiplayer at scale                                                      | 50 bots plus 10 people in one world stay smooth                                |
 | P6 Launch      | Polish and public release                                                 | Live and linked from itch.io                                                   |
+
+Forest sounds follow the ground underfoot: soft grass, damp forest litter,
+worn soil and indoor wood. Nearby trees carry occasional daytime birds and
+quiet canopy rustles with directional sound. Sound effects settings also
+control this atmosphere. The [Pacific Northwest tree direction](docs/art/pacific-northwest-trees.md)
+recommends fir, cedar and spruce silhouettes for a future art pass.
