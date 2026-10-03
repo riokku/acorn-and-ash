@@ -857,3 +857,13 @@ The woodland now uses Douglas-fir, western redcedar and Sitka spruce models.
 Most trees are 10–21 metres tall, with a mature mix reaching 32 metres in the
 clearing's tree line and wilderness. Taller trees take longer to fall;
 their wood still drops within reach. Faraway trees use simpler meshes.
+
+### Forest gameplay loop
+
+The next playable stages are recorded in [the gameplay-loop roadmap](docs/gameplay-loop-roadmap.md).
+Exploration skeleton encounters add trail wanderers, guarded ruins and night-only
+patrols alongside existing raids. Nearby fighters who contributed damage get
+independent protected housing-blueprint rewards. Each missed eligible kill raises
+the chance from 30% by 15 percentage points, guaranteeing the sixth; progress and
+reward ownership persist per character/world. See decision 0074. Art previews:
+`?gallery=ruins` and `?gallery=patrolTrail`.

@@ -1,6 +1,7 @@
 import { createRng, hashSeed } from '../rng';
 import {
-  BLUEPRINT_DROP_CHANCE,
+  blueprintDropChance,
+  BLUEPRINT_MAX_MISSES,
   HOME_SKILL_MASK,
   HOME_TIERS,
   blueprintHome,
@@ -111,6 +112,7 @@ import {
 } from '../world/home';
 import { castLanding, overlapsWater } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
+import { buildEncounterSites, encounterColliders, type EncounterSite } from '../world/encounters';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
 import {
   fleeDirection,
@@ -253,6 +255,7 @@ export interface WorldSimulationOptions {
    * runs, so a raid can be waited for rather than waited out.
    */
   readonly raidIntervalSeconds?: number;
+  readonly forestEncounters?: boolean;
 }
 
 /**
@@ -338,6 +341,7 @@ export interface PersistedPlayer {
    */
   readonly explored?: Uint8Array | null;
   readonly homeSkills?: number;
+  readonly blueprintMisses?: number;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -688,6 +692,7 @@ export interface PersistedPile {
   readonly x: number;
   readonly z: number;
   readonly droppedAtMs: number;
+  readonly ownerKey?: string;
 }
 
 /** A tree that has come back. */
@@ -717,6 +722,7 @@ interface PlayerRuntime {
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
   homeSkills: number;
+  blueprintMisses: number;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -853,6 +859,7 @@ export class WorldSimulation {
    * `clearing` it has no state worth keeping past construction.
    */
   readonly wilderness: Wilderness;
+  readonly encounterSites: readonly EncounterSite[];
   readonly collision: CollisionWorld;
   /**
    * Inside a home. Every room is laid out the same, so one set of walls and
@@ -944,6 +951,7 @@ export class WorldSimulation {
   private nextDroppedPileId = 1;
   /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
   private readonly pileChanges = new Set<number>();
+  private readonly blueprintProgressChanges = new Set<number>();
   private readonly discardEvents: DiscardedEvent[] = [];
   /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
   private readonly equipEvents: number[] = [];
@@ -989,9 +997,16 @@ export class WorldSimulation {
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
+    this.encounterSites = buildEncounterSites(
+      options.seed,
+      terrain,
+      [...this.clearing.colliders, ...this.wilderness.colliders],
+      this.clearing.water,
+    );
     this.collision = createCollisionWorld(terrain, [
       ...this.clearing.colliders,
       ...this.wilderness.colliders,
+      ...encounterColliders(this.encounterSites, terrain),
     ]);
     this.standing = [...this.clearing.props];
     this.world = createWorld();
@@ -1027,18 +1042,35 @@ export class WorldSimulation {
           const runtime = this.players.get(netId);
           if (runtime === undefined) return;
           const item = nextBlueprint(runtime.homeSkills);
-          if (
-            item === null ||
-            createRng(hashSeed(this.seed, 'home-blueprint', this.tick, raiderId)).nextFloat() >=
-              BLUEPRINT_DROP_CHANCE
-          )
-            return;
-          this.dropPile(item, 1, position, facingYaw, this.nowMs);
+          if (item === null) return;
+          const roll = createRng(
+            hashSeed(this.seed, 'home-blueprint', this.tick, raiderId, netId),
+          ).nextFloat();
+          if (roll < blueprintDropChance(runtime.blueprintMisses)) {
+            runtime.blueprintMisses = 0;
+            const spot = dropSpot(position, facingYaw);
+            const clear = this.dropSpotIsClear(spot.x, spot.z);
+            this.addPile(
+              item,
+              1,
+              clear ? spot.x : position.x,
+              clear ? spot.z : position.z,
+              this.nowMs,
+              false,
+              this.rewardOwnerKey(runtime),
+            );
+          } else {
+            runtime.blueprintMisses = Math.min(BLUEPRINT_MAX_MISSES, runtime.blueprintMisses + 1);
+          }
+          this.blueprintProgressChanges.add(netId);
         },
         dropLoot: (item, count, position, facingYaw) =>
           this.dropPile(item, count, position, facingYaw, this.nowMs),
       },
-      { intervalMinSeconds: options.raidIntervalSeconds },
+      {
+        intervalMinSeconds: options.raidIntervalSeconds,
+        encounterSites: options.forestEncounters === true ? this.encounterSites : [],
+      },
     );
   }
 
@@ -1150,6 +1182,9 @@ export class WorldSimulation {
         ((saved?.homeSkills ?? 0) |
           (home !== null && isHomeKind(home.kind) ? (1 << HOME_TIERS.indexOf(home.kind)) - 1 : 0)) &
         HOME_SKILL_MASK,
+      blueprintMisses: Number.isFinite(saved?.blueprintMisses)
+        ? Math.min(BLUEPRINT_MAX_MISSES, Math.max(0, Math.floor(saved?.blueprintMisses ?? 0)))
+        : 0,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -2157,7 +2192,10 @@ export class WorldSimulation {
     const pile = droppedPileInReach(
       position,
       this.droppedPiles.filter(
-        (p) => !this.pendingPiles.has(p.id) && (targetId === undefined || p.id === targetId),
+        (p) =>
+          !this.pendingPiles.has(p.id) &&
+          (p.ownerKey === undefined || p.ownerKey === this.rewardOwnerKey(runtime)) &&
+          (targetId === undefined || p.id === targetId),
       ),
     );
     if (pile === null) return false;
@@ -2368,7 +2406,7 @@ export class WorldSimulation {
     const z = landsInFront ? ahead.z : position.z;
 
     const existing = pileToMergeInto(
-      this.droppedPiles.filter((p) => !this.pendingPiles.has(p.id)),
+      this.droppedPiles.filter((p) => !this.pendingPiles.has(p.id) && p.ownerKey === undefined),
       item,
       count,
       x,
@@ -2395,6 +2433,7 @@ export class WorldSimulation {
     z: number,
     availableAtMs: number,
     pending = false,
+    ownerKey?: string,
   ): void {
     if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
       const oldest = this.droppedPiles.shift();
@@ -2410,6 +2449,7 @@ export class WorldSimulation {
       x,
       z,
       droppedAtMs: availableAtMs,
+      ...(ownerKey === undefined ? {} : { ownerKey }),
     };
     this.droppedPiles.push(pile);
     if (pending) this.pendingPiles.add(pile.id);
@@ -3638,16 +3678,46 @@ export class WorldSimulation {
   }
 
   /** Everything lying where somebody dropped it, as a browser is told it. */
-  droppedPilesList(): DroppedPileView[] {
-    return this.droppedPiles.filter((pile) => !this.pendingPiles.has(pile.id)).map(pileView);
+  droppedPilesList(viewerNetId?: number): DroppedPileView[] {
+    const viewer = viewerNetId === undefined ? undefined : this.players.get(viewerNetId);
+    return this.droppedPiles
+      .filter(
+        (pile) =>
+          !this.pendingPiles.has(pile.id) &&
+          (viewerNetId === undefined ||
+            pile.ownerKey === undefined ||
+            (viewer !== undefined && pile.ownerKey === this.rewardOwnerKey(viewer))),
+      )
+      .map(pileView);
+  }
+
+  private rewardOwnerKey(runtime: PlayerRuntime): string {
+    return runtime.playerKey ?? `session:${runtime.netId}`;
+  }
+
+  encounterRestState(): [number, number][] {
+    return this.raids.encounterRestState();
+  }
+  restoreEncounterRest(saved: readonly [number, number][]): void {
+    this.raids.restoreEncounterRest(saved);
+  }
+
+  blueprintMissesOf(netId: number): number {
+    return this.players.get(netId)?.blueprintMisses ?? 0;
+  }
+
+  drainBlueprintProgressChanges(): number[] {
+    const ids = [...this.blueprintProgressChanges];
+    this.blueprintProgressChanges.clear();
+    return ids;
   }
 
   /** One pile as it goes into storage, or null if it is gone - picked up or faded. */
   persistedPile(id: number): PersistedPile | null {
     const pile = this.droppedPiles.find((candidate) => candidate.id === id);
     if (pile === undefined) return null;
-    const { item, count, x, z, droppedAtMs } = pile;
-    return { id, item, count, x, z, droppedAtMs };
+    const { item, count, x, z, droppedAtMs, ownerKey } = pile;
+    return { id, item, count, x, z, droppedAtMs, ...(ownerKey === undefined ? {} : { ownerKey }) };
   }
 
   /** Put dropped piles back as they were after the world wakes from storage. */
@@ -3751,6 +3821,7 @@ export class WorldSimulation {
         equippedItem: runtime.equippedItem,
         explored: runtime.explored,
         homeSkills: runtime.homeSkills,
+        blueprintMisses: runtime.blueprintMisses,
       });
     }
     return saved;

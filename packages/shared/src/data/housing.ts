@@ -12,6 +12,15 @@ export type BlueprintItem = keyof typeof HOME_BLUEPRINTS;
 /** Three permanent unlocks. Tent building is known from the start. */
 export const HOME_SKILL_MASK = 7;
 export const BLUEPRINT_DROP_CHANCE = 0.3;
+export const BLUEPRINT_CHANCE_INCREMENT = 0.15;
+export const BLUEPRINT_MAX_MISSES = 5;
+/** A sixth eligible kill cannot miss. The streak resets only when a drop is made. */
+export function blueprintDropChance(misses: number): number {
+  const streak = Number.isFinite(misses) ? Math.max(0, Math.floor(misses)) : 0;
+  return streak >= BLUEPRINT_MAX_MISSES
+    ? 1
+    : BLUEPRINT_DROP_CHANCE + streak * BLUEPRINT_CHANCE_INCREMENT;
+}
 export function isHomeKind(kind: BuildableKindId): kind is HomeKind {
   return HOME_TIERS.includes(kind as HomeKind);
 }
