@@ -8,6 +8,7 @@ declare global {
       combatMove(): { kind: number; age: number; grounded: boolean };
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
       weatherEffects(): { rainDrops: number; fireflies: number };
+      snowOnGround(): number;
       buildBoundaryVisible(): boolean;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };

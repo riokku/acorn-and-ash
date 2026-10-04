@@ -12,6 +12,7 @@ import {
   type Wilderness,
 } from '@acorn/shared';
 import { createGroundShader } from '../art/ground-shading';
+import { seasonUniforms } from '../art/season-uniforms';
 import { seededRandom, worldFbm } from '../art/noise';
 
 const TILE = 12;
@@ -74,11 +75,14 @@ export function createGrass(
   const shade = sin(root.x.mul(0.16).add(root.z.mul(0.21)))
     .mul(0.5)
     .add(0.5);
-  material.colorNode = mix(
+  // Tinted by the season, and frosted over in winter: pale tufts poking out of
+  // the snow rather than green ones.
+  const bladeColour = mix(
     vec3(0.14, 0.25, 0.08),
     vec3(0.43, 0.57, 0.22),
     tip.mul(0.6).add(shade.mul(0.25)),
-  );
+  ).mul(seasonUniforms.blades);
+  material.colorNode = mix(bladeColour, vec3(0.82, 0.87, 0.9), seasonUniforms.snow.mul(0.8));
   const mesh = new THREE.InstancedMesh(geometry, material, MAX_CLUMPS);
   mesh.name = 'wind-grass';
   mesh.count = 0;

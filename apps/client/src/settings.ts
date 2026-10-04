@@ -1,3 +1,5 @@
+import { parseSeason, type SeasonId } from '@acorn/shared';
+
 /** The world to join when nothing says otherwise. */
 export const DEFAULT_WORLD_ID_FALLBACK = 'home-clearing';
 
@@ -8,6 +10,12 @@ export interface Settings {
    * compared without changing browsers. Set with `?renderer=webgl2`.
    */
   readonly forceWebGL: boolean;
+  /**
+   * Show the world in this season whatever the calendar says, so a season can
+   * be looked at without waiting up to six hours for it. Set with
+   * `?season=winter`. Only this browser's view changes (decision 0089).
+   */
+  readonly season: SeasonId | undefined;
 }
 
 /** Read settings from the build's environment, overridden by the query string. */
@@ -16,5 +24,6 @@ export function readSettings(search: string): Settings {
   return {
     worldId: params.get('world') ?? import.meta.env.VITE_WORLD_ID ?? undefined,
     forceWebGL: params.get('renderer') === 'webgl2',
+    season: parseSeason(params.get('season')),
   };
 }

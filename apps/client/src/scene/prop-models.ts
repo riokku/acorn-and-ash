@@ -1,3 +1,5 @@
+import * as THREE from 'three/webgpu';
+
 import { PROP_KINDS, propHeight, type PropKindId } from '@acorn/shared';
 
 import { createRockMaterial, paintedMaterial } from '../art/materials';
@@ -43,6 +45,24 @@ let preloadPromise: Promise<void> | null = null;
 export function preloadPropModels(): Promise<void> {
   preloadPromise ??= loadAll();
   return preloadPromise;
+}
+
+/**
+ * The needle and leaf materials of the real tree models, near and distant
+ * alike. Each is shared by every tree of its kind, so changing one recolours
+ * the whole forest at once, which is how the seasons tint the trees.
+ */
+export function treeFoliageMaterials(): THREE.MeshStandardMaterial[] {
+  const found = new Set<THREE.MeshStandardMaterial>();
+  for (const parts of [...modelParts, ...distantParts]) {
+    const [id, list] = parts;
+    if (PROP_KINDS[id].shape.family !== 'tree') continue;
+    for (const part of list) {
+      if (/bark/i.test(part.material.name)) continue;
+      if (part.material instanceof THREE.MeshStandardMaterial) found.add(part.material);
+    }
+  }
+  return [...found];
 }
 
 /** The real model's parts for this kind, or undefined to keep the placeholder. */

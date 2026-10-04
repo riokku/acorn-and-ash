@@ -111,7 +111,9 @@ import {
   isLeavingRoom,
   worldMoveDirection,
   buildWilderness,
+  calendarAt,
   castLanding,
+  clockShiftForSeason,
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
@@ -122,6 +124,7 @@ import {
   gatherSpotInReach,
   isDiscardable,
   isNight,
+  seasonMix,
   exploredFraction,
   nearestBuriedCache,
   nearestCampfire,
@@ -144,10 +147,12 @@ import {
   type Footprint,
   type BuriedCacheView,
   type CacheEvent,
+  type Calendar,
   type CharacterId,
   type Clearing,
   type CollisionWorld,
   type CraftedEvent,
+  type SeasonId,
   type CookedEvent,
   type ActionContext,
   type DiscardedEvent,
@@ -231,8 +236,10 @@ import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { createFox, type Fox } from './scene/fox';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
+import { seasonUniforms } from './art/season-uniforms';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
+import { createSeasonRig } from './scene/seasons';
 import { FireLights } from './scene/fire-light';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
@@ -488,6 +495,8 @@ export interface GameDebug {
   grassClumps(): number;
   combatMove(): { kind: number; age: number; grounded: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
+  /** How much of the ground and grass is under snow right now, from 0 to 1. */
+  snowOnGround(): number;
   buildBoundaryVisible(): boolean;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
@@ -616,6 +625,8 @@ export interface GameOptions {
   /** A multiplier on `BASE_MOUSE_SENSITIVITY`, from the Settings menu. */
   readonly lookSensitivity: number;
   readonly grassDensity: number;
+  /** Look at the world in this season whatever the calendar says: `?season=` in the address, for testing. */
+  readonly season?: SeasonId;
 }
 
 /** Everything that makes up a running game. */
@@ -760,6 +771,9 @@ export class Game {
   private weatherSeed = 0;
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
   private weatherCloud = 0;
+  private readonly seasons = createSeasonRig();
+  /** How far the calendar is pushed when a season was asked for in the address, once worked out. */
+  private seasonShiftMs: number | null = null;
   /** The lights every campfire, lantern and torch borrows (see fire-light.ts). */
   private fireLights: FireLights | null = null;
   /** The latest time the server told us, and our own clock when it told us - together, an estimate of the server's clock right now. */
@@ -1236,6 +1250,7 @@ export class Game {
         grounded: this.localPlayer?.motion.grounded ?? true,
       }),
       weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
+      snowOnGround: () => seasonUniforms.snow.value,
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
         this.remotePlayers.netIds().map((netId) => {
@@ -2200,6 +2215,7 @@ export class Game {
       const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
       this.weatherSeed = seed;
+      this.seasonShiftMs = null;
       this.weatherArt?.dispose();
       this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.weatherArt.group);
@@ -2705,6 +2721,7 @@ export class Game {
     const weather = forestWeather(this.weatherSeed, weatherNow);
     this.weatherCloud +=
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
+    this.seasons.apply(seasonMix(this.currentCalendar()), this.daylight);
     this.daylight?.update(dayProgress(weatherNow), this.weatherCloud);
     this.weatherArt?.update(
       deltaSeconds,
@@ -3436,6 +3453,19 @@ export class Game {
   private syncServerClock(serverTimeMs: number): void {
     this.latestServerTimeMs = serverTimeMs;
     this.latestServerTimeAtMs = performance.now();
+  }
+
+  /**
+   * Where in the year this world is (see decision 0089). Worked out from the
+   * same shared clock as the time of day, so everybody sees the same season;
+   * `?season=` only moves what this one browser shows, by whole days.
+   */
+  private currentCalendar(): Calendar {
+    const now = this.estimatedServerTimeMs();
+    if (this.options.season !== undefined && this.seasonShiftMs === null) {
+      this.seasonShiftMs = clockShiftForSeason(this.weatherSeed, now, this.options.season);
+    }
+    return calendarAt(this.weatherSeed, now + (this.seasonShiftMs ?? 0));
   }
 
   /**
@@ -4401,6 +4431,7 @@ export class Game {
       canDrop: this.space === OUTDOORS,
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
       forestWeather: forestWeather(this.weatherSeed, this.estimatedServerTimeMs()),
+      season: this.currentCalendar(),
       mapOpen: this.mapOpen,
       door: this.doorHint,
       home: this.homeHere(),

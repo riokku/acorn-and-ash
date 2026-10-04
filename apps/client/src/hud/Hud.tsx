@@ -1,7 +1,7 @@
-import { fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
+import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
-import type { ExpeditionRequest } from '@acorn/shared';
+import type { ExpeditionRequest, SeasonId } from '@acorn/shared';
 import { DECORATION_KINDS, isIndoorOnlyKind } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ, isMealItem } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
@@ -148,6 +148,7 @@ export function Hud({
         />
         <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
         <Row label="Time" value={timeOfDay(state)} />
+        <Row label="Season" value={seasonLine(state)} />
         <Row label="Hunger" value={<Hunger state={state} />} />
         <Row label="Health" value={<Health state={state} />} />
       </div>
@@ -1341,6 +1342,20 @@ function timeOfDay(state: HudState): string {
   const time = state.isNight ? 'Night' : 'Day';
   const kind = state.forestWeather?.kind;
   return kind === undefined || kind === 'clear' ? time : `${time} · ${kind}`;
+}
+
+const SEASON_NAMES: Record<SeasonId, string> = {
+  spring: 'Spring',
+  summer: 'Summer',
+  autumn: 'Autumn',
+  winter: 'Winter',
+};
+
+/** "Autumn, day 3 of 6": where in the year the world is. */
+function seasonLine(state: HudState): string {
+  const calendar = state.season;
+  if (calendar === undefined) return '…';
+  return `${SEASON_NAMES[calendar.season]}, day ${calendar.dayOfSeason} of ${DAYS_PER_SEASON}`;
 }
 
 function renderer(state: HudState): string {

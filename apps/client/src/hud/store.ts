@@ -1,7 +1,7 @@
 import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
 import { emptyExpedition, type ExpeditionView } from '@acorn/shared';
 import type { HomeDecoration } from '@acorn/shared';
-import type { ForestWeather } from '@acorn/shared';
+import type { Calendar, ForestWeather } from '@acorn/shared';
 import { NO_MEAL, type MealState } from '@acorn/shared';
 import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
 import type { PickupNotice } from './pickup-notice';
@@ -80,6 +80,8 @@ export interface HudState {
   /** What a nearby patch would gather, if anything is within reach right now. */
   readonly nearGatherSpot: ItemId | null;
   readonly forestWeather?: ForestWeather;
+  /** Where in the year the world is, for the Season line (see decision 0089). */
+  readonly season?: Calendar;
   /** Whether a cache of our own is close enough right now to dig up. */
   readonly nearBuriedCache: boolean;
   /**

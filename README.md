@@ -313,6 +313,21 @@ firelight itself and
 [decision 0062](docs/decisions/0062-tools-held-forward-and-firelight-without-a-freeze.md)
 for why lighting one never freezes the game.
 
+### The seasons
+
+The year turns round spring, summer, autumn and winter, six game days (two
+real hours) to a season, so a full year takes eight hours. Like day and
+night it runs off the server's clock, so everybody in a world sees the same
+season, and each world starts its year on a different day so they are not all
+in step. The HUD's "Season" row says which season it is and which day of it.
+For the last day and a half of a season the forest eases into the next one,
+so it changes colour slowly rather than all at once: the grass turns gold in
+autumn, the sky goes pale and cold in winter, and winter puts snow on the
+ground, the grass and the trees. This first step is how it looks; what each
+season changes in play (what you can gather, which fish bite, how creatures
+behave) comes next. See
+[decision 0089](docs/decisions/0089-seasons.md).
+
 ### Wildlife
 
 A few rabbits - soft-furred, long-eared, with a powder-puff tail - live at fixed spots
@@ -697,6 +712,7 @@ Add these to the end of the URL:
 | ------------------ | --------------------------------------------------- |
 | `?renderer=webgl2` | Force the WebGL 2 fallback, even where WebGPU works |
 | `?world=some-name` | Join a different world                              |
+| `?season=winter`   | See the world in that season, whatever the calendar |
 | `?gallery`         | Look at all of the game's own art, in daylight      |
 
 The gallery also includes `?gallery=tent`, `?gallery=teepee`, and

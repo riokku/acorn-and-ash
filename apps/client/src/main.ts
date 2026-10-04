@@ -67,6 +67,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     identity,
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
     forceWebGL: settings.forceWebGL,
+    season: settings.season,
     lookSensitivity: preferencesNow.lookSensitivity,
     grassDensity: preferencesNow.grassDensity,
   });
