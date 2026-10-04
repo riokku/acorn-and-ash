@@ -1,3 +1,10 @@
+import { createExpeditionBoard } from './scene/expedition-board';
+import {
+  emptyExpedition,
+  expeditionBoardSpot,
+  type ExpeditionRequest,
+  type ExpeditionView,
+} from '@acorn/shared';
 import {
   DECORATION_KINDS,
   isDecorationKind,
@@ -388,16 +395,27 @@ function createBuiltMesh(
   | Fence
   | GardenPath
   | ReturnType<typeof createHomeDecoration> {
+  if (isHomeKind(kind)) {
+    const home =
+      kind === 'tent' || kind === 'teepee'
+        ? createShelter(kind)
+        : kind === 'largeCabin'
+          ? createLargeCabin()
+          : createCabin();
+    const board = createExpeditionBoard(),
+      spot = expeditionBoardSpot({ kind, x: 0, z: 0, yaw: 0 });
+    board.group.position.set(spot.x, 0, spot.z);
+    home.group.add(board.group);
+    const dispose = home.dispose;
+    home.dispose = () => {
+      dispose();
+      board.dispose();
+    };
+    return home;
+  }
   switch (kind) {
     case 'campfire':
       return createCampfire();
-    case 'cabin':
-      return createCabin();
-    case 'tent':
-    case 'teepee':
-      return createShelter(kind);
-    case 'largeCabin':
-      return createLargeCabin();
     case 'flowerBed':
       return createFlowerBed();
     case 'lantern':
@@ -414,6 +432,7 @@ function createBuiltMesh(
     case 'fernLantern':
     case 'moonLantern':
     case 'flowerPlanter':
+    case 'trailPennant':
       return createHomeDecoration(kind);
   }
 }
@@ -665,7 +684,9 @@ export class Game {
   private protectedBuildSites: ProtectedBuildSite[] = [];
   private buildMenuOpen = false;
   private craftMenuOpen = false;
-  private journalTab: 'craft' | 'discoveries' | 'garden' = 'craft';
+  private expedition: ExpeditionView = { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' };
+  private expeditionPendingUntil = 0;
+  private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' = 'craft';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
@@ -1139,6 +1160,7 @@ export class Game {
       limit: 'Your home can hold 16 decorations',
       missing: 'That decoration is no longer here',
       packFull: 'Make room in your backpack before packing this up',
+      recipe: 'Complete three outings to learn the trail pennant recipe',
     }[reason];
   }
   private refreshDecorations(): void {
@@ -1167,6 +1189,7 @@ export class Game {
     );
   }
   pickBuildable(kind: BuildableKindId): void {
+    if (kind === 'trailPennant' && !(this.expedition.cosmetics & 1)) return;
     if (this.space !== OUTDOORS && (!isDecorationKind(kind) || this.homeHere()?.yours !== true))
       return;
     if (this.space === OUTDOORS && isIndoorOnlyKind(kind)) return;
@@ -1572,6 +1595,19 @@ export class Game {
           this.craftingNews = { text: this.decorNote, until: performance.now() + NEWS_MS };
         this.pendingPlacements = [];
         this.refreshDecorations();
+        break;
+      }
+      case 'expedition': {
+        this.expedition = {
+          cycle: message.cycle,
+          completed: message.completed,
+          active: message.active,
+          progress: [...message.progress],
+          cosmetics: message.cosmetics,
+          offers: [...message.offers],
+          notice: message.notice,
+        };
+        this.expeditionPendingUntil = 0;
         break;
       }
       case 'garden': {
@@ -3089,9 +3125,31 @@ export class Game {
     this.options.hud.publish({ craftingNews: text });
   }
 
-  setJournalTab(tab: 'craft' | 'discoveries' | 'garden'): void {
+  chooseExpedition(request: ExpeditionRequest): void {
+    if (this.connection?.sendExpedition(request)) {
+      this.expeditionPendingUntil = performance.now() + 4000;
+      this.options.hud.publish({ expeditionPending: true });
+    }
+  }
+  private nearOwnExpeditionBoard(): boolean {
+    if (this.space !== OUTDOORS) return this.homeHere()?.yours === true;
+    const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
+    const player = this.localPlayer;
+    if (home === undefined || player === null) return false;
+    const spot = expeditionBoardSpot(home);
+    return Math.hypot(player.motion.position.x - spot.x, player.motion.position.z - spot.z) <= 2.5;
+  }
+  setJournalTab(tab: 'craft' | 'discoveries' | 'garden' | 'expeditions'): void {
     this.journalTab = tab;
-    this.options.hud.publish({ journalTab: tab });
+    this.craftMenuOpen = true;
+    this.buildMenuOpen = false;
+    this.inventoryOpen = false;
+    this.options.hud.publish({
+      journalTab: tab,
+      craftMenuOpen: true,
+      buildMenuOpen: false,
+      inventoryOpen: false,
+    });
     if (tab === 'garden') this.connection?.sendGarden({ action: 'inspect' });
   }
   useGarden(request: GardenRequest): void {
@@ -4231,6 +4289,9 @@ export class Game {
       discoveriesClaimed: this.discoveriesClaimed,
       discoverySites: this.discoverySites,
       journalTab: this.journalTab,
+      expedition: this.expedition,
+      expeditionPending: performance.now() < this.expeditionPendingUntil,
+      nearExpeditionBoard: this.nearOwnExpeditionBoard(),
       trackHint:
         this.space === OUTDOORS && player !== null
           ? (() => {

@@ -1,3 +1,4 @@
+import type { ExpeditionRequest, ExpeditionView } from '../sim/expeditions';
 import type { DecorationRequest, DecorationState } from '../sim/decorations';
 import type { MealState } from '../sim/meals';
 import type { HomeSupplies } from '../sim/home-supplies';
@@ -44,6 +45,7 @@ export const ClientMessageType = {
   Chest: 0x0a,
   Garden: 0x0b,
   Decoration: 0x0c,
+  Expedition: 0x0d,
 } as const;
 
 /** What the server says back. */
@@ -89,6 +91,7 @@ export const ServerMessageType = {
   Meal: 0x36,
   Decoration: 0x37,
   RecoveryMarkers: 0x38,
+  Expedition: 0x39,
 } as const;
 
 export const RejectReason = {
@@ -197,6 +200,7 @@ export type ChestMessage = ChestRequest & { readonly type: 'chest' };
 export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
 
 export type ClientMessage =
+  | (ExpeditionRequest & { readonly type: 'expedition' })
   | (DecorationRequest & { readonly type: 'decoration' })
   | (GardenRequest & { readonly type: 'garden' })
   | ChestMessage
@@ -577,6 +581,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | (ExpeditionView & { readonly type: 'expedition' })
   | { readonly type: 'recoveryMarkers'; readonly caches: readonly BuriedCacheView[] }
   | (DecorationState & { readonly type: 'decoration' })
   | MealMessage

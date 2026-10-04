@@ -14,7 +14,18 @@ export function createHomeDecoration(kind: DecorationKind) {
   const green = paintedMaterial('burlap', { tint: 0x689584, roughness: 1 });
   const cream = paintedMaterial('burlap', { tint: 0xd5bd8c, roughness: 1 });
   const b = new ModelBuilder();
-  if (kind === 'flowerPlanter') {
+  if (kind === 'trailPennant') {
+    b.add(dark, new THREE.CylinderGeometry(0.035, 0.045, 1.45, 6), placed(0, 0.725, 0));
+    b.add(wood, new THREE.BoxGeometry(0.65, 0.045, 0.045), placed(0.3, 1.35, 0));
+    b.add(green, new THREE.BoxGeometry(0.48, 0.48, 0.018), placed(0.3, 1.075, 0));
+    b.add(cream, new THREE.BoxGeometry(0.035, 0.42, 0.023), placed(0.09, 1.075, 0));
+    for (let i = 0; i < 3; i++)
+      b.add(
+        cream,
+        new THREE.BoxGeometry(0.1, 0.1, 0.023),
+        placed(0.3, 1.22 - i * 0.14, 0, { z: Math.PI / 4 }),
+      );
+  } else if (kind === 'flowerPlanter') {
     const soil = paintedMaterial('soil', { roughness: 1 }),
       leaf = paintedMaterial('grass', { tint: 0x678447, roughness: 1 }),
       petal = paintedMaterial('burlap', { tint: 0xf1dab0, roughness: 1 });

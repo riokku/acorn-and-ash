@@ -926,4 +926,6 @@ Returning home closes the expedition loop: store building supplies with one ches
 
 During a dodge, tap left mouse for an aerial spin slash or click right mouse for an immediate higher somersault slam. Both follow-ups keep momentum along the original dodge path while aiming the weapon independently. Movement resumes on landing; the slam hits harder and has longer attack recovery. Outside a dodge, hold left mouse for the normal charged attack. Right-click still loots or drags the camera; see Settings > Keybindings and [dodge follow-ups](docs/decisions/0083-dodge-follow-up-attacks.md).
 
+Players can read a cedar expedition board beside their own home, or open its page from inside. Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
+
 The build menu opens a wider, responsive page with Home, Camp & lighting, Garden & boundaries and Trophies sections. Indoor decorations are grouped into Furniture, Lighting and Finishing touches. Number shortcuts keep their existing assignments; costs and availability stay visible alongside each choice.

@@ -1,3 +1,4 @@
+import { encodeExpeditionState, expeditionFromSaved, type ExpeditionState } from '@acorn/shared';
 import { encodeRecoveryMarkers } from '@acorn/shared';
 import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
 import { encodeMeal, mealFromSaved, type MealState } from '@acorn/shared';
@@ -224,6 +225,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
     server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
     server.send(encodeGardenState(simulation.gardenStateOf(netId)));
+    server.send(encodeExpeditionState(simulation.expeditionStateOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
@@ -334,6 +336,18 @@ export class World extends DurableObject<WorldEnv> {
       this.announcePiles(simulation, Date.now());
       this.announceEquipped(simulation);
       this.announceFishing(simulation);
+      return;
+    }
+    if (decoded.type === 'expedition') {
+      const result = simulation.requestExpedition(attachment.netId, decoded);
+      if (result.notice === 'accepted' || result.notice === 'claimed')
+        this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+      this.trySend(ws, encodeExpeditionState(result));
+      if (result.notice === 'claimed')
+        this.trySend(
+          ws,
+          encodeInventory(inventoryEntries(simulation.inventoryOf(attachment.netId))),
+        );
       return;
     }
     if (decoded.type === 'decoration') {
@@ -479,6 +493,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceCooking(simulation);
     this.announceEquipped(simulation);
     this.announceHealth(simulation);
+    this.announceExpeditions(simulation);
     this.announceMeals(simulation);
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
@@ -566,6 +581,23 @@ export class World extends DurableObject<WorldEnv> {
    * tick what is in their pack now. What that did to the patch or the pile
    * is everybody's news, told by `announcePatches` and `announcePiles`.
    */
+  private announceExpeditions(simulation: WorldSimulation): void {
+    const changes = simulation.drainExpeditionChanges();
+    if (changes.length === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const update = changes.find((change) => change.netId === attachment.netId);
+      if (update === undefined) continue;
+      this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+      this.trySend(ws, encodeExpeditionState(update.state));
+      if (update.state.notice === 'claimed')
+        this.trySend(
+          ws,
+          encodeInventory(inventoryEntries(simulation.inventoryOf(attachment.netId))),
+        );
+    }
+  }
   private announceDiscoveries(simulation: WorldSimulation): void {
     const events = simulation.drainDiscoveryChanges();
     if (events.length === 0) return;
@@ -1426,6 +1458,9 @@ export class World extends DurableObject<WorldEnv> {
   private createSchema(): void {
     const sql = this.ctx.storage.sql;
     sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_expeditions (player_key TEXT PRIMARY KEY, state TEXT NOT NULL)',
+    );
+    sql.exec(
       'CREATE TABLE IF NOT EXISTS player_meals (player_key TEXT PRIMARY KEY, item_index INTEGER, ticks_left INTEGER NOT NULL)',
     );
     sql.exec(
@@ -1640,6 +1675,7 @@ export class World extends DurableObject<WorldEnv> {
       )
       .toArray()[0];
     return {
+      expedition: this.readExpedition(playerKey),
       meal: mealFromSaved(
         savedMeal === undefined
           ? null
@@ -2013,6 +2049,7 @@ export class World extends DurableObject<WorldEnv> {
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
     this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
+    this.writeExpedition(attachment.playerKey, simulation.expeditionStateOf(attachment.netId));
     this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
     this.writeBlueprintProgress(
       attachment.playerKey,
@@ -2024,6 +2061,24 @@ export class World extends DurableObject<WorldEnv> {
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
   }
 
+  private readExpedition(playerKey: string): ExpeditionState {
+    const row = this.ctx.storage.sql
+      .exec<{ state: string }>('SELECT state FROM player_expeditions WHERE player_key=?', playerKey)
+      .toArray()[0];
+    try {
+      return expeditionFromSaved(row === undefined ? null : JSON.parse(row.state));
+    } catch {
+      return expeditionFromSaved(null);
+    }
+  }
+  private writeExpedition(playerKey: string, state: ExpeditionState): void {
+    const saved = expeditionFromSaved(state);
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_expeditions (player_key,state) VALUES (?,?) ON CONFLICT(player_key) DO UPDATE SET state=excluded.state',
+      playerKey,
+      JSON.stringify(saved),
+    );
+  }
   private writeMeal(playerKey: string, meal: MealState): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO player_meals (player_key,item_index,ticks_left) VALUES (?,?,?) ON CONFLICT(player_key) DO UPDATE SET item_index=excluded.item_index,ticks_left=excluded.ticks_left',
@@ -2194,6 +2249,7 @@ export class World extends DurableObject<WorldEnv> {
       );
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
+      this.writeExpedition(attachment.playerKey, expeditionFromSaved(player.expedition));
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
       this.writeDiscoveries(
@@ -2253,6 +2309,7 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec('DELETE FROM player_home_skills');
     sql.exec('DELETE FROM player_blueprint_progress');
     sql.exec('DELETE FROM player_discoveries');
+    sql.exec('DELETE FROM player_expeditions');
     sql.exec('DELETE FROM pickups_taken');
     return { ok: true, clearedPlayers };
   }

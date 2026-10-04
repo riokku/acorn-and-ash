@@ -1,3 +1,5 @@
+import { ExpeditionPanel } from './ExpeditionPanel';
+import type { ExpeditionRequest } from '@acorn/shared';
 import { DECORATION_KINDS, isIndoorOnlyKind } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ, isMealItem } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
@@ -58,10 +60,11 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
+  readonly onExpedition?: (request: ExpeditionRequest) => void;
   readonly onMoveDecoration?: (id: number) => void;
   readonly onReclaimDecoration?: (id: number) => void;
   readonly onGardenUse?: (request: GardenRequest) => void;
-  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
+  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
   readonly onPickRecipe?: (index: number) => void;
   readonly store: HudStore;
   readonly onPlay: () => void;
@@ -86,6 +89,7 @@ interface HudProps {
 }
 
 export function Hud({
+  onExpedition,
   store,
   onPlay,
   onToggleInventory,
@@ -144,8 +148,23 @@ export function Hud({
         <Row label="Health" value={<Health state={state} />} />
       </div>
 
+      {showingWorld &&
+      state.nearExpeditionBoard &&
+      !state.craftMenuOpen &&
+      !state.buildMenuOpen &&
+      !state.inventoryOpen ? (
+        <button
+          type="button"
+          className="expedition-board-open"
+          onClick={() => onJournalTabChange?.('expeditions')}
+        >
+          Read expedition board
+        </button>
+      ) : null}
       {state.craftMenuOpen ? (
-        state.journalTab === 'garden' ? (
+        state.journalTab === 'expeditions' ? (
+          <ExpeditionPanel state={state} onChange={onJournalTabChange} onRequest={onExpedition} />
+        ) : state.journalTab === 'garden' ? (
           <GardenJournal state={state} onChange={onJournalTabChange} onUse={onGardenUse} />
         ) : state.journalTab === 'discoveries' ? (
           <DiscoveryJournal state={state} onChange={onJournalTabChange} />
@@ -196,12 +215,20 @@ export function Hud({
                               <button
                                 type="button"
                                 key={kind}
+                                disabled={
+                                  kind === 'trailPennant' &&
+                                  !((state.expedition?.cosmetics ?? 0) & 1)
+                                }
                                 onClick={() => onPickBuildable(kind)}
                               >
                                 <BuildableIcon kind={kind} color="#a6bea5" />
                                 <strong>
                                   {index < 6 ? `${index + 1} · ` : ''}
                                   {BUILDABLE_KINDS[kind].displayName}
+                                  {kind === 'trailPennant' &&
+                                  !((state.expedition?.cosmetics ?? 0) & 1)
+                                    ? ' · complete three outings'
+                                    : ''}
                                 </strong>
                                 <span>
                                   {BUILDABLE_KINDS[kind].costs
@@ -599,6 +626,7 @@ interface RecipeEntry {
   readonly displayName: string;
   readonly costs: Recipe['costs'];
   readonly ready: boolean;
+  readonly locked?: boolean;
   readonly supplyNote?: string;
   readonly benefitNote?: string;
 }
@@ -664,10 +692,13 @@ function buildEntries(state: HudState): RecipeEntry[] {
       ),
       displayName: `${state.homeKind !== null && isHomeKind(kind) ? 'Upgrade to ' : ''}${buildable.displayName}${isHomeKind(kind) && !knowsHome(state.homeSkills, kind) ? ' · blueprint needed' : ''}`,
       costs: buildable.costs,
+      locked: kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1),
       supplyNote:
         isHomeKind(kind) && state.homeKind !== null
           ? 'Uses backpack first, then your private home chest'
-          : undefined,
+          : kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1)
+            ? 'Complete three outings to learn this recipe'
+            : undefined,
       ready:
         canAfford(
           isHomeKind(kind) && state.homeKind !== null
@@ -675,7 +706,8 @@ function buildEntries(state: HudState): RecipeEntry[] {
             : inventory,
           buildable,
         ) &&
-        (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)),
+        (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)) &&
+        (kind !== 'trailPennant' || !!((state.expedition?.cosmetics ?? 0) & 1)),
     };
   });
 }
@@ -708,13 +740,15 @@ function JournalPanel({
         onPick === undefined ? 'hud-journal-entry' : 'hud-journal-entry hud-journal-entry-pickable'
       }
       key={entry.index}
-      onClick={onPick === undefined ? undefined : () => onPick(entry.index)}
+      aria-disabled={entry.locked || undefined}
+      onClick={onPick === undefined || entry.locked ? undefined : () => onPick(entry.index)}
       role={onPick === undefined ? undefined : 'button'}
       tabIndex={onPick === undefined ? undefined : 0}
       onKeyDown={
         onPick === undefined
           ? undefined
           : (event) => {
+              if (entry.locked) return;
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 event.stopPropagation();

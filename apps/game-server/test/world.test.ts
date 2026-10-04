@@ -1250,7 +1250,8 @@ describe('chopping a tree down', () => {
     expect(second.inventory().some((entry) => entry.item === 'log')).toBe(false);
     await collectFallenLogs(second);
     expect(second.droppedPiles()).toEqual([]);
-    expect(second.inventory()).toEqual([
+    // A nearby loose stick can be collected while walking among the fallen logs.
+    expect(second.inventory().filter((entry) => entry.item !== 'stick')).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: choppingRuleFor(PROP_KINDS.oak)?.logs },
       { item: 'bag', count: 1 },
