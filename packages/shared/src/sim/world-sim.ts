@@ -192,7 +192,8 @@ import {
   type PlacedSpot,
   type RestingPlace,
 } from '../world/home';
-import { castLanding, overlapsWater } from '../world/water';
+import { LAKE } from '../world/lake';
+import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { buildEncounterSites, encounterColliders, type EncounterSite } from '../world/encounters';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
@@ -952,6 +953,8 @@ export class WorldSimulation {
   readonly world: World;
   readonly seed: number;
   readonly clearing: Clearing;
+  /** Everywhere the pond or the lake reaches, for the checks that only need to keep clear of water. */
+  private readonly keepOutWater: readonly WaterCircle[];
   /**
    * The generated forest beyond the clearing. Built once from the seed and
    * never touched again: none of it is ever chopped or picked up, so unlike
@@ -1299,6 +1302,7 @@ export class WorldSimulation {
       options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
     );
     this.clearing = buildTestClearing(options.seed);
+    this.keepOutWater = [...this.clearing.water, ...LAKE.basin];
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
@@ -1307,16 +1311,22 @@ export class WorldSimulation {
       terrain,
       [...this.clearing.colliders, ...this.wilderness.siteColliders],
       this.clearing.water,
+      LAKE,
     );
     this.discoverySites = buildDiscoverySites(this.encounterSites);
     for (const spot of discoveryForageSpots(this.discoverySites))
       this.patches.push(freshPatch(this.seed, spot));
-    this.collision = createCollisionWorld(terrain, [
-      ...this.clearing.colliders,
-      ...this.wilderness.colliders,
-      ...encounterColliders(this.encounterSites, terrain),
-      ...discoveryColliders(this.discoverySites, terrain),
-    ]);
+    this.collision = createCollisionWorld(
+      terrain,
+      [
+        ...this.clearing.colliders,
+        ...this.wilderness.colliders,
+        ...encounterColliders(this.encounterSites, terrain),
+        ...discoveryColliders(this.discoverySites, terrain),
+      ],
+      PLAYABLE_HALF_EXTENT,
+      LAKE,
+    );
     this.standing = [...this.clearing.props];
     this.world = createWorld();
 
@@ -1343,7 +1353,7 @@ export class WorldSimulation {
       options.seed,
       {
         collision: this.collision,
-        water: this.clearing.water,
+        water: this.keepOutWater,
         fighters: () => this.fighters,
         strikePlayer: (netId, damage, impactTick) =>
           this.raiderStrikesPlayer(netId, damage, impactTick),
@@ -2851,7 +2861,7 @@ export class WorldSimulation {
     if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < PATCH_SPAWN_CLEARANCE) {
       return false;
     }
-    if (overlapsWater(this.clearing.water, x, z, PATCH_CLEARANCE)) return false;
+    if (overlapsWater(this.keepOutWater, x, z, PATCH_CLEARANCE)) return false;
     const here = roundFootprint(x, z, PATCH_CLEARANCE, 'patch');
     if (footprints.some((footprint) => footprintGap(here, footprint) < 0)) return false;
 
@@ -3009,7 +3019,7 @@ export class WorldSimulation {
 
   /** Whether something dropped here would lie on open ground, not in the pond or inside a trunk. */
   private dropSpotIsClear(x: number, z: number): boolean {
-    if (overlapsWater(this.clearing.water, x, z, 0)) return false;
+    if (overlapsWater(this.keepOutWater, x, z, 0)) return false;
     const here = roundFootprint(x, z, 0, 'pile');
     return !this.buildFootprints().some((footprint) => footprintGap(here, footprint) < 0);
   }
@@ -3229,7 +3239,7 @@ export class WorldSimulation {
       canAttack &&
       toolKind(held) === 'rod' &&
       runtime.swingCooldownTicks === 0 &&
-      castLanding(position, aimYaw, this.clearing.water) !== null;
+      castLanding(position, aimYaw, this.clearing.water, LAKE) !== null;
     return {
       canAttack,
       castInstead,
@@ -3544,7 +3554,7 @@ export class WorldSimulation {
     if (runtime.swingCooldownTicks > 0) return;
     if (!this.isActiveItem(runtime, 'rod')) return;
 
-    const spot = castLanding(position, aimYaw, this.clearing.water);
+    const spot = castLanding(position, aimYaw, this.clearing.water, LAKE);
     if (spot === null) return;
 
     runtime.cast = startCast(
@@ -3627,7 +3637,7 @@ export class WorldSimulation {
             piece,
             position,
             BUILD_REACH + BUILD_REACH_SLACK,
-            this.clearing.water,
+            this.keepOutWater,
             this.buildFootprints(home.id, true),
             true,
           ) !== null
@@ -3681,7 +3691,7 @@ export class WorldSimulation {
       piece,
       position,
       BUILD_REACH + BUILD_REACH_SLACK,
-      this.clearing.water,
+      this.keepOutWater,
       this.buildFootprints(undefined, true),
       true,
     );

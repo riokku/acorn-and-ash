@@ -14,6 +14,7 @@ import {
 } from '../constants';
 import type { Vec3 } from '../math/vec3';
 import { cylinder, type Collider } from './colliders';
+import { isOnLake, type Lake } from './lake';
 
 /** One round patch of water. A pond is several of these, overlapping. */
 export interface WaterCircle {
@@ -66,11 +67,13 @@ const CAST_SEARCH_STEP = 0.25;
  * the longest throw inwards, the first spot that is properly on the water wins.
  * Facing the pond from its bank lands out in the middle; facing a narrow neck
  * lands short rather than on the far bank; facing the grass finds nothing.
+ * The lake counts too, with its islands left dry.
  */
 export function castLanding(
   position: Readonly<Vec3>,
   aimYaw: number,
   water: readonly WaterCircle[],
+  lake: Lake | null = null,
 ): FloatSpot | null {
   // Yaw 0 looks down -Z, the same way movement and chopping read it.
   const forwardX = -Math.sin(aimYaw);
@@ -84,6 +87,7 @@ export function castLanding(
     const x = position.x + forwardX * distance;
     const z = position.z + forwardZ * distance;
     if (isOnWater(water, x, z, FLOAT_SHORE_MARGIN)) return { x, z };
+    if (lake !== null && isOnLake(lake, x, z, FLOAT_SHORE_MARGIN)) return { x, z };
   }
   return null;
 }

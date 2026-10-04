@@ -1,4 +1,5 @@
 import {
+  LAKE,
   PROP_KINDS,
   SPAWN_POSITION,
   type PlacedProp,
@@ -24,7 +25,7 @@ export function createForestEnvironment(
   terrain: Terrain,
   standingProps: readonly PlacedProp[] = props,
 ): ForestEnvironment {
-  const ground = createGroundShader({ props, water });
+  const ground = createGroundShader({ props, water, lake: LAKE });
   const cells = new Map<string, ForestPoint[]>();
   for (const prop of standingProps) {
     if (PROP_KINDS[prop.kind].shape.family !== 'tree') continue;

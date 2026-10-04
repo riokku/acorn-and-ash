@@ -18,6 +18,9 @@ import {
   CLEARING_TREE_LINE_INNER,
   PROP_KINDS,
   SPAWN_POSITION,
+  isNearLake,
+  lakeDepthAt,
+  type Lake,
   type PlacedProp,
   type WaterCircle,
 } from '@acorn/shared';
@@ -33,6 +36,8 @@ export interface GroundShade {
 /** Everything the ground takes its looks from. */
 export interface GroundContext {
   readonly water: readonly WaterCircle[];
+  /** The lake, if there is one: its bank stays lush like the pond's. */
+  readonly lake?: Lake | null;
   /** Every tree and rock anywhere, the clearing's and the wilderness's alike. */
   readonly props: readonly PlacedProp[];
 }
@@ -110,6 +115,10 @@ export function createGroundShader(context: GroundContext): GroundShader {
       for (const circle of context.water) {
         const gap = Math.hypot(circle.x - x, circle.z - z) - circle.radius;
         shore = Math.max(shore, 1 - smoothstep(0, 3, gap));
+      }
+      if (context.lake != null && isNearLake(context.lake, x, z, 3)) {
+        // Negative depth is dry land, so the distance to the shore is its opposite.
+        shore = Math.max(shore, 1 - smoothstep(0, 3, -lakeDepthAt(context.lake, x, z)));
       }
 
       const wildPatches = smoothstep(0.4, 0.7, patches) * inWilderness * 0.6;

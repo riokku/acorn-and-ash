@@ -2,6 +2,7 @@ import { PLAYABLE_HALF_EXTENT } from '../constants';
 import { colliderFootprintRadius, cylinder, type Collider } from './colliders';
 import type { Terrain } from './terrain';
 import { overlapsWater, type WaterCircle } from './water';
+import { basinDepthAt, LAKE_SHORE_WIDTH, type Lake } from './lake';
 import { createRng, hashSeed } from '../rng';
 import type { RaiderKindId } from '../data/raiders';
 
@@ -27,12 +28,19 @@ export const ENCOUNTER_LINEUPS: Record<EncounterKind, readonly RaiderKindId[]> =
   patrol: ['rogue', 'minion', 'warrior'],
 };
 
-/** Find existing glades without changing any saved tree or scenery placement. */
+/**
+ * Find existing glades without changing any saved tree or scenery placement.
+ *
+ * A glade that would have landed in the lake, or on the bank that slopes down
+ * to it, is skipped and the next try is used instead, so every other glade
+ * stays exactly where it was.
+ */
 export function buildEncounterSites(
   seed: number,
   terrain: Terrain,
   colliders: readonly Collider[],
   water: readonly WaterCircle[],
+  lake: Lake | null = null,
 ): EncounterSite[] {
   const sites: EncounterSite[] = [];
   const kinds: readonly EncounterKind[] = [
@@ -51,6 +59,7 @@ export function buildEncounterSites(
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       if (overlapsWater(water, x, z, 4)) continue;
+      if (lake !== null && basinDepthAt(lake, x, z) > -(LAKE_SHORE_WIDTH + 4)) continue;
       if (sites.some((site) => Math.hypot(site.x - x, site.z - z) < 30)) continue;
       if (colliders.some((c) => Math.hypot(c.x - x, c.z - z) < colliderFootprintRadius(c) + 3.3))
         continue;
