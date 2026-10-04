@@ -1,10 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { attribute, float, mix, positionLocal, sin, smoothstep, uniform, vec3 } from 'three/tsl';
 import {
+  LAKE,
   PLAYABLE_HALF_EXTENT,
   SPAWN_POSITION,
   buildableFootprint,
   footprintGap,
+  lakeDepthAt,
   roundFootprint,
   type BuiltPropView,
   type Clearing,
@@ -50,6 +52,7 @@ export function createGrass(
       }
   const shader = createGroundShader({
     water: clearing.water,
+    lake: LAKE,
     props: [...clearing.props, ...wilderness.props],
   });
   const geometry = bladeClump();
@@ -122,7 +125,11 @@ export function createGrass(
       if (Math.abs(x) > PLAYABLE_HALF_EXTENT || Math.abs(z) > PLAYABLE_HALF_EXTENT) continue;
       if (
         Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < 2.5 ||
-        clearing.water.some((water) => Math.hypot(x - water.x, z - water.z) < water.radius + 0.35)
+        clearing.water.some(
+          (water) => Math.hypot(x - water.x, z - water.z) < water.radius + 0.35,
+        ) ||
+        // The lake's own shore, which on an island is the island's beach.
+        lakeDepthAt(LAKE, x, z) > -0.35
       )
         continue;
       const y = terrain.heightAt(x, z);

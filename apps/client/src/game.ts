@@ -112,8 +112,11 @@ import {
   worldMoveDirection,
   buildWilderness,
   calendarAt,
+  LAKE,
+  PLAYABLE_HALF_EXTENT,
   castLanding,
   clockShiftForSeason,
+  type WaterCircle,
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
@@ -196,6 +199,7 @@ import {
 } from './scene/clearing';
 import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
+import { createLakeScene } from './scene/lake';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
@@ -596,6 +600,8 @@ export interface GameDebug {
   screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
   /** The pond, as the circles it is made of. */
   pond(): Array<{ x: number; z: number; radius: number }>;
+  /** The lake's shape, as the world was built: its blobs of water and its islands. */
+  lake(): { basin: Array<{ x: number; z: number; radius: number }>; islands: string[] };
   /** Whether a click right now would cast. */
   canCast(): boolean;
   /** Where our own line is at: none out, waiting, or a fish on. */
@@ -789,6 +795,9 @@ export class Game {
 
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
+  private lakeScene: ReturnType<typeof createLakeScene> | null = null;
+  /** Everywhere the pond or the lake reaches: the build ghost keeps clear of all of it. */
+  private keepOutWater: readonly WaterCircle[] = [];
   private encounterLandmarks: ReturnType<typeof createEncounterLandmarks> | null = null;
   private clearing: Clearing | null = null;
   /** What the server says is gone, and what it says we carry. Never guessed. */
@@ -1369,6 +1378,10 @@ export class Game {
         this.aimYaw = yaw;
       },
       pond: () => (this.clearing?.water ?? []).map((circle) => ({ ...circle })),
+      lake: () => ({
+        basin: LAKE.basin.map((circle) => ({ ...circle })),
+        islands: LAKE.islands.map((island) => island.id),
+      }),
       canCast: () => this.canCast,
       fishing: () => this.fishingPhase,
       fishingNews: () => this.currentNews(performance.now()),
@@ -1398,6 +1411,7 @@ export class Game {
     this.forestAudio.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
+    this.lakeScene?.dispose();
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
@@ -2239,6 +2253,7 @@ export class Game {
         terrain,
         [...clearing.colliders, ...wilderness.siteColliders],
         clearing.water,
+        LAKE,
       );
       this.discoverySites = buildDiscoverySites(encounterSites);
       this.protectedBuildSites = [
@@ -2280,6 +2295,10 @@ export class Game {
 
       this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
       this.outdoors.add(this.wildernessScene.group);
+      this.lakeScene?.dispose();
+      this.lakeScene = createLakeScene(LAKE);
+      this.outdoors.add(this.lakeScene.group);
+      this.keepOutWater = [...clearing.water, ...LAKE.basin];
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);
@@ -2287,12 +2306,17 @@ export class Game {
 
       this.outdoors.add(this.floats.group);
 
-      const collision = createCollisionWorld(terrain, [
-        ...clearing.colliders,
-        ...wilderness.colliders,
-        ...encounterColliders(encounterSites, terrain),
-        ...discoveryColliders(this.discoverySites, terrain),
-      ]);
+      const collision = createCollisionWorld(
+        terrain,
+        [
+          ...clearing.colliders,
+          ...wilderness.colliders,
+          ...encounterColliders(encounterSites, terrain),
+          ...discoveryColliders(this.discoverySites, terrain),
+        ],
+        PLAYABLE_HALF_EXTENT,
+        LAKE,
+      );
       this.collision = collision;
       this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
       this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
@@ -3135,7 +3159,7 @@ export class Game {
       built: this.builtProps,
       pending: this.pendingPlacements.map((pending) => pending.request),
       scenery: this.sceneryFootprints(),
-      water: clearing.water,
+      water: this.keepOutWater,
     });
 
     // Placed at least one and there is nothing left to pay for the next:
@@ -3835,7 +3859,7 @@ export class Game {
       !axeHasSomethingToHit &&
       this.isEquipped('rod') &&
       this.clearing !== null &&
-      castLanding(player.motion.position, aimYaw, this.clearing.water) !== null;
+      castLanding(player.motion.position, aimYaw, this.clearing.water, LAKE) !== null;
 
     // Its own key, so it never competes with a swing or a cast for the click.
     // Offered whenever something could be afforded and the player is inside
@@ -4044,7 +4068,7 @@ export class Game {
       toolKind(held) === 'rod' &&
       performance.now() >= this.castReadyAt &&
       this.clearing !== null &&
-      castLanding(position, aimYaw, this.clearing.water) !== null;
+      castLanding(position, aimYaw, this.clearing.water, LAKE) !== null;
     return {
       canAttack,
       castInstead,

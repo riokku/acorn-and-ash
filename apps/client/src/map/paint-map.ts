@@ -13,11 +13,14 @@
  */
 
 import {
+  LAKE,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   buildTestClearing,
   buildWilderness,
   createWildernessTerrain,
+  lakeDepthAt,
+  type Lake,
   type PlacedProp,
   type Terrain,
   type WaterCircle,
@@ -67,6 +70,8 @@ const CONTOUR_INTERVAL = 1.25;
 export interface MapWorld {
   readonly terrain: Terrain;
   readonly water: readonly WaterCircle[];
+  /** The lake, with its islands, if the world has one. */
+  readonly lake?: Lake | null;
   readonly props: readonly PlacedProp[];
 }
 
@@ -74,7 +79,12 @@ export function mapWorldFromSeed(seed: number): MapWorld {
   const clearing = buildTestClearing(seed);
   const terrain = createWildernessTerrain(seed);
   const wilderness = buildWilderness(seed, terrain);
-  return { terrain, water: clearing.water, props: [...clearing.props, ...wilderness.props] };
+  return {
+    terrain,
+    water: clearing.water,
+    lake: LAKE,
+    props: [...clearing.props, ...wilderness.props],
+  };
 }
 
 /** Paint the whole world onto a square page `size` pixels across. */
@@ -160,7 +170,7 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
   const count = Math.ceil((MAP_HALF_EXTENT * 2) / SAMPLE_SPACING) + 1;
   const fields = 6;
   const grid = new Float32Array(count * count * fields);
-  const shader = createGroundShader({ water: world.water, props: world.props });
+  const shader = createGroundShader({ water: world.water, lake: world.lake, props: world.props });
   const step = SAMPLE_SPACING;
 
   for (let row = 0; row < count; row++) {
@@ -176,6 +186,8 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
       for (const circle of world.water) {
         waterGap = Math.min(waterGap, Math.hypot(circle.x - x, circle.z - z) - circle.radius);
       }
+      // Depth is positive on the water, so the gap to the water's edge is its opposite.
+      if (world.lake != null) waterGap = Math.min(waterGap, -lakeDepthAt(world.lake, x, z));
       const index = (row * count + column) * fields;
       grid[index] = height;
       grid[index + 1] = slope;

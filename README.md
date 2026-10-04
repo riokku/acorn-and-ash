@@ -274,6 +274,20 @@ wire - the same trick the clearing itself already uses. Nothing out there can
 be chopped or picked up yet; it's somewhere to walk, for now. See
 [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
 
+### The lake
+
+In the north-east corner of the world, a good walk from home, there is a big
+lake: about a hundred metres across, with five islands in it. It's the same in
+every world. The ground slopes down to a gentle beach, the water goes from clear
+green in the shallows to deep blue, and there are reeds, lily pads and stones
+along the shore. You can't wade in: the shore holds you back, and you slide
+along it if you walk at it on a slant. The islands, with their own trees and
+rocks, are out of reach for now; they are waiting for the rowboat. It shows on
+the minimap and the big map. You can cast a rod onto the lake the same as onto
+the pond (a cast never lands on an island). The code is in
+`packages/shared/src/world/lake.ts` and `apps/client/src/scene/lake.ts`. See
+[decision 0090](docs/decisions/0090-the-lake.md).
+
 ### Wind in the grass
 
 Nearby clearings and sunny forest patches now have moving grass blades, with
@@ -465,7 +479,8 @@ production use the real wait.
 
 ### Fishing
 
-The rod lies on the bank of the pond. Face the water and left click to cast. The
+The rod lies on the bank of the pond. Face the water - the pond or the lake -
+and left click to cast. The
 float bobs while fish nibble; when it goes right under, click. Too soon or too
 slow and the fish gets away. Three kinds bite: perch, trout, and now and then a
 golden carp.

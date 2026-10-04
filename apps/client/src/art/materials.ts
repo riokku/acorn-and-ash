@@ -4,6 +4,7 @@ import {
   color,
   float,
   max,
+  min,
   mix,
   normalWorld,
   positionWorld,
@@ -104,33 +105,50 @@ function depthInPond(circles: readonly WaterCircle[]) {
   return deepest ?? float(-1);
 }
 
+/** How a body of water differs from the little pond: a lake is deeper, bluer and has broader ripples. */
+export interface WaterLook {
+  /** Circles that are dry land inside the water: islands. The shore runs round them too. */
+  readonly islands?: readonly WaterCircle[];
+  /** How far from the shore the water reaches its deepest colour, in metres. */
+  readonly deepAt?: number;
+  /** The colour of the deepest water. */
+  readonly deep?: number;
+  /** How much bigger the ripples are than the pond's: 1 is the pond's. */
+  readonly rippleSize?: number;
+}
+
 /**
  * The pond's surface: clear and green-tinted in the shallows, deeper blue in
  * the middle, two layers of painted ripples drifting past each other to
- * catch the light, and a pale line where it laps at the bank.
+ * catch the light, and a pale line where it laps at the bank. The lake uses
+ * the same, with islands cut out of it and its own depth and colour.
  */
 export function createWaterMaterial(
   circles: readonly WaterCircle[],
+  look: WaterLook = {},
 ): THREE.MeshStandardNodeMaterial {
   const ripples = artTexture('ripples');
-  const inside = depthInPond(circles);
-  const depth = smoothstep(0, 2.4, inside);
+  const { islands = [], deepAt = 2.4, deep: deepColour = 0x2b5e7a, rippleSize = 1 } = look;
+  const outline = depthInPond(circles);
+  // The shore runs round an island as well as round the bank, whichever is nearer.
+  const inside = islands.length === 0 ? outline : min(outline, depthInPond(islands).negate());
+  const depth = smoothstep(0, deepAt, inside);
 
   const drift = time;
   const first = texture(
     ripples,
-    positionWorld.xz.mul(0.32).add(vec2(drift.mul(0.021), drift.mul(0.013))),
+    positionWorld.xz.mul(0.32 / rippleSize).add(vec2(drift.mul(0.021), drift.mul(0.013))),
   ).r;
   const second = texture(
     ripples,
-    positionWorld.xz.mul(0.19).add(vec2(drift.mul(-0.015), drift.mul(0.019))),
+    positionWorld.xz.mul(0.19 / rippleSize).add(vec2(drift.mul(-0.015), drift.mul(0.019))),
   ).r;
   // Soft, broad glints rather than sharp lines: where the two layers of
   // ripples happen to line up, the surface catches a little more sky.
   const glint = smoothstep(0.25, 0.95, first.add(second).mul(0.5));
 
   const shallows = color(0x4f9a8e);
-  const deep = color(0x2b5e7a);
+  const deep = color(deepColour);
   let surface = mix(shallows, deep, depth);
   surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.16));
   const lapping = smoothstep(0.28, 0.02, inside.add(first.mul(0.08)));

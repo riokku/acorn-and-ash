@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 
 import {
+  LAKE,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   type Clearing,
@@ -63,6 +64,7 @@ export function buildWildernessScene(
     terrain,
     createGroundShader({
       water: clearing.water,
+      lake: LAKE,
       props: [...clearing.props, ...wilderness.props],
     }),
   );

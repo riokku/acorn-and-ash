@@ -2,14 +2,10 @@ import * as THREE from 'three/webgpu';
 
 import type { WaterCircle } from '@acorn/shared';
 
-import {
-  createBankMaterial,
-  createWaterMaterial,
-  paintedMaterial,
-  plainMaterial,
-} from '../art/materials';
+import { createBankMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
+import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
 
 /**
  * Where the water's surface is drawn.
@@ -99,14 +95,7 @@ function flatDisc(radius: number, segments: number): THREE.BufferGeometry {
 
 /** Lily pads, reeds and stones, merged by material. */
 function createPondPlants(water: readonly WaterCircle[]): { group: THREE.Group; dispose(): void } {
-  const pad = plainMaterial(0x5f9138, { roughness: 0.7, flatShading: true });
-  const padUnder = plainMaterial(0x7a8a3c, { roughness: 0.8, flatShading: true });
-  const petal = plainMaterial(0xfbeef0, { roughness: 0.6, flatShading: true });
-  const petalPink = plainMaterial(0xf4b9c8, { roughness: 0.6, flatShading: true });
-  const heart = plainMaterial(0xf2c94c, { roughness: 0.6, flatShading: true });
-  const reed = plainMaterial(0x5d7a35, { roughness: 0.9, flatShading: true });
-  const reedPale = plainMaterial(0x8a9a4a, { roughness: 0.9, flatShading: true });
-  const cattail = plainMaterial(0x6b4a2e, { roughness: 1, flatShading: true });
+  const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const builder = new ModelBuilder();
 
@@ -114,41 +103,14 @@ function createPondPlants(water: readonly WaterCircle[]): { group: THREE.Group; 
     const circle = water[lily.circle];
     if (circle === undefined) return;
     const out = circle.radius * lily.out;
-    const x = circle.x + Math.cos(lily.angle) * out;
-    const z = circle.z + Math.sin(lily.angle) * out;
-    // A round pad with the notch every lily pad has, and a lighter underside
-    // showing at its curled edge.
-    const notch = 0.5;
-    const top = new THREE.CircleGeometry(lily.size, 12, notch / 2, Math.PI * 2 - notch);
-    top.rotateX(-Math.PI / 2);
-    const under = new THREE.CircleGeometry(lily.size * 1.03, 12, notch / 2, Math.PI * 2 - notch);
-    under.rotateX(-Math.PI / 2);
-    const turn = { y: lily.angle * 2.7 };
-    builder.add(pad, top, placed(x, WATER_SURFACE_Y + 0.012, z, turn));
-    builder.add(padUnder, under, placed(x, WATER_SURFACE_Y + 0.006, z, turn));
+    const at = {
+      x: circle.x + Math.cos(lily.angle) * out,
+      y: WATER_SURFACE_Y,
+      z: circle.z + Math.sin(lily.angle) * out,
+    };
     // Every other pad has a water lily in flower on it.
-    if (index % 2 === 0) {
-      const colour = index % 4 === 0 ? petal : petalPink;
-      for (let p = 0; p < 7; p++) {
-        const angle = (p / 7) * Math.PI * 2;
-        builder.add(
-          colour,
-          new THREE.ConeGeometry(0.045, 0.12, 4),
-          placed(
-            x + Math.cos(angle) * 0.04,
-            WATER_SURFACE_Y + 0.05,
-            z + Math.sin(angle) * 0.04,
-            { y: -angle, z: -1.0 },
-            { x: 1, y: 1, z: 0.45 },
-          ).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2)),
-        );
-      }
-      builder.add(
-        heart,
-        new THREE.IcosahedronGeometry(0.03, 0),
-        placed(x, WATER_SURFACE_Y + 0.06, z),
-      );
-    }
+    const flower = index % 2 === 0 ? (index % 4 === 0 ? 'white' : 'pink') : null;
+    addLilyPad(builder, plants, at, lily.size, lily.angle, flower);
   });
 
   const random = seededRandom(707);
@@ -156,35 +118,11 @@ function createPondPlants(water: readonly WaterCircle[]): { group: THREE.Group; 
     const circle = water[clump.circle];
     if (circle === undefined) continue;
     const edge = circle.radius - 0.3;
-    const baseX = circle.x + Math.cos(clump.angle) * edge;
-    const baseZ = circle.z + Math.sin(clump.angle) * edge;
-    for (let i = 0; i < 7; i++) {
-      const spin = random() * Math.PI * 2;
-      const spread = random() * 0.22;
-      const height = 0.7 + random() * 0.6;
-      const lean = { x: (random() - 0.5) * 0.3, z: (random() - 0.5) * 0.3 };
-      const bx = baseX + Math.cos(spin) * spread;
-      const bz = baseZ + Math.sin(spin) * spread;
-      // A long, flat blade.
-      const blade = new THREE.ConeGeometry(0.035, height, 4);
-      blade.translate(0, height / 2, 0);
-      builder.add(
-        random() < 0.3 ? reedPale : reed,
-        blade,
-        placed(bx, WATER_SURFACE_Y, bz, { ...lean, y: spin }, { x: 1, y: 1, z: 0.25 }),
-      );
-      // Some are cattails: a thin stalk with a brown velvet head.
-      if (i % 3 === 0) {
-        const stalkHeight = height + 0.25;
-        const stalk = new THREE.CylinderGeometry(0.008, 0.012, stalkHeight, 4);
-        stalk.translate(0, stalkHeight / 2, 0);
-        const stalkMatrix = placed(bx + 0.03, WATER_SURFACE_Y, bz, lean);
-        builder.add(reed, stalk, stalkMatrix);
-        const head = new THREE.CapsuleGeometry(0.028, 0.14, 2, 6);
-        head.translate(0, stalkHeight - 0.12, 0);
-        builder.add(cattail, head, stalkMatrix);
-      }
-    }
+    addReedClump(builder, plants, random, {
+      x: circle.x + Math.cos(clump.angle) * edge,
+      y: WATER_SURFACE_Y,
+      z: circle.z + Math.sin(clump.angle) * edge,
+    });
   }
 
   // A few stones along the edge, half in the water.
