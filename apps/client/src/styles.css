@@ -2344,10 +2344,11 @@ body {
 }
 
 .decor-panel {
+  z-index: 5;
   position: absolute;
   top: 5rem;
   right: 1rem;
-  width: min(33rem, calc(100vw - 2rem));
+  width: min(56rem, calc(100vw - 2rem));
   max-height: calc(100vh - 12rem);
   overflow: auto;
   pointer-events: auto;
@@ -2369,7 +2370,7 @@ body {
 }
 .decor-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
 }
 .decor-panel button {
@@ -2422,4 +2423,66 @@ body {
 .chest-store-supplies:focus-visible {
   outline: 3px solid #c08f36;
   outline-offset: 3px;
+}
+
+/* Build categories share room without hiding costs or changing number shortcuts. */
+.build-panel {
+  z-index: 5;
+  width: min(920px, calc(100vw - 32px));
+  max-height: calc(100dvh - 180px);
+  bottom: 130px;
+  padding: 24px;
+}
+.build-panel .hud-journal-header {
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.build-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.build-group {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(58, 42, 20, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 250, 240, 0.38);
+}
+.build-group h2,
+.build-group h3 {
+  margin: 0 0 10px;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 16px;
+}
+.build-panel .hud-journal-entry {
+  gap: 10px;
+  padding: 12px 4px;
+}
+.build-panel .hud-journal-entry:focus-visible {
+  outline: 2px solid var(--accent-warm);
+  outline-offset: 2px;
+  background: rgba(58, 42, 20, 0.08);
+}
+.build-panel .hud-journal-entry-name {
+  overflow-wrap: anywhere;
+}
+.decor-groups .build-group {
+  background: #20382c;
+  border-color: #56745b;
+}
+.decor-options button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .build-groups {
+    grid-template-columns: 1fr;
+  }
+  .build-panel {
+    padding: 16px;
+  }
+  .build-panel .hud-journal-closehint {
+    white-space: normal;
+  }
 }
