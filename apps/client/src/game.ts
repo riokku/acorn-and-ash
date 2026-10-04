@@ -776,6 +776,8 @@ export class Game {
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
   private weatherCloud = 0;
   private seasonFallArt: ReturnType<typeof createSeasonFall> | null = null;
+  private readonly viewDirection = new THREE.Vector3();
+  private readonly fallCentre = { x: 0, z: 0 };
   private readonly seasons = createSeasonRig();
   /** How far the calendar is pushed when a season was asked for in the address, once worked out. */
   private seasonShiftMs: number | null = null;
@@ -2745,9 +2747,13 @@ export class Game {
       this.reducedMotion.matches,
       rainShareFor(season),
     );
+    // Fill the air where the camera is looking, so it is the part that is seen that is full.
+    camera.camera.getWorldDirection(this.viewDirection);
+    this.fallCentre.x = camera.camera.position.x + this.viewDirection.x * 10;
+    this.fallCentre.z = camera.camera.position.z + this.viewDirection.z * 10;
     this.seasonFallArt?.update(
       deltaSeconds,
-      watcher,
+      this.fallCentre,
       season,
       weather,
       dayBrightness(dayProgress(weatherNow)),

@@ -3,8 +3,8 @@ import { createRng, hashSeed, type ForestWeather, type SeasonMix } from '@acorn/
 
 import { fallFor, type FallAmounts, type FallKind } from '../art/season-fall';
 
-/** Side of the square of air kept around the player, in metres. Things leave one edge and enter the other. */
-const SPAN = 36;
+/** Side of the square of air kept in front of the camera, in metres. Things leave one edge and enter the other. */
+const SPAN = 28;
 const HALF = SPAN / 2;
 
 interface Pool {
@@ -76,10 +76,10 @@ function makePool(
  * blossom petals, golden pollen, falling leaves and snowflakes.
  *
  * Like the rain, it is bounded and pooled: a fixed handful of instanced
- * shapes, built once, that follow the player. Nothing is made or thrown away
+ * shapes, built once, that follow the camera. Nothing is made or thrown away
  * while playing. Each one stays where it is in the world and is wrapped round
- * to the far side of a square of air around the player, so walking through
- * them feels like walking through them.
+ * to the far side of a square of air in front of the camera, so walking
+ * through them feels like walking through them.
  */
 export function createSeasonFall(seed: number, heightAt: (x: number, z: number) => number) {
   const group = new THREE.Group();
@@ -89,43 +89,43 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
   const pools: Record<FallKind, Pool> = {
     petals: makePool(
       'petals',
-      new THREE.PlaneGeometry(0.1, 0.07),
+      new THREE.PlaneGeometry(0.16, 0.115),
       new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
-      { max: 70, height: 9, fall: 0.45, sway: 1.1, spin: 2.2, drift: 0.9 },
+      { max: 110, height: 9, fall: 0.45, sway: 1.1, spin: 2.2, drift: 0.9 },
       PETAL_COLOURS,
       rng,
     ),
     pollen: makePool(
       'pollen',
-      new THREE.SphereGeometry(0.028, 5, 4),
+      new THREE.SphereGeometry(0.04, 5, 4),
       new THREE.MeshBasicMaterial({
         color: 0xffe48a,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.8,
         depthWrite: false,
       }),
-      { max: 60, height: 3.2, fall: 0, sway: 0.6, spin: 0, drift: 0.2 },
+      { max: 100, height: 3.2, fall: 0, sway: 0.6, spin: 0, drift: 0.2 },
       null,
       rng,
     ),
     leaves: makePool(
       'leaves',
-      new THREE.PlaneGeometry(0.15, 0.11),
+      new THREE.PlaneGeometry(0.24, 0.17),
       new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
-      { max: 90, height: 10, fall: 0.85, sway: 1.4, spin: 3.2, drift: 1.4 },
+      { max: 140, height: 10, fall: 0.85, sway: 1.4, spin: 3.2, drift: 1.4 },
       LEAF_COLOURS,
       rng,
     ),
     snow: makePool(
       'snow',
-      new THREE.SphereGeometry(0.04, 5, 4),
+      new THREE.SphereGeometry(0.06, 5, 4),
       new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.9,
         depthWrite: false,
       }),
-      { max: 240, height: 12, fall: 1.1, sway: 0.7, spin: 0, drift: 0.7 },
+      { max: 380, height: 12, fall: 1.1, sway: 0.7, spin: 0, drift: 0.7 },
       null,
       rng,
     ),
@@ -199,7 +199,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
       petals: amounts.petals,
       pollen: amounts.pollen * sunlit,
       leaves: amounts.leaves * windy,
-      snow: amounts.snow * (0.5 + 0.5 * weather.precipitation),
+      snow: amounts.snow * (0.6 + 0.4 * weather.precipitation),
     };
   }
 
@@ -214,6 +214,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
     }),
     update(
       delta: number,
+      /** The middle of the square of air to fill: a little way in front of the camera. */
       point: { x: number; z: number },
       mix: SeasonMix,
       weather: ForestWeather,
