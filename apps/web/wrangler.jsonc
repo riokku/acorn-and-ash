@@ -26,6 +26,32 @@
     ],
   },
 
+  // The accounts database (decision 0086). CI creates the real one for each
+  // environment and swaps its id in for the placeholder before deploying.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "acorn-ash-accounts-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Cloudflare's own rate limiter, so nobody can flood the accounts database
+  // with sign-in attempts. Only starting one is limited, never coming back.
+  "ratelimits": [
+    { "name": "SIGN_IN_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+  ],
+  // For running on your own machine only: deployed environments get a random
+  // session secret that nobody ever sees (see tools/prepare-accounts.mjs), and
+  // `vars` are not inherited by them. TEST_SIGN_IN lets a test player in with no
+  // Google or Discord account (decision 0086); `automatic` skips the sign-in
+  // screen. It is only honoured on localhost and on pull request previews, and
+  // never set for staging or production.
+  "vars": {
+    "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else",
+    "TEST_SIGN_IN": "automatic",
+  },
+
   "env": {
     // The browser tests (see playwright.config.ts): local in every way, with
     // the game server's own e2e settings beside it. Never deployed.
@@ -41,6 +67,30 @@
         "bindings": [
           { "name": "WORLD", "class_name": "World", "script_name": "acorn-ash-game-server" },
         ],
+      },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-local",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
+      "ratelimits": [
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1001",
+          "simple": { "limit": 600, "period": 60 },
+        },
+      ],
+      // The same local-only settings as above.
+      "vars": {
+        "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else",
+        "TEST_SIGN_IN": "automatic",
       },
     },
     "staging": {
@@ -61,6 +111,25 @@
           },
         ],
       },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-staging",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
+      "ratelimits": [
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1002",
+          "simple": { "limit": 20, "period": 60 },
+        },
+      ],
     },
     "production": {
       "name": "acorn-ash-web-production",
@@ -80,6 +149,25 @@
           },
         ],
       },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-production",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
+      "ratelimits": [
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1003",
+          "simple": { "limit": 20, "period": 60 },
+        },
+      ],
     },
   },
 }

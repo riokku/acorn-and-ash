@@ -40,6 +40,15 @@ export interface ConnectionHandlers {
   onStateChange(state: ConnectionState, detail?: string): void;
 }
 
+export interface ConnectionOptions {
+  /**
+   * Run before every connection attempt, to make sure the browser has an
+   * account for the world to recognise. If it fails the attempt is treated like
+   * any other dropped connection: say so, wait, try again.
+   */
+  readonly signIn?: () => Promise<void>;
+}
+
 /** How long to wait before trying again after the connection drops. */
 const RECONNECT_DELAY_MS = 2000;
 const PING_INTERVAL_MS = 2000;
@@ -54,6 +63,7 @@ export class WorldConnection {
   private socket: WebSocket | null = null;
   private readonly url: string;
   private readonly handlers: ConnectionHandlers;
+  private readonly options: ConnectionOptions;
 
   private outgoing: PlayerInput[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -67,14 +77,31 @@ export class WorldConnection {
   pingMs = 0;
   private lastPingSentAt = 0;
 
-  constructor(url: string, handlers: ConnectionHandlers) {
+  constructor(url: string, handlers: ConnectionHandlers, options: ConnectionOptions = {}) {
     this.url = url;
     this.handlers = handlers;
+    this.options = options;
   }
 
   connect(): void {
     if (this.closed) return;
     this.handlers.onStateChange('connecting');
+
+    const { signIn } = this.options;
+    if (signIn === undefined) {
+      this.open();
+      return;
+    }
+    signIn().then(
+      () => this.open(),
+      (error: unknown) =>
+        this.handleDrop(error instanceof Error ? error.message : 'Could not sign in'),
+    );
+  }
+
+  private open(): void {
+    // Closed while signing in: nobody is waiting for this connection any more.
+    if (this.closed) return;
 
     const socket = new WebSocket(this.url);
     socket.binaryType = 'arraybuffer';
@@ -273,33 +300,19 @@ export class WorldConnection {
 /**
  * Work out where the world server is.
  *
- * By default the client talks to the origin it was served from, so a preview
- * build automatically reaches the world its own environment is bound to.
+ * The client talks to the origin it was served from, so a preview build
+ * automatically reaches the world its own environment is bound to. Who is
+ * connecting is not in the address: the session cookie says, and the web Worker
+ * tells the world (see decision 0086).
  */
 export function worldSocketUrl(
   worldId: string,
-  playerKey: string,
-  override?: string,
   currentHref = typeof window === 'undefined' ? 'http://localhost/' : window.location.href,
 ): string {
-  const base = override && override.length > 0 ? new URL(override) : new URL(currentHref);
+  const base = new URL(currentHref);
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
   base.pathname = `/api/worlds/${worldId}/ws`;
   base.search = '';
   base.hash = '';
-  // The world uses this to put a returning player back where they left off.
-  base.searchParams.set('player', playerKey);
   return base.toString();
-}
-
-/** A key that identifies this browser to the world, so it remembers where you were. */
-export function playerKey(storage: Storage): string {
-  const existing = storage.getItem('acorn.playerKey');
-  if (existing !== null && /^[A-Za-z0-9_-]{8,64}$/.test(existing)) return existing;
-
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  const key = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  storage.setItem('acorn.playerKey', key);
-  return key;
 }

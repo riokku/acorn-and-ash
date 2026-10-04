@@ -685,11 +685,9 @@ player, so the newer one takes over from the older.
 If it cannot reach a server it builds the clearing anyway and lets you walk about
 offline, which is fine for working on how things look.
 
-To play against the deployed staging world:
-
-```bash
-VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.chrisistinson.workers.dev pnpm dev
-```
+To play against the deployed staging world, open its link. A local client can no
+longer be pointed at another site's server: your login cookie belongs to one
+site (see [decision 0086](docs/decisions/0086-sign-in-accounts.md)).
 
 ### Handy switches
 
@@ -792,6 +790,65 @@ why they agree.
 | `production` | The public game                | Automatically, on a `v*` tag      |
 
 Each environment has its own D1 database, R2 bucket and Durable Object namespace.
+
+### Player accounts
+
+Playing needs a Google or Discord account. A cookie remembers who is signed in
+for a year, and each world keeps **one character per player** (made once, on
+the Home screen, then final). Accounts live in a D1 database
+(`acorn-ash-accounts-<environment>`) behind [Better Auth](https://better-auth.com),
+and the web Worker tells each world which player is connecting. See
+[decision 0086](docs/decisions/0086-sign-in-accounts.md) and
+[decision 0087](docs/decisions/0087-one-character-per-world.md).
+
+- **Test players.** Your own machine (`pnpm dev:web`), the browser tests and pull
+  request previews can't use Google or Discord, so they have a "test player" that
+  needs no login: automatic locally, a **Test sign-in** button on previews. The
+  Worker only honours it on localhost and preview addresses, and the staging
+  deploy checks it is off.
+- **Database and session secret: nothing to do by hand.** Each deploy creates the
+  environment's database, brings its tables up to date and gives the Worker a
+  random session secret, using `tools/prepare-accounts.mjs`. It needs a Cloudflare
+  API token with **D1: Edit** and **Workers Scripts: Edit** permission; if a deploy
+  fails on that, the error says so.
+- **Changing the tables:** edit `apps/web/src/accounts/schema.ts`, then run
+  `pnpm --filter @acorn/web db:generate` and commit the new file in
+  `apps/web/migrations/`. Never edit a migration that has already been merged.
+- **Previews** share one throwaway database (`acorn-ash-accounts-preview`), so a
+  branch never touches staging's players.
+
+#### Setting up Google and Discord sign-in (once per environment)
+
+Nothing is committed for this: the login credentials are secrets set by hand.
+Until they are, the sign-in screen says signing in isn't switched on yet, and
+the staging deploy prints a warning.
+
+Each login service is told where to send people back to. For a Worker at
+`https://<worker>.<your-subdomain>.workers.dev` that is
+`https://<worker>.<your-subdomain>.workers.dev/api/auth/callback/google` (or
+`.../discord`). Staging is `acorn-ash-web-staging`, production is
+`acorn-ash-web-production`; add each one you use.
+
+1. **Google.** In the [Google Cloud console](https://console.cloud.google.com/apis/credentials)
+   make an _OAuth client ID_ of type _Web application_ and add the return
+   addresses above under _Authorised redirect URIs_. Then, under _OAuth consent
+   screen_ (Google Auth Platform), set the app's name and support email and
+   **publish it** ("In production"), or only the people on its test list can
+   sign in. The basic scopes it asks for (email and profile) need no review.
+2. **Discord.** In the [Discord developer portal](https://discord.com/developers/applications)
+   make an application, open _OAuth2_, add the return addresses under _Redirects_
+   and copy the _Client ID_ and _Client Secret_.
+3. **Cloudflare.** For each Worker (_Workers & Pages_, then the Worker, _Settings_,
+   _Variables and Secrets_) add four values, and choose the type **Secret**, not
+   Text, or the next deploy removes them: `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`. A service
+   with only half its pair is left out. A Worker has to be deployed once before
+   it appears there.
+
+To try the real thing on your own machine instead, put the same four values in
+`apps/web/.dev.vars` along with `TEST_SIGN_IN=off`, and add
+`http://localhost:8787/api/auth/callback/google` (and `discord`) to the services'
+return addresses.
 
 Pull requests get a preview link in a comment on the pull request, and it is the
 whole game: that branch's client **and** a world server built from that branch,

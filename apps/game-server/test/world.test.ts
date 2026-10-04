@@ -472,6 +472,110 @@ describe('introducing yourself', () => {
   });
 });
 
+describe('one character per world', () => {
+  const characterOf = async (worldId: string, playerKey: string): Promise<unknown> => {
+    const response = await SELF.fetch(
+      `https://game.test/worlds/${worldId}/character?player=${playerKey}`,
+    );
+    return response.json();
+  };
+
+  it('says a player has not made a character until they have', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'has-not-made-one-yet';
+    expect(await characterOf(worldId, playerKey)).toEqual({ made: false });
+
+    const client = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => client.received.length > 0);
+    // Arriving is not making a character: that takes a name.
+    expect(await characterOf(worldId, playerKey)).toEqual({ made: false });
+
+    client.hello('Acorn', 'knight', 'moss');
+    await waitFor('the roster to include them', () => client.roster().length > 0);
+    expect(await characterOf(worldId, playerKey)).toEqual({
+      made: true,
+      name: 'Acorn',
+      character: 'knight',
+      color: 'moss',
+    });
+    client.close();
+  });
+
+  it('tells nothing to a request with no valid player key', async () => {
+    const worldId = nextWorldId();
+    const noKey = await SELF.fetch(`https://game.test/worlds/${worldId}/character`);
+    expect(await noKey.json()).toEqual({ made: false });
+    expect(await characterOf(worldId, 'x')).toEqual({ made: false });
+  });
+
+  it('keeps the character a player made, whatever a later visit says', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'made-one-and-keeps-it';
+
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    first.hello('Acorn', 'knight', 'clay');
+    await waitFor('the roster to include them', () => first.roster().length > 0);
+    first.close();
+    await sleep(200);
+
+    const second = await TestClient.connect(worldId, playerKey);
+    await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
+    second.hello('Somebody Else', 'mage', 'plum');
+    await sleep(200);
+
+    expect(await characterOf(worldId, playerKey)).toEqual({
+      made: true,
+      name: 'Acorn',
+      character: 'knight',
+      color: 'clay',
+    });
+    expect(second.roster()).toEqual([
+      { netId: second.welcome().netId, name: 'Acorn', character: 'knight', color: 'clay' },
+    ]);
+    second.close();
+  });
+
+  it('still tells the others a returning player has arrived', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'returns-and-says-hello';
+
+    const first = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => first.received.length > 0);
+    first.hello('Acorn', 'knight', 'clay');
+    await waitFor('the roster to include them', () => first.roster().length > 0);
+    first.close();
+    await sleep(200);
+
+    const neighbour = await TestClient.connect(worldId, 'the-neighbour-next-door');
+    await waitFor('a welcome', () => neighbour.received.length > 0);
+
+    const returning = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => returning.received.length > 0);
+    returning.hello('Acorn', 'knight', 'clay');
+    await waitFor('the neighbour to hear who arrived', () =>
+      neighbour.roster().some((entry) => entry.name === 'Acorn'),
+    );
+    returning.close();
+    neighbour.close();
+  });
+
+  it('keeps it within one visit too, not only between visits', async () => {
+    const worldId = nextWorldId();
+    const playerKey = 'says-it-twice-in-one-visit';
+
+    const client = await TestClient.connect(worldId, playerKey);
+    await waitFor('a welcome', () => client.received.length > 0);
+    client.hello('Acorn', 'knight', 'clay');
+    await waitFor('the roster to include them', () => client.roster().length > 0);
+    client.hello('Changed My Mind', 'mage', 'plum');
+    await sleep(200);
+
+    expect(client.roster()[0]).toMatchObject({ name: 'Acorn', character: 'knight' });
+    client.close();
+  });
+});
+
 describe('the tick loop', () => {
   it('reports that it is running while somebody is connected', async () => {
     const worldId = nextWorldId();

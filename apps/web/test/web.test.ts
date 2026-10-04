@@ -2,6 +2,7 @@ import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_WORLD_ID, isValidWorldId } from '../src/worlds';
+import { startAsTestPlayer } from './helpers';
 
 describe('the API', () => {
   it('answers a health check', async () => {
@@ -27,8 +28,9 @@ describe('the API', () => {
 
 describe('reaching the World Durable Object', () => {
   it('forwards a realtime connection to the world', async () => {
+    const { cookie } = await startAsTestPlayer();
     const response = await SELF.fetch(`https://acorn.test/api/worlds/${DEFAULT_WORLD_ID}/ws`, {
-      headers: { Upgrade: 'websocket' },
+      headers: { Upgrade: 'websocket', cookie },
     });
     // The stub world stands in for the game server Worker here; what matters is
     // that the binding resolved and the upgrade header survived the hop.
@@ -37,6 +39,14 @@ describe('reaching the World Durable Object', () => {
       path: `/api/worlds/${DEFAULT_WORLD_ID}/ws`,
       upgrade: 'websocket',
     });
+  });
+
+  it('sends a world name that is not a world name away before looking anyone up', async () => {
+    const response = await SELF.fetch('https://acorn.test/api/worlds/..%2Fetc/ws', {
+      headers: { Upgrade: 'websocket' },
+    });
+    // Unknown world, not "sign in first": nothing is looked up for a junk URL.
+    expect(response.status).toBe(404);
   });
 
   it('sends two players in the same world to the same object', async () => {

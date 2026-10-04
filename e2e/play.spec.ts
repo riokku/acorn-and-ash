@@ -69,21 +69,25 @@ async function hudValue(page: Page, label: string): Promise<string> {
 }
 
 /**
- * Type a name and press play on the Home screen, if it is currently showing.
+ * Get past the Home screen, if it is currently showing.
  *
- * Every test that used to open straight into the game now lands here first,
- * so this is the one place that change had to be taught to the whole suite -
- * see the dedicated tests further down for the Home screen itself.
+ * A new player types a name and presses play. A player who already made their
+ * character in this world (a second visit in the same browser) is welcomed back
+ * to it instead, and just presses play. Every test that used to open straight
+ * into the game lands here first, so this is the one place that change had to
+ * be taught to the whole suite - see the dedicated tests further down for the
+ * Home screen itself.
  */
 async function passThroughHomeIfShown(page: Page): Promise<void> {
   const nameInput = page.locator('#home-name');
-  const shown = await nameInput
-    .waitFor({ state: 'visible', timeout: 3000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!shown) return;
+  const welcomeBack = page.getByTestId('saved-character');
+  const shown = await Promise.race([
+    nameInput.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'new' as const),
+    welcomeBack.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'returning' as const),
+  ]).catch(() => null);
+  if (shown === null) return;
 
-  await nameInput.fill('Playtester');
+  if (shown === 'new') await nameInput.fill('Playtester');
   await page.locator('.home-play').click();
 }
 

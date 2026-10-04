@@ -14,3 +14,7 @@ test-results/
 .turbo/
 # Written by CI to aim a preview at that pull request's own world server.
 apps/web/wrangler.preview.jsonc
+# Written by CI with the real accounts database id swapped in for a deploy.
+apps/web/wrangler.deploy.jsonc
+# Written by CI: the session secret for a pull request's preview.
+apps/web/preview-secrets.json

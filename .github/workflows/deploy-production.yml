@@ -45,10 +45,41 @@ jobs:
           workingDirectory: apps/game-server
           command: deploy --env production
 
+      # Player accounts live in a D1 database. The first deploy of an
+      # environment creates it; every deploy after that finds it by name. The
+      # committed config holds a placeholder id, which only this copy replaces.
+      - name: Find or create the accounts database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          id=$(node tools/prepare-accounts.mjs database acorn-ash-accounts-production)
+          test -n "$id"
+          grep -q 00000000-0000-0000-0000-000000000000 apps/web/wrangler.jsonc
+          sed "s/00000000-0000-0000-0000-000000000000/$id/" \
+            apps/web/wrangler.jsonc > apps/web/wrangler.deploy.jsonc
+
+      # Before the website, so new code never meets old tables.
+      - name: Update the accounts database
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: d1 migrations apply DB --remote -c wrangler.deploy.jsonc --env production
+
       - name: Deploy the website
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
-          command: deploy --env production
+          command: deploy -c wrangler.deploy.jsonc --env production
+
+      # Signs the session cookie. Made once, here, and never shown to anyone;
+      # an existing one is left alone so deploying never signs players out.
+      - name: Make sure sign-in has its secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/prepare-accounts.mjs secret acorn-ash-web-production BETTER_AUTH_SECRET

@@ -171,7 +171,8 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { clickAimYaw, yawTowards, type ClickCandidate } from './input/click-target';
 import { lootUnderRay, type LootTarget } from './input/loot-target';
-import { WorldConnection, playerKey, worldSocketUrl, type ConnectionState } from './net/connection';
+import { SignInError, resumeAccount } from './net/account';
+import { WorldConnection, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
 import { GatheringFocus } from './scene/gathering-focus';
@@ -608,7 +609,6 @@ export interface GameOptions {
   readonly hud: HudStore;
   readonly identity: PlayerIdentity;
   readonly worldId: string;
-  readonly serverUrlOverride?: string;
   readonly forceWebGL: boolean;
   /** A multiplier on `BASE_MOUSE_SENSITIVITY`, from the Settings menu. */
   readonly lookSensitivity: number;
@@ -1399,26 +1399,37 @@ export class Game {
   /* ---------------------------------------------------------------------- */
 
   private connect(): void {
-    const url = worldSocketUrl(
-      this.options.worldId,
-      playerKey(window.localStorage),
-      this.options.serverUrlOverride,
-    );
-    this.connection = new WorldConnection(url, {
-      onMessage: (message) => this.handleMessage(message),
-      onStateChange: (state, detail) => {
-        if (this.connectionState === 'connected' && state !== 'connected')
-          this.meal = this.currentMeal();
-        this.mealHeardAt = performance.now();
-        this.connectionState = state;
-        if (state !== 'connected') this.closeChest();
-        this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
-        // Playing in another tab now: the curtain comes down here, and
-        // clicking it is how to play in this one again (see `resume`).
-        if (state === 'elsewhere') this.setPlaying(false);
+    const url = worldSocketUrl(this.options.worldId);
+    this.connection = new WorldConnection(
+      url,
+      {
+        onMessage: (message) => this.handleMessage(message),
+        onStateChange: (state, detail) => {
+          if (this.connectionState === 'connected' && state !== 'connected')
+            this.meal = this.currentMeal();
+          this.mealHeardAt = performance.now();
+          this.connectionState = state;
+          if (state !== 'connected') this.closeChest();
+          this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
+          // Playing in another tab now: the curtain comes down here, and
+          // clicking it is how to play in this one again (see `resume`).
+          if (state === 'elsewhere') this.setPlaying(false);
+        },
       },
-    });
+      // Checked before every attempt. A session that has ended means going back
+      // to the sign-in screen, not sitting offline trying again for ever.
+      { signIn: () => this.stillSignedIn() },
+    );
     this.connection.connect();
+  }
+
+  private async stillSignedIn(): Promise<void> {
+    try {
+      await resumeAccount(window.localStorage);
+    } catch (error) {
+      if (error instanceof SignInError && error.status === 401) window.location.reload();
+      throw error;
+    }
   }
 
   private handleMessage(message: ServerMessage): void {

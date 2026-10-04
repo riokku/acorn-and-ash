@@ -2,72 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CLOSE_PLAYING_ELSEWHERE } from '@acorn/shared';
 
-import {
-  WorldConnection,
-  playerKey,
-  worldSocketUrl,
-  type ConnectionState,
-} from '../src/net/connection';
+import { WorldConnection, worldSocketUrl, type ConnectionState } from '../src/net/connection';
 import { readSettings } from '../src/settings';
 
 describe('finding the world server', () => {
   it('uses the origin the page came from', () => {
-    const url = worldSocketUrl(
-      'home-clearing',
-      'abcdefgh1234',
-      undefined,
-      'https://acorn.example/play?x=1',
-    );
-    expect(url).toBe('wss://acorn.example/api/worlds/home-clearing/ws?player=abcdefgh1234');
+    const url = worldSocketUrl('home-clearing', 'https://acorn.example/play?x=1');
+    expect(url).toBe('wss://acorn.example/api/worlds/home-clearing/ws');
   });
 
   it('uses ws, not wss, when the page is not secure', () => {
-    const url = worldSocketUrl(
-      'home-clearing',
-      'abcdefgh1234',
-      undefined,
-      'http://localhost:5173/',
-    );
-    expect(url.startsWith('ws://localhost:5173/')).toBe(true);
+    const url = worldSocketUrl('home-clearing', 'http://localhost:5173/');
+    expect(url).toBe('ws://localhost:5173/api/worlds/home-clearing/ws');
   });
 
-  it('can be pointed at another server entirely', () => {
-    const url = worldSocketUrl(
-      'home-clearing',
-      'abcdefgh1234',
-      'https://acorn-ash-web-staging.workers.dev',
-      'http://localhost:5173/',
-    );
-    expect(url.startsWith('wss://acorn-ash-web-staging.workers.dev/')).toBe(true);
-  });
-});
-
-describe('remembering who you are', () => {
-  const fakeStorage = (): Storage => {
-    const map = new Map<string, string>();
-    return {
-      getItem: (key) => map.get(key) ?? null,
-      setItem: (key, value) => void map.set(key, value),
-      removeItem: (key) => void map.delete(key),
-      clear: () => map.clear(),
-      key: (index) => [...map.keys()][index] ?? null,
-      get length() {
-        return map.size;
-      },
-    };
-  };
-
-  it('makes a key once and keeps it', () => {
-    const storage = fakeStorage();
-    const first = playerKey(storage);
-    expect(first).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
-    expect(playerKey(storage)).toBe(first);
-  });
-
-  it('replaces a key that has been tampered with', () => {
-    const storage = fakeStorage();
-    storage.setItem('acorn.playerKey', 'nope!');
-    expect(playerKey(storage)).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  it('does not say who is connecting: the session cookie does', () => {
+    const url = worldSocketUrl('home-clearing', 'https://acorn.example/');
+    expect(new URL(url).searchParams.has('player')).toBe(false);
   });
 });
 
@@ -175,5 +126,97 @@ describe('staying connected to the world', () => {
     vi.advanceTimersByTime(10_000);
     expect(FakeSocket.made).toHaveLength(2);
     expect(states.at(-1)).toBe('connected');
+  });
+});
+
+describe('signing in before connecting', () => {
+  let states: ConnectionState[];
+  let details: (string | undefined)[];
+  let signIn: ReturnType<typeof vi.fn<() => Promise<void>>>;
+
+  const connectWith = (handler: () => Promise<void>): WorldConnection => {
+    signIn = vi.fn(handler);
+    const connection = new WorldConnection(
+      'wss://acorn.example/ws',
+      {
+        onMessage: () => {},
+        onStateChange: (state, detail) => {
+          states.push(state);
+          details.push(detail);
+        },
+      },
+      { signIn },
+    );
+    connection.connect();
+    return connection;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('WebSocket', FakeSocket);
+    FakeSocket.made = [];
+    states = [];
+    details = [];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('opens the connection only once the browser has an account', async () => {
+    let finish: () => void = () => {};
+    const connection = connectWith(() => new Promise<void>((resolve) => (finish = resolve)));
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeSocket.made).toHaveLength(0);
+    expect(states.at(-1)).toBe('connecting');
+
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeSocket.made).toHaveLength(1);
+    connection.close();
+  });
+
+  it('says why, waits, and signs in again when it could not', async () => {
+    let attempts = 0;
+    const connection = connectWith(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('Could not sign in (503)');
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(states.at(-1)).toBe('offline');
+    expect(details.at(-1)).toBe('Could not sign in (503)');
+    expect(FakeSocket.made).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(signIn).toHaveBeenCalledTimes(2);
+    expect(FakeSocket.made).toHaveLength(1);
+    connection.close();
+  });
+
+  it('signs in again for each reconnect, so a lost cookie is replaced', async () => {
+    const connection = connectWith(async () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    FakeSocket.made[0]?.open();
+
+    FakeSocket.made[0]?.hangUp(1006);
+    await vi.advanceTimersByTimeAsync(2500);
+
+    expect(signIn).toHaveBeenCalledTimes(2);
+    expect(FakeSocket.made).toHaveLength(2);
+    connection.close();
+  });
+
+  it('opens nothing if the player left while it was signing in', async () => {
+    let finish: () => void = () => {};
+    const connection = connectWith(() => new Promise<void>((resolve) => (finish = resolve)));
+
+    connection.close();
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(FakeSocket.made).toHaveLength(0);
   });
 });

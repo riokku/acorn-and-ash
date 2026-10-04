@@ -176,10 +176,46 @@ jobs:
             apps/web/wrangler.jsonc > apps/web/wrangler.preview.jsonc
           grep -q "\"script_name\": \"$PR_GAME_SERVER\"" apps/web/wrangler.preview.jsonc
 
+      # Previews share one throwaway accounts database, so a branch never
+      # touches the staging one, and this pull request's own migrations are
+      # applied to it below. Each pull request also gets a session secret of its
+      # own, worked out from the Cloudflare token rather than stored anywhere, so
+      # it is the same on every push and a tester stays signed in between them.
+      - name: Give the preview an accounts database
+        if: steps.staging.outputs.exists == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          id=$(node tools/prepare-accounts.mjs database acorn-ash-accounts-preview)
+          test -n "$id"
+          sed -i "s/00000000-0000-0000-0000-000000000000/$id/" apps/web/wrangler.preview.jsonc
+          grep -q "$id" apps/web/wrangler.preview.jsonc
+
+          secret=$(printf 'acorn-preview-pr-%s' "$PR_NUMBER" \
+            | openssl dgst -sha256 -hmac "$CLOUDFLARE_API_TOKEN" -r | cut -d' ' -f1)
+          test ${#secret} -eq 64
+          printf '{"BETTER_AUTH_SECRET":"%s"}' "$secret" > apps/web/preview-secrets.json
+
+      - name: Update the preview accounts database
+        if: steps.staging.outputs.exists == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: d1 migrations apply DB --remote -c wrangler.preview.jsonc --env staging
+
       # A preview version of the staging web Worker. It is not promoted to any
       # traffic; it just gets its own URL. Because apps/web borrows the World
       # class from a game server rather than implementing it, Cloudflare will
       # give it a preview URL.
+      #
+      # Google and Discord only send people back to addresses they have been
+      # told about, and a preview's address is new every time. So a preview
+      # shows a "Test sign-in" button instead (TEST_SIGN_IN, which the Worker
+      # only honours on preview and local addresses; decision 0086).
       - name: Upload the preview
         id: upload
         if: steps.staging.outputs.exists == 'true'
@@ -191,6 +227,8 @@ jobs:
           command: >-
             versions upload -c wrangler.preview.jsonc --env staging
             --preview-alias pr-${{ github.event.number }}
+            --secrets-file preview-secrets.json
+            --var TEST_SIGN_IN:button
 
       - name: Find the preview link
         id: link
@@ -237,8 +275,9 @@ jobs:
                 `server of its own, built from this branch. Everything here is testable before ` +
                 `it merges.\n\n` +
                 `Its world starts empty every time the branch is new, so anything already ` +
-                `gathered on staging is not carried over. Open it in two tabs to see two ` +
-                `players.\n\n` +
+                `gathered on staging is not carried over. Google and Discord can't sign you in ` +
+                `on a preview, so press **Test sign-in** to get a throwaway player. Use a normal ` +
+                `window and a private one to see two players.\n\n` +
                 `_Updated for commit ${commit}._`;
             } else {
               body =
