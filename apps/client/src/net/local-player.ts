@@ -293,7 +293,7 @@ export class LocalPlayer {
     action: ActionState,
   ): void {
     if (footing === 'dodging') stepDodge(motion, action, this.collision);
-    else if (footing === 'aerial') stepDodgeAttack(motion, action, this.collision);
+    else if (footing === 'aerial') stepDodgeAttack(motion, action, this.collision, input.aimYaw);
     else
       stepPlayer(
         motion,

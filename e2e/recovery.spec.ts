@@ -4,7 +4,7 @@ test.use({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 test('keeps private recovery guidance after partial recovery with a crowded world', async ({
   page,
-}) => {
+}, testInfo) => {
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     hungerEmptyAfterSeconds: Infinity,
@@ -68,7 +68,11 @@ test('keeps private recovery guidance after partial recovery with a crowded worl
     await expect(page.locator('body')).toContainText('Some belongings recovered');
     await expect(page.locator('body')).toContainText('leftovers stay safely here');
     expect(sim.buriedCachesList()).toHaveLength(300);
-    await page.screenshot({ path: '/workspace/acorn-recovery-guidance.png' });
+    await page.screenshot({
+      path: process.env.CI
+        ? testInfo.outputPath('recovery-guidance.png')
+        : '/workspace/acorn-recovery-guidance.png',
+    });
     expect(errors).toEqual([]);
   } finally {
     sim.dispose();

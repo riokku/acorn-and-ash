@@ -262,6 +262,7 @@ export function movePose(move: MoveView): MovePose {
       return {
         ...NO_MOVE,
         clip: 'attack2',
+        legsFree: move.age > rules.land,
         time: lineUp('attack2', 1.1, rules.impact, move.age),
         aerialTurn: smoothstep(0, rules.impact, move.age),
         somersault: false,
@@ -272,6 +273,7 @@ export function movePose(move: MoveView): MovePose {
       const blow = CLIP_BLOW_SECONDS.strike ?? 0.73;
       return {
         ...NO_MOVE,
+        legsFree: move.age > rules.land,
         clip: 'strike',
         time:
           STRIKE_LEAP_SECONDS +

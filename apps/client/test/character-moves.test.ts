@@ -186,6 +186,10 @@ describe('eating', () => {
 });
 
 describe('aerial dodge follow-ups', () => {
+  it('lets locomotion animate under the grounded heavy recovery', () => {
+    expect(movePose(view(ActionKind.DodgeHeavy, 10)).legsFree).toBe(true);
+    expect(movePose(view(ActionKind.DodgeLight, 11)).legsFree).toBe(true);
+  });
   it('spins a light slash with the weapon sweep aligned to its impact', () => {
     const pose = movePose(view(ActionKind.DodgeLight, 5));
     expect(pose.clip).toBe('attack2');

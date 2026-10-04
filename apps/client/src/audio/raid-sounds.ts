@@ -99,7 +99,7 @@ function click(context: AudioContext, at: number, pitch: number, loudness: numbe
  * The tell before a skeleton swings: a bright ring of steel as it draws
  * back, so a swing can be heard coming as well as seen, even from behind.
  */
-export function playWindupRing(volume = 1): void {
+export function playWindupRing(volume = 1, heavy = false): void {
   const context = soundContext();
   if (context === null) return;
   const at = context.currentTime + 0.01;
@@ -111,8 +111,8 @@ export function playWindupRing(volume = 1): void {
   ] as const) {
     const tone = context.createOscillator();
     tone.type = 'sine';
-    tone.frequency.setValueAtTime(pitch * 0.92, at);
-    tone.frequency.exponentialRampToValueAtTime(pitch, at + 0.08);
+    tone.frequency.setValueAtTime(pitch * (heavy ? 0.7 : 0.92), at);
+    tone.frequency.exponentialRampToValueAtTime(pitch * (heavy ? 0.8 : 1), at + 0.08);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, at);
     gain.gain.exponentialRampToValueAtTime(level * share, at + 0.02);
