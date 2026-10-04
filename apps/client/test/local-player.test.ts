@@ -198,3 +198,37 @@ describe('charging on the client', () => {
     expect(crept).toBeLessThanOrEqual(creepPace + 1e-6);
   });
 });
+
+describe('dodge attacks predict and replay the authoritative hop', () => {
+  it.each([PlayerButton.Swing, PlayerButton.Charge])(
+    'starts a hop immediately for button %s',
+    (button) => {
+      const player = new LocalPlayer(vec3(0, 0, 0), collision);
+      player.setActionContext(() => ({ canAttack: true, castInstead: false }));
+      player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Dodge, 0);
+      player.advance(TICK_SECONDS, 0, 0, 0, button, 0);
+      expect(player.action.kind).toBe(
+        button === PlayerButton.Charge ? ActionKind.DodgeHeavy : ActionKind.DodgeLight,
+      );
+      const started = player.drainEvents().filter((event) => event.kind === 'began');
+      expect(started).toHaveLength(2);
+      const launch = { ...player.motion.position };
+      player.advance(TICK_SECONDS * 3, 0, 0, 0, 0, 0);
+      expect(player.motion.position.y).toBeGreaterThan(0.5);
+      expect(player.motion.grounded).toBe(false);
+      const predicted = { ...player.motion.position };
+      player.reconcile(
+        {
+          ...serverState(1, launch.x, launch.z),
+          action: button === PlayerButton.Charge ? ActionKind.DodgeHeavy : ActionKind.DodgeLight,
+          actionAge: 0,
+          actionHeading: 128,
+        },
+        2,
+      );
+      expect(player.motion.position.x).toBeCloseTo(predicted.x);
+      expect(player.motion.position.y).toBeCloseTo(predicted.y);
+      expect(player.motion.position.z).toBeCloseTo(predicted.z);
+    },
+  );
+});

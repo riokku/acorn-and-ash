@@ -11,7 +11,14 @@ import {
 import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather } from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
-import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
+import {
+  NO_MEAL,
+  mealCooldown,
+  type MealState,
+  DODGE,
+  DODGE_ATTACKS,
+  TICK_HZ,
+} from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
 import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
@@ -455,6 +462,7 @@ const HOME_CAMERA_BLOCKER_HEIGHT = 5;
 export interface GameDebug {
   selfNetId(): number;
   grassClumps(): number;
+  combatMove(): { kind: number; age: number; grounded: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
   buildBoundaryVisible(): boolean;
   localPosition(): Vec3;
@@ -1184,6 +1192,11 @@ export class Game {
       selfNetId: () => this.selfNetId,
       buildBoundaryVisible: () => this.buildBoundary?.group.visible ?? false,
       grassClumps: () => this.grass?.mesh.count ?? 0,
+      combatMove: () => ({
+        kind: this.localPlayer?.action.kind ?? 0,
+        age: this.localPlayer?.actionAge() ?? 0,
+        grounded: this.localPlayer?.motion.grounded ?? true,
+      }),
       weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
@@ -2730,7 +2743,9 @@ export class Game {
       (buttons & (PlayerButton.Swing | PlayerButton.Charge)) !== 0 ||
       kind === ActionKind.Swing ||
       kind === ActionKind.Charge ||
-      kind === ActionKind.Strike
+      kind === ActionKind.Strike ||
+      kind === ActionKind.DodgeLight ||
+      kind === ActionKind.DodgeHeavy
     );
   }
 
@@ -3941,6 +3956,10 @@ export class Game {
       playSwoosh((swing?.impact ?? 4) * TICK_SECONDS);
     } else if (action === ActionKind.Strike) {
       playSwoosh(STRIKE.impact * TICK_SECONDS, CHARGED_BLOW);
+    } else if (action === ActionKind.DodgeLight) {
+      playSwoosh(DODGE_ATTACKS.light.impact * TICK_SECONDS, 1.3);
+    } else if (action === ActionKind.DodgeHeavy) {
+      playSwoosh(DODGE_ATTACKS.heavy.impact * TICK_SECONDS, CHARGED_BLOW * 1.3);
     }
   }
 
@@ -3957,8 +3976,8 @@ export class Game {
     const strike = impact.kind === 'strike';
     const from = player.motion.position;
     const aimYaw = this.aimYaw ?? player.motion.facingYaw;
-    const strength = strike ? CHARGED_BLOW : 1;
-    if (strike) this.showSlam();
+    const strength = strike ? CHARGED_BLOW * (impact.dodge ? 1.35 : 1) : impact.dodge ? 1.4 : 1;
+    if (strike) this.showSlam(impact.dodge ? 1.5 : 1);
     if (this.aimedRaiderId !== null) {
       this.showOwnBlowOnRaider(this.aimedRaiderId, impact);
       return;
@@ -3990,21 +4009,21 @@ export class Game {
     const heavy = impact.kind === 'swing' && impact.step === 3;
     const landed = this.raiders.predictBlow(raiderId, player.motion.position, heavy, strike);
     if (landed === 'missed') return;
-    const weight = strike ? CHARGED_BLOW * 1.15 : heavy ? 1.4 : 1;
+    const weight = (strike ? CHARGED_BLOW * 1.15 : heavy ? 1.4 : 1) * (impact.dodge ? 1.2 : 1);
     const shrugged = landed === 'shrugged';
     this.localCharacter?.hitStop(shrugged ? 0.05 : 0.07 * weight);
     this.camera?.shake(HIT_LANDED_SHAKE * weight * (shrugged ? 0.6 : 1));
   }
 
   /** A charged strike coming down: dust thrown up where it hits the ground. */
-  private showSlam(): void {
+  private showSlam(strength = 1): void {
     const player = this.localPlayer;
     const tip = this.localCharacter?.heldTip(this.scratchBlow) ?? null;
     if (player === null || tip === null) return;
     tip.y = Math.max(tip.y, player.motion.position.y + 0.05);
     const yaw = player.motion.facingYaw;
-    this.bursts.burst('dust', tip, -Math.sin(yaw), -Math.cos(yaw), 1);
-    this.camera?.shake(HIT_LANDED_SHAKE * 0.6);
+    this.bursts.burst('dust', tip, -Math.sin(yaw), -Math.cos(yaw), strength);
+    this.camera?.shake(HIT_LANDED_SHAKE * 0.6 * strength);
   }
 
   /** A blow landing on a tree, from somebody at `from`: chips fly and the tree shivers. */

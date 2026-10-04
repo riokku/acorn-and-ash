@@ -1,0 +1,7 @@
+# Attacking out of a dodge
+
+A fresh attack during an active dodge starts one committed airborne follow-up, using the existing light-click/strong-hold distinction. Light gives a fast spin slash; strong gives a taller somersault and landing slam. Inputs held before the dodge do not trigger a follow-up. Fishing, unarmed players and interiors retain their existing restrictions. Raiders keep their current moves.
+
+Append action IDs 11 and 12 without expanding snapshots. The shared rules own timing, collision-checked motion, one impact, damage and recovery. Prediction and replay use the same hop. Damage against skeletons is two for the slash and six for the slam (normal light one, charged four). Against multi-hit wildlife the follow-ups count as two/three hits; ordinary charged attacks keep their existing behavior. The slam has longer recovery. Neither move extends dodge invulnerability.
+
+Existing licensed character clips are aligned with the impact tick and combined with an original body spin/somersault. Weapon trails, stronger landing dust and sound use the current effect pools. Controls are documented under Settings > Keybindings. No new art files, rendering lights, resources or input buttons are introduced.

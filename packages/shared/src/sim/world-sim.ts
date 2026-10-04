@@ -263,13 +263,14 @@ import {
   isUntouchable,
   packActionByte,
   stepDodge,
+  stepDodgeAttack,
   Gesture,
   type ActionContext,
   type ActionState,
   type GestureEvent,
   type Impact,
 } from './actions';
-import { DODGE, KNOCKED_OUT_TICKS, LIGHT_COMBO, STRIKE } from '../data/moves';
+import { DODGE, DODGE_ATTACKS, KNOCKED_OUT_TICKS, LIGHT_COMBO, STRIKE } from '../data/moves';
 import type { RaiderKindId } from '../data/raiders';
 import {
   RaidDirector,
@@ -843,6 +844,8 @@ interface PlayerRuntime {
    * a browser that stops sending mid-roll cannot stay untouchable.
    */
   dodgeStartedAtTick: number;
+  /** Historical protection stops when a roll becomes an attack. */
+  dodgeAttackStartedAtTick: number;
   /**
    * What this player last chose to hold, or null if they never have. Read
    * through `equippedItemOf`, never directly - the pack can empty this out
@@ -1473,6 +1476,7 @@ export class WorldSimulation {
       previousButtons: 0,
       knockedOutAtTick: 0,
       dodgeStartedAtTick: -Infinity,
+      dodgeAttackStartedAtTick: Infinity,
       equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
       explored: exploredMapFrom(saved?.explored),
       exploredCell: null,
@@ -1783,7 +1787,11 @@ export class WorldSimulation {
           const idle = idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw);
           if (runtime.action.kind === ActionKind.Idle) {
             stepPlayer(scratch, idle, TICK_SECONDS, collision);
-          } else if (runtime.action.kind !== ActionKind.Dodge) {
+          } else if (
+            runtime.action.kind !== ActionKind.Dodge &&
+            runtime.action.kind !== ActionKind.DodgeLight &&
+            runtime.action.kind !== ActionKind.DodgeHeavy
+          ) {
             stepPlayer(
               scratch,
               footedInput(idle, 'still', scratch.facingYaw),
@@ -1797,13 +1805,23 @@ export class WorldSimulation {
             if (input === undefined) break;
 
             const context = this.actionContext(runtime, scratch.position, input.aimYaw);
+            const beforeAction = runtime.action.kind;
             const tick = advanceAction(runtime.action, input, runtime.previousButtons, context);
+            if (
+              beforeAction === ActionKind.Dodge &&
+              (runtime.action.kind === ActionKind.DodgeLight ||
+                runtime.action.kind === ActionKind.DodgeHeavy)
+            )
+              runtime.dodgeAttackStartedAtTick = this.tick;
             runtime.previousButtons = input.buttons;
             if (runtime.action.kind === ActionKind.Dodge && runtime.action.age === 0) {
               runtime.dodgeStartedAtTick = this.tick;
+              runtime.dodgeAttackStartedAtTick = Infinity;
             }
             if (tick.footing === 'dodging') {
               stepDodge(scratch, runtime.action, collision);
+            } else if (tick.footing === 'aerial') {
+              stepDodgeAttack(scratch, runtime.action, collision);
             } else {
               stepPlayer(
                 scratch,
@@ -2012,7 +2030,11 @@ export class WorldSimulation {
     const runtime = this.players.get(netId);
     if (runtime === undefined || runtime.space !== OUTDOORS) return;
     const sinceRoll = impactTick - runtime.dodgeStartedAtTick;
-    if (sinceRoll < DODGE.invulnerable && runtime.dodgeStartedAtTick <= this.tick) {
+    if (
+      sinceRoll < DODGE.invulnerable &&
+      runtime.dodgeStartedAtTick <= this.tick &&
+      impactTick < runtime.dodgeAttackStartedAtTick
+    ) {
       this.healthEvents.push({
         netId,
         health: Math.round(runtime.health),
@@ -3167,8 +3189,13 @@ export class WorldSimulation {
 
     // Looking back to when the swing began, and a little before for the
     // browser having shown it slightly in the past (see decision 0056).
-    const began =
-      impact.kind === 'strike' ? STRIKE.impact : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
+    const began = impact.dodge
+      ? impact.kind === 'strike'
+        ? DODGE_ATTACKS.heavy.impact
+        : DODGE_ATTACKS.light.impact
+      : impact.kind === 'strike'
+        ? STRIKE.impact
+        : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
     const lookBack = began + LAG_COMPENSATION_TICKS;
 
     // A skeleton in front comes before anything else: mid-fight, the swing
@@ -3184,7 +3211,13 @@ export class WorldSimulation {
     }
 
     const animalTarget = this.animalInReachOf(position, aimYaw, lookBack);
-    if (animalTarget !== null) this.catchAnimal(runtime, animalTarget.id, charged);
+    if (animalTarget !== null)
+      this.catchAnimal(
+        runtime,
+        animalTarget.id,
+        charged,
+        impact.dodge ? (charged ? 3 : 2) : undefined,
+      );
   }
 
   /** One blow of the axe into a tree, or the one that brings it down. */
@@ -3286,13 +3319,21 @@ export class WorldSimulation {
    * the same way a tree waits out `regrowMinSeconds` before it is worth
    * chopping again.
    */
-  private catchAnimal(runtime: PlayerRuntime, animalId: number, charged: boolean): void {
+  private catchAnimal(
+    runtime: PlayerRuntime,
+    animalId: number,
+    charged: boolean,
+    dodgeWeight?: number,
+  ): void {
     const animal = this.animals.get(animalId);
     if (animal === undefined || animal.caught || animal.kind === 'curiousRaccoon') return;
     const kind: AnimalKind = ANIMAL_KINDS[animal.kind];
     animal.damageHelpers.add(runtime.netId);
-    if (kind.threat !== undefined && (!charged || animal.kind === 'woodlandGuardian')) {
-      animal.hitsTaken += charged ? 2 : 1;
+    if (
+      kind.threat !== undefined &&
+      (dodgeWeight !== undefined || !charged || animal.kind === 'woodlandGuardian')
+    ) {
+      animal.hitsTaken += dodgeWeight ?? (charged ? 2 : 1);
       const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
       if (hitsLeft > 0) {
         this.threatHitEvents.push({ animalId: animal.id, hitsLeft, netId: runtime.netId });

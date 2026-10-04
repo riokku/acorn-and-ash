@@ -13,6 +13,7 @@ import {
   ActionKind,
   CHARGE_TICKS,
   DODGE,
+  DODGE_ATTACKS,
   FLINCH,
   Gesture,
   KNOCKED_OUT_TICKS,
@@ -136,6 +137,9 @@ export interface MovePose {
    * for a raider's first swing - and unwinding again as the swing goes.
    */
   readonly coil: number;
+  /** A full aerial spin/somersault; completed turns leave the landing upright. */
+  readonly aerialTurn?: number;
+  readonly somersault?: boolean;
 }
 
 const NO_MOVE: MovePose = {
@@ -174,6 +178,8 @@ export function blendSeconds(kind: ActionKind): number {
   switch (kind) {
     case ActionKind.Swing:
     case ActionKind.Strike:
+    case ActionKind.DodgeLight:
+    case ActionKind.DodgeHeavy:
       return 0.06;
     case ActionKind.Dodge:
       return 0.05;
@@ -249,6 +255,30 @@ export function movePose(move: MoveView): MovePose {
       const blow = CLIP_BLOW_SECONDS.strike ?? 0.73;
       const speed = (blow - STRIKE_LEAP_SECONDS) / (STRIKE.impact * TICK_SECONDS);
       return { ...NO_MOVE, clip: 'strike', time: STRIKE_LEAP_SECONDS + seconds * speed };
+    }
+
+    case ActionKind.DodgeLight: {
+      const rules = DODGE_ATTACKS.light;
+      return {
+        ...NO_MOVE,
+        clip: 'attack2',
+        time: lineUp('attack2', 1.1, rules.impact, move.age),
+        aerialTurn: smoothstep(0, rules.impact, move.age),
+        somersault: false,
+      };
+    }
+    case ActionKind.DodgeHeavy: {
+      const rules = DODGE_ATTACKS.heavy;
+      const blow = CLIP_BLOW_SECONDS.strike ?? 0.73;
+      return {
+        ...NO_MOVE,
+        clip: 'strike',
+        time:
+          STRIKE_LEAP_SECONDS +
+          seconds * ((blow - STRIKE_LEAP_SECONDS) / (rules.impact * TICK_SECONDS)),
+        aerialTurn: smoothstep(0, rules.land, move.age),
+        somersault: true,
+      };
     }
 
     case ActionKind.Dodge: {

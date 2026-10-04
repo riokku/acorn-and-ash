@@ -5,6 +5,7 @@ import {
   CHARGE_TICKS,
   CHARGE_WALK_SHARE,
   DODGE,
+  DODGE_ATTACKS,
   FLINCH,
   Gesture,
   HOME_BED,
@@ -126,6 +127,22 @@ const DEMOS: readonly Demo[] = [
           : IDLE,
     speed: (age) => (age < CHARGE_TICKS ? PLAYER_WALK_SPEED * CHARGE_WALK_SHARE : 0),
   },
+  ...(['light', 'heavy'] as const).map((kind): Demo => ({
+    name: kind === 'light' ? 'dodge-slash' : 'dodge-slam',
+    item: 'axe',
+    burst: kind === 'heavy' ? 'dust' : 'fur',
+    length: 3 + DODGE_ATTACKS[kind].end + 8,
+    move: (age) =>
+      age < 3
+        ? { kind: ActionKind.Dodge, step: 0, age }
+        : age < 3 + DODGE_ATTACKS[kind].end
+          ? {
+              kind: kind === 'light' ? ActionKind.DodgeLight : ActionKind.DodgeHeavy,
+              step: 0,
+              age: age - 3,
+            }
+          : IDLE,
+  })),
   ...(['forward', 'backward', 'left', 'right'] as const).map((roll): Demo => ({
     name: `roll-${roll}`,
     item: 'torch',
@@ -313,6 +330,11 @@ function start(showing: Showing): void {
 function drawAt(showing: Showing, age: number, deltaSeconds: number): void {
   const { demo, character } = showing;
   const move = demo.move(age);
+  if (move.kind === ActionKind.DodgeLight || move.kind === ActionKind.DodgeHeavy) {
+    const rules = move.kind === ActionKind.DodgeHeavy ? DODGE_ATTACKS.heavy : DODGE_ATTACKS.light;
+    const progress = Math.min(1, move.age / rules.land);
+    character.group.position.y = 4 * rules.height * progress * (1 - progress);
+  } else character.group.position.y = 0;
   const before = demo.move(showing.drawnAge);
   showing.drawnAge = age;
   const rest = demo.rest;
@@ -364,11 +386,15 @@ function landed(
   now: { kind: ActionKind; step: number; age: number },
 ): boolean {
   const impact =
-    now.kind === ActionKind.Strike
-      ? STRIKE.impact
-      : now.kind === ActionKind.Swing
-        ? (LIGHT_COMBO[now.step - 1]?.impact ?? -1)
-        : -1;
+    now.kind === ActionKind.DodgeHeavy
+      ? DODGE_ATTACKS.heavy.impact
+      : now.kind === ActionKind.DodgeLight
+        ? DODGE_ATTACKS.light.impact
+        : now.kind === ActionKind.Strike
+          ? STRIKE.impact
+          : now.kind === ActionKind.Swing
+            ? (LIGHT_COMBO[now.step - 1]?.impact ?? -1)
+            : -1;
   if (impact < 0 || now.age < impact) return false;
   const sameMove = before.kind === now.kind && before.step === now.step;
   return !sameMove || before.age < impact;

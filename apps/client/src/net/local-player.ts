@@ -11,6 +11,7 @@ import {
   distance,
   footedInput,
   stepDodge,
+  stepDodgeAttack,
   stepPlayer,
   unpackActionByte,
   type ActionContext,
@@ -292,6 +293,7 @@ export class LocalPlayer {
     action: ActionState,
   ): void {
     if (footing === 'dodging') stepDodge(motion, action, this.collision);
+    else if (footing === 'aerial') stepDodgeAttack(motion, action, this.collision);
     else
       stepPlayer(
         motion,
