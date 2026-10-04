@@ -117,11 +117,12 @@ describe('left-click attacks', () => {
   );
 });
 
-describe('right-click loot gestures', () => {
+describe('right-click loot and dodge gestures', () => {
   let canvas: EventTarget & { requestPointerLock: ReturnType<typeof vi.fn> };
   let windowEvents: EventTarget;
   let controls: Controls;
   let now: number;
+  let dodging: boolean;
   beforeEach(() => {
     now = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => now);
@@ -132,7 +133,8 @@ describe('right-click loot gestures', () => {
       'document',
       Object.assign(new EventTarget(), { exitPointerLock: vi.fn(), pointerLockElement: null }),
     );
-    controls = new Controls(canvas as unknown as HTMLCanvasElement);
+    dodging = false;
+    controls = new Controls(canvas as unknown as HTMLCanvasElement, () => dodging);
   });
   afterEach(() => {
     controls.dispose();
@@ -150,6 +152,49 @@ describe('right-click loot gestures', () => {
       }),
     );
   }
+  it('sends the dodge slam on press once, without camera capture or loot on release', () => {
+    dodging = true;
+    mouse(canvas, 'mousedown');
+    expect(controls.buttons()).toBe(PlayerButton.Charge);
+    expect(controls.takeClickPoint()).toEqual({ x: 120, y: 240 });
+    expect(canvas.requestPointerLock).not.toHaveBeenCalled();
+    controls.forgetTaps();
+    mouse(canvas, 'mousemove', 15);
+    expect(controls.buttons()).toBe(0);
+    expect(controls.takeMouseDelta()).toEqual({ x: 0, y: 0 });
+    // Landing before release must not turn this attack into a loot/camera gesture.
+    dodging = false;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickTap()).toBe(false);
+    expect(controls.takeRightClickPoint()).toBeNull();
+    mouse(canvas, 'mousedown');
+    now = 100;
+    mouse(windowEvents, 'mouseup');
+    expect(controls.takeRightClickTap()).toBe(true);
+    expect(canvas.requestPointerLock).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a complete quick dodge click between ticks and clears it on pause', () => {
+    dodging = true;
+    mouse(canvas, 'mousedown');
+    mouse(windowEvents, 'mouseup');
+    expect(controls.buttons()).toBe(PlayerButton.Charge);
+    controls.setGameplayEnabled(false);
+    expect(controls.buttons()).toBe(0);
+    expect(controls.takeClickPoint()).toBeNull();
+    expect(controls.takeRightClickPoint()).toBeNull();
+  });
+
+  it('does not start a dodge slam from a left-button hold', () => {
+    dodging = true;
+    canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 0 }));
+    now = 500;
+    expect(controls.buttons()).toBe(0);
+    windowEvents.dispatchEvent(Object.assign(new Event('mouseup'), { button: 0 }));
+    dodging = false;
+    expect(controls.buttons()).toBe(0);
+  });
+
   it('keeps settings and loading input idle until gameplay resumes', () => {
     controls.setGameplayEnabled(false);
     mouse(canvas, 'mousedown');

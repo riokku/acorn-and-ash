@@ -18,6 +18,7 @@ const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
 const LIGHT_ATTACK = 'LightAttack';
 const CHARGED_ATTACK = 'ChargedAttack';
+const DODGE_SLAM = 'DodgeSlam';
 
 /**
  * Hotkeys for crafting or building, in menu order: 1 is the first entry, 2 the
@@ -99,6 +100,7 @@ export class Controls {
   private pointer: { x: number; y: number } | null = null;
   /** When the right button went down, and how far the mouse has moved since, to tell a tap from a drag. */
   private rightDownAt: number | null = null;
+  private rightAttackHeld = false;
   private rightTravelPx = 0;
   private rightTapped = false;
   private rightPressPoint: { x: number; y: number } | null = null;
@@ -109,7 +111,10 @@ export class Controls {
 
   private readonly canvas: HTMLCanvasElement;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    private readonly canDodgeAttack: () => boolean = () => false,
+  ) {
     this.canvas = canvas;
 
     window.addEventListener('keydown', this.handleKeyDown);
@@ -183,11 +188,13 @@ export class Controls {
       !this.leftFishingSent &&
       (leftHeldPastThreshold || this.tapped.has(CHARGED_ATTACK))
     ) {
-      buttons |= PlayerButton.Charge;
+      // The short dodge window uses an immediate right press instead of a hold.
+      if (!this.canDodgeAttack()) buttons |= PlayerButton.Charge;
       this.leftChargeSent = true;
     } else if (!this.leftFishingSent && this.tapped.has(LIGHT_ATTACK)) {
       buttons |= PlayerButton.Swing;
     }
+    if (!fishing && this.tapped.has(DODGE_SLAM)) buttons |= PlayerButton.Charge;
     return buttons;
   }
 
@@ -364,6 +371,7 @@ export class Controls {
     this.leftFishingSent = false;
     this.pendingClickPoint = null;
     this.rightDownAt = null;
+    this.rightAttackHeld = false;
     this.rightPressPoint = null;
     this.rightClickPoint = null;
     this.rightTapped = false;
@@ -436,7 +444,8 @@ export class Controls {
    * The right button turns the camera, WoW-style: capture the mouse for as
    * long as it is held so the drag can turn any distance without the cursor
    * hitting the edge of the screen, then let go the moment it is released
-   * (see `handleMouseUp`). It never becomes a game button in its own right.
+   * (see `handleMouseUp`). During an active combat dodge, its press instead
+   * starts the slam immediately and consumes the entire gesture.
    *
    * Every other button is kept alongside the keys, under a made-up name, the
    * mouse otherwise being completely free to click on the world or the HUD -
@@ -446,6 +455,13 @@ export class Controls {
     if (!this.gameplayEnabled) return;
     this.pointer = { x: event.clientX, y: event.clientY };
     if (event.button === 2) {
+      if (this.rightAttackHeld) return;
+      if (this.canDodgeAttack()) {
+        this.rightAttackHeld = true;
+        this.tapped.add(DODGE_SLAM);
+        this.pendingClickPoint = { x: event.clientX, y: event.clientY };
+        return;
+      }
       this.rightDownAt = performance.now();
       this.rightTravelPx = 0;
       this.rightPressPoint = { x: event.clientX, y: event.clientY };
@@ -464,6 +480,10 @@ export class Controls {
 
   private readonly handleMouseUp = (event: MouseEvent): void => {
     if (event.button === 2) {
+      if (this.rightAttackHeld) {
+        this.rightAttackHeld = false;
+        return;
+      }
       if (this.pointerLocked) document.exitPointerLock();
       if (
         this.rightDownAt !== null &&

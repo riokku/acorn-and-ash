@@ -897,7 +897,16 @@ export class Game {
     this.options.canvas.insertAdjacentElement('afterend', fade);
     this.sceneFade = fade;
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
-    this.controls = new Controls(this.options.canvas);
+    this.controls = new Controls(this.options.canvas, () => {
+      const player = this.localPlayer;
+      if (player === null || player.action.kind !== ActionKind.Dodge || this.placing !== null)
+        return false;
+      const context = this.actionContext(
+        player.motion.position,
+        this.aimYaw ?? player.motion.facingYaw,
+      );
+      return context.canAttack && !context.castInstead;
+    });
     this.controls.setGameplayEnabled(false);
 
     this.options.hud.publish({

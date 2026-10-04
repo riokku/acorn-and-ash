@@ -1,6 +1,6 @@
 # Attacking out of a dodge
 
-A fresh attack during an active dodge starts one committed airborne follow-up, using the existing light-click/strong-hold distinction. Light gives a fast spin slash; strong gives a taller somersault and landing slam. Inputs held before the dodge do not trigger a follow-up. Fishing, unarmed players and interiors retain their existing restrictions. Raiders keep their current moves.
+A fresh attack during an active dodge starts one committed airborne follow-up, using a left-click tap for light and an immediate right-button press for strong. A hold is too slow for the short dodge window; normal charged attacks outside a dodge still use a left-button hold. The slam consumes its entire right-button gesture so it cannot also loot or turn the camera. Light gives a fast spin slash; strong gives a taller somersault and landing slam. Inputs held before the dodge do not trigger a follow-up. Fishing, unarmed players and interiors retain their existing restrictions. Raiders keep their current moves.
 
 Append action IDs 11 and 12 without expanding snapshots. The shared rules own timing, collision-checked motion, one impact, damage and recovery. Prediction and replay use the same hop. Damage against skeletons is two for the slash and six for the slam (normal light one, charged four). Against multi-hit wildlife the follow-ups count as two/three hits; ordinary charged attacks keep their existing behavior. The slam has longer recovery. Neither move extends dodge invulnerability.
 

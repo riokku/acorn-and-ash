@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(240_000);
-test('turns real dodge clicks and holds into distinct airborne attacks', async ({ page }) => {
+test('turns real left and right dodge clicks into distinct airborne attacks', async ({ page }) => {
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     hungerEmptyAfterSeconds: Infinity,
@@ -50,7 +50,7 @@ test('turns real dodge clicks and holds into distinct airborne attacks', async (
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
     await page.locator('.hud-curtain').click();
     await page.mouse.move(480, 260);
-    for (const [kind, hold] of [
+    for (const [kind, strong] of [
       [shared.ActionKind.DodgeLight, false],
       [shared.ActionKind.DodgeHeavy, true],
     ] as const) {
@@ -64,11 +64,8 @@ test('turns real dodge clicks and holds into distinct airborne attacks', async (
         .poll(() => page.evaluate(() => window.acornDebug?.combatMove().kind), { intervals: [20] })
         .toBe(shared.ActionKind.Dodge);
       await page.keyboard.up('ControlLeft');
-      if (hold) {
-        await page.mouse.down();
-        await expect.poll(() => started.has(kind), { intervals: [20] }).toBe(true);
-        await page.mouse.up();
-      } else await page.mouse.click(480, 260);
+      await page.mouse.click(480, 260, { button: strong ? 'right' : 'left' });
+      expect(await page.evaluate(() => document.pointerLockElement === null)).toBe(true);
       await expect.poll(() => started.has(kind), { intervals: [20] }).toBe(true);
     }
     expect(errors).toEqual([]);
