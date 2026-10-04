@@ -635,6 +635,8 @@ export class Game {
    */
   private pendingPlacements: { readonly request: BuildRequest; readonly sentAt: number }[] = [];
   private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
+  private recoveryMarkers: readonly BuriedCacheView[] = [];
+  private recoveryHeard = false;
   private buriedCaches: readonly BuriedCacheView[] = [];
   /** Whether a cache of our own is close enough right now to dig up. */
   private nearBuriedCache = false;
@@ -1415,6 +1417,10 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.recoveryHeard = false;
+        this.recoveryMarkers = [];
+        this.buriedCaches = [];
+        this.applyBuriedCaches();
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
         // A fresh connection starts from a fresh pack list: what it says is
@@ -1704,8 +1710,23 @@ export class Game {
         this.applyBuiltProps();
         break;
       }
+      case 'recoveryMarkers': {
+        this.recoveryHeard = true;
+        this.recoveryMarkers = message.caches;
+        this.buriedCaches = [
+          ...this.buriedCaches.filter((cache) => cache.ownerNetId !== this.selfNetId),
+          ...message.caches,
+        ];
+        this.applyBuriedCaches();
+        break;
+      }
       case 'buriedCaches': {
-        this.buriedCaches = message.caches;
+        this.buriedCaches = this.recoveryHeard
+          ? [
+              ...message.caches.filter((cache) => cache.ownerNetId !== this.selfNetId),
+              ...this.recoveryMarkers,
+            ]
+          : message.caches;
         this.applyBuriedCaches();
         break;
       }
@@ -1944,8 +1965,10 @@ export class Game {
     const now = performance.now();
     const text =
       event.kind === 'buried'
-        ? 'Knocked out! Some of what you carried is buried where you fell.'
-        : 'You dug up what you buried.';
+        ? 'Safe at home. Follow your recovery marker to reclaim belongings; they never expire.'
+        : event.kind === 'partial'
+          ? 'Some belongings recovered. Make room in your pack; the rest stays safely marked.'
+          : 'All belongings recovered.';
     this.cacheNews = { text, until: now + NEWS_MS };
     this.options.hud.publish({ cacheNews: this.currentCacheNews() });
   }
@@ -2596,10 +2619,12 @@ export class Game {
       this.space !== OUTDOORS,
       this.reducedMotion.matches,
     );
-    // Only campfires animate right now; the `in` check skips the other
+    // Fires and windows animate; the `in` check skips the other
     // buildable kinds sharing this map without giving them all a no-op method.
     for (const built of this.builtMeshes.values()) {
-      if ('update' in built) built.update(deltaSeconds);
+      if ('update' in built && typeof built.update === 'function') built.update(deltaSeconds);
+      if ('setDaylight' in built && typeof built.setDaylight === 'function')
+        built.setDaylight(dayBrightness(dayProgress(weatherNow)));
     }
 
     if (this.homeInterior !== null && this.space !== OUTDOORS) {
@@ -3681,6 +3706,16 @@ export class Game {
     const changed = space !== this.space;
     if (changed) this.closeChest();
     this.space = space;
+    if (changed && inside && this.homeHere()?.yours === true) {
+      const kind = this.currentHomeKind();
+      this.craftingNews = {
+        text:
+          kind === 'tent'
+            ? 'Home again · store your finds and rest before your next outing.'
+            : 'Home again · store your finds, cook a meal and settle in.',
+        until: performance.now() + NEWS_MS,
+      };
+    }
 
     this.outdoors.visible = !inside;
     const kind = this.currentHomeKind();

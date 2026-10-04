@@ -86,6 +86,13 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     await expect(page.getByRole('button', { name: 'Take 9 Log', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Take 9 Log', exact: true }).click();
     await expect(panel).toContainText('0/10');
+    await page.getByRole('button', { name: 'Store building supplies', exact: true }).click();
+    await expect(panel).toContainText('3/10');
+    await expect(
+      page.getByRole('button', { name: 'Store building supplies', exact: true }),
+    ).toBeDisabled();
+    expect(sim.inventoryOf(1).log ?? 0).toBe(0);
+    expect(sim.inventoryOf(1).stick ?? 0).toBe(0);
     await page.getByRole('button', { name: 'Close storage chest' }).click();
     await expect(panel).toBeHidden();
     expect(errors).toEqual([]);

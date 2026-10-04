@@ -1,3 +1,4 @@
+import { storeBuildingSupplies } from './chest';
 import {
   isIndoorOnlyKind,
   isDecorationKind,
@@ -614,7 +615,7 @@ export interface BuriedCacheView {
  */
 export interface CacheEvent {
   readonly netId: number;
-  readonly kind: 'buried' | 'dugUp';
+  readonly kind: 'buried' | 'dugUp' | 'partial';
 }
 
 /**
@@ -623,7 +624,7 @@ export interface CacheEvent {
  * never goes to a client and so never needs to be a `CacheEvent` itself.
  */
 export type CacheChange =
-  | { readonly netId: number; readonly kind: 'buried'; readonly cache: BuriedCache }
+  | { readonly netId: number; readonly kind: 'buried' | 'partial'; readonly cache: BuriedCache }
   | { readonly netId: number; readonly kind: 'dugUp'; readonly cacheId: number };
 
 /** A tree's state, as it goes into and comes out of storage. */
@@ -1511,6 +1512,16 @@ export class WorldSimulation {
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
       return reply('busy');
     if (request.action === 'open') return reply(null);
+    if (request.action === 'storeSupplies') {
+      const wasHolding = this.equippedItemOf(netId);
+      const result = storeBuildingSupplies(slots, runtime.inventory);
+      if (result.moved > 0) this.homeChests.set(home.id, slots);
+      if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+      return reply(
+        result.left > 0 ? 'chestFull' : result.moved === 0 ? 'empty' : null,
+        result.moved,
+      );
+    }
     if (!validTransferAmount(request.amount)) return reply('invalid');
     const wasHolding = this.equippedItemOf(netId);
     let moved: number;
@@ -2943,9 +2954,25 @@ export class WorldSimulation {
     );
     if (cache === null) return false;
 
-    for (const entry of cache.items) addItem(runtime.inventory, entry.item, entry.count);
-    this.buriedCaches.splice(this.buriedCaches.indexOf(cache), 1);
-    this.cacheEvents.push({ netId: runtime.netId, kind: 'dugUp', cacheId: cache.id });
+    let recovered = 0;
+    const remaining: { item: ItemId; count: number }[] = [];
+    for (const entry of cache.items) {
+      const taken = addItem(runtime.inventory, entry.item, entry.count);
+      recovered += taken;
+      if (taken < entry.count) remaining.push({ item: entry.item, count: entry.count - taken });
+    }
+    if (recovered === 0) {
+      const item = remaining[0]?.item;
+      return item === undefined ? true : this.refusePickup(runtime, item);
+    }
+    if (remaining.length === 0) {
+      this.buriedCaches.splice(this.buriedCaches.indexOf(cache), 1);
+      this.cacheEvents.push({ netId: runtime.netId, kind: 'dugUp', cacheId: cache.id });
+    } else {
+      const updated = { ...cache, items: remaining };
+      this.buriedCaches[this.buriedCaches.indexOf(cache)] = updated;
+      this.cacheEvents.push({ netId: runtime.netId, kind: 'partial', cache: updated });
+    }
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: null });
     return true;
   }

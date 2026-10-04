@@ -9,6 +9,7 @@ export interface ChestStack {
 export type ChestSlot = ChestStack | null;
 export type ChestRequest =
   | { readonly action: 'open' }
+  | { readonly action: 'storeSupplies' }
   | { readonly action: 'deposit'; readonly item: ItemId; readonly amount: number }
   | { readonly action: 'withdraw'; readonly slot: number; readonly amount: number };
 export const CHEST_REASONS = [
@@ -98,4 +99,21 @@ export function chestFromSaved(value: unknown): ChestSlot[] | null {
     slots.push({ item: id, count });
   }
   return slots;
+}
+
+/** Leaves tools, meals, raw food, blueprints and earned trophies ready for the next outing. */
+export const CHEST_BUILDING_SUPPLIES = ['log', 'stick', 'bone', 'flower'] as const;
+export function storeBuildingSupplies(
+  slots: ChestSlot[],
+  inventory: Inventory,
+): { moved: number; left: number } {
+  let moved = 0,
+    left = 0;
+  for (const item of CHEST_BUILDING_SUPPLIES) {
+    const count = countOf(inventory, item);
+    if (count === 0) continue;
+    moved += depositInChest(slots, inventory, item, count);
+    left += countOf(inventory, item);
+  }
+  return { moved, left };
 }

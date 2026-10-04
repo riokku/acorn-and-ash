@@ -75,7 +75,7 @@ export function WorldMap({
       const dpr = fitCanvas(canvas, width, height);
       drawBigMap(context, feed, fog.canvasFor(feed), view, width, height, dpr, {
         home: 'Home',
-        stash: 'Your stash',
+        stash: 'Recover belongings',
       });
       if (feed.exploredVersion !== lastVersion) {
         lastVersion = feed.exploredVersion;

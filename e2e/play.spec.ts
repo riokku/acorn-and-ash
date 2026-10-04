@@ -5,6 +5,7 @@ declare global {
     acornDebug?: {
       selfNetId(): number;
       grassClumps(): number;
+      buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
       weatherEffects(): { rainDrops: number; fireflies: number };
       buildBoundaryVisible(): boolean;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;

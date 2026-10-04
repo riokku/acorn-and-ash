@@ -63,7 +63,11 @@ interface Exhibit {
   readonly yaw?: number;
   /** How far back the camera stands to look at it on its own. */
   readonly view: number;
-  create(): { group: THREE.Group; update?(deltaSeconds: number): void };
+  create(): {
+    group: THREE.Group;
+    update?(deltaSeconds: number): void;
+    setDaylight?(brightness: number): void;
+  };
 }
 
 const POND: WaterCircle[] = [
@@ -252,6 +256,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     const made = exhibit.create();
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;
+    made.setDaylight?.(dayBrightness(Number.isFinite(time) ? time : 0.42));
     if ('setLit' in made && typeof made.setLit === 'function') made.setLit(true);
     scene.add(made.group);
     if (made.update !== undefined) updaters.push(made.update);

@@ -921,3 +921,5 @@ Most outings have clear skies or drizzle, with short rain and occasional brief s
 ### Make yourself at home
 
 Press B inside your home to place a cedar bench, timber table, woven forest rug, colored lantern, flower planter or earned trophy. Colored lanterns and planters also work outdoors inside your building area. Point at the floor, scroll to rotate, and click to place. The preview protects doors, waking spots and useful stations. Move pieces for free or pack them up to recover their materials; a full backpack keeps the piece intact. Visitors can admire decorations but only owners can rearrange them. See [private decoration](docs/decisions/0081-private-home-decoration.md).
+
+Returning home closes the expedition loop: store building supplies with one chest button, prepare a meal and rest. Knockout recovery markers never expire. Digging takes only what fits in your backpack; leftovers remain safely buried and marked, including in long-lived worlds with many caches. Cabin windows brighten softly at night.

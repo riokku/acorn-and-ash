@@ -1580,7 +1580,7 @@ describe('hunger', () => {
   it('tells a new player they start full', async () => {
     const client = await TestClient.connect(nextWorldId());
     await waitFor('a hunger reading', () => client.hunger().length > 0);
-    expect(client.latestHunger()?.hunger).toBe(HUNGER_MAX);
+    expect(client.hunger()[0]?.hunger).toBe(HUNGER_MAX);
     client.close();
   });
 

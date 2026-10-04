@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 
+import { createFireGlow } from './fire-light';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 
@@ -16,6 +17,8 @@ import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from 
  */
 export interface Cabin {
   readonly group: THREE.Group;
+  setDaylight?(brightness: number): void;
+  update?(deltaSeconds: number): void;
   dispose(): void;
 }
 
@@ -59,7 +62,7 @@ export function createCabin(): Cabin {
     roughness: 0.3,
     emissive: 0xffb45c,
     emissiveIntensity: 0.9,
-  });
+  }).clone();
   const iron = plainMaterial(0x2b2622, { roughness: 0.6 });
 
   const builder = new ModelBuilder();
@@ -114,7 +117,30 @@ export function createCabin(): Cabin {
   addChimney(builder, cobbles, stone);
   addWoodpile(builder, bark, logEnds, () => seed++);
 
-  return builder.build();
+  const model = builder.build();
+  const glow = createFireGlow(0xffbb72, 2.5, 5, 0.04);
+  glow.anchor.position.set(
+    (WINDOW.left + WINDOW.right) / 2,
+    (WINDOW.bottom + WINDOW.top) / 2,
+    DEPTH / 2 + 0.18,
+  );
+  model.group.add(glow.anchor);
+  return {
+    group: model.group,
+    setDaylight(brightness) {
+      const night = 1 - Math.max(0, Math.min(1, brightness));
+      glass.emissiveIntensity = 0.35 + night * 1.2;
+      glow.brightness = 0.15 + night * 0.85;
+    },
+    update(deltaSeconds) {
+      glow.update(deltaSeconds);
+    },
+    dispose() {
+      glow.dispose();
+      glass.dispose();
+      model.dispose();
+    },
+  };
 }
 
 /** The pieces of one log course left once any openings it passes through are cut out. */

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   CHEST_SLOTS,
+  CHEST_BUILDING_SUPPLIES,
   ITEM_KINDS,
   inventoryFromEntries,
   packSlots,
@@ -85,6 +86,18 @@ export function ChestPanel({
         </header>
         <p className="chest-help">
           Click a stack to move it. Shift-click moves one. Only you can open this chest.
+        </p>
+        <button
+          type="button"
+          className="chest-store-supplies"
+          disabled={pending || !CHEST_BUILDING_SUPPLIES.some((item) => (inventory[item] ?? 0) > 0)}
+          onClick={() => onTransfer({ action: 'storeSupplies' })}
+        >
+          Store building supplies
+        </button>
+        <p className="chest-help">
+          Keeps tools, food, blueprints and trophies in your pack. Stored building supplies count
+          toward home upgrades.
         </p>
         <div className="chest-columns">
           <section>
