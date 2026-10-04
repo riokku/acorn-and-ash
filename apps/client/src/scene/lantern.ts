@@ -1,3 +1,4 @@
+import { LANTERN_PALETTES } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
@@ -27,17 +28,17 @@ const GLASS_WIDTH = 0.12;
 const GLASS_Y = POST_HEIGHT - 0.24;
 
 /** Smaller and closer than the campfire's - a garden lantern, not a bonfire. */
-const LANTERN_LIGHT_COLOR = 0xffce7a;
 const LANTERN_LIGHT_INTENSITY = 6;
 const LANTERN_LIGHT_DISTANCE = 5;
 
-export function createLantern(): Lantern {
+export function createLantern(shade: keyof typeof LANTERN_PALETTES = 'amber'): Lantern {
+  const palette = LANTERN_PALETTES[shade];
   const timber = paintedMaterial('wood', { tint: 0x9b7658, roughness: 0.85 });
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const iron = plainMaterial(0x2f2a26, { roughness: 0.55, flatShading: true });
-  const glass = plainMaterial(0xffe3a8, {
+  const glass = plainMaterial(palette.glass, {
     roughness: 0.25,
-    emissive: 0xffa93f,
+    emissive: palette.emissive,
     emissiveIntensity: 1.6,
   });
 
@@ -103,11 +104,7 @@ export function createLantern(): Lantern {
   }
 
   const model = builder.build();
-  const fireGlow = createFireGlow(
-    LANTERN_LIGHT_COLOR,
-    LANTERN_LIGHT_INTENSITY,
-    LANTERN_LIGHT_DISTANCE,
-  );
+  const fireGlow = createFireGlow(palette.light, LANTERN_LIGHT_INTENSITY, LANTERN_LIGHT_DISTANCE);
   fireGlow.anchor.position.set(HANG_X, GLASS_Y, 0);
   model.group.add(fireGlow.anchor);
 

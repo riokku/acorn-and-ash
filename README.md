@@ -917,3 +917,7 @@ Learn recipes through discoveries, then prepare one benefit for the trail: ratio
 ### Gentle forest weather
 
 Most outings have clear skies or drizzle, with short rain and occasional brief storms. Rain-fed mushroom clusters yield up to two mushrooms during rain and for six minutes afterward. Storms leave a few shared fallen logs and branches; dusk brings fireflies. Weather adds opportunities and atmosphere without survival penalties. See [forest weather](docs/decisions/0080-gentle-forest-weather.md).
+
+### Make yourself at home
+
+Press B inside your home to place a cedar bench, timber table, woven forest rug, colored lantern, flower planter or earned trophy. Colored lanterns and planters also work outdoors inside your building area. Point at the floor, scroll to rotate, and click to place. The preview protects doors, waking spots and useful stations. Move pieces for free or pack them up to recover their materials; a full backpack keeps the piece intact. Visitors can admire decorations but only owners can rearrange them. See [private decoration](docs/decisions/0081-private-home-decoration.md).

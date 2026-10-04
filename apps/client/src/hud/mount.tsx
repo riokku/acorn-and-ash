@@ -37,6 +37,8 @@ export function mountHud(
     onTabChange: (tab: 'craft' | 'discoveries' | 'garden') => void;
     onCraft: (index: number) => void;
     onGarden?: (request: GardenRequest) => void;
+    onMoveDecoration?: (id: number) => void;
+    onReclaimDecoration?: (id: number) => void;
   },
 ): void {
   createRoot(container).render(
@@ -61,6 +63,8 @@ export function mountHud(
         onJournalTabChange={journalActions?.onTabChange}
         onPickRecipe={journalActions?.onCraft}
         onGardenUse={journalActions?.onGarden}
+        onMoveDecoration={journalActions?.onMoveDecoration}
+        onReclaimDecoration={journalActions?.onReclaimDecoration}
       />
     </StrictMode>,
   );

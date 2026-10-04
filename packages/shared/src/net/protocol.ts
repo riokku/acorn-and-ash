@@ -1,3 +1,11 @@
+import {
+  DECORATION_KINDS,
+  DECORATION_REASONS,
+  MAX_WORLD_DECORATIONS,
+  type DecorationRequest,
+  type DecorationState,
+  type HomeDecoration,
+} from '../sim/decorations';
 import { MEAL_ITEMS, MAX_MEAL_TICKS, type MealState } from '../sim/meals';
 import type { HomeSupplies } from '../sim/home-supplies';
 import { DISCOVERY_MASK, type DiscoveryState } from '../data/discoveries';
@@ -487,6 +495,34 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     return { type: 'craft', item };
   }
 
+  if (type === ClientMessageType.Decoration) {
+    if (data.byteLength !== 19) return null;
+    const action = ['place', 'move', 'reclaim'][view.getUint8(1)],
+      kind = DECORATION_KINDS[view.getUint8(2)];
+    const id = view.getUint32(3, true),
+      x = view.getFloat32(7, true),
+      z = view.getFloat32(11, true),
+      yaw = view.getFloat32(15, true);
+    if (
+      action === undefined ||
+      kind === undefined ||
+      ![x, z, yaw].every(Number.isFinite) ||
+      Math.abs(x) > 20 ||
+      Math.abs(z) > 20 ||
+      Math.abs(yaw) > Math.PI * 100 ||
+      (action === 'place') !== (id === 0)
+    )
+      return null;
+    return {
+      type: 'decoration',
+      action: action as DecorationRequest['action'],
+      kind,
+      id,
+      x,
+      z,
+      yaw,
+    };
+  }
   if (type === ClientMessageType.Build) {
     if (data.byteLength !== BUILD_MESSAGE_BYTES) return null;
     const kind = buildableKindFromIndex(view.getUint8(1));
@@ -1468,6 +1504,46 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         notice: (['none', 'guarded', 'full', 'quiet', 'guardian'] as const)[reason]!,
       };
     }
+    case ServerMessageType.Decoration: {
+      if (data.byteLength < 4) return null;
+      const count = view.getUint16(1, true),
+        reasonIndex = view.getUint8(3);
+      if (
+        count > MAX_WORLD_DECORATIONS ||
+        data.byteLength !== 4 + count * 21 ||
+        reasonIndex > DECORATION_REASONS.length
+      )
+        return null;
+      const pieces: HomeDecoration[] = [],
+        ids = new Set<number>();
+      for (let index = 0; index < count; index++) {
+        const at = 4 + index * 21,
+          id = view.getUint32(at, true),
+          homeId = view.getUint32(at + 4, true),
+          kind = DECORATION_KINDS[view.getUint8(at + 8)],
+          x = view.getFloat32(at + 9, true),
+          z = view.getFloat32(at + 13, true),
+          yaw = view.getFloat32(at + 17, true);
+        if (
+          id === 0 ||
+          homeId === 0 ||
+          ids.has(id) ||
+          kind === undefined ||
+          ![x, z, yaw].every(Number.isFinite) ||
+          Math.abs(x) > 20 ||
+          Math.abs(z) > 20 ||
+          Math.abs(yaw) > Math.PI * 100
+        )
+          return null;
+        ids.add(id);
+        pieces.push({ id, homeId, kind, x, z, yaw });
+      }
+      return {
+        type: 'decoration',
+        pieces,
+        reason: reasonIndex === 0 ? null : DECORATION_REASONS[reasonIndex - 1]!,
+      };
+    }
     case ServerMessageType.Welcome: {
       if (data.byteLength !== 17) return null;
       return {
@@ -1885,4 +1961,34 @@ export function snapshotBytes(entityCount: number): number {
 /** How big an input bundle carrying this many inputs will be, in bytes. */
 export function inputBundleBytes(inputCount: number): number {
   return INPUT_HEADER_BYTES + inputCount * BYTES_PER_INPUT;
+}
+
+export function encodeDecorationRequest(request: DecorationRequest): ArrayBuffer {
+  const buffer = new ArrayBuffer(19),
+    view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Decoration);
+  view.setUint8(1, ['place', 'move', 'reclaim'].indexOf(request.action));
+  view.setUint8(2, DECORATION_KINDS.indexOf(request.kind));
+  view.setUint32(3, request.id, true);
+  view.setFloat32(7, request.x, true);
+  view.setFloat32(11, request.z, true);
+  view.setFloat32(15, request.yaw, true);
+  return buffer;
+}
+export function encodeDecorationState(state: DecorationState): ArrayBuffer {
+  const buffer = new ArrayBuffer(4 + state.pieces.length * 21),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Decoration);
+  view.setUint16(1, state.pieces.length, true);
+  view.setUint8(3, state.reason === null ? 0 : DECORATION_REASONS.indexOf(state.reason) + 1);
+  state.pieces.forEach((piece, index) => {
+    const at = 4 + index * 21;
+    view.setUint32(at, piece.id, true);
+    view.setUint32(at + 4, piece.homeId, true);
+    view.setUint8(at + 8, DECORATION_KINDS.indexOf(piece.kind));
+    view.setFloat32(at + 9, piece.x, true);
+    view.setFloat32(at + 13, piece.z, true);
+    view.setFloat32(at + 17, piece.yaw, true);
+  });
+  return buffer;
 }

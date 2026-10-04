@@ -35,7 +35,7 @@ export const KEYBINDINGS = [
       ['Click / Shift-click a storage stack', 'Move the stack / move one item'],
       ['Right mouse on a slot', 'Drop one, drop all, or destroy an item'],
       ['C', 'Open the field journal: crafting and discoveries'],
-      ['B', 'Open or close building'],
+      ['B', 'Open building outdoors or decoration inside your home'],
       ['1–9 in Crafting / Click an entry', 'Choose a recipe'],
       ['1–6 in Build / Click an entry', 'Choose a building piece'],
       ['M / Click the minimap', 'Open or close the map'],
@@ -46,7 +46,7 @@ export const KEYBINDINGS = [
     title: 'Building',
     bindings: [
       ['Left mouse', 'Place the preview'],
-      ['Mouse wheel', 'Rotate the preview'],
+      ['Mouse wheel', 'Rotate the building or decoration preview'],
       ['Shift with a fence', 'Place freely without snapping'],
       ['Escape / Right mouse (tap)', 'Cancel placement'],
     ],

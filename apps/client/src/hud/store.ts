@@ -1,3 +1,4 @@
+import type { HomeDecoration } from '@acorn/shared';
 import type { ForestWeather } from '@acorn/shared';
 import { NO_MEAL, type MealState } from '@acorn/shared';
 import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
@@ -165,6 +166,8 @@ export interface HudState {
   /** What a door right here would do, if anything - see decision 0055. */
   readonly door: 'enter' | 'visit' | 'locked' | 'leave' | null;
   /** The home we are inside, if any: whether it is ours, and whether its door is locked. */
+  readonly decorations?: readonly HomeDecoration[];
+  readonly decorNote?: string | null;
   readonly home: { readonly yours: boolean; readonly locked: boolean } | null;
   /** Sat in the chair or lying in bed right now, if either - see decision 0056. */
   readonly resting: 'chair' | 'bed' | null;

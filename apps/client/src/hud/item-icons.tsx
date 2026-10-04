@@ -126,6 +126,44 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <rect x="6" y="6" width="12" height="5" rx="2" />
     </>
   ),
+  fernLantern: (
+    <>
+      <rect x="8" y="5" width="8" height="13" rx="2" />
+      <path d="M5 20H19V22H5ZM12 2V5M12 7L9 12L12 15L15 12Z" stroke="currentColor" />
+    </>
+  ),
+  moonLantern: (
+    <>
+      <rect x="8" y="5" width="8" height="13" rx="2" />
+      <path d="M5 20H19V22H5ZM12 2V5M13 8C8 8 8 15 13 15C10 12 10 10 13 8Z" stroke="currentColor" />
+    </>
+  ),
+  flowerPlanter: (
+    <>
+      <path d="M5 14H19L17 22H7Z" />
+      <path d="M12 14V7M8 10L12 13L16 10" stroke="currentColor" />
+      <circle cx="12" cy="5" r="4" />
+    </>
+  ),
+  cedarBench: (
+    <>
+      <rect x="3" y="9" width="18" height="4" rx="1" />
+      <path d="M5 13H8V21H5ZM16 13H19V21H16Z" />
+    </>
+  ),
+  timberTable: (
+    <>
+      <rect x="2" y="6" width="20" height="5" rx="1" />
+      <path d="M4 11H7V22H4ZM17 11H20V22H17Z" />
+    </>
+  ),
+  wovenRug: (
+    <>
+      <path d="M3 5H21V19H3Z" />
+      <path d="M0 7H3M0 11H3M0 15H3M21 7H24M21 11H24M21 15H24" stroke="currentColor" />
+      <path d="M8 12L12 8L16 12L12 16Z" fill="var(--parchment,#e8dbc2)" />
+    </>
+  ),
   campfire: <polygon points="12,2 15,9 18,8 15,15 17,20 12,23 7,20 9,15 6,8 9,9" />,
   tent: <polygon points="12,3 23,21 1,21 9,16 12,8 15,16" />,
   teepee: <polygon points="10,1 12,5 14,1 15,2 13,7 22,22 14,22 12,15 10,22 2,22 11,7 9,2" />,
