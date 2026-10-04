@@ -1,3 +1,4 @@
+import { encodeRaiderVitals } from '@acorn/shared';
 import { encodeExpeditionState, expeditionFromSaved, type ExpeditionState } from '@acorn/shared';
 import { encodeRecoveryMarkers } from '@acorn/shared';
 import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
@@ -228,6 +229,9 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeExpeditionState(simulation.expeditionStateOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
+    for (const raider of simulation.raidersList())
+      if (raider.kind === 'sentinel')
+        server.send(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
       encodeHealth({ netId, health: simulation.healthOf(netId), knockedOut: false, dodged: false }),
@@ -705,6 +709,9 @@ export class World extends DurableObject<WorldEnv> {
         this.savedEncounterRest = rest;
       }
       this.broadcast(encodeRaiders(simulation.raidersList()));
+      for (const raider of simulation.raidersList())
+        if (raider.kind === 'sentinel')
+          this.broadcast(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     }
     for (const hit of simulation.drainRaiderHits()) this.broadcast(encodeRaiderHit(hit));
     for (const news of simulation.drainRaidNews()) this.broadcast(encodeRaidNews(news));
@@ -1012,7 +1019,14 @@ export class World extends DurableObject<WorldEnv> {
     simulation.fadeDroppedPiles(nowMs);
     const changed = simulation.drainPileChanges();
     const progress = new Set(simulation.drainBlueprintProgressChanges());
-    if (changed.length === 0 && progress.size === 0 && weatherCycle === null) return;
+    const sentinelProgress = new Set(simulation.drainSentinelProgressChanges());
+    if (
+      changed.length === 0 &&
+      progress.size === 0 &&
+      sentinelProgress.size === 0 &&
+      weatherCycle === null
+    )
+      return;
     // Weather cursor, windfalls and blueprint progress save with their rewards.
     this.ctx.storage.transactionSync(() => {
       if (weatherCycle !== null) this.writeMeta('weather-cycle', String(weatherCycle));
@@ -1023,6 +1037,11 @@ export class World extends DurableObject<WorldEnv> {
       }
       for (const ws of this.ctx.getWebSockets()) {
         const attachment = this.attachmentFor(ws);
+        if (attachment?.playerKey != null && sentinelProgress.has(attachment.netId))
+          this.writeSentinel(
+            attachment.playerKey,
+            simulation.sentinelVictoriesOf(attachment.netId),
+          );
         if (attachment?.playerKey != null && progress.has(attachment.netId))
           this.writeBlueprintProgress(
             attachment.playerKey,
@@ -1598,6 +1617,9 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec(
       'CREATE TABLE IF NOT EXISTS player_blueprint_progress (player_key TEXT PRIMARY KEY, misses INTEGER NOT NULL)',
     );
+    sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_sentinel (player_key TEXT PRIMARY KEY, victories INTEGER NOT NULL)',
+    );
     // Whatever anybody dropped, until it is picked up or fades.
     sql.exec(`CREATE TABLE IF NOT EXISTS dropped_piles (
       id INTEGER PRIMARY KEY,
@@ -1692,6 +1714,13 @@ export class World extends DurableObject<WorldEnv> {
       z: row.z,
       facingYaw: row.facing_yaw,
       items: this.loadPlayerItems(playerKey),
+      sentinelVictories:
+        this.ctx.storage.sql
+          .exec<{ victories: number }>(
+            'SELECT victories FROM player_sentinel WHERE player_key=?',
+            playerKey,
+          )
+          .toArray()[0]?.victories ?? 0,
       homeSkills:
         this.ctx.storage.sql
           .exec<{ skills: number }>(
@@ -2050,6 +2079,7 @@ export class World extends DurableObject<WorldEnv> {
     );
     this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
     this.writeExpedition(attachment.playerKey, simulation.expeditionStateOf(attachment.netId));
+    this.writeSentinel(attachment.playerKey, simulation.sentinelVictoriesOf(attachment.netId));
     this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
     this.writeBlueprintProgress(
       attachment.playerKey,
@@ -2061,6 +2091,13 @@ export class World extends DurableObject<WorldEnv> {
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
   }
 
+  private writeSentinel(playerKey: string, victories: number): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_sentinel (player_key,victories) VALUES (?,?) ON CONFLICT(player_key) DO UPDATE SET victories=excluded.victories',
+      playerKey,
+      victories,
+    );
+  }
   private readExpedition(playerKey: string): ExpeditionState {
     const row = this.ctx.storage.sql
       .exec<{ state: string }>('SELECT state FROM player_expeditions WHERE player_key=?', playerKey)
@@ -2250,6 +2287,7 @@ export class World extends DurableObject<WorldEnv> {
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
       this.writeExpedition(attachment.playerKey, expeditionFromSaved(player.expedition));
+      this.writeSentinel(attachment.playerKey, player.sentinelVictories ?? 0);
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
       this.writeDiscoveries(
@@ -2307,6 +2345,7 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec('DELETE FROM players');
     sql.exec('DELETE FROM player_meals');
     sql.exec('DELETE FROM player_home_skills');
+    sql.exec('DELETE FROM player_sentinel');
     sql.exec('DELETE FROM player_blueprint_progress');
     sql.exec('DELETE FROM player_discoveries');
     sql.exec('DELETE FROM player_expeditions');

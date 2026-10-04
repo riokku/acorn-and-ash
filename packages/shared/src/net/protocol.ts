@@ -1896,6 +1896,12 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const event = decodeDiscarded(view);
       return event === null ? null : { type: 'discarded', event };
     }
+    case ServerMessageType.RaiderVitals: {
+      if (view.byteLength !== 4) return null;
+      const maxHits = view.getUint8(3);
+      if (![24, 32, 40, 48].includes(maxHits)) return null;
+      return { type: 'raiderVitals', id: view.getUint16(1, true), maxHits };
+    }
     case ServerMessageType.Raiders: {
       const raiders = decodeRaiders(view);
       return raiders === null ? null : { type: 'raiders', raiders };
@@ -2101,4 +2107,14 @@ export function encodeExpeditionState(state: ExpeditionView): ArrayBuffer {
   state.offers.forEach((n, i) => view.setUint8(17 + i, n));
   view.setUint8(20, EXPEDITION_NOTICES.indexOf(state.notice));
   return data;
+}
+
+/** Boss maximum health travels separately, preserving the ordinary raider packet. */
+export function encodeRaiderVitals(id: number, maxHits: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(4),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.RaiderVitals);
+  view.setUint16(1, id, true);
+  view.setUint8(3, maxHits);
+  return buffer;
 }

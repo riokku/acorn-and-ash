@@ -92,6 +92,7 @@ export const ServerMessageType = {
   Decoration: 0x37,
   RecoveryMarkers: 0x38,
   Expedition: 0x39,
+  RaiderVitals: 0x3a,
 } as const;
 
 export const RejectReason = {
@@ -581,6 +582,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }
   | (ExpeditionView & { readonly type: 'expedition' })
   | { readonly type: 'recoveryMarkers'; readonly caches: readonly BuriedCacheView[] }
   | (DecorationState & { readonly type: 'decoration' })

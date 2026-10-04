@@ -13,7 +13,7 @@
 import type { ItemId } from './items';
 import type { WindupPace } from './moves';
 
-export type RaiderKindId = 'minion' | 'rogue' | 'warrior' | 'mage';
+export type RaiderKindId = 'minion' | 'rogue' | 'warrior' | 'mage' | 'sentinel';
 
 export interface RaiderKind {
   readonly id: RaiderKindId;
@@ -116,10 +116,31 @@ export const RAIDER_KINDS = {
     weight: 2,
     loot: { item: 'bone', count: 1 },
   },
+  sentinel: {
+    id: 'sentinel',
+    displayName: 'Ruin Sentinel',
+    toughness: 24,
+    swingDamage: 14,
+    strikeDamage: 28,
+    runSpeed: 3.4,
+    windup: 2,
+    comboLength: 2,
+    strikeChance: 0.5,
+    dodgeChance: 0,
+    steadfast: true,
+    weight: 0,
+    loot: { item: 'bone', count: 0 },
+  },
 } as const satisfies Record<RaiderKindId, RaiderKind>;
 
 /** A stable order, so a kind can travel as a small number. Only ever add to the end. */
-export const RAIDER_KIND_ORDER: readonly RaiderKindId[] = ['minion', 'rogue', 'warrior', 'mage'];
+export const RAIDER_KIND_ORDER: readonly RaiderKindId[] = [
+  'minion',
+  'rogue',
+  'warrior',
+  'mage',
+  'sentinel',
+];
 
 export function raiderKindIndex(id: RaiderKindId): number {
   return RAIDER_KIND_ORDER.indexOf(id);
@@ -196,3 +217,8 @@ export const RAID = {
   /** Raiders this close to each other step apart. */
   personalSpace: 1.3,
 } as const;
+
+/** Each actual helper adds eight blows, capped at four fighters. */
+export function sentinelToughness(contributors: number): number {
+  return 24 + 8 * (Math.min(4, Math.max(1, Math.floor(contributors))) - 1);
+}

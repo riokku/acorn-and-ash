@@ -433,6 +433,7 @@ function createBuiltMesh(
     case 'moonLantern':
     case 'flowerPlanter':
     case 'trailPennant':
+    case 'sentinelTrophy':
       return createHomeDecoration(kind);
   }
 }
@@ -1709,6 +1710,10 @@ export class Game {
       }
       case 'raiders': {
         this.raiders.setList(message.raiders);
+        break;
+      }
+      case 'raiderVitals': {
+        this.raiders.setMaximumHits(message.id, message.maxHits);
         break;
       }
       case 'raiderHit': {

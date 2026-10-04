@@ -105,7 +105,9 @@ describe('useful housing facilities', () => {
   });
   it('keeps existing item indices and appends refined tools', () => {
     expect(ITEM_ORDER.slice(0, 3)).toEqual(['axe', 'log', 'rod']);
-    expect(ITEM_ORDER.slice(-2)).toEqual(['refinedAxe', 'refinedRod']);
+    expect(
+      ITEM_ORDER.slice(ITEM_ORDER.indexOf('refinedAxe'), ITEM_ORDER.indexOf('refinedAxe') + 2),
+    ).toEqual(['refinedAxe', 'refinedRod']);
     expect(recipeFor('refinedAxe')?.station).toBe('workbench');
   });
   it('makes a refined rod shorten the wait without shortening the catch window', () => {
