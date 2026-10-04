@@ -101,7 +101,7 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
   }
 });
 for (const demo of ['dodge-slash', 'dodge-slam']) {
-  test(`renders the ${demo} launch, airborne turn and landing`, async ({ page }) => {
+  test(`renders the ${demo} launch, airborne turn and landing`, async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.route('https://fonts.googleapis.com/**', (route) =>
@@ -111,7 +111,11 @@ for (const demo of ['dodge-slash', 'dodge-slam']) {
     await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true', {
       timeout: 120_000,
     });
-    await page.screenshot({ path: `/workspace/acorn-${demo}-poses.png` });
+    await page.screenshot({
+      path: process.env.CI
+        ? testInfo.outputPath(`${demo}-poses.png`)
+        : `/workspace/acorn-${demo}-poses.png`,
+    });
     expect(errors).toEqual([]);
   });
 }

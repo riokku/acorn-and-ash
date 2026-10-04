@@ -4,7 +4,7 @@ test.use({ viewport: { width: 1180, height: 760 }, deviceScaleFactor: 0.75 });
 test.setTimeout(180_000);
 test('reads three outings, claims a completed reward and learns a placeable cosmetic', async ({
   page,
-}) => {
+}, testInfo) => {
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     hungerEmptyAfterSeconds: Infinity,
@@ -87,7 +87,11 @@ test('reads three outings, claims a completed reward and learns a placeable cosm
     await page.locator('.hud-curtain').click();
     const read = page.getByRole('button', { name: 'Read expedition board' });
     await expect(read).toBeVisible();
-    await page.screenshot({ path: '/workspace/acorn-expedition-board.png' });
+    await page.screenshot({
+      path: process.env.CI
+        ? testInfo.outputPath('expedition-board.png')
+        : '/workspace/acorn-expedition-board.png',
+    });
     await read.click();
     await expect(page.getByRole('region', { name: 'Expedition board' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Claim rewards' })).toBeEnabled();
@@ -97,7 +101,11 @@ test('reads three outings, claims a completed reward and learns a placeable cosm
       'Trail pennant recipe learned',
     );
     expect(sim.inventoryOf(1)).toEqual({ log: 6, stick: 4 });
-    await page.screenshot({ path: '/workspace/acorn-expedition-journal.png' });
+    await page.screenshot({
+      path: process.env.CI
+        ? testInfo.outputPath('expedition-journal.png')
+        : '/workspace/acorn-expedition-journal.png',
+    });
     await page.getByRole('button', { name: 'Choose outing' }).first().click();
     await expect(page.locator('.expedition-active')).toBeVisible();
     expect(sim.expeditionStateOf(1).active).not.toBeNull();

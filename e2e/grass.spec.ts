@@ -9,7 +9,7 @@ import {
 
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
-test('renders wind grass and remembers a lower density setting', async ({ page }) => {
+test('renders wind grass and remembers a lower density setting', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
@@ -58,7 +58,11 @@ test('renders wind grass and remembers a lower density setting', async ({ page }
     .toBeGreaterThan(1000);
   const dense = await page.evaluate(() => window.acornDebug?.grassClumps() ?? 0);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: '/workspace/acorn-wind-grass.png' });
+  await page.screenshot({
+    path: process.env.CI
+      ? testInfo.outputPath('wind-grass.png')
+      : '/workspace/acorn-wind-grass.png',
+  });
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Grass density').fill('0.2');
