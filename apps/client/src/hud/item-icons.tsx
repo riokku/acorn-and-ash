@@ -115,6 +115,29 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <rect x="11" y="9" width="5" height="1.6" rx="0.8" />
     </g>
   ),
+  reed: (
+    <>
+      <rect x="6" y="6" width="2" height="16" rx="1" />
+      <rect x="11" y="2" width="2" height="20" rx="1" />
+      <rect x="16" y="8" width="2" height="14" rx="1" />
+      <ellipse cx="7" cy="5.5" rx="1.8" ry="3.2" />
+      <ellipse cx="12" cy="3" rx="1.8" ry="3.2" />
+      <ellipse cx="17" cy="7.5" rx="1.8" ry="3.2" />
+    </>
+  ),
+  rope: (
+    <>
+      <path
+        d="M12 1.5A8.5 8.5 0 1 1 12 18.5A8.5 8.5 0 1 1 12 1.5ZM12 3.7A6.3 6.3 0 1 0 12 16.3A6.3 6.3 0 1 0 12 3.7Z"
+        fillRule="evenodd"
+      />
+      <path
+        d="M12 5.7A4.3 4.3 0 1 1 12 14.3A4.3 4.3 0 1 1 12 5.7ZM12 7.9A2.1 2.1 0 1 0 12 12.1A2.1 2.1 0 1 0 12 7.9Z"
+        fillRule="evenodd"
+      />
+      <path d="M10.8 17.5H13.2V20.4Q13.2 21 13.8 21H19V23H13.2Q10.8 23 10.8 20.6Z" />
+    </>
+  ),
   meat: meat(),
   roastedMeat: roastedMeat(),
   bone: (

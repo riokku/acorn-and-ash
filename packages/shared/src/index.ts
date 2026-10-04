@@ -18,6 +18,7 @@ export * from './world/clearing';
 export * from './world/water';
 export * from './world/lake';
 export * from './world/islands';
+export * from './world/reeds';
 export * from './world/wilderness';
 export * from './world/noise';
 export * from './world/animals';

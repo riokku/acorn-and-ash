@@ -288,6 +288,17 @@ the pond (a cast never lands on an island). The code is in
 `packages/shared/src/world/lake.ts` and `apps/client/src/scene/lake.ts`. See
 [decision 0090](docs/decisions/0090-the-lake.md).
 
+### Reeds and rope
+
+Six clumps of reeds grow in the shallows along the lake's bank, a long walk
+apart. Stand at the water's edge beside one and press E (or right-click) to cut
+a reed; a clump holds two to six, and once it is cut bare it grows back in the
+same place after a few minutes. Open the craft menu (`C`) and twist three reeds
+into a length of rope, by hand with no workbench. Rope is for the rowboat, which
+comes next. The places are worked out in `packages/shared/src/world/reeds.ts`
+and drawn in `apps/client/src/scene/reed-models.ts`. See
+[decision 0091](docs/decisions/0091-reeds-and-rope.md).
+
 ### Wind in the grass
 
 Nearby clearings and sunny forest patches now have moving grass blades, with

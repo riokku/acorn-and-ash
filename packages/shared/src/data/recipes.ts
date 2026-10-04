@@ -72,6 +72,9 @@ export const RECIPES: Partial<Record<ItemId, Recipe>> = {
   // Cheap and gathered by hand, same as the axe - nothing about needing
   // light at night should be blocked behind a tool you don't have yet.
   torch: { result: 'torch', costs: [{ item: 'stick', amount: 2 }] },
+  // Twisted by hand from reeds cut at the lake, so rope is never behind a tool
+  // or a station. It is what the rowboat is lashed together with.
+  rope: { result: 'rope', costs: [{ item: 'reed', amount: 3 }] },
 };
 
 /** Every craftable item, in the wire order, so the HUD lists recipes the same for everybody. */

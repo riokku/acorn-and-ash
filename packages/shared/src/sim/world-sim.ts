@@ -193,6 +193,7 @@ import {
   type RestingPlace,
 } from '../world/home';
 import { LAKE } from '../world/lake';
+import { isReedPatch, REED_PATCHES } from '../world/reeds';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { buildEncounterSites, encounterColliders, type EncounterSite } from '../world/encounters';
@@ -1316,6 +1317,7 @@ export class WorldSimulation {
     this.discoverySites = buildDiscoverySites(this.encounterSites);
     for (const spot of discoveryForageSpots(this.discoverySites))
       this.patches.push(freshPatch(this.seed, spot));
+    for (const spot of REED_PATCHES) this.patches.push(freshPatch(this.seed, spot));
     this.collision = createCollisionWorld(
       terrain,
       [
@@ -2735,7 +2737,8 @@ export class WorldSimulation {
    * if there is one in reach with any left and this player is not still
    * catching their breath from a swing, a cast or a gather of their own.
    * Taking the last one leaves the patch picked clean until it grows back
-   * somewhere else (see `regrowPatches`). A nearby patch claims E even on cooldown.
+   * somewhere else - or where it stood, for the lake's reeds (see
+   * `regrowPatches`). A nearby patch claims E even on cooldown.
    */
   private tryGather(runtime: PlayerRuntime, position: Readonly<Vec3>, targetId?: number): boolean {
     const patch = gatherSpotInReach(
@@ -2809,6 +2812,12 @@ export class WorldSimulation {
    * them is.
    */
   private movePatch(patch: GatherPatch, generation: number, nowMs = this.nowMs): boolean {
+    // A reed is rooted: it grows back where it stood, with a fresh count.
+    if (isReedPatch(patch.id)) {
+      patch.generation = generation;
+      this.patchChanges.add(patch.id);
+      return true;
+    }
     const forage = discoveryForageSpots(this.discoverySites).find((s) => s.id === patch.id);
     if (forage !== undefined) {
       const footprints = this.buildFootprints();
@@ -2884,7 +2893,8 @@ export class WorldSimulation {
    */
   private movePatchesFrom(piece: Footprint): void {
     for (const patch of this.patches) {
-      if (patch.remaining === 0) continue;
+      // Nothing is ever built in the lake, and a reed stays where it is rooted.
+      if (patch.remaining === 0 || isReedPatch(patch.id)) continue;
       const here = roundFootprint(patch.x, patch.z, PATCH_CLEARANCE, 'patch');
       if (footprintGap(here, piece) < 0) this.movePatch(patch, patch.generation + 1);
     }

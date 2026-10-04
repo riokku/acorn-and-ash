@@ -14,6 +14,12 @@ import {
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { flowerModelParts } from './flower-models';
 import { createStickPatchModel } from './pickup-models';
+import {
+  createReedPatchModel,
+  createReedPileModel,
+  createRopeModel,
+  type PartsModel,
+} from './reed-models';
 
 /**
  * Things lying on the grass to be picked up by hand: the stick and flower
@@ -128,10 +134,21 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
   };
 }
 
-/** A stick or flower patch, built to hold as many as any patch ever can. */
+/** A stick, flower, berry, mushroom or reed patch, built to hold as many as any patch ever can. */
 function createPatchModel(item: ItemId): GroundModel {
   if (item === 'berry' || item === 'mushroom') return createForageModel(item);
+  if (item === 'reed') return createPartsModel(item, createReedPatchModel());
   return item === 'flower' ? createFlowerModel('flower') : createSticksModel(item);
+}
+
+/** One of the models that hands back its parts to show a few at a time. */
+function createPartsModel(item: ItemId, model: PartsModel): GroundModel {
+  return {
+    item,
+    group: model.group,
+    show: (count) => showFirst(model.group, model.parts, count),
+    dispose: () => model.dispose(),
+  };
 }
 
 /**
@@ -159,6 +176,8 @@ function createPileModel(item: ItemId): GroundModel {
   if (item === 'flower') return createFlowerModel(item);
   if (item === 'bone') return createBonesModel(item);
   if (item === 'log') return createLogsModel();
+  if (item === 'reed') return createPartsModel(item, createReedPileModel());
+  if (item === 'rope') return createPartsModel(item, createRopeModel());
   return createBundleModel(item);
 }
 
