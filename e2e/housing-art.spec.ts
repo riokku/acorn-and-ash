@@ -34,7 +34,7 @@ for (const kind of ['tent', 'teepee', 'cabin', 'largeCabin']) {
   });
 }
 
-test('renders warm cabin windows at night', async ({ page }) => {
+test('renders warm cabin windows at night', async ({ page }, testInfo) => {
   await page.route('https://fonts.googleapis.com/**', (route) =>
     route.fulfill({ contentType: 'text/css', body: '' }),
   );
@@ -44,6 +44,10 @@ test('renders warm cabin windows at night', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true', {
     timeout: 120_000,
   });
-  await page.screenshot({ path: '/workspace/acorn-homecoming-night.png' });
+  await page.screenshot({
+    path: process.env.CI
+      ? testInfo.outputPath('homecoming-night.png')
+      : '/workspace/acorn-homecoming-night.png',
+  });
   expect(errors).toEqual([]);
 });
