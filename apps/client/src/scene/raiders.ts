@@ -84,6 +84,7 @@ export class RaiderCrowd {
   private readonly figures = new Map<number, RaiderFigure>();
   private readonly memories = new Map<number, MoveMemory>();
   private readonly kinds = new Map<number, RaiderKindId>();
+  private readonly maximumHits = new Map<number, number>();
   private readonly hitsLeft = new Map<number, number>();
   /** When each last staggered, in seconds on `clock`, to tell a blow that will be shrugged off. */
   private readonly staggeredAt = new Map<number, number>();
@@ -133,6 +134,11 @@ export class RaiderCrowd {
       this.hitsLeft.set(raider.id, raider.hitsLeft);
     }
     for (const id of this.hitsLeft.keys()) if (!this.kinds.has(id)) this.hitsLeft.delete(id);
+    for (const id of this.maximumHits.keys()) if (!this.kinds.has(id)) this.maximumHits.delete(id);
+  }
+
+  setMaximumHits(id: number, maxHits: number): void {
+    if (this.kinds.get(id) === 'sentinel') this.maximumHits.set(id, maxHits);
   }
 
   /** The raiders in a snapshot - only ever those - and nobody else's. */
@@ -273,8 +279,9 @@ export class RaiderCrowd {
       );
       const kind = RAIDER_KINDS[figure.kind];
       const left = this.hitsLeft.get(id) ?? kind.toughness;
-      figure.bar.setHealth(left / kind.toughness);
-      const hurt = left < kind.toughness;
+      const maximum = this.maximumHits.get(id) ?? kind.toughness;
+      figure.bar.setHealth(left / maximum);
+      const hurt = left < maximum;
       figure.bar.setWanted(
         !figure.down && (hurt || id === aimedId || distance < BAR_SHOWS_WITHIN),
         id === aimedId,

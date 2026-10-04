@@ -16,6 +16,7 @@ const MODEL_URLS: Record<RaiderKindId, string> = {
   minion: minionUrl,
   rogue: rogueUrl,
   warrior: warriorUrl,
+  sentinel: warriorUrl,
   mage: mageUrl,
 };
 
@@ -35,14 +36,18 @@ export function raiderModelTemplate(kind: RaiderKindId): AnimatedModel | undefin
 
 async function loadAll(): Promise<void> {
   await Promise.all(
-    (Object.entries(MODEL_URLS) as Array<[RaiderKindId, string]>).map(async ([kind, url]) => {
-      try {
-        templates.set(kind, await loadAnimatedModel(url));
-      } catch (error) {
-        // A raider with no model is drawn as a plain stand-in instead (see
-        // raiders.ts), so a failed fetch never hides a fight.
-        console.error(`Could not load the skeleton model for "${kind}".`, error);
-      }
-    }),
+    (Object.entries(MODEL_URLS) as Array<[RaiderKindId, string]>)
+      .filter(([kind]) => kind !== 'sentinel')
+      .map(async ([kind, url]) => {
+        try {
+          templates.set(kind, await loadAnimatedModel(url));
+        } catch (error) {
+          // A raider with no model is drawn as a plain stand-in instead (see
+          // raiders.ts), so a failed fetch never hides a fight.
+          console.error(`Could not load the skeleton model for "${kind}".`, error);
+        }
+      }),
   );
+  const warrior = templates.get('warrior');
+  if (warrior !== undefined) templates.set('sentinel', warrior);
 }

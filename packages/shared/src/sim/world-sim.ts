@@ -418,6 +418,7 @@ export interface PersistedPlayer {
   readonly explored?: Uint8Array | null;
   readonly homeSkills?: number;
   readonly blueprintMisses?: number;
+  readonly sentinelVictories?: number;
   readonly discoveriesFound?: number;
   readonly discoveriesClaimed?: number;
   readonly expedition?: ExpeditionState;
@@ -805,6 +806,7 @@ interface PlayerRuntime {
   discoveriesFound: number;
   discoveriesClaimed: number;
   expedition: ExpeditionState;
+  sentinelVictories: number;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -1236,6 +1238,7 @@ export class WorldSimulation {
   /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
   private readonly pileChanges = new Set<number>();
   private readonly blueprintProgressChanges = new Set<number>();
+  private readonly sentinelProgressChanges = new Set<number>();
   private readonly expeditionChanges = new Map<number, ExpeditionNotice>();
   private readonly discoveryChanges = new Map<number, DiscoveryNotice>();
   private readonly homeGardens = new Map<number, GardenPlot[]>();
@@ -1329,10 +1332,19 @@ export class WorldSimulation {
         fighters: () => this.fighters,
         strikePlayer: (netId, damage, impactTick) =>
           this.raiderStrikesPlayer(netId, damage, impactTick),
-        defeated: (netId, raiderId, position, facingYaw) => {
+        defeated: (netId, raiderId, position, facingYaw, kind) => {
           const runtime = this.players.get(netId);
           if (runtime === undefined) return;
           this.advanceExpedition(runtime, { kind: 'defeat' }, 1);
+          if (kind === 'sentinel') {
+            const owner = this.rewardOwnerKey(runtime);
+            if (runtime.sentinelVictories === 0)
+              this.addPile('sentinelTrophy', 1, position.x, position.z, this.nowMs, false, owner);
+            this.addPile('bone', 4, position.x + 0.25, position.z, this.nowMs, false, owner);
+            this.addPile('log', 4, position.x - 0.25, position.z, this.nowMs, false, owner);
+            runtime.sentinelVictories = Math.min(0xffffffff, runtime.sentinelVictories + 1);
+            this.sentinelProgressChanges.add(netId);
+          }
           const item = nextBlueprint(runtime.homeSkills);
           if (item === null) return;
           const roll = createRng(
@@ -1482,6 +1494,12 @@ export class WorldSimulation {
         ((saved?.discoveriesFound ?? 0) | (saved?.discoveriesClaimed ?? 0)) & DISCOVERY_MASK,
       discoveriesClaimed: (saved?.discoveriesClaimed ?? 0) & DISCOVERY_MASK,
       expedition: expeditionFromSaved(saved?.expedition),
+      sentinelVictories:
+        Number.isInteger(saved?.sentinelVictories) &&
+        saved!.sentinelVictories! >= 0 &&
+        saved!.sentinelVictories! <= 0xffffffff
+          ? saved!.sentinelVictories!
+          : 0,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -1688,6 +1706,7 @@ export class WorldSimulation {
     runtime.entity.destroy();
     this.players.delete(netId);
     this.expeditionChanges.delete(netId);
+    this.sentinelProgressChanges.delete(netId);
     this.raids.forgetPlayer(netId);
     return true;
   }
@@ -2035,6 +2054,7 @@ export class WorldSimulation {
       const { action } = runtime;
       this.fighters.push({
         netId: runtime.netId,
+        rewardKey: this.rewardOwnerKey(runtime),
         position,
         aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
         action,
@@ -2925,7 +2945,10 @@ export class WorldSimulation {
     ownerKey?: string,
   ): void {
     if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
-      const oldest = this.droppedPiles.shift();
+      const removable = this.droppedPiles.findIndex(
+        (pile) => !(pile.item === 'sentinelTrophy' && pile.ownerKey !== undefined),
+      );
+      const oldest = removable < 0 ? undefined : this.droppedPiles.splice(removable, 1)[0];
       if (oldest !== undefined) {
         this.pileChanges.add(oldest.id);
         this.pendingPiles.delete(oldest.id);
@@ -4329,6 +4352,15 @@ export class WorldSimulation {
     return runtime.playerKey ?? `session:${runtime.netId}`;
   }
 
+  sentinelVictoriesOf(netId: number): number {
+    return this.players.get(netId)?.sentinelVictories ?? 0;
+  }
+  drainSentinelProgressChanges(): number[] {
+    const ids = [...this.sentinelProgressChanges];
+    this.sentinelProgressChanges.clear();
+    return ids;
+  }
+
   expeditionStateOf(netId: number, notice: ExpeditionNotice = 'none'): ExpeditionView {
     const runtime = this.players.get(netId),
       state = expeditionFromSaved(runtime?.expedition);
@@ -4557,7 +4589,15 @@ export class WorldSimulation {
         Number.isFinite(row.droppedAtMs),
     );
     rows.sort((a, b) => a.droppedAtMs - b.droppedAtMs);
-    for (const row of rows.slice(-MAX_DROPPED_PILES)) {
+    const permanent = rows.filter(
+      (row) => row.item === 'sentinelTrophy' && row.ownerKey !== undefined,
+    );
+    const ordinary = rows.filter(
+      (row) => !(row.item === 'sentinelTrophy' && row.ownerKey !== undefined),
+    );
+    const available = Math.max(0, MAX_DROPPED_PILES - permanent.length);
+    const retained = [...permanent, ...(available === 0 ? [] : ordinary.slice(-available))];
+    for (const row of retained) {
       this.droppedPiles.push({ ...row });
       if (row.droppedAtMs > nowMs) this.pendingPiles.add(row.id);
       this.nextDroppedPileId = Math.max(this.nextDroppedPileId, (row.id % 0xffff) + 1);
@@ -4651,6 +4691,7 @@ export class WorldSimulation {
         blueprintMisses: runtime.blueprintMisses,
         discoveriesFound: runtime.discoveriesFound,
         discoveriesClaimed: runtime.discoveriesClaimed,
+        sentinelVictories: runtime.sentinelVictories,
         expedition: { ...runtime.expedition, progress: [...runtime.expedition.progress] },
       });
     }

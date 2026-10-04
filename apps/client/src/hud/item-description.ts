@@ -9,6 +9,8 @@ import {
 } from '@acorn/shared';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  sentinelTrophy:
+    'A personal reward for your first ruin sentinel victory. Place this carved crown inside or outside your home. Kept through knockout.',
   guardianTrophy:
     'Earned by helping defeat the woodland guardian. Place it inside your home area from Build. Kept through a knockout.',
   refinedAxe:

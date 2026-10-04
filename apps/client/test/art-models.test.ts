@@ -1,3 +1,4 @@
+import { createSentinelTrophy } from '../src/scene/sentinel-art';
 import { createExpeditionBoard } from '../src/scene/expedition-board';
 import { createHomeDecoration } from '../src/scene/home-decoration';
 import { createDiscoveryLandmarks } from '../src/scene/discovery-sites';
@@ -51,6 +52,11 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    {
+      name: 'sentinel trophy',
+      make: createSentinelTrophy,
+      budget: BUILDABLE_KINDS.sentinelTrophy.triangleBudget,
+    },
     { name: 'expedition board', make: createExpeditionBoard, budget: 800 },
     {
       name: 'trail pennant',

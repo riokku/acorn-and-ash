@@ -1,3 +1,4 @@
+import { sentinelToughness } from '../data/raiders';
 /**
  * Skeleton raids (see decision 0063).
  *
@@ -117,6 +118,8 @@ export interface RaiderView {
 /** A player, as far as a raid is concerned. */
 export interface RaidFighter {
   readonly netId: number;
+  /** Stable identity for cooperative scaling across reconnects; never sent to browsers. */
+  readonly rewardKey?: string;
   /** Meaningless indoors, where it is a room's own coordinates. */
   readonly position: Readonly<Vec3>;
   readonly aimYaw: number;
@@ -140,7 +143,13 @@ export interface RaidHost {
    */
   strikePlayer(netId: number, damage: number, impactTick: number): void;
   /** Leave something on the ground where a raider fell. */
-  defeated?(netId: number, raiderId: number, position: Readonly<Vec3>, facingYaw: number): void;
+  defeated?(
+    netId: number,
+    raiderId: number,
+    position: Readonly<Vec3>,
+    facingYaw: number,
+    kind: RaiderKindId,
+  ): void;
   dropLoot(item: ItemId, count: number, position: Readonly<Vec3>, facingYaw: number): void;
 }
 
@@ -216,6 +225,7 @@ interface RaiderRuntime {
   /** Blows taken, weighted (see `RAIDER_BLOW_WEIGHT`). */
   damageTaken: number;
   readonly contributors: Set<number>;
+  readonly contributorKeys: Set<string>;
   mode: RaiderMode;
   /** Ticks since `mode` last changed. */
   modeTicks: number;
@@ -485,10 +495,13 @@ export class RaidDirector {
           : RAIDER_BLOW_WEIGHT.swing;
     raider.damageTaken += weight;
     raider.contributors.add(attackerNetId);
+    const attacker = this.fighterById.get(attackerNetId) ?? this.findFighter(attackerNetId);
+    raider.contributorKeys.add(attacker?.rewardKey ?? `session:${attackerNetId}`);
     const encounterRaid = this.raids.get(raider.raidId);
     if (encounterRaid?.encounter !== undefined && encounterRaid.targetNetId === 0)
       this.engageEncounter(encounterRaid, attackerNetId);
-    const hitsLeft = Math.max(0, kind.toughness - raider.damageTaken);
+    if (raider.kind === 'sentinel') this.listChanged = true;
+    const hitsLeft = Math.max(0, this.maxHitsOf(raider.id) - raider.damageTaken);
     const heavy = weight > RAIDER_BLOW_WEIGHT.swing;
 
     // Knocked back, away from whoever hit it.
@@ -527,7 +540,13 @@ export class RaidDirector {
             ENCOUNTER_RULES.nearbyContributorRadius
         )
           continue;
-        this.host.defeated?.(netId, raider.id, raider.motion.position, raider.motion.facingYaw);
+        this.host.defeated?.(
+          netId,
+          raider.id,
+          raider.motion.position,
+          raider.motion.facingYaw,
+          raider.kind,
+        );
       }
       this.defeat(raider);
     } else if (raider.mode === 'leave') {
@@ -603,6 +622,14 @@ export class RaidDirector {
     this.mirror(raider);
   }
 
+  maxHitsOf(id: number): number {
+    const raider = this.raiders.get(id);
+    if (!raider) return 0;
+    return raider.kind === 'sentinel'
+      ? sentinelToughness(raider.contributorKeys.size)
+      : RAIDER_KINDS[raider.kind].toughness;
+  }
+
   /** Every raider, the way every browser's list of them reads. */
   raidersList(): RaiderView[] {
     const list: RaiderView[] = [];
@@ -610,7 +637,7 @@ export class RaidDirector {
       list.push({
         id: raider.id,
         kind: raider.kind,
-        hitsLeft: Math.max(0, RAIDER_KINDS[raider.kind].toughness - raider.damageTaken),
+        hitsLeft: Math.max(0, this.maxHitsOf(raider.id) - raider.damageTaken),
       });
     }
     return list;
@@ -751,6 +778,7 @@ export class RaidDirector {
       aimYaw: facingYaw,
       damageTaken: 0,
       contributors: new Set(),
+      contributorKeys: new Set(),
       mode: 'march',
       modeTicks: 0,
       targetNetId: null,
@@ -1013,7 +1041,8 @@ export class RaidDirector {
       this.move(raider, input);
       if (raider.modeTicks >= Math.round(RAID.crumbleSeconds * TICK_HZ)) {
         const { item, count } = RAIDER_KINDS[raider.kind].loot;
-        this.host.dropLoot(item, count, raider.motion.position, raider.motion.facingYaw);
+        if (count > 0)
+          this.host.dropLoot(item, count, raider.motion.position, raider.motion.facingYaw);
         this.despawn(raider);
       }
       return;
@@ -1657,7 +1686,8 @@ export function drawLineup(rng: Rng, size: number): RaiderKindId[] {
   const lineup: RaiderKindId[] = [];
   for (let index = 0; index < size; index++) {
     const choices = RAIDER_KIND_ORDER.filter(
-      (kind) => kind !== 'warrior' || !lineup.includes('warrior'),
+      (kind) =>
+        RAIDER_KINDS[kind].weight > 0 && (kind !== 'warrior' || !lineup.includes('warrior')),
     );
     const total = choices.reduce((sum, kind) => sum + RAIDER_KINDS[kind].weight, 0);
     let roll = rng.nextFloat() * total;

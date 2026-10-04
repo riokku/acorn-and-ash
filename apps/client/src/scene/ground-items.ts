@@ -1,3 +1,4 @@
+import { createSentinelTrophy } from './sentinel-art';
 import { createForageModel, createMealModel } from './forest-food';
 import * as THREE from 'three/webgpu';
 
@@ -139,6 +140,17 @@ function createPatchModel(item: ItemId): GroundModel {
  * bundle in its own colour until it has a model of its own.
  */
 function createPileModel(item: ItemId): GroundModel {
+  if (item === 'sentinelTrophy') {
+    const model = createSentinelTrophy();
+    model.group.scale.setScalar(0.55);
+    return {
+      ...model,
+      item,
+      show: (count) => {
+        model.group.visible = count > 0;
+      },
+    };
+  }
   if (item === 'berry' || item === 'mushroom') return createForageModel(item);
   if (item === 'trailRation' || item === 'forestStew' || item === 'berryTea')
     return createMealModel(item);

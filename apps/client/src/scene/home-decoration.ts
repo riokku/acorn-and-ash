@@ -1,3 +1,4 @@
+import { createSentinelTrophy } from './sentinel-art';
 import * as THREE from 'three/webgpu';
 import { ModelBuilder, placed } from '../art/shapes';
 import { paintedMaterial } from '../art/materials';
@@ -5,6 +6,7 @@ import type { DecorationKind } from '@acorn/shared';
 import { createLantern } from './lantern';
 import { createGuardianTrophy } from './guardian-trophy';
 export function createHomeDecoration(kind: DecorationKind) {
+  if (kind === 'sentinelTrophy') return createSentinelTrophy();
   if (kind === 'lantern') return createLantern();
   if (kind === 'fernLantern') return createLantern('fern');
   if (kind === 'moonLantern') return createLantern('moonlight');
