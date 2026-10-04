@@ -79,6 +79,10 @@ app.get('/api/worlds/:worldId/ws', async (c) => {
   const worldId = c.req.param('worldId');
   if (!isValidWorldId(worldId)) return c.json({ error: 'Unknown world' }, 404);
 
+  // Browsers already keep the cookie off a connection started by another site;
+  // this is the second lock on the same door.
+  if (!isSameSite(c.req.raw)) return c.json({ error: 'Not from this site' }, 403);
+
   const account = await signedInAccount(c.req.raw, c.env);
   if (!account) return c.json({ error: 'Sign in first' }, 401);
 

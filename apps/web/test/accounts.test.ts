@@ -109,6 +109,22 @@ describe('getting into a world', () => {
     expect(status).toBe(401);
   });
 
+  it('refuses a connection started by a page on another website, even with a good cookie', async () => {
+    const { cookie } = await startAsGuest();
+    const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws`, {
+      headers: { Upgrade: 'websocket', cookie, Origin: 'https://elsewhere.example' },
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('lets in the game page itself, which names its own site as the origin', async () => {
+    const { cookie } = await startAsGuest();
+    const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws`, {
+      headers: { Upgrade: 'websocket', cookie, Origin: SITE },
+    });
+    expect(response.status).toBe(200);
+  });
+
   it('gives different browsers different players', async () => {
     const one = await playerSeenByWorld((await startAsGuest()).cookie);
     const two = await playerSeenByWorld((await startAsGuest()).cookie);
