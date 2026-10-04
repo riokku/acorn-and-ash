@@ -426,6 +426,15 @@ describe("a player's blows on a raider", () => {
     expect(scene.director.drainListChanged()).toBe(true);
   });
 
+  it('gives dodge slash two damage and dodge slam six damage', () => {
+    const light = standoff('warrior');
+    hit(light.scene, light.player, { kind: 'swing', step: 3, dodge: true });
+    expect(only(light.scene.director.drainHits())).toMatchObject({ hitsLeft: 5, heavy: true });
+    const heavy = standoff('warrior');
+    hit(heavy.scene, heavy.player, { kind: 'strike', dodge: true });
+    expect(only(heavy.scene.director.drainHits())).toMatchObject({ hitsLeft: 1, heavy: true });
+  });
+
   it('misses a raider standing behind the player', () => {
     const { scene, player, id } = standoff('minion');
     scene.director.placeRaider(id, { x: 0, y: 0, z: 1.5 });

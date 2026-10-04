@@ -22,6 +22,8 @@ export const KEYBINDINGS = [
       ['Left mouse', 'Face your target; chop, fight, cast or hook a fish'],
       ['Left mouse (hold, release)', 'Charge a heavy attack'],
       ['Left mouse as a swing lands', 'Continue your attack combo'],
+      ['Dodge + left mouse (tap)', 'Aerial spin slash'],
+      ['Dodge + left mouse (hold)', 'Somersault slam: more damage, longer recovery'],
     ],
   },
   {

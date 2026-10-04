@@ -33,7 +33,7 @@ import {
   TICK_SECONDS,
 } from '../constants';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
-import { DODGE } from '../data/moves';
+import { DODGE, DODGE_ATTACKS } from '../data/moves';
 import type { ItemId } from '../data/items';
 import {
   RAID,
@@ -296,7 +296,11 @@ const ATTACKING_KINDS: ReadonlySet<ActionKind> = new Set([
   ActionKind.Strike,
 ]);
 
-const RAIDER_CONTEXT: ActionContext = { canAttack: true, castInstead: false };
+const RAIDER_CONTEXT: ActionContext = {
+  canAttack: true,
+  canDodgeAttack: false,
+  castInstead: false,
+};
 
 /**
  * Runs every raid in one world: when they come, where from, and every
@@ -470,8 +474,11 @@ export class RaidDirector {
       return true;
     }
 
-    const weight =
-      impact.kind === 'strike'
+    const weight = impact.dodge
+      ? impact.kind === 'strike'
+        ? DODGE_ATTACKS.heavy.damage
+        : DODGE_ATTACKS.light.damage
+      : impact.kind === 'strike'
         ? RAIDER_BLOW_WEIGHT.strike
         : impact.step === 3
           ? RAIDER_BLOW_WEIGHT.finisher

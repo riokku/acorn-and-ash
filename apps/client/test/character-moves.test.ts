@@ -184,3 +184,21 @@ describe('eating', () => {
     expect(eatingPose((first + second) / 2).bite).toBeLessThan(0.1);
   });
 });
+
+describe('aerial dodge follow-ups', () => {
+  it('spins a light slash with the weapon sweep aligned to its impact', () => {
+    const pose = movePose(view(ActionKind.DodgeLight, 5));
+    expect(pose.clip).toBe('attack2');
+    expect(pose.time).toBeCloseTo(clipBlowSeconds('attack2')!);
+    expect(pose.aerialTurn).toBe(1);
+    expect(pose.somersault).toBe(false);
+    expect(pose.legsFree).toBe(false);
+  });
+  it('finishes the slam somersault upright on the impact/landing tick', () => {
+    const pose = movePose(view(ActionKind.DodgeHeavy, 9));
+    expect(pose.clip).toBe('strike');
+    expect(pose.time).toBeCloseTo(clipBlowSeconds('strike')!);
+    expect(pose.aerialTurn).toBe(1);
+    expect(pose.somersault).toBe(true);
+  });
+});

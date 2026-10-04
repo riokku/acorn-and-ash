@@ -904,6 +904,12 @@ function placeBody(
     pivot.scale.set(tuck, tuck, tuck);
   }
 
+  if (pose.aerialTurn !== undefined) {
+    const turn = pose.aerialTurn * Math.PI * 2;
+    if (pose.somersault) pivot.rotation.x = -turn;
+    else pivot.rotation.y = turn;
+  }
+
   // Coiled for a swing: twisted back to the weapon side and leaning away
   // from the blow to come, so it can be seen coming from any side.
   if (pose.coil > 0) {

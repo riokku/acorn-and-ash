@@ -21,10 +21,12 @@ import {
   DODGE_DISTANCE,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
+  PLAYER_TURN_RATE,
   TICK_SECONDS,
 } from '../constants';
 import {
   CHARGE_TICKS,
+  DODGE_ATTACKS,
   DODGE,
   FLINCH,
   LIGHT_COMBO,
@@ -35,6 +37,7 @@ import {
   type ComboSwing,
 } from '../data/moves';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import { rotateToward } from '../math/angles';
 import type { ItemId } from '../data/items';
 import { PlayerButton, worldMoveDirection, type PlayerInput, type PlayerMotion } from './player';
 
@@ -66,6 +69,10 @@ export const ActionKind = {
    * ever starts one: only a raider's own brain does (see `sim/raids.ts`).
    */
   Windup: 10,
+  /** A rising spin slash started during a dodge. */
+  DodgeLight: 11,
+  /** A somersault slam started during a dodge. */
+  DodgeHeavy: 12,
 } as const;
 export type ActionKind = (typeof ActionKind)[keyof typeof ActionKind];
 
@@ -83,7 +90,7 @@ export interface ActionState {
   /** Another swing has been asked for, to follow this one. */
   queued: boolean;
   /**
-   * Which way a dodge carries you, in 256ths of a turn (see `headingDirection`)
+   * Which way a dodge or its follow-up carries you, in 256ths of a turn (see `headingDirection`)
    * - whole steps, so the server and the browser work it out alike.
    */
   heading: number;
@@ -120,6 +127,8 @@ export function beginAction(state: ActionState, kind: ActionKind, step = 0): voi
 export interface ActionContext {
   /** Holding something to swing, outdoors, with no line in the water. */
   readonly canAttack: boolean;
+  /** Raiders retain their existing moves. */
+  readonly canDodgeAttack?: boolean;
   /** A preparation benefit changes recovery, never the invulnerable window. */
   readonly dodgeCooldown?: number;
   /** The rod is out and there is water in front: a fresh click casts instead of swinging. */
@@ -136,11 +145,12 @@ export interface ActionContext {
  * - `still`: no walking, jumping or turning - sitting, lying, down, getting up.
  * - `dodging`: carried along the dodge instead of walking (see `stepDodge`).
  */
-export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging';
+export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging' | 'aerial';
 
 /** A blow landing on this tick. */
 export type Impact =
-  { readonly kind: 'swing'; readonly step: 1 | 2 | 3 } | { readonly kind: 'strike' };
+  | { readonly kind: 'swing'; readonly step: 1 | 2 | 3; readonly dodge?: true }
+  | { readonly kind: 'strike'; readonly dodge?: true };
 
 export interface ActionTick {
   readonly footing: Footing;
@@ -247,12 +257,48 @@ export function advanceAction(
     }
 
     case ActionKind.Dodge:
+      if (
+        state.age < DODGE.end &&
+        context.canAttack &&
+        context.canDodgeAttack !== false &&
+        !context.castInstead
+      ) {
+        const heavy = fresh(PlayerButton.Charge);
+        if (heavy || fresh(PlayerButton.Swing)) {
+          beginAction(state, heavy ? ActionKind.DodgeHeavy : ActionKind.DodgeLight);
+          // Commit the hop toward the attack aim, even when the original roll was backward.
+          state.heading = dodgeHeading({
+            ...input,
+            moveX: 0,
+            moveZ: 0,
+            aimYaw: input.aimYaw + Math.PI,
+          });
+          return { footing: 'aerial', impact: null, cast: false };
+        }
+      }
       if (state.age < DODGE.travel) return { footing: 'dodging', impact: null, cast: false };
       if (state.age >= DODGE.end) {
         beginAction(state, ActionKind.Idle);
         return startFromIdle(state, input, previousButtons, context, tryDodge);
       }
       return { footing: 'planted', impact: null, cast: false };
+
+    case ActionKind.DodgeLight:
+    case ActionKind.DodgeHeavy: {
+      const heavy = state.kind === ActionKind.DodgeHeavy;
+      const move = heavy ? DODGE_ATTACKS.heavy : DODGE_ATTACKS.light;
+      const impact: Impact | null =
+        state.age === move.impact
+          ? heavy
+            ? { kind: 'strike', dodge: true }
+            : { kind: 'swing', step: 3, dodge: true }
+          : null;
+      if (state.age >= move.end) {
+        beginAction(state, ActionKind.Idle);
+        return { footing: 'free', impact, cast: false };
+      }
+      return { footing: state.age <= move.land ? 'aerial' : 'planted', impact, cast: false };
+    }
 
     case ActionKind.Flinch: {
       const dodged = tryDodge();
@@ -463,7 +509,7 @@ export function packActionByte(state: Readonly<ActionState>): number {
 
 export function unpackActionByte(byte: number, into: ActionState): ActionState {
   const kind = byte & 0x1f;
-  into.kind = kind <= ActionKind.Windup ? (kind as ActionKind) : ActionKind.Idle;
+  into.kind = kind <= ActionKind.DodgeHeavy ? (kind as ActionKind) : ActionKind.Idle;
   into.step = (byte >> 5) & 0x3;
   into.queued = (byte & 0x80) !== 0;
   return into;
@@ -486,4 +532,33 @@ export interface GestureEvent {
   readonly gesture: Gesture;
   /** What was picked up or eaten, to show in hand; null when it does not matter. */
   readonly item: ItemId | null;
+}
+
+/** A predictable, collision-checked hop shared by prediction and the server. */
+export function stepDodgeAttack(
+  motion: PlayerMotion,
+  state: Readonly<ActionState>,
+  world: CollisionWorld,
+): void {
+  const move = state.kind === ActionKind.DodgeHeavy ? DODGE_ATTACKS.heavy : DODGE_ATTACKS.light;
+  const direction = headingDirection(state.heading);
+  motion.facingYaw = rotateToward(
+    motion.facingYaw,
+    Math.atan2(-direction.x, -direction.z),
+    PLAYER_TURN_RATE * TICK_SECONDS,
+  );
+  const progress = Math.min(1, state.age / move.land);
+  const height = 4 * move.height * progress * (1 - progress);
+  const oldY = motion.position.y;
+  const travelling = state.age > 0 && state.age <= move.land;
+  const speed = travelling ? move.distance / (move.land * TICK_SECONDS) : 0;
+  motion.velocity.x = direction.x * speed;
+  motion.velocity.z = direction.z * speed;
+  motion.position.x += motion.velocity.x * TICK_SECONDS;
+  motion.position.z += motion.velocity.z * TICK_SECONDS;
+  motion.position.y = world.terrain.heightAt(motion.position.x, motion.position.z) + height;
+  resolveCapsule(motion.position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
+  motion.velocity.y = (motion.position.y - oldY) / TICK_SECONDS;
+  motion.grounded = state.age >= move.land;
+  if (motion.grounded) motion.velocity.x = motion.velocity.y = motion.velocity.z = 0;
 }
