@@ -51,11 +51,13 @@ export function createForestWeather(seed: number, heightAt: (x: number, z: numbe
       weather: ForestWeather,
       indoors: boolean,
       reducedMotion: boolean,
+      /** How much of the rain shows, 1 for all of it: in winter the snow takes over instead. */
+      rainShare = 1,
     ) {
       group.visible = !indoors;
       seconds += Math.min(delta, 0.1);
       strength += (weather.precipitation - strength) * Math.min(1, delta * 0.5);
-      const visible = Math.round(count * strength);
+      const visible = Math.round(count * strength * rainShare);
       rain.visible = visible > 0 && !reducedMotion;
       geometry.setDrawRange(0, visible * 2);
       for (let i = 0; i < visible; i++) {

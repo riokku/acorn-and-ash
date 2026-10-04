@@ -9,6 +9,7 @@ declare global {
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
       weatherEffects(): { rainDrops: number; fireflies: number };
       snowOnGround(): number;
+      seasonFall(): { petals: number; pollen: number; leaves: number; snow: number };
       buildBoundaryVisible(): boolean;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };
