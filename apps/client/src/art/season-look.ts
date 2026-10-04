@@ -33,24 +33,24 @@ export interface SeasonLook {
 }
 
 export const SEASON_LOOKS: Readonly<Record<SeasonId, SeasonLook>> = {
-  // Fresh and bright: the greens turn up a notch and the light is clear.
+  // Fresh and bright: pale lime greens under a clear, slightly bluer sky.
   spring: {
-    sky: [0.98, 1.02, 1.04],
-    light: [1, 1.02, 1],
+    sky: [0.96, 1.03, 1.08],
+    light: [1, 1.03, 1.03],
     sunStrength: 1,
-    ground: [0.97, 1.1, 0.96],
-    blades: [0.95, 1.18, 0.88],
-    foliage: [0.96, 1.08, 0.94],
+    ground: [1.04, 1.22, 1],
+    blades: [0.95, 1.34, 0.9],
+    foliage: [0.96, 1.1, 0.96],
     snow: 0,
   },
-  // Deep, lush and golden: the longest, warmest light of the year.
+  // Deep, rich and golden: darker greens in the longest, warmest light of the year.
   summer: {
-    sky: [1.02, 1.02, 0.97],
-    light: [1.05, 1, 0.9],
-    sunStrength: 1.08,
-    ground: [0.97, 1.03, 0.86],
-    blades: [1, 1.05, 0.82],
-    foliage: [0.92, 1.02, 0.86],
+    sky: [1.03, 1.03, 0.96],
+    light: [1.07, 1.01, 0.88],
+    sunStrength: 1.1,
+    ground: [0.84, 0.97, 0.74],
+    blades: [0.82, 0.94, 0.68],
+    foliage: [0.9, 0.99, 0.84],
     snow: 0,
   },
   // Hazy amber: the grass goes gold and russet, the trees turn a touch warm.
