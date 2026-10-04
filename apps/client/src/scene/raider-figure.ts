@@ -197,7 +197,7 @@ export class RaiderFigure {
     this.recoil(deltaSeconds);
     this.climbOrSink(deltaSeconds, frame.move);
     this.streak(deltaSeconds, pose);
-    this.glintFor(deltaSeconds);
+    this.glintFor(deltaSeconds, pose, frame.move);
     this.bar.update(deltaSeconds);
     return pose;
   }
@@ -330,7 +330,7 @@ export class RaiderFigure {
       case ActionKind.Charge:
         this.glintAge = 0;
         this.glintStrength = 1.4;
-        playWindupRing(volume);
+        playWindupRing(volume, true);
         break;
       case ActionKind.Swing: {
         const swing = LIGHT_COMBO[Math.min(Math.max(move.step, 1), LIGHT_COMBO.length) - 1];
@@ -446,8 +446,19 @@ export class RaiderFigure {
   }
 
   /** A star of light off the weapon as it is drawn back: the moment to get ready. */
-  private glintFor(deltaSeconds: number): void {
-    this.glintAge += deltaSeconds;
+  private glintFor(
+    deltaSeconds: number,
+    pose: MovePose | null,
+    move: CharacterFrame['move'],
+  ): void {
+    const winding = move.kind === ActionKind.Windup || move.kind === ActionKind.Charge;
+    const heat = pose === null ? 0 : Math.max(pose.windup, pose.charge);
+    // Keep the tell visible through the whole preparation, not just its first
+    // third of a second. Interrupting the attack cancels the tell immediately.
+    if (winding) this.glintAge = GLINT_SECONDS * 0.25;
+    else if (move.kind !== ActionKind.Swing && move.kind !== ActionKind.Strike)
+      this.glintAge = Infinity;
+    else this.glintAge += deltaSeconds;
     const through = this.glintAge / GLINT_SECONDS;
     if (through >= 1 || this.sinceDown !== null) {
       this.glint.visible = false;
@@ -461,10 +472,14 @@ export class RaiderFigure {
     this.glint.visible = true;
     this.glint.position.copy(tip);
     // Pops out fast, then shrinks away, turning a little as it goes.
-    const size = GLINT_SIZE * this.glintStrength * Math.sin(Math.PI * Math.sqrt(through));
+    const size =
+      GLINT_SIZE *
+      this.glintStrength *
+      (winding ? 0.35 + 0.65 * heat : Math.sin(Math.PI * Math.sqrt(through)));
     this.glint.scale.setScalar(Math.max(0.001, size));
     this.glintMaterial.rotation = through * 1.2;
-    this.glintMaterial.opacity = 1 - through * 0.5;
+    this.glintMaterial.opacity = winding ? 0.55 + 0.45 * heat : 1 - through * 0.5;
+    this.glintMaterial.color.setHex(this.glintStrength > 1 ? 0xffad73 : 0xffe2b0);
   }
 }
 

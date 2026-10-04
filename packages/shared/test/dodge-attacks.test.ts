@@ -4,6 +4,8 @@ import {
   ActionKind,
   DODGE,
   DODGE_ATTACKS,
+  DODGE_SPEED,
+  TICK_SECONDS,
   PlayerButton,
   advanceAction,
   beginAction,
@@ -73,12 +75,13 @@ it('refuses pre-held, late, fishing, unarmed and enemy combo requests', () => {
     expect(state.kind).not.toBe(ActionKind.DodgeLight);
   }
 });
-it('hops toward the aim, lands exactly once, and respects a tall wall', () => {
+it('carries dodge momentum, lands exactly once, and respects a tall wall', () => {
   const world = createCollisionWorld(createFlatTerrain(0), []),
     state = createActionState();
   beginAction(state, ActionKind.DodgeHeavy);
   state.heading = 128;
   const motion = createPlayerMotion({ x: 0, y: 0, z: 0 });
+  motion.velocity.z = -DODGE_SPEED;
   let apex = 0;
   for (let age = 0; age <= DODGE_ATTACKS.heavy.land; age++) {
     state.age = age;
@@ -88,10 +91,13 @@ it('hops toward the aim, lands exactly once, and respects a tall wall', () => {
   expect(apex).toBeGreaterThan(1.5);
   expect(motion.position.y).toBe(0);
   expect(motion.grounded).toBe(true);
-  expect(motion.position.z).toBeCloseTo(-DODGE_ATTACKS.heavy.distance);
+  expect(motion.position.z).toBeCloseTo(
+    (-DODGE_SPEED * TICK_SECONDS * (DODGE_ATTACKS.heavy.land + 1)) / 2,
+  );
   expect(motion.velocity).toEqual({ x: 0, y: 0, z: 0 });
   const blocked = createCollisionWorld(createFlatTerrain(0), [box(0, 3, -0.6, 3, 3, 0.1)]),
     other = createPlayerMotion({ x: 0, y: 0, z: 0 });
+  other.velocity.z = -DODGE_SPEED;
   for (let age = 0; age <= DODGE_ATTACKS.heavy.land; age++) {
     state.age = age;
     stepDodgeAttack(other, state, blocked);
@@ -122,4 +128,57 @@ it('ends protection at the follow-up while honoring a hit from the earlier dodge
   } finally {
     sim.dispose();
   }
+});
+
+it.each([PlayerButton.Swing, PlayerButton.Charge])(
+  'preserves the original dodge heading when attack %s aims elsewhere',
+  (button) => {
+    for (const heading of [0, 64, 128, 192]) {
+      const state = createActionState();
+      beginAction(state, ActionKind.Dodge);
+      state.age = 2;
+      state.heading = heading;
+      // Both a changed movement key and opposite aim must leave the path alone.
+      advanceAction(state, createInput(1, -1, 1, 0, button, Math.PI / 3), 0, armed);
+      expect(state.heading).toBe(heading);
+    }
+  },
+);
+
+it.each([ActionKind.DodgeLight, ActionKind.DodgeHeavy])(
+  'keeps launch velocity and travel separate from aim for action %s',
+  (kind) => {
+    const state = createActionState();
+    beginAction(state, kind);
+    state.heading = 64;
+    const motion = createPlayerMotion({ x: 0, y: 0, z: 0 });
+    motion.velocity.x = DODGE_SPEED;
+    const world = createCollisionWorld(createFlatTerrain(0), []);
+    let previousSpeed = DODGE_SPEED;
+    const rules = kind === ActionKind.DodgeHeavy ? DODGE_ATTACKS.heavy : DODGE_ATTACKS.light;
+    for (let age = 0; age <= rules.land; age++) {
+      state.age = age;
+      stepDodgeAttack(motion, state, world, Math.PI / 2);
+      if (age === 0) expect(motion.velocity.x).toBeCloseTo(DODGE_SPEED);
+      expect(motion.velocity.x).toBeLessThanOrEqual(previousSpeed + 1e-8);
+      expect(motion.velocity.z).toBeCloseTo(0);
+      previousSpeed = motion.velocity.x;
+    }
+    expect(motion.position.x).toBeGreaterThan(2);
+    expect(motion.facingYaw).toBeCloseTo(Math.PI / 2);
+    expect(motion.grounded).toBe(true);
+    const tick = advanceAction(state, createInput(30, 1, 0, 0, 0), 0, armed);
+    expect(state.kind).toBe(kind);
+    expect(tick.footing).toBe('free');
+  },
+);
+
+it('does not manufacture momentum if the roll has already stopped', () => {
+  const state = createActionState();
+  beginAction(state, ActionKind.DodgeHeavy);
+  const motion = createPlayerMotion({ x: 0, y: 0, z: 0 });
+  const world = createCollisionWorld(createFlatTerrain(0), []);
+  stepDodgeAttack(motion, state, world, Math.PI);
+  expect(motion.position.x).toBe(0);
+  expect(motion.position.z).toBe(0);
 });

@@ -11,6 +11,8 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
   sim.placePlayer(1, { x: 0, y: 0, z: 10 }, 0);
   Object.assign(sim.inventoryOf(1), { axe: 1 });
   sim.useItem(1, 'axe');
+  let closed = false;
+  const poses: shared.SnapshotEntity[] = [];
   const started = new Set<number>(),
     errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -29,7 +31,7 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
     send(shared.encodeWelcome(1, shared.DEFAULT_WORLD_SEED, 0, Date.now()));
     refresh();
     socket.onMessage((message) => {
-      if (typeof message === 'string') return;
+      if (closed || typeof message === 'string') return;
       const request = shared.decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(shared.encodePong(request.clientTimeMs, Date.now()));
       if (request?.type === 'input') {
@@ -38,6 +40,7 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
           sim.step(Date.now());
           const me = sim.snapshotFor(1).find((entity) => entity.netId === 1)!;
           started.add(me.action & 0x1f);
+          poses.push({ ...me });
         }
         refresh();
       }
@@ -59,6 +62,7 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
         .toBe(shared.ActionKind.Idle);
       // Let the normal dodge cooldown expire before the next attempt.
       await page.waitForTimeout(1500);
+      if (strong) await page.keyboard.down('KeyD');
       await page.keyboard.down('ControlLeft');
       await expect
         .poll(() => page.evaluate(() => window.acornDebug?.combatMove().kind), { intervals: [20] })
@@ -67,9 +71,32 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
       await page.mouse.click(480, 260, { button: strong ? 'right' : 'left' });
       expect(await page.evaluate(() => document.pointerLockElement === null)).toBe(true);
       await expect.poll(() => started.has(kind), { intervals: [20] }).toBe(true);
+      const launch = poses.find((pose) => (pose.action & 0x1f) === kind)!;
+      expect(launch.actionHeading).toBe(strong ? 64 : 0);
+      expect(strong ? launch.vx : launch.vz).toBeGreaterThan(5);
+      if (strong) {
+        // Turn away from the trees at the clearing edge on landing. Changing
+        // the held direction in the air must not redirect the dodge momentum.
+        await page.keyboard.up('KeyD');
+        await page.keyboard.down('KeyA');
+        await expect
+          .poll(
+            () =>
+              poses.some(
+                (pose) =>
+                  (pose.action & 0x1f) === kind &&
+                  pose.actionAge > shared.DODGE_ATTACKS.heavy.land &&
+                  pose.vx < 0,
+              ),
+            { intervals: [20] },
+          )
+          .toBe(true);
+        await page.keyboard.up('KeyA');
+      }
     }
     expect(errors).toEqual([]);
   } finally {
+    closed = true;
     sim.dispose();
   }
 });

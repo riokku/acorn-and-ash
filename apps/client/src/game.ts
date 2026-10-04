@@ -4020,7 +4020,7 @@ export class Game {
     if (landed === 'missed') return;
     const weight = (strike ? CHARGED_BLOW * 1.15 : heavy ? 1.4 : 1) * (impact.dodge ? 1.2 : 1);
     const shrugged = landed === 'shrugged';
-    this.localCharacter?.hitStop(shrugged ? 0.05 : 0.07 * weight);
+    this.localCharacter?.hitStop(shrugged ? 0.05 : Math.min(0.11, 0.07 * weight));
     this.camera?.shake(HIT_LANDED_SHAKE * weight * (shrugged ? 0.6 : 1));
   }
 

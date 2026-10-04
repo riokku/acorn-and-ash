@@ -1821,7 +1821,7 @@ export class WorldSimulation {
             if (tick.footing === 'dodging') {
               stepDodge(scratch, runtime.action, collision);
             } else if (tick.footing === 'aerial') {
-              stepDodgeAttack(scratch, runtime.action, collision);
+              stepDodgeAttack(scratch, runtime.action, collision, input.aimYaw);
             } else {
               stepPlayer(
                 scratch,

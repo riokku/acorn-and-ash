@@ -266,13 +266,7 @@ export function advanceAction(
         const heavy = fresh(PlayerButton.Charge);
         if (heavy || fresh(PlayerButton.Swing)) {
           beginAction(state, heavy ? ActionKind.DodgeHeavy : ActionKind.DodgeLight);
-          // Commit the hop toward the attack aim, even when the original roll was backward.
-          state.heading = dodgeHeading({
-            ...input,
-            moveX: 0,
-            moveZ: 0,
-            aimYaw: input.aimYaw + Math.PI,
-          });
+          // Keep the original dodge path. Attack aiming must never redirect travel.
           return { footing: 'aerial', impact: null, cast: false };
         }
       }
@@ -297,7 +291,7 @@ export function advanceAction(
         beginAction(state, ActionKind.Idle);
         return { footing: 'free', impact, cast: false };
       }
-      return { footing: state.age <= move.land ? 'aerial' : 'planted', impact, cast: false };
+      return { footing: state.age <= move.land ? 'aerial' : 'free', impact, cast: false };
     }
 
     case ActionKind.Flinch: {
@@ -539,19 +533,22 @@ export function stepDodgeAttack(
   motion: PlayerMotion,
   state: Readonly<ActionState>,
   world: CollisionWorld,
+  aimYaw = motion.facingYaw,
 ): void {
   const move = state.kind === ActionKind.DodgeHeavy ? DODGE_ATTACKS.heavy : DODGE_ATTACKS.light;
   const direction = headingDirection(state.heading);
-  motion.facingYaw = rotateToward(
-    motion.facingYaw,
-    Math.atan2(-direction.x, -direction.z),
-    PLAYER_TURN_RATE * TICK_SECONDS,
-  );
+  motion.facingYaw = rotateToward(motion.facingYaw, aimYaw, PLAYER_TURN_RATE * TICK_SECONDS);
   const progress = Math.min(1, state.age / move.land);
   const height = 4 * move.height * progress * (1 - progress);
   const oldY = motion.position.y;
-  const travelling = state.age > 0 && state.age <= move.land;
-  const speed = travelling ? move.distance / (move.land * TICK_SECONDS) : 0;
+  // Carry the actual roll velocity rather than restarting a preset hop. The
+  // linear envelope can resume from snapshot velocity at any airborne tick.
+  const carried = Math.max(0, motion.velocity.x * direction.x + motion.velocity.z * direction.z);
+  const remaining = Math.max(0, move.land - state.age);
+  const speed =
+    state.age === 0
+      ? Math.min(DODGE_SPEED, carried)
+      : (Math.min(DODGE_SPEED, carried) * remaining) / (remaining + 1);
   motion.velocity.x = direction.x * speed;
   motion.velocity.z = direction.z * speed;
   motion.position.x += motion.velocity.x * TICK_SECONDS;

@@ -213,16 +213,17 @@ describe('dodge attacks predict and replay the authoritative hop', () => {
       const started = player.drainEvents().filter((event) => event.kind === 'began');
       expect(started).toHaveLength(2);
       const launch = { ...player.motion.position };
+      const carried = { ...player.motion.velocity };
       player.advance(TICK_SECONDS * 3, 0, 0, 0, 0, 0);
       expect(player.motion.position.y).toBeGreaterThan(0.5);
       expect(player.motion.grounded).toBe(false);
       const predicted = { ...player.motion.position };
       player.reconcile(
         {
-          ...serverState(1, launch.x, launch.z),
+          ...serverState(1, launch.x, launch.z, carried.x, carried.z),
           action: button === PlayerButton.Charge ? ActionKind.DodgeHeavy : ActionKind.DodgeLight,
           actionAge: 0,
-          actionHeading: 128,
+          actionHeading: 0,
         },
         2,
       );

@@ -94,6 +94,6 @@ export const SETTLE = { chair: 16, bed: 40, earliestUp: 4 } as const;
 
 /** Dodge follow-ups: one committed hop, with a heavier landing and recovery for the slam. */
 export const DODGE_ATTACKS = {
-  light: { impact: 5, land: 10, end: 14, height: 0.95, distance: 0.55, damage: 2 },
-  heavy: { impact: 9, land: 9, end: 20, height: 1.65, distance: 0.8, damage: 6 },
+  light: { impact: 5, land: 10, end: 14, height: 0.95, damage: 2 },
+  heavy: { impact: 9, land: 9, end: 20, height: 1.65, damage: 6 },
 } as const;
