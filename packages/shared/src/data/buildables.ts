@@ -24,7 +24,9 @@ export type BuildableKindId =
   | 'wovenRug'
   | 'fernLantern'
   | 'moonLantern'
-  | 'flowerPlanter';
+  | 'flowerPlanter'
+  | 'trailPennant'
+  | 'sentinelTrophy';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -263,6 +265,29 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0xc8af78,
   },
+  trailPennant: {
+    id: 'trailPennant',
+    displayName: 'Trail pennant',
+    costs: [
+      { item: 'stick', amount: 2 },
+      { item: 'flower', amount: 2 },
+    ],
+    footprintRadius: 0.25,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 800,
+    placeholderColor: 0x73918b,
+  },
+  sentinelTrophy: {
+    id: 'sentinelTrophy',
+    displayName: 'Ruin sentinel trophy',
+    costs: [{ item: 'sentinelTrophy', amount: 1 }],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0x9ea997,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -283,6 +308,8 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'fernLantern',
   'moonLantern',
   'flowerPlanter',
+  'trailPennant',
+  'sentinelTrophy',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

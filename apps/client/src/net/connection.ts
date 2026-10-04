@@ -1,3 +1,4 @@
+import { encodeExpeditionRequest, type ExpeditionRequest } from '@acorn/shared';
 import { encodeDecorationRequest, type DecorationRequest } from '@acorn/shared';
 import {
   encodeGardenRequest,
@@ -192,6 +193,11 @@ export class WorldConnection {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.flush();
     this.socket.send(encodeChestRequest(request));
+  }
+  sendExpedition(request: ExpeditionRequest): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(encodeExpeditionRequest(request));
+    return true;
   }
   sendGarden(request: GardenRequest): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;

@@ -1,3 +1,4 @@
+import { dressSentinel } from './sentinel-art';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -162,6 +163,7 @@ export class RaiderFigure {
       tint: null,
       weapon: raiderWeapon(kind),
     });
+    if (kind === 'sentinel') dressSentinel(character);
     return new RaiderFigure(kind, character, parent, bursts);
   }
 

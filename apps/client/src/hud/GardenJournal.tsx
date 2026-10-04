@@ -26,7 +26,7 @@ export function GardenJournal({
   onUse,
 }: {
   state: HudState;
-  onChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
   onUse?: (request: GardenRequest) => void;
 }) {
   const inventory = inventoryFromEntries(state.carrying),

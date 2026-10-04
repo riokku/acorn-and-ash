@@ -218,7 +218,7 @@ describe('exploration skeleton encounters', () => {
     a.step();
     expect(a.director.drainNews()[0]?.kind).toBe('wanderer');
   });
-  it('keeps a two-skeleton guard at ruins', () => {
+  it('keeps the ruin sentinel at ruins', () => {
     const a = forest('ruins');
     a.step(TICK_HZ);
     expect(
@@ -226,7 +226,7 @@ describe('exploration skeleton encounters', () => {
         .raidersList()
         .map((r) => r.kind)
         .sort(),
-    ).toEqual(['mage', 'warrior']);
+    ).toEqual(['sentinel']);
     a.step(TICK_HZ * 30);
     for (const raider of a.director.raidersList()) {
       const at = a.director.positionOf(raider.id)!;

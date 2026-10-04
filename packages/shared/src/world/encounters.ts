@@ -23,7 +23,7 @@ export const ENCOUNTER_RULES = {
 } as const;
 export const ENCOUNTER_LINEUPS: Record<EncounterKind, readonly RaiderKindId[]> = {
   wanderer: ['minion'],
-  ruins: ['warrior', 'mage'],
+  ruins: ['sentinel'],
   patrol: ['rogue', 'minion', 'warrior'],
 };
 

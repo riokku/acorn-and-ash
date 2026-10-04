@@ -1,3 +1,4 @@
+import type { ExpeditionRequest } from '@acorn/shared';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -34,8 +35,9 @@ export function mountHud(
   onCloseChest: () => void,
   onSettingsOpenChange?: (open: boolean) => void,
   journalActions?: {
-    onTabChange: (tab: 'craft' | 'discoveries' | 'garden') => void;
+    onTabChange: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
     onCraft: (index: number) => void;
+    onExpedition?: (request: ExpeditionRequest) => void;
     onGarden?: (request: GardenRequest) => void;
     onMoveDecoration?: (id: number) => void;
     onReclaimDecoration?: (id: number) => void;
@@ -63,6 +65,7 @@ export function mountHud(
         onJournalTabChange={journalActions?.onTabChange}
         onPickRecipe={journalActions?.onCraft}
         onGardenUse={journalActions?.onGarden}
+        onExpedition={journalActions?.onExpedition}
         onMoveDecoration={journalActions?.onMoveDecoration}
         onReclaimDecoration={journalActions?.onReclaimDecoration}
       />

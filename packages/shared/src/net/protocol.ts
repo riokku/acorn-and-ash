@@ -1,4 +1,11 @@
 import {
+  EXPEDITIONS,
+  EXPEDITION_NOTICES,
+  expeditionFromSaved,
+  type ExpeditionRequest,
+  type ExpeditionView,
+} from '../sim/expeditions';
+import {
   DECORATION_KINDS,
   DECORATION_REASONS,
   MAX_WORLD_DECORATIONS,
@@ -432,6 +439,14 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   const view = new DataView(data);
   const type = view.getUint8(0);
 
+  if (type === ClientMessageType.Expedition) {
+    if (data.byteLength < 2) return null;
+    const action = view.getUint8(1);
+    if (action === 1) return data.byteLength === 2 ? { type: 'expedition', action: 'claim' } : null;
+    return action === 0 && data.byteLength === 3 && view.getUint8(2) < 3
+      ? { type: 'expedition', action: 'accept', index: view.getUint8(2) }
+      : null;
+  }
   if (type === ClientMessageType.Garden) {
     if (data.byteLength !== 4) return null;
     const action = view.getUint8(1),
@@ -1500,6 +1515,32 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         reason: reason === 0 ? null : GARDEN_REASONS[reason - 1]!,
       };
     }
+    case ServerMessageType.Expedition: {
+      if (data.byteLength !== 21) return null;
+      const active = view.getUint8(9);
+      const offers = [view.getUint8(17), view.getUint8(18), view.getUint8(19)];
+      const notice = EXPEDITION_NOTICES[view.getUint8(20)];
+      if (
+        (active !== 255 && active >= EXPEDITIONS.length) ||
+        offers.some((id) => id >= EXPEDITIONS.length) ||
+        new Set(offers).size !== 3 ||
+        notice === undefined ||
+        view.getUint8(16) > 1
+      )
+        return null;
+      return {
+        type: 'expedition',
+        ...expeditionFromSaved({
+          cycle: view.getUint32(1, true),
+          completed: view.getUint32(5, true),
+          active: active === 255 ? null : active,
+          progress: [view.getUint16(10, true), view.getUint16(12, true), view.getUint16(14, true)],
+          cosmetics: view.getUint8(16),
+        }),
+        offers,
+        notice,
+      };
+    }
     case ServerMessageType.Discoveries: {
       if (data.byteLength !== 4) return null;
       const found = view.getUint8(1),
@@ -1855,6 +1896,12 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const event = decodeDiscarded(view);
       return event === null ? null : { type: 'discarded', event };
     }
+    case ServerMessageType.RaiderVitals: {
+      if (view.byteLength !== 4) return null;
+      const maxHits = view.getUint8(3);
+      if (![24, 32, 40, 48].includes(maxHits)) return null;
+      return { type: 'raiderVitals', id: view.getUint16(1, true), maxHits };
+    }
     case ServerMessageType.Raiders: {
       const raiders = decodeRaiders(view);
       return raiders === null ? null : { type: 'raiders', raiders };
@@ -2037,5 +2084,37 @@ export function encodeRecoveryMarkers(caches: readonly BuriedCacheView[]): Array
     view.setInt16(at + 6, clamp(quantisePosition(cache.x), INT16_MIN, INT16_MAX), true);
     view.setInt16(at + 8, clamp(quantisePosition(cache.z), INT16_MIN, INT16_MAX), true);
   });
+  return buffer;
+}
+
+export function encodeExpeditionRequest(request: ExpeditionRequest): ArrayBuffer {
+  const data = new ArrayBuffer(request.action === 'claim' ? 2 : 3),
+    view = new DataView(data);
+  view.setUint8(0, ClientMessageType.Expedition);
+  view.setUint8(1, request.action === 'claim' ? 1 : 0);
+  if (request.action === 'accept') view.setUint8(2, request.index);
+  return data;
+}
+export function encodeExpeditionState(state: ExpeditionView): ArrayBuffer {
+  const data = new ArrayBuffer(21),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Expedition);
+  view.setUint32(1, state.cycle, true);
+  view.setUint32(5, state.completed, true);
+  view.setUint8(9, state.active ?? 255);
+  state.progress.forEach((n, i) => view.setUint16(10 + i * 2, n, true));
+  view.setUint8(16, state.cosmetics);
+  state.offers.forEach((n, i) => view.setUint8(17 + i, n));
+  view.setUint8(20, EXPEDITION_NOTICES.indexOf(state.notice));
+  return data;
+}
+
+/** Boss maximum health travels separately, preserving the ordinary raider packet. */
+export function encodeRaiderVitals(id: number, maxHits: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(4),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.RaiderVitals);
+  view.setUint16(1, id, true);
+  view.setUint8(3, maxHits);
   return buffer;
 }

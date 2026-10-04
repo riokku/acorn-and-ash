@@ -1,3 +1,6 @@
+import { createSentinelTrophy } from '../src/scene/sentinel-art';
+import { createExpeditionBoard } from '../src/scene/expedition-board';
+import { createHomeDecoration } from '../src/scene/home-decoration';
 import { createDiscoveryLandmarks } from '../src/scene/discovery-sites';
 import { createHomeFacilities } from '../src/scene/home-facilities';
 import { createForageModel, createMealModel } from '../src/scene/forest-food';
@@ -49,6 +52,17 @@ function reach(group: THREE.Object3D): number {
 
 describe("the game's own models", () => {
   const budgets = [
+    {
+      name: 'sentinel trophy',
+      make: createSentinelTrophy,
+      budget: BUILDABLE_KINDS.sentinelTrophy.triangleBudget,
+    },
+    { name: 'expedition board', make: createExpeditionBoard, budget: 800 },
+    {
+      name: 'trail pennant',
+      make: () => createHomeDecoration('trailPennant'),
+      budget: BUILDABLE_KINDS.trailPennant.triangleBudget,
+    },
     ...(['teepee', 'cabin', 'largeCabin'] as const).map((kind) => ({
       name: `${kind} facilities`,
       budget: kind === 'largeCabin' ? PROP_BUDGET * 3 : PROP_BUDGET,

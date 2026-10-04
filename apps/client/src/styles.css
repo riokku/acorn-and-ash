@@ -2425,6 +2425,113 @@ body {
   outline-offset: 3px;
 }
 
+.expedition-panel {
+  width: min(940px, calc(100vw - 32px));
+  max-height: calc(100dvh - 180px);
+  z-index: 5;
+}
+.expedition-panel h2 {
+  margin: 0;
+}
+.expedition-intro {
+  color: var(--ink-warm-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.expedition-offers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.expedition-offer,
+.expedition-active {
+  border: 1px solid #ac986b66;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fffaf044;
+}
+.expedition-offer {
+  display: flex;
+  flex-direction: column;
+}
+.expedition-panel h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  margin: 8px 0;
+  font-size: 20px;
+}
+.expedition-panel p,
+.expedition-panel li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.expedition-offer ul {
+  padding-left: 18px;
+}
+.expedition-eyebrow {
+  color: #7a6548;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.expedition-rewards {
+  margin-top: auto;
+  font-weight: 600;
+}
+.expedition-panel button:not(.hud-journal-tabs button) {
+  padding: 10px 14px;
+  border: 1px solid #486248;
+  border-radius: 8px;
+  background: #3b6049;
+  color: #fff7e4;
+  cursor: pointer;
+}
+.expedition-panel button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.expedition-panel button:focus-visible {
+  outline: 2px solid #a65e32;
+  outline-offset: 3px;
+}
+.expedition-objectives {
+  list-style: none;
+  padding: 0;
+}
+.expedition-objectives li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 14px 0;
+}
+.expedition-objectives progress {
+  grid-column: 1/-1;
+  width: 100%;
+  height: 8px;
+  accent-color: #587654;
+}
+.expedition-milestone {
+  color: var(--ink-warm-dim);
+  border-top: 1px dashed #aa906455;
+  padding-top: 12px;
+}
+.expedition-board-open {
+  position: absolute;
+  right: 16px;
+  bottom: 112px;
+  padding: 10px 16px;
+  pointer-events: auto;
+  border: 1px solid #91a27b;
+  border-radius: 10px;
+  background: #23372bec;
+  color: #f7efda;
+  cursor: pointer;
+}
+@media (max-width: 800px) {
+  .expedition-offers {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Build categories share room without hiding costs or changing number shortcuts. */
 .build-panel {
   z-index: 5;

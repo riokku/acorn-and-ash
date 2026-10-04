@@ -32,6 +32,16 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <path d="M19 14L20 17L23 18L20 19L19 22L18 19L15 18L18 17Z" />
     </>
   ),
+  sentinelTrophy: (
+    <>
+      <path d="M4 21H20V18H4ZM8 17V11L5 7L7 2L10 5L12 2L14 5L17 2L19 7L16 11V17Z" />
+    </>
+  ),
+  trailPennant: (
+    <>
+      <path d="M4 2H6V22H4ZM7 4H21V16L14 12L7 16Z" />
+    </>
+  ),
   guardianTrophy: (
     <>
       <path d="M4 21H20V18H4ZM9 18V12L4 7V2H6V6L10 9H14L18 6V2H20V7L15 12V18Z" />

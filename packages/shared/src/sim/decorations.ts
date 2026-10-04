@@ -13,6 +13,8 @@ export const DECORATION_KINDS = [
   'fernLantern',
   'moonLantern',
   'flowerPlanter',
+  'trailPennant',
+  'sentinelTrophy',
 ] as const;
 export type DecorationKind = (typeof DECORATION_KINDS)[number];
 export const DECORATION_REASONS = [
@@ -25,6 +27,7 @@ export const DECORATION_REASONS = [
   'limit',
   'missing',
   'packFull',
+  'recipe',
 ] as const;
 export type DecorationReason = (typeof DECORATION_REASONS)[number];
 export const MAX_HOME_DECORATIONS = 16;

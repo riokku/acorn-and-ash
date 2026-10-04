@@ -1,3 +1,17 @@
+import {
+  EXPEDITIONS,
+  expeditionFromSaved,
+  expeditionComplete,
+  expeditionOffers,
+  expeditionBoardSpot,
+  progressExpedition,
+  TRAIL_PENNANT_SKILL,
+  type ExpeditionState,
+  type ExpeditionView,
+  type ExpeditionRequest,
+  type ExpeditionEvent,
+  type ExpeditionNotice,
+} from './expeditions';
 import { storeBuildingSupplies } from './chest';
 import {
   isIndoorOnlyKind,
@@ -404,8 +418,10 @@ export interface PersistedPlayer {
   readonly explored?: Uint8Array | null;
   readonly homeSkills?: number;
   readonly blueprintMisses?: number;
+  readonly sentinelVictories?: number;
   readonly discoveriesFound?: number;
   readonly discoveriesClaimed?: number;
+  readonly expedition?: ExpeditionState;
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -789,6 +805,8 @@ interface PlayerRuntime {
   blueprintMisses: number;
   discoveriesFound: number;
   discoveriesClaimed: number;
+  expedition: ExpeditionState;
+  sentinelVictories: number;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -1060,6 +1078,12 @@ export class WorldSimulation {
       return result('private');
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
       return result('busy');
+    if (
+      request.action === 'place' &&
+      request.kind === 'trailPennant' &&
+      !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL)
+    )
+      return result('recipe');
     const old = this.decorations.find(
       (piece) => piece.id === request.id && piece.homeId === home.id,
     );
@@ -1214,6 +1238,8 @@ export class WorldSimulation {
   /** Piles dropped, added to, picked from or faded since this was last asked, by id. */
   private readonly pileChanges = new Set<number>();
   private readonly blueprintProgressChanges = new Set<number>();
+  private readonly sentinelProgressChanges = new Set<number>();
+  private readonly expeditionChanges = new Map<number, ExpeditionNotice>();
   private readonly discoveryChanges = new Map<number, DiscoveryNotice>();
   private readonly homeGardens = new Map<number, GardenPlot[]>();
   private readonly discardEvents: DiscardedEvent[] = [];
@@ -1306,9 +1332,19 @@ export class WorldSimulation {
         fighters: () => this.fighters,
         strikePlayer: (netId, damage, impactTick) =>
           this.raiderStrikesPlayer(netId, damage, impactTick),
-        defeated: (netId, raiderId, position, facingYaw) => {
+        defeated: (netId, raiderId, position, facingYaw, kind) => {
           const runtime = this.players.get(netId);
           if (runtime === undefined) return;
+          this.advanceExpedition(runtime, { kind: 'defeat' }, 1);
+          if (kind === 'sentinel') {
+            const owner = this.rewardOwnerKey(runtime);
+            if (runtime.sentinelVictories === 0)
+              this.addPile('sentinelTrophy', 1, position.x, position.z, this.nowMs, false, owner);
+            this.addPile('bone', 4, position.x + 0.25, position.z, this.nowMs, false, owner);
+            this.addPile('log', 4, position.x - 0.25, position.z, this.nowMs, false, owner);
+            runtime.sentinelVictories = Math.min(0xffffffff, runtime.sentinelVictories + 1);
+            this.sentinelProgressChanges.add(netId);
+          }
           const item = nextBlueprint(runtime.homeSkills);
           if (item === null) return;
           const roll = createRng(
@@ -1457,6 +1493,13 @@ export class WorldSimulation {
       discoveriesFound:
         ((saved?.discoveriesFound ?? 0) | (saved?.discoveriesClaimed ?? 0)) & DISCOVERY_MASK,
       discoveriesClaimed: (saved?.discoveriesClaimed ?? 0) & DISCOVERY_MASK,
+      expedition: expeditionFromSaved(saved?.expedition),
+      sentinelVictories:
+        Number.isInteger(saved?.sentinelVictories) &&
+        saved!.sentinelVictories! >= 0 &&
+        saved!.sentinelVictories! <= 0xffffffff
+          ? saved!.sentinelVictories!
+          : 0,
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -1662,6 +1705,8 @@ export class WorldSimulation {
     if (!runtime) return false;
     runtime.entity.destroy();
     this.players.delete(netId);
+    this.expeditionChanges.delete(netId);
+    this.sentinelProgressChanges.delete(netId);
     this.raids.forgetPlayer(netId);
     return true;
   }
@@ -2009,6 +2054,7 @@ export class WorldSimulation {
       const { action } = runtime;
       this.fighters.push({
         netId: runtime.netId,
+        rewardKey: this.rewardOwnerKey(runtime),
         position,
         aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
         action,
@@ -2673,6 +2719,7 @@ export class WorldSimulation {
     const offered =
       patch.item === 'mushroom' && forestWeather(this.seed, this.nowMs).mushroomsAbundant ? 2 : 1;
     const gathered = addItem(runtime.inventory, patch.item, offered);
+    this.advanceExpedition(runtime, { kind: 'gather', item: patch.item }, gathered);
 
     patch.remaining -= 1;
     if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
@@ -2898,7 +2945,10 @@ export class WorldSimulation {
     ownerKey?: string,
   ): void {
     if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
-      const oldest = this.droppedPiles.shift();
+      const removable = this.droppedPiles.findIndex(
+        (pile) => !(pile.item === 'sentinelTrophy' && pile.ownerKey !== undefined),
+      );
+      const oldest = removable < 0 ? undefined : this.droppedPiles.splice(removable, 1)[0];
       if (oldest !== undefined) {
         this.pileChanges.add(oldest.id);
         this.pendingPiles.delete(oldest.id);
@@ -3243,6 +3293,7 @@ export class WorldSimulation {
       return;
     }
 
+    this.advanceExpedition(runtime, { kind: 'chop' }, 1);
     this.fellTree(target.prop.id, this.nowMs);
     state.fallYaw = treeFallYaw(target.prop, position);
     const landsAt = this.nowMs + treeFallTimes(target.prop).break * 1000;
@@ -3497,6 +3548,7 @@ export class WorldSimulation {
   private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
     const { kind } = request;
     if (isIndoorOnlyKind(kind)) return;
+    if (kind === 'trailPennant' && !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL)) return;
     const buildable = BUILDABLE_KINDS[kind];
     const refuse = (reason: HomeBuildReason): void => {
       if (isHomeKind(kind))
@@ -3589,6 +3641,7 @@ export class WorldSimulation {
           prop: upgraded,
           ownerKey: runtime.playerKey,
         });
+        this.expeditionChanges.set(runtime.netId, 'none');
         this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: home.id, reason: null });
         return;
       }
@@ -3628,7 +3681,10 @@ export class WorldSimulation {
     };
     this.builtProps.push(prop);
     this.builtPropsById.set(prop.id, prop);
-    if (buildable.isHome) this.addHomeSolid(prop);
+    if (buildable.isHome) {
+      this.addHomeSolid(prop);
+      this.expeditionChanges.set(runtime.netId, 'none');
+    }
     this.movePatchesFrom(piece);
     const ownerKey = runtime.playerKey;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
@@ -3709,6 +3765,7 @@ export class WorldSimulation {
     if (end.outcome === 'caught') {
       // Hooked either way; a full pack means it goes back in the water.
       const added = addItem(runtime.inventory, end.item);
+      if (added > 0) this.advanceExpedition(runtime, { kind: 'fish' }, 1);
       this.fishingEvents.push({ kind: 'caught', netId: runtime.netId, item: end.item, added });
       return;
     }
@@ -4295,6 +4352,85 @@ export class WorldSimulation {
     return runtime.playerKey ?? `session:${runtime.netId}`;
   }
 
+  sentinelVictoriesOf(netId: number): number {
+    return this.players.get(netId)?.sentinelVictories ?? 0;
+  }
+  drainSentinelProgressChanges(): number[] {
+    const ids = [...this.sentinelProgressChanges];
+    this.sentinelProgressChanges.clear();
+    return ids;
+  }
+
+  expeditionStateOf(netId: number, notice: ExpeditionNotice = 'none'): ExpeditionView {
+    const runtime = this.players.get(netId),
+      state = expeditionFromSaved(runtime?.expedition);
+    const home = runtime?.playerKey == null ? null : this.homeOf(runtime.playerKey);
+    return {
+      ...state,
+      offers: expeditionOffers(
+        home !== null && isHomeKind(home.kind) ? home.kind : null,
+        state,
+        this.seed,
+        runtime?.playerKey ?? `session:${netId}`,
+      ),
+      notice,
+    };
+  }
+  nearExpeditionBoardOf(netId: number): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime?.playerKey == null) return false;
+    const home = this.homeOf(runtime.playerKey);
+    if (home === null) return false;
+    if (runtime.space === home.id) return true;
+    if (runtime.space !== OUTDOORS) return false;
+    const at = runtime.entity.get(Position),
+      spot = expeditionBoardSpot(home);
+    return at !== undefined && Math.hypot(at.x - spot.x, at.z - spot.z) <= 2.5;
+  }
+  requestExpedition(netId: number, request: ExpeditionRequest): ExpeditionView {
+    const runtime = this.players.get(netId);
+    const result = (notice: ExpeditionNotice): ExpeditionView =>
+      this.expeditionStateOf(netId, notice);
+    if (runtime === undefined || !this.nearExpeditionBoardOf(netId)) return result('away');
+    if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
+      return result('busy');
+    const state = runtime.expedition;
+    if (request.action === 'accept') {
+      if (state.active !== null) return result('active');
+      if (!Number.isInteger(request.index) || request.index < 0 || request.index > 2)
+        return result('choice');
+      state.active = this.expeditionStateOf(netId).offers[request.index]!;
+      state.progress = [0, 0, 0];
+      // Requests return their state immediately; discard an older queued update.
+      this.expeditionChanges.delete(netId);
+      return result('accepted');
+    }
+    if (!expeditionComplete(state)) return result('unfinished');
+    const copy = { ...runtime.inventory };
+    for (const reward of EXPEDITIONS[state.active!]!.rewards)
+      if (addItem(copy, reward.item, reward.count) !== reward.count) return result('full');
+    Object.assign(runtime.inventory, copy);
+    state.active = null;
+    state.progress = [0, 0, 0];
+    state.completed = Math.min(0xffffffff, state.completed + 1);
+    state.cycle = Math.min(0xffffffff, state.cycle + 1);
+    if (state.completed >= 3) state.cosmetics |= TRAIL_PENNANT_SKILL;
+    this.expeditionChanges.delete(netId);
+    return result('claimed');
+  }
+  private advanceExpedition(runtime: PlayerRuntime, event: ExpeditionEvent, count: number): void {
+    if (progressExpedition(runtime.expedition, event, count))
+      this.expeditionChanges.set(runtime.netId, 'none');
+  }
+  drainExpeditionChanges(): { netId: number; state: ExpeditionView }[] {
+    const changed = [...this.expeditionChanges].map(([netId, notice]) => ({
+      netId,
+      state: this.expeditionStateOf(netId, notice),
+    }));
+    this.expeditionChanges.clear();
+    return changed;
+  }
+
   discoveryStateOf(netId: number): DiscoveryState {
     const runtime = this.players.get(netId);
     return {
@@ -4354,6 +4490,8 @@ export class WorldSimulation {
 
   private findDiscoveries(runtime: PlayerRuntime, position: Readonly<Vec3>): void {
     for (const site of this.discoverySites) {
+      if (Math.hypot(position.x - site.x, position.z - site.z) <= 6)
+        this.advanceExpedition(runtime, { kind: 'visit', site: site.kind }, 1);
       if (
         site.kind === 'guardianHollow' ||
         discoveryKnown(runtime.discoveriesFound, site.id) ||
@@ -4451,7 +4589,15 @@ export class WorldSimulation {
         Number.isFinite(row.droppedAtMs),
     );
     rows.sort((a, b) => a.droppedAtMs - b.droppedAtMs);
-    for (const row of rows.slice(-MAX_DROPPED_PILES)) {
+    const permanent = rows.filter(
+      (row) => row.item === 'sentinelTrophy' && row.ownerKey !== undefined,
+    );
+    const ordinary = rows.filter(
+      (row) => !(row.item === 'sentinelTrophy' && row.ownerKey !== undefined),
+    );
+    const available = Math.max(0, MAX_DROPPED_PILES - permanent.length);
+    const retained = [...permanent, ...(available === 0 ? [] : ordinary.slice(-available))];
+    for (const row of retained) {
       this.droppedPiles.push({ ...row });
       if (row.droppedAtMs > nowMs) this.pendingPiles.add(row.id);
       this.nextDroppedPileId = Math.max(this.nextDroppedPileId, (row.id % 0xffff) + 1);
@@ -4545,6 +4691,8 @@ export class WorldSimulation {
         blueprintMisses: runtime.blueprintMisses,
         discoveriesFound: runtime.discoveriesFound,
         discoveriesClaimed: runtime.discoveriesClaimed,
+        sentinelVictories: runtime.sentinelVictories,
+        expedition: { ...runtime.expedition, progress: [...runtime.expedition.progress] },
       });
     }
     return saved;

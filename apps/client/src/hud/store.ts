@@ -1,3 +1,4 @@
+import { emptyExpedition, type ExpeditionView } from '@acorn/shared';
 import type { HomeDecoration } from '@acorn/shared';
 import type { ForestWeather } from '@acorn/shared';
 import { NO_MEAL, type MealState } from '@acorn/shared';
@@ -28,6 +29,9 @@ export interface RaidBanner {
 
 /** Everything the HUD shows. */
 export interface HudState {
+  readonly expedition?: ExpeditionView;
+  readonly nearExpeditionBoard?: boolean;
+  readonly expeditionPending?: boolean;
   readonly connection: ConnectionState;
   readonly connectionDetail: string;
   readonly backend: RenderBackend;
@@ -111,7 +115,7 @@ export interface HudState {
   readonly discoverySites: readonly DiscoverySite[];
   readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;
-  readonly journalTab: 'craft' | 'discoveries' | 'garden';
+  readonly journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions';
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -176,6 +180,9 @@ export interface HudState {
 }
 
 const INITIAL: HudState = {
+  expedition: { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' },
+  nearExpeditionBoard: false,
+  expeditionPending: false,
   connection: 'connecting',
   connectionDetail: '',
   backend: 'unknown',

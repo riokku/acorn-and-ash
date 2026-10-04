@@ -106,6 +106,9 @@ export function droppedPileInReach<T extends { x: number; z: number; count: numb
 
 /** When this pile fades if nobody picks it up, in real milliseconds. */
 export function pileFadesAtMs(pile: Readonly<DroppedPile>): number {
+  // The first-victory keepsake remains until its owner can make room.
+  if (pile.item === 'sentinelTrophy' && pile.ownerKey !== undefined)
+    return Number.POSITIVE_INFINITY;
   return pile.droppedAtMs + DROPPED_PILE_SECONDS * 1000;
 }
 
