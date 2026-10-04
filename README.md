@@ -685,11 +685,9 @@ player, so the newer one takes over from the older.
 If it cannot reach a server it builds the clearing anyway and lets you walk about
 offline, which is fine for working on how things look.
 
-To play against the deployed staging world:
-
-```bash
-VITE_GAME_SERVER_URL=https://acorn-ash-web-staging.chrisistinson.workers.dev pnpm dev
-```
+To play against the deployed staging world, open its link. A local client can no
+longer be pointed at another site's server: your login cookie belongs to one
+site (see [decision 0086](docs/decisions/0086-guest-accounts.md)).
 
 ### Handy switches
 
@@ -792,6 +790,27 @@ why they agree.
 | `production` | The public game                | Automatically, on a `v*` tag      |
 
 Each environment has its own D1 database, R2 bucket and Durable Object namespace.
+
+### Player accounts
+
+Every browser is signed in as a guest the first time it plays, with nothing to
+type, and a cookie remembers it for a year. Accounts live in a D1 database
+(`acorn-ash-accounts-<environment>`) behind [Better Auth](https://better-auth.com),
+and the web Worker tells each world which player is connecting. See
+[decision 0086](docs/decisions/0086-guest-accounts.md).
+
+- **Nothing to set up by hand.** Each deploy creates the environment's database,
+  brings its tables up to date and gives the Worker a random session secret,
+  using `tools/prepare-accounts.mjs`. The one thing it needs is a Cloudflare API
+  token with **D1: Edit** and **Workers Scripts: Edit** permission; if a deploy
+  fails on that, the error says so.
+- **Locally**, `pnpm dev:web` and `pnpm test:e2e` create the database on your
+  machine by themselves, with a made-up secret that is only ever used there.
+- **Changing the tables:** edit `apps/web/src/accounts/schema.ts`, then run
+  `pnpm --filter @acorn/web db:generate` and commit the new file in
+  `apps/web/migrations/`. Never edit a migration that has already been merged.
+- **Previews** share one throwaway database (`acorn-ash-accounts-preview`), so a
+  branch never touches staging's players.
 
 Pull requests get a preview link in a comment on the pull request, and it is the
 whole game: that branch's client **and** a world server built from that branch,

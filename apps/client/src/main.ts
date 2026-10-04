@@ -64,7 +64,6 @@ const enterWorld = (identity: PlayerIdentity): void => {
     hud,
     identity,
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
-    ...(settings.serverUrl === undefined ? {} : { serverUrlOverride: settings.serverUrl }),
     forceWebGL: settings.forceWebGL,
     lookSensitivity: preferencesNow.lookSensitivity,
     grassDensity: preferencesNow.grassDensity,

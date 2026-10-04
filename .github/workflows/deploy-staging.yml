@@ -45,19 +45,59 @@ jobs:
           workingDirectory: apps/game-server
           command: deploy --env staging
 
+      # Player accounts live in a D1 database. The first deploy of an
+      # environment creates it; every deploy after that finds it by name. The
+      # committed config holds a placeholder id, which only this copy replaces.
+      - name: Find or create the accounts database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          id=$(node tools/prepare-accounts.mjs database acorn-ash-accounts-staging)
+          test -n "$id"
+          grep -q 00000000-0000-0000-0000-000000000000 apps/web/wrangler.jsonc
+          sed "s/00000000-0000-0000-0000-000000000000/$id/" \
+            apps/web/wrangler.jsonc > apps/web/wrangler.deploy.jsonc
+
+      # Before the website, so new code never meets old tables.
+      - name: Update the accounts database
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: d1 migrations apply DB --remote -c wrangler.deploy.jsonc --env staging
+
       - name: Deploy the website
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
-          command: deploy --env staging
+          command: deploy -c wrangler.deploy.jsonc --env staging
+
+      # Signs the session cookie. Made once, here, and never shown to anyone;
+      # an existing one is left alone so deploying never signs players out.
+      - name: Make sure sign-in has its secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/prepare-accounts.mjs secret acorn-ash-web-staging BETTER_AUTH_SECRET
 
       - name: Verify the live game
         env:
           GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
         run: |
           curl --fail --silent --show-error --retry 3 "$GAME_URL/api/health" | jq -e '.ok == true and .service == "web"'
+
+      # The real thing, end to end: the database exists, its tables are there
+      # and the session secret works. Makes one guest, which is harmless.
+      - name: Verify players can sign in
+        env:
+          GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
+        run: |
+          curl --fail --silent --show-error --retry 3 -X POST "$GAME_URL/api/session" \
+            | jq -e '.kind == "guest"'
           curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e '(.tick | type) == "number" and (.seed | type) == "number"'
           curl --fail --silent --show-error --retry 3 "$GAME_URL/" -o /tmp/acorn-live-index.html
           cmp apps/client/dist/index.html /tmp/acorn-live-index.html

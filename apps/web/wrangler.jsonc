@@ -26,6 +26,26 @@
     ],
   },
 
+  // The accounts database (decision 0086). CI creates the real one for each
+  // environment and swaps its id in for the placeholder before deploying.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "acorn-ash-accounts-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Cloudflare's own rate limiter, so nobody can fill the accounts database with
+  // guests. Only creating a new guest is limited, never coming back as one.
+  "ratelimits": [
+    { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+  ],
+  // Signs the session cookie. For running on your own machine only: deployed
+  // environments get a random secret that nobody ever sees (see
+  // tools/prepare-accounts.mjs), and `vars` are not inherited by them.
+  "vars": { "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else" },
+
   "env": {
     // The browser tests (see playwright.config.ts): local in every way, with
     // the game server's own e2e settings beside it. Never deployed.
@@ -42,6 +62,25 @@
           { "name": "WORLD", "class_name": "World", "script_name": "acorn-ash-game-server" },
         ],
       },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-local",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
+      // guests. Only creating a new guest is limited, never coming back as one.
+      "ratelimits": [
+        { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+      ],
+      // Signs the session cookie. For running on your own machine only: deployed
+      // environments get a random secret that nobody ever sees (see
+      // tools/prepare-accounts.mjs), and `vars` are not inherited by them.
+      "vars": { "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else" },
     },
     "staging": {
       "name": "acorn-ash-web-staging",
@@ -61,6 +100,21 @@
           },
         ],
       },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-staging",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
+      // guests. Only creating a new guest is limited, never coming back as one.
+      "ratelimits": [
+        { "name": "GUEST_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+      ],
     },
     "production": {
       "name": "acorn-ash-web-production",
@@ -80,6 +134,21 @@
           },
         ],
       },
+      // The accounts database (decision 0086). CI creates the real one for each
+      // environment and swaps its id in for the placeholder before deploying.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "acorn-ash-accounts-production",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations",
+        },
+      ],
+      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
+      // guests. Only creating a new guest is limited, never coming back as one.
+      "ratelimits": [
+        { "name": "GUEST_LIMIT", "namespace_id": "1003", "simple": { "limit": 20, "period": 60 } },
+      ],
     },
   },
 }

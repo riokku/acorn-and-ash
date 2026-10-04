@@ -56,6 +56,8 @@ export default defineConfig({
     // whatever the test was in the middle of.
     command:
       'pnpm --filter @acorn/client build && ' +
+      // The local accounts database needs its tables before anyone can sign in.
+      'pnpm --filter @acorn/web exec wrangler d1 migrations apply DB --local --env e2e && ' +
       `pnpm --filter @acorn/web exec wrangler dev -c wrangler.jsonc -c ../game-server/wrangler.jsonc --env e2e --port ${PORT} --ip 127.0.0.1`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,

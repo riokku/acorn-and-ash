@@ -1,8 +1,9 @@
 /**
  * Point a crowd of bots at a running world.
  *
- * Each bot behaves like a browser: it connects, walks in a circle, and posts one
- * input per simulation tick bundled at 15 messages a second. It reports what
+ * Each bot behaves like a browser: it signs in as a guest of its own, connects,
+ * walks in a circle, and posts one input per simulation tick bundled at 15
+ * messages a second. It reports what
  * came back so we can see whether the world kept up.
  *
  * Run it with:
@@ -50,15 +51,47 @@ interface BotStats {
   errors: string[];
 }
 
+/**
+ * A bot's first visit: a guest account of its own, the way a new browser gets
+ * one. Returns the cookie to connect with. The site limits how fast one address
+ * can make guests, so a deployed environment will turn a big crowd away; local
+ * ones allow plenty.
+ */
+async function signInAsGuest(): Promise<string> {
+  const origin = new URL(values.url);
+  origin.protocol =
+    origin.protocol === 'wss:' ? 'https:' : origin.protocol === 'ws:' ? 'http:' : origin.protocol;
+  origin.pathname = '/api/session';
+  origin.search = '';
+
+  const response = await fetch(origin, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) throw new Error(`sign-in answered ${response.status}`);
+  return response.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(';')[0])
+    .join('; ');
+}
+
 /** One bot, walking in a slow circle so the collision code has work to do. */
-function startBot(index: number, stats: BotStats): { stop: () => void } {
+async function startBot(index: number, stats: BotStats): Promise<{ stop: () => void }> {
+  let cookie: string;
+  try {
+    cookie = await signInAsGuest();
+  } catch (error) {
+    stats.errors.push(error instanceof Error ? error.message : 'could not sign in');
+    return { stop: () => {} };
+  }
+
   const base = new URL(values.url);
   base.protocol =
     base.protocol === 'https:' ? 'wss:' : base.protocol === 'http:' ? 'ws:' : base.protocol;
   base.pathname = `/api/worlds/${values.world}/ws`;
-  base.searchParams.set('player', `loadbot${String(index).padStart(6, '0')}`);
 
-  const socket = new WebSocket(base.toString());
+  const socket = new WebSocket(base.toString(), { headers: { cookie } });
   socket.binaryType = 'arraybuffer';
 
   const connectedAt = performance.now();
@@ -137,7 +170,7 @@ async function main(): Promise<void> {
       errors: [],
     };
     everyone.push(stats);
-    running.push(startBot(i, stats));
+    running.push(await startBot(i, stats));
     // Arrive gradually, the way people actually do.
     await sleep(40);
   }
