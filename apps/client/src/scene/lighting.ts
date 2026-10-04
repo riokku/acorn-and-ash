@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 
 import { dayBrightness } from '@acorn/shared';
 
+import type { Rgb } from '../art/season-look';
+
 const DAY_SKY = new THREE.Color(0x9fc4d8);
 const NIGHT_SKY = new THREE.Color(0x0d1830);
 
@@ -22,11 +24,30 @@ const NIGHT_SUN_INTENSITY = 0.5;
 const FOG_NEAR = 55;
 const FOG_FAR = 120;
 
+/**
+ * Tint a colour by the season, as much as there is daylight. The season warms
+ * or cools the day and leaves the night as dark as it always was.
+ */
+function tintBy(colour: THREE.Color, tint: THREE.Color, daylight: number): void {
+  colour.r *= 1 + (tint.r - 1) * daylight;
+  colour.g *= 1 + (tint.g - 1) * daylight;
+  colour.b *= 1 + (tint.b - 1) * daylight;
+}
+
 /** Behind a room seen from inside a home: a warm, dark backdrop, like the edge of a stage. */
 const INDOOR_BACKDROP = new THREE.Color(0x1d1712);
 
+/** What the time of year does to the sky and the light: see `SeasonLook`. */
+export interface SeasonalLight {
+  readonly sky: Rgb;
+  readonly light: Rgb;
+  readonly sunStrength: number;
+}
+
 export interface DaylightRig {
   readonly sun: THREE.DirectionalLight;
+  /** Tint the sky and sunlight for the time of year, from the next `update` on. */
+  setSeason(look: SeasonalLight): void;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
   update(progress: number, cloud?: number): void;
   /**
@@ -65,6 +86,9 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   let lastProgress = 0.5;
   let lastCloud = 0;
   const overcast = new THREE.Color(0x829a9e);
+  const skyTint = new THREE.Color(1, 1, 1);
+  const lightTint = new THREE.Color(1, 1, 1);
+  let sunStrength = 1;
 
   function update(progress: number, cloud = lastCloud): void {
     lastProgress = progress;
@@ -73,24 +97,36 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
 
     if (indoors) background.copy(INDOOR_BACKDROP);
     else background.lerpColors(NIGHT_SKY, DAY_SKY, brightness);
-    if (!indoors) background.lerp(overcast, cloud * brightness * 0.55);
+    if (!indoors) {
+      tintBy(background, skyTint, brightness);
+      background.lerp(overcast, cloud * brightness * 0.55);
+    }
     fog.color.copy(background);
 
     sky.color.lerpColors(NIGHT_HEMI_SKY, DAY_HEMI_SKY, brightness);
     sky.groundColor.lerpColors(NIGHT_HEMI_GROUND, DAY_HEMI_GROUND, brightness);
     sky.intensity = THREE.MathUtils.lerp(NIGHT_HEMI_INTENSITY, DAY_HEMI_INTENSITY, brightness);
+    tintBy(sky.color, lightTint, brightness);
 
     // Doubles as moonlight at night, rather than modelling a separate moon -
     // a placeholder to replace once this is fun enough to deserve real art.
     sun.color.lerpColors(NIGHT_SUN_COLOR, DAY_SUN_COLOR, brightness);
+    tintBy(sun.color, lightTint, brightness);
     sun.intensity =
-      THREE.MathUtils.lerp(NIGHT_SUN_INTENSITY, DAY_SUN_INTENSITY, brightness) * (1 - cloud * 0.45);
+      THREE.MathUtils.lerp(NIGHT_SUN_INTENSITY, DAY_SUN_INTENSITY, brightness) *
+      (1 - cloud * 0.45) *
+      (1 + (sunStrength - 1) * brightness);
   }
 
   update(0.5);
   return {
     sun,
     update,
+    setSeason(look) {
+      skyTint.setRGB(look.sky[0], look.sky[1], look.sky[2]);
+      lightTint.setRGB(look.light[0], look.light[1], look.light[2]);
+      sunStrength = look.sunStrength;
+    },
     setIndoors(next) {
       indoors = next;
       scene.fog = next ? null : fog;

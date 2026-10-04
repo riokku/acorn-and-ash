@@ -13,10 +13,12 @@ import {
   time,
   triplanarTexture,
   vec2,
+  vec3,
 } from 'three/tsl';
 
 import type { WaterCircle } from '@acorn/shared';
 
+import { seasonUniforms } from './season-uniforms';
 import { artTexture, type ArtTextureId } from './textures';
 
 /**
@@ -72,8 +74,16 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   const amount = attribute('floor', 'float');
   const bare = smoothstep(0.3, 0.7, amount.sub(blades));
 
+  // The season recolours the whole ground, and in winter snow covers it:
+  // thinner under the trees, where the bare forest floor is, and keeping the
+  // soft patches of light and shade, so snow is not a flat white sheet.
+  const shaded = mix(grassColour, floorColour, bare).mul(attribute('tint', 'vec3'));
+  const seasonal = shaded.mul(seasonUniforms.ground);
+  const snowCover = seasonUniforms.snow.mul(float(1).sub(bare.mul(0.45))).mul(0.88);
+  const snow = vec3(0.9, 0.93, 0.98).mul(attribute('tint', 'vec3'));
+
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, metalness: 0 });
-  material.colorNode = mix(grassColour, floorColour, bare).mul(attribute('tint', 'vec3'));
+  material.colorNode = mix(seasonal, snow, snowCover);
   material.name = 'painted-ground';
   return material;
 }
