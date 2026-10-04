@@ -323,10 +323,22 @@ in step. The HUD's "Season" row says which season it is and which day of it.
 For the last day and a half of a season the forest eases into the next one,
 so it changes colour slowly rather than all at once: the grass turns gold in
 autumn, the sky goes pale and cold in winter, and winter puts snow on the
-ground, the grass and the trees. This first step is how it looks; what each
-season changes in play (what you can gather, which fish bite, how creatures
-behave) comes next. See
-[decision 0089](docs/decisions/0089-seasons.md).
+ground, the grass and the trees.
+
+Each season also fills the air with its own thing: blossom petals in spring,
+drifting golden pollen on summer days, falling leaves in autumn and snowflakes
+in winter. They fade in over the last day and a half of the season before and
+fade out over the last day and a half of their own, so the first leaves fall
+while it is still summer. Wind makes the leaves come thicker, and snow falls
+more heavily when it is also raining. In winter the snow takes the place of
+the rain streaks. They are a small fixed pool that follows you, so they cost
+almost nothing; they stay outdoors only, and nothing falls if your computer
+asks for reduced motion (`art/season-fall.ts` holds the rules,
+`scene/season-fall.ts` draws them).
+
+So far the seasons only change how the world looks; what each season changes
+in play (what you can gather, which fish bite, how creatures behave) comes
+next. See [decision 0089](docs/decisions/0089-seasons.md).
 
 ### Wildlife
 

@@ -36,7 +36,8 @@ test('renders shared rain and dusk fireflies without errors', async ({ page }) =
     });
   });
   try {
-    await page.goto('/?renderer=webgl2&world=weather-ui');
+    // Summer, so the rain is rain: in winter the snow takes over from it (decision 0089).
+    await page.goto('/?renderer=webgl2&world=weather-ui&season=summer');
     await page.locator('#home-name').fill('Rain Watcher');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });

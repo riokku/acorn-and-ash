@@ -236,9 +236,11 @@ import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { createFox, type Fox } from './scene/fox';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
+import { rainShareFor } from './art/season-fall';
 import { seasonUniforms } from './art/season-uniforms';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
+import { createSeasonFall } from './scene/season-fall';
 import { createSeasonRig } from './scene/seasons';
 import { FireLights } from './scene/fire-light';
 import { installBvhRaycasting } from './scene/bvh';
@@ -497,6 +499,8 @@ export interface GameDebug {
   weatherEffects(): { rainDrops: number; fireflies: number };
   /** How much of the ground and grass is under snow right now, from 0 to 1. */
   snowOnGround(): number;
+  /** How many petals, pollen specks, leaves and snowflakes are drifting in view. */
+  seasonFall(): { petals: number; pollen: number; leaves: number; snow: number };
   buildBoundaryVisible(): boolean;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
@@ -771,6 +775,9 @@ export class Game {
   private weatherSeed = 0;
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
   private weatherCloud = 0;
+  private seasonFallArt: ReturnType<typeof createSeasonFall> | null = null;
+  private readonly viewDirection = new THREE.Vector3();
+  private readonly fallCentre = { x: 0, z: 0 };
   private readonly seasons = createSeasonRig();
   /** How far the calendar is pushed when a season was asked for in the address, once worked out. */
   private seasonShiftMs: number | null = null;
@@ -1251,6 +1258,8 @@ export class Game {
       }),
       weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
       snowOnGround: () => seasonUniforms.snow.value,
+      seasonFall: () =>
+        this.seasonFallArt?.visibleEffects() ?? { petals: 0, pollen: 0, leaves: 0, snow: 0 },
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
         this.remotePlayers.netIds().map((netId) => {
@@ -1396,6 +1405,7 @@ export class Game {
     for (const model of this.decorModels) model.dispose();
     this.decorModels.length = 0;
     this.weatherArt?.dispose();
+    this.seasonFallArt?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -2219,6 +2229,9 @@ export class Game {
       this.weatherArt?.dispose();
       this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.weatherArt.group);
+      this.seasonFallArt?.dispose();
+      this.seasonFallArt = createSeasonFall(seed, (x, z) => terrain.heightAt(x, z));
+      this.outdoors.add(this.seasonFallArt.group);
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
       const encounterSites = buildEncounterSites(
@@ -2721,13 +2734,29 @@ export class Game {
     const weather = forestWeather(this.weatherSeed, weatherNow);
     this.weatherCloud +=
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
-    this.seasons.apply(seasonMix(this.currentCalendar()), this.daylight);
+    const season = seasonMix(this.currentCalendar());
+    this.seasons.apply(season, this.daylight);
     this.daylight?.update(dayProgress(weatherNow), this.weatherCloud);
+    const watcher = this.localPlayer?.motion.position ?? { x: 0, z: 0 };
     this.weatherArt?.update(
       deltaSeconds,
-      this.localPlayer?.motion.position ?? { x: 0, z: 0 },
+      watcher,
       weatherNow,
       weather,
+      this.space !== OUTDOORS,
+      this.reducedMotion.matches,
+      rainShareFor(season),
+    );
+    // Fill the air where the camera is looking, so it is the part that is seen that is full.
+    camera.camera.getWorldDirection(this.viewDirection);
+    this.fallCentre.x = camera.camera.position.x + this.viewDirection.x * 10;
+    this.fallCentre.z = camera.camera.position.z + this.viewDirection.z * 10;
+    this.seasonFallArt?.update(
+      deltaSeconds,
+      this.fallCentre,
+      season,
+      weather,
+      dayBrightness(dayProgress(weatherNow)),
       this.space !== OUTDOORS,
       this.reducedMotion.matches,
     );
