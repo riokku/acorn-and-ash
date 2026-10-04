@@ -1209,11 +1209,16 @@ describe('chopping a tree down', () => {
     expect(hits.every((hit) => hit.netId === client.welcome().netId)).toBe(true);
 
     await collectFallenLogs(client);
-    expect(client.inventory()).toEqual([
-      { item: 'axe', count: 1 },
-      { item: 'log', count: logs },
-      { item: 'bag', count: 1 },
-    ]);
+    // E can also gather a nearby shared stick patch while collecting logs.
+    // Verify this tree's exact yield without assuming unrelated gathering is absent.
+    expect(client.inventory().find((entry) => entry.item === 'log')?.count).toBe(logs);
+    expect(client.inventory()).toEqual(
+      expect.arrayContaining([
+        { item: 'axe', count: 1 },
+        { item: 'log', count: logs },
+        { item: 'bag', count: 1 },
+      ]),
+    );
     client.close();
   });
 
@@ -1580,7 +1585,7 @@ describe('hunger', () => {
   it('tells a new player they start full', async () => {
     const client = await TestClient.connect(nextWorldId());
     await waitFor('a hunger reading', () => client.hunger().length > 0);
-    expect(client.latestHunger()?.hunger).toBe(HUNGER_MAX);
+    expect(client.hunger()[0]?.hunger).toBe(HUNGER_MAX);
     client.close();
   });
 

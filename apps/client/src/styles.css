@@ -2407,3 +2407,19 @@ body {
 .decor-owned span {
   flex: 1;
 }
+.chest-store-supplies {
+  padding: 10px 16px;
+  border: 1px solid #52725a;
+  border-radius: 8px;
+  background: #355740;
+  color: #fff5df;
+  cursor: pointer;
+}
+.chest-store-supplies:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chest-store-supplies:focus-visible {
+  outline: 3px solid #c08f36;
+  outline-offset: 3px;
+}

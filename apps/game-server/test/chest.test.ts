@@ -49,7 +49,7 @@ it('saves both sides of a chest transfer immediately, survives an empty world, a
     sim.placePlayer(id, { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z }, HOME_WAKE_SPOT.yaw, 7);
     Object.assign(sim.inventoryOf(id), { log: 12 });
   });
-  owner.chest({ action: 'deposit', item: 'log', amount: 12 });
+  owner.chest({ action: 'storeSupplies' });
   await waitFor('deposit acknowledgement', () => lastChest(owner)?.moved === 12);
   expect(lastChest(owner)?.slots[0]).toEqual({ item: 'log', count: 10 });
   expect(lastChest(owner)?.slots[1]).toEqual({ item: 'log', count: 2 });

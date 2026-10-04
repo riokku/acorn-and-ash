@@ -542,14 +542,18 @@ function CacheCompass({
   compass: NonNullable<HudState['ownCacheCompass']>;
 }): React.JSX.Element {
   return (
-    <div className="cache-compass">
+    <div
+      className="cache-compass"
+      role="status"
+      title="Your buried belongings never expire. Make room in your backpack before digging; anything that does not fit stays safely here."
+    >
       <span
         className="cache-compass-arrow"
         style={{ transform: `rotate(${compass.bearingDegrees}deg)` }}
       >
         ▲
       </span>
-      Your stash · {Math.round(compass.distanceMeters)} m
+      Recover belongings · {Math.round(compass.distanceMeters)} m
     </div>
   );
 }
@@ -741,8 +745,10 @@ export function hint(state: HudState): string {
     state.buildMenuOpen || state.craftMenuOpen || state.placing !== null ? null : fightHint(state);
   if (fighting !== null) return fighting;
   // Settled in, E gets you up rather than doing anything else it would.
-  if (state.resting === 'chair') return 'Sitting comfortably · move or press E to get up';
-  if (state.resting === 'bed') return 'Snug in bed · move or press E to get up';
+  if (state.resting === 'chair')
+    return 'Resting at home · safe and sheltered · move or press E to get up';
+  if (state.resting === 'bed')
+    return 'Snug in bed · safe and sheltered · move or press E to get up';
   // A held raw food beside a lit campfire is deliberately saved for cooking
   // even while hungry, so say what E will really do before the hunger nudge.
   const cookingNow = campfireCookingHint(state);
@@ -768,7 +774,7 @@ export function hint(state: HudState): string {
   // clearing to be found, then something dropped, then a patch.
   if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
-  if (state.nearBuriedCache) return 'Press E to dig up your buried stash';
+  if (state.nearBuriedCache) return 'Press E to recover belongings · leftovers stay safely here';
   if (state.nearbyDiscovery === 'The elk grove')
     return 'Press E to sketch the elk · give it room to settle';
   if (state.nearbyDiscovery !== null)

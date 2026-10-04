@@ -38,6 +38,8 @@ export function createLargeCabin(): Cabin {
   group.add(porch.group);
   return {
     group,
+    setDaylight: (brightness) => cabin.setDaylight?.(brightness),
+    update: (deltaSeconds) => cabin.update?.(deltaSeconds),
     dispose() {
       cabin.dispose();
       porch.dispose();

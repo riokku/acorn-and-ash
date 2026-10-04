@@ -33,3 +33,17 @@ for (const kind of ['tent', 'teepee', 'cabin', 'largeCabin']) {
     expect(errors).toEqual([]);
   });
 }
+
+test('renders warm cabin windows at night', async ({ page }) => {
+  await page.route('https://fonts.googleapis.com/**', (route) =>
+    route.fulfill({ contentType: 'text/css', body: '' }),
+  );
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/?gallery=cabin&renderer=webgl2&time=0.02&angle=0.2');
+  await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true', {
+    timeout: 120_000,
+  });
+  await page.screenshot({ path: '/workspace/acorn-homecoming-night.png' });
+  expect(errors).toEqual([]);
+});

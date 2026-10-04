@@ -330,6 +330,8 @@ const LOOT_KINDS = ['pickup', 'pile', 'patch'] as const;
 
 export function encodeChestRequest(request: ChestRequest): ArrayBuffer {
   if (request.action === 'open') return new Uint8Array([ClientMessageType.Chest, 0]).buffer;
+  if (request.action === 'storeSupplies')
+    return new Uint8Array([ClientMessageType.Chest, 3]).buffer;
   const buffer = new ArrayBuffer(5);
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Chest);
@@ -470,6 +472,8 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
 
   if (type === ClientMessageType.Chest) {
     if (data.byteLength === 2 && view.getUint8(1) === 0) return { type: 'chest', action: 'open' };
+    if (data.byteLength === 2 && view.getUint8(1) === 3)
+      return { type: 'chest', action: 'storeSupplies' };
     if (data.byteLength !== 5) return null;
     const action = view.getUint8(1),
       source = view.getUint8(2),
@@ -1432,14 +1436,19 @@ export function encodeCache(event: CacheEvent): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.Cache);
   view.setUint16(1, event.netId & 0xffff, true);
-  view.setUint8(3, event.kind === 'dugUp' ? CACHE_FLAG_DUG_UP : 0);
+  view.setUint8(3, event.kind === 'dugUp' ? CACHE_FLAG_DUG_UP : event.kind === 'partial' ? 2 : 0);
   return buffer;
 }
 
 function decodeCache(view: DataView): CacheEvent {
   return {
     netId: view.getUint16(1, true),
-    kind: (view.getUint8(3) & CACHE_FLAG_DUG_UP) !== 0 ? 'dugUp' : 'buried',
+    kind:
+      view.getUint8(3) === 2
+        ? 'partial'
+        : view.getUint8(3) === CACHE_FLAG_DUG_UP
+          ? 'dugUp'
+          : 'buried',
   };
 }
 
@@ -1756,6 +1765,27 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       return { type: 'builtProps', props };
     }
+    case ServerMessageType.RecoveryMarkers: {
+      if (data.byteLength < 3) return null;
+      const count = view.getUint16(1, true);
+      if (data.byteLength !== 3 + count * 10) return null;
+      const caches: BuriedCacheView[] = [],
+        ids = new Set<number>();
+      for (let index = 0; index < count; index++) {
+        const at = 3 + index * 10,
+          id = view.getUint32(at, true),
+          ownerNetId = view.getUint16(at + 4, true);
+        if (id === 0 || ids.has(id) || ownerNetId === NO_OWNER) return null;
+        ids.add(id);
+        caches.push({
+          id,
+          ownerNetId,
+          x: dequantisePosition(view.getInt16(at + 6, true)),
+          z: dequantisePosition(view.getInt16(at + 8, true)),
+        });
+      }
+      return { type: 'recoveryMarkers', caches };
+    }
     case ServerMessageType.BuriedCaches: {
       if (data.byteLength < 2) return null;
       const count = view.getUint8(1);
@@ -1880,7 +1910,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       return { type: 'health', event: decodeHealth(view) };
     }
     case ServerMessageType.Cache: {
-      if (data.byteLength !== CACHE_MESSAGE_BYTES) return null;
+      if (data.byteLength !== CACHE_MESSAGE_BYTES || view.getUint8(3) > 2) return null;
       return { type: 'cache', event: decodeCache(view) };
     }
     case ServerMessageType.Roster: {
@@ -1989,6 +2019,23 @@ export function encodeDecorationState(state: DecorationState): ArrayBuffer {
     view.setFloat32(at + 9, piece.x, true);
     view.setFloat32(at + 13, piece.z, true);
     view.setFloat32(at + 17, piece.yaw, true);
+  });
+  return buffer;
+}
+
+/** Owner-only recovery markers have a larger count and stable 32-bit cache IDs. */
+export function encodeRecoveryMarkers(caches: readonly BuriedCacheView[]): ArrayBuffer {
+  if (caches.length > 65535) throw new Error('Too many recovery markers in one world');
+  const buffer = new ArrayBuffer(3 + caches.length * 10),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.RecoveryMarkers);
+  view.setUint16(1, caches.length, true);
+  caches.forEach((cache, index) => {
+    const at = 3 + index * 10;
+    view.setUint32(at, cache.id, true);
+    view.setUint16(at + 4, cache.ownerNetId ?? NO_OWNER, true);
+    view.setInt16(at + 6, clamp(quantisePosition(cache.x), INT16_MIN, INT16_MAX), true);
+    view.setInt16(at + 8, clamp(quantisePosition(cache.z), INT16_MIN, INT16_MAX), true);
   });
   return buffer;
 }

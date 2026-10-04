@@ -1,3 +1,4 @@
+import { encodeRecoveryMarkers } from '@acorn/shared';
 import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
 import { encodeMeal, mealFromSaved, type MealState } from '@acorn/shared';
 import { isHomeKind } from '@acorn/shared';
@@ -215,6 +216,11 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
     // Where every stick and flower patch is now, and what anybody dropped.
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
+    server.send(
+      encodeRecoveryMarkers(
+        simulation.buriedCachesList().filter((cache) => cache.ownerNetId === netId),
+      ),
+    );
     server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
     server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
     server.send(encodeGardenState(simulation.gardenStateOf(netId)));
@@ -845,23 +851,36 @@ export class World extends DurableObject<WorldEnv> {
     const changes = simulation.drainCacheEvents();
     if (changes.length === 0) return;
 
-    for (const change of changes) {
-      if (change.kind === 'buried') this.writeBuriedCache(change.cache);
-      else this.deleteBuriedCache(change.cacheId);
-    }
+    const changedPlayers = new Set(changes.map((change) => change.netId));
+    this.ctx.storage.transactionSync(() => {
+      for (const change of changes) {
+        if (change.kind !== 'dugUp') this.writeBuriedCache(change.cache);
+        else this.deleteBuriedCache(change.cacheId);
+      }
+      for (const ws of this.ctx.getWebSockets()) {
+        const attachment = this.attachmentFor(ws);
+        if (attachment !== null && changedPlayers.has(attachment.netId))
+          this.savePlayer(simulation, attachment);
+      }
+    });
 
     const byNetId = new Map(
       changes.map((change) => [change.netId, { netId: change.netId, kind: change.kind }]),
     );
+    const caches = simulation.buriedCachesList();
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.attachmentFor(ws);
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
       if (event !== undefined) this.trySend(ws, encodeCache(event));
+      this.trySend(
+        ws,
+        encodeRecoveryMarkers(caches.filter((cache) => cache.ownerNetId === attachment.netId)),
+      );
     }
     this.sendPacks(simulation, new Set(byNetId.keys()));
 
-    this.broadcast(encodeBuriedCaches(simulation.buriedCachesList()));
+    this.broadcast(encodeBuriedCaches(caches));
   }
 
   /**
@@ -1857,6 +1876,7 @@ export class World extends DurableObject<WorldEnv> {
       cache.z,
       Date.now(),
     );
+    sql.exec('DELETE FROM buried_cache_items WHERE cache_id = ?', cache.id);
     for (const entry of cache.items) {
       sql.exec(
         'INSERT INTO buried_cache_items (cache_id, item_index, count) VALUES (?, ?, ?)',

@@ -86,3 +86,15 @@ systems; each stage must create a reason to use the previous stage.
 Minor tuning and content
 choices can be proposed in each playable PR; do not introduce XP or additional
 survival meters.
+
+## Implemented stages
+
+The ordered implementation now covers encounters/blueprint progress (#78),
+discoveries/journal (#79), housing facilities (#83), prepared meals (#84), gentle
+forest weather (#85), decoration (#86), and homecoming/safe recovery. Wildlife
+and tracking (#82) and private wilderness homesteads (#81) extend the same loop.
+Rations improve dodge recovery while there is no energy meter. Progression costs
+are a starting balance: the 15–25-minute expedition and 3–5-hour cabin targets
+still need sustained playtesting. The 50-player benchmark also has existing
+occasional slow ticks (recorded in #85); a passing functional suite does not
+establish multiplayer performance at that scale.

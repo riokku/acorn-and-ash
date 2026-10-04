@@ -88,6 +88,7 @@ export const ServerMessageType = {
   HomeSupplies: 0x35,
   Meal: 0x36,
   Decoration: 0x37,
+  RecoveryMarkers: 0x38,
 } as const;
 
 export const RejectReason = {
@@ -576,6 +577,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'recoveryMarkers'; readonly caches: readonly BuriedCacheView[] }
   | (DecorationState & { readonly type: 'decoration' })
   | MealMessage
   | HomeSuppliesMessage

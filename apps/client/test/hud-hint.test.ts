@@ -326,7 +326,7 @@ describe('the hint along the bottom', () => {
 
   it('offers to dig up a buried cache of your own within reach', () => {
     const state: HudState = { ...BASE_STATE, nearBuriedCache: true };
-    expect(hint(state)).toBe('Press E to dig up your buried stash');
+    expect(hint(state)).toBe('Press E to recover belongings · leftovers stay safely here');
   });
 
   it('reaches for a pickup or a patch before a buried cache, the same button', () => {
@@ -399,7 +399,7 @@ describe('the hint along the bottom', () => {
 
   it('reaches for a buried cache of your own before a campfire, the same button', () => {
     const state: HudState = { ...BASE_STATE, nearBuriedCache: true, nearCampfire: 'unlit' };
-    expect(hint(state)).toBe('Press E to dig up your buried stash');
+    expect(hint(state)).toBe('Press E to recover belongings · leftovers stay safely here');
   });
 
   it('offers to catch prey with no mention of hits, since one swing is always enough', () => {
@@ -604,7 +604,9 @@ describe('the hint at the chair and the bed', () => {
 
   it('says how to get up again, even when hungry, since E gets you up then', () => {
     expect(hint({ ...inside, resting: 'chair', hunger: 0 })).toMatch(/move or press E to get up$/);
-    expect(hint({ ...inside, resting: 'bed' })).toBe('Snug in bed · move or press E to get up');
+    expect(hint({ ...inside, resting: 'bed' })).toBe(
+      'Snug in bed · safe and sheltered · move or press E to get up',
+    );
   });
 });
 
