@@ -84,3 +84,5 @@ export * from './sim/weather';
 export * from './sim/decorations';
 
 export * from './sim/expeditions';
+export * from './sim/fish-records';
+export * from './sim/rare-reel';

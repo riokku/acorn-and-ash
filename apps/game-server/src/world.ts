@@ -1,4 +1,10 @@
 import { encodeRaiderVitals } from '@acorn/shared';
+import {
+  encodeFishRecords,
+  encodeRareReel,
+  fishRecordsFromSaved,
+  type FishRecords,
+} from '@acorn/shared';
 import { encodeExpeditionState, expeditionFromSaved, type ExpeditionState } from '@acorn/shared';
 import { encodeRecoveryMarkers } from '@acorn/shared';
 import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
@@ -227,6 +233,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
     server.send(encodeGardenState(simulation.gardenStateOf(netId)));
     server.send(encodeExpeditionState(simulation.expeditionStateOf(netId)));
+    server.send(encodeFishRecords(simulation.fishRecordsOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     for (const raider of simulation.raidersList())
@@ -768,6 +775,18 @@ export class World extends DurableObject<WorldEnv> {
    */
   private announceFishing(simulation: WorldSimulation): void {
     const events = simulation.drainFishingEvents();
+    const changed = new Set(simulation.drainFishRecordChanges()),
+      reels = new Map(simulation.drainReelChanges().map((update) => [update.netId, update.state]));
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      if (changed.has(attachment.netId)) {
+        this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+        this.trySend(ws, encodeFishRecords(simulation.fishRecordsOf(attachment.netId)));
+      }
+      const reel = reels.get(attachment.netId);
+      if (reel !== undefined) this.trySend(ws, encodeRareReel(reel));
+    }
     if (events.length === 0) return;
 
     const landed = new Set<number>();
@@ -1477,6 +1496,9 @@ export class World extends DurableObject<WorldEnv> {
   private createSchema(): void {
     const sql = this.ctx.storage.sql;
     sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_fishing_collection (player_key TEXT PRIMARY KEY, state TEXT NOT NULL)',
+    );
+    sql.exec(
       'CREATE TABLE IF NOT EXISTS player_expeditions (player_key TEXT PRIMARY KEY, state TEXT NOT NULL)',
     );
     sql.exec(
@@ -1698,6 +1720,7 @@ export class World extends DurableObject<WorldEnv> {
       .toArray()[0];
     return {
       expedition: this.readExpedition(playerKey),
+      fishRecords: this.readFishRecords(playerKey),
       meal: mealFromSaved(
         savedMeal === undefined
           ? null
@@ -2079,6 +2102,7 @@ export class World extends DurableObject<WorldEnv> {
     );
     this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
     this.writeExpedition(attachment.playerKey, simulation.expeditionStateOf(attachment.netId));
+    this.writeFishRecords(attachment.playerKey, simulation.fishRecordsOf(attachment.netId));
     this.writeSentinel(attachment.playerKey, simulation.sentinelVictoriesOf(attachment.netId));
     this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
     this.writeBlueprintProgress(
@@ -2096,6 +2120,26 @@ export class World extends DurableObject<WorldEnv> {
       'INSERT INTO player_sentinel (player_key,victories) VALUES (?,?) ON CONFLICT(player_key) DO UPDATE SET victories=excluded.victories',
       playerKey,
       victories,
+    );
+  }
+  private readFishRecords(playerKey: string): FishRecords {
+    const row = this.ctx.storage.sql
+      .exec<{ state: string }>(
+        'SELECT state FROM player_fishing_collection WHERE player_key=?',
+        playerKey,
+      )
+      .toArray()[0];
+    try {
+      return fishRecordsFromSaved(row === undefined ? null : JSON.parse(row.state));
+    } catch {
+      return fishRecordsFromSaved(null);
+    }
+  }
+  private writeFishRecords(playerKey: string, state: FishRecords): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_fishing_collection (player_key,state) VALUES (?,?) ON CONFLICT(player_key) DO UPDATE SET state=excluded.state',
+      playerKey,
+      JSON.stringify(fishRecordsFromSaved(state)),
     );
   }
   private readExpedition(playerKey: string): ExpeditionState {
@@ -2287,6 +2331,7 @@ export class World extends DurableObject<WorldEnv> {
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
       this.writeExpedition(attachment.playerKey, expeditionFromSaved(player.expedition));
+      this.writeFishRecords(attachment.playerKey, fishRecordsFromSaved(player.fishRecords));
       this.writeSentinel(attachment.playerKey, player.sentinelVictories ?? 0);
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
@@ -2349,6 +2394,7 @@ export class World extends DurableObject<WorldEnv> {
     sql.exec('DELETE FROM player_blueprint_progress');
     sql.exec('DELETE FROM player_discoveries');
     sql.exec('DELETE FROM player_expeditions');
+    sql.exec('DELETE FROM player_fishing_collection');
     sql.exec('DELETE FROM pickups_taken');
     return { ok: true, clearedPlayers };
   }

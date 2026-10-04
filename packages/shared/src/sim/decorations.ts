@@ -15,6 +15,8 @@ export const DECORATION_KINDS = [
   'flowerPlanter',
   'trailPennant',
   'sentinelTrophy',
+  'fishDisplay',
+  'goldenFishDisplay',
 ] as const;
 export type DecorationKind = (typeof DECORATION_KINDS)[number];
 export const DECORATION_REASONS = [

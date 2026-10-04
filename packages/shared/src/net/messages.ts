@@ -1,3 +1,5 @@
+import type { FishRecords } from '../sim/fish-records';
+import type { ReelView } from '../sim/rare-reel';
 import type { ExpeditionRequest, ExpeditionView } from '../sim/expeditions';
 import type { DecorationRequest, DecorationState } from '../sim/decorations';
 import type { MealState } from '../sim/meals';
@@ -93,6 +95,8 @@ export const ServerMessageType = {
   RecoveryMarkers: 0x38,
   Expedition: 0x39,
   RaiderVitals: 0x3a,
+  FishRecords: 0x3b,
+  RareReel: 0x3c,
 } as const;
 
 export const RejectReason = {
@@ -584,6 +588,8 @@ export type MealMessage = MealState & { readonly type: 'meal' };
 export type ServerMessage =
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }
   | (ExpeditionView & { readonly type: 'expedition' })
+  | (FishRecords & { readonly type: 'fishRecords' })
+  | (ReelView & { readonly type: 'rareReel' })
   | { readonly type: 'recoveryMarkers'; readonly caches: readonly BuriedCacheView[] }
   | (DecorationState & { readonly type: 'decoration' })
   | MealMessage

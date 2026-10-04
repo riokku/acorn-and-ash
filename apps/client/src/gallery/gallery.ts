@@ -1,3 +1,4 @@
+import { createFishDisplay } from '../scene/fish-display';
 import { createGuardianTrophy } from '../scene/guardian-trophy';
 import { createWoodlandCreature } from '../scene/woodland-creatures';
 import { createDiscoveryLandmarks } from '../scene/discovery-sites';
@@ -76,6 +77,8 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
+  { name: 'fish-display', x: 26, z: 20, view: 2.2, create: () => createFishDisplay() },
+  { name: 'golden-fish-display', x: 26, z: 23, view: 2.2, create: () => createFishDisplay(true) },
   { name: 'guardian-trophy', x: 26, z: 16, view: 2.3, create: createGuardianTrophy },
   ...(['elk', 'curiousRaccoon', 'woodlandGuardian'] as const).map((kind, index) => ({
     name: kind,
