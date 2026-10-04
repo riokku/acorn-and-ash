@@ -22,7 +22,12 @@ export interface GrassScene {
   readonly mesh: THREE.InstancedMesh;
   setDensity(value: number): void;
   setBuildings(buildings: readonly BuiltPropView[]): void;
-  update(deltaSeconds: number, position: { x: number; z: number }, reducedMotion: boolean): void;
+  update(
+    deltaSeconds: number,
+    position: { x: number; z: number },
+    reducedMotion: boolean,
+    wind?: number,
+  ): void;
   dispose(): void;
 }
 
@@ -50,6 +55,7 @@ export function createGrass(
   const roots = new Float32Array(MAX_CLUMPS * 3);
   geometry.setAttribute('grassRoot', new THREE.InstancedBufferAttribute(roots, 3));
   const clock = uniform(0);
+  const windStrength = uniform(1);
   const viewer = uniform(new THREE.Vector3());
   const root = attribute('grassRoot', 'vec3');
   const tip = positionLocal.y.div(0.38).clamp(0, 1);
@@ -57,7 +63,7 @@ export function createGrass(
     .mul(0.5)
     .add(0.5);
   const flutter = sin(root.x.mul(0.7).add(root.z.mul(0.4)).add(clock.mul(2.3))).mul(0.035);
-  const bend = gust.mul(0.13).add(0.035).add(flutter).mul(tip.mul(tip));
+  const bend = gust.mul(0.13).add(0.035).add(flutter).mul(tip.mul(tip)).mul(windStrength);
   const distance = root.xz.sub(viewer.xz).length();
   const fade = float(1).sub(smoothstep(REACH - 8, REACH, distance));
   // Instances are deliberately not rotated: wind stays in a common world direction.
@@ -205,7 +211,8 @@ export function createGrass(
       buildings = next;
       changed = true;
     },
-    update(deltaSeconds, position, reducedMotion) {
+    update(deltaSeconds, position, reducedMotion, wind = 0.15) {
+      windStrength.value += (1 + wind - windStrength.value) * Math.min(1, deltaSeconds * 0.5);
       if (!reducedMotion) elapsed += deltaSeconds;
       clock.value = elapsed;
       viewer.value.set(position.x, 0, position.z);

@@ -791,7 +791,7 @@ function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): s
 function gatherHint(state: HudState, item: ItemId): string {
   const plural = ITEM_KINDS[item].pluralName.toLowerCase();
   if (roomFor(inventoryFromEntries(state.carrying), item) > 0)
-    return `Right-click or press E to gather ${plural}`;
+    return `Right-click or press E to gather ${plural}${item === 'mushroom' && state.forestWeather?.mushroomsAbundant ? ' · rain-fed clusters yield up to two' : ''}`;
   return `Your pack is full · no room for more ${plural}`;
 }
 
@@ -1162,7 +1162,9 @@ function colorOf(placeholderColor: number): string {
 }
 
 function timeOfDay(state: HudState): string {
-  return state.isNight ? 'Night' : 'Day';
+  const time = state.isNight ? 'Night' : 'Day';
+  const kind = state.forestWeather?.kind;
+  return kind === undefined || kind === 'clear' ? time : `${time} · ${kind}`;
 }
 
 function renderer(state: HudState): string {

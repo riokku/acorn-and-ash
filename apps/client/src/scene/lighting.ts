@@ -28,7 +28,7 @@ const INDOOR_BACKDROP = new THREE.Color(0x1d1712);
 export interface DaylightRig {
   readonly sun: THREE.DirectionalLight;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
-  update(progress: number): void;
+  update(progress: number, cloud?: number): void;
   /**
    * Inside a home (see decision 0055): no sky and no fog behind the room,
    * just a dark backdrop, while the daylight itself carries on through the
@@ -63,13 +63,17 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
 
   let indoors = false;
   let lastProgress = 0.5;
+  let lastCloud = 0;
+  const overcast = new THREE.Color(0x829a9e);
 
-  function update(progress: number): void {
+  function update(progress: number, cloud = lastCloud): void {
     lastProgress = progress;
+    lastCloud = cloud;
     const brightness = dayBrightness(progress);
 
     if (indoors) background.copy(INDOOR_BACKDROP);
     else background.lerpColors(NIGHT_SKY, DAY_SKY, brightness);
+    if (!indoors) background.lerp(overcast, cloud * brightness * 0.55);
     fog.color.copy(background);
 
     sky.color.lerpColors(NIGHT_HEMI_SKY, DAY_HEMI_SKY, brightness);
@@ -79,7 +83,8 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
     // Doubles as moonlight at night, rather than modelling a separate moon -
     // a placeholder to replace once this is fun enough to deserve real art.
     sun.color.lerpColors(NIGHT_SUN_COLOR, DAY_SUN_COLOR, brightness);
-    sun.intensity = THREE.MathUtils.lerp(NIGHT_SUN_INTENSITY, DAY_SUN_INTENSITY, brightness);
+    sun.intensity =
+      THREE.MathUtils.lerp(NIGHT_SUN_INTENSITY, DAY_SUN_INTENSITY, brightness) * (1 - cloud * 0.45);
   }
 
   update(0.5);

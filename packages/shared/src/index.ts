@@ -78,3 +78,5 @@ export * from './sim/garden';
 export * from './sim/home-supplies';
 
 export * from './sim/meals';
+
+export * from './sim/weather';

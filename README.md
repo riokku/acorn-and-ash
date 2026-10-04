@@ -913,3 +913,7 @@ Tent storage grows into teepee cooking, small-cabin workbenches, and a three-box
 ### Expedition meals
 
 Learn recipes through discoveries, then prepare one benefit for the trail: rations shorten dodge recovery, forest stew gently heals, and berry tea shortens hand-gathering recovery. Special meals can be eaten at full hunger. One benefit lasts ten connected minutes, pauses while disconnected, and is replaced by the next special meal. The active indicator appears above health; recipes and inventory descriptions explain the effects. See [meal preparation](docs/decisions/0079-meal-preparation-benefits.md).
+
+### Gentle forest weather
+
+Most outings have clear skies or drizzle, with short rain and occasional brief storms. Rain-fed mushroom clusters yield up to two mushrooms during rain and for six minutes afterward. Storms leave a few shared fallen logs and branches; dusk brings fireflies. Weather adds opportunities and atmosphere without survival penalties. See [forest weather](docs/decisions/0080-gentle-forest-weather.md).

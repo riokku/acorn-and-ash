@@ -1,3 +1,5 @@
+import { forestWeather } from '@acorn/shared';
+import { createForestWeather } from './scene/forest-weather';
 import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
@@ -428,6 +430,7 @@ const HOME_CAMERA_BLOCKER_HEIGHT = 5;
 export interface GameDebug {
   selfNetId(): number;
   grassClumps(): number;
+  weatherEffects(): { rainDrops: number; fireflies: number };
   buildBoundaryVisible(): boolean;
   localPosition(): Vec3;
   remotePlayers(): Array<{ netId: number; x: number; y: number; z: number }>;
@@ -684,6 +687,9 @@ export class Game {
   private controls: Controls | null = null;
   private connection: WorldConnection | null = null;
   private daylight: DaylightRig | null = null;
+  private weatherSeed = 0;
+  private weatherArt: ReturnType<typeof createForestWeather> | null = null;
+  private weatherCloud = 0;
   /** The lights every campfire, lantern and torch borrows (see fire-light.ts). */
   private fireLights: FireLights | null = null;
   /** The latest time the server told us, and our own clock when it told us - together, an estimate of the server's clock right now. */
@@ -1087,6 +1093,7 @@ export class Game {
       selfNetId: () => this.selfNetId,
       buildBoundaryVisible: () => this.buildBoundary?.group.visible ?? false,
       grassClumps: () => this.grass?.mesh.count ?? 0,
+      weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
       localPosition: () => ({ ...this.motionOrOrigin() }),
       remotePlayers: () =>
         this.remotePlayers.netIds().map((netId) => {
@@ -1229,6 +1236,7 @@ export class Game {
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
     this.animalTracks?.dispose();
+    this.weatherArt?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
@@ -1973,6 +1981,10 @@ export class Game {
 
       const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
+      this.weatherSeed = seed;
+      this.weatherArt?.dispose();
+      this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
+      this.outdoors.add(this.weatherArt.group);
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
       const encounterSites = buildEncounterSites(
@@ -2458,6 +2470,7 @@ export class Game {
         deltaSeconds,
         this.localPlayer.motion.position,
         this.reducedMotion.matches,
+        forestWeather(this.weatherSeed, this.estimatedServerTimeMs()).wind,
       );
     this.updateRemotePlayers(deltaSeconds);
     this.updateRemoteAnimals(deltaSeconds);
@@ -2469,7 +2482,19 @@ export class Game {
     }
     this.treeLandingEffects.update(deltaSeconds, camera.camera);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
-    this.daylight?.update(dayProgress(this.estimatedServerTimeMs()));
+    const weatherNow = this.estimatedServerTimeMs();
+    const weather = forestWeather(this.weatherSeed, weatherNow);
+    this.weatherCloud +=
+      (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
+    this.daylight?.update(dayProgress(weatherNow), this.weatherCloud);
+    this.weatherArt?.update(
+      deltaSeconds,
+      this.localPlayer?.motion.position ?? { x: 0, z: 0 },
+      weatherNow,
+      weather,
+      this.space !== OUTDOORS,
+      this.reducedMotion.matches,
+    );
     // Only campfires animate right now; the `in` check skips the other
     // buildable kinds sharing this map without giving them all a no-op method.
     for (const built of this.builtMeshes.values()) {
@@ -4038,6 +4063,7 @@ export class Game {
       pickupNotice: this.pickupNotices.current(now),
       canDrop: this.space === OUTDOORS,
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
+      forestWeather: forestWeather(this.weatherSeed, this.estimatedServerTimeMs()),
       mapOpen: this.mapOpen,
       door: this.doorHint,
       home: this.homeHere(),
