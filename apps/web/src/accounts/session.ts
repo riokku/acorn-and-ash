@@ -1,16 +1,30 @@
 import type { WebEnv } from '../env';
 import { AccountsNotConfiguredError, createAuth, type Auth } from './auth';
+import type { Provider } from './options';
 import { isPlayerKey } from './player-key';
 
 /** Who is playing, as far as the rest of the Worker needs to know. */
 export interface Account {
-  readonly kind: 'guest' | 'member';
+  /** `test` is a test player (decision 0086); everybody real is a `member`. */
+  readonly kind: 'test' | 'member';
+  readonly id: string;
+  /** What the account is called at the login service. Only ever shown back to them. */
+  readonly name: string;
   /** What the worlds know this player by. Never sent to the browser. */
   readonly playerKey: string;
+  /** Whether this account has ever joined a world. */
+  readonly entered: boolean;
 }
 
 function authFor(env: WebEnv, request: Request): Auth {
   return createAuth(env, new URL(request.url).origin);
+}
+
+/** A reply that also hands over the cookies Better Auth just set or cleared. */
+function replyWith(cookies: string[], body: unknown, init: ResponseInit = {}): Response {
+  const reply = Response.json(body, init);
+  for (const cookie of cookies) reply.headers.append('set-cookie', cookie);
+  return reply;
 }
 
 /**
@@ -30,7 +44,13 @@ export async function resumeSession(
   if (!user || !isPlayerKey(user.playerKey)) return { account: null, cookies };
 
   return {
-    account: { kind: user.isAnonymous ? 'guest' : 'member', playerKey: user.playerKey },
+    account: {
+      kind: user.isAnonymous ? 'test' : 'member',
+      id: user.id,
+      name: user.name,
+      playerKey: user.playerKey,
+      entered: user.enteredAt != null,
+    },
     cookies,
   };
 }
@@ -41,34 +61,64 @@ export async function signedInAccount(request: Request, env: WebEnv): Promise<Ac
 }
 
 /**
- * Give a browser that has no account yet one of its own, as a guest.
+ * Send a browser off to Google or Discord to sign in.
  *
- * `earlierKey` is the key a browser used before accounts existed. Handing it
- * over lets that browser's old character carry on under its new account
- * instead of starting again. Only a brand-new guest can take one, and only if
- * no other account already has it, so this can't be used to pick up a key that
- * belongs to somebody else's account.
+ * Better Auth makes the address to send them to, and a cookie that lets it
+ * recognise them when they come back; both are handed on. Where they land
+ * afterwards is the game itself, whether it went well or not.
  */
-export async function startGuest(
+export async function beginSignIn(
   request: Request,
   env: WebEnv,
-  earlierKey: unknown,
+  provider: Provider,
 ): Promise<Response> {
-  const { headers, response } = await authFor(env, request).api.signInAnonymous({
+  const { headers, response } = await authFor(env, request).api.signInSocial({
+    body: {
+      provider,
+      callbackURL: '/',
+      newUserCallbackURL: '/',
+      errorCallbackURL: '/?signin=failed',
+    },
     headers: request.headers,
     returnHeaders: true,
   });
+  if (!response.url) return Response.json({ error: 'Could not start signing in' }, { status: 502 });
 
-  if (isPlayerKey(earlierKey) && response?.user.id) {
-    await adoptEarlierKey(env.DB, response.user.id, earlierKey);
-  }
-
-  const reply = Response.json({ kind: 'guest', created: true }, { status: 201 });
+  const reply = new Response(null, { status: 302, headers: { location: response.url } });
   for (const cookie of headers.getSetCookie()) reply.headers.append('set-cookie', cookie);
   return reply;
 }
 
-/** Whether the guest took the key. Taken keys, and a lost race for one, return false. */
+/** Let the player go: ends this session and clears its cookie. */
+export async function endSession(request: Request, env: WebEnv): Promise<Response> {
+  const { headers } = await authFor(env, request).api.signOut({
+    headers: request.headers,
+    returnHeaders: true,
+  });
+  return replyWith(headers.getSetCookie(), { signedIn: false });
+}
+
+/**
+ * Give a browser a test player of its own, with no Google or Discord account.
+ * Only for the places `testSignInMode` allows; the route checks that first.
+ */
+export async function startTestPlayer(request: Request, env: WebEnv): Promise<Response> {
+  const { headers } = await authFor(env, request).api.signInAnonymous({
+    headers: request.headers,
+    returnHeaders: true,
+  });
+  return replyWith(headers.getSetCookie(), { created: true }, { status: 201 });
+}
+
+/**
+ * Let a signed-in account take over the key a browser played under before
+ * accounts existed, so a character made then carries on instead of starting
+ * again.
+ *
+ * Only an account that has never joined a world can do it, and only if no other
+ * account has that key, so it can't be used to pick up somebody else's, or to
+ * swap away a character already made. A lost race for a key returns false too.
+ */
 export async function adoptEarlierKey(
   database: D1Database,
   userId: string,
@@ -78,7 +128,7 @@ export async function adoptEarlierKey(
     const result = await database
       .prepare(
         `UPDATE user SET player_key = ?1
-         WHERE id = ?2 AND is_anonymous = 1
+         WHERE id = ?2 AND entered_at IS NULL
            AND NOT EXISTS (SELECT 1 FROM user WHERE player_key = ?1)`,
       )
       .bind(key, userId)
@@ -86,9 +136,17 @@ export async function adoptEarlierKey(
     return result.meta.changes === 1;
   } catch {
     // The unique index on player_key: somebody took it between the check and
-    // the write. The guest simply keeps the fresh key it was given.
+    // the write. The account simply keeps the fresh key it was given.
     return false;
   }
+}
+
+/** Note that this account has joined a world, so its key can no longer be swapped. */
+export async function markEntered(database: D1Database, userId: string): Promise<void> {
+  await database
+    .prepare('UPDATE user SET entered_at = ?1 WHERE id = ?2 AND entered_at IS NULL')
+    .bind(Date.now(), userId)
+    .run();
 }
 
 export { AccountsNotConfiguredError };

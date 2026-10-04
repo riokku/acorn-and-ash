@@ -1,0 +1,1 @@
+ALTER TABLE `user` ADD `entered_at` integer;

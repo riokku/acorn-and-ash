@@ -16,7 +16,7 @@ export const user = sqliteTable('user', {
   image: text('image'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-  /** True for a guest, who has not yet saved their progress to a sign-in. */
+  /** True for a test player (see decision 0086): the one kind of account that is not a Google or Discord sign-in. */
   isAnonymous: integer('is_anonymous', { mode: 'boolean' }).notNull().default(false),
   /**
    * What the worlds know this player by. Every world keeps its saved
@@ -25,6 +25,12 @@ export const user = sqliteTable('user', {
    * ever holds a session cookie.
    */
   playerKey: text('player_key').notNull().unique(),
+  /**
+   * When this account first joined a world. Until then its key has never been
+   * used, so it is still free to take over the key an earlier browser played
+   * under; after, it never is (see `adoptEarlierKey`).
+   */
+  enteredAt: integer('entered_at', { mode: 'timestamp_ms' }),
 });
 
 export const session = sqliteTable(

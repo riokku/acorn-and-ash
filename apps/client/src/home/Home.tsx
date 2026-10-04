@@ -18,13 +18,20 @@ import type { Preferences } from '../preferences/preferences';
 
 interface HomeProps {
   readonly initial: PlayerIdentity;
+  /** The character already made in this world, if there is one (decision 0087). */
+  readonly saved: PlayerIdentity | null;
+  /** Who is signed in, shown back to them so they know it is the right account. */
+  readonly accountName: string;
+  readonly onSignOut: () => void;
   readonly onPlay: (identity: PlayerIdentity) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
 /**
- * Shown before the game connects: pick a name, a character and a tint.
+ * Shown before the game connects. A player with no character in this world
+ * picks a name, a character and a tint, once; a player who has one is welcomed
+ * back to it and goes straight in.
  *
  * All six of the pack's characters have real art now (see decisions 0036
  * and 0044) - the lock/"Coming soon" styling below stays in place for
@@ -32,6 +39,9 @@ interface HomeProps {
  */
 export function Home({
   initial,
+  saved,
+  accountName,
+  onSignOut,
   onPlay,
   initialPreferences,
   onSettingsChange,
@@ -48,6 +58,34 @@ export function Home({
     if (!canPlay) return;
     onPlay({ name: trimmed, character, color });
   };
+
+  if (saved !== null) {
+    return (
+      <form
+        className="home-screen"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onPlay(saved);
+        }}
+      >
+        <ForestBackdrop />
+        <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
+        <div className="home-card">
+          <p className="home-kicker">Welcome back</p>
+          <h1 className="home-title">Acorn &amp; Ash</h1>
+          <div className="home-saved" data-testid="saved-character">
+            <PersonIcon color={hexString(TINT_COLORS[saved.color].hex)} />
+            <span className="home-saved-name">{saved.name}</span>
+            <span className="home-saved-kind">{CHARACTER_KINDS[saved.character].displayName}</span>
+          </div>
+          <button type="submit" className="home-play" autoFocus>
+            Enter the clearing as {saved.name}
+          </button>
+          <AccountLine accountName={accountName} onSignOut={onSignOut} />
+        </div>
+      </form>
+    );
+  }
 
   return (
     <form className="home-screen" onSubmit={handleSubmit}>
@@ -145,9 +183,31 @@ export function Home({
         <button type="submit" className="home-play" disabled={!canPlay}>
           {canPlay ? `Enter the clearing as ${trimmed}` : 'Enter the clearing'}
         </button>
-        <p className="home-footnote">Others in the clearing will see this name.</p>
+        <p className="home-footnote">
+          Others in the clearing will see this name. You get one character in this world, so choose
+          with care: it can&rsquo;t be changed later.
+        </p>
+        <AccountLine accountName={accountName} onSignOut={onSignOut} />
       </div>
     </form>
+  );
+}
+
+/** Which account is signed in, and the way out of it. */
+function AccountLine({
+  accountName,
+  onSignOut,
+}: {
+  accountName: string;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <p className="home-footnote home-account">
+      Signed in as {accountName}.{' '}
+      <button type="button" className="home-link" onClick={onSignOut}>
+        Sign out
+      </button>
+    </p>
   );
 }
 
@@ -209,7 +269,7 @@ function CheckIcon(): React.JSX.Element {
  * screen. Purely decorative - the same silhouettes from the sunlit-grove
  * mockup Chris signed off on.
  */
-function ForestBackdrop(): React.JSX.Element {
+export function ForestBackdrop(): React.JSX.Element {
   return (
     <svg
       className="home-backdrop"

@@ -1087,6 +1087,94 @@ body {
   color: var(--home-ink-faint);
 }
 
+/* The sign-in screen and the welcome-back card (decisions 0086 and 0087). */
+
+.home-signins {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 30px;
+}
+
+.home-signin {
+  display: block;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 2px solid var(--home-accent);
+  background: #fffaf0;
+  color: var(--home-ink);
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+
+.home-signin:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+}
+
+.home-signin-discord {
+  background: #5865f2;
+  border-color: #5865f2;
+  color: #ffffff;
+}
+
+.home-signin-test {
+  border-style: dashed;
+}
+
+.home-notice {
+  margin: 20px 0 0;
+  max-width: 420px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 250, 240, 0.85);
+  font-size: 14px;
+  color: var(--home-ink);
+}
+
+.home-saved {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 30px;
+}
+
+.home-saved-name {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--home-ink);
+}
+
+.home-saved-kind {
+  font-size: 14px;
+  color: var(--home-ink-dim);
+}
+
+.home-account {
+  margin-top: 6px;
+}
+
+.home-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ------------------------------------------------------------------------ */
 /* The minimap and the big map (decision 0054)                              */
 /* ------------------------------------------------------------------------ */

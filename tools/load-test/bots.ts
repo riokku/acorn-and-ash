@@ -1,7 +1,7 @@
 /**
  * Point a crowd of bots at a running world.
  *
- * Each bot behaves like a browser: it signs in as a guest of its own, connects,
+ * Each bot behaves like a browser: it signs in as a test player of its own, connects,
  * walks in a circle, and posts one input per simulation tick bundled at 15
  * messages a second. It reports what
  * came back so we can see whether the world kept up.
@@ -52,22 +52,22 @@ interface BotStats {
 }
 
 /**
- * A bot's first visit: a guest account of its own, the way a new browser gets
- * one. Returns the cookie to connect with. The site limits how fast one address
- * can make guests, so a deployed environment will turn a big crowd away; local
- * ones allow plenty.
+ * A bot's first visit: a test player of its own, which is all a bot can be: it
+ * has no Google or Discord account. That only works against your own machine
+ * (`pnpm dev:web`) or a pull request preview, never staging or production, and
+ * the site limits how fast one address can sign in, so a deployed preview will
+ * turn a big crowd away; local ones allow plenty. Returns the cookie to connect
+ * with.
  */
-async function signInAsGuest(): Promise<string> {
+async function signInAsTestPlayer(): Promise<string> {
   const origin = new URL(values.url);
   origin.protocol =
     origin.protocol === 'wss:' ? 'https:' : origin.protocol === 'ws:' ? 'http:' : origin.protocol;
-  origin.pathname = '/api/session';
+  origin.pathname = '/api/test-sign-in';
   origin.search = '';
 
   const response = await fetch(origin, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: '{}',
   });
   if (!response.ok) throw new Error(`sign-in answered ${response.status}`);
   return response.headers
@@ -80,7 +80,7 @@ async function signInAsGuest(): Promise<string> {
 async function startBot(index: number, stats: BotStats): Promise<{ stop: () => void }> {
   let cookie: string;
   try {
-    cookie = await signInAsGuest();
+    cookie = await signInAsTestPlayer();
   } catch (error) {
     stats.errors.push(error instanceof Error ? error.message : 'could not sign in');
     return { stop: () => {} };

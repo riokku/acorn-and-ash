@@ -36,15 +36,21 @@
       "migrations_dir": "migrations",
     },
   ],
-  // Cloudflare's own rate limiter, so nobody can fill the accounts database with
-  // guests. Only creating a new guest is limited, never coming back as one.
+  // Cloudflare's own rate limiter, so nobody can flood the accounts database
+  // with sign-in attempts. Only starting one is limited, never coming back.
   "ratelimits": [
-    { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+    { "name": "SIGN_IN_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
   ],
-  // Signs the session cookie. For running on your own machine only: deployed
-  // environments get a random secret that nobody ever sees (see
-  // tools/prepare-accounts.mjs), and `vars` are not inherited by them.
-  "vars": { "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else" },
+  // For running on your own machine only: deployed environments get a random
+  // session secret that nobody ever sees (see tools/prepare-accounts.mjs), and
+  // `vars` are not inherited by them. TEST_SIGN_IN lets a test player in with no
+  // Google or Discord account (decision 0086); `automatic` skips the sign-in
+  // screen. It is only honoured on localhost and on pull request previews, and
+  // never set for staging or production.
+  "vars": {
+    "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else",
+    "TEST_SIGN_IN": "automatic",
+  },
 
   "env": {
     // The browser tests (see playwright.config.ts): local in every way, with
@@ -72,15 +78,20 @@
           "migrations_dir": "migrations",
         },
       ],
-      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
-      // guests. Only creating a new guest is limited, never coming back as one.
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
       "ratelimits": [
-        { "name": "GUEST_LIMIT", "namespace_id": "1001", "simple": { "limit": 600, "period": 60 } },
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1001",
+          "simple": { "limit": 600, "period": 60 },
+        },
       ],
-      // Signs the session cookie. For running on your own machine only: deployed
-      // environments get a random secret that nobody ever sees (see
-      // tools/prepare-accounts.mjs), and `vars` are not inherited by them.
-      "vars": { "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else" },
+      // The same local-only settings as above.
+      "vars": {
+        "BETTER_AUTH_SECRET": "local-development-only-secret-not-used-anywhere-else",
+        "TEST_SIGN_IN": "automatic",
+      },
     },
     "staging": {
       "name": "acorn-ash-web-staging",
@@ -110,10 +121,14 @@
           "migrations_dir": "migrations",
         },
       ],
-      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
-      // guests. Only creating a new guest is limited, never coming back as one.
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
       "ratelimits": [
-        { "name": "GUEST_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1002",
+          "simple": { "limit": 20, "period": 60 },
+        },
       ],
     },
     "production": {
@@ -144,10 +159,14 @@
           "migrations_dir": "migrations",
         },
       ],
-      // Cloudflare's own rate limiter, so nobody can fill the accounts database with
-      // guests. Only creating a new guest is limited, never coming back as one.
+      // Cloudflare's own rate limiter, so nobody can flood the accounts database
+      // with sign-in attempts. Only starting one is limited, never coming back.
       "ratelimits": [
-        { "name": "GUEST_LIMIT", "namespace_id": "1003", "simple": { "limit": 20, "period": 60 } },
+        {
+          "name": "SIGN_IN_LIMIT",
+          "namespace_id": "1003",
+          "simple": { "limit": 20, "period": 60 },
+        },
       ],
     },
   },

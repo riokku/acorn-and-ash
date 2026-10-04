@@ -171,7 +171,7 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { clickAimYaw, yawTowards, type ClickCandidate } from './input/click-target';
 import { lootUnderRay, type LootTarget } from './input/loot-target';
-import { ensureAccount } from './net/account';
+import { SignInError, resumeAccount } from './net/account';
 import { WorldConnection, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
 import { InterpolatedEntities } from './net/interpolated-entities';
@@ -1416,11 +1416,20 @@ export class Game {
           if (state === 'elsewhere') this.setPlaying(false);
         },
       },
-      // Signed in again before every attempt, so a lost cookie is replaced
-      // rather than leaving the player stuck offline.
-      { signIn: () => ensureAccount(window.localStorage) },
+      // Checked before every attempt. A session that has ended means going back
+      // to the sign-in screen, not sitting offline trying again for ever.
+      { signIn: () => this.stillSignedIn() },
     );
     this.connection.connect();
+  }
+
+  private async stillSignedIn(): Promise<void> {
+    try {
+      await resumeAccount(window.localStorage);
+    } catch (error) {
+      if (error instanceof SignInError && error.status === 401) window.location.reload();
+      throw error;
+    }
   }
 
   private handleMessage(message: ServerMessage): void {

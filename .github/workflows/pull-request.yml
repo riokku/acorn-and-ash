@@ -211,6 +211,11 @@ jobs:
       # traffic; it just gets its own URL. Because apps/web borrows the World
       # class from a game server rather than implementing it, Cloudflare will
       # give it a preview URL.
+      #
+      # Google and Discord only send people back to addresses they have been
+      # told about, and a preview's address is new every time. So a preview
+      # shows a "Test sign-in" button instead (TEST_SIGN_IN, which the Worker
+      # only honours on preview and local addresses; decision 0086).
       - name: Upload the preview
         id: upload
         if: steps.staging.outputs.exists == 'true'
@@ -223,6 +228,7 @@ jobs:
             versions upload -c wrangler.preview.jsonc --env staging
             --preview-alias pr-${{ github.event.number }}
             --secrets-file preview-secrets.json
+            --var TEST_SIGN_IN:button
 
       - name: Find the preview link
         id: link
@@ -269,8 +275,9 @@ jobs:
                 `server of its own, built from this branch. Everything here is testable before ` +
                 `it merges.\n\n` +
                 `Its world starts empty every time the branch is new, so anything already ` +
-                `gathered on staging is not carried over. Open it in two tabs to see two ` +
-                `players.\n\n` +
+                `gathered on staging is not carried over. Google and Discord can't sign you in ` +
+                `on a preview, so press **Test sign-in** to get a throwaway player. Use a normal ` +
+                `window and a private one to see two players.\n\n` +
                 `_Updated for commit ${commit}._`;
             } else {
               body =

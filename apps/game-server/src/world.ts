@@ -156,6 +156,12 @@ export class World extends DurableObject<WorldEnv> {
       return Response.json(this.resetPlayers());
     }
 
+    // Who this player already is in this world, so the Home screen can show
+    // their character instead of offering to make another (decision 0087).
+    if (url.pathname.endsWith('/character')) {
+      return Response.json(this.savedCharacter(url.searchParams.get('player')));
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('This endpoint speaks WebSocket.', { status: 426 });
     }
@@ -1128,7 +1134,8 @@ export class World extends DurableObject<WorldEnv> {
   /**
    * A player introduced themselves: sanitise what they said, refuse a
    * character that is not available yet regardless of what the client
-   * asked for, remember it for next time, and let everybody know.
+   * asked for, remember it for next time, and let everybody know. Only the
+   * first introduction counts: after that the character is theirs for good.
    */
   private handleHello(
     ws: WebSocket,
@@ -1137,6 +1144,15 @@ export class World extends DurableObject<WorldEnv> {
     requestedCharacter: CharacterId,
     color: TintColorId,
   ): void {
+    // One character per player per world (decision 0087). Whoever already has
+    // a name here keeps it: what a returning browser says is ignored, and only
+    // the roster is repeated so the others hear they have arrived. A connection
+    // with no player key has no character to protect and may say who it is again.
+    if (attachment.playerKey !== null && attachment.name !== null) {
+      this.broadcast(encodeRoster(this.currentRoster()));
+      return;
+    }
+
     const name = sanitizePlayerName(rawName);
     if (!isValidPlayerName(name)) return;
 
@@ -1740,6 +1756,24 @@ export class World extends DurableObject<WorldEnv> {
       equippedItem:
         row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
       explored: row.explored === null ? null : new Uint8Array(row.explored),
+    };
+  }
+
+  /**
+   * The character a player made in this world, in the words the browser uses,
+   * or `{ made: false }` if they have not made one (or the key is not one).
+   */
+  private savedCharacter(
+    requestedKey: string | null,
+  ): { made: false } | { made: true; name: string; character: CharacterId; color: TintColorId } {
+    if (requestedKey === null || !PLAYER_KEY_PATTERN.test(requestedKey)) return { made: false };
+    const saved = this.loadPlayerIdentity(requestedKey);
+    if (saved === undefined) return { made: false };
+    return {
+      made: true,
+      name: saved.name,
+      character: characterFromIndex(saved.characterIndex) ?? DEFAULT_CHARACTER,
+      color: tintColorFromIndex(saved.colorIndex) ?? DEFAULT_TINT_COLOR,
     };
   }
 

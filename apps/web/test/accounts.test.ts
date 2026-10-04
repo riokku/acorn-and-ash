@@ -3,61 +3,40 @@ import { describe, expect, it } from 'vitest';
 
 import app from '../src/index';
 import { adoptEarlierKey } from '../src/accounts/session';
-import { SITE, cookieHeader, playerSeenByWorld, startAsGuest } from './helpers';
+import { SITE, cookieHeader, playerSeenByWorld, sayHere, startAsTestPlayer } from './helpers';
 
-async function countUsers(): Promise<number> {
-  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM user').first<{ n: number }>();
-  return row?.n ?? 0;
+async function userFor(player: string | null): Promise<{ id: string; entered_at: number | null }> {
+  const row = await env.DB.prepare('SELECT id, entered_at FROM user WHERE player_key = ?')
+    .bind(player)
+    .first<{ id: string; entered_at: number | null }>();
+  if (row === null) throw new Error('No account has that key');
+  return row;
 }
 
-function postSession(headers: Record<string, string> = {}, body: unknown = {}): Request {
-  return new Request(`${SITE}/api/session`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-}
-
-describe('a first visit', () => {
-  it('gives the browser a guest account and a cookie to remember it by', async () => {
-    const before = await countUsers();
-    const response = await SELF.fetch(postSession());
-
-    expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ kind: 'guest', created: true });
-    expect(response.headers.getSetCookie().length).toBeGreaterThan(0);
-    expect(await countUsers()).toBe(before + 1);
-  });
-
-  it('keeps the guest signed in for about a year', async () => {
-    const response = await SELF.fetch(postSession());
+describe('being signed in', () => {
+  it('is remembered by a cookie that lasts about a year', async () => {
+    const response = await SELF.fetch(`${SITE}/api/test-sign-in`, { method: 'POST' });
     const sessionCookie = response.headers.getSetCookie().find((c) => c.includes('session_token'));
     expect(sessionCookie).toMatch(/Max-Age=31536000/i);
     expect(sessionCookie).toMatch(/HttpOnly/i);
   });
 
-  it('never tells the browser the key the worlds know it by', async () => {
-    const { cookie } = await startAsGuest();
+  it('is told back to the browser without the key the worlds know it by', async () => {
+    const { cookie } = await startAsTestPlayer();
     const { player } = await playerSeenByWorld(cookie);
-    const response = await SELF.fetch(postSession({ cookie }));
-    expect(JSON.stringify(await response.json())).not.toContain(player);
-  });
-});
-
-describe('coming back', () => {
-  it('recognises a browser that already has an account and makes no new one', async () => {
-    const { cookie } = await startAsGuest();
-    const before = await countUsers();
-
-    const response = await SELF.fetch(postSession({ cookie }));
+    const response = await sayHere(cookie);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ kind: 'guest', created: false });
-    expect(await countUsers()).toBe(before);
+    expect(JSON.stringify(await response.json())).not.toContain(player);
   });
 
-  it('pushes the year back when a guest returns a few days later, cookie and all', async () => {
-    const { cookie } = await startAsGuest();
+  it('is required before saying "I am here"', async () => {
+    const response = await sayHere('');
+    expect(response.status).toBe(401);
+  });
+
+  it('pushes the year back when a player returns a few days later, cookie and all', async () => {
+    const { cookie } = await startAsTestPlayer();
     // Two days have gone by since the session was last refreshed.
     const twoDays = 2 * 24 * 60 * 60 * 1000;
     await env.DB.prepare('UPDATE session SET expires_at = expires_at - ?').bind(twoDays).run();
@@ -65,7 +44,7 @@ describe('coming back', () => {
       latest: number;
     }>();
 
-    const response = await SELF.fetch(postSession({ cookie }));
+    const response = await SELF.fetch(`${SITE}/api/session`, { headers: { cookie } });
 
     const renewed = response.headers.getSetCookie().find((c) => c.includes('session_token'));
     expect(renewed).toMatch(/Max-Age=31536000/i);
@@ -76,28 +55,29 @@ describe('coming back', () => {
   });
 
   it('is the same player every time', async () => {
-    const { cookie } = await startAsGuest();
+    const { cookie } = await startAsTestPlayer();
     const first = await playerSeenByWorld(cookie);
     const second = await playerSeenByWorld(cookie);
     expect(first.player).not.toBeNull();
     expect(second.player).toBe(first.player);
   });
 
-  it('is never held back by the guest limit, which only guards making new guests', async () => {
-    const { cookie } = await startAsGuest();
+  it('is never held back by the sign-in limit, which only guards starting to sign in', async () => {
+    const { cookie } = await startAsTestPlayer();
     const everyoneLimited = { limit: async () => ({ success: false }) };
 
-    const response = await app.fetch(postSession({ cookie }), {
+    const response = await app.fetch(new Request(`${SITE}/api/session`, { headers: { cookie } }), {
       ...env,
-      GUEST_LIMIT: everyoneLimited,
+      SIGN_IN_LIMIT: everyoneLimited,
     });
 
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ signedIn: true });
   });
 });
 
 describe('getting into a world', () => {
-  it('turns away a browser that has no account', async () => {
+  it('turns away a browser that is not signed in', async () => {
     const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws`, {
       headers: { Upgrade: 'websocket' },
     });
@@ -110,7 +90,7 @@ describe('getting into a world', () => {
   });
 
   it('refuses a connection started by a page on another website, even with a good cookie', async () => {
-    const { cookie } = await startAsGuest();
+    const { cookie } = await startAsTestPlayer();
     const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws`, {
       headers: { Upgrade: 'websocket', cookie, Origin: 'https://elsewhere.example' },
     });
@@ -118,106 +98,133 @@ describe('getting into a world', () => {
   });
 
   it('lets in the game page itself, which names its own site as the origin', async () => {
-    const { cookie } = await startAsGuest();
+    const { cookie } = await startAsTestPlayer();
     const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws`, {
       headers: { Upgrade: 'websocket', cookie, Origin: SITE },
     });
     expect(response.status).toBe(200);
   });
 
-  it('gives different browsers different players', async () => {
-    const one = await playerSeenByWorld((await startAsGuest()).cookie);
-    const two = await playerSeenByWorld((await startAsGuest()).cookie);
+  it('gives different people different players', async () => {
+    const one = await playerSeenByWorld((await startAsTestPlayer()).cookie);
+    const two = await playerSeenByWorld((await startAsTestPlayer()).cookie);
     expect(one.player).not.toBe(two.player);
   });
 
   it('tells the world who is connecting with a key that is long and random', async () => {
-    const { player } = await playerSeenByWorld((await startAsGuest()).cookie);
+    const { player } = await playerSeenByWorld((await startAsTestPlayer()).cookie);
     expect(player).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('does not let a browser pick its own player by asking for one', async () => {
-    const { cookie } = await startAsGuest();
+    const { cookie } = await startAsTestPlayer();
     const honest = await playerSeenByWorld(cookie);
     const pretending = await playerSeenByWorld(cookie, '?player=somebody-elses-key');
     expect(pretending.player).toBe(honest.player);
+  });
+
+  it('notes that the account has been in a world, once', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const { player } = await playerSeenByWorld(cookie);
+    const first = await userFor(player);
+    expect(first.entered_at).not.toBeNull();
+
+    await playerSeenByWorld(cookie);
+    expect((await userFor(player)).entered_at).toBe(first.entered_at);
+  });
+});
+
+describe('the character a player made in a world', () => {
+  const characterUrl = `${SITE}/api/worlds/home-clearing/character`;
+
+  it('is asked of the world, as the signed-in player and nobody else', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(`${characterUrl}?player=somebody-elses-key`, {
+      headers: { cookie },
+    });
+    const body = (await response.json()) as { path: string; player: string };
+
+    expect(response.status).toBe(200);
+    expect(body.path).toBe('/api/worlds/home-clearing/character');
+    expect(body.player).toBe((await playerSeenByWorld(cookie)).player);
+  });
+
+  it('is private: no sign-in, no answer', async () => {
+    expect((await SELF.fetch(characterUrl)).status).toBe(401);
+  });
+
+  it('is only asked of a world that exists', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(`${SITE}/api/worlds/..%2Fetc/character`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(404);
   });
 });
 
 describe('characters from before accounts', () => {
   const earlierKey = '0123456789abcdef01234567';
 
-  it('carries on under the new account, so nobody starts again', async () => {
-    const { cookie } = await startAsGuest(earlierKey);
+  it('carry on under the account that signs in, so nobody starts again', async () => {
+    const { cookie } = await startAsTestPlayer();
+    await sayHere(cookie, earlierKey);
     expect((await playerSeenByWorld(cookie)).player).toBe(earlierKey);
   });
 
-  it('cannot be claimed twice: the second browser gets a fresh player instead', async () => {
+  it('cannot be claimed twice: the second account gets a fresh player instead', async () => {
     const key = 'fedcba98765432100123456789abcdef';
-    const first = await playerSeenByWorld((await startAsGuest(key)).cookie);
-    const second = await playerSeenByWorld((await startAsGuest(key)).cookie);
+    const first = (await startAsTestPlayer()).cookie;
+    const second = (await startAsTestPlayer()).cookie;
+    await sayHere(first, key);
+    await sayHere(second, key);
 
-    expect(first.player).toBe(key);
-    expect(second.player).not.toBe(key);
-    expect(second.player).toMatch(/^[0-9a-f]{32}$/);
+    expect((await playerSeenByWorld(first)).player).toBe(key);
+    const other = (await playerSeenByWorld(second)).player;
+    expect(other).not.toBe(key);
+    expect(other).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('is ignored when it is not shaped like a key', async () => {
-    const { cookie } = await startAsGuest('short');
+  it('are ignored when the key is not shaped like one', async () => {
+    const { cookie } = await startAsTestPlayer();
+    await sayHere(cookie, 'short');
     expect((await playerSeenByWorld(cookie)).player).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('cannot be picked up by someone who is not a brand-new guest', async () => {
-    const { cookie } = await startAsGuest();
+  it('cannot be taken by an account that has already been in a world', async () => {
+    const { cookie } = await startAsTestPlayer();
     const { player } = await playerSeenByWorld(cookie);
-    const user = await env.DB.prepare('SELECT id FROM user WHERE player_key = ?')
-      .bind(player)
-      .first<{ id: string }>();
-    await env.DB.prepare('UPDATE user SET is_anonymous = 0 WHERE id = ?').bind(user?.id).run();
 
-    expect(await adoptEarlierKey(env.DB, user?.id ?? '', 'abcdefabcdefabcdefabcdef')).toBe(false);
+    await sayHere(cookie, 'abcdefabcdefabcdefabcdef');
+
+    expect((await playerSeenByWorld(cookie)).player).toBe(player);
+  });
+
+  it('leave an account that has been in a world with the key it has, however it is asked', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const { player } = await playerSeenByWorld(cookie);
+    const { id } = await userFor(player);
+
+    expect(await adoptEarlierKey(env.DB, id, 'abcdefabcdefabcdefabcdef')).toBe(false);
   });
 });
 
 describe('what goes wrong', () => {
-  it('refuses to sign somebody in on the say-so of another website', async () => {
-    const before = await countUsers();
-    const response = await SELF.fetch(postSession({ Origin: 'https://elsewhere.example' }));
-
-    expect(response.status).toBe(403);
-    expect(response.headers.getSetCookie()).toEqual([]);
-    expect(await countUsers()).toBe(before);
-  });
-
-  it('says to slow down, and makes no guest, when one address makes too many', async () => {
-    const before = await countUsers();
-    const everyoneLimited = { limit: async () => ({ success: false }) };
-
-    const response = await app.fetch(postSession(), { ...env, GUEST_LIMIT: everyoneLimited });
-
-    expect(response.status).toBe(429);
-    expect(await countUsers()).toBe(before);
-  });
-
-  it('counts guests by address, so one visitor cannot use up everyone else’s turns', async () => {
-    const keys: string[] = [];
-    const recording = {
-      limit: async ({ key }: { key: string }) => {
-        keys.push(key);
-        return { success: true };
-      },
-    };
-
-    await app.fetch(postSession({ 'CF-Connecting-IP': '203.0.113.7' }), {
-      ...env,
-      GUEST_LIMIT: recording,
+  it('refuses to say "I am here" on the say-so of another website', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(`${SITE}/api/session`, {
+      method: 'POST',
+      headers: { cookie, Origin: 'https://elsewhere.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ earlierKey: '0123456789abcdef01234567' }),
     });
 
-    expect(keys).toEqual(['203.0.113.7']);
+    expect(response.status).toBe(403);
   });
 
   it('says plainly that accounts are not set up when the session secret is missing', async () => {
-    const response = await app.fetch(postSession(), { ...env, BETTER_AUTH_SECRET: undefined });
+    const response = await app.fetch(new Request(`${SITE}/api/session`), {
+      ...env,
+      BETTER_AUTH_SECRET: undefined,
+    });
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
@@ -226,8 +233,7 @@ describe('what goes wrong', () => {
   });
 
   it('rejects a session cookie signed with a different secret', async () => {
-    const response = await SELF.fetch(postSession());
-    const cookie = cookieHeader(response);
+    const cookie = cookieHeader(await SELF.fetch(`${SITE}/api/test-sign-in`, { method: 'POST' }));
 
     const otherSecret = await app.fetch(
       new Request(`${SITE}/api/worlds/home-clearing/ws`, { headers: { cookie } }),

@@ -90,14 +90,31 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 3 "$GAME_URL/api/health" | jq -e '.ok == true and .service == "web"'
 
-      # The real thing, end to end: the database exists, its tables are there
-      # and the session secret works. Makes one guest, which is harmless.
+      # The real thing, end to end: the database exists, its tables are there,
+      # the session secret works, each login service that has been set up sends
+      # people to the right place and back to this address, and the shortcuts
+      # meant for tests and previews are not switched on. Nobody is signed in.
       - name: Verify players can sign in
         env:
           GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
         run: |
-          curl --fail --silent --show-error --retry 3 -X POST "$GAME_URL/api/session" \
-            | jq -e '.kind == "guest"'
+          status=$(curl --fail --silent --show-error --retry 3 "$GAME_URL/api/session")
+          echo "$status" | jq -e '.signedIn == false and .testSignIn == null and (.providers | type) == "array"'
+
+          code=$(curl --silent -o /dev/null -w '%{http_code}' -X POST "$GAME_URL/api/test-sign-in")
+          test "$code" = 404 || { echo "::error::Test sign-in answered $code. It must not exist on staging."; exit 1; }
+
+          for provider in $(echo "$status" | jq -r '.providers[]'); do
+            target=$(curl --silent -o /dev/null -w '%{redirect_url}' "$GAME_URL/api/login/$provider")
+            expected="redirect_uri=$(printf '%s' "$GAME_URL/api/auth/callback/$provider" | jq -sRr @uri)"
+            case "$target" in
+              *"$expected"*) echo "$provider sign-in sends people back to $GAME_URL" ;;
+              *) echo "::error::$provider sign-in does not come back to $GAME_URL/api/auth/callback/$provider"; exit 1 ;;
+            esac
+          done
+          if [ "$(echo "$status" | jq '.providers | length')" -eq 0 ]; then
+            echo "::warning::No login service is set up on staging yet, so nobody can sign in. Add the Google and Discord secrets to the acorn-ash-web-staging Worker (see the README)."
+          fi
           curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e '(.tick | type) == "number" and (.seed | type) == "number"'
           curl --fail --silent --show-error --retry 3 "$GAME_URL/" -o /tmp/acorn-live-index.html
           cmp apps/client/dist/index.html /tmp/acorn-live-index.html

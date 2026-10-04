@@ -2,7 +2,7 @@ import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_WORLD_ID, isValidWorldId } from '../src/worlds';
-import { startAsGuest } from './helpers';
+import { startAsTestPlayer } from './helpers';
 
 describe('the API', () => {
   it('answers a health check', async () => {
@@ -28,7 +28,7 @@ describe('the API', () => {
 
 describe('reaching the World Durable Object', () => {
   it('forwards a realtime connection to the world', async () => {
-    const { cookie } = await startAsGuest();
+    const { cookie } = await startAsTestPlayer();
     const response = await SELF.fetch(`https://acorn.test/api/worlds/${DEFAULT_WORLD_ID}/ws`, {
       headers: { Upgrade: 'websocket', cookie },
     });
