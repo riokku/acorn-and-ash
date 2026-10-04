@@ -1,3 +1,4 @@
+import { DECORATION_KINDS, isIndoorOnlyKind } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ, isMealItem } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { GardenJournal } from './GardenJournal';
@@ -57,6 +58,8 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
+  readonly onMoveDecoration?: (id: number) => void;
+  readonly onReclaimDecoration?: (id: number) => void;
   readonly onGardenUse?: (request: GardenRequest) => void;
   readonly onJournalTabChange?: (tab: 'craft' | 'discoveries' | 'garden') => void;
   readonly onPickRecipe?: (index: number) => void;
@@ -102,6 +105,8 @@ export function Hud({
   onJournalTabChange,
   onPickRecipe,
   onGardenUse,
+  onMoveDecoration,
+  onReclaimDecoration,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   // One parchment layer for both maps, so it is only ever worked out once.
@@ -160,14 +165,65 @@ export function Hud({
           />
         )
       ) : null}
-      {state.ready && state.playing && (state.buildMenuOpen || state.placing !== null) ? (
+      {state.ready &&
+      state.playing &&
+      state.home === null &&
+      (state.buildMenuOpen || state.placing !== null) ? (
         <p className="build-area-note" role="status">
           {state.buildAreaRadius === null
             ? 'Place your first tent to establish a 12 m building area'
             : `Your home boundary · ${state.buildAreaRadius} m radius`}
         </p>
       ) : null}
-      {state.buildMenuOpen ? (
+      {state.buildMenuOpen && state.home !== null ? (
+        <section className="decor-panel" aria-label="Home decoration">
+          <h2>Make yourself at home</h2>
+          <p>
+            Pick a piece, point at the floor and scroll to rotate. Click to place. B or right-click
+            to cancel.
+          </p>
+          {state.home.yours ? (
+            <>
+              <div className="decor-options">
+                {DECORATION_KINDS.map((kind, index) => (
+                  <button type="button" key={kind} onClick={() => onPickBuildable(kind)}>
+                    <BuildableIcon kind={kind} color="#a6bea5" />
+                    <strong>
+                      {index < 6 ? `${index + 1} · ` : ''}
+                      {BUILDABLE_KINDS[kind].displayName}
+                    </strong>
+                    <span>
+                      {BUILDABLE_KINDS[kind].costs
+                        .map(
+                          (cost) =>
+                            `${cost.amount} ${ITEM_KINDS[cost.item].pluralName.toLowerCase()}`,
+                        )
+                        .join(' · ')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <h3>Your decorations · {state.decorations?.length ?? 0}/16</h3>
+              {(state.decorations ?? []).map((piece) => (
+                <div className="decor-owned" key={piece.id}>
+                  <span>{BUILDABLE_KINDS[piece.kind].displayName}</span>
+                  <button type="button" onClick={() => onMoveDecoration?.(piece.id)}>
+                    Move
+                  </button>
+                  <button type="button" onClick={() => onReclaimDecoration?.(piece.id)}>
+                    Pack up
+                  </button>
+                </div>
+              ))}
+              <p>Pack up returns the materials to your backpack.</p>
+            </>
+          ) : (
+            <p>Only the homeowner can decorate this room.</p>
+          )}
+          {state.decorNote ? <p role="status">{state.decorNote}</p> : null}
+        </section>
+      ) : null}
+      {state.buildMenuOpen && state.home === null ? (
         <JournalPanel
           title="Things I can build"
           entries={buildEntries(state)}
@@ -553,7 +609,7 @@ function craftEntries(state: HudState): RecipeEntry[] {
 function buildEntries(state: HudState): RecipeEntry[] {
   const inventory = inventoryFromEntries(state.carrying);
   return BUILDABLE_KIND_ORDER.flatMap((original, index) => {
-    if (isHomeKind(original) && original !== 'cabin') return [];
+    if (isIndoorOnlyKind(original) || (isHomeKind(original) && original !== 'cabin')) return [];
     const target = nextHome(state.homeKind);
     if (original === 'cabin' && target === null) return [];
     const kind = original === 'cabin' ? target! : original;

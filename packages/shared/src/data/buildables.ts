@@ -18,7 +18,13 @@ export type BuildableKindId =
   | 'tent'
   | 'teepee'
   | 'largeCabin'
-  | 'guardianTrophy';
+  | 'guardianTrophy'
+  | 'cedarBench'
+  | 'timberTable'
+  | 'wovenRug'
+  | 'fernLantern'
+  | 'moonLantern'
+  | 'flowerPlanter';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -179,6 +185,84 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x73995d,
   },
+  cedarBench: {
+    id: 'cedarBench',
+    displayName: 'Cedar bench',
+    costs: [
+      { item: 'log', amount: 4 },
+      { item: 'stick', amount: 2 },
+    ],
+    footprintRadius: 0.95,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x9b7952,
+  },
+  timberTable: {
+    id: 'timberTable',
+    displayName: 'Timber table',
+    costs: [
+      { item: 'log', amount: 6 },
+      { item: 'stick', amount: 4 },
+    ],
+    footprintRadius: 0.8,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0xb19167,
+  },
+  wovenRug: {
+    id: 'wovenRug',
+    displayName: 'Woven forest rug',
+    costs: [
+      { item: 'stick', amount: 4 },
+      { item: 'flower', amount: 6 },
+    ],
+    footprintRadius: 1.05,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x739c7b,
+  },
+  fernLantern: {
+    id: 'fernLantern',
+    displayName: 'Fern lantern',
+    costs: [
+      { item: 'log', amount: 1 },
+      { item: 'stick', amount: 2 },
+    ],
+    footprintRadius: 0.3,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x93bb84,
+  },
+  moonLantern: {
+    id: 'moonLantern',
+    displayName: 'Moonlit lantern',
+    costs: [
+      { item: 'log', amount: 1 },
+      { item: 'stick', amount: 2 },
+    ],
+    footprintRadius: 0.3,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x94bddd,
+  },
+  flowerPlanter: {
+    id: 'flowerPlanter',
+    displayName: 'Woodland flower planter',
+    costs: [
+      { item: 'log', amount: 1 },
+      { item: 'flower', amount: 3 },
+    ],
+    footprintRadius: 0.35,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0xc8af78,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -193,6 +277,12 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'teepee',
   'largeCabin',
   'guardianTrophy',
+  'cedarBench',
+  'timberTable',
+  'wovenRug',
+  'fernLantern',
+  'moonLantern',
+  'flowerPlanter',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

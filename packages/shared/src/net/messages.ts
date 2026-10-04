@@ -1,3 +1,4 @@
+import type { DecorationRequest, DecorationState } from '../sim/decorations';
 import type { MealState } from '../sim/meals';
 import type { HomeSupplies } from '../sim/home-supplies';
 import type { DiscoveryState } from '../data/discoveries';
@@ -42,6 +43,7 @@ export const ClientMessageType = {
   Loot: 0x09,
   Chest: 0x0a,
   Garden: 0x0b,
+  Decoration: 0x0c,
 } as const;
 
 /** What the server says back. */
@@ -85,6 +87,7 @@ export const ServerMessageType = {
   Garden: 0x34,
   HomeSupplies: 0x35,
   Meal: 0x36,
+  Decoration: 0x37,
 } as const;
 
 export const RejectReason = {
@@ -193,6 +196,7 @@ export type ChestMessage = ChestRequest & { readonly type: 'chest' };
 export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
 
 export type ClientMessage =
+  | (DecorationRequest & { readonly type: 'decoration' })
   | (GardenRequest & { readonly type: 'garden' })
   | ChestMessage
   | InputBundleMessage
@@ -572,6 +576,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | (DecorationState & { readonly type: 'decoration' })
   | MealMessage
   | HomeSuppliesMessage
   | (GardenState & { readonly type: 'garden' })

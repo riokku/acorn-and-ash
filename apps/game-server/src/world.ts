@@ -1,3 +1,4 @@
+import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
 import { encodeMeal, mealFromSaved, type MealState } from '@acorn/shared';
 import { isHomeKind } from '@acorn/shared';
 import { encodeDiscoveries } from '@acorn/shared';
@@ -207,6 +208,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
     server.send(encodeHomeSupplies(simulation.homeSuppliesOf(netId)));
     server.send(encodeMeal(simulation.mealStateOf(netId)));
+    server.send(encodeDecorationState({ pieces: simulation.decorationsList(), reason: null }));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
@@ -326,6 +328,18 @@ export class World extends DurableObject<WorldEnv> {
       this.announcePiles(simulation, Date.now());
       this.announceEquipped(simulation);
       this.announceFishing(simulation);
+      return;
+    }
+    if (decoded.type === 'decoration') {
+      const result = simulation.requestDecoration(attachment.netId, decoded);
+      if (result.reason === null && attachment.playerKey !== null) {
+        this.ctx.storage.transactionSync(() => {
+          this.savePlayer(simulation, attachment);
+          this.writeMeta('home-decorations', JSON.stringify(result.pieces));
+        });
+        this.sendPacks(simulation, new Set([attachment.netId]));
+        this.broadcast(encodeDecorationState(result));
+      } else this.trySend(ws, encodeDecorationState(result));
       return;
     }
     if (decoded.type === 'garden') {
@@ -1212,6 +1226,15 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
+    const decor = this.readMeta('home-decorations');
+    if (decor !== null) {
+      try {
+        const parsed: unknown = JSON.parse(decor);
+        if (Array.isArray(parsed)) simulation.restoreDecorations(parsed as HomeDecoration[]);
+      } catch {
+        console.error('Invalid saved home decorations');
+      }
+    }
     for (const row of this.ctx.storage.sql.exec<{ home_id: number; plots: string }>(
       'SELECT home_id, plots FROM home_gardens',
     )) {

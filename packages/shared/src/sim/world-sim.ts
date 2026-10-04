@@ -1,3 +1,14 @@
+import {
+  isIndoorOnlyKind,
+  isDecorationKind,
+  checkDecorationSpot,
+  decorationCollider,
+  MAX_HOME_DECORATIONS,
+  MAX_WORLD_DECORATIONS,
+  type DecorationRequest,
+  type DecorationState,
+  type HomeDecoration,
+} from './decorations';
 import { forestWeather, weatherPlan, WEATHER_CYCLE_MS } from './weather';
 import {
   advanceMeal,
@@ -993,6 +1004,131 @@ export class WorldSimulation {
   }
   private readonly homeSolids = new Map<number, ReturnType<typeof cabinCollider>>();
   private readonly roomWorlds = new Map<HomeKind, CollisionWorld>();
+  private readonly decoratedRooms = new Map<number, CollisionWorld>();
+  private decorations: HomeDecoration[] = [];
+  private readonly decoratedHomes = new Set<number>();
+  private nextDecorationId = 1;
+  decorationsList(): HomeDecoration[] {
+    return this.decorations.map((piece) => ({ ...piece }));
+  }
+  restoreDecorations(pieces: readonly HomeDecoration[]): void {
+    const ids = new Set<number>(),
+      counts = new Map<number, number>();
+    this.decorations = pieces
+      .slice(0, MAX_WORLD_DECORATIONS)
+      .filter(
+        (piece) =>
+          piece != null &&
+          isDecorationKind(piece.kind) &&
+          this.builtPropsById.has(piece.homeId) &&
+          isHomeKind(this.builtPropsById.get(piece.homeId)!.kind) &&
+          Math.abs(piece.x) <= 20 &&
+          Math.abs(piece.z) <= 20 &&
+          Math.abs(piece.yaw) <= Math.PI * 100 &&
+          Number.isInteger(piece.id) &&
+          piece.id > 0 &&
+          piece.id <= 0xfffffffe &&
+          [piece.x, piece.z, piece.yaw].every(Number.isFinite),
+      )
+      .filter((piece) => {
+        const count = counts.get(piece.homeId) ?? 0;
+        if (ids.has(piece.id) || count >= MAX_HOME_DECORATIONS) return false;
+        ids.add(piece.id);
+        counts.set(piece.homeId, count + 1);
+        return true;
+      })
+      .map((piece) => ({ ...piece }));
+    this.nextDecorationId = Math.max(0, ...this.decorations.map((piece) => piece.id)) + 1;
+    this.decoratedHomes.clear();
+    for (const piece of this.decorations) this.decoratedHomes.add(piece.homeId);
+    this.decoratedRooms.clear();
+  }
+  requestDecoration(netId: number, request: DecorationRequest): DecorationState {
+    const runtime = this.players.get(netId),
+      home = runtime === undefined ? undefined : this.builtPropsById.get(runtime.space);
+    const result = (reason: DecorationState['reason']): DecorationState => ({
+      pieces: this.decorationsList(),
+      reason,
+    });
+    if (runtime === undefined || home === undefined || !isHomeKind(home.kind))
+      return result('unavailable');
+    if (runtime.playerKey === null || this.builtPropOwner(home.id) !== runtime.playerKey)
+      return result('private');
+    if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
+      return result('busy');
+    const old = this.decorations.find(
+      (piece) => piece.id === request.id && piece.homeId === home.id,
+    );
+    if (request.action !== 'place' && (old === undefined || old.kind !== request.kind))
+      return result('missing');
+    if (request.action === 'reclaim') {
+      const copy = { ...runtime.inventory };
+      for (const cost of BUILDABLE_KINDS[old!.kind].costs)
+        if (addItem(copy, cost.item, cost.amount) !== cost.amount) return result('packFull');
+      Object.assign(runtime.inventory, copy);
+      this.decorations.splice(this.decorations.indexOf(old!), 1);
+      if (!this.decorations.some((piece) => piece.homeId === home.id))
+        this.decoratedHomes.delete(home.id);
+      this.decoratedRooms.delete(home.id);
+      return result(null);
+    }
+    if (
+      request.action === 'place' &&
+      (request.id !== 0 ||
+        this.decorations.length >= MAX_WORLD_DECORATIONS ||
+        this.decorations.filter((piece) => piece.homeId === home.id).length >= MAX_HOME_DECORATIONS)
+    )
+      return result('limit');
+    if (
+      request.kind === 'guardianTrophy' &&
+      this.decorations.some(
+        (piece) =>
+          piece.kind === 'guardianTrophy' && piece.homeId === home.id && piece.id !== old?.id,
+      )
+    )
+      return result('limit');
+    const piece: HomeDecoration = {
+      id: old?.id ?? this.nextDecorationId,
+      homeId: home.id,
+      kind: request.kind,
+      x: request.x,
+      z: request.z,
+      yaw: request.yaw,
+    };
+    const position = runtime.entity.get(Position);
+    if (position === undefined) return result('unavailable');
+    const refusal = checkDecorationSpot(
+      home.kind,
+      piece,
+      this.decorations.filter((other) => other.homeId === home.id),
+      position,
+    );
+    if (refusal !== null) return result(refusal);
+    if (
+      piece.kind !== 'wovenRug' &&
+      [...this.players.values()].some(
+        (other) =>
+          other !== runtime &&
+          other.space === home.id &&
+          Math.hypot(
+            (other.entity.get(Position)?.x ?? 0) - piece.x,
+            (other.entity.get(Position)?.z ?? 0) - piece.z,
+          ) <
+            BUILDABLE_KINDS[piece.kind].footprintRadius + PLAYER_RADIUS,
+      )
+    )
+      return result('blocked');
+    if (request.action === 'place') {
+      if (!canAfford(runtime.inventory, BUILDABLE_KINDS[piece.kind])) return result('materials');
+      for (const cost of BUILDABLE_KINDS[piece.kind].costs)
+        removeItem(runtime.inventory, cost.item, cost.amount);
+      this.decorations.push(piece);
+      this.decoratedHomes.add(home.id);
+      this.nextDecorationId++;
+    } else this.decorations[this.decorations.indexOf(old!)] = piece;
+    this.decoratedRooms.delete(home.id);
+    return result(null);
+  }
   private addHomeSolid(prop: BuiltProp): void {
     const solid = cabinCollider(prop, this.collision.terrain.heightAt(prop.x, prop.z));
     this.homeSolids.set(prop.id, solid);
@@ -1004,6 +1140,22 @@ export class WorldSimulation {
   }
   private roomFor(space: number): CollisionWorld {
     const kind = this.kindOfHome(space);
+    if (this.decoratedHomes.has(space)) {
+      let decorated = this.decoratedRooms.get(space);
+      if (decorated === undefined) {
+        const colliders = this.decorations
+          .filter((piece) => piece.homeId === space)
+          .map(decorationCollider)
+          .filter((value): value is NonNullable<typeof value> => value !== null);
+        decorated = createCollisionWorld(
+          createFlatTerrain(0),
+          [...homeRoomColliders(kind), ...colliders],
+          (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+        );
+        this.decoratedRooms.set(space, decorated);
+      }
+      return decorated;
+    }
     if (kind === 'cabin') return this.roomCollision;
     let room = this.roomWorlds.get(kind);
     if (room === undefined) {
@@ -3276,6 +3428,7 @@ export class WorldSimulation {
    */
   private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
     const { kind } = request;
+    if (isIndoorOnlyKind(kind)) return;
     const buildable = BUILDABLE_KINDS[kind];
     const refuse = (reason: HomeBuildReason): void => {
       if (isHomeKind(kind))
@@ -3318,6 +3471,17 @@ export class WorldSimulation {
           return refuse('moved');
         if ([...this.players.values()].some((player) => player.space === home.id))
           return refuse('occupied');
+        const furnishings = this.decorations.filter((piece) => piece.homeId === home.id);
+        if (
+          furnishings.some(
+            (piece) =>
+              checkDecorationSpot(kind, piece, furnishings, {
+                x: piece.x + BUILDABLE_KINDS[piece.kind].footprintRadius + PLAYER_RADIUS + 0.2,
+                z: piece.z,
+              }) !== null,
+          )
+        )
+          return refuse('blocked');
         const piece = buildableFootprint(kind, home.x, home.z, home.yaw);
         if (
           checkBuildSpot(

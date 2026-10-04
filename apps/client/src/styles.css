@@ -2342,3 +2342,68 @@ body {
   width: 1rem;
   height: 1rem;
 }
+
+.decor-panel {
+  position: absolute;
+  top: 5rem;
+  right: 1rem;
+  width: min(33rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 12rem);
+  overflow: auto;
+  pointer-events: auto;
+  padding: 1.2rem;
+  border: 1px solid #63785f;
+  border-radius: 1rem;
+  background: #172b24f5;
+  color: #e5e6d3;
+  box-shadow: 0 12px 45px #0005;
+}
+.decor-panel h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+}
+.decor-panel p {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #bed0bd;
+}
+.decor-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.decor-panel button {
+  color: inherit;
+  background: #304d3d;
+  border: 1px solid #68876c;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+  cursor: pointer;
+}
+.decor-panel button:hover,
+.decor-panel button:focus-visible {
+  background: #476a51;
+  outline: 2px solid #b3d49a;
+}
+.decor-options button {
+  display: grid;
+  text-align: left;
+  gap: 0.25rem;
+}
+.decor-options svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.decor-options span {
+  font-size: 0.75rem;
+  color: #c4d4b8;
+}
+.decor-owned {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.45rem 0;
+}
+.decor-owned span {
+  flex: 1;
+}

@@ -1,3 +1,14 @@
+import {
+  DECORATION_KINDS,
+  isDecorationKind,
+  isIndoorOnlyKind,
+  checkDecorationSpot,
+  decorationCollider,
+  canAfford,
+  type HomeDecoration,
+  type DecorationState,
+} from '@acorn/shared';
+import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather } from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
 import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
@@ -362,7 +373,14 @@ function isRaiderEntity(entity: SnapshotEntity): boolean {
 /** The placeholder model for whatever kind of thing somebody built. */
 function createBuiltMesh(
   kind: BuildableKindId,
-): Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath {
+):
+  | Campfire
+  | Cabin
+  | FlowerBed
+  | Lantern
+  | Fence
+  | GardenPath
+  | ReturnType<typeof createHomeDecoration> {
   switch (kind) {
     case 'campfire':
       return createCampfire();
@@ -383,6 +401,13 @@ function createBuiltMesh(
       return createGardenPath();
     case 'guardianTrophy':
       return createGuardianTrophy();
+    case 'cedarBench':
+    case 'timberTable':
+    case 'wovenRug':
+    case 'fernLantern':
+    case 'moonLantern':
+    case 'flowerPlanter':
+      return createHomeDecoration(kind);
   }
 }
 
@@ -581,9 +606,19 @@ export class Game {
   private readonly critters = new Map<number, Critter | Raccoon | Fox | WoodlandCreature>();
   private readonly builtMeshes = new Map<
     number,
-    Campfire | Cabin | FlowerBed | Lantern | Fence | GardenPath
+    | Campfire
+    | Cabin
+    | FlowerBed
+    | Lantern
+    | Fence
+    | GardenPath
+    | ReturnType<typeof createHomeDecoration>
   >();
   private builtProps: readonly BuiltPropView[] = [];
+  private decorations: readonly HomeDecoration[] = [];
+  private decorMoveId = 0;
+  private decorNote: string | null = null;
+  private readonly decorModels: ReturnType<typeof createHomeDecoration>[] = [];
   private homeStoredSupplies: HomeSupplies['items'] = [];
   private meal: MealState = { ...NO_MEAL };
   private mealHeardAt = 0;
@@ -1061,7 +1096,61 @@ export class Game {
    * Start placing one of these, the same as pressing its number with the
    * build menu open - called when an entry in that menu is clicked.
    */
+  moveDecoration(id: number): void {
+    const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
+    if (piece === undefined || this.homeHere()?.yours !== true) return;
+    this.buildMenuOpen = false;
+    this.startPlacing(piece.kind);
+    this.decorMoveId = id;
+    if (this.placing !== null) this.placing.yaw = piece.yaw;
+  }
+  reclaimDecoration(id: number): void {
+    const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
+    if (piece !== undefined) this.connection?.sendDecoration({ ...piece, action: 'reclaim' });
+  }
+  private decorationRefusal(reason: DecorationState['reason']): string | null {
+    if (reason === null) return null;
+    return {
+      unavailable: 'Enter your home to decorate',
+      private: 'Only the homeowner can decorate',
+      materials: 'Gather the listed materials first',
+      blocked: 'Keep furniture, doorways, beds and stations clear',
+      tooFar: 'Move closer to that spot',
+      busy: 'Stand up and finish your current action first',
+      limit: 'Your home can hold 16 decorations',
+      missing: 'That decoration is no longer here',
+      packFull: 'Make room in your backpack before packing this up',
+    }[reason];
+  }
+  private refreshDecorations(): void {
+    for (const model of this.decorModels) {
+      model.group.removeFromParent();
+      model.dispose();
+    }
+    this.decorModels.length = 0;
+    if (this.space === OUTDOORS || this.homeInterior === null) return;
+    const pieces = this.decorations.filter((piece) => piece.homeId === this.space);
+    for (const piece of pieces) {
+      const model = createHomeDecoration(piece.kind);
+      model.group.position.set(piece.x, 0, piece.z);
+      model.group.rotation.y = piece.yaw;
+      this.homeInterior.group.add(model.group);
+      this.decorModels.push(model);
+    }
+    const colliders = pieces
+      .map(decorationCollider)
+      .filter((value): value is NonNullable<typeof value> => value !== null);
+    this.roomCollision.colliders.splice(
+      0,
+      this.roomCollision.colliders.length,
+      ...homeRoomColliders(this.currentHomeKind()),
+      ...colliders,
+    );
+  }
   pickBuildable(kind: BuildableKindId): void {
+    if (this.space !== OUTDOORS && (!isDecorationKind(kind) || this.homeHere()?.yours !== true))
+      return;
+    if (this.space === OUTDOORS && isIndoorOnlyKind(kind)) return;
     if (kind === 'cabin') {
       const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
       const target = nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null);
@@ -1236,6 +1325,8 @@ export class Game {
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
     this.animalTracks?.dispose();
+    for (const model of this.decorModels) model.dispose();
+    this.decorModels.length = 0;
     this.weatherArt?.dispose();
     this.grass?.dispose();
     this.floats.dispose();
@@ -1444,6 +1535,15 @@ export class Game {
         if (message.notice === 'full')
           this.showJournalNotice('Make room in your pack, then inspect again', performance.now());
         this.updateDiscoveryMarkers();
+        break;
+      }
+      case 'decoration': {
+        this.decorations = message.pieces;
+        this.decorNote = message.reason === null ? null : this.decorationRefusal(message.reason);
+        if (this.decorNote !== null)
+          this.craftingNews = { text: this.decorNote, until: performance.now() + NEWS_MS };
+        this.pendingPlacements = [];
+        this.refreshDecorations();
         break;
       }
       case 'garden': {
@@ -2482,6 +2582,7 @@ export class Game {
     }
     this.treeLandingEffects.update(deltaSeconds, camera.camera);
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
+    for (const model of this.decorModels) if ('update' in model) model.update(deltaSeconds);
     const weatherNow = this.estimatedServerTimeMs();
     const weather = forestWeather(this.weatherSeed, weatherNow);
     this.weatherCloud +=
@@ -2689,9 +2790,22 @@ export class Game {
    * digit keys swap it for another without going back to the menu.
    */
   private handleBuildMenuInput(controls: Controls): void {
-    // Nothing to build on indoors - decorating comes later.
     if (this.space !== OUTDOORS) {
-      controls.takeBuildMenuToggle();
+      if (controls.takeBuildMenuToggle()) {
+        this.stopPlacing();
+        this.buildMenuOpen = !this.buildMenuOpen;
+        this.craftMenuOpen = false;
+        this.inventoryOpen = false;
+      }
+      if (this.buildMenuOpen && this.homeHere()?.yours === true) {
+        for (const index of controls.takeBuildTaps()) {
+          const kind = DECORATION_KINDS[index];
+          if (kind !== undefined) {
+            this.pickBuildable(kind);
+            break;
+          }
+        }
+      }
       return;
     }
     if (controls.takeBuildMenuToggle()) {
@@ -2746,6 +2860,7 @@ export class Game {
 
   /** Put the piece being placed away, if there is one. */
   private stopPlacing(): void {
+    this.decorMoveId = 0;
     const placing = this.placing;
     if (placing === null) return;
     this.scene.remove(placing.ghost.group);
@@ -2772,6 +2887,16 @@ export class Game {
     if (spot === null || refusal !== null) return;
 
     const request: BuildRequest = { kind: placing.kind, x: spot.x, z: spot.z, yaw: spot.yaw };
+    if (this.space !== OUTDOORS && isDecorationKind(request.kind)) {
+      this.connection?.sendDecoration({
+        ...request,
+        kind: request.kind,
+        id: this.decorMoveId,
+        action: this.decorMoveId === 0 ? 'place' : 'move',
+      });
+      this.stopPlacing();
+      return;
+    }
     this.connection?.sendBuild(request);
     this.pendingPlacements.push({ request, sentAt: performance.now() });
     placing.placedAny = true;
@@ -2793,6 +2918,40 @@ export class Game {
       (pending) => now - pending.sentAt < PENDING_PLACEMENT_MS,
     );
 
+    if (this.space !== OUTDOORS && isDecorationKind(placing.kind)) {
+      const mouse = this.groundUnderPointer(camera);
+      const affordable =
+        this.decorMoveId !== 0 ||
+        canAfford(inventoryFromEntries(this.carrying), BUILDABLE_KINDS[placing.kind]);
+      const piece = {
+        id: this.decorMoveId,
+        homeId: this.space,
+        kind: placing.kind,
+        x: mouse?.x ?? 0,
+        z: mouse?.z ?? 0,
+        yaw: placing.yaw,
+      };
+      const reason =
+        this.homeHere()?.yours !== true
+          ? 'private'
+          : !affordable
+            ? 'materials'
+            : checkDecorationSpot(
+                this.currentHomeKind(),
+                piece,
+                this.decorations.filter((piece) => piece.homeId === this.space),
+                player.motion.position,
+              );
+      placing.plan = {
+        spot: mouse === null ? null : piece,
+        refusal: this.decorationRefusal(reason),
+        affordable,
+        snapped: false,
+      };
+      if (mouse === null) placing.ghost.hide();
+      else placing.ghost.show(mouse.x, mouse.z, placing.yaw, reason === null, 0);
+      return;
+    }
     placing.plan = planPlacement({
       kind: placing.kind,
       enforceHomeArea: true,
@@ -2841,6 +3000,16 @@ export class Game {
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
     const ray = this.clickRaycaster.ray;
+    if (this.space !== OUTDOORS) {
+      if (Math.abs(ray.direction.y) < 0.00001) return null;
+      const distance = -ray.origin.y / ray.direction.y;
+      return distance < 0
+        ? null
+        : {
+            x: ray.origin.x + distance * ray.direction.x,
+            z: ray.origin.z + distance * ray.direction.z,
+          };
+    }
     return this.collision === null
       ? null
       : groundAlongRay(ray.origin, ray.direction, this.collision.terrain);
@@ -3533,6 +3702,7 @@ export class Game {
     this.homeInterior?.setGardenPlots(
       this.garden.homeId === space ? this.garden.plots : emptyGarden(),
     );
+    this.refreshDecorations();
     this.daylight?.setIndoors(inside);
     // Coming out, the camera looks at you from out front, with your home
     // behind you: walking back towards the camera takes you out into the world.
@@ -4067,6 +4237,8 @@ export class Game {
       mapOpen: this.mapOpen,
       door: this.doorHint,
       home: this.homeHere(),
+      decorations: this.decorations.filter((piece) => piece.homeId === this.space),
+      decorNote: this.decorNote,
       resting: this.restingNow(),
       restingNearby: this.space === OUTDOORS ? null : this.restingNearby,
     });

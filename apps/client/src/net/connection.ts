@@ -1,3 +1,4 @@
+import { encodeDecorationRequest, type DecorationRequest } from '@acorn/shared';
 import {
   encodeGardenRequest,
   type GardenRequest,
@@ -147,6 +148,11 @@ export class WorldConnection {
    * moment the player clicks to place it. The server still checks the spot
    * is in reach and clear on the tick that follows.
    */
+  sendDecoration(request: DecorationRequest): void {
+    if (this.socket?.readyState === WebSocket.OPEN)
+      this.socket.send(encodeDecorationRequest(request));
+  }
+
   sendBuild(request: BuildRequest): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeBuild(request));
