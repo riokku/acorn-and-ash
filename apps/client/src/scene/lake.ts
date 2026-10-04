@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 
-import { basinDepthAt, lakeDepthAt, type Lake, type WaterCircle } from '@acorn/shared';
+import {
+  basinDepthAt,
+  lakeDepthAt,
+  REED_PATCHES,
+  type Lake,
+  type WaterCircle,
+} from '@acorn/shared';
 
 import { createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
@@ -16,6 +22,8 @@ const DEEP_WATER_AT = 9;
 const REED_SPACING = 5.5;
 /** Of those, how many get a clump: the rest of the shore is bare beach. */
 const REED_SHARE = 0.55;
+/** Scenery reeds keep this far from a reed that can be cut, in metres. */
+const REED_PATCH_CLEAR = 2.5;
 const LILY_PADS = 26;
 const SHORE_STONES = 46;
 
@@ -103,6 +111,12 @@ function createShorePlants(lake: Lake): { group: THREE.Group; dispose(): void } 
       const at = { x: x - outX * 0.35 * inwards, y: level, z: z - outZ * 0.35 * inwards };
       const depth = lakeDepthAt(lake, at.x, at.z);
       if (depth < 0.12 || depth > 1.1) continue;
+      // The reeds that can be cut are drawn by the ground items, so the
+      // scenery leaves a gap round each one instead of burying it.
+      if (
+        REED_PATCHES.some((patch) => Math.hypot(patch.x - at.x, patch.z - at.z) < REED_PATCH_CLEAR)
+      )
+        continue;
       addReedClump(builder, plants, random, at, 5 + Math.floor(random() * 3));
     }
   };

@@ -22,6 +22,9 @@ export function playCollection(item: ItemId, depleted: boolean, volume = 1): voi
   } else if (item === 'stick') {
     tone(context, start, 420, 250, 0.07, volume * 0.075);
     noise(context, start, 0.045, 2300, volume * 0.1);
+  } else if (item === 'reed') {
+    tone(context, start, 300, 220, 0.06, volume * 0.05);
+    noise(context, start, 0.09, 3200, volume * 0.09);
   } else if (item === 'flower') {
     tone(context, start, 660, 760, 0.18, volume * 0.065);
     tone(context, start + 0.025, 990, 1050, 0.16, volume * 0.025);

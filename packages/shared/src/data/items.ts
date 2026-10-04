@@ -33,7 +33,9 @@ export type ItemId =
   | 'forestStew'
   | 'berryTea'
   | 'guardianTrophy'
-  | 'sentinelTrophy';
+  | 'sentinelTrophy'
+  | 'reed'
+  | 'rope';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -423,6 +425,30 @@ export const ITEM_KINDS = {
     keepOnKnockout: true,
     equippable: false,
   },
+  reed: {
+    id: 'reed',
+    displayName: 'Reed',
+    pluralName: 'Reeds',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x8a9a4a,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
+  rope: {
+    id: 'rope',
+    displayName: 'Rope',
+    pluralName: 'Rope',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xc9a46a,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -461,6 +487,8 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'refinedAxe',
   'refinedRod',
   'sentinelTrophy',
+  'reed',
+  'rope',
 ];
 
 export function itemIndex(id: ItemId): number {
