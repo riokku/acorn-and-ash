@@ -184,23 +184,38 @@ export function Hud({
           </p>
           {state.home.yours ? (
             <>
-              <div className="decor-options">
-                {DECORATION_KINDS.map((kind, index) => (
-                  <button type="button" key={kind} onClick={() => onPickBuildable(kind)}>
-                    <BuildableIcon kind={kind} color="#a6bea5" />
-                    <strong>
-                      {index < 6 ? `${index + 1} · ` : ''}
-                      {BUILDABLE_KINDS[kind].displayName}
-                    </strong>
-                    <span>
-                      {BUILDABLE_KINDS[kind].costs
-                        .map(
-                          (cost) =>
-                            `${cost.amount} ${ITEM_KINDS[cost.item].pluralName.toLowerCase()}`,
-                        )
-                        .join(' · ')}
-                    </span>
-                  </button>
+              <div className="build-groups decor-groups">
+                {['Furniture', 'Lighting', 'Finishing touches'].map((group) => (
+                  <section className="build-group" key={group} aria-label={group}>
+                    <h3>{group}</h3>
+                    <div className="decor-options">
+                      {DECORATION_KINDS.flatMap((kind, index) =>
+                        buildGroup(kind, true) !== group
+                          ? []
+                          : [
+                              <button
+                                type="button"
+                                key={kind}
+                                onClick={() => onPickBuildable(kind)}
+                              >
+                                <BuildableIcon kind={kind} color="#a6bea5" />
+                                <strong>
+                                  {index < 6 ? `${index + 1} · ` : ''}
+                                  {BUILDABLE_KINDS[kind].displayName}
+                                </strong>
+                                <span>
+                                  {BUILDABLE_KINDS[kind].costs
+                                    .map(
+                                      (cost) =>
+                                        `${cost.amount} ${ITEM_KINDS[cost.item].pluralName.toLowerCase()}`,
+                                    )
+                                    .join(' · ')}
+                                </span>
+                              </button>,
+                            ],
+                      )}
+                    </div>
+                  </section>
                 ))}
               </div>
               <h3>Your decorations · {state.decorations?.length ?? 0}/16</h3>
@@ -226,6 +241,7 @@ export function Hud({
       {state.buildMenuOpen && state.home === null ? (
         <JournalPanel
           title="Things I can build"
+          groups={['Home', 'Camp & lighting', 'Garden & boundaries', 'Trophies']}
           entries={buildEntries(state)}
           closeHint="Pick one below, or B to close"
           onPick={(index) => {
@@ -558,8 +574,26 @@ function CacheCompass({
   );
 }
 
-/** One row of the craft or build journal panel: what pressing its number makes, and from what. */
+/** Group related pieces without changing their existing shortcut indices. */
+function buildGroup(kind: BuildableKindId, indoors = false): string {
+  if (isHomeKind(kind)) return 'Home';
+  if (kind === 'cedarBench' || kind === 'timberTable') return 'Furniture';
+  if (kind === 'lantern' || kind === 'fernLantern' || kind === 'moonLantern')
+    return indoors ? 'Lighting' : 'Camp & lighting';
+  if (kind === 'campfire') return 'Camp & lighting';
+  if (
+    kind === 'flowerBed' ||
+    kind === 'fence' ||
+    kind === 'gardenPath' ||
+    (!indoors && kind === 'flowerPlanter')
+  )
+    return 'Garden & boundaries';
+  return indoors ? 'Finishing touches' : 'Trophies';
+}
+
+/** One row of the craft or build journal panel. */
 interface RecipeEntry {
+  readonly group?: string;
   readonly index: number;
   readonly icon: React.ReactNode;
   readonly displayName: string;
@@ -619,6 +653,7 @@ function buildEntries(state: HudState): RecipeEntry[] {
     const kind = original === 'cabin' ? target! : original;
     const buildable = BUILDABLE_KINDS[kind];
     return {
+      group: buildGroup(kind),
       index: index + 1,
       icon: (
         <BuildableIcon
@@ -657,7 +692,9 @@ function JournalPanel({
   closeHint,
   onPick,
   navigation,
+  groups,
 }: {
+  groups?: readonly string[];
   navigation?: React.ReactNode;
   title: string;
   entries: readonly RecipeEntry[];
@@ -665,59 +702,83 @@ function JournalPanel({
   /** Clicking an entry does the same as pressing its number. Absent, entries are not clickable. */
   onPick?: (index: number) => void;
 }): React.JSX.Element {
+  const renderEntry = (entry: RecipeEntry): React.JSX.Element => (
+    <div
+      className={
+        onPick === undefined ? 'hud-journal-entry' : 'hud-journal-entry hud-journal-entry-pickable'
+      }
+      key={entry.index}
+      onClick={onPick === undefined ? undefined : () => onPick(entry.index)}
+      role={onPick === undefined ? undefined : 'button'}
+      tabIndex={onPick === undefined ? undefined : 0}
+      onKeyDown={
+        onPick === undefined
+          ? undefined
+          : (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                onPick(entry.index);
+              }
+            }
+      }
+    >
+      <div className="hud-journal-stamp">{entry.icon}</div>
+      <div className="hud-journal-entry-main">
+        <div className="hud-journal-entry-name">
+          {groups === undefined || entry.index <= 6 ? `${entry.index} · ` : ''}
+          {entry.displayName}
+        </div>
+        {entry.benefitNote && <div className="hud-journal-supply-note">{entry.benefitNote}</div>}
+        {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
+        <div className="hud-journal-ingredients">
+          {entry.costs.map((cost) => {
+            const costKind = ITEM_KINDS[cost.item];
+            const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
+            return (
+              <span className="hud-journal-ingredient" key={cost.item}>
+                <ItemIcon
+                  item={cost.item}
+                  color="#7a6a4d"
+                  className="hud-journal-ingredient-icon"
+                />
+                {cost.amount} {name.toLowerCase()}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+      <span
+        className={
+          entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
+        }
+      >
+        {entry.ready ? 'Ready' : 'Need more'}
+      </span>
+    </div>
+  );
   return (
-    <div className="hud-journal">
+    <div className={groups === undefined ? 'hud-journal' : 'hud-journal build-panel'}>
       <div className="hud-journal-header">
         <span className="hud-journal-title">{title}</span>
         <span className="hud-journal-closehint">{closeHint}</span>
       </div>
       {navigation}
-      {entries.map((entry) => (
-        <div
-          className={
-            onPick === undefined
-              ? 'hud-journal-entry'
-              : 'hud-journal-entry hud-journal-entry-pickable'
-          }
-          key={entry.index}
-          onClick={onPick === undefined ? undefined : () => onPick(entry.index)}
-          role={onPick === undefined ? undefined : 'button'}
-        >
-          <div className="hud-journal-stamp">{entry.icon}</div>
-          <div className="hud-journal-entry-main">
-            <div className="hud-journal-entry-name">
-              {entry.index} · {entry.displayName}
-            </div>
-            {entry.benefitNote && (
-              <div className="hud-journal-supply-note">{entry.benefitNote}</div>
-            )}
-            {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
-            <div className="hud-journal-ingredients">
-              {entry.costs.map((cost) => {
-                const costKind = ITEM_KINDS[cost.item];
-                const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
-                return (
-                  <span className="hud-journal-ingredient" key={cost.item}>
-                    <ItemIcon
-                      item={cost.item}
-                      color="#7a6a4d"
-                      className="hud-journal-ingredient-icon"
-                    />
-                    {cost.amount} {name.toLowerCase()}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-          <span
-            className={
-              entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
-            }
-          >
-            {entry.ready ? 'Ready' : 'Need more'}
-          </span>
+      {groups === undefined ? (
+        entries.map(renderEntry)
+      ) : (
+        <div className="build-groups">
+          {groups.map((group) => {
+            const items = entries.filter((entry) => entry.group === group);
+            return items.length === 0 ? null : (
+              <section className="build-group" key={group} aria-label={group}>
+                <h2>{group}</h2>
+                {items.map(renderEntry)}
+              </section>
+            );
+          })}
         </div>
-      ))}
+      )}
     </div>
   );
 }
