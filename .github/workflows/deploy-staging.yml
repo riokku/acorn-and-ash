@@ -84,6 +84,34 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node tools/prepare-accounts.mjs secret acorn-ash-web-staging BETTER_AUTH_SECRET
 
+      # Cloudflare takes a little while to switch every location over to a new
+      # version, so right after a deploy the site can still be serving the
+      # previous one, or the new page without its new files yet. Wait for the
+      # live site to match what was just built, for up to three minutes, before
+      # checking anything else. A deploy that really did not go live still fails.
+      - name: Wait for the new version to be live
+        env:
+          GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
+        run: |
+          matches_build() {
+            curl --fail --silent --show-error "$GAME_URL/" -o /tmp/acorn-live-index.html || return 1
+            cmp -s apps/client/dist/index.html /tmp/acorn-live-index.html || return 1
+            for asset in apps/client/dist/assets/index-*.js apps/client/dist/assets/index-*.css apps/client/dist/assets/entering-the-woods-*.webp; do
+              curl --fail --silent --show-error "$GAME_URL/assets/${asset##*/}" -o /tmp/acorn-live-asset || return 1
+              cmp -s "$asset" /tmp/acorn-live-asset || return 1
+            done
+          }
+          for attempt in $(seq 1 18); do
+            if matches_build; then
+              echo "The live site matches this build (check $attempt)."
+              exit 0
+            fi
+            echo "Still serving the previous version (check $attempt of 18); trying again in 10 seconds."
+            sleep 10
+          done
+          echo "::error::Three minutes after deploying, the live site still does not match what was just built."
+          exit 1
+
       - name: Verify the live game
         env:
           GAME_URL: https://acorn-ash-web-staging.chrisistinson.workers.dev
@@ -116,9 +144,3 @@ jobs:
             echo "::warning::No login service is set up on staging yet, so nobody can sign in. Add the Google and Discord secrets to the acorn-ash-web-staging Worker (see the README)."
           fi
           curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e '(.tick | type) == "number" and (.seed | type) == "number"'
-          curl --fail --silent --show-error --retry 3 "$GAME_URL/" -o /tmp/acorn-live-index.html
-          cmp apps/client/dist/index.html /tmp/acorn-live-index.html
-          for asset in apps/client/dist/assets/index-*.js apps/client/dist/assets/index-*.css apps/client/dist/assets/entering-the-woods-*.webp; do
-            curl --fail --silent --show-error --retry 3 "$GAME_URL/assets/${asset##*/}" -o /tmp/acorn-live-asset
-            cmp "$asset" /tmp/acorn-live-asset
-          done
