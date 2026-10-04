@@ -1,3 +1,11 @@
+import { FISHING_LEASH } from '../constants';
+import {
+  fishDisplayLearned,
+  fishRecordsFromSaved,
+  recordFish,
+  type FishRecords,
+} from './fish-records';
+import { startRareReel, readRareReel, type RareReel, type ReelView } from './rare-reel';
 import {
   EXPEDITIONS,
   expeditionFromSaved,
@@ -419,6 +427,7 @@ export interface PersistedPlayer {
   readonly homeSkills?: number;
   readonly blueprintMisses?: number;
   readonly sentinelVictories?: number;
+  readonly fishRecords?: FishRecords;
   readonly discoveriesFound?: number;
   readonly discoveriesClaimed?: number;
   readonly expedition?: ExpeditionState;
@@ -807,6 +816,8 @@ interface PlayerRuntime {
   discoveriesClaimed: number;
   expedition: ExpeditionState;
   sentinelVictories: number;
+  fishRecords: FishRecords;
+  reel: RareReel | null;
   /** Ticks left before this player may swing, cast or gather again. */
   swingCooldownTicks: number;
   /**
@@ -1084,6 +1095,8 @@ export class WorldSimulation {
       !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL)
     )
       return result('recipe');
+    if (request.action === 'place' && !fishDisplayLearned(request.kind, runtime.fishRecords))
+      return result('recipe');
     const old = this.decorations.find(
       (piece) => piece.id === request.id && piece.homeId === home.id,
     );
@@ -1214,6 +1227,8 @@ export class WorldSimulation {
   private readonly threatHitEvents: ThreatHit[] = [];
   private readonly regrowthEvents: TreeRegrown[] = [];
   private readonly fishingEvents: FishingEvent[] = [];
+  private readonly reelChanges = new Map<number, ReelView>();
+  private readonly fishRecordChanges = new Set<number>();
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
   private readonly mealChanges = new Map<number, MealState>();
@@ -1507,6 +1522,8 @@ export class WorldSimulation {
       pendingBuild: null,
       pendingLoot: null,
       cast: null,
+      reel: null,
+      fishRecords: fishRecordsFromSaved(saved?.fishRecords),
       lastProcessedSeq: 0,
       droppedInputs: 0,
       hunger,
@@ -1707,6 +1724,8 @@ export class WorldSimulation {
     this.players.delete(netId);
     this.expeditionChanges.delete(netId);
     this.sentinelProgressChanges.delete(netId);
+    this.reelChanges.delete(netId);
+    this.fishRecordChanges.delete(netId);
     this.raids.forgetPlayer(netId);
     return true;
   }
@@ -3547,7 +3566,7 @@ export class WorldSimulation {
    */
   private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
     const { kind } = request;
-    if (isIndoorOnlyKind(kind)) return;
+    if (isIndoorOnlyKind(kind) || !fishDisplayLearned(kind, runtime.fishRecords)) return;
     if (kind === 'trailPennant' && !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL)) return;
     const buildable = BUILDABLE_KINDS[kind];
     const refuse = (reason: HomeBuildReason): void => {
@@ -3746,6 +3765,12 @@ export class WorldSimulation {
 
   /** A tick of waiting at the water: the bite, the leash and giving up. */
   private tickLine(runtime: PlayerRuntime, cast: Cast, position: Readonly<Vec3>): void {
+    if (runtime.reel !== null) {
+      if (Math.hypot(position.x - cast.fromX, position.z - cast.fromZ) > FISHING_LEASH)
+        this.endCast(runtime, { outcome: 'walkedAway' });
+      else if (this.tick > runtime.reel.giveUpTick) this.endCast(runtime, { outcome: 'tooLate' });
+      return;
+    }
     const progress = tickCast(cast, this.tick, position);
     if (progress.bit) this.fishingEvents.push({ kind: 'bite', netId: runtime.netId });
     if (progress.end !== null) this.endCast(runtime, progress.end);
@@ -3753,19 +3778,43 @@ export class WorldSimulation {
 
   /** One of the angler's inputs: did they click, and did they see the bite? */
   private readLine(runtime: PlayerRuntime, cast: Cast, input: CastInput): void {
+    if (runtime.reel !== null) {
+      if (!input.sawBite && input.seq > runtime.reel.lastSeq)
+        runtime.reel.giveUpTick = this.tick + 20 * TICK_HZ;
+      const end = readRareReel(runtime.reel, input);
+      this.reelChanges.set(runtime.netId, {
+        age: runtime.reel.age,
+        hits: runtime.reel.hits,
+        misses: runtime.reel.misses,
+      });
+      if (end !== null)
+        this.endCast(
+          runtime,
+          end === 'caught' ? { outcome: 'caught', item: 'goldenCarp' } : { outcome: end },
+        );
+      return;
+    }
     const end = readCastInput(cast, this.seed, this.tick, input);
-    if (end !== null) this.endCast(runtime, end);
+    if (end?.outcome === 'caught' && end.item === 'goldenCarp') {
+      runtime.reel = startRareReel(this.tick);
+      this.reelChanges.set(runtime.netId, { age: 0, hits: 0, misses: 0 });
+    } else if (end !== null) this.endCast(runtime, end);
   }
 
   /** The line comes in, with or without a fish, and everybody hears how. */
   private endCast(runtime: PlayerRuntime, end: CastEnd): void {
+    const castNumber = runtime.cast?.castNumber ?? 0;
     runtime.cast = null;
+    runtime.reel = null;
+    this.reelChanges.delete(runtime.netId);
     runtime.swingCooldownTicks = CAST_COOLDOWN_TICKS;
 
     if (end.outcome === 'caught') {
       // Hooked either way; a full pack means it goes back in the water.
       const added = addItem(runtime.inventory, end.item);
-      if (added > 0) this.advanceExpedition(runtime, { kind: 'fish' }, 1);
+      recordFish(runtime.fishRecords, end.item, this.seed, castNumber, this.tick);
+      this.fishRecordChanges.add(runtime.netId);
+      this.advanceExpedition(runtime, { kind: 'fish' }, 1);
       this.fishingEvents.push({ kind: 'caught', netId: runtime.netId, item: end.item, added });
       return;
     }
@@ -4352,6 +4401,19 @@ export class WorldSimulation {
     return runtime.playerKey ?? `session:${runtime.netId}`;
   }
 
+  fishRecordsOf(netId: number): FishRecords {
+    return fishRecordsFromSaved(this.players.get(netId)?.fishRecords);
+  }
+  drainFishRecordChanges(): number[] {
+    const result = [...this.fishRecordChanges];
+    this.fishRecordChanges.clear();
+    return result;
+  }
+  drainReelChanges(): { netId: number; state: ReelView }[] {
+    const result = [...this.reelChanges].map(([netId, state]) => ({ netId, state }));
+    this.reelChanges.clear();
+    return result;
+  }
   sentinelVictoriesOf(netId: number): number {
     return this.players.get(netId)?.sentinelVictories ?? 0;
   }
@@ -4692,6 +4754,7 @@ export class WorldSimulation {
         discoveriesFound: runtime.discoveriesFound,
         discoveriesClaimed: runtime.discoveriesClaimed,
         sentinelVictories: runtime.sentinelVictories,
+        fishRecords: fishRecordsFromSaved(runtime.fishRecords),
         expedition: { ...runtime.expedition, progress: [...runtime.expedition.progress] },
       });
     }

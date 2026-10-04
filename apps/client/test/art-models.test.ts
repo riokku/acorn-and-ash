@@ -1,3 +1,4 @@
+import { createFishDisplay } from '../src/scene/fish-display';
 import { createSentinelTrophy } from '../src/scene/sentinel-art';
 import { createExpeditionBoard } from '../src/scene/expedition-board';
 import { createHomeDecoration } from '../src/scene/home-decoration';
@@ -115,6 +116,8 @@ describe("the game's own models", () => {
       make: createGardenPath,
       budget: BUILDABLE_KINDS.gardenPath.triangleBudget,
     },
+    { name: 'carved fish display', make: () => createFishDisplay(), budget: 2000 },
+    { name: 'golden fish display', make: () => createFishDisplay(true), budget: 2000 },
     { name: 'rabbit', make: createCritter, budget: ANIMAL_KINDS.rabbit.triangleBudget },
     { name: 'raccoon', make: createRaccoon, budget: ANIMAL_KINDS.maskedRaccoon.triangleBudget },
     { name: 'buried mound', make: createBuriedCacheMound, budget: PROP_BUDGET },

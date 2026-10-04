@@ -48,7 +48,7 @@ declare global {
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       canCast(): boolean;
-      fishing(): 'waiting' | 'biting' | null;
+      fishing(): 'waiting' | 'biting' | 'reeling' | null;
       fishingNews(): string | null;
       hunger(): number;
       hungerNews(): string | null;
@@ -1180,7 +1180,15 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
     // Somewhere between three and ten seconds later, the float goes under.
     await expect.poll(fishing, { timeout: 20_000, intervals: [25] }).toBe('biting');
     await click(page);
-
+    await expect.poll(async () => (await fishing()) !== 'biting').toBe(true);
+    if ((await fishing()) === 'reeling') {
+      for (let pull = 0; pull < 2; pull++) {
+        await expect(page.locator('.rare-reel-steady')).toBeVisible();
+        await click(page);
+        if (pull === 0) await expect(page.locator('.rare-reel')).toContainText('1 / 2');
+        await expect(page.locator('.rare-reel-steady')).toHaveCount(0);
+      }
+    }
     await expect.poll(fishing).toBeNull();
     news = await page.evaluate(() => window.acornDebug?.fishingNews());
     console.log(`Cast ${attempt + 1}: ${news}`);

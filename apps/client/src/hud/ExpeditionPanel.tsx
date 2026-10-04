@@ -26,7 +26,7 @@ export function ExpeditionPanel({
   onRequest,
 }: {
   state: HudState;
-  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
   onRequest?: (request: ExpeditionRequest) => void;
 }) {
   const journey = state.expedition ?? {

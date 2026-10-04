@@ -1,3 +1,4 @@
+import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
 import { createExpeditionBoard } from './scene/expedition-board';
 import {
   emptyExpedition,
@@ -434,6 +435,8 @@ function createBuiltMesh(
     case 'flowerPlanter':
     case 'trailPennant':
     case 'sentinelTrophy':
+    case 'fishDisplay':
+    case 'goldenFishDisplay':
       return createHomeDecoration(kind);
   }
 }
@@ -687,7 +690,7 @@ export class Game {
   private craftMenuOpen = false;
   private expedition: ExpeditionView = { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' };
   private expeditionPendingUntil = 0;
-  private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' = 'craft';
+  private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
@@ -817,6 +820,8 @@ export class Game {
   private readonly floats = new Floats();
   /** Our own line, as far as the server has told us. */
   private fishingPhase: FishingPhase = null;
+  private fishRecords: FishRecords = fishRecordsFromSaved(null);
+  private reel: ReelView | null = null;
   private fishingNews: { text: string; until: number } | null = null;
   /** How hungry we are, as far as the server has told us. */
   private hunger = HUNGER_MAX;
@@ -1598,6 +1603,17 @@ export class Game {
         this.refreshDecorations();
         break;
       }
+      case 'fishRecords': {
+        this.fishRecords = fishRecordsFromSaved(message);
+        this.options.hud.publish({ fishRecords: this.fishRecords });
+        break;
+      }
+      case 'rareReel': {
+        this.reel = message;
+        this.fishingPhase = 'reeling';
+        this.options.hud.publish({ fishing: this.fishingPhase, reel: this.reel });
+        break;
+      }
       case 'expedition': {
         this.expedition = {
           cycle: message.cycle,
@@ -1856,6 +1872,7 @@ export class Game {
       this.fishingPhase = 'biting';
     } else {
       this.fishingPhase = null;
+      this.reel = null;
       const now = performance.now();
       this.fishingNews = { text: newsFor(event), until: now + NEWS_MS };
       this.castReadyAt = now + CAST_COOLDOWN_SECONDS * 1000;
@@ -1866,7 +1883,11 @@ export class Game {
     // being anywhere near crashed. A stall like that must not be able to eat
     // the whole few seconds this news is shown for, or swallow it outright, so
     // the moment this is known it goes straight to the HUD.
-    this.options.hud.publish({ fishing: this.fishingPhase, fishingNews: this.currentNews() });
+    this.options.hud.publish({
+      fishing: this.fishingPhase,
+      reel: this.reel,
+      fishingNews: this.currentNews(),
+    });
   }
 
   private currentNews(now = performance.now()): string | null {
@@ -3144,7 +3165,7 @@ export class Game {
     const spot = expeditionBoardSpot(home);
     return Math.hypot(player.motion.position.x - spot.x, player.motion.position.z - spot.z) <= 2.5;
   }
-  setJournalTab(tab: 'craft' | 'discoveries' | 'garden' | 'expeditions'): void {
+  setJournalTab(tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing'): void {
     this.journalTab = tab;
     this.craftMenuOpen = true;
     this.buildMenuOpen = false;
@@ -3338,7 +3359,11 @@ export class Game {
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
 
-    const yaw = clickAimYaw(this.clickRaycaster.ray, from, from.y, this.clickCandidates());
+    // Fishing aims at the water beneath the cursor. A canopy between the
+    // camera and pond must not turn a rod click into an attack at its trunk.
+    const targets =
+      toolKind(this.equipped.get(this.selfNetId) ?? null) === 'rod' ? [] : this.clickCandidates();
+    const yaw = clickAimYaw(this.clickRaycaster.ray, from, from.y, targets);
     if (yaw !== null) this.aimYaw = yaw;
   }
 
@@ -4346,6 +4371,8 @@ export class Game {
       inventoryOpen: this.inventoryOpen,
       canCast: this.canCast,
       fishing: this.fishingPhase,
+      reel: this.reel,
+      fishRecords: this.fishRecords,
       fishingNews: this.currentNews(now),
       meal: this.currentMeal(),
       hunger: this.hunger,
@@ -4393,7 +4420,8 @@ function newsFor(event: FishingEvent): string {
   switch (event.kind) {
     case 'caught': {
       const name = ITEM_KINDS[event.item].displayName.toLowerCase();
-      if (event.added === 0) return `No room for another ${name}, so you let it go.`;
+      if (event.added === 0)
+        return `No room for another ${name}, so you let it go. Catch recorded.`;
       return event.item === RAREST_FISH ? `A ${name}! That's a rare one.` : `You caught a ${name}!`;
     }
     case 'tooSoon':

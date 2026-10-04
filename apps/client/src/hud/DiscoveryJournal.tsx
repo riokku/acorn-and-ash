@@ -6,14 +6,20 @@ export function JournalTabs({
   onChange,
   hasGarden = false,
 }: {
-  selected: 'craft' | 'discoveries' | 'garden' | 'expeditions';
-  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
+  selected: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing';
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
   hasGarden?: boolean;
 }) {
   return (
     <nav className="hud-journal-tabs" aria-label="Field journal pages">
       {(
-        ['craft', 'discoveries', 'expeditions', ...(hasGarden ? ['garden' as const] : [])] as const
+        [
+          'craft',
+          'discoveries',
+          'expeditions',
+          'fishing',
+          ...(hasGarden ? ['garden' as const] : []),
+        ] as const
       ).map((tab) => (
         <button
           key={tab}
@@ -25,9 +31,11 @@ export function JournalTabs({
             ? 'Crafting'
             : tab === 'garden'
               ? 'Garden'
-              : tab === 'expeditions'
-                ? 'Expeditions'
-                : 'Discoveries'}
+              : tab === 'fishing'
+                ? 'Fishing'
+                : tab === 'expeditions'
+                  ? 'Expeditions'
+                  : 'Discoveries'}
         </button>
       ))}
     </nav>
@@ -38,7 +46,7 @@ export function DiscoveryJournal({
   onChange,
 }: {
   state: HudState;
-  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
+  onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
 }) {
   const found = DISCOVERIES.filter((d) => discoveryKnown(state.discoveriesFound, d.id)).length;
   return (

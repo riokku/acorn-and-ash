@@ -1,3 +1,4 @@
+import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
 import { emptyExpedition, type ExpeditionView } from '@acorn/shared';
 import type { HomeDecoration } from '@acorn/shared';
 import type { ForestWeather } from '@acorn/shared';
@@ -13,7 +14,7 @@ import type { HotbarPins } from './hotbar-layout';
 import type { ToastView } from './toasts';
 
 /** Our own line: none out, waiting for a bite, or a fish on right now. */
-export type FishingPhase = 'waiting' | 'biting' | null;
+export type FishingPhase = 'waiting' | 'biting' | 'reeling' | null;
 
 /**
  * The big words across the top when a skeleton raid turns up, is fought
@@ -30,6 +31,8 @@ export interface RaidBanner {
 /** Everything the HUD shows. */
 export interface HudState {
   readonly expedition?: ExpeditionView;
+  readonly fishRecords?: FishRecords;
+  readonly reel?: ReelView | null;
   readonly nearExpeditionBoard?: boolean;
   readonly expeditionPending?: boolean;
   readonly connection: ConnectionState;
@@ -115,7 +118,7 @@ export interface HudState {
   readonly discoverySites: readonly DiscoverySite[];
   readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;
-  readonly journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions';
+  readonly journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing';
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
   /** Whether the build menu (opened with B) is currently showing. */
@@ -182,6 +185,8 @@ export interface HudState {
 const INITIAL: HudState = {
   expedition: { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' },
   nearExpeditionBoard: false,
+  fishRecords: fishRecordsFromSaved(null),
+  reel: null,
   expeditionPending: false,
   connection: 'connecting',
   connectionDetail: '',
