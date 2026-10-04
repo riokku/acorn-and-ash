@@ -1,3 +1,4 @@
+import { MEAL_BENEFITS, TICK_HZ, isMealItem } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { GardenJournal } from './GardenJournal';
 import type { GardenRequest } from '@acorn/shared';
@@ -201,6 +202,19 @@ export function Hud({
         />
       ) : null}
       {showingWorld ? <HealthBar health={state.health} /> : null}
+      {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
+        <div
+          className="meal-benefit"
+          role="status"
+          tabIndex={0}
+          aria-label={`Active meal benefit: ${MEAL_BENEFITS[state.meal.item]}`}
+          title={`${MEAL_BENEFITS[state.meal.item]} · eating another special meal replaces this benefit`}
+        >
+          <ItemIcon item={state.meal.item} color="#b8c58d" className="meal-benefit-icon" />
+          <span>{ITEM_KINDS[state.meal.item].displayName}</span>
+          <span>{Math.ceil(state.meal.ticksLeft / TICK_HZ / 60)} min</span>
+        </div>
+      ) : null}
       {showingWorld && state.raidBanner !== null ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
       ) : null}
@@ -492,6 +506,7 @@ interface RecipeEntry {
   readonly costs: Recipe['costs'];
   readonly ready: boolean;
   readonly supplyNote?: string;
+  readonly benefitNote?: string;
 }
 
 /** Every recipe this player could pick, in menu order. */
@@ -522,6 +537,9 @@ function craftEntries(state: HudState): RecipeEntry[] {
                 : ''
         }`,
         costs: recipe.costs,
+        benefitNote: isMealItem(item)
+          ? `${MEAL_BENEFITS[item]} · 10 active minutes · replaces your previous meal`
+          : undefined,
         ready:
           canCraft(inventory, item, state.discoveriesClaimed) &&
           (recipe.station !== 'campfire' || state.nearCampfire === 'lit') &&
@@ -610,6 +628,9 @@ function JournalPanel({
             <div className="hud-journal-entry-name">
               {entry.index} · {entry.displayName}
             </div>
+            {entry.benefitNote && (
+              <div className="hud-journal-supply-note">{entry.benefitNote}</div>
+            )}
             {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
             <div className="hud-journal-ingredients">
               {entry.costs.map((cost) => {

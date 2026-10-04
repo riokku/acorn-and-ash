@@ -1,4 +1,12 @@
 import {
+  advanceMeal,
+  mealCooldown,
+  mealFromSaved,
+  startMeal,
+  isMealItem,
+  type MealState,
+} from './meals';
+import {
   combineHomeSupplies,
   storedHomeSupplies,
   payHomeUpgrade,
@@ -85,6 +93,7 @@ import {
   SPRINT_REPORTING_SPEED,
   SWING_COOLDOWN_TICKS,
   TICK_SECONDS,
+  TICK_HZ,
 } from '../constants';
 import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
 import {
@@ -357,6 +366,7 @@ export interface PersistedPlayer {
   readonly facingYaw: number;
   readonly items: readonly { readonly item: ItemId; readonly count: number }[];
   readonly hunger: number;
+  readonly meal?: MealState;
   /**
    * Optional, and defaults to full: added after every existing save already
    * had a player in it, the same reason `addPlayer`'s `playerKey` is its own
@@ -797,6 +807,7 @@ interface PlayerRuntime {
   droppedInputs: number;
   /** How hungry they are, from `HUNGER_MAX` (full) down to zero. */
   hunger: number;
+  meal: MealState;
   /**
    * The last whole number of hunger this player was actually sent, so a
    * message only goes out when it would show something different.
@@ -975,6 +986,7 @@ export class WorldSimulation {
   private readonly fishingEvents: FishingEvent[] = [];
   /** Every cast in this world gets its own number, so no two share a roll. */
   private castCounter = 0;
+  private readonly mealChanges = new Map<number, MealState>();
   private readonly hungerEvents: HungerEvent[] = [];
   private readonly healthEvents: HealthEvent[] = [];
   private readonly gestureEvents: GestureEvent[] = [];
@@ -1252,6 +1264,7 @@ export class WorldSimulation {
       // Matches what `addPlayer`'s caller is about to be told separately, on
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
+      meal: mealFromSaved(saved?.meal),
       health: saved?.health ?? HEALTH_MAX,
       action: createActionState(),
       previousButtons: 0,
@@ -1504,6 +1517,20 @@ export class WorldSimulation {
         const runtime = this.players.get(networkId.value);
         if (runtime === undefined) return;
 
+        const hadMeal = runtime.meal.item !== null;
+        const mealStep = advanceMeal(runtime.meal);
+        runtime.meal = mealStep.state;
+        if (mealStep.healing > 0 && runtime.health > 0 && runtime.health < HEALTH_MAX) {
+          runtime.health = Math.min(HEALTH_MAX, runtime.health + mealStep.healing);
+          this.healthEvents.push({
+            netId: runtime.netId,
+            health: Math.round(runtime.health),
+            knockedOut: false,
+            dodged: false,
+          });
+        }
+        if (hadMeal && (this.tick % TICK_HZ === 0 || runtime.meal.item === null))
+          this.mealChanges.set(runtime.netId, { ...runtime.meal });
         runtime.hunger = drainHunger(runtime.hunger, TICK_SECONDS, this.hungerDrainPerSecond);
 
         scratch.position.x = position.x;
@@ -2421,7 +2448,7 @@ export class WorldSimulation {
       z: patch.z,
       depleted: patch.remaining === 0,
     });
-    runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
+    runtime.swingCooldownTicks = mealCooldown(runtime.meal, SWING_COOLDOWN_TICKS, 'berryTea');
     this.gatherEvents.push(runtime.netId);
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.PickUp, item: patch.item });
     return true;
@@ -2805,6 +2832,10 @@ export class WorldSimulation {
   private eatItem(runtime: PlayerRuntime, item: ItemId): void {
     removeItem(runtime.inventory, item);
     runtime.hunger = eat(runtime.hunger, item);
+    if (isMealItem(item)) {
+      runtime.meal = startMeal(item);
+      this.mealChanges.set(runtime.netId, { ...runtime.meal });
+    }
     this.queueHungerEvent(runtime, item);
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Eat, item });
   }
@@ -2877,7 +2908,11 @@ export class WorldSimulation {
       toolKind(held) === 'rod' &&
       runtime.swingCooldownTicks === 0 &&
       castLanding(position, aimYaw, this.clearing.water) !== null;
-    return { canAttack, castInstead };
+    return {
+      canAttack,
+      castInstead,
+      dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
+    };
   }
 
   /**
@@ -3753,6 +3788,15 @@ export class WorldSimulation {
   }
 
   /** Hand over every change to anybody's hunger since this was last asked. */
+  mealStateOf(netId: number): MealState {
+    return { ...(this.players.get(netId)?.meal ?? mealFromSaved(null)) };
+  }
+  drainMealChanges(): ReadonlyMap<number, MealState> {
+    const changes = new Map(this.mealChanges);
+    this.mealChanges.clear();
+    return changes;
+  }
+
   drainHungerEvents(): HungerEvent[] {
     return this.hungerEvents.splice(0);
   }
@@ -3838,7 +3882,7 @@ export class WorldSimulation {
       changed = true;
     }
     const savingForFire = cookedItemFor(item) !== null && this.nearCookingFireOf(netId);
-    if (isFood(item) && runtime.hunger < HUNGER_MAX && !savingForFire) {
+    if (isFood(item) && (runtime.hunger < HUNGER_MAX || isMealItem(item)) && !savingForFire) {
       this.eatItem(runtime, item);
       changed = true;
     }
@@ -4209,6 +4253,7 @@ export class WorldSimulation {
         facingYaw: outside.yaw,
         items: inventoryEntries(runtime.inventory),
         hunger: runtime.hunger,
+        meal: { ...runtime.meal },
         health: runtime.health,
         equippedItem: runtime.equippedItem,
         explored: runtime.explored,

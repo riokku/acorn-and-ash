@@ -1,3 +1,4 @@
+import { MEAL_ITEMS, MAX_MEAL_TICKS, type MealState } from '../sim/meals';
 import type { HomeSupplies } from '../sim/home-supplies';
 import { DISCOVERY_MASK, type DiscoveryState } from '../data/discoveries';
 import {
@@ -633,6 +634,16 @@ export function encodeHomeBuildFeedback(result: HomeBuildFeedback): ArrayBuffer 
 }
 export function encodeHomeSkills(skills: number): ArrayBuffer {
   return new Uint8Array([ServerMessageType.HomeSkills, skills & HOME_SKILL_MASK]).buffer;
+}
+
+/** Only the owner receives their active preparation benefit. */
+export function encodeMeal(state: MealState): ArrayBuffer {
+  const data = new ArrayBuffer(6),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Meal);
+  view.setUint8(1, state.item === null ? 0 : MEAL_ITEMS.indexOf(state.item) + 1);
+  view.setUint32(2, state.ticksLeft, true);
+  return data;
 }
 
 export function encodeHomeSupplies(state: HomeSupplies): ArrayBuffer {
@@ -1555,6 +1566,18 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.HomeSkills: {
       if (data.byteLength !== 2 || (view.getUint8(1) & ~HOME_SKILL_MASK) !== 0) return null;
       return { type: 'homeSkills', skills: view.getUint8(1) };
+    }
+    case ServerMessageType.Meal: {
+      if (data.byteLength !== 6) return null;
+      const index = view.getUint8(1),
+        ticksLeft = view.getUint32(2, true);
+      if (
+        index > MEAL_ITEMS.length ||
+        ticksLeft > MAX_MEAL_TICKS ||
+        (index === 0) !== (ticksLeft === 0)
+      )
+        return null;
+      return { type: 'meal', item: index === 0 ? null : MEAL_ITEMS[index - 1]!, ticksLeft };
     }
     case ServerMessageType.HomeSupplies: {
       if (data.byteLength < 6) return null;

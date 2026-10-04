@@ -909,3 +909,7 @@ separate from the existing hostile masked raccoons.
 ### Useful homes
 
 Tent storage grows into teepee cooking, small-cabin workbenches, and a three-box larger-cabin garden. Use E at the cooker, C beside a workbench for improved tools, or click garden boxes to plant and harvest. Gardens grow during active world time and keep ready crops until collected. Only owners can tend them. Housing upgrades show their costs and use your backpack first, then your private chest; other crafting and building still use the backpack. See [housing facilities](docs/decisions/0076-housing-facilities.md).
+
+### Expedition meals
+
+Learn recipes through discoveries, then prepare one benefit for the trail: rations shorten dodge recovery, forest stew gently heals, and berry tea shortens hand-gathering recovery. Special meals can be eaten at full hunger. One benefit lasts ten connected minutes, pauses while disconnected, and is replaced by the next special meal. The active indicator appears above health; recipes and inventory descriptions explain the effects. See [meal preparation](docs/decisions/0079-meal-preparation-benefits.md).

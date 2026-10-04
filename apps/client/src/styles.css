@@ -2323,3 +2323,22 @@ body {
   font-size: 13px;
   white-space: nowrap;
 }
+
+.meal-benefit {
+  position: absolute;
+  bottom: 5rem;
+  left: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 1rem;
+  background: rgba(29, 39, 28, 0.9);
+  color: #eee8d3;
+  font-size: 0.75rem;
+  pointer-events: auto;
+}
+.meal-benefit-icon {
+  width: 1rem;
+  height: 1rem;
+}

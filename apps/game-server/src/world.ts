@@ -1,3 +1,4 @@
+import { encodeMeal, mealFromSaved, type MealState } from '@acorn/shared';
 import { isHomeKind } from '@acorn/shared';
 import { encodeDiscoveries } from '@acorn/shared';
 import { DurableObject } from 'cloudflare:workers';
@@ -205,6 +206,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
     server.send(encodeHomeSupplies(simulation.homeSuppliesOf(netId)));
+    server.send(encodeMeal(simulation.mealStateOf(netId)));
     server.send(encodePickupsTaken(simulation.takenPickupIds()));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
@@ -308,6 +310,7 @@ export class World extends DurableObject<WorldEnv> {
         );
       }
       this.announceHunger(simulation);
+      this.announceMeals(simulation);
       this.announceEquipped(simulation);
       return;
     }
@@ -456,6 +459,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceCooking(simulation);
     this.announceEquipped(simulation);
     this.announceHealth(simulation);
+    this.announceMeals(simulation);
     this.announceBuriedCaches(simulation);
     this.announceRegrowth(simulation, startedAt);
     this.announcePatches(simulation, startedAt);
@@ -733,7 +737,11 @@ export class World extends DurableObject<WorldEnv> {
       const attachment = this.attachmentFor(ws);
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
-      if (event !== undefined) this.trySend(ws, encodeHunger(event));
+      if (event !== undefined) {
+        if (ate.has(attachment.netId))
+          this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+        this.trySend(ws, encodeHunger(event));
+      }
     }
     // Eating took something out of the pack; say so, the same as any other
     // way a pack changes.
@@ -747,6 +755,17 @@ export class World extends DurableObject<WorldEnv> {
    * else's business how hurt anybody else is. A knockout's new position
    * needs no message of its own - it is already in the next snapshot.
    */
+  private announceMeals(simulation: WorldSimulation): void {
+    const changes = simulation.drainMealChanges();
+    if (changes.size === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const meal = changes.get(attachment.netId);
+      if (meal !== undefined) this.trySend(ws, encodeMeal(meal));
+    }
+  }
+
   private announceHealth(simulation: WorldSimulation): void {
     const events = simulation.drainHealthEvents();
     if (events.length === 0) return;
@@ -1360,6 +1379,9 @@ export class World extends DurableObject<WorldEnv> {
   private createSchema(): void {
     const sql = this.ctx.storage.sql;
     sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_meals (player_key TEXT PRIMARY KEY, item_index INTEGER, ticks_left INTEGER NOT NULL)',
+    );
+    sql.exec(
       'CREATE TABLE IF NOT EXISTS player_home_skills (player_key TEXT PRIMARY KEY, skills INTEGER NOT NULL)',
     );
     sql.exec(`CREATE TABLE IF NOT EXISTS world_meta (
@@ -1558,6 +1580,12 @@ export class World extends DurableObject<WorldEnv> {
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
+    const savedMeal = this.ctx.storage.sql
+      .exec<{ item_index: number | null; ticks_left: number }>(
+        'SELECT item_index,ticks_left FROM player_meals WHERE player_key=?',
+        playerKey,
+      )
+      .toArray()[0];
     const discoveries = this.ctx.storage.sql
       .exec<{ found: number; claimed: number }>(
         'SELECT found, claimed FROM player_discoveries WHERE player_key = ?',
@@ -1565,6 +1593,14 @@ export class World extends DurableObject<WorldEnv> {
       )
       .toArray()[0];
     return {
+      meal: mealFromSaved(
+        savedMeal === undefined
+          ? null
+          : {
+              item: savedMeal.item_index === null ? null : itemFromIndex(savedMeal.item_index),
+              ticksLeft: savedMeal.ticks_left,
+            },
+      ),
       discoveriesFound: discoveries?.found ?? 0,
       discoveriesClaimed: discoveries?.claimed ?? 0,
       netId: 0,
@@ -1928,6 +1964,7 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
+    this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
     this.writeHomeSkills(attachment.playerKey, simulation.homeSkillsOf(attachment.netId));
     this.writeBlueprintProgress(
       attachment.playerKey,
@@ -1937,6 +1974,15 @@ export class World extends DurableObject<WorldEnv> {
     this.writeDiscoveries(attachment.playerKey, discoveries.found, discoveries.claimed);
     const explored = simulation.exploredMapOf(attachment.netId);
     if (explored !== null) this.writePlayerExplored(attachment.playerKey, explored);
+  }
+
+  private writeMeal(playerKey: string, meal: MealState): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_meals (player_key,item_index,ticks_left) VALUES (?,?,?) ON CONFLICT(player_key) DO UPDATE SET item_index=excluded.item_index,ticks_left=excluded.ticks_left',
+      playerKey,
+      meal.item === null ? null : itemIndex(meal.item),
+      meal.ticksLeft,
+    );
   }
 
   private writeDiscoveries(playerKey: string, found: number, claimed: number): void {
@@ -2099,6 +2145,7 @@ export class World extends DurableObject<WorldEnv> {
         player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
+      this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
       this.writeHomeSkills(attachment.playerKey, player.homeSkills ?? 0);
       this.writeBlueprintProgress(attachment.playerKey, player.blueprintMisses ?? 0);
       this.writeDiscoveries(
@@ -2154,6 +2201,7 @@ export class World extends DurableObject<WorldEnv> {
       .toArray().length;
     sql.exec('DELETE FROM player_items');
     sql.exec('DELETE FROM players');
+    sql.exec('DELETE FROM player_meals');
     sql.exec('DELETE FROM player_home_skills');
     sql.exec('DELETE FROM player_blueprint_progress');
     sql.exec('DELETE FROM player_discoveries');
