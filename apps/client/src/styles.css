@@ -2681,3 +2681,92 @@ body {
     white-space: normal;
   }
 }
+
+.fishing-species {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.fishing-species article {
+  padding: 0.8rem;
+  border: 1px solid #b8b398;
+  border-radius: 0.5rem;
+  background: #ffffff30;
+}
+.fishing-species svg {
+  width: 100%;
+  max-height: 125px;
+}
+.fishing-species h3 {
+  margin: 0.2rem 0;
+}
+.rare-reel {
+  position: absolute;
+  left: 50%;
+  bottom: 7rem;
+  transform: translateX(-50%);
+  width: min(28rem, 85vw);
+  padding: 1rem;
+  border: 1px solid #b7cbb3;
+  border-radius: 0.8rem;
+  background: #172b24ec;
+  color: #f2e7cd;
+  text-align: center;
+  pointer-events: none;
+}
+.rare-reel-track {
+  position: relative;
+  height: 1rem;
+  margin: 0.8rem 0;
+  background: #536971;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.rare-reel-zone {
+  position: absolute;
+  left: 30%;
+  width: 55%;
+  height: 100%;
+  background: #8aa75d;
+}
+.rare-reel-marker {
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: #fff5cd;
+}
+.rare-reel-steady {
+  border-color: #d3e6a7;
+}
+.rare-reel p {
+  margin: 0.3rem 0;
+}
+@media (max-width: 700px) {
+  .fishing-species {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fishing-journal {
+  width: min(54rem, calc(100vw - 2rem));
+  max-width: none;
+}
+.hud-journal-tabs {
+  flex-wrap: wrap;
+}
+.fishing-journal {
+  z-index: 3;
+}
+.fishing-species svg {
+  max-height: 100px;
+}
+.fishing-species article p {
+  margin: 0.45rem 0;
+  font-size: 0.95em;
+  line-height: 1.35;
+}
+.fishing-species strong {
+  display: block;
+  font-size: 0.85em;
+}

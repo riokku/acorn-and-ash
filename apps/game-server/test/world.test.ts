@@ -1,3 +1,4 @@
+import { finishRareCatch } from './helpers';
 import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
@@ -1597,6 +1598,7 @@ describe('fishing', () => {
     );
     // A browser showing the bite says so on every input, the click included.
     click(client, PlayerButton.SawBite);
+    await finishRareCatch(client);
 
     await waitFor('the catch', () => client.fishing().some((event) => event.kind === 'caught'));
     const caught = client.fishing().find((event) => event.kind === 'caught');
@@ -1680,6 +1682,7 @@ describe('hunger', () => {
     click(client);
     await waitFor('a bite', () => client.fishing().some((event) => event.kind === 'bite'), 12_000);
     click(client, PlayerButton.SawBite);
+    await finishRareCatch(client);
 
     await waitFor('the catch', () => client.fishing().some((event) => event.kind === 'caught'));
     const caught = client.fishing().find((event) => event.kind === 'caught');

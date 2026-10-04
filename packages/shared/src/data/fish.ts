@@ -42,3 +42,30 @@ export function fishForRoll(table: readonly FishRow[], roll: number): ItemId {
   if (last === undefined) throw new Error('A fish table needs at least one fish');
   return last.item;
 }
+
+export const FISH_SPECIES = [
+  {
+    item: 'perch',
+    name: 'Yellow perch',
+    note: 'Striped flashes in the quiet shallows.',
+    minCm: 12,
+    maxCm: 38,
+    color: '#a58b39',
+  },
+  {
+    item: 'trout',
+    name: 'Rainbow trout',
+    note: 'Silver scales and a rose-colored ribbon.',
+    minCm: 20,
+    maxCm: 65,
+    color: '#8eabb1',
+  },
+  {
+    item: 'goldenCarp',
+    name: 'Golden carp',
+    note: 'A rare glimmer beneath the lily pads.',
+    minCm: 25,
+    maxCm: 80,
+    color: '#d4a444',
+  },
+] as const;

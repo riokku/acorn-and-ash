@@ -35,7 +35,7 @@ export function mountHud(
   onCloseChest: () => void,
   onSettingsOpenChange?: (open: boolean) => void,
   journalActions?: {
-    onTabChange: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
+    onTabChange: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
     onCraft: (index: number) => void;
     onExpedition?: (request: ExpeditionRequest) => void;
     onGarden?: (request: GardenRequest) => void;

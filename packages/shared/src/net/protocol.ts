@@ -1,3 +1,5 @@
+import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
+import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
 import {
   EXPEDITIONS,
   EXPEDITION_NOTICES,
@@ -1515,6 +1517,23 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         reason: reason === 0 ? null : GARDEN_REASONS[reason - 1]!,
       };
     }
+    case ServerMessageType.FishRecords: {
+      if (data.byteLength !== 20) return null;
+      const counts = [1, 5, 9].map((offset) => view.getUint32(offset, true)),
+        bestCm = [13, 15, 17].map((offset) => view.getUint16(offset, true));
+      if (bestCm.some((cm) => cm > 80)) return null;
+      const state = fishRecordsFromSaved({ counts, bestCm });
+      if (view.getUint8(19) !== state.displays) return null;
+      return { type: 'fishRecords', ...state };
+    }
+    case ServerMessageType.RareReel: {
+      if (data.byteLength !== 5) return null;
+      const age = view.getUint16(1, true),
+        hits = view.getUint8(3),
+        misses = view.getUint8(4);
+      if (age > REEL_LIMIT || hits > 1 || misses > 2) return null;
+      return { type: 'rareReel', age, hits, misses };
+    }
     case ServerMessageType.Expedition: {
       if (data.byteLength !== 21) return null;
       const active = view.getUint8(9);
@@ -2117,4 +2136,24 @@ export function encodeRaiderVitals(id: number, maxHits: number): ArrayBuffer {
   view.setUint16(1, id, true);
   view.setUint8(3, maxHits);
   return buffer;
+}
+
+export function encodeFishRecords(records: FishRecords): ArrayBuffer {
+  const state = fishRecordsFromSaved(records),
+    data = new ArrayBuffer(20),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.FishRecords);
+  state.counts.forEach((count, i) => view.setUint32(1 + i * 4, count, true));
+  state.bestCm.forEach((cm, i) => view.setUint16(13 + i * 2, cm, true));
+  view.setUint8(19, state.displays);
+  return data;
+}
+export function encodeRareReel(state: ReelView): ArrayBuffer {
+  const data = new ArrayBuffer(5),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.RareReel);
+  view.setUint16(1, state.age, true);
+  view.setUint8(3, state.hits);
+  view.setUint8(4, state.misses);
+  return data;
 }
