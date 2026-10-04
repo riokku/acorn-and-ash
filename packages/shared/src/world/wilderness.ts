@@ -19,6 +19,8 @@ import type { Collider } from './colliders';
 import { colliderForProp, type PlacedProp } from './clearing';
 import { wildernessHillWeight, type Terrain } from './terrain';
 import { fractalNoise2D } from './noise';
+import { buildIslandProps } from './islands';
+import { basinDepthAt, LAKE, LAKE_PROP_CLEARANCE, type Lake } from './lake';
 
 const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
@@ -43,8 +45,12 @@ export interface Wilderness {
  * Density also eases up over the same distance the ground eases into hills, so
  * the wilderness thickens as the clearing falls behind rather than starting at
  * full density the moment the tree line ends.
+ *
+ * Nothing grows in the lake or right at its edge, and each of its islands gets
+ * a few trees and rocks of its own, numbered after all the others so no
+ * existing tree changes its number.
  */
-export function buildWilderness(seed: number, terrain: Terrain): Wilderness {
+export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAKE): Wilderness {
   const props: PlacedProp[] = [];
   const outerRadius = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
   const steps = Math.floor(outerRadius / WILDERNESS.cellSize);
@@ -100,13 +106,16 @@ export function buildWilderness(seed: number, terrain: Terrain): Wilderness {
 
   const kept = props.filter(
     (prop) =>
+      basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !WOODLAND_ENCOUNTERS.some(
         (site) => Math.hypot(prop.x - site.x, prop.z - site.z) < site.radius + 2,
       ),
   );
+  const onIslands = buildIslandProps(seed, lake, terrain, nextId);
+  const standing = [...kept, ...onIslands];
   return {
-    props: kept,
-    colliders: kept.map(colliderForProp),
+    props: standing,
+    colliders: standing.map(colliderForProp),
     siteColliders: props.map(colliderForProp),
   };
 }

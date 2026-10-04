@@ -7,7 +7,22 @@ import {
   type Collider,
   type CylinderCollider,
 } from '../world/colliders';
+import { isNearLake, lakeSlopeAt, type Lake, type LakeSlope } from '../world/lake';
 import type { Terrain } from '../world/terrain';
+
+/**
+ * The invisible wall along the lake's shore: it keeps anyone on foot out of
+ * the water, and off the islands, while it is up.
+ *
+ * It is a switch rather than a set of cylinders because the lake is not one
+ * round shape, and because the wall is not always there: a boat can cross the
+ * water, and in winter the lake freezes and can be walked on.
+ */
+export interface LakeWall {
+  readonly lake: Lake;
+  /** Is the wall up? Down, the water can be walked into. */
+  up: boolean;
+}
 
 /** Everything the movement code needs to know about the world around it. */
 export interface CollisionWorld {
@@ -23,14 +38,22 @@ export interface CollisionWorld {
   readonly colliders: Collider[];
   /** Players are held inside this square, measured from the origin. */
   readonly boundsHalfExtent: number;
+  /** The shore of the lake, or null where there is no lake. */
+  readonly lakeWall: LakeWall | null;
 }
 
 export function createCollisionWorld(
   terrain: Terrain,
   colliders: readonly Collider[],
   boundsHalfExtent: number = PLAYABLE_HALF_EXTENT,
+  lake: Lake | null = null,
 ): CollisionWorld {
-  return { terrain, colliders: [...colliders], boundsHalfExtent };
+  return {
+    terrain,
+    colliders: [...colliders],
+    boundsHalfExtent,
+    lakeWall: lake === null ? null : { lake, up: true },
+  };
 }
 
 /** Swap one collider out, for when a tree comes down. */
@@ -89,6 +112,11 @@ export function resolveCapsule(
         touched = true;
       }
     }
+    const wall = world.lakeWall;
+    if (wall !== null && wall.up && pushOutOfLake(position, radius, wall.lake)) {
+      movedThisPass = true;
+      touched = true;
+    }
     if (!movedThisPass) break;
   }
 
@@ -102,6 +130,26 @@ export function resolveCapsule(
   }
 
   return touched;
+}
+
+/** Reused so checking the shore makes no garbage; nothing here is kept between calls. */
+const shoreScratch: LakeSlope = { depth: 0, towardX: 0, towardZ: 0 };
+
+/**
+ * Walk a capsule back from the water until it is just clear of it, straight
+ * away from the nearest shore - so someone pressing into the lake slides
+ * along the bank instead of sticking to it.
+ */
+function pushOutOfLake(position: Vec3, radius: number, lake: Lake): boolean {
+  if (!isNearLake(lake, position.x, position.z, radius + 1)) return false;
+  const shore = lakeSlopeAt(lake, position.x, position.z, shoreScratch);
+  // `depth` is how far in from the water's edge the centre is, so the body
+  // reaches the water until the centre is a full radius out on dry land.
+  const overlap = shore.depth + radius;
+  if (overlap <= COLLISION_SKIN_WIDTH) return false;
+  position.x -= shore.towardX * overlap;
+  position.z -= shore.towardZ * overlap;
+  return true;
 }
 
 /** Cheap rejection before doing the real shape test. */

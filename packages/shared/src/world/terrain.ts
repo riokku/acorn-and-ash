@@ -4,6 +4,7 @@
 
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { smoothstep } from '../math/vec3';
+import { LAKE, lakeGroundHeight, type Lake } from './lake';
 import { fractalNoise2D } from './noise';
 
 export interface Terrain {
@@ -28,11 +29,14 @@ export function createFlatTerrain(height = 0): Terrain {
  * invisible wall at the edge of the world - so neither the clearing nor the
  * boundary ever sit on a slope. Same seed, same hills, on the server and in
  * every browser: nothing about the shape of the ground travels over the wire.
+ *
+ * The lake sits in the north-east corner, and the ground is shaped round it:
+ * a gentle bank, a sunken floor and a dome for each island (see lake.ts).
  */
-export function createWildernessTerrain(seed: number): Terrain {
+export function createWildernessTerrain(seed: number, lake: Lake = LAKE): Terrain {
   return {
     kind: 'wilderness',
-    heightAt: (x, z) => wildernessHeightAt(seed, x, z),
+    heightAt: (x, z) => wildernessHeightAt(seed, x, z, lake),
   };
 }
 
@@ -53,7 +57,12 @@ export function wildernessHillWeight(distanceFromCentre: number): number {
   return Math.min(risingIn, flattenOut);
 }
 
-export function wildernessHeightAt(seed: number, x: number, z: number): number {
+export function wildernessHeightAt(seed: number, x: number, z: number, lake: Lake = LAKE): number {
+  return lakeGroundHeight(lake, x, z, hillsHeightAt(seed, x, z));
+}
+
+/** What the hills alone would make the ground, before the lake shapes it. */
+function hillsHeightAt(seed: number, x: number, z: number): number {
   const weight = wildernessHillWeight(Math.hypot(x, z));
   if (weight <= 0) return 0;
   // Rescaled to roughly [-1, 1] so the ground rises and dips either side of
