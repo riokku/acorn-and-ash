@@ -76,3 +76,5 @@ export * from './data/home-facilities';
 export * from './sim/garden';
 
 export * from './sim/home-supplies';
+
+export * from './sim/meals';

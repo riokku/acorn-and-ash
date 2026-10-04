@@ -1,3 +1,4 @@
+import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
 import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
@@ -581,6 +582,8 @@ export class Game {
   >();
   private builtProps: readonly BuiltPropView[] = [];
   private homeStoredSupplies: HomeSupplies['items'] = [];
+  private meal: MealState = { ...NO_MEAL };
+  private mealHeardAt = 0;
   private homeSkills = 0;
   private homeSkillsHeard = false;
   private interiorKind: HomeKind | null = null;
@@ -1257,6 +1260,9 @@ export class Game {
     this.connection = new WorldConnection(url, {
       onMessage: (message) => this.handleMessage(message),
       onStateChange: (state, detail) => {
+        if (this.connectionState === 'connected' && state !== 'connected')
+          this.meal = this.currentMeal();
+        this.mealHeardAt = performance.now();
         this.connectionState = state;
         if (state !== 'connected') this.closeChest();
         this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
@@ -1436,6 +1442,11 @@ export class Game {
         this.garden = message;
         if (message.homeId === this.space) this.homeInterior?.setGardenPlots(message.plots);
         this.options.hud.publish({ garden: message });
+        break;
+      }
+      case 'meal': {
+        this.meal = { item: message.item, ticksLeft: message.ticksLeft };
+        this.mealHeardAt = performance.now();
         break;
       }
       case 'homeSupplies': {
@@ -3603,6 +3614,16 @@ export class Game {
    * cast, with the rod facing water - the same as the server decides it
    * (see `WorldSimulation.actionContext`).
    */
+  private currentMeal(): MealState {
+    if (this.meal.item === null) return { ...NO_MEAL };
+    if (this.connectionState !== 'connected') return { ...this.meal };
+    const left = Math.max(
+      0,
+      this.meal.ticksLeft - Math.floor(((performance.now() - this.mealHeardAt) * TICK_HZ) / 1000),
+    );
+    return left === 0 ? { ...NO_MEAL } : { item: this.meal.item, ticksLeft: left };
+  }
+
   private actionContext(position: Readonly<Vec3>, aimYaw: number): ActionContext {
     const held = this.equipped.get(this.selfNetId) ?? null;
     const canAttack = held !== null && this.space === OUTDOORS && this.fishingPhase === null;
@@ -3612,7 +3633,11 @@ export class Game {
       performance.now() >= this.castReadyAt &&
       this.clearing !== null &&
       castLanding(position, aimYaw, this.clearing.water) !== null;
-    return { canAttack, castInstead };
+    return {
+      canAttack,
+      castInstead,
+      dodgeCooldown: mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
+    };
   }
 
   /**
@@ -3998,6 +4023,7 @@ export class Game {
       canCast: this.canCast,
       fishing: this.fishingPhase,
       fishingNews: this.currentNews(now),
+      meal: this.currentMeal(),
       hunger: this.hunger,
       hungerNews: this.currentHungerNews(now),
       health: this.health,

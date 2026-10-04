@@ -1,3 +1,4 @@
+import type { MealState } from '../sim/meals';
 import type { HomeSupplies } from '../sim/home-supplies';
 import type { DiscoveryState } from '../data/discoveries';
 import type { GardenRequest, GardenState } from '../sim/garden';
@@ -83,6 +84,7 @@ export const ServerMessageType = {
   Discoveries: 0x33,
   Garden: 0x34,
   HomeSupplies: 0x35,
+  Meal: 0x36,
 } as const;
 
 export const RejectReason = {
@@ -567,7 +569,10 @@ export type HomeBuildFeedbackMessage = HomeBuildFeedback & { readonly type: 'hom
 export type DiscoveriesMessage = DiscoveryState & { readonly type: 'discoveries' };
 export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies' };
 
+export type MealMessage = MealState & { readonly type: 'meal' };
+
 export type ServerMessage =
+  | MealMessage
   | HomeSuppliesMessage
   | (GardenState & { readonly type: 'garden' })
   | DiscoveriesMessage

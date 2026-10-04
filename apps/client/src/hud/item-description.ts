@@ -1,3 +1,4 @@
+import { isMealItem, MEAL_BENEFITS } from '@acorn/shared';
 import {
   blueprintHome,
   BUILDABLE_KINDS,
@@ -37,6 +38,8 @@ export function itemDescription(item: ItemId): string {
     return `Adds ${kind.extraSlots} pack slots. Your bag stays with you.`;
   if (kind.restoresHunger !== undefined) {
     const cooked = cookedItemFor(item);
+    if (isMealItem(item))
+      return `${DESCRIPTIONS[item]} Restores ${kind.restoresHunger} hunger. ${MEAL_BENEFITS[item]} for 10 active minutes. Can be eaten at full hunger; replaces your previous meal benefit. Pauses while disconnected.`;
     return `${DESCRIPTIONS[item] === undefined ? '' : `${DESCRIPTIONS[item]} `}Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire or home cooker and press E to roast it.' : ''}`;
   }
   return DESCRIPTIONS[item] ?? 'A useful find from the woods.';

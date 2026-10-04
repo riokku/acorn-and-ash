@@ -62,6 +62,7 @@ const BASE_STATE: HudState = {
   canCast: false,
   fishing: null,
   fishingNews: null,
+  meal: { item: null, ticksLeft: 0 },
   hunger: HUNGER_MAX,
   hungerNews: null,
   health: HEALTH_MAX,

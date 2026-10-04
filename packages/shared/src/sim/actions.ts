@@ -120,6 +120,8 @@ export function beginAction(state: ActionState, kind: ActionKind, step = 0): voi
 export interface ActionContext {
   /** Holding something to swing, outdoors, with no line in the water. */
   readonly canAttack: boolean;
+  /** A preparation benefit changes recovery, never the invulnerable window. */
+  readonly dodgeCooldown?: number;
   /** The rod is out and there is water in front: a fresh click casts instead of swinging. */
   readonly castInstead: boolean;
 }
@@ -173,7 +175,7 @@ export function advanceAction(
     if (!held(PlayerButton.Dodge) || state.dodgeCooldown > 0) return null;
     beginAction(state, ActionKind.Dodge);
     state.heading = dodgeHeading(input);
-    state.dodgeCooldown = DODGE.cooldown;
+    state.dodgeCooldown = context.dodgeCooldown ?? DODGE.cooldown;
     return { footing: 'dodging', impact: null, cast: false };
   };
 

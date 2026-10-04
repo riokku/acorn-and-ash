@@ -1,3 +1,4 @@
+import { NO_MEAL, type MealState } from '@acorn/shared';
 import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
 import type { PickupNotice } from './pickup-notice';
 import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } from '@acorn/shared';
@@ -130,6 +131,7 @@ export interface HudState {
   /** What just happened to our line, while it is still worth showing. */
   readonly fishingNews: string | null;
   /** How hungry we are, from `HUNGER_MAX` (full) down to zero. */
+  readonly meal: MealState;
   readonly hunger: number;
   /** What we last ate, while it is still worth showing. */
   readonly hungerNews: string | null;
@@ -226,6 +228,7 @@ const INITIAL: HudState = {
   canCast: false,
   fishing: null,
   fishingNews: null,
+  meal: { ...NO_MEAL },
   hunger: HUNGER_MAX,
   hungerNews: null,
   health: HEALTH_MAX,
