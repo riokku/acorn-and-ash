@@ -2,6 +2,7 @@ import { SELF } from 'cloudflare:test';
 
 import {
   BUILDABLE_KINDS,
+  PlayerButton,
   decodeServerMessage,
   encodeBuild,
   encodeChestRequest,
@@ -422,3 +423,25 @@ export async function waitFor(
 
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Ordinary catches end immediately; a rare catch asks for two gentle pulls. */
+export async function finishRareCatch(client: TestClient): Promise<void> {
+  await waitFor(
+    'catch or rare reel',
+    () =>
+      client.fishing().some((e) => e.kind === 'caught') ||
+      client.received.some((m) => m.type === 'rareReel'),
+  );
+  if (client.fishing().some((e) => e.kind === 'caught')) return;
+  const yaw = -Math.PI / 2;
+  client.walk(0, 0, yaw, 13);
+  client.walk(0, 0, yaw, 1, PlayerButton.Fish);
+  client.walk(0, 0, yaw, 1);
+  await waitFor('first steady pull', () =>
+    client.received.some((m) => m.type === 'rareReel' && m.hits === 1),
+  );
+  client.walk(0, 0, yaw, 19);
+  client.walk(0, 0, yaw, 19);
+  client.walk(0, 0, yaw, 1, PlayerButton.Fish);
+  client.walk(0, 0, yaw, 1);
+}

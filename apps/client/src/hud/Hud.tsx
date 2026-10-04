@@ -1,3 +1,5 @@
+import { fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
+import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
 import type { ExpeditionRequest } from '@acorn/shared';
 import { DECORATION_KINDS, isIndoorOnlyKind } from '@acorn/shared';
@@ -64,7 +66,9 @@ interface HudProps {
   readonly onMoveDecoration?: (id: number) => void;
   readonly onReclaimDecoration?: (id: number) => void;
   readonly onGardenUse?: (request: GardenRequest) => void;
-  readonly onJournalTabChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions') => void;
+  readonly onJournalTabChange?: (
+    tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing',
+  ) => void;
   readonly onPickRecipe?: (index: number) => void;
   readonly store: HudStore;
   readonly onPlay: () => void;
@@ -162,7 +166,9 @@ export function Hud({
         </button>
       ) : null}
       {state.craftMenuOpen ? (
-        state.journalTab === 'expeditions' ? (
+        state.journalTab === 'fishing' ? (
+          <FishingJournal state={state} onChange={onJournalTabChange} />
+        ) : state.journalTab === 'expeditions' ? (
           <ExpeditionPanel state={state} onChange={onJournalTabChange} onRequest={onExpedition} />
         ) : state.journalTab === 'garden' ? (
           <GardenJournal state={state} onChange={onJournalTabChange} onUse={onGardenUse} />
@@ -216,8 +222,9 @@ export function Hud({
                                 type="button"
                                 key={kind}
                                 disabled={
-                                  kind === 'trailPennant' &&
-                                  !((state.expedition?.cosmetics ?? 0) & 1)
+                                  (kind === 'trailPennant' &&
+                                    !((state.expedition?.cosmetics ?? 0) & 1)) ||
+                                  !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords))
                                 }
                                 onClick={() => onPickBuildable(kind)}
                               >
@@ -228,7 +235,12 @@ export function Hud({
                                   {kind === 'trailPennant' &&
                                   !((state.expedition?.cosmetics ?? 0) & 1)
                                     ? ' · complete three outings'
-                                    : ''}
+                                    : !fishDisplayLearned(
+                                          kind,
+                                          fishRecordsFromSaved(state.fishRecords),
+                                        )
+                                      ? ' · earn through fishing'
+                                      : ''}
                                 </strong>
                                 <span>
                                   {BUILDABLE_KINDS[kind].costs
@@ -391,6 +403,7 @@ export function Hud({
         </div>
       ) : null}
 
+      {showingWorld && !state.mapOpen ? <RareReelHint state={state} /> : null}
       {state.ready &&
       state.playing &&
       !state.mapOpen &&
@@ -692,13 +705,17 @@ function buildEntries(state: HudState): RecipeEntry[] {
       ),
       displayName: `${state.homeKind !== null && isHomeKind(kind) ? 'Upgrade to ' : ''}${buildable.displayName}${isHomeKind(kind) && !knowsHome(state.homeSkills, kind) ? ' · blueprint needed' : ''}`,
       costs: buildable.costs,
-      locked: kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1),
+      locked:
+        (kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1)) ||
+        !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords)),
       supplyNote:
         isHomeKind(kind) && state.homeKind !== null
           ? 'Uses backpack first, then your private home chest'
           : kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1)
             ? 'Complete three outings to learn this recipe'
-            : undefined,
+            : !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords))
+              ? 'Earn this recipe in your fishing collection'
+              : undefined,
       ready:
         canAfford(
           isHomeKind(kind) && state.homeKind !== null
@@ -707,7 +724,8 @@ function buildEntries(state: HudState): RecipeEntry[] {
           buildable,
         ) &&
         (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)) &&
-        (kind !== 'trailPennant' || !!((state.expedition?.cosmetics ?? 0) & 1)),
+        (kind !== 'trailPennant' || !!((state.expedition?.cosmetics ?? 0) & 1)) &&
+        fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords)),
     };
   });
 }
@@ -829,6 +847,7 @@ function JournalPanel({
  * takes a swing at an animal (see decision 0056).
  */
 export function hint(state: HudState): string {
+  if (state.fishing === 'reeling') return '';
   if (state.fishing === 'biting') return "It's biting! Click!";
   if (state.fishing === 'waiting') return 'Watch the float. Click when it goes right under.';
   // Real danger, unlike being hungry: one more hit like the last one and you

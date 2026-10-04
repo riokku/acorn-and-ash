@@ -26,7 +26,9 @@ export type BuildableKindId =
   | 'moonLantern'
   | 'flowerPlanter'
   | 'trailPennant'
-  | 'sentinelTrophy';
+  | 'sentinelTrophy'
+  | 'fishDisplay'
+  | 'goldenFishDisplay';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -278,6 +280,32 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 800,
     placeholderColor: 0x73918b,
   },
+  fishDisplay: {
+    id: 'fishDisplay',
+    displayName: 'Carved fish display',
+    costs: [
+      { item: 'log', amount: 2 },
+      { item: 'stick', amount: 2 },
+    ],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x9a9772,
+  },
+  goldenFishDisplay: {
+    id: 'goldenFishDisplay',
+    displayName: 'Golden collection display',
+    costs: [
+      { item: 'log', amount: 3 },
+      { item: 'flower', amount: 3 },
+    ],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0xc6a34d,
+  },
   sentinelTrophy: {
     id: 'sentinelTrophy',
     displayName: 'Ruin sentinel trophy',
@@ -310,6 +338,8 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'flowerPlanter',
   'trailPennant',
   'sentinelTrophy',
+  'fishDisplay',
+  'goldenFishDisplay',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {
