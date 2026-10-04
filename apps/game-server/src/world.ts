@@ -942,12 +942,15 @@ export class World extends DurableObject<WorldEnv> {
    * write those straight to storage.
    */
   private announcePiles(simulation: WorldSimulation, nowMs: number): void {
+    simulation.updateWeather(nowMs);
+    const weatherCycle = simulation.drainWeatherCycleChange();
     simulation.fadeDroppedPiles(nowMs);
     const changed = simulation.drainPileChanges();
     const progress = new Set(simulation.drainBlueprintProgressChanges());
-    if (changed.length === 0 && progress.size === 0) return;
-    // A generated reward and the reset/missed roll save together before sending.
+    if (changed.length === 0 && progress.size === 0 && weatherCycle === null) return;
+    // Weather cursor, windfalls and blueprint progress save with their rewards.
     this.ctx.storage.transactionSync(() => {
+      if (weatherCycle !== null) this.writeMeta('weather-cycle', String(weatherCycle));
       for (const id of changed) {
         const pile = simulation.persistedPile(id);
         if (pile === null) this.deletePile(id);
@@ -1204,6 +1207,8 @@ export class World extends DurableObject<WorldEnv> {
       forestEncounters: (this.raidIntervalSeconds() ?? 240) < 86400,
     });
     this.simulation = simulation;
+    const weatherCycle = this.readMeta('weather-cycle');
+    simulation.restoreWeatherCycle(weatherCycle === null ? null : Number(weatherCycle));
     simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());

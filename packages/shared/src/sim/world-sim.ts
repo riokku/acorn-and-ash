@@ -1,3 +1,4 @@
+import { forestWeather, weatherPlan, WEATHER_CYCLE_MS } from './weather';
 import {
   advanceMeal,
   mealCooldown,
@@ -936,6 +937,55 @@ export class WorldSimulation {
 
   /** Real time as of the tick being simulated, supplied by the caller. */
   private nowMs = 0;
+  private weatherCycle: number | null = null;
+  private weatherCycleChanged = false;
+  restoreWeatherCycle(value: number | null): void {
+    this.weatherCycle = value !== null && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
+  drainWeatherCycleChange(): number | null {
+    if (!this.weatherCycleChanged) return null;
+    this.weatherCycleChanged = false;
+    return this.weatherCycle;
+  }
+  /** Only the latest completed storm leaves rewards; sleeping does not stockpile old storms. */
+  updateWeather(nowMs: number): void {
+    const cycle = Math.floor(nowMs / WEATHER_CYCLE_MS);
+    if (this.weatherCycle !== null && cycle <= this.weatherCycle) return;
+    if (
+      this.weatherCycle !== null &&
+      cycle > this.weatherCycle &&
+      weatherPlan(this.seed, cycle - 1).storm
+    ) {
+      const rng = createRng(hashSeed('storm-windfall', this.seed, cycle));
+      const footprints = this.buildFootprints(undefined, true).filter(
+        (footprint) =>
+          Math.hypot(footprint.x, footprint.z) <= 71 + footprint.radius + footprint.halfLength,
+      );
+      const protectedSites = this.protectedBuildSites();
+      let placed = 0;
+      for (
+        let attempt = 0;
+        attempt < 128 && placed < 6 && this.droppedPiles.length < MAX_DROPPED_PILES;
+        attempt++
+      ) {
+        const angle = rng.nextRange(0, Math.PI * 2),
+          radius = rng.nextRange(18, 70);
+        const x = Math.cos(angle) * radius,
+          z = Math.sin(angle) * radius;
+        const nearbyFootprints = footprints.filter((footprint) => {
+          const reach = footprint.radius + footprint.halfLength + PATCH_CLEARANCE;
+          return Math.abs(footprint.x - x) < reach && Math.abs(footprint.z - z) < reach;
+        });
+        if (!this.patchSpotIsClear(-1, x, z, nearbyFootprints)) continue;
+        if (protectedSites.some((site) => Math.hypot(site.x - x, site.z - z) < site.radius + 1))
+          continue;
+        this.addPile(placed % 2 === 0 ? 'log' : 'stick', placed % 2 === 0 ? 1 : 3, x, z, nowMs);
+        placed++;
+      }
+    }
+    this.weatherCycle = cycle;
+    this.weatherCycleChanged = true;
+  }
 
   private readonly homeBuildFeedback: (HomeBuildFeedback & { netId: number })[] = [];
   drainHomeBuildFeedback(): (HomeBuildFeedback & { netId: number })[] {
@@ -2435,7 +2485,9 @@ export class WorldSimulation {
     if (patch === null) return false;
     if (roomFor(runtime.inventory, patch.item) === 0) return this.refusePickup(runtime, patch.item);
     if (runtime.swingCooldownTicks > 0) return true;
-    addItem(runtime.inventory, patch.item);
+    const offered =
+      patch.item === 'mushroom' && forestWeather(this.seed, this.nowMs).mushroomsAbundant ? 2 : 1;
+    const gathered = addItem(runtime.inventory, patch.item, offered);
 
     patch.remaining -= 1;
     if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
@@ -2443,7 +2495,7 @@ export class WorldSimulation {
     this.collectionEvents.push({
       netId: runtime.netId,
       item: patch.item,
-      count: 1,
+      count: gathered,
       x: patch.x,
       z: patch.z,
       depleted: patch.remaining === 0,

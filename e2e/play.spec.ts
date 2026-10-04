@@ -5,6 +5,7 @@ declare global {
     acornDebug?: {
       selfNetId(): number;
       grassClumps(): number;
+      weatherEffects(): { rainDrops: number; fireflies: number };
       buildBoundaryVisible(): boolean;
       screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
       localPosition(): { x: number; y: number; z: number };

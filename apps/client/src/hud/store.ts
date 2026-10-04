@@ -1,3 +1,4 @@
+import type { ForestWeather } from '@acorn/shared';
 import { NO_MEAL, type MealState } from '@acorn/shared';
 import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
 import type { PickupNotice } from './pickup-notice';
@@ -70,6 +71,7 @@ export interface HudState {
   readonly nearbyPile: { readonly item: ItemId; readonly count: number } | null;
   /** What a nearby patch would gather, if anything is within reach right now. */
   readonly nearGatherSpot: ItemId | null;
+  readonly forestWeather?: ForestWeather;
   /** Whether a cache of our own is close enough right now to dig up. */
   readonly nearBuriedCache: boolean;
   /**
