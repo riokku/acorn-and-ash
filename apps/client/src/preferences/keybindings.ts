@@ -8,6 +8,7 @@ export const KEYBINDINGS = [
       ['Space', 'Jump'],
       ['Right mouse + drag', 'Turn the camera'],
       ['Left Ctrl', 'Dodge roll'],
+      ['X', 'Sit down on the ground, anywhere; move, or press X or E, to get up'],
     ],
   },
   {

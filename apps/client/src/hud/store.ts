@@ -187,8 +187,11 @@ export interface HudState {
   readonly decorations?: readonly HomeDecoration[];
   readonly decorNote?: string | null;
   readonly home: { readonly yours: boolean; readonly locked: boolean } | null;
-  /** Sat in the chair or lying in bed right now, if either - see decision 0056. */
-  readonly resting: 'chair' | 'bed' | null;
+  /**
+   * Sat in the chair, lying in bed or sat on the ground right now, if any of
+   * them - see decisions 0056 and 0102.
+   */
+  readonly resting: 'chair' | 'bed' | 'ground' | null;
   /** The chair or the bed close enough to sit or lie down on, inside a home. */
   readonly restingNearby: 'chair' | 'bed' | null;
   /**

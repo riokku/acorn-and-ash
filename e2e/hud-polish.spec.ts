@@ -153,3 +153,53 @@ test.describe('pack hover labels', () => {
     }
   });
 });
+
+test.describe('sitting on the ground with X', () => {
+  test('X sits you down where you stand, and moving gets you up', async ({ page }) => {
+    const sim = await startFakeWorld(page, { hunger: 100, health: 100, items: {} });
+    try {
+      const sittingHint = page.locator('.hud-hint').filter({ hasText: 'Sitting on the ground' });
+      await expect(sittingHint).toHaveCount(0);
+
+      await page.keyboard.down('KeyX');
+      await page.waitForTimeout(150);
+      await page.keyboard.up('KeyX');
+      await expect(sittingHint).toBeVisible();
+      await expect(sittingHint).toContainText('press X or E to get up');
+      await expect.poll(() => sim.actionOf(1)?.kind).toBe(shared.ActionKind.SitGround);
+
+      // Walking off gets up again, and the hint goes away.
+      await page.keyboard.down('KeyW');
+      await page.waitForTimeout(1200);
+      await page.keyboard.up('KeyW');
+      await expect(sittingHint).toHaveCount(0);
+      await expect.poll(() => sim.actionOf(1)?.kind).not.toBe(shared.ActionKind.SitGround);
+    } finally {
+      sim.dispose();
+    }
+  });
+
+  test('pressing X again gets you up, even when held for a while the first time', async ({
+    page,
+  }) => {
+    const sim = await startFakeWorld(page, { hunger: 100, health: 100, items: {} });
+    try {
+      const sittingHint = page.locator('.hud-hint').filter({ hasText: 'Sitting on the ground' });
+      // Held down for most of a second: still one sit, not a sit-and-stand bounce.
+      await page.keyboard.down('KeyX');
+      await page.waitForTimeout(800);
+      await page.keyboard.up('KeyX');
+      await expect(sittingHint).toBeVisible();
+      await page.waitForTimeout(600);
+      await expect.poll(() => sim.actionOf(1)?.kind).toBe(shared.ActionKind.SitGround);
+
+      await page.keyboard.down('KeyX');
+      await page.waitForTimeout(150);
+      await page.keyboard.up('KeyX');
+      await expect(sittingHint).toHaveCount(0);
+      await expect.poll(() => sim.actionOf(1)?.kind).not.toBe(shared.ActionKind.SitGround);
+    } finally {
+      sim.dispose();
+    }
+  });
+});

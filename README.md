@@ -128,6 +128,7 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `W` `A` `S` `D` or the arrow keys    | Walk                                                                     |
 | `Shift` (held)                       | Sprint                                                                   |
 | `Space`                              | Jump                                                                     |
+| `X`                                  | Sit down on the ground, anywhere (move, or `X` or `E` again, to get up)  |
 | Right mouse on world loot (tap)      | Pick up the clicked item or gather one from a patch                      |
 | `E`                                  | Pick up nearby loot, gather, dig up a cache, use/cook at a campfire, eat |
 | `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)                     |

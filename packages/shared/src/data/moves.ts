@@ -79,18 +79,20 @@ export const FLINCH = { planted: 4, end: 12 } as const;
 /** Down on the ground after a knockout, before waking up at home. */
 export const KNOCKED_OUT_TICKS = 40;
 
-/** Getting back up: out of bed, off the ground, or out of the chair. */
+/** Getting back up: out of bed, off the ground, or out of the chair - or up from sitting on the ground. */
 export const RISE = {
   ground: 31,
   bed: 31,
   chair: 16,
+  floor: 23,
 } as const;
 
 /**
- * Settling into the chair or the bed. Pressing interact or moving before
- * this still gets you up, but not on the very tick you sat down.
+ * Settling into the chair or the bed, or down onto the ground. Pressing
+ * interact or moving before this still gets you up, but not on the very tick
+ * you sat down.
  */
-export const SETTLE = { chair: 16, bed: 40, earliestUp: 4 } as const;
+export const SETTLE = { chair: 16, bed: 40, floor: 20, earliestUp: 4 } as const;
 
 /** Dodge follow-ups: one committed hop, with a heavier landing and recovery for the slam. */
 export const DODGE_ATTACKS = {

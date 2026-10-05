@@ -840,6 +840,8 @@ export function hint(state: HudState): string {
     return 'Resting at home · safe and sheltered · move or press E to get up';
   if (state.resting === 'bed')
     return 'Snug in bed · safe and sheltered · move or press E to get up';
+  // Sat on the bare ground is only a rest for the eyes: nothing is sheltered.
+  if (state.resting === 'ground') return 'Sitting on the ground · move, or press X or E to get up';
   // Out on the water, the oars are all there is to think about.
   if (state.boat === 'climbOut')
     return 'Rowing · move to steer, Shift to pull harder · press E to climb out here';

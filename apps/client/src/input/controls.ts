@@ -74,6 +74,7 @@ const GAME_KEYS = new Set([
   'Space',
   'KeyB',
   'KeyC',
+  'KeyX',
 ]);
 
 export class Controls {
@@ -162,9 +163,11 @@ export class Controls {
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
    * cannot climb the sky. Holding E is harmless in the same way: the server
-   * hands over each thing exactly once. A short left click swings on release;
-   * holding it charges without first swinging. Fishing uses immediate clicks
-   * so casting and reacting to a bite never wait for an attack decision.
+   * hands over each thing exactly once. Holding X is too: the shared rule only
+   * reads a fresh press, so it sits down once and does not bounce back up. A
+   * short left click swings on release; holding it charges without first
+   * swinging. Fishing uses immediate clicks so casting and reacting to a bite
+   * never wait for an attack decision.
    */
   buttons(fishing = false): number {
     let buttons = 0;
@@ -176,6 +179,7 @@ export class Controls {
     if (this.held.has('ControlLeft') || this.tapped.has('ControlLeft')) {
       buttons |= PlayerButton.Dodge;
     }
+    if (this.held.has('KeyX') || this.tapped.has('KeyX')) buttons |= PlayerButton.Sit;
 
     const leftHeldPastThreshold =
       this.leftMouseDownAt !== null && performance.now() - this.leftMouseDownAt >= CHARGE_HOLD_MS;

@@ -3766,7 +3766,9 @@ export class Game {
     // The left button places a piece while one is out, so it is never also
     // a swing or a charge then.
     const placingMask =
-      this.placing === null ? ~0 : ~(PlayerButton.Swing | PlayerButton.Charge | PlayerButton.Fish);
+      this.placing === null
+        ? ~0
+        : ~(PlayerButton.Swing | PlayerButton.Charge | PlayerButton.Fish | PlayerButton.Sit);
     const fishingClick =
       this.fishingPhase !== null ||
       this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)
@@ -4230,10 +4232,12 @@ export class Game {
   }
 
   /** What a door right here would do, if anything: for the hint along the bottom. */
-  /** Sat in the chair or lying in bed, if either. */
-  private restingNow(): 'chair' | 'bed' | null {
+  /** Sat in the chair, lying in bed or sat on the ground, if any of them. */
+  private restingNow(): 'chair' | 'bed' | 'ground' | null {
     const kind = this.localPlayer?.action.kind;
-    return kind === ActionKind.Sit ? 'chair' : kind === ActionKind.Lie ? 'bed' : null;
+    if (kind === ActionKind.Sit) return 'chair';
+    if (kind === ActionKind.Lie) return 'bed';
+    return kind === ActionKind.SitGround ? 'ground' : null;
   }
 
   /**
@@ -4333,6 +4337,10 @@ export class Game {
     return {
       canAttack,
       castInstead,
+      // Anywhere there is ground underfoot; the line in hand is the one thing
+      // that rules it out (see decision 0102). Standing on something is
+      // checked by the caller, which knows the footing.
+      canSit: this.fishingPhase === null,
       dodgeCooldown: mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
     };
   }

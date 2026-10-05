@@ -93,6 +93,20 @@ describe('input bundles', () => {
     });
   });
 
+  it('carries every button, the sit button above the first byte included', () => {
+    const everything = Object.values(PlayerButton).reduce((all, button) => all | button, 0);
+    expect(everything).toBeGreaterThan(0xff);
+    const decoded = decodeClientMessage(
+      encodeInputBundle([
+        createInput(1, 0, 0, 0, everything),
+        createInput(2, 0, 0, 0, PlayerButton.Sit),
+      ]),
+    );
+    if (decoded?.type !== 'input') throw new Error('expected an input bundle');
+    expect(decoded.inputs[0]?.buttons).toBe(everything);
+    expect(decoded.inputs[1]?.buttons).toBe(PlayerButton.Sit);
+  });
+
   it('keeps where the character aims apart from where the camera looks', () => {
     const decoded = decodeClientMessage(encodeInputBundle([createInput(1, 0, 0, 0.3, 0, -2.5)]));
     if (decoded?.type !== 'input') throw new Error('expected an input bundle');

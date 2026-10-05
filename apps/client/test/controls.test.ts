@@ -295,3 +295,53 @@ describe('taking a press of E for something done on this side', () => {
     expect(controls.claimInteractPress()).toBe(false);
   });
 });
+
+describe('X, to sit down on the ground', () => {
+  let controls: Controls;
+  let windowEvents: EventTarget;
+
+  beforeEach(() => {
+    windowEvents = new EventTarget();
+    vi.stubGlobal('window', windowEvents);
+    vi.stubGlobal('document', new EventTarget());
+    controls = new Controls(new EventTarget() as HTMLCanvasElement);
+  });
+
+  afterEach(() => {
+    controls.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  function key(type: 'keydown' | 'keyup'): void {
+    windowEvents.dispatchEvent(Object.assign(new Event(type), { code: 'KeyX' }));
+  }
+
+  it('sends the sit button while X is held, and not otherwise', () => {
+    expect(controls.buttons() & PlayerButton.Sit).toBe(0);
+    key('keydown');
+    expect(controls.buttons() & PlayerButton.Sit).toBe(PlayerButton.Sit);
+    key('keyup');
+    controls.forgetTaps();
+    expect(controls.buttons() & PlayerButton.Sit).toBe(0);
+  });
+
+  it('keeps a quick tap that starts and ends between ticks', () => {
+    key('keydown');
+    key('keyup');
+    expect(controls.buttons() & PlayerButton.Sit).toBe(PlayerButton.Sit);
+  });
+
+  it('sits down once when held, rather than bouncing back up', () => {
+    const state = createActionState();
+    const ground = { canAttack: false, castInstead: false, canSit: true };
+    key('keydown');
+    let previous = 0;
+    for (let seq = 1; seq <= 40; seq++) {
+      const input = createInput(seq, 0, 0, 0, controls.buttons(), 0);
+      advanceAction(state, input, previous, ground);
+      previous = input.buttons;
+      controls.forgetTaps();
+    }
+    expect(state.kind).toBe(ActionKind.SitGround);
+  });
+});

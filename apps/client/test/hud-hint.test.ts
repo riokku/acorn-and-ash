@@ -621,6 +621,18 @@ describe('the hint at the chair and the bed', () => {
   });
 });
 
+describe('the hint while sitting on the ground', () => {
+  it('says how to get up, outdoors as well as in', () => {
+    expect(hint({ ...BASE_STATE, resting: 'ground' })).toBe(
+      'Sitting on the ground · move, or press X or E to get up',
+    );
+  });
+
+  it('lets real danger speak first', () => {
+    expect(hint({ ...BASE_STATE, resting: 'ground', health: 10 })).toMatch(/^Hurt badly/);
+  });
+});
+
 describe('the hint at a rowboat', () => {
   it('offers to climb into a free boat, and says when somebody else has it', () => {
     expect(hint({ ...BASE_STATE, boat: 'board' })).toBe('Press E to climb into the rowboat');
