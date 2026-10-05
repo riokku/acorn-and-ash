@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-import type { WaterCircle } from '@acorn/shared';
+import { REED_PATCHES, type WaterCircle } from '@acorn/shared';
 
 import { createBankMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
@@ -36,6 +36,9 @@ const REED_CLUMPS: readonly { circle: number; angle: number }[] = [
   { circle: 1, angle: 5.6 },
   { circle: 2, angle: 2.6 },
 ];
+
+/** Scenery reeds keep this far from a reed that can be cut, in metres. */
+const REED_PATCH_CLEAR = 1.8;
 
 /**
  * The pond (see decision 0053): painted water on a muddy bank that fades
@@ -118,11 +121,17 @@ function createPondPlants(water: readonly WaterCircle[]): { group: THREE.Group; 
     const circle = water[clump.circle];
     if (circle === undefined) continue;
     const edge = circle.radius - 0.3;
-    addReedClump(builder, plants, random, {
+    const at = {
       x: circle.x + Math.cos(clump.angle) * edge,
       y: WATER_SURFACE_Y,
       z: circle.z + Math.sin(clump.angle) * edge,
-    });
+    };
+    // The reeds that can be cut are drawn by the ground items, so the
+    // scenery leaves a gap round each one instead of burying it.
+    if (REED_PATCHES.some((bed) => Math.hypot(bed.x - at.x, bed.z - at.z) < REED_PATCH_CLEAR)) {
+      continue;
+    }
+    addReedClump(builder, plants, random, at);
   }
 
   // A few stones along the edge, half in the water.

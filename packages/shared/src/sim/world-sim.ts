@@ -209,9 +209,9 @@ import {
 } from './rowing';
 import {
   isReedPatch,
-  isReedSpot,
-  REED_BED_SPACING,
+  isReedSpotFor,
   REED_PATCHES,
+  reedBedSpacing,
   reedIsDue,
   reedRegrowSpot,
 } from '../world/reeds';
@@ -3017,8 +3017,10 @@ export class WorldSimulation {
 
   /**
    * Whether a bed of mature reeds could come back here: nothing built or
-   * growing on top of it, and well away from any other bed that still has
-   * reeds, so they are spread round the shore and not bunched.
+   * growing on top of it, well away from any other bed of the same water that
+   * still has reeds (so they are spread round the shore and not bunched), and
+   * not so close to anything else waiting to be picked up that one press of
+   * the button could mean either.
    */
   private reedSpotIsClear(
     patchId: number,
@@ -3028,13 +3030,32 @@ export class WorldSimulation {
   ): boolean {
     const here = roundFootprint(x, z, REED_CLEAR_RADIUS, 'reeds');
     if (footprints.some((footprint) => footprintGap(here, footprint) < 0)) return false;
-    return !this.patches.some(
+    const spacing = reedBedSpacing(patchId);
+    const tooCloseToAnotherBed = this.patches.some(
       (other) =>
         other.id !== patchId &&
         isReedPatch(other.id) &&
         other.remaining > 0 &&
-        Math.hypot(other.x - x, other.z - z) < REED_BED_SPACING,
+        Math.hypot(other.x - x, other.z - z) < spacing,
     );
+    return !tooCloseToAnotherBed && !this.somethingElseTooCloseToPress(patchId, x, z);
+  }
+
+  /**
+   * Whether anything else waiting to be picked up - another kind of patch, a
+   * pickup lying in the clearing, a dropped pile or a buried cache - is near
+   * enough to this spot that one press of the button could mean either.
+   */
+  private somethingElseTooCloseToPress(patchId: number, x: number, z: number): boolean {
+    const tooClose = (other: { x: number; z: number }): boolean =>
+      Math.hypot(other.x - x, other.z - z) < PATCH_SPACING;
+    for (const other of this.patches) {
+      if (other.id !== patchId && other.remaining > 0 && tooClose(other)) return true;
+    }
+    for (const pickup of this.clearing.pickups) {
+      if (!this.takenPickups.has(pickup.id) && tooClose(pickup)) return true;
+    }
+    return this.droppedPiles.some(tooClose) || this.buriedCaches.some(tooClose);
   }
 
   /**
@@ -3056,16 +3077,7 @@ export class WorldSimulation {
     const here = roundFootprint(x, z, PATCH_CLEARANCE, 'patch');
     if (footprints.some((footprint) => footprintGap(here, footprint) < 0)) return false;
 
-    const tooClose = (other: { x: number; z: number }): boolean =>
-      Math.hypot(other.x - x, other.z - z) < PATCH_SPACING;
-    for (const other of this.patches) {
-      if (other.id !== patchId && other.remaining > 0 && tooClose(other)) return false;
-    }
-    for (const pickup of this.clearing.pickups) {
-      if (!this.takenPickups.has(pickup.id) && tooClose(pickup)) return false;
-    }
-    if (this.droppedPiles.some(tooClose)) return false;
-    return !this.buriedCaches.some(tooClose);
+    return !this.somethingElseTooCloseToPress(patchId, x, z);
   }
 
   /**
@@ -4969,8 +4981,8 @@ export class WorldSimulation {
         Number.isInteger(row.generation) &&
         row.generation >= 0 &&
         Number.isFinite(row.emptiedAtMs) &&
-        // A bed of reeds can only stand at the lake's edge.
-        (!isReedPatch(row.id) || isReedSpot(row.x, row.z));
+        // A bed of reeds can only stand at the edge of the water it belongs to.
+        (!isReedPatch(row.id) || isReedSpotFor(row.id, row.x, row.z));
       if (!sensible) continue;
       patch.x = row.x;
       patch.z = row.z;

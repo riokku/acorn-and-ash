@@ -5,12 +5,14 @@ import {
   DEFAULT_WORLD_SEED,
   GATHER_PATCH_MAX_COUNT,
   GATHER_PATCH_MIN_COUNT,
+  PATCH_SPACING,
   PICKUP_REACH,
   PLAYABLE_HALF_EXTENT,
   REED_REGROW_MAX_SECONDS,
   REED_REGROW_MIN_SECONDS,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
+  SPAWN_POSITION,
   TICK_MILLISECONDS,
 } from '../src/constants';
 import { ITEM_KINDS } from '../src/data/items';
@@ -22,27 +24,61 @@ import { WorldSimulation } from '../src/sim/world-sim';
 import { buildWilderness } from '../src/world/wilderness';
 import { createWildernessTerrain } from '../src/world/terrain';
 import { LAKE, lakeDepthAt, basinDepthAt, nearestIslandDepthAt } from '../src/world/lake';
-import { STICK_PATCHES, FLOWER_PATCHES } from '../src/world/clearing';
 import {
-  REED_BED_SPACING,
-  REED_MIN_MOVE,
+  AXE_STUMP,
+  BAG_SPOT,
+  FLOWER_PATCHES,
+  POND,
+  ROD_SPOT,
+  STICK_PATCHES,
+} from '../src/world/clearing';
+import { waterColliders, type WaterCircle } from '../src/world/water';
+import {
   REED_PATCHES,
   REED_PATCH_DEPTH,
   REED_PATCH_FIRST_ID,
-  REED_PATCH_SPACING,
   REED_SHORE_SPOTS,
+  REED_WATERS,
   buildReedPatchSpots,
   isReedPatch,
   isReedSpot,
+  isReedSpotFor,
+  reedBedSpacing,
   reedRegrowDelayMs,
   reedRegrowSpot,
+  reedShoreSpots,
+  reedWaterOf,
 } from '../src/world/reeds';
 
+const LAKE_WATER = REED_WATERS.find((water) => water.name === 'lake')!;
+const POND_WATER = REED_WATERS.find((water) => water.name === 'pond')!;
+const LAKE_BEDS = REED_PATCHES.filter((bed) => reedWaterOf(bed.id) === LAKE_WATER);
+const POND_BEDS = REED_PATCHES.filter((bed) => reedWaterOf(bed.id) === POND_WATER);
+
+/** How far inside a pond's outline a spot is, in metres: negative on dry land. */
+function outlineDepth(circles: readonly WaterCircle[], x: number, z: number): number {
+  return Math.max(...circles.map((c) => c.radius - Math.hypot(x - c.x, z - c.z)));
+}
+
+/** Everything the clearing already lays out round the pond. */
+const AROUND_THE_POND = [
+  SPAWN_POSITION,
+  AXE_STUMP,
+  BAG_SPOT,
+  ROD_SPOT,
+  ...STICK_PATCHES,
+  ...FLOWER_PATCHES,
+];
+
 describe('where the reeds grow', () => {
-  it('has a handful of patches round the bank', () => {
+  it('has a handful of patches at every water', () => {
     expect(REED_PATCHES.length).toBeGreaterThanOrEqual(4);
     expect(REED_PATCHES.length).toBeLessThanOrEqual(12);
     for (const spot of REED_PATCHES) expect(spot.item).toBe('reed');
+    // The lake and the pond each start with some.
+    expect(LAKE_BEDS.length).toBeGreaterThanOrEqual(4);
+    expect(POND_BEDS.length).toBeGreaterThanOrEqual(2);
+    expect(LAKE_BEDS.length + POND_BEDS.length).toBe(REED_PATCHES.length);
   });
 
   it('numbers them from 100, clear of the clearing and the forest', () => {
@@ -57,6 +93,17 @@ describe('where the reeds grow', () => {
     expect(Math.max(...ids)).toBeLessThanOrEqual(0xff);
   });
 
+  it('keeps the lake beds numbered as they always were, with the pond after them', () => {
+    // A world saved before the pond had any loads unchanged: the lake's ids come first.
+    expect(LAKE_BEDS.map((bed) => bed.id)).toEqual(
+      LAKE_BEDS.map((_, index) => REED_PATCH_FIRST_ID + index),
+    );
+    expect(POND_BEDS.map((bed) => bed.id)).toEqual(
+      POND_BEDS.map((_, index) => REED_PATCH_FIRST_ID + LAKE_BEDS.length + index),
+    );
+    expect(buildReedPatchSpots([LAKE_WATER])).toEqual(LAKE_BEDS);
+  });
+
   it('knows its own, and only its own', () => {
     for (const spot of REED_PATCHES) expect(isReedPatch(spot.id)).toBe(true);
     expect(isReedPatch(1)).toBe(false);
@@ -65,8 +112,15 @@ describe('where the reeds grow', () => {
     expect(isReedPatch(200)).toBe(false);
   });
 
-  it('stands them in the shallows at the water edge, never out on an island', () => {
-    for (const spot of REED_PATCHES) {
+  it('knows which water each bed belongs to', () => {
+    for (const bed of LAKE_BEDS) expect(reedWaterOf(bed.id)?.name).toBe('lake');
+    for (const bed of POND_BEDS) expect(reedWaterOf(bed.id)?.name).toBe('pond');
+    expect(reedWaterOf(1)).toBeNull();
+    expect(reedWaterOf(200)).toBeNull();
+  });
+
+  it("stands the lake's in the shallows at the water edge, never out on an island", () => {
+    for (const spot of LAKE_BEDS) {
       expect(lakeDepthAt(LAKE, spot.x, spot.z)).toBeGreaterThan(REED_PATCH_DEPTH - 0.05);
       expect(lakeDepthAt(LAKE, spot.x, spot.z)).toBeLessThan(REED_PATCH_DEPTH + 0.05);
       // On the open bank of the lake, not where two of its circles run together.
@@ -76,12 +130,22 @@ describe('where the reeds grow', () => {
     }
   });
 
-  it('spreads them out along the bank', () => {
+  it("stands the pond's in the shallows at the water edge, on the open bank", () => {
+    for (const spot of POND_BEDS) {
+      const depth = outlineDepth(POND, spot.x, spot.z);
+      expect(depth).toBeGreaterThan(REED_PATCH_DEPTH - 0.05);
+      expect(depth).toBeLessThan(REED_PATCH_DEPTH + 0.05);
+    }
+  });
+
+  it('spreads them out along each bank, and never lets two beds crowd a press of the button', () => {
     for (const [index, spot] of REED_PATCHES.entries()) {
       for (const other of REED_PATCHES.slice(index + 1)) {
-        expect(Math.hypot(spot.x - other.x, spot.z - other.z)).toBeGreaterThanOrEqual(
-          REED_PATCH_SPACING,
-        );
+        const apart = Math.hypot(spot.x - other.x, spot.z - other.z);
+        expect(apart).toBeGreaterThanOrEqual(PATCH_SPACING);
+        if (reedWaterOf(spot.id) === reedWaterOf(other.id)) {
+          expect(apart).toBeGreaterThanOrEqual(reedWaterOf(spot.id)!.startSpacing);
+        }
       }
     }
   });
@@ -94,12 +158,20 @@ describe('where the reeds grow', () => {
   });
 
   it('is the same every time it is worked out', () => {
-    expect(buildReedPatchSpots(LAKE)).toEqual(REED_PATCHES);
+    expect(buildReedPatchSpots(REED_WATERS)).toEqual(REED_PATCHES);
+  });
+
+  it("keeps the pond's beds clear of the rod, the flowers, the sticks and the rest of the clearing", () => {
+    for (const bed of POND_BEDS) {
+      for (const place of AROUND_THE_POND) {
+        expect(Math.hypot(bed.x - place.x, bed.z - place.z)).toBeGreaterThanOrEqual(PATCH_SPACING);
+      }
+    }
   });
 
   it('can be reached from the bank without wading in', () => {
     const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-    const world = createCollisionWorld(terrain, [], PLAYABLE_HALF_EXTENT, LAKE);
+    const world = createCollisionWorld(terrain, waterColliders(POND), PLAYABLE_HALF_EXTENT, LAKE);
     for (const spot of REED_PATCHES) {
       // Stand right on the reeds: the shore pushes you back to the bank, and the
       // bank is within a hand's reach of where they grow.
@@ -107,6 +179,7 @@ describe('where the reeds grow', () => {
       resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
       expect(Math.hypot(position.x - spot.x, position.z - spot.z)).toBeLessThan(PICKUP_REACH);
       expect(lakeDepthAt(LAKE, position.x, position.z)).toBeLessThan(0);
+      expect(outlineDepth(POND, position.x, position.z)).toBeLessThan(0.01);
     }
   });
 
@@ -122,12 +195,16 @@ describe('where the reeds grow', () => {
 });
 
 describe('everywhere a bed of mature reeds can come back to', () => {
-  it('is a good many places, all along the bank', () => {
+  it('is a good many places, all along each bank', () => {
     expect(REED_SHORE_SPOTS.length).toBeGreaterThan(REED_PATCHES.length * 3);
+    for (const water of REED_WATERS) {
+      const beds = REED_PATCHES.filter((bed) => reedWaterOf(bed.id) === water);
+      expect(reedShoreSpots(water).length).toBeGreaterThan(beds.length * 3);
+    }
   });
 
-  it('stands them all in the shallows at the water edge, never out on an island', () => {
-    for (const spot of REED_SHORE_SPOTS) {
+  it("stands the lake's all in the shallows at the water edge, never out on an island", () => {
+    for (const spot of reedShoreSpots(LAKE_WATER)) {
       expect(lakeDepthAt(LAKE, spot.x, spot.z)).toBeGreaterThan(REED_PATCH_DEPTH - 0.05);
       expect(lakeDepthAt(LAKE, spot.x, spot.z)).toBeLessThan(REED_PATCH_DEPTH + 0.05);
       expect(nearestIslandDepthAt(LAKE, spot.x, spot.z)).toBeLessThan(-5);
@@ -136,14 +213,28 @@ describe('everywhere a bed of mature reeds can come back to', () => {
     }
   });
 
+  it("stands the pond's all in the shallows at the water edge, and clear of the clearing's things", () => {
+    for (const spot of reedShoreSpots(POND_WATER)) {
+      const depth = outlineDepth(POND, spot.x, spot.z);
+      expect(depth).toBeGreaterThan(REED_PATCH_DEPTH - 0.05);
+      expect(depth).toBeLessThan(REED_PATCH_DEPTH + 0.05);
+      for (const place of AROUND_THE_POND) {
+        expect(Math.hypot(spot.x - place.x, spot.z - place.z)).toBeGreaterThanOrEqual(
+          PATCH_SPACING,
+        );
+      }
+    }
+  });
+
   it('can all be reached from the bank without wading in', () => {
     const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-    const world = createCollisionWorld(terrain, [], PLAYABLE_HALF_EXTENT, LAKE);
+    const world = createCollisionWorld(terrain, waterColliders(POND), PLAYABLE_HALF_EXTENT, LAKE);
     for (const spot of REED_SHORE_SPOTS) {
       const position = { x: spot.x, y: terrain.heightAt(spot.x, spot.z), z: spot.z };
       resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
       expect(Math.hypot(position.x - spot.x, position.z - spot.z)).toBeLessThan(PICKUP_REACH);
       expect(lakeDepthAt(LAKE, position.x, position.z)).toBeLessThan(0);
+      expect(outlineDepth(POND, position.x, position.z)).toBeLessThan(0.01);
     }
   });
 
@@ -151,6 +242,37 @@ describe('everywhere a bed of mature reeds can come back to', () => {
     for (const spot of REED_SHORE_SPOTS) expect(isReedSpot(spot.x, spot.z)).toBe(true);
     for (const spot of REED_PATCHES) expect(isReedSpot(spot.x, spot.z)).toBe(true);
     expect(isReedSpot(0, 0)).toBe(false);
+  });
+
+  it("only lets a bed stand at the water it belongs to: the pond's never on the lake, nor the lake's at the pond", () => {
+    const lakeBed = LAKE_BEDS[0]!;
+    const pondBed = POND_BEDS[0]!;
+    for (const spot of reedShoreSpots(LAKE_WATER)) {
+      expect(isReedSpotFor(lakeBed.id, spot.x, spot.z)).toBe(true);
+      expect(isReedSpotFor(pondBed.id, spot.x, spot.z)).toBe(false);
+    }
+    for (const spot of reedShoreSpots(POND_WATER)) {
+      expect(isReedSpotFor(pondBed.id, spot.x, spot.z)).toBe(true);
+      expect(isReedSpotFor(lakeBed.id, spot.x, spot.z)).toBe(false);
+    }
+    expect(isReedSpotFor(1, pondBed.x, pondBed.z)).toBe(false);
+    expect(isReedSpotFor(pondBed.id, 0, 0)).toBe(false);
+  });
+
+  it('gives every bed its own water spacing, and nothing else any', () => {
+    for (const bed of LAKE_BEDS) expect(reedBedSpacing(bed.id)).toBe(LAKE_WATER.bedSpacing);
+    for (const bed of POND_BEDS) expect(reedBedSpacing(bed.id)).toBe(POND_WATER.bedSpacing);
+    expect(reedBedSpacing(1)).toBe(0);
+  });
+
+  it("comes back at its own water, however it is asked, and never on the other's", () => {
+    for (const bed of REED_PATCHES) {
+      const water = reedWaterOf(bed.id)!;
+      const back = reedRegrowSpot(DEFAULT_WORLD_SEED, bed.id, 1, bed, () => true);
+      expect(back).not.toBeNull();
+      expect(isReedSpotFor(bed.id, back!.x, back!.z)).toBe(true);
+      expect(Math.hypot(back!.x - bed.x, back!.z - bed.z)).toBeGreaterThanOrEqual(water.minMove);
+    }
   });
 });
 
@@ -261,8 +383,10 @@ describe('cutting reeds', () => {
     const grown = reedPatchView(sim, first.id);
     expect(grown.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
     expect(grown.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
-    expect(Math.hypot(grown.x - bare.x, grown.z - bare.z)).toBeGreaterThanOrEqual(REED_MIN_MOVE);
-    expect(isReedSpot(grown.x, grown.z)).toBe(true);
+    expect(Math.hypot(grown.x - bare.x, grown.z - bare.z)).toBeGreaterThanOrEqual(
+      LAKE_WATER.minMove,
+    );
+    expect(isReedSpotFor(first.id, grown.x, grown.z)).toBe(true);
     expect(sim.persistedPatch(first.id)?.generation).toBe(1);
     expect(sim.drainPatchChanges()).toEqual([first.id]);
   });
@@ -296,7 +420,9 @@ describe('cutting reeds', () => {
       expect(grown.remaining).toBeGreaterThan(0);
       expect(isReedSpot(grown.x, grown.z)).toBe(true);
       const last = seen[seen.length - 1]!;
-      expect(Math.hypot(grown.x - last.x, grown.z - last.z)).toBeGreaterThanOrEqual(REED_MIN_MOVE);
+      expect(Math.hypot(grown.x - last.x, grown.z - last.z)).toBeGreaterThanOrEqual(
+        LAKE_WATER.minMove,
+      );
       seen.push(grown);
     }
     // Over eight comings back it has been to more than a couple of places.
@@ -318,10 +444,147 @@ describe('cutting reeds', () => {
         const bed = reedPatchView(sim, other.id);
         if (bed.remaining === 0) continue;
         expect(Math.hypot(grown.x - bed.x, grown.z - bed.z)).toBeGreaterThanOrEqual(
-          REED_BED_SPACING,
+          reedBedSpacing(first.id),
         );
       }
     }
+  });
+
+  describe("at the clearing's pond", () => {
+    const pondFirst = POND_BEDS[0]!;
+    const pondOther = POND_BEDS[1]!;
+
+    /** Cut this bed clean, then bring it back and say where it came back to. */
+    function cutAndRegrow(sim: WorldSimulation, id: number, generation = 0) {
+      const emptiedAtMs = tickClock();
+      sim.restorePatches([{ ...sim.persistedPatch(id)!, remaining: 0, generation, emptiedAtMs }]);
+      sim.regrowPatches(emptiedAtMs + reedRegrowDelayMs(DEFAULT_WORLD_SEED, id, generation));
+      return reedPatchView(sim, id);
+    }
+
+    it('starts a few beds in the world, each holding a few', () => {
+      const sim = worldWithGatherer();
+      for (const spot of POND_BEDS) {
+        const patch = reedPatchView(sim, spot.id);
+        expect(patch.item).toBe('reed');
+        expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+        expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
+      }
+    });
+
+    it('can be cut by hand from the bank', () => {
+      const sim = worldWithGatherer();
+      const before = reedPatchView(sim, pondFirst.id).remaining;
+      gatherFor(sim, pondFirst.id, 1);
+      expect(countOf(sim.inventoryOf(1), 'reed')).toBe(1);
+      expect(reedPatchView(sim, pondFirst.id).remaining).toBe(before - 1);
+    });
+
+    it('comes back after the same fifteen to twenty-five minutes, somewhere else round the pond', () => {
+      const sim = worldWithGatherer();
+      gatherFor(sim, pondFirst.id, 120);
+      const bare = reedPatchView(sim, pondFirst.id);
+      expect(bare.remaining).toBe(0);
+
+      const saved = sim.persistedPatch(pondFirst.id)!;
+      const delay = reedRegrowDelayMs(DEFAULT_WORLD_SEED, pondFirst.id, 0);
+      expect(delay).toBeGreaterThanOrEqual(REED_REGROW_MIN_SECONDS * 1000);
+      expect(delay).toBeLessThanOrEqual(REED_REGROW_MAX_SECONDS * 1000);
+      sim.regrowPatches(saved.emptiedAtMs + delay - 1);
+      expect(reedPatchView(sim, pondFirst.id).remaining).toBe(0);
+
+      sim.regrowPatches(saved.emptiedAtMs + delay);
+      const grown = reedPatchView(sim, pondFirst.id);
+      expect(grown.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+      expect(Math.hypot(grown.x - bare.x, grown.z - bare.z)).toBeGreaterThanOrEqual(
+        POND_WATER.minMove,
+      );
+      expect(isReedSpotFor(pondFirst.id, grown.x, grown.z)).toBe(true);
+    });
+
+    it('always comes back at the pond, never at the lake', () => {
+      const sim = worldWithGatherer();
+      for (let generation = 0; generation < 10; generation++) {
+        const grown = cutAndRegrow(sim, pondFirst.id, generation);
+        expect(grown.remaining).toBeGreaterThan(0);
+        expect(outlineDepth(POND, grown.x, grown.z)).toBeGreaterThan(REED_PATCH_DEPTH - 0.05);
+        expect(lakeDepthAt(LAKE, grown.x, grown.z)).toBeLessThan(0);
+      }
+    });
+
+    it("and the lake's beds never come back at the pond", () => {
+      const sim = worldWithGatherer();
+      for (let generation = 0; generation < 10; generation++) {
+        const grown = cutAndRegrow(sim, first.id, generation);
+        expect(grown.remaining).toBeGreaterThan(0);
+        expect(lakeDepthAt(LAKE, grown.x, grown.z)).toBeGreaterThan(0);
+      }
+    });
+
+    it('keeps clear of the other pond bed while it still has reeds, and of everything the clearing lays out', () => {
+      // Wider than the gap that keeps any two things apart, or this would prove nothing.
+      expect(POND_WATER.bedSpacing).toBeGreaterThan(PATCH_SPACING);
+      const sim = worldWithGatherer();
+      // Two of the pond's places are only four or five metres from the other bed, so
+      // it takes a good many comings back for the wider gap to be what turns one away.
+      for (let generation = 0; generation < 60; generation++) {
+        const grown = cutAndRegrow(sim, pondFirst.id, generation);
+        const other = reedPatchView(sim, pondOther.id);
+        expect(other.remaining).toBeGreaterThan(0);
+        expect(Math.hypot(grown.x - other.x, grown.z - other.z)).toBeGreaterThanOrEqual(
+          POND_WATER.bedSpacing,
+        );
+        for (const place of AROUND_THE_POND) {
+          expect(Math.hypot(grown.x - place.x, grown.z - place.z)).toBeGreaterThanOrEqual(
+            PATCH_SPACING,
+          );
+        }
+      }
+    });
+
+    it('is not put where somebody has left a dropped pile, so one press of the button never means two things', () => {
+      const learn = worldWithGatherer();
+      const where = cutAndRegrow(learn, pondFirst.id);
+
+      const sim = worldWithGatherer();
+      sim.restoreDroppedPiles(
+        [{ id: 1, item: 'stick', count: 1, x: where.x, z: where.z, droppedAtMs: clockMs }],
+        clockMs,
+      );
+      const grown = cutAndRegrow(sim, pondFirst.id);
+      expect(grown.remaining).toBeGreaterThan(0);
+      expect(Math.hypot(grown.x - where.x, grown.z - where.z)).toBeGreaterThanOrEqual(
+        PATCH_SPACING,
+      );
+    });
+
+    it('is remembered across a restart, and a row saved at the lake for a pond bed is not believed', () => {
+      const sim = worldWithGatherer();
+      const moved = cutAndRegrow(sim, pondFirst.id);
+      const saved = sim.persistedPatch(pondFirst.id)!;
+
+      const later = worldWithGatherer();
+      later.restorePatches([saved]);
+      expect(reedPatchView(later, pondFirst.id)).toEqual(moved);
+
+      const lakeSpot = reedShoreSpots(LAKE_WATER)[0]!;
+      const bad = worldWithGatherer();
+      bad.restorePatches([{ ...saved, x: lakeSpot.x, z: lakeSpot.z }]);
+      expect(reedPatchView(bad, pondFirst.id).x).toBeCloseTo(pondFirst.x, 5);
+      expect(reedPatchView(bad, pondFirst.id).z).toBeCloseTo(pondFirst.z, 5);
+    });
+
+    it('stops a boat being moored on a pond bed, the same as a lake one', () => {
+      const sim = worldWithGatherer();
+      const beds = sim
+        .gatherPatchesList()
+        .filter((patch) => isReedPatch(patch.id) && patch.remaining > 0);
+      const footprints = reedFootprints(beds);
+      expect(footprints).toHaveLength(REED_PATCHES.length);
+      for (const bed of POND_BEDS) {
+        expect(footprints.some((f) => f.x === bed.x && f.z === bed.z)).toBe(true);
+      }
+    });
   });
 
   it('comes back at the same time for everybody: the wait is worked out from the seed', () => {

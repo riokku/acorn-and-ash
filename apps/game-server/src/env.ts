@@ -26,8 +26,8 @@ export interface WorldEnv extends Env {
    */
   readonly WORLD_PATCH_REGROW_SECONDS?: string;
   /**
-   * The shortest a cut-clean bed of mature reeds at the lake takes to come
-   * back somewhere else round the shore, in seconds. Reeds return somewhere
+   * The shortest a cut-clean bed of mature reeds, at the pond or the lake,
+   * takes to come back somewhere else round the same shore, in seconds. Reeds return somewhere
    * between this and a bit over half as long again.
    *
    * Set low on previews and local runs so a bed moving can be watched in one

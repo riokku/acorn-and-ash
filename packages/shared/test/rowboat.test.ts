@@ -15,7 +15,7 @@ import { createInput } from '../src/sim/player';
 import { WorldSimulation } from '../src/sim/world-sim';
 import { BOAT_BERTH_MAX_DEPTH, BOAT_HULL_MIN_DEPTH } from '../src/world/boat';
 import { LAKE, lakeDepthAt } from '../src/world/lake';
-import { REED_PATCHES } from '../src/world/reeds';
+import { REED_PATCHES, reedWaterOf } from '../src/world/reeds';
 import type { WaterCircle } from '../src/world/water';
 
 /** A walker far from the lake, so only the lake's own rules say anything. */
@@ -87,8 +87,11 @@ describe('what a rowboat is', () => {
 });
 
 describe('where a rowboat can be moored', () => {
-  it('floats beside every clump of reeds, lying along the bank', () => {
-    for (const spot of REED_PATCHES) {
+  it('floats beside every clump of reeds at the lake, lying along the bank', () => {
+    // Boats are for the lake (decision 0092): the pond's reeds are not somewhere to moor.
+    const lakeBeds = REED_PATCHES.filter((spot) => reedWaterOf(spot.id)?.name === 'lake');
+    expect(lakeBeds.length).toBeGreaterThan(0);
+    for (const spot of lakeBeds) {
       const berth = berthBeside(spot);
       const piece = buildableFootprint('rowboat', berth.x, berth.z, berth.yaw);
       expect(checkBuildSpot(piece, FAR_AWAY, ANY_REACH, [], [])).toBeNull();
