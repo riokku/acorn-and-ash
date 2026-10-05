@@ -196,6 +196,7 @@ import {
 import { LAKE } from '../world/lake';
 import {
   beachedBoat,
+  boatSalvage,
   boatYawFor,
   isWithinBoardingReach,
   landingBeside,
@@ -1302,6 +1303,7 @@ export class WorldSimulation {
   private readonly buildEvents: BuildEvent[] = [];
   /** Rowboats somebody climbed into or out of since this was last asked, by built-prop id. */
   private readonly boatChanges = new Set<number>();
+  private readonly brokenBoats: number[] = [];
   /** When each currently-lit campfire should go out on its own, by prop id. Absent while unlit. */
   private readonly campfireLitUntilMs = new Map<number, number>();
   private readonly campfireLitEvents: CampfireLitEvent[] = [];
@@ -3563,6 +3565,46 @@ export class WorldSimulation {
     return changed;
   }
 
+  /**
+   * A player has been knocked out and wakes in bed. Any boat of theirs that
+   * nobody is rowing and that is left on an island, where they cannot walk
+   * back to it, falls apart where it lies into half its materials for
+   * anybody to pick up - so they are free to build another (decision 0094).
+   * A boat on the mainland shore stays put.
+   */
+  private breakUpStrandedBoats(runtime: PlayerRuntime): void {
+    if (runtime.playerKey === null) return;
+    const owned: BuiltProp[] = [];
+    for (const [id, owner] of this.ownedBuiltProps) {
+      if (owner !== runtime.playerKey) continue;
+      const prop = this.builtPropsById.get(id);
+      if (prop !== undefined && prop.kind === 'rowboat' && prop.rower === undefined)
+        owned.push(prop);
+    }
+    for (const boat of owned) {
+      const shore = landingBeside(boat.x, boat.z);
+      if (!shore.onIsland) continue;
+      this.removeBoat(boat);
+      boatSalvage().forEach((part, index) =>
+        this.addPile(part.item, part.count, shore.x + index * 0.3, shore.z, this.nowMs),
+      );
+    }
+  }
+
+  /** Take a boat out of the world altogether. */
+  private removeBoat(boat: BuiltProp): void {
+    this.builtProps.splice(this.builtProps.indexOf(boat), 1);
+    this.builtPropsById.delete(boat.id);
+    this.ownedBuiltProps.delete(boat.id);
+    this.boatChanges.delete(boat.id);
+    this.brokenBoats.push(boat.id);
+  }
+
+  /** Hand over the id of every boat that has fallen apart since this was last asked. */
+  drainBrokenBoats(): number[] {
+    return this.brokenBoats.splice(0);
+  }
+
   /** Whether nobody else is already in this chair, or in this bed. */
   private isRestingPlaceFree(runtime: PlayerRuntime, place: RestingPlace): boolean {
     const kind = place.kind === 'chair' ? ActionKind.Sit : ActionKind.Lie;
@@ -3695,6 +3737,8 @@ export class WorldSimulation {
     if (knockedOut) {
       // Out of the boat first, so what they buried is on dry ground.
       this.putBoatAshore(runtime);
+      // A boat they can no longer walk back to is not worth keeping (decision 0094).
+      this.breakUpStrandedBoats(runtime);
       // Where they fell is where it stays buried.
       const position = runtime.entity.get(Position);
       if (position !== undefined) {

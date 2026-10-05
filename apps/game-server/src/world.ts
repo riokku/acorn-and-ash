@@ -508,6 +508,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
     this.announceBoats(simulation);
+    this.announceBrokenBoats(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
     this.announceCooking(simulation);
@@ -796,6 +797,21 @@ export class World extends DurableObject<WorldEnv> {
           boat.yaw,
           boat.id,
         );
+    });
+    this.broadcastBuiltProps(simulation);
+  }
+
+  /**
+   * A boat fell apart because its owner was knocked out with it cut off on an
+   * island (decision 0094): forget it for good, and tell everybody it is gone.
+   * The pile of materials it left is announced with every other pile.
+   */
+  private announceBrokenBoats(simulation: WorldSimulation): void {
+    const broken = simulation.drainBrokenBoats();
+    if (broken.length === 0) return;
+    this.ctx.storage.transactionSync(() => {
+      for (const id of broken)
+        this.ctx.storage.sql.exec('DELETE FROM built_props WHERE id = ?', id);
     });
     this.broadcastBuiltProps(simulation);
   }

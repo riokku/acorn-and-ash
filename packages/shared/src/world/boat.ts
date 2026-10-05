@@ -58,3 +58,6 @@ export const BOAT_GLIDE_DECELERATION = 0.9;
 
 /** How fast the bow swings round to where the rower wants to go, in radians per second. */
 export const BOAT_TURN_RATE = 1.9;
+
+/** How much of what a rowboat cost is left when it falls apart: half, rounded down for each thing. */
+export const BOAT_SALVAGE_SHARE = 0.5;

@@ -325,6 +325,13 @@ the bank. The rowing rules are in `packages/shared/src/sim/rowing.ts`, and the
 boat under each rider is drawn by `apps/client/src/scene/rowing-boats.ts`. See
 [decision 0093](docs/decisions/0093-rowing.md).
 
+If you are knocked out and your boat is left on an island, where you can't walk
+back to it, it falls apart where it sits and you wake in bed free to build
+another. It leaves half its materials (three logs and a rope) in a pile on the
+island's shore for anybody to pick up. A boat on the mainland shore, one that
+somebody else is rowing, and anybody else's boat are left alone. See
+[decision 0094](docs/decisions/0094-boat-falls-apart.md).
+
 ### Wind in the grass
 
 Nearby clearings and sunny forest patches now have moving grass blades, with
