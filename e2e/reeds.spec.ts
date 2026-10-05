@@ -1,9 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import * as shared from '../packages/shared/src/index';
+import { skipDrawing } from './skip-drawing';
 
 /**
- * Reeds and rope (decision 0091): reeds grow along the lake's bank, E cuts one,
- * and three of them twist into a rope from the Craft menu.
+ * Reeds and rope (decisions 0091 and 0101): mature reeds grow along the bank of
+ * the lake and of the clearing's pond, E cuts one, and three of them twist into
+ * a rope from the Craft menu.
  *
  * The server is played by an in-page copy of the simulation standing in for
  * it, with the player already on the bank beside a patch. That keeps the test
@@ -37,14 +39,29 @@ function bankBeside(spot: { x: number; z: number }): { x: number; z: number } {
   return bank;
 }
 
-test('you can cut reeds at the lake and twist them into rope', async ({ page }) => {
+for (const water of ['lake', 'pond'] as const) {
+  test(`you can cut reeds at the ${water} and twist them into rope`, async ({ page }) => {
+    await cutReedsAndTwistRope(page, water);
+  });
+}
+
+async function cutReedsAndTwistRope(page: Page, water: 'lake' | 'pond'): Promise<void> {
+  // What this checks is what the browser sends and shows, not the picture (decision
+  // 0100). Drawn in software, the pond's busy clearing leaves the page too slow to
+  // send a press of E for seconds at a time, and the cut was never reached.
+  await skipDrawing(page);
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     hungerEmptyAfterSeconds: Infinity,
   });
-  // A patch with enough reeds for one rope, so the test never waits for regrowth.
-  const patch = sim.gatherPatchesList().find((view) => view.item === 'reed' && view.remaining >= 3);
-  if (patch === undefined) throw new Error('no reed patch holds three reeds');
+  // A patch at this water with enough reeds for one rope, so the test never waits for regrowth.
+  const patch = sim
+    .gatherPatchesList()
+    .find(
+      (view) =>
+        view.item === 'reed' && view.remaining >= 3 && shared.reedWaterOf(view.id)?.name === water,
+    );
+  if (patch === undefined) throw new Error(`no reed patch at the ${water} holds three reeds`);
   const start = bankBeside(patch);
   sim.addPlayer(1, undefined, 'cutter');
   sim.placePlayer(1, { x: start.x, y: 0, z: start.z }, 0);
@@ -85,10 +102,10 @@ test('you can cut reeds at the lake and twist them into rope', async ({ page }) 
     });
   });
 
-  await enterWorld(page, 'reeds-lake');
+  await enterWorld(page, `reeds-${water}`);
   await page.locator('.hud-curtain').click();
 
-  // The browser knows about every clump along the bank, drawn from what the server says.
+  // The browser knows about every clump along every bank, drawn from what the server says.
   const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
   expect(spots.filter((spot) => spot.item === 'reed')).toHaveLength(shared.REED_PATCHES.length);
   await expect(page.locator('.hud-hint')).toContainText(
@@ -125,4 +142,4 @@ test('you can cut reeds at the lake and twist them into rope', async ({ page }) 
     .toBe(1);
   expect(await reedsCarried()).toBe(0);
   expect(errors).toEqual([]);
-});
+}

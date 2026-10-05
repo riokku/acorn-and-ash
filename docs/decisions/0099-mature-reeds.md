@@ -4,7 +4,7 @@
 
 The reeds you could cut for rope ([decision 0091](0091-reeds-and-rope.md)) were six fixed clumps that looked like the scenery reeds around them and grew back in the same place after a few minutes. Chris asked for only some reeds to be gatherable, for those to stand out, to be called **mature reeds**, and for them to come back somewhere around the water on a random timer of about twenty minutes.
 
-"The pond" could mean the small pond in the clearing or the big lake in the north-east. The lake is where the reeds already are, and it is the only water the rowboat can use, so the mature reeds live there. The places a bed can return to are one list (`REED_SHORE_SPOTS`), so the clearing's pond could be added to it later without changing how anything else works.
+"The pond" could mean the small pond in the clearing or the big lake in the north-east. The lake is where the reeds already are, and it is the only water the rowboat can use, so the mature reeds live there. The places a bed can return to are one list (`REED_SHORE_SPOTS`), so the clearing's pond could be added to it later without changing how anything else works. It was: see [decision 0101](0101-reeds-at-every-water.md).
 
 ## Decision
 

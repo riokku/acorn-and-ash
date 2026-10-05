@@ -295,21 +295,25 @@ the pond (a cast never lands on an island). In winter the lake freezes over: see
 
 ### Reeds and rope
 
-Most of the reeds at the lake are just scenery. A few are **mature reeds**:
-taller and golden, with fat brown cattails, so they stand out across the water.
-Six of them start out along the lake's bank, a long walk apart. Stand at the
+Most of the reeds at the lake and the pond are just scenery. A few are **mature
+reeds**: taller and golden, with fat brown cattails, so they stand out across
+the water. Six of them start out along the lake's bank, a long walk apart, and
+two more stand on the east bank of the pond in the home clearing. Stand at the
 water's edge beside one and press E (or right-click) to cut a reed; a bed holds
 two to six. Once it is cut bare it comes back after a random fifteen to
-twenty-five minutes, at a different place round the shore. Open the Craft menu
-(`C`), turn to its **Lake** page and twist three reeds into a length of rope, by
-hand with no workbench. Rope is for the rowboat, below.
+twenty-five minutes, at a different place round the shore of the same water: a
+pond bed never turns up at the lake, nor the other way round, so both always
+have some. Open the Craft menu (`C`), turn to its **Lake** page and twist three
+reeds into a length of rope, by hand with no workbench. Rope is for the rowboat,
+below, which is for the lake only.
 
 The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
 `apps/client/src/scene/reed-models.ts`. `local` runs and preview links bring a
 bed back in 45 to 75 seconds instead, set by `WORLD_REED_REGROW_SECONDS` in
 [`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). See
-[decision 0091](docs/decisions/0091-reeds-and-rope.md) and
-[decision 0099](docs/decisions/0099-mature-reeds.md).
+[decision 0091](docs/decisions/0091-reeds-and-rope.md),
+[decision 0099](docs/decisions/0099-mature-reeds.md) and
+[decision 0101](docs/decisions/0101-reeds-at-every-water.md).
 
 ### Rowboat
 

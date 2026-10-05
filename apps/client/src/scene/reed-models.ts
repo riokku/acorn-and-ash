@@ -6,8 +6,8 @@ import { plainMaterial } from '../art/materials';
 import { waterPlantMaterials } from './water-plants';
 
 /**
- * The mature reeds at the lake that can be cut, and what they are twisted into
- * (see decisions 0091 and 0099). They stand out from the scenery reeds all
+ * The mature reeds at the pond and the lake that can be cut, and what they are
+ * twisted into (see decisions 0091, 0099 and 0101). They stand out from the scenery reeds all
  * round them: taller, golden instead of green, with fat brown cattails, so
  * the ones worth walking to can be picked out from across the water. They are
  * still built from the same plain shapes; the ground items add and remove
