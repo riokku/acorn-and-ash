@@ -1328,8 +1328,9 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
 
 /**
  * Walk toward wherever an animal currently is - it wanders, so this re-reads
- * its position every attempt rather than aiming at a fixed spot - until the
- * game says a swing would land on it.
+ * its position every attempt rather than aiming at a fixed spot - until a
+ * swing would land on it, or it is close enough that it may start bolting and
+ * the chase proper (`huntAnimal`) should take over.
  *
  * A den can be fifty metres past the tree line, and every check here is a
  * round trip through the browser. On a slow enough machine that round trip
@@ -1400,17 +1401,9 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
       continue;
     }
 
-    // Close enough that it may already be bolting, curving fresh every tick
-    // to run straight away from whoever is chasing it - aiming once and then
-    // sprinting blind for seconds just walks to where it *was*. A sprinting
-    // player only just outpaces a fleeing rabbit (7 m/s vs 6), so the chase
-    // only gains ground by re-aiming often: a short hold, then look again.
-    await page.keyboard.down('ShiftLeft');
-    await page.keyboard.down('KeyW');
-    await page.waitForTimeout(400);
-    await page.keyboard.up('KeyW');
-    await page.keyboard.up('ShiftLeft');
-    await page.waitForTimeout(80);
+    // Close enough that it may already be bolting: from here the chase is
+    // `huntAnimal`'s job, which keeps the sprint held down while it re-aims.
+    return;
   }
   throw new Error(`Never got within swinging distance of animal ${animalId}`);
 }
@@ -1438,46 +1431,64 @@ async function huntAnimal(
   const hitsLeft: number[] = [];
   await centerMouse(page);
 
-  for (let step = 0; step < 150; step++) {
-    const look = await page.evaluate((id) => {
-      const animal = window.acornDebug?.animals().find((entry) => entry.id === id) ?? null;
-      return {
-        animal: animal === null ? null : { x: animal.x, z: animal.z },
-        aimed: window.acornDebug?.aimedAnimal() ?? null,
-        hint: document.querySelector('.hud-hint')?.textContent ?? '',
-      };
-    }, animalId);
-    if (look.animal === null) return { caught: true, hints, hitsLeft };
-
-    await page.evaluate(
-      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
-      [look.animal.x, look.animal.z],
-    );
-
-    if (look.aimed === null) {
-      // Not in reach yet: a short sprint, then look again.
+  // A sprinting player only just outpaces a fleeing rabbit (7 m/s against 6),
+  // so letting go of the keys between looks hands the whole lead back. The
+  // sprint stays held while closing in and is released only to swing.
+  let sprinting = false;
+  const sprint = async (on: boolean): Promise<void> => {
+    if (on === sprinting) return;
+    sprinting = on;
+    if (on) {
       await page.keyboard.down('ShiftLeft');
       await page.keyboard.down('KeyW');
-      await page.waitForTimeout(300);
+    } else {
       await page.keyboard.up('KeyW');
       await page.keyboard.up('ShiftLeft');
-      await page.waitForTimeout(80);
-      continue;
     }
+  };
 
-    hints.push(look.hint);
-    if (look.aimed.hitsLeft !== undefined) hitsLeft.push(look.aimed.hitsLeft);
-    const first = hitsLeft[0];
-    if (options.stopWhenHurt && first !== undefined && Math.min(...hitsLeft) < first) {
-      return { caught: false, hints, hitsLeft };
+  try {
+    for (let step = 0; step < 400; step++) {
+      const look = await page.evaluate((id) => {
+        const animal = window.acornDebug?.animals().find((entry) => entry.id === id) ?? null;
+        return {
+          animal: animal === null ? null : { x: animal.x, z: animal.z },
+          aimed: window.acornDebug?.aimedAnimal() ?? null,
+          hint: document.querySelector('.hud-hint')?.textContent ?? '',
+        };
+      }, animalId);
+      if (look.animal === null) return { caught: true, hints, hitsLeft };
+
+      // Curving fresh every tick, it runs straight away from whoever is
+      // chasing it, so aim again each time rather than at where it was.
+      await page.evaluate(
+        ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+        [look.animal.x, look.animal.z],
+      );
+
+      if (look.aimed === null) {
+        await sprint(true);
+        await page.waitForTimeout(60);
+        continue;
+      }
+
+      await sprint(false);
+      hints.push(look.hint);
+      if (look.aimed.hitsLeft !== undefined) hitsLeft.push(look.aimed.hitsLeft);
+      const first = hitsLeft[0];
+      if (options.stopWhenHurt && first !== undefined && Math.min(...hitsLeft) < first) {
+        return { caught: false, hints, hitsLeft };
+      }
+
+      await page.mouse.down();
+      await page.waitForTimeout(200);
+      await page.mouse.up();
+      await page.waitForTimeout(150);
     }
-
-    await page.mouse.down();
-    await page.waitForTimeout(200);
-    await page.mouse.up();
-    await page.waitForTimeout(150);
+    throw new Error(`animal ${animalId} was never caught`);
+  } finally {
+    await sprint(false);
   }
-  throw new Error(`animal ${animalId} was never caught`);
 }
 
 test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
@@ -1699,8 +1710,8 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
  * Face the given spot, open the Craft menu with B, turn to the given page of
  * it (Camp, Yard...), press the given number on that page, then point the mouse at open ground ahead and click until something
  * appears - the way a player places a piece once its preview follows the
- * mouse (decision 0052). Tries a few spots down the screen from the middle,
- * nearer and nearer the player, in case the first is not clear. Stops once
+ * mouse (decision 0052). Tries a few spots up and down the screen from the
+ * middle, nearer and farther from the player, in case the first is not clear. Stops once
  * `piecesWanted` pieces stand in the world, counting any built already.
  */
 async function buildFacing(
@@ -1728,7 +1739,10 @@ async function buildFacing(
       await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
       await page.keyboard.press(digit);
     }
-    const lower = (attempt % 3) * 70;
+    // Up the screen is farther from the player and down is nearer: a big piece
+    // like the tent needs room round it, so it is not clear at the first spot.
+    const lowerBy = [0, -60, -120, 60, 120, -180];
+    const lower = lowerBy[attempt % lowerBy.length] ?? 0;
     await page.mouse.move(viewport.width / 2, viewport.height / 2 + lower);
     await expect
       .poll(
