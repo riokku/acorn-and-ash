@@ -139,13 +139,28 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     expect(sim.inventoryOf(1).guardianTrophy).toBe(1);
     teleport(0, 0);
     await page.keyboard.press('KeyB');
+    // Straight to the Trophies page: a short list that does not scroll under the click.
+    await page
+      .locator('.craft-tabs')
+      .getByRole('button', { name: 'Trophies', exact: true })
+      .click();
     await page.locator('.hud-journal-entry').filter({ hasText: 'Guardian trophy' }).click();
+    // The menu closes once the piece is in hand; a mouse move before that lands on the panel, not the world.
+    await expect(page.locator('.hud-journal')).toHaveCount(0);
     const point = await page.evaluate(() => window.acornDebug?.screenPoint(2.5, 0, 0));
     if (point == null) throw new Error('trophy position is off screen');
     await page.mouse.move(point.x, point.y);
+    // The preview starts out with no spot and no refusal, so wait for it to find
+    // the spot under the mouse before clicking - at a few frames a second the
+    // click would otherwise land first and place nothing.
     await expect
-      .poll(() => page.evaluate(() => window.acornDebug?.buildPreview()?.refusal))
-      .toBeNull();
+      .poll(() =>
+        page.evaluate(() => {
+          const preview = window.acornDebug?.buildPreview();
+          return preview?.spot != null && preview.refusal === null;
+        }),
+      )
+      .toBe(true);
     await page.mouse.click(point.x, point.y);
     await expect
       .poll(() => sim.builtPropsList().some((prop) => prop.kind === 'guardianTrophy'))

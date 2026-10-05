@@ -33,6 +33,7 @@ declare global {
       aimedAnimal(): { name: string; hitsLeft?: number } | null;
       canBuild(): boolean;
       buildMenuOpen(): boolean;
+      craftMenuOpen(): boolean;
       builtProps(): Array<{
         id: number;
         kind: string;
@@ -1576,8 +1577,8 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
 }
 
 /**
- * Face the given spot, open the build menu with B, pick the given menu slot,
- * then point the mouse at open ground ahead and click until something
+ * Face the given spot, open the Craft menu with B, turn to the given page of
+ * it (Camp, Yard...), press the given number on that page, then point the mouse at open ground ahead and click until something
  * appears - the way a player places a piece once its preview follows the
  * mouse (decision 0052). Tries a few spots down the screen from the middle,
  * nearer and nearer the player, in case the first is not clear.
@@ -1585,6 +1586,7 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
 async function buildFacing(
   page: Page,
   target: { x: number; z: number },
+  tab: string,
   digit: string,
 ): Promise<void> {
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
@@ -1597,6 +1599,7 @@ async function buildFacing(
     if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) === null) {
       await page.keyboard.press('KeyB');
       await page.waitForTimeout(150);
+      await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
       await page.keyboard.press(digit);
     }
     const lower = (attempt % 3) * 70;
@@ -1680,12 +1683,15 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   // Opening the menu with only four logs offers the campfire but not the
   // starter tent (which costs six sticks). Picking the unaffordable one still shows its
   // preview, red, saying what is missing (decision 0052) - and a click
-  // then places nothing. The journal panel itself lists every option now
-  // (decision 0043); the hint line beneath it just says how to close the menu.
+  // then places nothing. The one Craft menu lists every option (decisions 0043
+  // and 0096); the hint line beneath it just says how to close it.
   await page.keyboard.press('KeyB');
-  await expect(page.locator('.hud-hint')).toContainText('Pick one below, or B to close');
-  await page.keyboard.press('Digit2');
-  expect(await page.evaluate(() => window.acornDebug?.buildMenuOpen() ?? true)).toBe(false);
+  await expect(page.locator('.hud-hint')).toContainText('Pick one below, or C to close');
+  await page
+    .locator('.hud-journal-entry')
+    .filter({ hasText: /^\d?Tent/ })
+    .click();
+  expect(await page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true)).toBe(false);
   await centerMouse(page);
   await expect(page.locator('.hud-hint')).toContainText('Need 6 more sticks');
   await page.mouse.down();
@@ -1697,7 +1703,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)).toBeNull();
   await expect(page.locator('.hud-curtain')).toBeHidden();
 
-  await buildFacing(page, spawnSpot, 'Digit1');
+  await buildFacing(page, spawnSpot, 'Camp', 'Digit1');
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built).toHaveLength(1);
@@ -1765,7 +1771,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
     ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
     [spawnSpot.x, spawnSpot.z],
   );
-  await buildFacing(page, spawnSpot, 'Digit1');
+  await buildFacing(page, spawnSpot, 'Camp', 'Digit1');
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   const campfire = built[0];
@@ -1833,17 +1839,18 @@ test('you can gather flowers and plant something pretty for the garden', async (
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
 
-  // All six buildables now show in the journal panel, in the same order
-  // every time - the fence and the garden path stone (decision 0048)
-  // included, not just the original four.
+  // One Craft menu lists everything. Its Yard page holds the flower bed, the
+  // fence, the garden path stone (decision 0048) and the planter, and the
+  // lantern sits on the Camp page that is built from below.
   await page.keyboard.press('KeyB');
-  await expect(page.locator('.hud-journal-entry')).toHaveCount(6);
+  await page.locator('.craft-tabs').getByRole('button', { name: 'Yard', exact: true }).click();
+  await expect(page.locator('.hud-journal-entry')).toHaveCount(4);
   await expect(page.locator('.hud-journal')).toContainText('Fence');
   await expect(page.locator('.hud-journal')).toContainText('Garden path');
   await page.keyboard.press('KeyB');
   await page.waitForTimeout(150);
 
-  await buildFacing(page, spawnSpot, 'Digit4');
+  await buildFacing(page, spawnSpot, 'Camp', 'Digit2');
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built).toHaveLength(1);

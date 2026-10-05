@@ -100,6 +100,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
     await page.getByRole('button', { name: /Teepee blueprint, 1/ }).click();
     await expect.poll(() => sim.homeSkillsOf(1)).toBe(1);
     await page.keyboard.press('KeyB');
+    await page.locator('.craft-tabs').getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page.locator('.hud-journal')).toContainText('Upgrade to Teepee');
     await expect(page.locator('.hud-journal')).not.toContainText('blueprint needed');
     await page.locator('.hud-journal-entry').filter({ hasText: 'Upgrade to Teepee' }).click();
@@ -118,7 +119,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
       )
       .toBe('teepee');
     await page.keyboard.down('KeyB');
-    await expect.poll(() => page.evaluate(() => window.acornDebug?.buildMenuOpen())).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.acornDebug?.craftMenuOpen())).toBe(true);
     await page.keyboard.up('KeyB');
     await expect(page.locator('.build-area-note')).toContainText('18 m radius');
     await expect

@@ -10,6 +10,7 @@ import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } fr
 import type { RenderBackend } from '../scene/renderer';
 import type { ConnectionState } from '../net/connection';
 import type { Compass } from './cache-compass';
+import type { CraftTabId } from './craft-menu';
 import type { HotbarPins } from './hotbar-layout';
 import type { ToastView } from './toasts';
 
@@ -121,9 +122,11 @@ export interface HudState {
   readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;
   readonly journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing';
+  /** Which page of the Craft menu is showing: everything, or one kind of thing (see decision 0096). */
+  readonly craftTab: CraftTabId;
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
-  /** Whether the build menu (opened with B) is currently showing. */
+  /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
   readonly buildMenuOpen: boolean;
   /**
    * The piece being placed, if any (see decision 0052): its name, why a
@@ -249,6 +252,7 @@ const INITIAL: HudState = {
   trackHint: null,
   nearbyDiscovery: null,
   journalTab: 'craft',
+  craftTab: 'all',
   homeKind: null,
   buildAreaRadius: null,
   buildMenuOpen: false,

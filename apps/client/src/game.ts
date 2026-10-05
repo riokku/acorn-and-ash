@@ -95,7 +95,6 @@ import {
   treeLogSpots,
   RAIDER_KINDS,
   PlayerButton,
-  RECIPE_ITEMS,
   SPAWN_POSITION,
   SnapshotFlag,
   TINT_COLORS,
@@ -195,6 +194,15 @@ import { ForestAudio } from './audio/forest-sounds';
 import { createForestEnvironment, type ForestEnvironment } from './audio/forest-environment';
 import { TreeLandingEffects } from './scene/tree-landing';
 import { PickupNoticeShelf } from './hud/pickup-notice';
+import {
+  choosingPiece,
+  craftMenuEntries,
+  entriesOnTab,
+  shownTab,
+  type CraftAction,
+  type CraftEntry,
+  type CraftTabId,
+} from './hud/craft-menu';
 import { playPickupRefused, playTreeLanding, playCollection } from './audio/feedback';
 import {
   buildClearingScene,
@@ -563,9 +571,9 @@ export interface GameDebug {
   raidBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
-  /** Whether the build menu (opened with B) is currently showing. */
+  /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
   buildMenuOpen(): boolean;
-  /** Whether the craft menu (opened with C) is currently showing. */
+  /** Whether the Craft menu (opened with C, or B outdoors) is currently showing. */
   craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{
@@ -736,6 +744,7 @@ export class Game {
   private expedition: ExpeditionView = { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' };
   private expeditionPendingUntil = 0;
   private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
+  private craftTab: CraftTabId = 'all';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
@@ -1198,7 +1207,7 @@ export class Game {
 
   /**
    * Start placing one of these, the same as pressing its number with the
-   * build menu open - called when an entry in that menu is clicked.
+   * Craft menu open - called when an entry in that menu is clicked.
    */
   moveDecoration(id: number): void {
     const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
@@ -3024,11 +3033,13 @@ export class Game {
   }
 
   /**
-   * B opens or closes the build menu, closing the craft menu if that was open
-   * instead - only one ever shows at once, so a digit key always means one
-   * thing. While it is open, a digit key picks from it and starts placing
-   * that piece (see decision 0052); while a piece is being placed, the same
-   * digit keys swap it for another without going back to the menu.
+   * B outdoors opens the Craft menu, the same one C does, on its Craft page:
+   * what you make and what you place are listed together (see decision 0096).
+   * While it is open, a digit key picks the entry numbered beside it; picking a
+   * piece starts placing it (see decision 0052), and while a piece is being
+   * placed the same digit keys swap it for another without going back.
+   *
+   * Indoors B is the room's decorating panel, which has pieces of its own.
    */
   private handleBuildMenuInput(controls: Controls): void {
     if (this.space !== OUTDOORS) {
@@ -3049,27 +3060,17 @@ export class Game {
       }
       return;
     }
+    this.buildMenuOpen = false;
     if (controls.takeBuildMenuToggle()) {
-      this.buildMenuOpen = !this.buildMenuOpen;
-      if (this.buildMenuOpen) {
-        this.stopPlacing();
-        this.craftMenuOpen = false;
-        this.inventoryOpen = false;
-      }
+      if (this.craftMenuOpen && this.journalTab === 'craft') this.craftMenuOpen = false;
+      else this.openCraftMenu();
     }
-    if (!this.buildMenuOpen && this.placing === null) return;
-    for (const index of controls.takeBuildTaps()) {
-      const original = BUILDABLE_KIND_ORDER[index];
-      const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
-      const kind =
-        original === 'cabin'
-          ? nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null)
-          : original;
-      if (kind === null || (original !== 'cabin' && original !== undefined && isHomeKind(original)))
-        continue;
-      if (kind === undefined) continue;
-      this.buildMenuOpen = false;
-      this.startPlacing(kind);
+    if (this.placing === null || this.craftMenuOpen) return;
+    // A piece in hand: a digit swaps it for another, the way it always has.
+    for (const index of controls.takeCraftTaps()) {
+      const entry = this.craftMenuEntriesShown()[index];
+      if (entry === undefined || entry.locked || entry.action.kind !== 'build') continue;
+      this.pickBuildable(entry.action.buildable);
       break;
     }
   }
@@ -3295,12 +3296,12 @@ export class Game {
   }
 
   /**
-   * C opens or closes the craft menu, closing the build menu if that was
-   * open instead, the same reason opening the build menu closes this one.
-   * While it is open, a digit key sends a craft request - unlike the build
-   * menu this stays open afterwards, since crafting several things in a row
-   * is common and nothing about a craft needs a fresh aim the way a
-   * placement does.
+   * C opens or closes the Craft menu (see decision 0096), closing the room
+   * decorating panel if that was open instead. While it is open, a digit key
+   * picks the entry numbered beside it. Crafting something leaves the menu
+   * open, since making several things in a row is common and nothing about
+   * a craft needs a fresh aim the way a placement does; picking a piece to
+   * place closes it.
    */
   private showJournalNotice(text: string, now: number): void {
     this.craftingNews = { text, until: now + NEWS_MS };
@@ -3338,9 +3339,40 @@ export class Game {
     this.connection?.sendGarden(request);
   }
 
-  craftRecipe(index: number): void {
-    const item = RECIPE_ITEMS[index - 1];
-    if (item !== undefined) this.connection?.sendCraft(item);
+  /** Switch the Craft menu to another page: everything, or one kind of thing. */
+  setCraftTab(tab: CraftTabId): void {
+    this.craftTab = tab;
+    this.options.hud.publish({ craftTab: tab });
+  }
+
+  /** Open the Craft menu on its Craft page, putting away whatever else was open. */
+  private openCraftMenu(): void {
+    this.journalTab = 'craft';
+    this.craftMenuOpen = true;
+    this.buildMenuOpen = false;
+    this.inventoryOpen = false;
+    this.stopPlacing();
+    this.options.hud.publish({ journalTab: 'craft', craftMenuOpen: true, inventoryOpen: false });
+  }
+
+  /**
+   * The entries on the page of the Craft menu that is showing, in the order
+   * the number keys count them. Read from the HUD's own state, so a key always
+   * agrees with what the panel lists beside its number.
+   */
+  private craftMenuEntriesShown(): CraftEntry[] {
+    const state = this.options.hud.getSnapshot();
+    const entries = craftMenuEntries(state);
+    return entriesOnTab(entries, shownTab(entries, this.craftTab));
+  }
+
+  /**
+   * Pick an entry from the Craft menu: make a thing into the pack, which leaves
+   * the menu open for the next one, or pick up a piece to place, which closes it.
+   */
+  pickCraftEntry(action: CraftAction): void {
+    if (action.kind === 'craft') this.connection?.sendCraft(action.item);
+    else this.pickBuildable(action.buildable);
   }
 
   private updateDiscoveryMarkers(): void {
@@ -3358,9 +3390,12 @@ export class Game {
       }
     }
     if (!this.craftMenuOpen) return;
-    for (const index of controls.takeCraftTaps()) {
-      const item = RECIPE_ITEMS[index];
-      if (item !== undefined && this.journalTab === 'craft') this.connection?.sendCraft(item);
+    const taps = controls.takeCraftTaps();
+    if (this.journalTab !== 'craft') return;
+    const entries = this.craftMenuEntriesShown();
+    for (const index of taps) {
+      const entry = entries[index];
+      if (entry !== undefined && !entry.locked) this.pickCraftEntry(entry.action);
     }
   }
 
@@ -3723,12 +3758,18 @@ export class Game {
       proposal !== undefined
     )
       area = homeBuildArea({ id: ownHome?.id ?? 0, kind: this.placing.kind, ...proposal });
+    // The home's boundary shows while a piece is in hand, or the Craft menu is open on a page that lists pieces.
+    const choosingAPiece = choosingPiece({
+      craftMenuOpen: this.craftMenuOpen,
+      journalTab: this.journalTab,
+      craftTab: this.craftTab,
+    });
     this.mapFeed.buildArea =
-      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+      this.playing && this.space === OUTDOORS && (choosingAPiece || this.placing !== null)
         ? area
         : null;
     this.buildBoundary?.show(
-      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+      this.playing && this.space === OUTDOORS && (choosingAPiece || this.placing !== null)
         ? area
         : null,
       this.placing?.plan.refusal !== null && this.placing?.plan.refusal !== undefined,
@@ -4526,6 +4567,7 @@ export class Game {
       discoveriesClaimed: this.discoveriesClaimed,
       discoverySites: this.discoverySites,
       journalTab: this.journalTab,
+      craftTab: this.craftTab,
       expedition: this.expedition,
       expeditionPending: performance.now() < this.expeditionPendingUntil,
       nearExpeditionBoard: this.nearOwnExpeditionBoard(),

@@ -11,6 +11,7 @@ import type { HotbarPins } from './hotbar-layout';
 import type { Preferences } from '../preferences/preferences';
 import type { MapFeed } from '../map/map-feed';
 import type { CombatFeed } from './combat-feed';
+import type { CraftAction, CraftTabId } from './craft-menu';
 
 /**
  * The HUD is React, drawn as an HTML layer over the canvas. The 3D scene is
@@ -36,7 +37,8 @@ export function mountHud(
   onSettingsOpenChange?: (open: boolean) => void,
   journalActions?: {
     onTabChange: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
-    onCraft: (index: number) => void;
+    onCraftTab: (tab: CraftTabId) => void;
+    onPickCraft: (action: CraftAction) => void;
     onExpedition?: (request: ExpeditionRequest) => void;
     onGarden?: (request: GardenRequest) => void;
     onMoveDecoration?: (id: number) => void;
@@ -63,7 +65,8 @@ export function mountHud(
         onChestTransfer={onChestTransfer}
         onCloseChest={onCloseChest}
         onJournalTabChange={journalActions?.onTabChange}
-        onPickRecipe={journalActions?.onCraft}
+        onCraftTabChange={journalActions?.onCraftTab}
+        onPickCraft={journalActions?.onPickCraft}
         onGardenUse={journalActions?.onGarden}
         onExpedition={journalActions?.onExpedition}
         onMoveDecoration={journalActions?.onMoveDecoration}

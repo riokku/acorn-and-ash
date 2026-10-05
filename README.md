@@ -134,10 +134,9 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `E` beside a rowboat                 | Climb in (one rider to a boat); in a boat at a shore, climb out          |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
-| `C`                                  | Open the craft menu                                                      |
-| `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                                       |
-| `B`                                  | Open the build menu                                                      |
-| `1`–`6` (build menu open)            | Pick a campfire, next home tier, flower bed, lantern, fence or path      |
+| `C` (or `B` outdoors)                | Open the Craft menu: everything you can make or place, on one list       |
+| `1`–`9` (Craft menu open)            | Pick the entry with that number on the page showing (axe, rod, torch...) |
+| `B` indoors                          | Decorate the room                                                        |
 | Left mouse (piece picked)            | Place it where its preview stands                                        |
 | Mouse wheel (piece picked)           | Turn it                                                                  |
 | `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence                 |
@@ -296,7 +295,7 @@ the pond (a cast never lands on an island). In winter the lake freezes over: see
 Six clumps of reeds grow in the shallows along the lake's bank, a long walk
 apart. Stand at the water's edge beside one and press E (or right-click) to cut
 a reed; a clump holds two to six, and once it is cut bare it grows back in the
-same place after a few minutes. Open the craft menu (`C`) and twist three reeds
+same place after a few minutes. Open the Craft menu (`C`), turn to its **Lake** page and twist three reeds
 into a length of rope, by hand with no workbench. Rope is for the rowboat, below.
 The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
 `apps/client/src/scene/reed-models.ts`. See
@@ -304,8 +303,8 @@ The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
 
 ### Rowboat
 
-With six logs and two rope, open the build menu (`B`) and pick **Rowboat** under
-Lake. Stand on the bank, point at the water a step or two out, and a see-through
+With six logs and two rope, open the Craft menu (`C` or `B`) and pick **Rowboat** on
+the Lake page. Stand on the bank, point at the water a step or two out, and a see-through
 boat floats there: green where it fits, red where it can't. Scroll to turn it
 along the bank, then click to moor it. You can have one, and it stays where you
 built it. A boat needs water under all of it (so not on the sand) and can't be
@@ -1095,7 +1094,7 @@ During a dodge, tap left mouse for an aerial spin slash or click right mouse for
 
 Players can read a cedar expedition board beside their own home, or open its page from inside. Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
 
-The build menu opens a wider, responsive page with Home, Camp & lighting, Garden & boundaries and Trophies sections. Indoor decorations are grouped into Furniture, Lighting and Finishing touches. Number shortcuts keep their existing assignments; costs and availability stay visible alongside each choice.
+The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (`B` inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
 
 A crowned, moss-armored ruin sentinel guards the old ruin clearings. It can be fought solo; actual helpers increase its health, with stable character identity across reconnects. Nearby contributors receive protected materials and their existing housing blueprint roll. A first victory earns a personal placeable trophy that stays available if the backpack is full; subsequent victories award materials.
 

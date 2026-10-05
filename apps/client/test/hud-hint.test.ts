@@ -53,6 +53,7 @@ const BASE_STATE: HudState = {
   trackHint: null,
   nearbyDiscovery: null,
   journalTab: 'craft',
+  craftTab: 'all',
   homeKind: null,
   buildAreaRadius: null,
   canBuild: false,
@@ -143,7 +144,7 @@ describe('the hint along the bottom', () => {
     expect(hint(state)).toBe('');
   });
 
-  it('walks you through the build menu once it is open, ahead of everything else', () => {
+  it('walks you through decorating a room once the panel is open, ahead of everything else', () => {
     const state: HudState = {
       ...BASE_STATE,
       buildMenuOpen: true,
