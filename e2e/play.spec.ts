@@ -1447,17 +1447,25 @@ async function huntAnimal(
     }
   };
 
+  let closest = Infinity;
+  let lastLook: unknown = null;
   try {
     for (let step = 0; step < 400; step++) {
       const look = await page.evaluate((id) => {
         const animal = window.acornDebug?.animals().find((entry) => entry.id === id) ?? null;
         return {
           animal: animal === null ? null : { x: animal.x, z: animal.z },
+          here: window.acornDebug?.localPosition() ?? { x: 0, z: 0 },
           aimed: window.acornDebug?.aimedAnimal() ?? null,
           hint: document.querySelector('.hud-hint')?.textContent ?? '',
         };
       }, animalId);
       if (look.animal === null) return { caught: true, hints, hitsLeft };
+      lastLook = look;
+      closest = Math.min(
+        closest,
+        Math.hypot(look.here.x - look.animal.x, look.here.z - look.animal.z),
+      );
 
       // Curving fresh every tick, it runs straight away from whoever is
       // chasing it, so aim again each time rather than at where it was.
@@ -1485,7 +1493,9 @@ async function huntAnimal(
       await page.mouse.up();
       await page.waitForTimeout(150);
     }
-    throw new Error(`animal ${animalId} was never caught`);
+    throw new Error(
+      `animal ${animalId} was never caught; closest was ${closest.toFixed(1)} m, last seen ${JSON.stringify(lastLook)}`,
+    );
   } finally {
     await sprint(false);
   }
@@ -1768,6 +1778,35 @@ async function buildFacing(
 }
 
 /**
+ * `buildFacing`, trying other ways round if the first is blocked: a rock or a
+ * tree close by can refuse every spot in one direction while the next is clear,
+ * and which side of the spawn spot the player ends up on depends on where they
+ * walked in from.
+ */
+async function buildFacingAnyWay(
+  page: Page,
+  firstChoice: { x: number; z: number },
+  tab: string,
+  digit: string,
+  piecesWanted = 1,
+): Promise<void> {
+  const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+  const around = [0, 90, 180, 270].map((degrees) => ({
+    x: here.x + 10 * Math.cos((degrees * Math.PI) / 180),
+    z: here.z + 10 * Math.sin((degrees * Math.PI) / 180),
+  }));
+  const choices = [firstChoice, ...around];
+  for (const [index, target] of choices.entries()) {
+    try {
+      await buildFacing(page, target, tab, digit, piecesWanted);
+      return;
+    } catch (error) {
+      if (index === choices.length - 1) throw error;
+    }
+  }
+}
+
+/**
  * A point on the far side of the player from a placed piece, to face when the
  * next piece should go up on the other side of them rather than on top of it.
  */
@@ -1795,7 +1834,7 @@ async function buildFirstTent(
     ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
     [spawnSpot.x, spawnSpot.z],
   );
-  await buildFacing(page, spawnSpot, 'Home', 'Digit1');
+  await buildFacingAnyWay(page, spawnSpot, 'Home', 'Digit1');
   const tent = (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
     (piece) => piece.kind === 'tent',
   );
@@ -1884,7 +1923,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   // A campfire needs a building area, and the first tent is what makes one. Then
   // the campfire goes up on the other side of the player from the tent.
   const tent = await buildFirstTent(page, spawnSpot);
-  await buildFacing(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built.map((piece) => piece.kind).sort()).toEqual(['campfire', 'tent']);
@@ -1947,7 +1986,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
 
   // The first tent makes the building area the campfire goes into.
   const tent = await buildFirstTent(page, spawnSpot);
-  await buildFacing(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
 
   const campfireNow = async () =>
     (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
@@ -2028,7 +2067,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
 
   // The lantern needs a building area, so the first tent goes up before it.
   const tent = await buildFirstTent(page, spawnSpot);
-  await buildFacing(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built.map((piece) => piece.kind).sort()).toEqual(['lantern', 'tent']);
