@@ -23,7 +23,7 @@ A few tests had also gone out of date in ways that had nothing to do with speed:
 - **Walking to something waits for that thing.** The helper that walks to a pickup now stops only when the item that is in reach is the one it wanted, so the bag next to the start no longer counts as the axe.
 - **Checks use what the game knows.** Tests read the inventory through `acornDebug.carrying()` and the hotbar, not the removed "Carrying" line, and use the game's own tree names.
 - **Building tests pitch the first tent.** The campfire and lantern tests gather six sticks and place a tent, then build the piece on the other side of the player, trying other directions if a rock is in the way.
-- **Hunting tests chase in one loop.** They close in with the sprint held down, swing the moment a swing would land, and read the hint at that same moment. They pick the nearest animal of the right kind.
+- **Hunting tests chase in one loop, and may try again.** They close in with the sprint held down, swing the moment a swing would land, and keep closing in for a few frames so the hint has time to appear. They pick the nearest animal of the right kind out past the clearing, and if a chase comes to nothing (prey runs straight through trees a player has to go round, or out past the edge of the world) they pick again, up to five times.
 
 ## Consequences
 

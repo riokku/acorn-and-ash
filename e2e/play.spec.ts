@@ -6,7 +6,12 @@ import {
   type Page,
 } from '@playwright/test';
 
-import { PROP_KINDS, type PropKindId } from '../packages/shared/src/index';
+import {
+  CLEARING_TREE_LINE_INNER,
+  PLAYABLE_HALF_EXTENT,
+  PROP_KINDS,
+  type PropKindId,
+} from '../packages/shared/src/index';
 
 declare global {
   interface Window {
@@ -1409,22 +1414,39 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
 }
 
 /**
- * The animal of one kind that stands nearest the player, for a hunt that does
- * not have to cross the whole wilderness. Some dens sit right at the edge of
- * the world, where a fleeing animal can run out past the line the player may
- * not cross, so the nearest one is also the one that can be caught.
+ * The animal of one kind that stands nearest the player out past the clearing,
+ * for a hunt that does not have to cross the whole of it. Two kinds of spot are
+ * left out: the open ground inside the tree line, where a pond or a build can
+ * stand between hunter and hunted, and the very edge of the world, where a
+ * fleeing animal can run out past the line the player may not cross.
+ *
+ * Wildlife wanders, and the one fox in the world can be out of range for a
+ * while, so this waits (up to a minute) for one to come into range.
  */
 async function nearestAnimalOfKind(
   page: Page,
   kind: string,
-): Promise<{ id: number; kind: string; x: number; z: number } | undefined> {
-  const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  return animals
-    .filter((entry) => entry.kind === kind)
-    .sort(
-      (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
-    )[0];
+): Promise<{ id: number; kind: string; x: number; z: number }> {
+  const edge = PLAYABLE_HALF_EXTENT - 30;
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+    const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+    const nearest = animals
+      .filter(
+        (entry) =>
+          entry.kind === kind &&
+          Math.hypot(entry.x, entry.z) > CLEARING_TREE_LINE_INNER &&
+          Math.abs(entry.x) < edge &&
+          Math.abs(entry.z) < edge,
+      )
+      .sort(
+        (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
+      )[0];
+    if (nearest !== undefined) return nearest;
+    if (Date.now() > deadline) throw new Error(`no ${kind} out past the clearing to hunt`);
+    await page.waitForTimeout(1_000);
+  }
 }
 
 /**
@@ -1440,14 +1462,29 @@ async function nearestAnimalOfKind(
  * Gives back what the hint said each time the animal was in reach, and how many
  * hits it had left each time. With `stopWhenHurt` it stops as soon as that
  * number has dropped, for a fight that should not be taken all the way down.
+ *
+ * The hint on screen is drawn a moment after the game notices what is in front
+ * of the player, so a first look often catches the hint from before. When the
+ * caller says which hint it is after (`hint`), the chase keeps closing in for a
+ * few looks to let it appear (standing still to wait would hand a fleeing
+ * animal the lead), then swings regardless.
+ *
+ * A chase is not guaranteed to end in a catch: prey runs straight through trees
+ * a player has to go round, and can run out past the edge of the world, where
+ * the player cannot follow. So it gives up (`gaveUp`) after `maxSteps` looks, or
+ * once the animal is off the playable ground, and leaves it to the caller to try
+ * another animal.
  */
 async function huntAnimal(
   page: Page,
   animalId: number,
-  options: { stopWhenHurt?: boolean } = {},
-): Promise<{ caught: boolean; hints: string[]; hitsLeft: number[] }> {
+  options: { stopWhenHurt?: boolean; hint?: RegExp; maxSteps?: number } = {},
+): Promise<{ caught: boolean; gaveUp: boolean; hints: string[]; hitsLeft: number[] }> {
   const hints: string[] = [];
   const hitsLeft: number[] = [];
+  const maxSteps = options.maxSteps ?? 150;
+  const wantedHint = options.hint;
+  let hintLooks = 0;
   await centerMouse(page);
 
   // A sprinting player only just outpaces a fleeing rabbit (7 m/s against 6),
@@ -1466,10 +1503,9 @@ async function huntAnimal(
     }
   };
 
-  let closest = Infinity;
-  let lastLook: unknown = null;
+  const playableEdge = PLAYABLE_HALF_EXTENT - 1;
   try {
-    for (let step = 0; step < 400; step++) {
+    for (let step = 0; step < maxSteps; step++) {
       const look = await page.evaluate((id) => {
         const animal = window.acornDebug?.animals().find((entry) => entry.id === id) ?? null;
         return {
@@ -1479,12 +1515,10 @@ async function huntAnimal(
           hint: document.querySelector('.hud-hint')?.textContent ?? '',
         };
       }, animalId);
-      if (look.animal === null) return { caught: true, hints, hitsLeft };
-      lastLook = look;
-      closest = Math.min(
-        closest,
-        Math.hypot(look.here.x - look.animal.x, look.here.z - look.animal.z),
-      );
+      if (look.animal === null) return { caught: true, gaveUp: false, hints, hitsLeft };
+      if (Math.abs(look.animal.x) > playableEdge || Math.abs(look.animal.z) > playableEdge) {
+        return { caught: false, gaveUp: true, hints, hitsLeft };
+      }
 
       // Curving fresh every tick, it runs straight away from whoever is
       // chasing it, so aim again each time rather than at where it was.
@@ -1499,25 +1533,69 @@ async function huntAnimal(
         continue;
       }
 
-      await sprint(false);
       hints.push(look.hint);
       if (look.aimed.hitsLeft !== undefined) hitsLeft.push(look.aimed.hitsLeft);
       const first = hitsLeft[0];
       if (options.stopWhenHurt && first !== undefined && Math.min(...hitsLeft) < first) {
-        return { caught: false, hints, hitsLeft };
+        return { caught: false, gaveUp: false, hints, hitsLeft };
       }
 
+      if (
+        wantedHint !== undefined &&
+        !hints.some((hint) => wantedHint.test(hint)) &&
+        hintLooks < 3
+      ) {
+        hintLooks++;
+        await page.waitForTimeout(60);
+        continue;
+      }
+
+      await sprint(false);
       await page.mouse.down();
       await page.waitForTimeout(200);
       await page.mouse.up();
       await page.waitForTimeout(150);
     }
-    throw new Error(
-      `animal ${animalId} was never caught; closest was ${closest.toFixed(1)} m, last seen ${JSON.stringify(lastLook)}`,
-    );
+    return { caught: false, gaveUp: true, hints, hitsLeft };
   } finally {
     await sprint(false);
   }
+}
+
+/**
+ * Pick the nearest animal of a kind, walk up to it and hunt it - and if that
+ * chase comes to nothing (see `huntAnimal`), pick again and have another go.
+ * Nothing about a chase through a forest is certain, so a handful of tries is
+ * what makes the test a fair check of the game rather than of luck.
+ */
+async function huntNearest(
+  page: Page,
+  kind: string,
+  options: { stopWhenHurt?: boolean; hint?: RegExp } = {},
+): Promise<{
+  animalId: number;
+  hunt: { caught: boolean; hints: string[]; hitsLeft: number[] };
+}> {
+  const hints: string[] = [];
+  const hitsLeft: number[] = [];
+  const problems: string[] = [];
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const animal = await nearestAnimalOfKind(page, kind);
+    try {
+      await walkWithinReachOfAnimal(page, animal.id);
+    } catch (error) {
+      problems.push(`try ${attempt}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    const hunt = await huntAnimal(page, animal.id, options);
+    hints.push(...hunt.hints);
+    hitsLeft.push(...hunt.hitsLeft);
+    if (!hunt.gaveUp) {
+      return { animalId: animal.id, hunt: { caught: hunt.caught, hints, hitsLeft } };
+    }
+    problems.push(`try ${attempt}: ${kind} ${animal.id} got away`);
+  }
+  throw new Error(`Never got hold of a ${kind}: ${problems.join('; ')}`);
 }
 
 test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
@@ -1546,24 +1624,19 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
     .toBe(true);
   await equip(page, 'axe');
 
-  const rabbit = await nearestAnimalOfKind(page, 'rabbit');
-  if (rabbit === undefined) throw new Error('no rabbit nearby to hunt');
-
-  await walkWithinReachOfAnimal(page, rabbit.id);
   // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
   // usually the catch hint, but a walk this long can run the hunger meter out
   // first on a slow machine (it empties in three minutes here, not the real
   // twenty) - hungry beats everything else on purpose, so either is the hint
   // doing its job correctly.
-  const hunt = await huntAnimal(page, rabbit.id);
-  expect(hunt.hints.some((hint) => /Left click to catch the rabbit|You're hungry/.test(hint))).toBe(
-    true,
-  );
+  const catchHint = /Left click to catch the rabbit|You're hungry/;
+  const { animalId: rabbitId, hunt } = await huntNearest(page, 'rabbit', { hint: catchHint });
+  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
 
   // It is gone, and the meat is ours.
   expect(
     (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === rabbit.id,
+      (entry) => entry.id === rabbitId,
     ),
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
@@ -1602,28 +1675,24 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
     .toBe(true);
   await equip(page, 'axe');
 
-  const fox = await nearestAnimalOfKind(page, 'fox');
-  if (fox === undefined) throw new Error('no fox in the wilderness');
-
   // The same helpers the rabbit hunt uses: neither cares which kind of
   // wildlife it is, only where it is and whether a swing would land. A fox
   // is prey to the player exactly like a rabbit - it is only a predator to
   // a rabbit (decision 0035), which this test does not touch.
-  await walkWithinReachOfAnimal(page, fox.id);
+  //
   // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
   // usually the catch hint, but a walk this long can run the hunger meter out
   // first on a slow machine (it empties in three minutes here, not the real
   // twenty) - hungry beats everything else on purpose, so either is the hint
   // doing its job correctly.
-  const hunt = await huntAnimal(page, fox.id);
-  expect(hunt.hints.some((hint) => /Left click to catch the fox|You're hungry/.test(hint))).toBe(
-    true,
-  );
+  const catchHint = /Left click to catch the fox|You're hungry/;
+  const { animalId: foxId, hunt } = await huntNearest(page, 'fox', { hint: catchHint });
+  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
 
   // It is gone, and the meat is ours - a fox pays out exactly like a rabbit.
   expect(
     (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === fox.id,
+      (entry) => entry.id === foxId,
     ),
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
@@ -1661,13 +1730,9 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
     .toBe(true);
   await equip(page, 'axe');
 
-  const raccoon = await nearestAnimalOfKind(page, 'maskedRaccoon');
-  if (raccoon === undefined) throw new Error('no masked raccoon in the wilderness');
-
   // The same helpers the rabbit hunt uses: neither cares which kind of
   // wildlife it is, only where it is and whether a swing would land.
-  await walkWithinReachOfAnimal(page, raccoon.id);
-
+  //
   // Noticing, chasing, the wind-up, multi-hit defeat and the knockout-and-
   // heal all already have thorough, fast, deterministic coverage in the
   // shared and game-server suites (decision 0024) - a raccoon fights back,
@@ -1682,12 +1747,12 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   // hunger meter out first on a slow machine (it empties in three minutes
   // here, not the real twenty) - hungry beats everything else on purpose, so
   // either is the hint doing its job correctly.
-  const fight = await huntAnimal(page, raccoon.id, { stopWhenHurt: true });
-  expect(
-    fight.hints.some((hint) =>
-      /Left click to fight off the masked raccoon|You're hungry/.test(hint),
-    ),
-  ).toBe(true);
+  const fightHint = /Left click to fight off the masked raccoon|You're hungry/;
+  const { hunt: fight } = await huntNearest(page, 'maskedRaccoon', {
+    stopWhenHurt: true,
+    hint: fightHint,
+  });
+  expect(fight.hints.some((hint) => fightHint.test(hint))).toBe(true);
 
   // Landed enough to fell it outright (even better), or its count came down.
   if (!fight.caught) {
@@ -1909,7 +1974,11 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     [spawnSpot.x, spawnSpot.z],
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
-  await expect(page.locator('.hud-hint')).not.toContainText('Press B to build');
+  // No hint at all counts too, so read whatever is showing rather than wait
+  // for an element that is not there.
+  await expect
+    .poll(async () => (await page.locator('.hud-hint').allTextContents()).join(' '))
+    .not.toContain('Press B to build');
 
   // Opening the menu with only four logs offers the campfire but not the
   // starter tent (which costs six sticks). Picking the unaffordable one still shows its
