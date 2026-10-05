@@ -12,7 +12,7 @@ The reeds you could cut for rope ([decision 0091](0091-reeds-and-rope.md)) were 
 - **A bed that is cut clean comes back somewhere else.** It waits a random 15–25 minutes (worked out from the world's seed, in real time, so a world nobody is in still has them back when somebody returns). It then returns to a different place on the shore, at least 10 m from where it was, a fresh two to six reeds.
 - **Where they can return to** is every spot on the open bank of the lake, about every 6 m (`world/reeds.ts`). A bed keeps 14 m from any other bed that still has reeds, so they stay spread round the shore. It will not return onto a boat, a build, or a tree. If nowhere is free, it stays where it was.
 - **The six starting beds are unchanged**, so a new world looks the same as before until the first one is cut.
-- Boats and builds keep clear of the beds *where they stand now*, not where they began.
+- Boats and builds keep clear of the beds _where they stand now_, not where they began.
 - Previews and local runs use 45–75 seconds instead (`WORLD_REED_REGROW_SECONDS`), the same way the other timers are shortened.
 - The server saves each bed's place, so a bed that moved is still there after a restart. A saved place that is not on the shore is ignored.
 
