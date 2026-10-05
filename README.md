@@ -872,6 +872,14 @@ then waits for it to grow back, and another waits at the pond for a bite. It
 runs the world in the `e2e` environment, where skeleton raids are put off for
 a day so one cannot knock the test player out halfway through.
 
+The older tests in `e2e/play.spec.ts` skip the actual drawing (they stop the
+browser sending triangles to the graphics card), because the browsers in
+automated runs have no real graphics card and draw one frame every few seconds,
+which makes a walking player crawl. The game logic is untouched. Two tests
+tagged `@real-drawing` still draw for real, so a broken renderer is still
+caught. To see real pictures, for screenshots say, run with
+`ACORN_E2E_DRAW=1 pnpm test:e2e` (see [decision 0100](docs/decisions/0100-browser-tests-skip-the-gpu.md)).
+
 ## Repository layout
 
 ```

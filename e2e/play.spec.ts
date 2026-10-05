@@ -1,4 +1,17 @@
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test as base,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
+
+import {
+  CLEARING_TREE_LINE_INNER,
+  PLAYABLE_HALF_EXTENT,
+  PROP_KINDS,
+  type PropKindId,
+} from '../packages/shared/src/index';
 
 declare global {
   interface Window {
@@ -70,6 +83,63 @@ declare global {
       mapState(): { painted: boolean; open: boolean; explored: number };
     };
   }
+}
+
+/**
+ * Make a page skip the real drawing: every WebGL draw call does nothing.
+ *
+ * The browsers these tests run in have no graphics card, so "drawing" means a
+ * program on the processor painting every blade of grass and leaf in the
+ * forest, which takes two to three seconds a frame. The game moves a player a
+ * fixed step per frame, so holding a key for a second moved them a metre or
+ * less, and every test that walked up to a tree or an item gave up before it
+ * got there (decision 0100). With the draw calls turned off a frame takes well
+ * under a tenth of a second, as it would on a real machine, and everything
+ * else - walking, swinging, the server, the hints - runs just as it does for a
+ * player.
+ *
+ * Set `ACORN_E2E_DRAW=1` to draw for real, for example to look at the pictures
+ * some tests save. Tests tagged `@real-drawing` are about the drawing itself
+ * and always draw.
+ */
+async function skipDrawing(target: Page | BrowserContext): Promise<void> {
+  if (process.env.ACORN_E2E_DRAW === '1') return;
+  await target.addInitScript(() => {
+    const drawCalls = [
+      'drawArrays',
+      'drawElements',
+      'drawArraysInstanced',
+      'drawElementsInstanced',
+      'drawRangeElements',
+    ];
+    for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+      for (const name of drawCalls) {
+        if (name in prototype) (prototype as unknown as Record<string, unknown>)[name] = () => {};
+      }
+    }
+  });
+}
+
+/** Every test's own page, with the drawing skipped unless it is about the drawing. */
+const test = base.extend({
+  page: async ({ page }, use, testInfo) => {
+    if (!testInfo.tags.includes('@real-drawing')) await skipDrawing(page);
+    await use(page);
+  },
+});
+
+/** A second tab in its own window, the way the tests that open several want them. */
+async function openTab(browser: Browser): Promise<Page> {
+  const tab = await browser.newPage();
+  await skipDrawing(tab);
+  return tab;
+}
+
+/** A browser of its own, so a later visit is the same player coming back. */
+async function openBrowserContext(browser: Browser): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  await skipDrawing(context);
+  return context;
 }
 
 /** Read one labelled row out of the HUD panel. */
@@ -219,24 +289,28 @@ test.describe('the Settings menu', () => {
   });
 });
 
-test('the game loads, connects and draws the clearing', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+test(
+  'the game loads, connects and draws the clearing',
+  { tag: '@real-drawing' },
+  async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
 
-  await page.goto('/');
-  await waitForConnected(page);
+    await page.goto('/');
+    await waitForConnected(page);
 
-  // The curtain only lifts once the world has been built.
-  await expect(page.locator('.hud-curtain')).toContainText('Click to play');
+    // The curtain only lifts once the world has been built.
+    await expect(page.locator('.hud-curtain')).toContainText('Click to play');
 
-  const backend = await hudValue(page, 'Renderer');
-  expect(backend).toMatch(/WebGPU|WebGL 2/);
-  console.log(`Renderer backend in this browser: ${backend}`);
+    const backend = await hudValue(page, 'Renderer');
+    expect(backend).toMatch(/WebGPU|WebGL 2/);
+    console.log(`Renderer backend in this browser: ${backend}`);
 
-  // Something is actually being drawn.
-  await expect.poll(async () => Number(await hudValue(page, 'FPS'))).toBeGreaterThan(0);
-  expect(errors).toEqual([]);
-});
+    // Something is actually being drawn.
+    await expect.poll(async () => Number(await hudValue(page, 'FPS'))).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  },
+);
 
 test('the map fills in around you, and M opens it over the game', async ({ page }) => {
   await page.goto('/');
@@ -261,11 +335,15 @@ test('the map fills in around you, and M opens it over the game', async ({ page 
   await expect(page.getByTestId('minimap')).toBeVisible();
 });
 
-test('the WebGL 2 fallback works when WebGPU is refused', async ({ page }) => {
-  await page.goto('/?renderer=webgl2');
-  await waitForConnected(page);
-  expect(await hudValue(page, 'Renderer')).toContain('WebGL 2');
-});
+test(
+  'the WebGL 2 fallback works when WebGPU is refused',
+  { tag: '@real-drawing' },
+  async ({ page }) => {
+    await page.goto('/?renderer=webgl2');
+    await waitForConnected(page);
+    expect(await hudValue(page, 'Renderer')).toContain('WebGL 2');
+  },
+);
 
 test('shows whether it is day or night', async ({ page }) => {
   await page.goto('/');
@@ -296,8 +374,8 @@ test('walking moves the player, and the server agrees', async ({ page }) => {
 });
 
 test('two tabs see each other move', async ({ browser }) => {
-  const walker = await browser.newPage();
-  const watcher = await browser.newPage();
+  const walker = await openTab(browser);
+  const watcher = await openTab(browser);
 
   await walker.goto('/');
   await watcher.goto('/');
@@ -425,19 +503,22 @@ test('walking away from the clearing leads into generated wilderness, not a wall
 });
 
 /**
- * Walk to a spot until the game says you can reach what is there.
+ * Walk to a spot until the game says you can reach the pickup that is there.
  *
  * In short steps, stopping between each one. Holding the key down and watching
  * the distance does not work: on a slow machine the player keeps walking for as
  * long as it takes to let go, which is long enough to sail straight past.
  *
  * The condition is the game's own answer rather than a distance we work out
- * here, so the test ends up where the player would actually get the prompt.
+ * here, so the test ends up where the player would actually get the prompt -
+ * and it names the item it came for, because it is not always the only thing in
+ * reach: the bag lies a few steps from where everyone spawns, so "something is
+ * in reach" is already true before the first step towards the axe.
  */
-async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void> {
+async function walkWithinReachOf(page: Page, x: number, z: number, item: string): Promise<void> {
   for (let step = 0; step < 80; step++) {
     const reachable = await page.evaluate(() => window.acornDebug?.nearbyItem() ?? null);
-    if (reachable !== null) return;
+    if (reachable === item) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
@@ -453,7 +534,7 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
     // Let them come to a stop before looking again.
     await page.waitForTimeout(200);
   }
-  throw new Error(`Never got within reach of ${x}, ${z}`);
+  throw new Error(`Never got within reach of the ${item} at ${x}, ${z}`);
 }
 
 /**
@@ -497,6 +578,17 @@ async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Pr
     await page.waitForTimeout(200);
   }
   throw new Error(`Never got within reach of the gather spot at ${x}, ${z}`);
+}
+
+/** Wait until the server says this is in the pack - the bag in there already does not count. */
+async function waitUntilCarrying(page: Page, item: string): Promise<void> {
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === item,
+      ),
+    )
+    .toBe(true);
 }
 
 /** How many of something we carry right now, as the server says. */
@@ -547,15 +639,31 @@ async function gatherFromPatches(
 }
 
 /**
+ * What the game calls a kind of tree. The first three kinds kept their old keys
+ * (`oak` and friends) when they became real species, so the key and the name
+ * the player sees no longer match: the landmark `oak` reads as a Sitka spruce.
+ */
+function treeName(kind: string): string {
+  return PROP_KINDS[kind as PropKindId].displayName;
+}
+
+/**
  * Walk up to a tree until the game says a swing would reach it.
  *
  * Never assume standing where the axe was leaves you in range of the oak beside
  * it: where you stop depends on which way you came in, and the difference
  * between two and three metres is the difference between chopping and flailing.
  */
-async function walkWithinReachOfTree(page: Page, tree: { x: number; z: number }): Promise<void> {
+async function walkWithinReachOfTree(
+  page: Page,
+  tree: { x: number; z: number; kind: string },
+): Promise<void> {
+  // Every tree in the forest can be chopped now, so the first tree faced on the
+  // way over is often a different one. Only the kind we came for counts.
+  const wanted = treeName(tree.kind);
   for (let step = 0; step < 80; step++) {
-    if ((await page.evaluate(() => window.acornDebug?.aimedTree() ?? null)) !== null) return;
+    const aimed = await page.evaluate(() => window.acornDebug?.aimedTree() ?? null);
+    if (aimed?.name === wanted) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - tree.x, (here?.z ?? 0) - tree.z);
@@ -578,7 +686,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   // One browser context throughout, so the second visit is the same player
   // coming back rather than a stranger: the key that identifies them lives in
   // this browser's storage.
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   // A fresh world, so the axe is definitely still in its stump.
   const page = await context.newPage();
   await page.goto(`/?world=axe-${Date.now()}`);
@@ -588,16 +696,14 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   // Nothing to start with, and the axe is out there waiting.
   expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
-    'nothing yet',
-  );
+  await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(0);
 
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   expect(axe).toBeDefined();
   if (axe === undefined) throw new Error('no axe in the clearing');
 
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
 
   // Standing next to it, the game offers it.
   await expect(page.locator('.hud-hint')).toContainText(
@@ -613,7 +719,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
     { item: 'axe', count: 1 },
   ]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Axe');
+  await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(1);
 
   // Reload the page: the world server still knows it is ours.
   const url = page.url();
@@ -639,8 +745,8 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
 }) => {
   test.setTimeout(180_000);
   const worldId = `equip-${Date.now()}`;
-  const equipper = await browser.newPage();
-  const watcher = await browser.newPage();
+  const equipper = await openTab(browser);
+  const watcher = await openTab(browser);
 
   await equipper.goto(`/?world=${worldId}`);
   await watcher.goto(`/?world=${worldId}`);
@@ -659,7 +765,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   if (bag === undefined || axe === undefined) throw new Error('no bag or axe in the clearing');
 
   // Find the bag first, the way a new player would - not that the axe needs it.
-  await walkWithinReachOf(equipper, bag.x, bag.z);
+  await walkWithinReachOf(equipper, bag.x, bag.z, 'bag');
   await equipper.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -669,7 +775,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
     )
     .toBe(true);
 
-  await walkWithinReachOf(equipper, axe.x, axe.z);
+  await walkWithinReachOf(equipper, axe.x, axe.z, 'axe');
   await equipper.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -975,7 +1081,7 @@ async function equip(page: Page, item: string): Promise<void> {
 test('you can chop a tree down, and the stump is still there next time', async ({ browser }) => {
   test.setTimeout(240_000);
   // One context throughout, so coming back is the same player returning.
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=chop-${Date.now()}`);
   await waitForConnected(page);
@@ -988,11 +1094,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   // The big oak stands right beside the axe's stump.
@@ -1005,7 +1109,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
 
   // Facing it, the game offers the swing and says how much is left in it.
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
-  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+  await expect(page.locator('.hud-hint')).toContainText(
+    `Left click to chop the ${treeName(oak.kind).toLowerCase()}`,
+  );
 
   await chopUntilFelled(page, oak);
   await collectFallenLogs(page);
@@ -1014,7 +1120,6 @@ test('you can chop a tree down, and the stump is still there next time', async (
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Logs');
 
   // Nothing left to swing at where it stood.
   await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0), [oak.x, oak.z]);
@@ -1043,11 +1148,9 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   // The big oak takes several ordinary swings - one charged attack should
@@ -1056,7 +1159,9 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   const oak = trees.find((tree) => tree.kind === 'oak');
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
-  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+  await expect(page.locator('.hud-hint')).toContainText(
+    `Left click to chop the ${treeName(oak.kind).toLowerCase()}`,
+  );
 
   // Holding starts only the charge. Even once ready, the oak stays untouched
   // until release: no preliminary light swing and no automatic strong swing.
@@ -1080,7 +1185,7 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
 test('a chopped tree grows back on its own', async ({ browser }) => {
   // Locally a tree takes two to four minutes to come back, and this waits it out.
   test.setTimeout(600_000);
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=regrow-${Date.now()}`);
   await waitForConnected(page);
@@ -1090,11 +1195,9 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
@@ -1143,7 +1246,7 @@ async function click(page: Page): Promise<void> {
 
 test('you can find the rod, cast into the pond and land a fish', async ({ browser }) => {
   test.setTimeout(180_000);
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=fish-${Date.now()}`);
   await waitForConnected(page);
@@ -1153,7 +1256,7 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const rod = pickups.find((entry) => entry.item === 'rod');
   if (rod === undefined) throw new Error('no rod in the clearing');
-  await walkWithinReachOf(page, rod.x, rod.z);
+  await walkWithinReachOf(page, rod.x, rod.z, 'rod');
   await expect(page.locator('.hud-hint')).toContainText(
     'Right-click or press E to pick up the fishing rod',
   );
@@ -1223,9 +1326,6 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
       ),
     )
     .toBe(true);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
-    /Perch|Trout|Golden carp/,
-  );
   expect(await page.evaluate(() => window.acornDebug?.fishing())).toBeNull();
 
   await context.close();
@@ -1233,8 +1333,9 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
 
 /**
  * Walk toward wherever an animal currently is - it wanders, so this re-reads
- * its position every attempt rather than aiming at a fixed spot - until the
- * game says a swing would land on it.
+ * its position every attempt rather than aiming at a fixed spot - until a
+ * swing would land on it, or it is close enough that it may start bolting and
+ * the chase proper (`huntAnimal`) should take over.
  *
  * A den can be fifty metres past the tree line, and every check here is a
  * round trip through the browser. On a slow enough machine that round trip
@@ -1305,42 +1406,196 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
       continue;
     }
 
-    // Close enough that it may already be bolting, curving fresh every tick
-    // to run straight away from whoever is chasing it - aiming once and then
-    // sprinting blind for seconds just walks to where it *was*. A sprinting
-    // player only just outpaces a fleeing rabbit (7 m/s vs 6), so the chase
-    // only gains ground by re-aiming often: a short hold, then look again.
-    await page.keyboard.down('ShiftLeft');
-    await page.keyboard.down('KeyW');
-    await page.waitForTimeout(400);
-    await page.keyboard.up('KeyW');
-    await page.keyboard.up('ShiftLeft');
-    await page.waitForTimeout(80);
+    // Close enough that it may already be bolting: from here the chase is
+    // `huntAnimal`'s job, which keeps the sprint held down while it re-aims.
+    return;
   }
   throw new Error(`Never got within swinging distance of animal ${animalId}`);
 }
 
 /**
- * Swing at the animal in taps, re-aiming each time since it can still drift
- * before the first one lands, until the server says it is caught.
+ * The animal of one kind that stands nearest the player out past the clearing,
+ * for a hunt that does not have to cross the whole of it. Two kinds of spot are
+ * left out: the open ground inside the tree line, where a pond or a build can
+ * stand between hunter and hunted, and the very edge of the world, where a
+ * fleeing animal can run out past the line the player may not cross.
+ *
+ * Wildlife wanders, and the one fox in the world can be out of range for a
+ * while, so this waits (up to a minute) for one to come into range.
  */
-async function catchUntilCaught(page: Page, animalId: number): Promise<void> {
-  await centerMouse(page);
-  for (let step = 0; step < 20; step++) {
+async function nearestAnimalOfKind(
+  page: Page,
+  kind: string,
+): Promise<{ id: number; kind: string; x: number; z: number }> {
+  const edge = PLAYABLE_HALF_EXTENT - 30;
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
     const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-    const animal = animals.find((entry) => entry.id === animalId);
-    if (animal === undefined) return;
-
-    await page.evaluate(
-      ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
-      [animal.x, animal.z],
-    );
-    await page.mouse.down();
-    await page.waitForTimeout(200);
-    await page.mouse.up();
-    await page.waitForTimeout(150);
+    const nearest = animals
+      .filter(
+        (entry) =>
+          entry.kind === kind &&
+          Math.hypot(entry.x, entry.z) > CLEARING_TREE_LINE_INNER &&
+          Math.abs(entry.x) < edge &&
+          Math.abs(entry.z) < edge,
+      )
+      .sort(
+        (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
+      )[0];
+    if (nearest !== undefined) return nearest;
+    if (Date.now() > deadline) throw new Error(`no ${kind} out past the clearing to hunt`);
+    await page.waitForTimeout(1_000);
   }
-  throw new Error(`animal ${animalId} was never caught`);
+}
+
+/**
+ * Close in on an animal and swing whenever a swing would land, all in one loop.
+ *
+ * Reaching it and then looking at the hint, or reaching it and then swinging,
+ * are separate round trips through the browser, and a rabbit that bolts in
+ * between is out of reach again by the second one. Doing it in one pass means
+ * a swing goes out the moment one could land, and the hint is read at the same
+ * moment the animal is in reach. Each swing re-aims first, since the animal can
+ * still drift before it lands.
+ *
+ * Gives back what the hint said each time the animal was in reach, and how many
+ * hits it had left each time. With `stopWhenHurt` it stops as soon as that
+ * number has dropped, for a fight that should not be taken all the way down.
+ *
+ * The hint on screen is drawn a moment after the game notices what is in front
+ * of the player, so a first look often catches the hint from before. When the
+ * caller says which hint it is after (`hint`), the chase keeps closing in for a
+ * few looks to let it appear (standing still to wait would hand a fleeing
+ * animal the lead), then swings regardless.
+ *
+ * A chase is not guaranteed to end in a catch: prey runs straight through trees
+ * a player has to go round, and can run out past the edge of the world, where
+ * the player cannot follow. So it gives up (`gaveUp`) after `maxSteps` looks, or
+ * once the animal is off the playable ground, and leaves it to the caller to try
+ * another animal.
+ */
+async function huntAnimal(
+  page: Page,
+  animalId: number,
+  options: { stopWhenHurt?: boolean; hint?: RegExp; maxSteps?: number } = {},
+): Promise<{ caught: boolean; gaveUp: boolean; hints: string[]; hitsLeft: number[] }> {
+  const hints: string[] = [];
+  const hitsLeft: number[] = [];
+  const maxSteps = options.maxSteps ?? 150;
+  const wantedHint = options.hint;
+  let hintLooks = 0;
+  await centerMouse(page);
+
+  // A sprinting player only just outpaces a fleeing rabbit (7 m/s against 6),
+  // so letting go of the keys between looks hands the whole lead back. The
+  // sprint stays held while closing in and is released only to swing.
+  let sprinting = false;
+  const sprint = async (on: boolean): Promise<void> => {
+    if (on === sprinting) return;
+    sprinting = on;
+    if (on) {
+      await page.keyboard.down('ShiftLeft');
+      await page.keyboard.down('KeyW');
+    } else {
+      await page.keyboard.up('KeyW');
+      await page.keyboard.up('ShiftLeft');
+    }
+  };
+
+  const playableEdge = PLAYABLE_HALF_EXTENT - 1;
+  try {
+    for (let step = 0; step < maxSteps; step++) {
+      const look = await page.evaluate((id) => {
+        const animal = window.acornDebug?.animals().find((entry) => entry.id === id) ?? null;
+        return {
+          animal: animal === null ? null : { x: animal.x, z: animal.z },
+          here: window.acornDebug?.localPosition() ?? { x: 0, z: 0 },
+          aimed: window.acornDebug?.aimedAnimal() ?? null,
+          hint: document.querySelector('.hud-hint')?.textContent ?? '',
+        };
+      }, animalId);
+      if (look.animal === null) return { caught: true, gaveUp: false, hints, hitsLeft };
+      if (Math.abs(look.animal.x) > playableEdge || Math.abs(look.animal.z) > playableEdge) {
+        return { caught: false, gaveUp: true, hints, hitsLeft };
+      }
+
+      // Curving fresh every tick, it runs straight away from whoever is
+      // chasing it, so aim again each time rather than at where it was.
+      await page.evaluate(
+        ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+        [look.animal.x, look.animal.z],
+      );
+
+      if (look.aimed === null) {
+        await sprint(true);
+        await page.waitForTimeout(60);
+        continue;
+      }
+
+      hints.push(look.hint);
+      if (look.aimed.hitsLeft !== undefined) hitsLeft.push(look.aimed.hitsLeft);
+      const first = hitsLeft[0];
+      if (options.stopWhenHurt && first !== undefined && Math.min(...hitsLeft) < first) {
+        return { caught: false, gaveUp: false, hints, hitsLeft };
+      }
+
+      if (
+        wantedHint !== undefined &&
+        !hints.some((hint) => wantedHint.test(hint)) &&
+        hintLooks < 3
+      ) {
+        hintLooks++;
+        await page.waitForTimeout(60);
+        continue;
+      }
+
+      await sprint(false);
+      await page.mouse.down();
+      await page.waitForTimeout(200);
+      await page.mouse.up();
+      await page.waitForTimeout(150);
+    }
+    return { caught: false, gaveUp: true, hints, hitsLeft };
+  } finally {
+    await sprint(false);
+  }
+}
+
+/**
+ * Pick the nearest animal of a kind, walk up to it and hunt it - and if that
+ * chase comes to nothing (see `huntAnimal`), pick again and have another go.
+ * Nothing about a chase through a forest is certain, so a handful of tries is
+ * what makes the test a fair check of the game rather than of luck.
+ */
+async function huntNearest(
+  page: Page,
+  kind: string,
+  options: { stopWhenHurt?: boolean; hint?: RegExp } = {},
+): Promise<{
+  animalId: number;
+  hunt: { caught: boolean; hints: string[]; hitsLeft: number[] };
+}> {
+  const hints: string[] = [];
+  const hitsLeft: number[] = [];
+  const problems: string[] = [];
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const animal = await nearestAnimalOfKind(page, kind);
+    try {
+      await walkWithinReachOfAnimal(page, animal.id);
+    } catch (error) {
+      problems.push(`try ${attempt}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    const hunt = await huntAnimal(page, animal.id, options);
+    hints.push(...hunt.hints);
+    hitsLeft.push(...hunt.hitsLeft);
+    if (!hunt.gaveUp) {
+      return { animalId: animal.id, hunt: { caught: hunt.caught, hints, hitsLeft } };
+    }
+    problems.push(`try ${attempt}: ${kind} ${animal.id} got away`);
+  }
+  throw new Error(`Never got hold of a ${kind}: ${problems.join('; ')}`);
 }
 
 test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
@@ -1358,7 +1613,7 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1369,30 +1624,23 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const rabbit = animals[0];
-  if (rabbit === undefined) throw new Error('no wildlife nearby to hunt');
-
-  await walkWithinReachOfAnimal(page, rabbit.id);
-  // Usually the catch hint, but a walk this long can run the hunger meter
-  // out first on a slow machine (it empties in three minutes here, not the
-  // real twenty) - hungry beats everything else on purpose, so either is the
-  // hint doing its job correctly.
-  await expect(page.locator('.hud-hint')).toContainText(
-    /Left click to catch the rabbit|You're hungry/,
-  );
-
-  await catchUntilCaught(page, rabbit.id);
+  // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
+  // usually the catch hint, but a walk this long can run the hunger meter out
+  // first on a slow machine (it empties in three minutes here, not the real
+  // twenty) - hungry beats everything else on purpose, so either is the hint
+  // doing its job correctly.
+  const catchHint = /Left click to catch the rabbit|You're hungry/;
+  const { animalId: rabbitId, hunt } = await huntNearest(page, 'rabbit', { hint: catchHint });
+  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
 
   // It is gone, and the meat is ours.
   expect(
     (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === rabbit.id,
+      (entry) => entry.id === rabbitId,
     ),
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
     .toBe('You caught some meat!');
@@ -1416,7 +1664,7 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1427,34 +1675,28 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const fox = animals.find((entry) => entry.kind === 'fox');
-  if (fox === undefined) throw new Error('no fox in the wilderness');
-
   // The same helpers the rabbit hunt uses: neither cares which kind of
   // wildlife it is, only where it is and whether a swing would land. A fox
   // is prey to the player exactly like a rabbit - it is only a predator to
   // a rabbit (decision 0035), which this test does not touch.
-  await walkWithinReachOfAnimal(page, fox.id);
-  // Usually the catch hint, but a walk this long can run the hunger meter
-  // out first on a slow machine (it empties in three minutes here, not the
-  // real twenty) - hungry beats everything else on purpose, so either is the
-  // hint doing its job correctly.
-  await expect(page.locator('.hud-hint')).toContainText(
-    /Left click to catch the fox|You're hungry/,
-  );
-
-  await catchUntilCaught(page, fox.id);
+  //
+  // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
+  // usually the catch hint, but a walk this long can run the hunger meter out
+  // first on a slow machine (it empties in three minutes here, not the real
+  // twenty) - hungry beats everything else on purpose, so either is the hint
+  // doing its job correctly.
+  const catchHint = /Left click to catch the fox|You're hungry/;
+  const { animalId: foxId, hunt } = await huntNearest(page, 'fox', { hint: catchHint });
+  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
 
   // It is gone, and the meat is ours - a fox pays out exactly like a rabbit.
   expect(
     (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === fox.id,
+      (entry) => entry.id === foxId,
     ),
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
     .toBe('You caught some meat!');
@@ -1477,7 +1719,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1488,21 +1730,9 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const raccoon = animals.find((entry) => entry.kind === 'maskedRaccoon');
-  if (raccoon === undefined) throw new Error('no masked raccoon in the wilderness');
-
   // The same helpers the rabbit hunt uses: neither cares which kind of
   // wildlife it is, only where it is and whether a swing would land.
-  await walkWithinReachOfAnimal(page, raccoon.id);
-  // Usually the fight hint, but a walk this long can run the hunger meter out
-  // first on a slow machine (it empties in three minutes here, not the real
-  // twenty) - hungry beats everything else on purpose, so either is the hint
-  // doing its job correctly.
-  await expect(page.locator('.hud-hint')).toContainText(
-    /Left click to fight off the masked raccoon|You're hungry/,
-  );
-
+  //
   // Noticing, chasing, the wind-up, multi-hit defeat and the knockout-and-
   // heal all already have thorough, fast, deterministic coverage in the
   // shared and game-server suites (decision 0024) - a raccoon fights back,
@@ -1512,31 +1742,22 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   // only needs to prove what only it can: the raccoon renders, the hint
   // names it and its hit count, and one real swing reaches the real server
   // and comes back as a lower count.
-  const before = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
-  expect(before).not.toBeNull();
+  //
+  // The hint is usually the fight hint, but a walk this long can run the
+  // hunger meter out first on a slow machine (it empties in three minutes
+  // here, not the real twenty) - hungry beats everything else on purpose, so
+  // either is the hint doing its job correctly.
+  const fightHint = /Left click to fight off the masked raccoon|You're hungry/;
+  const { hunt: fight } = await huntNearest(page, 'maskedRaccoon', {
+    stopWhenHurt: true,
+    hint: fightHint,
+  });
+  expect(fight.hints.some((hint) => fightHint.test(hint))).toBe(true);
 
-  await centerMouse(page);
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const stillThere = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === raccoon.id,
-    );
-    if (!stillThere) break; // landed enough to fell it outright - even better
-    const hitsLeft = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
-    if (hitsLeft !== null && before !== null && hitsLeft < before) break;
-
-    await page.mouse.down();
-    await page.waitForTimeout(200);
-    await page.mouse.up();
-    await page.waitForTimeout(150);
-  }
-
-  const stillThere = (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-    (entry) => entry.id === raccoon.id,
-  );
-  if (stillThere) {
-    const after = await page.evaluate(() => window.acornDebug?.aimedAnimal()?.hitsLeft ?? null);
-    expect(after).not.toBeNull();
-    expect(after).toBeLessThan(before ?? Infinity);
+  // Landed enough to fell it outright (even better), or its count came down.
+  if (!fight.caught) {
+    expect(fight.hitsLeft.length).toBeGreaterThan(1);
+    expect(Math.min(...fight.hitsLeft)).toBeLessThan(fight.hitsLeft[0] ?? Infinity);
   }
 
   // Nothing thrown while walking out, aiming or landing a swing.
@@ -1580,29 +1801,39 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
  * Face the given spot, open the Craft menu with B, turn to the given page of
  * it (Camp, Yard...), press the given number on that page, then point the mouse at open ground ahead and click until something
  * appears - the way a player places a piece once its preview follows the
- * mouse (decision 0052). Tries a few spots down the screen from the middle,
- * nearer and nearer the player, in case the first is not clear.
+ * mouse (decision 0052). Tries a few spots up and down the screen from the
+ * middle, nearer and farther from the player, in case the first is not clear. Stops once
+ * `piecesWanted` pieces stand in the world, counting any built already.
  */
 async function buildFacing(
   page: Page,
   target: { x: number; z: number },
   tab: string,
   digit: string,
+  piecesWanted = 1,
 ): Promise<void> {
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   for (let attempt = 0; attempt < 15; attempt++) {
-    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) > 0) break;
+    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) >= piecesWanted) {
+      break;
+    }
     await page.evaluate(
       ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
       [target.x, target.z],
     );
     if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) === null) {
-      await page.keyboard.press('KeyB');
-      await page.waitForTimeout(150);
+      // Wait for the menu itself rather than a fixed moment: at a few frames a
+      // second a key pressed just after another can be taken for the same press.
+      const menuOpen = async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? false);
+      if (!(await menuOpen())) await page.keyboard.press('KeyB');
+      await expect.poll(menuOpen).toBe(true);
       await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
       await page.keyboard.press(digit);
     }
-    const lower = (attempt % 3) * 70;
+    // Up the screen is farther from the player and down is nearer: a big piece
+    // like the tent needs room round it, so it is not clear at the first spot.
+    const lowerBy = [0, -60, -120, 60, 120, -180];
+    const lower = lowerBy[attempt % lowerBy.length] ?? 0;
     await page.mouse.move(viewport.width / 2, viewport.height / 2 + lower);
     await expect
       .poll(
@@ -1615,7 +1846,7 @@ async function buildFacing(
     }
     await page.waitForTimeout(300);
   }
-  if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) === 0) {
+  if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) < piecesWanted) {
     throw new Error('never built anything');
   }
   // Whatever was left out to place another goes away again - on its own
@@ -1627,12 +1858,77 @@ async function buildFacing(
   }
 }
 
+/**
+ * `buildFacing`, trying other ways round if the first is blocked: a rock or a
+ * tree close by can refuse every spot in one direction while the next is clear,
+ * and which side of the spawn spot the player ends up on depends on where they
+ * walked in from.
+ */
+async function buildFacingAnyWay(
+  page: Page,
+  firstChoice: { x: number; z: number },
+  tab: string,
+  digit: string,
+  piecesWanted = 1,
+): Promise<void> {
+  const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+  const around = [0, 90, 180, 270].map((degrees) => ({
+    x: here.x + 10 * Math.cos((degrees * Math.PI) / 180),
+    z: here.z + 10 * Math.sin((degrees * Math.PI) / 180),
+  }));
+  const choices = [firstChoice, ...around];
+  for (const [index, target] of choices.entries()) {
+    try {
+      await buildFacing(page, target, tab, digit, piecesWanted);
+      return;
+    } catch (error) {
+      if (index === choices.length - 1) throw error;
+    }
+  }
+}
+
+/**
+ * A point on the far side of the player from a placed piece, to face when the
+ * next piece should go up on the other side of them rather than on top of it.
+ */
+async function pointAwayFrom(
+  page: Page,
+  piece: { x: number; z: number },
+): Promise<{ x: number; z: number }> {
+  const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+  return { x: here.x + (here.x - piece.x), z: here.z + (here.z - piece.z) };
+}
+
+/**
+ * Everything but a tent needs a building area, and a first tent is what makes
+ * one: six sticks, then it goes up on the open ground by the spawn spot.
+ * Leaves the player standing beside it and gives back where it stands, ready
+ * to build the next piece on the other side.
+ */
+async function buildFirstTent(
+  page: Page,
+  spawnSpot: { x: number; z: number },
+): Promise<{ x: number; z: number }> {
+  await gatherFromPatches(page, 'stick', 6);
+  await walkToward(page, spawnSpot);
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
+    [spawnSpot.x, spawnSpot.z],
+  );
+  await buildFacingAnyWay(page, spawnSpot, 'Home', 'Digit1');
+  const tent = (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
+    (piece) => piece.kind === 'tent',
+  );
+  if (tent === undefined) throw new Error('the first piece built was not a tent');
+  return { x: tent.x, z: tent.z };
+}
+
 test('you can chop enough logs to build a campfire, and it is still there next time', async ({
   browser,
 }) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
 
@@ -1649,7 +1945,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1678,7 +1974,11 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     [spawnSpot.x, spawnSpot.z],
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
-  await expect(page.locator('.hud-hint')).not.toContainText('Press B to build');
+  // No hint at all counts too, so read whatever is showing rather than wait
+  // for an element that is not there.
+  await expect
+    .poll(async () => (await page.locator('.hud-hint').allTextContents()).join(' '))
+    .not.toContain('Press B to build');
 
   // Opening the menu with only four logs offers the campfire but not the
   // starter tent (which costs six sticks). Picking the unaffordable one still shows its
@@ -1700,18 +2000,21 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)).toBe(0);
   // Escape puts it away again, before anything else it would do.
   await page.keyboard.press('Escape');
-  expect(await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)).toBeNull();
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.buildPreview() ?? null))
+    .toBeNull();
   await expect(page.locator('.hud-curtain')).toBeHidden();
 
-  await buildFacing(page, spawnSpot, 'Camp', 'Digit1');
+  // A campfire needs a building area, and the first tent is what makes one. Then
+  // the campfire goes up on the other side of the player from the tent.
+  const tent = await buildFirstTent(page, spawnSpot);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
-  expect(built).toHaveLength(1);
-  expect(built[0]?.kind).toBe('campfire');
-  expect(await page.evaluate(() => window.acornDebug?.carrying() ?? [])).toEqual([
-    { item: 'axe', count: 1 },
-  ]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).not.toContainText('Log');
+  expect(built.map((piece) => piece.kind).sort()).toEqual(['campfire', 'tent']);
+  const carriedAfter = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
+  expect(carriedAfter.find((entry) => entry.item === 'log')).toBeUndefined();
+  expect(carriedAfter.find((entry) => entry.item === 'axe')?.count).toBe(1);
 
   // The Phase 1 promise, for a campfire this time: log out, come back, it is
   // still there.
@@ -1722,7 +2025,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   await waitForConnected(again);
   await expect
     .poll(async () => (await again.evaluate(() => window.acornDebug?.builtProps() ?? [])).length)
-    .toBe(1);
+    .toBe(2);
   const rebuilt = await again.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(rebuilt).toEqual(built);
 
@@ -1748,7 +2051,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1766,27 +2069,24 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   await chopUntilFelled(page, oak);
   await collectFallenLogs(page);
 
-  await walkToward(page, spawnSpot);
-  await page.evaluate(
-    ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
-    [spawnSpot.x, spawnSpot.z],
-  );
-  await buildFacing(page, spawnSpot, 'Camp', 'Digit1');
+  // The first tent makes the building area the campfire goes into.
+  const tent = await buildFirstTent(page, spawnSpot);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
 
-  const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
-  const campfire = built[0];
-  expect(campfire?.kind).toBe('campfire');
-  expect(campfire?.lit).toBe(false);
+  const campfireNow = async () =>
+    (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
+      (piece) => piece.kind === 'campfire',
+    );
+  const campfire = await campfireNow();
   if (campfire === undefined) throw new Error('no campfire was built');
+  expect(campfire.lit).toBe(false);
 
   // Built BUILD_DISTANCE away, past interact reach - one more short walk.
   await walkOntoSpot(page, campfire.x, campfire.z);
   await expect(page.locator('.hud-hint')).toContainText('Press E to light the campfire');
 
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.builtProps() ?? []))[0]?.lit)
-    .toBe(true);
+  await expect.poll(async () => (await campfireNow())?.lit).toBe(true);
   await expect(page.locator('.hud-hint')).toContainText('Press E to put out the campfire');
   // A look at the fire's own light on the ground around it, by eye - the
   // same reason the axe's grip got a screenshot in the equip test above.
@@ -1795,9 +2095,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   // Put out by hand, well before the ten minutes it would otherwise take -
   // that timing lives in a fast, non-browser test instead of a real wait here.
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.builtProps() ?? []))[0]?.lit)
-    .toBe(false);
+  await expect.poll(async () => (await campfireNow())?.lit).toBe(false);
   await expect(page.locator('.hud-hint')).toContainText('Press E to light the campfire');
 
   expect(errors).toEqual([]);
@@ -1848,13 +2146,16 @@ test('you can gather flowers and plant something pretty for the garden', async (
   await expect(page.locator('.hud-journal')).toContainText('Fence');
   await expect(page.locator('.hud-journal')).toContainText('Garden path');
   await page.keyboard.press('KeyB');
-  await page.waitForTimeout(150);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true))
+    .toBe(false);
 
-  await buildFacing(page, spawnSpot, 'Camp', 'Digit2');
+  // The lantern needs a building area, so the first tent goes up before it.
+  const tent = await buildFirstTent(page, spawnSpot);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
-  expect(built).toHaveLength(1);
-  expect(built[0]?.kind).toBe('lantern');
+  expect(built.map((piece) => piece.kind).sort()).toEqual(['lantern', 'tent']);
   // A look at the lantern's own light, by eye - the same reason the lit
   // campfire got a screenshot in the build test above.
   await page.screenshot({ path: 'test-results/lantern-lit.png' });
@@ -1864,7 +2165,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   );
   expect(spent).toBe(gathered - 4);
 
-  // Nothing thrown while gathering, walking back or planting the lantern.
+  // Nothing thrown while gathering, walking back, pitching the tent or planting the lantern.
   expect(errors).toEqual([]);
 });
 
@@ -1913,7 +2214,7 @@ test.describe('woods interaction polish', () => {
     );
     if (bag === undefined) throw new Error('No bag in the clearing');
     await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [bag.x, bag.z]);
-    await walkWithinReachOf(page, bag.x, bag.z);
+    await walkWithinReachOf(page, bag.x, bag.z, 'bag');
     const point = await page.evaluate(
       ([x, z]) => window.acornDebug?.screenPoint(x!, 0.12, z!),
       [bag.x, bag.z],
@@ -1955,11 +2256,12 @@ test.describe('woods interaction polish', () => {
     try {
       await expect
         .poll(() => countHeld(page, 'stick'), { timeout: 60_000, intervals: [1000] })
-        .toBeGreaterThan(0);
+        .toBeGreaterThan(1);
     } finally {
       await page.keyboard.up('KeyW');
       await page.keyboard.up('KeyE');
     }
+    // "Drop one" is only offered when there is more than one to drop.
     await page.keyboard.press('KeyI');
     await page.getByTestId('pack-slot-stick').click({ button: 'right' });
     await expect(page.locator('.slot-menu')).toBeVisible();
