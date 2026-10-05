@@ -6,6 +6,8 @@ import {
   type Page,
 } from '@playwright/test';
 
+import { PROP_KINDS, type PropKindId } from '../packages/shared/src/index';
+
 declare global {
   interface Window {
     acornDebug?: {
@@ -632,6 +634,15 @@ async function gatherFromPatches(
 }
 
 /**
+ * What the game calls a kind of tree. The first three kinds kept their old keys
+ * (`oak` and friends) when they became real species, so the key and the name
+ * the player sees no longer match: the landmark `oak` reads as a Sitka spruce.
+ */
+function treeName(kind: string): string {
+  return PROP_KINDS[kind as PropKindId].displayName;
+}
+
+/**
  * Walk up to a tree until the game says a swing would reach it.
  *
  * Never assume standing where the axe was leaves you in range of the oak beside
@@ -644,11 +655,10 @@ async function walkWithinReachOfTree(
 ): Promise<void> {
   // Every tree in the forest can be chopped now, so the first tree faced on the
   // way over is often a different one. Only the kind we came for counts.
-  const simplified = (name: string): string => name.toLowerCase().replace(/[^a-z]/g, '');
-  const wanted = simplified(tree.kind);
+  const wanted = treeName(tree.kind);
   for (let step = 0; step < 80; step++) {
     const aimed = await page.evaluate(() => window.acornDebug?.aimedTree() ?? null);
-    if (aimed !== null && simplified(aimed.name) === wanted) return;
+    if (aimed?.name === wanted) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - tree.x, (here?.z ?? 0) - tree.z);
@@ -1094,7 +1104,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
 
   // Facing it, the game offers the swing and says how much is left in it.
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.aimedTree())).not.toBeNull();
-  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+  await expect(page.locator('.hud-hint')).toContainText(
+    `Left click to chop the ${treeName(oak.kind).toLowerCase()}`,
+  );
 
   await chopUntilFelled(page, oak);
   await collectFallenLogs(page);
@@ -1142,7 +1154,9 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   const oak = trees.find((tree) => tree.kind === 'oak');
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
-  await expect(page.locator('.hud-hint')).toContainText('Left click to chop the oak');
+  await expect(page.locator('.hud-hint')).toContainText(
+    `Left click to chop the ${treeName(oak.kind).toLowerCase()}`,
+  );
 
   // Holding starts only the charge. Even once ready, the oak stays untouched
   // until release: no preliminary light swing and no automatic strong swing.
