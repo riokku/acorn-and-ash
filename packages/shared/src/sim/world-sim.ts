@@ -251,6 +251,7 @@ import {
   checkBuildSpot,
   footprintGap,
   nearestCampfire,
+  reedFootprints,
   roundFootprint,
   type Footprint,
 } from './building';
@@ -3604,7 +3605,11 @@ export class WorldSimulation {
       (prop) => isHomeKind(prop.kind) && prop.id !== ownedHome?.id,
     );
     const proposedPiece = buildableFootprint(kind, request.x, request.z, request.yaw);
-    if (!buildGroundIsLevel(proposedPiece, this.collision.terrain)) return refuse('ground');
+    // A boat floats on the lake, so the ground under it is the lake bed and
+    // it is nobody's home boundary: its own mooring rule says where it fits.
+    const isBoat = kind === 'rowboat';
+    if (!isBoat && !buildGroundIsLevel(proposedPiece, this.collision.terrain))
+      return refuse('ground');
     if (isHomeKind(kind)) {
       const area = homeBuildArea({ id: ownedHome?.id ?? 0, kind, x: request.x, z: request.z });
       if (
@@ -3613,6 +3618,7 @@ export class WorldSimulation {
       )
         return refuse('area');
     } else if (
+      !isBoat &&
       checkPieceBuildArea(proposedPiece, ownedHome, otherHomes, this.protectedBuildSites()) !== null
     )
       return;
@@ -3755,6 +3761,8 @@ export class WorldSimulation {
       ...this.builtProps
         .filter((built) => built.id !== excludeId)
         .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),
+      // Nothing is moored on top of the reeds that are cut for rope.
+      ...reedFootprints(),
     ];
   }
 

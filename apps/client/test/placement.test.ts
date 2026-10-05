@@ -1,6 +1,8 @@
 import {
   BUILDABLE_KINDS,
   BUILD_REACH,
+  LAKE,
+  REED_PATCHES,
   roundFootprint,
   type BuildRequest,
   type BuiltPropView,
@@ -129,6 +131,71 @@ describe('why a piece will not go where it is pointed', () => {
   it('keeps out of the water', () => {
     const plan = planPlacement({ ...BASE, water: [{ x: 0, z: -4, radius: 1 }] });
     expect(plan.refusal).toBe('Too close to the water');
+  });
+});
+
+describe('moored boats', () => {
+  // A boat on the water beside the first clump of reeds, lying along the bank,
+  // and a place on the bank to have built it from.
+  const spot = REED_PATCHES[0]!;
+  const circle = LAKE.basin.reduce((best, c) => {
+    const gap = (c: { x: number; z: number; radius: number }) =>
+      Math.abs(Math.hypot(spot.x - c.x, spot.z - c.z) - c.radius);
+    return gap(c) < gap(best) ? c : best;
+  });
+  const away = Math.hypot(circle.x - spot.x, circle.z - spot.z);
+  const inward = { x: (circle.x - spot.x) / away, z: (circle.z - spot.z) / away };
+  const onWater = { x: spot.x + inward.x * 2.05, z: spot.z + inward.z * 2.05 };
+  const yaw = Math.atan2(-inward.x, -inward.z);
+  const bank = { x: onWater.x - inward.x * 2.9, y: 0, z: onWater.z - inward.z * 2.9 };
+  const BOAT: PlacementInputs = {
+    ...BASE,
+    kind: 'rowboat',
+    // Outside any home area, the way the real game asks.
+    enforceHomeArea: true,
+    yaw,
+    mouse: onWater,
+    player: bank,
+    carrying: [
+      { item: 'log', count: 6 },
+      { item: 'rope', count: 2 },
+    ],
+    water: [...LAKE.basin],
+  };
+
+  it('goes on the water beside the bank, with no home and no clear ground to ask for', () => {
+    const plan = planPlacement(BOAT);
+    expect(plan.refusal).toBeNull();
+    expect(plan.spot?.x).toBeCloseTo(onWater.x, 6);
+  });
+
+  it('says a boat floats, when pointed at dry ground', () => {
+    // A few steps inland from where the player stands on the bank.
+    const inland = { x: bank.x - inward.x * 2.5, z: bank.z - inward.z * 2.5 };
+    const plan = planPlacement({ ...BOAT, mouse: inland });
+    expect(plan.refusal).toBe(
+      'Rowboats float in the lake · moor it a step or two out from the bank',
+    );
+  });
+
+  it('asks for rope and logs like any other piece', () => {
+    const plan = planPlacement({ ...BOAT, carrying: [{ item: 'log', count: 6 }] });
+    expect(plan.refusal).toBe('Need 2 more rope');
+    expect(plan.affordable).toBe(false);
+  });
+
+  it('allows one each', () => {
+    const plan = planPlacement({
+      ...BOAT,
+      built: [built({ kind: 'rowboat', x: 400, z: 400, yours: true })],
+    });
+    expect(plan.refusal).toBe('You already have a rowboat');
+  });
+
+  it('describes a boat that is too far out in the deep', () => {
+    expect(describeRefusal({ reason: 'tooFarOut' })).toBe(
+      'Too far out · moor it closer to the bank',
+    );
   });
 });
 

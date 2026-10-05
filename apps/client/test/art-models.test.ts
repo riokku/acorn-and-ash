@@ -30,6 +30,7 @@ import { createGardenPath } from '../src/scene/garden-path';
 import { createLantern } from '../src/scene/lantern';
 import { createSatchel, createStickPileModel, stumpGeometries } from '../src/scene/pickup-models';
 import { createRaccoon } from '../src/scene/raccoon';
+import { createRowboat } from '../src/scene/rowboat';
 
 /** CLAUDE.md's own ceiling for a small prop. */
 const PROP_BUDGET = 2000;
@@ -116,6 +117,7 @@ describe("the game's own models", () => {
       make: createGardenPath,
       budget: BUILDABLE_KINDS.gardenPath.triangleBudget,
     },
+    { name: 'rowboat', make: createRowboat, budget: BUILDABLE_KINDS.rowboat.triangleBudget },
     { name: 'carved fish display', make: () => createFishDisplay(), budget: 2000 },
     { name: 'golden fish display', make: () => createFishDisplay(true), budget: 2000 },
     { name: 'rabbit', make: createCritter, budget: ANIMAL_KINDS.rabbit.triangleBudget },
@@ -150,6 +152,43 @@ describe("the game's own models", () => {
     const cabin = createCabin();
     expect(reach(cabin.group)).toBeLessThan(BUILDABLE_KINDS.cabin.footprintRadius + 0.5);
     cabin.dispose();
+  });
+
+  it('floats a rowboat on its waterline, inside the room its footprint asks for', () => {
+    const boat = createRowboat();
+    const box = new THREE.Box3().setFromObject(boat.group);
+    const { footprintHalfLength, footprintRadius } = BUILDABLE_KINDS.rowboat;
+    // Long along X, and no wider or longer than the hull the build rules keep clear.
+    expect(box.max.x).toBeLessThanOrEqual(footprintHalfLength + footprintRadius + 0.01);
+    expect(box.min.x).toBeGreaterThanOrEqual(-(footprintHalfLength + footprintRadius) - 0.01);
+    expect(box.max.z).toBeLessThanOrEqual(footprintRadius);
+    expect(box.min.z).toBeGreaterThanOrEqual(-footprintRadius);
+    // Its rim stands above the water and its keel sits under it.
+    expect(box.min.y).toBeLessThan(-0.1);
+    expect(box.max.y).toBeGreaterThan(0.2);
+    expect(box.max.y).toBeLessThan(0.5);
+    boat.dispose();
+  });
+
+  it('gives a rowboat a pointed bow at +X and a blunter stern at -X', () => {
+    const boat = createRowboat();
+    let bowWidth = 0;
+    let sternWidth = 0;
+    const point = new THREE.Vector3();
+    boat.group.updateMatrixWorld(true);
+    boat.group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const position = (child.geometry as THREE.BufferGeometry).attributes.position;
+      if (position === undefined) return;
+      for (let i = 0; i < position.count; i++) {
+        point.fromBufferAttribute(position, i).applyMatrix4(child.matrixWorld);
+        if (point.x > 1.3) bowWidth = Math.max(bowWidth, Math.abs(point.z));
+        if (point.x < -1.3) sternWidth = Math.max(sternWidth, Math.abs(point.z));
+      }
+    });
+    expect(bowWidth).toBeGreaterThan(0);
+    expect(bowWidth).toBeLessThan(sternWidth);
+    boat.dispose();
   });
 
   it("puts a fence piece's posts right on its two ends, where the next piece joins", () => {

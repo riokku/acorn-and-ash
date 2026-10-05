@@ -148,7 +148,9 @@ function refusalFor(
   }
 
   const piece = buildableFootprint(inputs.kind, spot.x, spot.z, spot.yaw);
-  if (inputs.enforceHomeArea) {
+  // A boat is moored at the lake, wherever that is: no home area, and the
+  // water's own rule (see `checkBuildSpot`) stands in for level ground.
+  if (inputs.enforceHomeArea && inputs.kind !== 'rowboat') {
     const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind)) ?? null;
     const others = inputs.built.filter((prop) => isHomeKind(prop.kind) && prop.id !== home?.id);
     const area = homeBuildArea({ id: home?.id ?? 0, kind: inputs.kind, ...spot });
@@ -200,6 +202,10 @@ export function describeRefusal(refusal: BuildRefusal): string {
       return 'Only inside the clearing';
     case 'water':
       return 'Too close to the water';
+    case 'needsWater':
+      return 'Rowboats float in the lake · moor it a step or two out from the bank';
+    case 'tooFarOut':
+      return 'Too far out · moor it closer to the bank';
     case 'tooClose':
       return `Too close to the ${refusal.what}`;
   }

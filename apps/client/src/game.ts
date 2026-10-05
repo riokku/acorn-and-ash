@@ -132,6 +132,7 @@ import {
   nearestBuriedCache,
   nearestCampfire,
   pickupInReach,
+  reedFootprints,
   replaceCollider,
   roundFootprint,
   stumpColliderFor,
@@ -250,6 +251,7 @@ import { FireLights } from './scene/fire-light';
 import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
+import { createRowboat, type Rowboat } from './scene/rowboat';
 import { createGrass, type GrassScene } from './scene/grass';
 import { createHomeInterior, type HomeInterior } from './scene/home-interior';
 import { planPlacement, type PlacementPlan } from './building/placement';
@@ -409,6 +411,7 @@ function createBuiltMesh(
   | Lantern
   | Fence
   | GardenPath
+  | Rowboat
   | ReturnType<typeof createHomeDecoration> {
   if (isHomeKind(kind)) {
     const home =
@@ -441,6 +444,8 @@ function createBuiltMesh(
       return createGardenPath();
     case 'guardianTrophy':
       return createGuardianTrophy();
+    case 'rowboat':
+      return createRowboat();
     case 'cedarBench':
     case 'timberTable':
     case 'wovenRug':
@@ -2442,11 +2447,7 @@ export class Game {
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
       if ('setLit' in built) built.setLit(prop.lit);
-      built.group.position.set(
-        prop.x,
-        this.collision?.terrain.heightAt(prop.x, prop.z) ?? 0,
-        prop.z,
-      );
+      built.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
       built.group.rotation.y = prop.yaw;
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
@@ -3178,8 +3179,13 @@ export class Game {
         spot.z,
         spot.yaw,
         refusal === null,
-        this.collision?.terrain.heightAt(spot.x, spot.z) ?? 0,
+        this.builtGroundY(placing.kind, spot.x, spot.z),
       );
+  }
+
+  /** Where the foot of a built piece sits: on the ground, or for a boat on the lake's surface. */
+  private builtGroundY(kind: BuildableKindId, x: number, z: number): number {
+    return kind === 'rowboat' ? LAKE.level : (this.collision?.terrain.heightAt(x, z) ?? 0);
   }
 
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
@@ -3202,21 +3208,30 @@ export class Game {
             z: ray.origin.z + distance * ray.direction.z,
           };
     }
+    // A boat is aimed at the water's surface, not the bed under it.
     return this.collision === null
       ? null
-      : groundAlongRay(ray.origin, ray.direction, this.collision.terrain);
+      : groundAlongRay(
+          ray.origin,
+          ray.direction,
+          this.collision.terrain,
+          this.placing?.kind === 'rowboat' ? LAKE.level : undefined,
+        );
   }
 
   /** Every tree, rock and stump, as the same footprints the server checks a build against. */
   private sceneryFootprints(): Footprint[] {
-    return [...this.standingProps, ...this.wildernessProps].map((prop) =>
-      roundFootprint(
-        prop.x,
-        prop.z,
-        PROP_KINDS[prop.kind].colliderRadius * prop.scale,
-        this.isFelled(prop.id) ? 'stump' : PROP_KINDS[prop.kind].displayName.toLowerCase(),
+    return [
+      ...[...this.standingProps, ...this.wildernessProps].map((prop) =>
+        roundFootprint(
+          prop.x,
+          prop.z,
+          PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+          this.isFelled(prop.id) ? 'stump' : PROP_KINDS[prop.kind].displayName.toLowerCase(),
+        ),
       ),
-    );
+      ...reedFootprints(),
+    ];
   }
 
   /**

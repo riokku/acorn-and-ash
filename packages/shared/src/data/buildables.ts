@@ -28,7 +28,8 @@ export type BuildableKindId =
   | 'trailPennant'
   | 'sentinelTrophy'
   | 'fishDisplay'
-  | 'goldenFishDisplay';
+  | 'goldenFishDisplay'
+  | 'rowboat';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -316,6 +317,25 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x9ea997,
   },
+  rowboat: {
+    id: 'rowboat',
+    displayName: 'Rowboat',
+    // Planks from the woods, lashed together with rope twisted from lake reeds.
+    costs: [
+      { item: 'log', amount: 6 },
+      { item: 'rope', amount: 2 },
+    ],
+    // A hull about three and a quarter metres long and a metre and a third
+    // across: a line along its length with its round ends, the way a fence
+    // is, laid along the model's own X axis with the bow at +X.
+    footprintRadius: 0.65,
+    footprintHalfLength: 0.95,
+    isHome: false,
+    // One each, like a home: a lake full of boats nobody rows helps nobody.
+    capPerPlayer: true,
+    triangleBudget: 3000,
+    placeholderColor: 0x8a5a36,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -340,6 +360,7 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'sentinelTrophy',
   'fishDisplay',
   'goldenFishDisplay',
+  'rowboat',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {
