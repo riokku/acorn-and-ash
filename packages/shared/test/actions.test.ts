@@ -9,6 +9,8 @@ import {
   dodgeHeading,
   footedInput,
   headingDirection,
+  isDown,
+  isResting,
   isUntouchable,
   packActionByte,
   unpackActionByte,
@@ -33,6 +35,7 @@ import { CHARGE_WALK_SHARE } from '../src/constants';
 const ARMED: ActionContext = { canAttack: true, castInstead: false };
 const UNARMED: ActionContext = { canAttack: false, castInstead: false };
 const AT_THE_WATER: ActionContext = { canAttack: true, castInstead: true };
+const ON_THE_GROUND: ActionContext = { canAttack: false, castInstead: false, canSit: true };
 
 /**
  * Feeds inputs one at a time, remembering the buttons on the last one the
@@ -343,6 +346,129 @@ describe('resting', () => {
     const still = footedInput(input, 'still', 0.5);
     expect(still).toMatchObject({ moveX: 0, moveZ: 0, aimYaw: 0.5 });
     expect(still.buttons & PlayerButton.Jump).toBe(0);
+  });
+});
+
+describe('sitting on the ground', () => {
+  it('sits you down wherever you stand, on a fresh press of the sit button', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    expect(feed(PlayerButton.Sit).footing).toBe('still');
+    expect(state.kind).toBe(ActionKind.SitGround);
+    expect(isResting(state)).toBe(true);
+  });
+
+  it('does nothing when there is no ground to sit on, or a line in the water', () => {
+    const { state, feed } = player({ canAttack: false, castInstead: false, canSit: false });
+    feed(PlayerButton.Sit);
+    expect(state.kind).toBe(ActionKind.Idle);
+    const unspecified = player(UNARMED);
+    unspecified.feed(PlayerButton.Sit);
+    expect(unspecified.state.kind).toBe(ActionKind.Idle);
+  });
+
+  it('sits you down holding something, too, without swinging it', () => {
+    const { state, feed } = player({ canAttack: true, castInstead: false, canSit: true });
+    feed(PlayerButton.Sit | PlayerButton.Swing);
+    expect(state.kind).toBe(ActionKind.SitGround);
+  });
+
+  it('stays put while sat, however you push, until you ask to get up', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    expect(feed(PlayerButton.Swing | PlayerButton.Sit).footing).toBe('still');
+    expect(state.kind).toBe(ActionKind.SitGround);
+  });
+
+  it('gets you up with a second press of the sit button, once you have settled', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    // Held down past the first tick, it is still the same press.
+    for (let i = 0; i < SETTLE.earliestUp + 2; i++) feed(PlayerButton.Sit);
+    expect(state.kind).toBe(ActionKind.SitGround);
+    feed(0);
+    feed(PlayerButton.Sit);
+    expect(state).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Sat });
+    for (let i = 1; i < RISE.floor; i++) expect(feed().footing).toBe('still');
+    expect(feed().footing).toBe('free');
+    expect(state.kind).toBe(ActionKind.Idle);
+  });
+
+  it('does not get you up again on the very tick you sat down', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    feed(0);
+    feed(PlayerButton.Sit);
+    expect(state.kind).toBe(ActionKind.SitGround);
+  });
+
+  it.each([
+    ['moving', 0, 0, 1],
+    ['a fresh press of interact', PlayerButton.Interact, 0, 0],
+    ['a jump', PlayerButton.Jump, 0, 0],
+  ])('gets you up when you ask by %s', (_how, buttons, moveX, moveZ) => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    for (let i = 0; i < SETTLE.earliestUp; i++) feed();
+    feed(buttons, moveX, moveZ);
+    expect(state).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Sat });
+  });
+
+  it('is not sat down again by a button still held from getting up', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    for (let i = 0; i < SETTLE.earliestUp; i++) feed();
+    feed(0, 0, 1);
+    for (let i = 0; i < RISE.floor; i++) feed(PlayerButton.Sit, 0, 1);
+    expect(state.kind).toBe(ActionKind.Idle);
+  });
+
+  it('gives way to a dodge, and cannot start mid-swing', () => {
+    const rolling = player(ON_THE_GROUND);
+    rolling.feed(PlayerButton.Sit | PlayerButton.Dodge);
+    expect(rolling.state.kind).toBe(ActionKind.Dodge);
+
+    const swinging = player({ canAttack: true, castInstead: false, canSit: true });
+    swinging.feed(PlayerButton.Swing);
+    swinging.feed(PlayerButton.Sit);
+    expect(swinging.state.kind).toBe(ActionKind.Swing);
+  });
+
+  it('leaves you touchable and not down, sat or getting up, unlike a knockout', () => {
+    const { state, feed } = player(ON_THE_GROUND);
+    feed(PlayerButton.Sit);
+    expect(isDown(state)).toBe(false);
+    expect(isUntouchable(state)).toBe(false);
+    for (let i = 0; i < SETTLE.earliestUp; i++) feed();
+    feed(0, 0, 1);
+    expect(state).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Sat });
+    expect(isDown(state)).toBe(false);
+    expect(isUntouchable(state)).toBe(false);
+
+    const knockedOut = createActionState();
+    beginAction(knockedOut, ActionKind.KnockedOut);
+    expect(isDown(knockedOut)).toBe(true);
+    for (const from of [RiseFrom.Ground, RiseFrom.Bed]) {
+      const rising = createActionState();
+      beginAction(rising, ActionKind.Rise, from);
+      expect(isDown(rising)).toBe(true);
+      expect(isUntouchable(rising)).toBe(true);
+    }
+    const outOfTheChair = createActionState();
+    beginAction(outOfTheChair, ActionKind.Rise, RiseFrom.Chair);
+    expect(isDown(outOfTheChair)).toBe(false);
+  });
+
+  it('travels on the wire, sitting and getting up', () => {
+    const state = createActionState();
+    beginAction(state, ActionKind.SitGround);
+    expect(unpackActionByte(packActionByte(state), createActionState())).toMatchObject({
+      kind: ActionKind.SitGround,
+    });
+    beginAction(state, ActionKind.Rise, RiseFrom.Sat);
+    expect(unpackActionByte(packActionByte(state), createActionState())).toMatchObject({
+      kind: ActionKind.Rise,
+      step: RiseFrom.Sat,
+    });
   });
 });
 

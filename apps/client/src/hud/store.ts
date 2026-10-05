@@ -35,6 +35,12 @@ export interface HudState {
   readonly fishRecords?: FishRecords;
   readonly reel?: ReelView | null;
   readonly nearExpeditionBoard?: boolean;
+  /**
+   * Standing at the board on the doorstep itself, free to act and clear of
+   * the doorway, so a press of E could read it (see `expeditionBoardClaimsInteract`).
+   * Unlike `nearExpeditionBoard`, never true inside your home.
+   */
+  readonly atExpeditionBoard?: boolean;
   readonly expeditionPending?: boolean;
   readonly connection: ConnectionState;
   readonly connectionDetail: string;
@@ -181,8 +187,11 @@ export interface HudState {
   readonly decorations?: readonly HomeDecoration[];
   readonly decorNote?: string | null;
   readonly home: { readonly yours: boolean; readonly locked: boolean } | null;
-  /** Sat in the chair or lying in bed right now, if either - see decision 0056. */
-  readonly resting: 'chair' | 'bed' | null;
+  /**
+   * Sat in the chair, lying in bed or sat on the ground right now, if any of
+   * them - see decisions 0056 and 0102.
+   */
+  readonly resting: 'chair' | 'bed' | 'ground' | null;
   /** The chair or the bed close enough to sit or lie down on, inside a home. */
   readonly restingNearby: 'chair' | 'bed' | null;
   /**
@@ -200,6 +209,7 @@ export type BoatHint = 'board' | 'taken' | 'frozen' | 'climbOut' | 'tooFar' | nu
 const INITIAL: HudState = {
   expedition: { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' },
   nearExpeditionBoard: false,
+  atExpeditionBoard: false,
   fishRecords: fishRecordsFromSaved(null),
   reel: null,
   expeditionPending: false,

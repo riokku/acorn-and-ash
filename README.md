@@ -128,10 +128,12 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `W` `A` `S` `D` or the arrow keys    | Walk                                                                     |
 | `Shift` (held)                       | Sprint                                                                   |
 | `Space`                              | Jump                                                                     |
+| `X`                                  | Sit down on the ground, anywhere (move, or `X` or `E` again, to get up)  |
 | Right mouse on world loot (tap)      | Pick up the clicked item or gather one from a patch                      |
 | `E`                                  | Pick up nearby loot, gather, dig up a cache, use/cook at a campfire, eat |
 | `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)                     |
 | `E` beside a rowboat                 | Climb in (one rider to a boat); in a boat at a shore, climb out          |
+| `E` at your expedition board         | Read the board on your doorstep; `E` again to put it away                |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
 | `C` (or `B` outdoors)                | Open the Craft menu: everything you can make or place, on one list       |
@@ -876,8 +878,8 @@ then waits for it to grow back, and another waits at the pond for a bite. It
 runs the world in the `e2e` environment, where skeleton raids are put off for
 a day so one cannot knock the test player out halfway through.
 
-The older tests in `e2e/play.spec.ts` skip the actual drawing (they stop the
-browser sending triangles to the graphics card), because the browsers in
+The older tests in `e2e/play.spec.ts`, and the reeds and rowing tests, skip the
+actual drawing (they stop the browser sending triangles to the graphics card), because the browsers in
 automated runs have no real graphics card and draw one frame every few seconds,
 which makes a walking player crawl. The game logic is untouched. Two tests
 tagged `@real-drawing` still draw for real, so a broken renderer is still
@@ -1120,7 +1122,7 @@ Returning home closes the expedition loop: store building supplies with one ches
 
 During a dodge, tap left mouse for an aerial spin slash or click right mouse for an immediate higher somersault slam. Both follow-ups keep momentum along the original dodge path while aiming the weapon independently. Movement resumes on landing; the slam hits harder and has longer attack recovery. Outside a dodge, hold left mouse for the normal charged attack. Right-click still loots or drags the camera; see Settings > Keybindings and [dodge follow-ups](docs/decisions/0083-dodge-follow-up-attacks.md).
 
-Players can read a cedar expedition board beside their own home, or open its page from inside. Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
+Players can read a cedar expedition board beside their own home by standing at it and pressing `E` (or, from inside, by opening its page with the button on screen). Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
 
 The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (`B` inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
 

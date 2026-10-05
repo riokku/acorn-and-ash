@@ -621,6 +621,18 @@ describe('the hint at the chair and the bed', () => {
   });
 });
 
+describe('the hint while sitting on the ground', () => {
+  it('says how to get up, outdoors as well as in', () => {
+    expect(hint({ ...BASE_STATE, resting: 'ground' })).toBe(
+      'Sitting on the ground · move, or press X or E to get up',
+    );
+  });
+
+  it('lets real danger speak first', () => {
+    expect(hint({ ...BASE_STATE, resting: 'ground', health: 10 })).toMatch(/^Hurt badly/);
+  });
+});
+
 describe('the hint at a rowboat', () => {
   it('offers to climb into a free boat, and says when somebody else has it', () => {
     expect(hint({ ...BASE_STATE, boat: 'board' })).toBe('Press E to climb into the rowboat');
@@ -646,6 +658,23 @@ describe('the hint at a rowboat', () => {
   it('puts rowing ahead of anything lying around in the reeds', () => {
     const state: HudState = { ...BASE_STATE, boat: 'climbOut', nearGatherSpot: 'reed' };
     expect(hint(state)).toMatch(/climb out here$/);
+  });
+});
+
+describe('the hint at the expedition board', () => {
+  const atBoard: HudState = { ...BASE_STATE, atExpeditionBoard: true };
+
+  it('says E reads the board when you stand at it', () => {
+    expect(hint(atBoard)).toBe('Press E to read the expedition board');
+  });
+
+  it('keeps to what is already waiting on E: a pickup, a campfire', () => {
+    expect(hint({ ...atBoard, nearbyItem: 'axe' })).not.toMatch(/expedition board/);
+    expect(hint({ ...atBoard, nearCampfire: 'unlit' })).toBe('Press E to light the campfire');
+  });
+
+  it('says nothing about the board away from it', () => {
+    expect(hint(BASE_STATE)).not.toMatch(/expedition board/);
   });
 });
 

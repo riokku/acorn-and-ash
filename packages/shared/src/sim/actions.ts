@@ -79,11 +79,17 @@ export const ActionKind = {
    * alone, like sitting down.
    */
   Row: 13,
+  /**
+   * Sat on the ground, wherever they happened to be standing. Unlike `Sit`
+   * there is no chair to settle into: the player starts it themselves, with
+   * the sit button, from any ground they are standing on.
+   */
+  SitGround: 14,
 } as const;
 export type ActionKind = (typeof ActionKind)[keyof typeof ActionKind];
 
-/** Where a `Rise` gets up from. */
-export const RiseFrom = { Ground: 0, Bed: 1, Chair: 2 } as const;
+/** Where a `Rise` gets up from. `Sat` is up from sitting on the ground (`SitGround`). */
+export const RiseFrom = { Ground: 0, Bed: 1, Chair: 2, Sat: 3 } as const;
 export type RiseFrom = (typeof RiseFrom)[keyof typeof RiseFrom];
 
 /** Everything about a move in progress. Small on purpose: it all travels in a snapshot. */
@@ -139,6 +145,11 @@ export interface ActionContext {
   readonly dodgeCooldown?: number;
   /** The rod is out and there is water in front: a fresh click casts instead of swinging. */
   readonly castInstead: boolean;
+  /**
+   * Free to sit down right here: on the ground, not in the air, with no line
+   * in the water. Left out, it is no.
+   */
+  readonly canSit?: boolean;
 }
 
 /**
@@ -332,9 +343,11 @@ export function advanceAction(
       const length =
         state.step === RiseFrom.Chair
           ? RISE.chair
-          : state.step === RiseFrom.Bed
-            ? RISE.bed
-            : RISE.ground;
+          : state.step === RiseFrom.Sat
+            ? RISE.floor
+            : state.step === RiseFrom.Bed
+              ? RISE.bed
+              : RISE.ground;
       if (state.age < length) return { footing: 'still', impact: null, cast: false };
       beginAction(state, ActionKind.Idle);
       return startFromIdle(state, input, previousButtons, context, tryDodge);
@@ -346,13 +359,23 @@ export function advanceAction(
       return { footing: 'rowing', impact: null, cast: false };
 
     case ActionKind.Sit:
-    case ActionKind.Lie: {
-      const wantsUp = moving || fresh(PlayerButton.Interact) || fresh(PlayerButton.Jump);
+    case ActionKind.Lie:
+    case ActionKind.SitGround: {
+      // On the ground the sit button gets you up again, as it sat you down.
+      const wantsUp =
+        moving ||
+        fresh(PlayerButton.Interact) ||
+        fresh(PlayerButton.Jump) ||
+        (state.kind === ActionKind.SitGround && fresh(PlayerButton.Sit));
       if (wantsUp && state.age >= SETTLE.earliestUp) {
         beginAction(
           state,
           ActionKind.Rise,
-          state.kind === ActionKind.Sit ? RiseFrom.Chair : RiseFrom.Bed,
+          state.kind === ActionKind.Sit
+            ? RiseFrom.Chair
+            : state.kind === ActionKind.SitGround
+              ? RiseFrom.Sat
+              : RiseFrom.Bed,
         );
       }
       return { footing: 'still', impact: null, cast: false };
@@ -373,6 +396,14 @@ function startFromIdle(
 
   const dodged = tryDodge();
   if (dodged !== null) return dodged;
+  if (
+    held(PlayerButton.Sit) &&
+    (previousButtons & PlayerButton.Sit) === 0 &&
+    context.canSit === true
+  ) {
+    beginAction(state, ActionKind.SitGround);
+    return { footing: 'still', impact: null, cast: false };
+  }
   if (!context.canAttack) return FREE;
   if (held(PlayerButton.Fish)) {
     const freshFish = (previousButtons & PlayerButton.Fish) === 0;
@@ -479,24 +510,30 @@ export function footedInput(
   return { ...input, moveX: 0, moveZ: 0, buttons };
 }
 
+/**
+ * Whether they are down: knocked out, or getting back up after it (or out of
+ * bed). Raiders leave somebody down alone. Getting up out of a chair, or up
+ * from sitting on the ground, is nothing like it: they are only sat there.
+ */
+export function isDown(state: Readonly<ActionState>): boolean {
+  if (state.kind === ActionKind.KnockedOut) return true;
+  return (
+    state.kind === ActionKind.Rise &&
+    (state.step === RiseFrom.Ground || state.step === RiseFrom.Bed)
+  );
+}
+
 /** Whether a hit simply misses right now: mid-roll, or down, or getting up after being down. */
 export function isUntouchable(state: Readonly<ActionState>): boolean {
-  switch (state.kind) {
-    case ActionKind.Dodge:
-      return state.age < DODGE.invulnerable;
-    case ActionKind.KnockedOut:
-      return true;
-    case ActionKind.Rise:
-      return state.step !== RiseFrom.Chair;
-    default:
-      return false;
-  }
+  if (state.kind === ActionKind.Dodge) return state.age < DODGE.invulnerable;
+  return isDown(state);
 }
 
 /** Whether they are sitting, lying or getting up: nothing else is theirs to do. */
 export function isResting(state: Readonly<ActionState>): boolean {
   return (
     state.kind === ActionKind.Sit ||
+    state.kind === ActionKind.SitGround ||
     state.kind === ActionKind.Lie ||
     state.kind === ActionKind.KnockedOut ||
     state.kind === ActionKind.Rise
@@ -515,7 +552,7 @@ export function packActionByte(state: Readonly<ActionState>): number {
 
 export function unpackActionByte(byte: number, into: ActionState): ActionState {
   const kind = byte & 0x1f;
-  into.kind = kind <= ActionKind.Row ? (kind as ActionKind) : ActionKind.Idle;
+  into.kind = kind <= ActionKind.SitGround ? (kind as ActionKind) : ActionKind.Idle;
   into.step = (byte >> 5) & 0x3;
   into.queued = (byte & 0x80) !== 0;
   return into;

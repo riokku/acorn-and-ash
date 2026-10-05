@@ -183,7 +183,7 @@ export class LocalPlayer {
         this.action,
         input,
         this.previousButtons,
-        this.contextFor(this.motion.position, input.aimYaw),
+        this.contextOn(this.motion.position, input.aimYaw, this.motion.grounded),
       );
       this.previousButtons = input.buttons;
       this.stepFeet(this.motion, input, tick.footing, this.action);
@@ -237,7 +237,7 @@ export class LocalPlayer {
         action,
         input,
         previousButtons,
-        this.contextFor(replayed.position, input.aimYaw),
+        this.contextOn(replayed.position, input.aimYaw, replayed.grounded),
       );
       previousButtons = input.buttons;
       this.stepFeet(replayed, input, tick.footing, action);
@@ -266,6 +266,16 @@ export class LocalPlayer {
     this.motion.facingYaw = replayed.facingYaw;
     this.motion.grounded = replayed.grounded;
     this.previous = cloneVec3(this.motion.position);
+  }
+
+  /**
+   * What the game says about the next tick, plus the one thing only the feet
+   * know: sitting down needs the ground underfoot, as it does on the server
+   * (see `actionContext` in the shared simulation).
+   */
+  private contextOn(position: Readonly<Vec3>, aimYaw: number, grounded: boolean): ActionContext {
+    const context = this.contextFor(position, aimYaw);
+    return context.canSit === true && !grounded ? { ...context, canSit: false } : context;
   }
 
   /** Where to draw the player right now, part way between two ticks. */

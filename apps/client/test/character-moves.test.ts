@@ -148,6 +148,27 @@ describe('drawing resting', () => {
     expect(up.handsFree).toBe(false);
   });
 
+  it('sits down on the bare ground, then waits there with hands free and no seat to slide to', () => {
+    const settling = movePose(view(ActionKind.SitGround, 3));
+    expect(settling.clip).toBe('sitFloorDown');
+    expect(settling.loop).toBe(false);
+    const sitting = movePose(view(ActionKind.SitGround, SETTLE.floor + 30));
+    expect(sitting.clip).toBe('sitFloorIdle');
+    expect(sitting.loop).toBe(true);
+    expect(sitting.rest).toBe(0);
+    expect(sitting.handsFree).toBe(true);
+  });
+
+  it('gets up from the ground with its own clip, holding things again by the end', () => {
+    const rising = movePose(view(ActionKind.Rise, 4, { step: RiseFrom.Sat }));
+    expect(rising.clip).toBe('sitFloorUp');
+    expect(rising.rest).toBe(0);
+    expect(rising.handsFree).toBe(true);
+    expect(movePose(view(ActionKind.Rise, RISE.floor, { step: RiseFrom.Sat })).handsFree).toBe(
+      false,
+    );
+  });
+
   it('gets up off the ground where it fell, never onto a bed', () => {
     for (let age = 0; age <= RISE.ground; age += 5) {
       expect(movePose(view(ActionKind.Rise, age, { step: RiseFrom.Ground })).rest).toBe(0);

@@ -60,6 +60,9 @@ export type MoveClip =
   | 'sitDown'
   | 'sitIdle'
   | 'sitUp'
+  | 'sitFloorDown'
+  | 'sitFloorIdle'
+  | 'sitFloorUp'
   | 'lieDown'
   | 'lieIdle'
   | 'lieUp';
@@ -323,6 +326,15 @@ export function movePose(move: MoveView): MovePose {
           handsFree: move.age < RISE.chair * 0.6,
         };
       }
+      if (move.step === RiseFrom.Sat) {
+        // Up off the bare ground: nothing to climb out of, so no sliding about.
+        return {
+          ...NO_MOVE,
+          clip: 'sitFloorUp',
+          time: seconds * (1.133 / (RISE.floor * TICK_SECONDS)),
+          handsFree: move.age < RISE.floor * 0.8,
+        };
+      }
       const length = move.step === RiseFrom.Bed ? RISE.bed : RISE.ground;
       return {
         ...NO_MOVE,
@@ -342,6 +354,19 @@ export function movePose(move: MoveView): MovePose {
         time: down ? seconds * (0.8 / (settle * TICK_SECONDS)) : (move.age - settle) * TICK_SECONDS,
         loop: !down,
         rest: smoothstep(0, 9, move.age),
+        handsFree: true,
+      };
+    }
+
+    case ActionKind.SitGround: {
+      // Sat down right where they stand, on the ground (see decision 0102).
+      const settle = SETTLE.floor;
+      const down = move.age < settle;
+      return {
+        ...NO_MOVE,
+        clip: down ? 'sitFloorDown' : 'sitFloorIdle',
+        time: down ? seconds * (1 / (settle * TICK_SECONDS)) : (move.age - settle) * TICK_SECONDS,
+        loop: !down,
         handsFree: true,
       };
     }

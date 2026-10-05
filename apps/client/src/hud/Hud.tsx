@@ -56,6 +56,8 @@ import {
 } from './InventoryPanel';
 import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
+import { vitalsThrob } from './vitals';
+import { expeditionBoardClaimsInteract } from './board-claim';
 import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { amountOf, gainedLabel } from './item-words';
@@ -170,7 +172,7 @@ export function Hud({
           className="expedition-board-open"
           onClick={() => onJournalTabChange?.('expeditions')}
         >
-          Read expedition board
+          Read expedition board{expeditionBoardClaimsInteract(state) ? ' · E' : ''}
         </button>
       ) : null}
       {state.craftMenuOpen ? (
@@ -307,7 +309,12 @@ export function Hud({
           onClose={onCloseChest}
         />
       ) : null}
-      {showingWorld ? <HealthBar health={state.health} /> : null}
+      {showingWorld ? (
+        <div className="vitals">
+          <HungerBar hunger={state.hunger} />
+          <HealthBar health={state.health} />
+        </div>
+      ) : null}
       {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
         <div
           className="meal-benefit"
@@ -505,14 +512,46 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
 }
 
 /**
+ * How full you are, just above the health bar in the bottom left corner. It
+ * throbs once it is nearly empty, so it is noticed before the nudge along the
+ * bottom has to say anything.
+ */
+function HungerBar({ hunger }: { hunger: number }): React.JSX.Element {
+  const fraction = Math.min(1, Math.max(0, hunger / HUNGER_MAX));
+  const low = vitalsThrob(hunger, HEALTH_MAX).hunger;
+  return (
+    <div
+      className={low ? 'hunger-bar hunger-bar-low' : 'hunger-bar'}
+      data-testid="hunger-bar"
+      role="meter"
+      aria-label="Hunger"
+      aria-valuemin={0}
+      aria-valuemax={HUNGER_MAX}
+      aria-valuenow={Math.round(hunger)}
+    >
+      {/* A drumstick: meat on a bone. */}
+      <svg className="hunger-bar-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path className="hunger-bar-bone" d="M10.2 13.8 5.4 18.6" />
+        <circle className="hunger-bar-bone-end" cx="4.6" cy="19.4" r="1.9" />
+        <circle className="hunger-bar-meat" cx="15" cy="9" r="6.6" />
+      </svg>
+      <div className="hunger-bar-track">
+        <div className="hunger-bar-fill" style={{ width: `${fraction * 100}%` }} />
+      </div>
+      <span className="hunger-bar-number">{Math.round(hunger)}</span>
+    </div>
+  );
+}
+
+/**
  * How much health is left, in the bottom left corner where it is always in
  * view (see decision 0063): the bar drops the moment a blow lands, a pale
  * strip behind it shows what that blow took and catches up a beat later,
- * and the whole thing flashes. Red and beating once there is little left.
+ * and the whole thing flashes. Red and throbbing once there is little left.
  */
 function HealthBar({ health }: { health: number }): React.JSX.Element {
   const fraction = Math.min(1, Math.max(0, health / HEALTH_MAX));
-  const low = health <= HEALTH_LOW_THRESHOLD;
+  const low = vitalsThrob(HUNGER_MAX, health).health;
   // Counts every blow taken, so the flash plays again for each one.
   const [hits, setHits] = useState(0);
   const [last, setLast] = useState(health);
@@ -631,7 +670,8 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
  * The Craft menu (C, or B outside): one page of the field journal listing
  * everything you can make, whether it goes into your pack or onto the ground
  * (see decision 0096). Each entry is a stamped icon, a name, its ingredients
- * (each with its own small icon) and a Ready/Need more mark.
+ * (each with its own small icon) and a mark saying whether it is ready or
+ * exactly what is in the way (see `CraftStatusId`).
  *
  * The title, the page tabs and the category pills stay put while the list
  * scrolls, so a small screen never hides the way to another category.
@@ -701,14 +741,24 @@ function CraftPanel({
             {entry.costs.map((cost) => {
               const costKind = ITEM_KINDS[cost.item];
               const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
+              const short = entry.shortfalls.find((shortfall) => shortfall.item === cost.item);
               return (
-                <span className="hud-journal-ingredient" key={cost.item}>
+                <span
+                  className={
+                    short === undefined
+                      ? 'hud-journal-ingredient'
+                      : 'hud-journal-ingredient hud-journal-ingredient-missing'
+                  }
+                  key={cost.item}
+                >
                   <ItemIcon
                     item={cost.item}
                     color="#7a6a4d"
                     className="hud-journal-ingredient-icon"
                   />
-                  {cost.amount} {name.toLowerCase()}
+                  {/* What is missing says how much of it there is: 2/6 logs. */}
+                  {short === undefined ? cost.amount : `${short.have}/${cost.amount}`}{' '}
+                  {name.toLowerCase()}
                 </span>
               );
             })}
@@ -716,10 +766,14 @@ function CraftPanel({
         </div>
         <span
           className={
-            entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
+            entry.ready
+              ? 'hud-journal-status hud-journal-status-ready'
+              : entry.status === 'needMore' || entry.status === 'locked'
+                ? 'hud-journal-status'
+                : 'hud-journal-status hud-journal-status-blocked'
           }
         >
-          {entry.ready ? 'Ready' : 'Need more'}
+          {entry.statusLabel}
         </span>
       </div>
     );
@@ -786,6 +840,8 @@ export function hint(state: HudState): string {
     return 'Resting at home · safe and sheltered · move or press E to get up';
   if (state.resting === 'bed')
     return 'Snug in bed · safe and sheltered · move or press E to get up';
+  // Sat on the bare ground is only a rest for the eyes: nothing is sheltered.
+  if (state.resting === 'ground') return 'Sitting on the ground · move, or press X or E to get up';
   // Out on the water, the oars are all there is to think about.
   if (state.boat === 'climbOut')
     return 'Rowing · move to steer, Shift to pull harder · press E to climb out here';
@@ -833,6 +889,9 @@ export function hint(state: HudState): string {
     return state.home === null
       ? 'Press E to put out the campfire'
       : 'Cooking station · C for learned recipes';
+  // The board on the doorstep answers to E like anything else, once nothing
+  // above has already claimed the press.
+  if (expeditionBoardClaimsInteract(state)) return 'Press E to read the expedition board';
   // Doors - see decision 0055.
   if (state.door === 'enter') return 'Walk in, or press E, to go inside';
   if (state.door === 'visit') return 'Walk in, or press E, to visit';

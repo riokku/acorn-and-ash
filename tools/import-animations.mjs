@@ -64,6 +64,10 @@ const CLIPS = {
   sitDown: ['Simulation', 'Sit_Chair_Down'],
   sitIdle: ['Simulation', 'Sit_Chair_Idle'],
   sitUp: ['Simulation', 'Sit_Chair_StandUp'],
+  // Anywhere, on the bare ground (see decision 0102).
+  sitFloorDown: ['Simulation', 'Sit_Floor_Down'],
+  sitFloorIdle: ['Simulation', 'Sit_Floor_Idle'],
+  sitFloorUp: ['Simulation', 'Sit_Floor_StandUp'],
   lieDown: ['Simulation', 'Lie_Down'],
   lieIdle: ['Simulation', 'Lie_Idle'],
   lieUp: ['Simulation', 'Lie_StandUp'],

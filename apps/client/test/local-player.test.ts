@@ -5,6 +5,7 @@ import {
   CHARGE_WALK_SHARE,
   PLAYER_WALK_SPEED,
   PlayerButton,
+  SETTLE,
   SPAWN_POSITION,
   TICK_SECONDS,
   createCollisionWorld,
@@ -232,4 +233,41 @@ describe('dodge attacks predict and replay the authoritative hop', () => {
       expect(player.motion.position.z).toBeCloseTo(predicted.z);
     },
   );
+});
+
+describe('sitting on the ground on the client', () => {
+  const canSit = () => ({ canAttack: false, castInstead: false, canSit: true });
+
+  it('sits down straight away when X is pressed on the ground', () => {
+    const player = new LocalPlayer(vec3(0, 0, 0), collision);
+    player.setActionContext(canSit);
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Sit, 0);
+    expect(player.action.kind).toBe(ActionKind.SitGround);
+  });
+
+  it('does not sit down in mid-air, as the server would not either', () => {
+    const player = new LocalPlayer(vec3(0, 0, 0), collision);
+    player.setActionContext(canSit);
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Jump, 0);
+    expect(player.motion.grounded).toBe(false);
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Sit, 0);
+    expect(player.action.kind).not.toBe(ActionKind.SitGround);
+  });
+
+  it('does nothing when the game has not said sitting is fine', () => {
+    const player = new LocalPlayer(vec3(0, 0, 0), collision);
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Sit, 0);
+    expect(player.action.kind).toBe(ActionKind.Idle);
+  });
+
+  it('stays sitting through a server answer that agrees, and gets up when moved', () => {
+    const player = new LocalPlayer(vec3(0, 0, 0), collision);
+    player.setActionContext(canSit);
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Sit, 0);
+    player.reconcile({ ...serverState(1, 0, 0), action: ActionKind.SitGround }, 1);
+    expect(player.action.kind).toBe(ActionKind.SitGround);
+    // Still settling for the first few ticks; after that, walking off gets up.
+    player.advance(TICK_SECONDS * (SETTLE.earliestUp + 2), 0, 1, 0, 0, 0);
+    expect(player.action.kind).toBe(ActionKind.Rise);
+  });
 });

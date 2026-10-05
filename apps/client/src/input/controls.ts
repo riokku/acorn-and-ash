@@ -74,6 +74,7 @@ const GAME_KEYS = new Set([
   'Space',
   'KeyB',
   'KeyC',
+  'KeyX',
 ]);
 
 export class Controls {
@@ -87,6 +88,8 @@ export class Controls {
    * carries it means a jump is never quietly swallowed.
    */
   private readonly tapped = new Set<string>();
+  /** E was taken for something done on this side, and stays taken until it is let go. */
+  private interactClaimed = false;
   private pointerLocked = false;
   private mouseDeltaX = 0;
   private mouseDeltaY = 0;
@@ -160,18 +163,23 @@ export class Controls {
    * Holding Space keeps the jump bit set, so the player hops again the moment
    * they land. The shared rule only lets a jump start from the ground, so that
    * cannot climb the sky. Holding E is harmless in the same way: the server
-   * hands over each thing exactly once. A short left click swings on release;
-   * holding it charges without first swinging. Fishing uses immediate clicks
-   * so casting and reacting to a bite never wait for an attack decision.
+   * hands over each thing exactly once. Holding X is too: the shared rule only
+   * reads a fresh press, so it sits down once and does not bounce back up. A
+   * short left click swings on release; holding it charges without first
+   * swinging. Fishing uses immediate clicks so casting and reacting to a bite
+   * never wait for an attack decision.
    */
   buttons(fishing = false): number {
     let buttons = 0;
     if (this.held.has('Space') || this.tapped.has('Space')) buttons |= PlayerButton.Jump;
     if (this.held.has('ShiftLeft') || this.held.has('ShiftRight')) buttons |= PlayerButton.Sprint;
-    if (this.held.has('KeyE') || this.tapped.has('KeyE')) buttons |= PlayerButton.Interact;
+    if (!this.interactClaimed && (this.held.has('KeyE') || this.tapped.has('KeyE'))) {
+      buttons |= PlayerButton.Interact;
+    }
     if (this.held.has('ControlLeft') || this.tapped.has('ControlLeft')) {
       buttons |= PlayerButton.Dodge;
     }
+    if (this.held.has('KeyX') || this.tapped.has('KeyX')) buttons |= PlayerButton.Sit;
 
     const leftHeldPastThreshold =
       this.leftMouseDownAt !== null && performance.now() - this.leftMouseDownAt >= CHARGE_HOLD_MS;
@@ -196,6 +204,20 @@ export class Controls {
     }
     if (!fishing && this.tapped.has(DODGE_SLAM)) buttons |= PlayerButton.Charge;
     return buttons;
+  }
+
+  /**
+   * Take a fresh press of E for something the game does on this side, such as
+   * reading the expedition board, so the press is not also sent to the server
+   * as "interact" (where it would go on to eat or sit down). Holding the key
+   * keeps it claimed until it is let go, so the key repeating while held
+   * neither fires this again nor leaks an interact through.
+   */
+  claimInteractPress(): boolean {
+    if (this.interactClaimed || !this.tapped.has('KeyE')) return false;
+    this.tapped.delete('KeyE');
+    this.interactClaimed = true;
+    return true;
   }
 
   /** Called once a tick has actually carried the taps, so they are not sent twice. */
@@ -366,6 +388,7 @@ export class Controls {
   releaseAll(): void {
     this.held.clear();
     this.tapped.clear();
+    this.interactClaimed = false;
     this.leftMouseDownAt = null;
     this.leftChargeSent = false;
     this.leftFishingSent = false;
@@ -403,6 +426,11 @@ export class Controls {
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
     this.held.delete(event.code);
+    if (event.code === 'KeyE' && this.interactClaimed) {
+      this.interactClaimed = false;
+      // A key repeat that landed just before the release must not outlive the claim.
+      this.tapped.delete('KeyE');
+    }
   };
 
   /** Clicking away must not leave the player walking into a tree forever. */

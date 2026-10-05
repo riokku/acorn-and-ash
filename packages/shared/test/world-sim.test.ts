@@ -71,13 +71,20 @@ import {
   cabinDoorstep,
   cabinDoorway,
 } from '../src/world/home';
-import { ActionKind, Gesture, RiseFrom } from '../src/sim/actions';
+import {
+  ActionKind,
+  Gesture,
+  RiseFrom,
+  createActionState,
+  unpackActionByte,
+} from '../src/sim/actions';
 import {
   CHARGE_TICKS,
   DODGE,
   KNOCKED_OUT_TICKS,
   LIGHT_COMBO,
   RISE,
+  SETTLE,
   STRIKE,
 } from '../src/data/moves';
 
@@ -4725,6 +4732,70 @@ describe('moves in the world', () => {
 
     press(sim, 1, seq, PlayerButton.Interact);
     expect(sim.actionOf(1)?.kind).toBe(ActionKind.Sit);
+  });
+
+  describe('sitting on the ground', () => {
+    it('sits you down on the spot, outdoors, and gets you up again with the same button', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      const before = sim.readPlayer(1);
+      let seq = press(sim, 1, 1, PlayerButton.Sit);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.SitGround);
+      // Right where they were standing, and the snapshot says so to everybody.
+      expect(sim.readPlayer(1)?.position.x).toBeCloseTo(before?.position.x ?? NaN, 5);
+      expect(sim.readPlayer(1)?.position.z).toBeCloseTo(before?.position.z ?? NaN, 5);
+      expect(unpackActionByte(sim.snapshotFor(1)[0]?.action ?? 0, createActionState()).kind).toBe(
+        ActionKind.SitGround,
+      );
+
+      // Pushing about does not move a sitter.
+      for (let i = 0; i < SETTLE.earliestUp; i++) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+        sim.step(tickClock());
+      }
+      seq = press(sim, 1, seq, PlayerButton.Sit);
+      expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Sat });
+      for (let i = 0; i < RISE.floor; i++) {
+        sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+        sim.step(tickClock());
+      }
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+    });
+
+    it('walks off when you move', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      const seq = press(sim, 1, 1, PlayerButton.Sit);
+      drive(sim, 1, 0, 1, SETTLE.earliestUp + RISE.floor + 10, seq);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+    });
+
+    it('does not sit you down in mid-air', () => {
+      const sim = createWorld();
+      sim.addPlayer(1);
+      const seq = drive(sim, 1, 0, 0, 1, 1, PlayerButton.Jump);
+      expect(sim.readPlayer(1)?.grounded).toBe(false);
+      drive(sim, 1, 0, 0, 1, seq, PlayerButton.Sit);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+    });
+
+    it('sits you down indoors, too, anywhere on the floor', () => {
+      const { sim } = worldWithChrisAtHome();
+      sim.placePlayer(1, { x: 0.5, y: 0, z: 0.5 }, 0, 7);
+      press(sim, 1, 1, PlayerButton.Sit);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.SitGround);
+    });
+
+    it('does not take your place at the chair, or keep anybody else out of it', () => {
+      const { sim } = worldWithChrisAtHome();
+      sim.addPlayer(2, undefined, 'visitor');
+      sim.placePlayer(1, { x: 0.5, y: 0, z: 0.5 }, 0, 7);
+      sim.placePlayer(2, { x: HOME_CHAIR.stand.x, y: 0, z: HOME_CHAIR.stand.z + 0.3 }, 0, 7);
+      press(sim, 1, 1, PlayerButton.Sit);
+      press(sim, 2, 1, PlayerButton.Interact);
+      expect(sim.actionOf(1)?.kind).toBe(ActionKind.SitGround);
+      expect(sim.actionOf(2)?.kind).toBe(ActionKind.Sit);
+    });
   });
 
   it('keeps a chair for whoever sat in it first', () => {

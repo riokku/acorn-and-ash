@@ -307,6 +307,7 @@ import {
   beginAction,
   createActionState,
   footedInput,
+  isDown,
   isFreeToInteract,
   isUntouchable,
   packActionByte,
@@ -1991,7 +1992,12 @@ export class WorldSimulation {
             const input = runtime.queue.shift();
             if (input === undefined) break;
 
-            const context = this.actionContext(runtime, scratch.position, input.aimYaw);
+            const context = this.actionContext(
+              runtime,
+              scratch.position,
+              input.aimYaw,
+              scratch.grounded,
+            );
             const beforeAction = runtime.action.kind;
             const tick = advanceAction(runtime.action, input, runtime.previousButtons, context);
             if (
@@ -2215,9 +2221,7 @@ export class WorldSimulation {
         aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
         action,
         outdoors: runtime.space === OUTDOORS,
-        down:
-          action.kind === ActionKind.KnockedOut ||
-          (action.kind === ActionKind.Rise && action.step !== RiseFrom.Chair),
+        down: isDown(action),
       });
     }
   }
@@ -2694,12 +2698,7 @@ export class WorldSimulation {
       // Somebody indoors is nowhere out in the world at all, and somebody
       // down, or getting back up, is left alone.
       if (runtime.space !== OUTDOORS) continue;
-      if (
-        runtime.action.kind === ActionKind.KnockedOut ||
-        (runtime.action.kind === ActionKind.Rise && runtime.action.step !== RiseFrom.Chair)
-      ) {
-        continue;
-      }
+      if (isDown(runtime.action)) continue;
       const position = runtime.entity.get(Position);
       if (position === undefined) continue;
       const distance = horizontalDistance(from, position);
@@ -3444,6 +3443,7 @@ export class WorldSimulation {
     runtime: PlayerRuntime,
     position: Readonly<Vec3>,
     aimYaw: number,
+    grounded: boolean,
   ): ActionContext {
     const held = this.equippedItemOf(runtime.netId);
     const canAttack = held !== null && runtime.space === OUTDOORS && runtime.cast === null;
@@ -3455,6 +3455,8 @@ export class WorldSimulation {
     return {
       canAttack,
       castInstead,
+      // Anywhere there is ground underfoot and no line in the water.
+      canSit: grounded && runtime.cast === null,
       dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
     };
   }

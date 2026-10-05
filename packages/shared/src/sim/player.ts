@@ -18,7 +18,7 @@ import { clamp, type Vec3 } from '../math/vec3';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
 import type { Direction2D } from './animals';
 
-/** Buttons are a bit field so the wire format stays one byte. */
+/** Buttons are a bit field, two bytes on the wire (see `encodeInputBundle`). */
 export const PlayerButton = {
   /** Reserved for Phase 2 onwards; nothing reads it yet. */
   Interact: 1 << 0,
@@ -40,6 +40,8 @@ export const PlayerButton = {
   Charge: 1 << 6,
   /** Cast or attempt to hook a fish. Never becomes a weapon attack, even if the line just ended. */
   Fish: 1 << 7,
+  /** X. Sits down on the spot, wherever you stand, and gets you up again. */
+  Sit: 1 << 8,
 } as const;
 
 /**

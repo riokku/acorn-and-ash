@@ -110,6 +110,128 @@ describe('the Craft menu list', () => {
     );
   });
 
+  describe('says what is in the way, not just "need more"', () => {
+    const craftEntry = (state: CraftMenuState, item: string) =>
+      craftMenuEntries(state).find(
+        (entry) => entry.action.kind === 'craft' && entry.action.item === item,
+      );
+
+    it('names a whole item that is missing, even with all the materials for it', () => {
+      const refined = craftEntry(
+        {
+          ...OUTSIDE,
+          nearWorkbench: true,
+          carrying: [
+            { item: 'log', count: 6 },
+            { item: 'bone', count: 4 },
+          ],
+        },
+        'refinedAxe',
+      );
+      expect(refined?.ready).toBe(false);
+      expect(refined?.status).toBe('needItem');
+      expect(refined?.statusLabel).toBe('Need axe');
+      expect(refined?.shortfalls).toEqual([{ item: 'axe', have: 0 }]);
+    });
+
+    it('names the trophy a mounted trophy is made from', () => {
+      const trophy = craftMenuEntries({
+        ...OUTSIDE,
+        carrying: [{ item: 'log', count: 10 }],
+      }).find((entry) => entry.costs.some((cost) => cost.item === 'guardianTrophy'));
+      expect(trophy?.status).toBe('needItem');
+      expect(trophy?.statusLabel).toBe('Need guardian trophy');
+    });
+
+    it('keeps "need more" for materials that are only a few short, and counts them', () => {
+      const rope = craftEntry({ ...OUTSIDE, carrying: [{ item: 'reed', count: 1 }] }, 'rope');
+      expect(rope?.status).toBe('needMore');
+      expect(rope?.statusLabel).toBe('Need more');
+      expect(rope?.shortfalls).toEqual([{ item: 'reed', have: 1 }]);
+    });
+
+    it('says the pack is full when the materials are all there but no slot is left for the result', () => {
+      // Twenty logs fill two slots and stay at two after a rod is made from two of them.
+      const fullPack = [
+        { item: 'log' as const, count: 20 },
+        { item: 'flower' as const, count: 1 },
+        { item: 'bone' as const, count: 1 },
+        { item: 'berry' as const, count: 1 },
+        { item: 'mushroom' as const, count: 1 },
+      ];
+      const rod = craftEntry({ ...OUTSIDE, carrying: fullPack }, 'rod');
+      expect(rod?.ready).toBe(false);
+      expect(rod?.status).toBe('packFull');
+      expect(rod?.statusLabel).toBe('Pack full');
+      expect(rod?.shortfalls).toEqual([]);
+    });
+
+    it('lets the materials it uses up free the slot it needs', () => {
+      const axe = craftEntry(
+        {
+          ...OUTSIDE,
+          carrying: [
+            { item: 'stick', count: 3 },
+            { item: 'log', count: 1 },
+            { item: 'flower', count: 1 },
+            { item: 'bone', count: 1 },
+            { item: 'berry', count: 1 },
+            { item: 'mushroom', count: 1 },
+          ],
+        },
+        'axe',
+      );
+      expect(axe?.status).toBe('ready');
+    });
+
+    it('says a blueprint is missing once a home upgrade has every material', () => {
+      const upgrade = craftMenuEntries({
+        ...OUTSIDE,
+        homeKind: 'tent',
+        carrying: [
+          { item: 'stick', count: 16 },
+          { item: 'log', count: 12 },
+        ],
+      }).find((entry) => entry.action.kind === 'build' && entry.action.buildable === 'cabin');
+      expect(upgrade?.status).toBe('needBlueprint');
+      expect(upgrade?.statusLabel).toBe('Need blueprint');
+      expect(upgrade?.shortfalls).toEqual([]);
+    });
+
+    it('says which station is missing', () => {
+      const rations = craftEntry(
+        { ...OUTSIDE, discoveriesClaimed: 1 << 3, carrying: [{ item: 'berry', count: 3 }] },
+        'berryTea',
+      );
+      expect(rations?.status).toBe('needFire');
+      expect(rations?.statusLabel).toBe('Need lit campfire');
+      const lit = craftEntry(
+        {
+          ...OUTSIDE,
+          nearCampfire: 'lit',
+          discoveriesClaimed: 1 << 3,
+          carrying: [{ item: 'berry', count: 3 }],
+        },
+        'berryTea',
+      );
+      expect(lit?.status).toBe('ready');
+    });
+
+    it('calls a recipe you have not learned unknown', () => {
+      const stew = craftEntry(
+        {
+          ...OUTSIDE,
+          carrying: [
+            { item: 'roastedMeat', count: 1 },
+            { item: 'mushroom', count: 3 },
+          ],
+        },
+        'forestStew',
+      );
+      expect(stew?.status).toBe('needRecipe');
+    });
+  });
+
   it('gives every entry a name', () => {
     expect(names(craftMenuEntries(OUTSIDE)).every((name) => name.length > 0)).toBe(true);
   });
