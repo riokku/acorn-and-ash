@@ -199,6 +199,14 @@ export function lakeDepthAt(lake: Lake, x: number, z: number): number {
   return Math.min(basin, -nearestIslandDepthAt(lake, x, z));
 }
 
+/**
+ * Is the nearest shore to a spot on the water an island's, rather than the
+ * mainland's? Somebody climbing out here would step onto an island.
+ */
+export function nearestShoreIsIsland(lake: Lake, x: number, z: number): boolean {
+  return -nearestIslandDepthAt(lake, x, z) < basinDepthAt(lake, x, z);
+}
+
 /** Is this spot on the water, at least `margin` metres in from every shore? */
 export function isOnLake(lake: Lake, x: number, z: number, margin = 0): boolean {
   if (!isNearLake(lake, x, z)) return false;

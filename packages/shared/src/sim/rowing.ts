@@ -13,6 +13,7 @@ import { rotateToward, angleDelta } from '../math/angles';
 import { clamp, type Vec3 } from '../math/vec3';
 import { type CollisionWorld } from '../collision/capsule';
 import { BUILDABLE_KINDS } from '../data/buildables';
+import type { ItemId } from '../data/items';
 import {
   BOAT_ACCELERATION,
   BOAT_BEACHED_DEPTH,
@@ -22,10 +23,11 @@ import {
   BOAT_HULL_MIN_DEPTH,
   BOAT_LANDING_DISTANCE,
   BOAT_ROW_SPEED,
+  BOAT_SALVAGE_SHARE,
   BOAT_SPRINT_SPEED,
   BOAT_TURN_RATE,
 } from '../world/boat';
-import { LAKE, lakeSlopeAt, type LakeSlope } from '../world/lake';
+import { LAKE, lakeSlopeAt, nearestShoreIsIsland, type LakeSlope } from '../world/lake';
 import {
   isHeld,
   PlayerButton,
@@ -204,6 +206,8 @@ export interface Landing {
   readonly towardZ: number;
   /** How far from the shore the boat's middle was. */
   readonly depth: number;
+  /** Whether that shore is an island's, so the bank here is not one you can walk home from. */
+  readonly onIsland: boolean;
 }
 
 /**
@@ -221,7 +225,14 @@ export function landingBeside(x: number, z: number): Landing {
   lakeSlopeAt(LAKE, x, z, slope);
   const { depth, towardX, towardZ } = slope;
   const inland = depth + BOAT_LANDING_DISTANCE;
-  return { x: x - towardX * inland, z: z - towardZ * inland, towardX, towardZ, depth };
+  return {
+    x: x - towardX * inland,
+    z: z - towardZ * inland,
+    towardX,
+    towardZ,
+    depth,
+    onIsland: nearestShoreIsIsland(LAKE, x, z),
+  };
 }
 
 /**
@@ -242,4 +253,24 @@ export function beachedBoat(x: number, z: number): BoatPlace {
     z: shoreZ + towardZ * BOAT_BEACHED_DEPTH,
     yaw: Math.atan2(-alongZ, alongX),
   };
+}
+
+/** What is left of a rowboat that comes apart: these many of each thing it was built from. */
+export interface BoatSalvage {
+  readonly item: ItemId;
+  readonly count: number;
+}
+
+/**
+ * The pile a boat falls apart into (see decision 0094): about half of what
+ * it cost, rounded down, so losing one costs a little and rebuilding is
+ * still a trip to the woods and the reeds.
+ */
+export function boatSalvage(): BoatSalvage[] {
+  const pile: BoatSalvage[] = [];
+  for (const cost of rowboat.costs) {
+    const count = Math.floor(cost.amount * BOAT_SALVAGE_SHARE);
+    if (count > 0) pile.push({ item: cost.item, count });
+  }
+  return pile;
 }

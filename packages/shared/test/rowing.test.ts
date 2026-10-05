@@ -7,6 +7,7 @@ import { buildableFootprint, checkBuildSpot } from '../src/sim/building';
 import { createInput, createPlayerMotion, PlayerButton } from '../src/sim/player';
 import {
   beachedBoat,
+  boatSalvage,
   boatYawFor,
   isWithinBoardingReach,
   keepBoatAfloat,
@@ -24,7 +25,8 @@ import {
   BOAT_ROW_SPEED,
   BOAT_SPRINT_SPEED,
 } from '../src/world/boat';
-import { LAKE, lakeDepthAt } from '../src/world/lake';
+import { LAKE, lakeDepthAt, nearestShoreIsIsland } from '../src/world/lake';
+import { countOf } from '../src/sim/inventory';
 import { REED_PATCHES } from '../src/world/reeds';
 import { encodeBuiltProps, decodeServerMessage } from '../src/net/protocol';
 
@@ -60,6 +62,22 @@ function berthAt(depth = 2.5, alongBank = 0) {
     /** The camera heading that points it along the bank, away from the reeds. */
     alongYaw: Math.atan2(-along.x, -along.z),
   };
+}
+
+/** Water just off an island's shore, where a boat floats, and the island's own beach beside it. */
+function islandBerth(islandId = 'heart') {
+  const island = LAKE.islands.find((each) => each.id === islandId)!;
+  const lobe = island.lobes[0]!;
+  for (let step = 0; step < 72; step++) {
+    const angle = (step / 72) * Math.PI * 2;
+    const x = lobe.x + Math.cos(angle) * (lobe.radius + 2.5);
+    const z = lobe.z + Math.sin(angle) * (lobe.radius + 2.5);
+    if (!nearestShoreIsIsland(LAKE, x, z)) continue;
+    const yaw = -angle - Math.PI / 2;
+    if (keepBoatAfloat({ x, y: 0, z }, yaw) !== null) continue;
+    return { x, z, yaw, bank: landingBeside(x, z) };
+  }
+  throw new Error(`no open water beside the ${islandId} island`);
 }
 
 describe('rowing a boat', () => {
@@ -200,7 +218,11 @@ describe('a boat in the world', () => {
   const BOAT_ID = 7;
 
   /** A world with one boat moored at `berth`, and `players` of them on the bank beside it. */
-  function lakeWorld(berth = berthAt(), players = 1) {
+  function lakeWorld(
+    berth: { x: number; z: number; yaw: number; bank: { x: number; z: number } } = berthAt(),
+    players = 1,
+    boatOwner = 'boatwright',
+  ) {
     const sim = new WorldSimulation({
       seed: DEFAULT_WORLD_SEED,
       hungerEmptyAfterSeconds: Infinity,
@@ -214,7 +236,7 @@ describe('a boat in the world', () => {
         z: berth.z,
         yaw: berth.yaw,
         lit: false,
-        ownerKey: 'boatwright',
+        ownerKey: boatOwner,
         litUntilMs: null,
       },
     ]);
@@ -417,5 +439,162 @@ describe('a boat in the world', () => {
     );
     if (moored?.type !== 'builtProps') throw new Error('not built props');
     expect(moored.props[0]?.occupied).toBeUndefined();
+  });
+});
+
+describe('a boat cut off on an island', () => {
+  const built: WorldSimulation[] = [];
+  let clockMs = 1_700_000_000_000;
+  afterEach(() => {
+    for (const sim of built.splice(0)) sim.dispose();
+  });
+
+  const BOAT_ID = 7;
+
+  /** A world with one boat moored at `berth`, owned by `owner`, and `walkers` standing about. */
+  function worldWith(
+    berth: { x: number; z: number; yaw: number; bank: { x: number; z: number } },
+    owner: string | null,
+    walkers: string[],
+  ) {
+    const sim = new WorldSimulation({
+      seed: DEFAULT_WORLD_SEED,
+      hungerEmptyAfterSeconds: Infinity,
+    });
+    built.push(sim);
+    sim.restoreBuiltProps([
+      {
+        id: BOAT_ID,
+        kind: 'rowboat',
+        x: berth.x,
+        z: berth.z,
+        yaw: berth.yaw,
+        lit: false,
+        ownerKey: owner,
+        litUntilMs: null,
+      },
+    ]);
+    walkers.forEach((key, index) => {
+      const netId = index + 1;
+      sim.addPlayer(
+        netId,
+        { netId, x: 0, y: 0, z: 0, facingYaw: 0, items: [], hunger: HUNGER_MAX },
+        key,
+      );
+      sim.placePlayer(netId, { x: berth.bank.x, y: 0, z: berth.bank.z }, 0);
+    });
+    return sim;
+  }
+
+  /** The hit that knocks somebody out, wherever they are. */
+  function knockOut(sim: WorldSimulation, netId: number): void {
+    const hits = sim as unknown as {
+      raiderStrikesPlayer(id: number, damage: number, impactTick: number): void;
+    };
+    hits.raiderStrikesPlayer(netId, 1000, sim.tick);
+    sim.step((clockMs += TICK_MILLISECONDS));
+  }
+
+  const boatsIn = (sim: WorldSimulation) =>
+    sim.builtPropsList().filter((prop) => prop.kind === 'rowboat');
+  const pileOf = (sim: WorldSimulation, item: string) =>
+    sim.droppedPilesList().find((pile) => pile.item === item);
+
+  it('keeps half its materials: three logs and a rope from six logs and two rope', () => {
+    expect(boatSalvage()).toEqual([
+      { item: 'log', count: 3 },
+      { item: 'rope', count: 1 },
+    ]);
+  });
+
+  it('falls apart where it lies when its owner is knocked out, leaving a pile at the island', () => {
+    const berth = islandBerth();
+    const sim = worldWith(berth, 'owner', ['owner']);
+    knockOut(sim, 1);
+
+    expect(boatsIn(sim)).toEqual([]);
+    expect(sim.drainBrokenBoats()).toEqual([BOAT_ID]);
+    expect(sim.drainBrokenBoats()).toEqual([]);
+    expect(sim.builtPropOwner(BOAT_ID)).toBeNull();
+    // The pile is on the island, beside the boat's last place, for anybody to pick up.
+    const logs = pileOf(sim, 'log');
+    const rope = pileOf(sim, 'rope');
+    expect(logs?.count).toBe(3);
+    expect(rope?.count).toBe(1);
+    for (const pile of [logs!, rope!]) {
+      expect(lakeDepthAt(LAKE, pile.x, pile.z)).toBeLessThan(0);
+      expect(Math.hypot(pile.x - berth.x, pile.z - berth.z)).toBeLessThan(4);
+    }
+    expect(pileOf(sim, 'log')).toBeDefined();
+  });
+
+  it('lets the owner build another, with the one-boat rule no longer in the way', () => {
+    const berth = islandBerth();
+    const sim = worldWith(berth, 'owner', ['owner']);
+    const mainland = berthAt();
+    Object.assign(sim.inventoryOf(1), { log: 6, rope: 2 });
+    // Still has a boat: another is refused.
+    sim.placePlayer(1, { x: mainland.bank.x, y: 0, z: mainland.bank.z }, 0);
+    sim.requestBuild(1, { kind: 'rowboat', x: mainland.x, z: mainland.z, yaw: mainland.yaw });
+    sim.step((clockMs += TICK_MILLISECONDS));
+    expect(boatsIn(sim)).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'log')).toBe(6);
+
+    knockOut(sim, 1);
+    expect(boatsIn(sim)).toHaveLength(0);
+    // Half of what they carried is buried; what is left is enough only if they find the rest.
+    Object.assign(sim.inventoryOf(1), { log: 6, rope: 2 });
+    sim.placePlayer(1, { x: mainland.bank.x, y: 0, z: mainland.bank.z }, 0);
+    sim.requestBuild(1, { kind: 'rowboat', x: mainland.x, z: mainland.z, yaw: mainland.yaw });
+    sim.step((clockMs += TICK_MILLISECONDS));
+    expect(boatsIn(sim)).toHaveLength(1);
+    expect(sim.builtPropOwner(boatsIn(sim)[0]!.id)).toBe('owner');
+  });
+
+  it('stays put on the mainland shore, where the owner can walk back to it', () => {
+    const berth = berthAt();
+    const sim = worldWith(berth, 'owner', ['owner']);
+    knockOut(sim, 1);
+    expect(boatsIn(sim)).toHaveLength(1);
+    expect(sim.drainBrokenBoats()).toEqual([]);
+    expect(sim.droppedPilesList()).toEqual([]);
+  });
+
+  it('is not touched when somebody else is knocked out beside it', () => {
+    const berth = islandBerth();
+    const sim = worldWith(berth, 'owner', ['owner', 'visitor']);
+    knockOut(sim, 2);
+    expect(boatsIn(sim)).toHaveLength(1);
+    expect(sim.droppedPilesList()).toEqual([]);
+  });
+
+  it('is not touched when nobody owns it, or when somebody else is rowing it', () => {
+    const berth = islandBerth();
+    const unowned = worldWith(berth, null, ['visitor']);
+    knockOut(unowned, 1);
+    expect(boatsIn(unowned)).toHaveLength(1);
+
+    // The owner is knocked out while a visitor has the boat out: it is the visitor's to row home.
+    const lent = worldWith(berth, 'owner', ['owner', 'visitor']);
+    lent.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
+    lent.step((clockMs += TICK_MILLISECONDS));
+    lent.queueInput(2, createInput(2, 0, 0, 0, 0));
+    lent.step((clockMs += TICK_MILLISECONDS));
+    expect(boatsIn(lent)[0]?.rower).toBe(2);
+    knockOut(lent, 1);
+    expect(boatsIn(lent)).toHaveLength(1);
+    expect(lent.droppedPilesList()).toEqual([]);
+  });
+
+  it('is gone from what is told to everybody and saved for the world', () => {
+    const berth = islandBerth();
+    const sim = worldWith(berth, 'owner', ['owner']);
+    knockOut(sim, 1);
+    const message = decodeServerMessage(encodeBuiltProps(sim.builtPropsList(), () => false));
+    expect(message?.type).toBe('builtProps');
+    if (message?.type !== 'builtProps') return;
+    expect(message.props.some((prop) => prop.id === BOAT_ID)).toBe(false);
+    // Nothing for the world to save is left of it, and it is not a candidate to move at wake-up.
+    expect(sim.builtPropsList().some((prop) => prop.id === BOAT_ID)).toBe(false);
   });
 });
