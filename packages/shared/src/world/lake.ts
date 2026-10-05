@@ -207,6 +207,15 @@ export function nearestShoreIsIsland(lake: Lake, x: number, z: number): boolean 
   return -nearestIslandDepthAt(lake, x, z) < basinDepthAt(lake, x, z);
 }
 
+/**
+ * Where the top of the ice is when the lake is frozen (decision 0095): the
+ * same hair above the water as the beach, so there is no step from the bank
+ * onto the ice.
+ */
+export function lakeIceHeight(lake: Lake): number {
+  return lake.level + LAKE_SHORE_LIP;
+}
+
 /** Is this spot on the water, at least `margin` metres in from every shore? */
 export function isOnLake(lake: Lake, x: number, z: number, margin = 0): boolean {
   if (!isNearLake(lake, x, z)) return false;

@@ -61,3 +61,9 @@ export const BOAT_TURN_RATE = 1.9;
 
 /** How much of what a rowboat cost is left when it falls apart: half, rounded down for each thing. */
 export const BOAT_SALVAGE_SHARE = 0.5;
+
+/**
+ * How far from the middle of a boat somebody is put when the lake freezes
+ * under them (decision 0095): a step out over its side, clear of the hull.
+ */
+export const BOAT_ICE_STEP_OUT = 1.4;

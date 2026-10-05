@@ -3,12 +3,13 @@ import * as THREE from 'three/webgpu';
 import {
   basinDepthAt,
   lakeDepthAt,
+  lakeIceHeight,
   REED_PATCHES,
   type Lake,
   type WaterCircle,
 } from '@acorn/shared';
 
-import { createWaterMaterial, paintedMaterial } from '../art/materials';
+import { createIceMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
@@ -37,8 +38,17 @@ const SHORE_STONES = 46;
  * the join never shows, the same way the pond is drawn. The islands need no
  * cutting out: the ground rises through the water there, and the water's
  * colour thins to the shallows round them (see `createWaterMaterial`).
+ *
+ * In winter (decision 0095) the same discs are drawn again as ice, at the
+ * height people walk on, and the water is hidden: `setFrozen` swaps one for the
+ * other.
  */
-export function createLakeScene(lake: Lake): { group: THREE.Group; dispose(): void } {
+export function createLakeScene(lake: Lake): {
+  group: THREE.Group;
+  /** Show the lake as ice (true) or as open water (false). */
+  setFrozen(frozen: boolean): void;
+  dispose(): void;
+} {
   const group = new THREE.Group();
   group.name = 'lake';
   const geometries: THREE.BufferGeometry[] = [];
@@ -50,6 +60,9 @@ export function createLakeScene(lake: Lake): { group: THREE.Group; dispose(): vo
     deep: 0x1f4f73,
     rippleSize: 1.7,
   });
+  const iceMaterial = createIceMaterial();
+  const water: THREE.Mesh[] = [];
+  const ice: THREE.Mesh[] = [];
   for (const circle of lake.basin) {
     const surface = new THREE.CircleGeometry(circle.radius, DISC_SEGMENTS);
     surface.rotateX(-Math.PI / 2);
@@ -58,6 +71,14 @@ export function createLakeScene(lake: Lake): { group: THREE.Group; dispose(): vo
     mesh.position.set(circle.x, lake.level, circle.z);
     mesh.receiveShadow = true;
     group.add(mesh);
+    water.push(mesh);
+
+    const sheet = new THREE.Mesh(surface, iceMaterial);
+    sheet.position.set(circle.x, lakeIceHeight(lake), circle.z);
+    sheet.receiveShadow = true;
+    sheet.visible = false;
+    group.add(sheet);
+    ice.push(sheet);
   }
 
   const plants = createShorePlants(lake);
@@ -65,9 +86,14 @@ export function createLakeScene(lake: Lake): { group: THREE.Group; dispose(): vo
 
   return {
     group,
+    setFrozen: (frozen) => {
+      for (const mesh of water) mesh.visible = !frozen;
+      for (const mesh of ice) mesh.visible = frozen;
+    },
     dispose: () => {
       for (const geometry of geometries) geometry.dispose();
       waterMaterial.dispose();
+      iceMaterial.dispose();
       plants.dispose();
       group.removeFromParent();
     },

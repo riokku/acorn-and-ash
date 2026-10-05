@@ -63,6 +63,8 @@ export interface PlacementInputs {
   /** Every tree, rock and stump. */
   readonly scenery: readonly Footprint[];
   readonly water: readonly WaterCircle[];
+  /** Is the lake frozen over right now? There is no water to float a boat on. */
+  readonly lakeFrozen?: boolean;
 }
 
 export interface PlacementPlan {
@@ -170,6 +172,7 @@ function refusalFor(
     inputs.water,
     [...inputs.scenery, ...everythingBuilt],
     inputs.enforceHomeArea ?? false,
+    inputs.lakeFrozen ?? false,
   );
   return refusal === null ? null : describeRefusal(refusal);
 }
@@ -206,6 +209,8 @@ export function describeRefusal(refusal: BuildRefusal): string {
       return 'Rowboats float in the lake · moor it a step or two out from the bank';
     case 'tooFarOut':
       return 'Too far out · moor it closer to the bank';
+    case 'frozen':
+      return 'The lake is frozen · no boats until spring';
     case 'tooClose':
       return `Too close to the ${refusal.what}`;
   }

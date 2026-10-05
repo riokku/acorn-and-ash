@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 
 import app from '../src/index';
 import { adoptEarlierKey } from '../src/accounts/session';
-import { SITE, cookieHeader, playerSeenByWorld, sayHere, startAsTestPlayer } from './helpers';
+import {
+  LIVE_SITE,
+  SITE,
+  cookieHeader,
+  playerSeenByWorld,
+  sayHere,
+  startAsTestPlayer,
+} from './helpers';
 
 async function userFor(player: string | null): Promise<{ id: string; entered_at: number | null }> {
   const row = await env.DB.prepare('SELECT id, entered_at FROM user WHERE player_key = ?')
@@ -121,6 +128,27 @@ describe('getting into a world', () => {
     const honest = await playerSeenByWorld(cookie);
     const pretending = await playerSeenByWorld(cookie, '?player=somebody-elses-key');
     expect(pretending.player).toBe(honest.player);
+  });
+
+  it('hands on a season asked for with ?season= from your own machine', async () => {
+    const { cookie } = await startAsTestPlayer();
+    expect((await playerSeenByWorld(cookie, '?season=winter')).season).toBe('winter');
+    expect((await playerSeenByWorld(cookie)).season).toBeNull();
+  });
+
+  it('hands it on from a pull request preview too', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const preview = 'https://pr-97-acorn-ash-web-staging.example.workers.dev';
+    expect((await playerSeenByWorld(cookie, '?season=winter', preview)).season).toBe('winter');
+  });
+
+  it('keeps a season out of the real worlds, where the seasons follow their own clock', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const seen = await playerSeenByWorld(cookie, '?season=winter', LIVE_SITE);
+    expect(seen.status).toBe(200);
+    expect(seen.season).toBeNull();
+    // The rest of the request is untouched.
+    expect(seen.player).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('notes that the account has been in a world, once', async () => {

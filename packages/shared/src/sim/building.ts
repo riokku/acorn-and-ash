@@ -54,6 +54,8 @@ export type BuildRefusal =
   | { readonly reason: 'needsWater' }
   /** A boat built so far out that it could never have been reached from the bank. */
   | { readonly reason: 'tooFarOut' }
+  /** A boat, while the lake is frozen: there is no water to float it on until spring. */
+  | { readonly reason: 'frozen' }
   | { readonly reason: 'tooClose'; readonly what: string };
 
 interface Point {
@@ -122,6 +124,7 @@ export function checkBuildSpot(
   water: readonly WaterCircle[],
   others: readonly Footprint[],
   allowWilderness = false,
+  lakeFrozen = false,
 ): BuildRefusal | null {
   if (Math.hypot(piece.x - player.x, piece.z - player.z) > reach) return { reason: 'tooFar' };
   // Nothing built stops anybody walking yet, but a cabin going up around
@@ -147,6 +150,7 @@ export function checkBuildSpot(
   }
 
   if (isBoat) {
+    if (lakeFrozen) return { reason: 'frozen' };
     const berth = boatBerthRefusal(piece, ends);
     if (berth !== null) return berth;
   } else {

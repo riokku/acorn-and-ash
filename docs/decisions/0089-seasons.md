@@ -12,7 +12,7 @@ The look eases between seasons over the last quarter of each one (a game day and
 
 Each season also has one thing drifting through the air: blossom petals, golden pollen, falling leaves, snowflakes (`apps/client/src/art/season-fall.ts` says how much of each, using the same easing). They are a small fixed pool of instanced shapes that follows the player, like the rain, so nothing is made or freed while playing, and they stay outdoors and stop for anyone who asks for reduced motion. In winter the snow takes the place of the rain streaks. All of it is look only: the server knows nothing about it.
 
-`?season=winter` in the address shifts this one browser's calendar by whole days, so a season can be looked at without waiting up to six hours. For now it changes only what that browser shows. When seasons start changing gameplay, the server has to be told too, and that switch must work only on local and preview addresses, like test sign-in does (decision 0086).
+`?season=winter` in the address shifts this one browser's calendar by whole days, so a season can be looked at without waiting up to six hours. On the real game it still changes only what that browser shows. Now that the lake freezes (decision 0095), the browser also sends it to the server, which uses it for the first one into an empty world and only on local, browser-test and preview servers, like test sign-in (decision 0086).
 
 ## Consequences
 

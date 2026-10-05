@@ -42,4 +42,12 @@ export interface WorldEnv extends Env {
    * sitting. Four minutes everywhere real.
    */
   readonly WORLD_RAID_SECONDS?: string;
+  /**
+   * Set to "1" to let a browser pick the season with `?season=` (decision
+   * 0089), for looking at winter without waiting for it.
+   *
+   * Set on local runs, the browser tests and previews only. Left unset on
+   * staging and production, where the seasons follow the world's own clock.
+   */
+  readonly WORLD_ALLOW_TEST_SEASON?: string;
 }

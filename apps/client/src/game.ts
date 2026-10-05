@@ -120,6 +120,7 @@ import {
   choppingRuleFor,
   colliderForProp,
   createCollisionWorld,
+  setLakeFrozen,
   createWildernessTerrain,
   dayBrightness,
   dayProgress,
@@ -621,6 +622,8 @@ export interface GameDebug {
   pond(): Array<{ x: number; z: number; radius: number }>;
   /** The lake's shape, as the world was built: its blobs of water and its islands. */
   lake(): { basin: Array<{ x: number; z: number; radius: number }>; islands: string[] };
+  /** Whether the server has told us the lake is frozen over. */
+  lakeFrozen(): boolean;
   /** Whether a click right now would cast. */
   canCast(): boolean;
   /** Where our own line is at: none out, waiting, or a fish on. */
@@ -819,6 +822,8 @@ export class Game {
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
   private lakeScene: ReturnType<typeof createLakeScene> | null = null;
+  /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
+  private lakeFrozen = false;
   /** Everywhere the pond or the lake reaches: the build ghost keeps clear of all of it. */
   private keepOutWater: readonly WaterCircle[] = [];
   private encounterLandmarks: ReturnType<typeof createEncounterLandmarks> | null = null;
@@ -1411,6 +1416,7 @@ export class Game {
         basin: LAKE.basin.map((circle) => ({ ...circle })),
         islands: LAKE.islands.map((island) => island.id),
       }),
+      lakeFrozen: () => this.lakeFrozen,
       canCast: () => this.canCast,
       fishing: () => this.fishingPhase,
       fishingNews: () => this.currentNews(performance.now()),
@@ -1473,7 +1479,7 @@ export class Game {
   /* ---------------------------------------------------------------------- */
 
   private connect(): void {
-    const url = worldSocketUrl(this.options.worldId);
+    const url = worldSocketUrl(this.options.worldId, undefined, this.options.season);
     this.connection = new WorldConnection(
       url,
       {
@@ -1686,6 +1692,10 @@ export class Game {
       case 'fishRecords': {
         this.fishRecords = fishRecordsFromSaved(message);
         this.options.hud.publish({ fishRecords: this.fishRecords });
+        break;
+      }
+      case 'lakeIce': {
+        this.applyLakeIce(message.frozen);
         break;
       }
       case 'rareReel': {
@@ -2327,6 +2337,7 @@ export class Game {
       this.outdoors.add(this.wildernessScene.group);
       this.lakeScene?.dispose();
       this.lakeScene = createLakeScene(LAKE);
+      this.lakeScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.lakeScene.group);
       this.keepOutWater = [...clearing.water, ...LAKE.basin];
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
@@ -2348,6 +2359,7 @@ export class Game {
         LAKE,
       );
       this.collision = collision;
+      setLakeFrozen(collision, this.lakeFrozen);
       this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
       this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
       this.applyTreeStates();
@@ -3197,6 +3209,7 @@ export class Game {
       pending: this.pendingPlacements.map((pending) => pending.request),
       scenery: this.sceneryFootprints(),
       water: this.keepOutWater,
+      lakeFrozen: this.lakeFrozen,
     });
 
     // Placed at least one and there is nothing left to pay for the next:
@@ -3217,6 +3230,17 @@ export class Game {
         refusal === null,
         this.builtGroundY(placing.kind, spot.x, spot.z),
       );
+  }
+
+  /**
+   * The server says the lake froze over or thawed (decision 0095): draw it as
+   * ice or water, and let the ground under our own feet match, so walking out
+   * on it is predicted the same way the server will decide it.
+   */
+  private applyLakeIce(frozen: boolean): void {
+    this.lakeFrozen = frozen;
+    this.lakeScene?.setFrozen(frozen);
+    if (this.collision !== null) setLakeFrozen(this.collision, frozen);
   }
 
   /** Where the foot of a built piece sits: on the ground, or for a boat on the lake's surface. */
@@ -4072,6 +4096,7 @@ export class Game {
     let taken = false;
     for (const prop of this.builtProps) {
       if (prop.kind !== 'rowboat' || !isWithinBoardingReach(position, prop)) continue;
+      if (this.lakeFrozen) return 'frozen';
       if (prop.occupied !== true) return 'board';
       taken = true;
     }

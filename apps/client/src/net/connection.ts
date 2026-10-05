@@ -1,4 +1,4 @@
-import { encodeExpeditionRequest, type ExpeditionRequest } from '@acorn/shared';
+import { encodeExpeditionRequest, type ExpeditionRequest, type SeasonId } from '@acorn/shared';
 import { encodeDecorationRequest, type DecorationRequest } from '@acorn/shared';
 import {
   encodeGardenRequest,
@@ -304,15 +304,21 @@ export class WorldConnection {
  * automatically reaches the world its own environment is bound to. Who is
  * connecting is not in the address: the session cookie says, and the web Worker
  * tells the world (see decision 0086).
+ *
+ * A season asked for with `?season=` goes along, for looking at winter while
+ * testing. Only the first browser into an empty world sets it, and only on
+ * your own machine and pull request previews; everywhere else it is left out
+ * on the way (decision 0095).
  */
 export function worldSocketUrl(
   worldId: string,
   currentHref = typeof window === 'undefined' ? 'http://localhost/' : window.location.href,
+  season?: SeasonId,
 ): string {
   const base = new URL(currentHref);
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
   base.pathname = `/api/worlds/${worldId}/ws`;
-  base.search = '';
+  base.search = season === undefined ? '' : `?season=${season}`;
   base.hash = '';
   return base.toString();
 }

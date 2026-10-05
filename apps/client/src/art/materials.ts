@@ -161,6 +161,25 @@ export function createWaterMaterial(
 }
 
 /**
+ * The lake's ice in winter (see decision 0095): a pale, slightly glossy sheet,
+ * clearer blue where it is thin and frosted white where it has clouded, with
+ * no ripples. The same painted ripple texture, read at two scales, is what
+ * breaks the colour up.
+ */
+export function createIceMaterial(): THREE.MeshStandardNodeMaterial {
+  const frost = artTexture('ripples');
+  const coarse = texture(frost, positionWorld.xz.mul(0.17)).r;
+  const fine = texture(frost, positionWorld.xz.mul(0.61)).r;
+  const cloud = smoothstep(0.2, 0.9, coarse.mul(0.65).add(fine.mul(0.35)));
+  const surface = mix(color(0xa9cfe2), color(0xeaf6fb), cloud);
+
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.3, metalness: 0 });
+  material.colorNode = surface;
+  material.name = 'painted-ice';
+  return material;
+}
+
+/**
  * The muddy bank round the pond: dark and wet at the water's edge, drying
  * out and fading softly into the grass further back, instead of stopping at
  * a hard ring.

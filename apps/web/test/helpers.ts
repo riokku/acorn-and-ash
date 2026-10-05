@@ -37,11 +37,12 @@ export function sayHere(cookie: string, earlierKey?: string): Promise<Response> 
 export async function playerSeenByWorld(
   cookie: string,
   extraQuery = '',
-): Promise<{ status: number; player: string | null }> {
-  const response = await SELF.fetch(`${SITE}/api/worlds/home-clearing/ws${extraQuery}`, {
+  site = SITE,
+): Promise<{ status: number; player: string | null; season: string | null }> {
+  const response = await SELF.fetch(`${site}/api/worlds/home-clearing/ws${extraQuery}`, {
     headers: { Upgrade: 'websocket', cookie },
   });
-  if (response.status !== 200) return { status: response.status, player: null };
-  const body = (await response.json()) as { player: string | null };
-  return { status: 200, player: body.player };
+  if (response.status !== 200) return { status: response.status, player: null, season: null };
+  const body = (await response.json()) as { player: string | null; season: string | null };
+  return { status: 200, player: body.player, season: body.season };
 }

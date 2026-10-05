@@ -23,6 +23,7 @@ export default defineConfig({
           WORLD_HUNGER_EMPTY_SECONDS: '3',
           WORLD_PATCH_REGROW_SECONDS: '2',
           WORLD_RAID_SECONDS: '86400',
+          WORLD_ALLOW_TEST_SEASON: '1',
         },
       },
     }),
