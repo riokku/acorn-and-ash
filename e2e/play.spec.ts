@@ -1,4 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test as base,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 
 declare global {
   interface Window {
@@ -70,6 +76,63 @@ declare global {
       mapState(): { painted: boolean; open: boolean; explored: number };
     };
   }
+}
+
+/**
+ * Make a page skip the real drawing: every WebGL draw call does nothing.
+ *
+ * The browsers these tests run in have no graphics card, so "drawing" means a
+ * program on the processor painting every blade of grass and leaf in the
+ * forest, which takes two to three seconds a frame. The game moves a player a
+ * fixed step per frame, so holding a key for a second moved them a metre or
+ * less, and every test that walked up to a tree or an item gave up before it
+ * got there (decision 0100). With the draw calls turned off a frame takes well
+ * under a tenth of a second, as it would on a real machine, and everything
+ * else - walking, swinging, the server, the hints - runs just as it does for a
+ * player.
+ *
+ * Set `ACORN_E2E_DRAW=1` to draw for real, for example to look at the pictures
+ * some tests save. Tests tagged `@real-drawing` are about the drawing itself
+ * and always draw.
+ */
+async function skipDrawing(target: Page | BrowserContext): Promise<void> {
+  if (process.env.ACORN_E2E_DRAW === '1') return;
+  await target.addInitScript(() => {
+    const drawCalls = [
+      'drawArrays',
+      'drawElements',
+      'drawArraysInstanced',
+      'drawElementsInstanced',
+      'drawRangeElements',
+    ];
+    for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+      for (const name of drawCalls) {
+        if (name in prototype) (prototype as unknown as Record<string, unknown>)[name] = () => {};
+      }
+    }
+  });
+}
+
+/** Every test's own page, with the drawing skipped unless it is about the drawing. */
+const test = base.extend({
+  page: async ({ page }, use, testInfo) => {
+    if (!testInfo.tags.includes('@real-drawing')) await skipDrawing(page);
+    await use(page);
+  },
+});
+
+/** A second tab in its own window, the way the tests that open several want them. */
+async function openTab(browser: Browser): Promise<Page> {
+  const tab = await browser.newPage();
+  await skipDrawing(tab);
+  return tab;
+}
+
+/** A browser of its own, so a later visit is the same player coming back. */
+async function openBrowserContext(browser: Browser): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  await skipDrawing(context);
+  return context;
 }
 
 /** Read one labelled row out of the HUD panel. */
@@ -219,24 +282,28 @@ test.describe('the Settings menu', () => {
   });
 });
 
-test('the game loads, connects and draws the clearing', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+test(
+  'the game loads, connects and draws the clearing',
+  { tag: '@real-drawing' },
+  async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
 
-  await page.goto('/');
-  await waitForConnected(page);
+    await page.goto('/');
+    await waitForConnected(page);
 
-  // The curtain only lifts once the world has been built.
-  await expect(page.locator('.hud-curtain')).toContainText('Click to play');
+    // The curtain only lifts once the world has been built.
+    await expect(page.locator('.hud-curtain')).toContainText('Click to play');
 
-  const backend = await hudValue(page, 'Renderer');
-  expect(backend).toMatch(/WebGPU|WebGL 2/);
-  console.log(`Renderer backend in this browser: ${backend}`);
+    const backend = await hudValue(page, 'Renderer');
+    expect(backend).toMatch(/WebGPU|WebGL 2/);
+    console.log(`Renderer backend in this browser: ${backend}`);
 
-  // Something is actually being drawn.
-  await expect.poll(async () => Number(await hudValue(page, 'FPS'))).toBeGreaterThan(0);
-  expect(errors).toEqual([]);
-});
+    // Something is actually being drawn.
+    await expect.poll(async () => Number(await hudValue(page, 'FPS'))).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  },
+);
 
 test('the map fills in around you, and M opens it over the game', async ({ page }) => {
   await page.goto('/');
@@ -261,11 +328,15 @@ test('the map fills in around you, and M opens it over the game', async ({ page 
   await expect(page.getByTestId('minimap')).toBeVisible();
 });
 
-test('the WebGL 2 fallback works when WebGPU is refused', async ({ page }) => {
-  await page.goto('/?renderer=webgl2');
-  await waitForConnected(page);
-  expect(await hudValue(page, 'Renderer')).toContain('WebGL 2');
-});
+test(
+  'the WebGL 2 fallback works when WebGPU is refused',
+  { tag: '@real-drawing' },
+  async ({ page }) => {
+    await page.goto('/?renderer=webgl2');
+    await waitForConnected(page);
+    expect(await hudValue(page, 'Renderer')).toContain('WebGL 2');
+  },
+);
 
 test('shows whether it is day or night', async ({ page }) => {
   await page.goto('/');
@@ -296,8 +367,8 @@ test('walking moves the player, and the server agrees', async ({ page }) => {
 });
 
 test('two tabs see each other move', async ({ browser }) => {
-  const walker = await browser.newPage();
-  const watcher = await browser.newPage();
+  const walker = await openTab(browser);
+  const watcher = await openTab(browser);
 
   await walker.goto('/');
   await watcher.goto('/');
@@ -425,19 +496,22 @@ test('walking away from the clearing leads into generated wilderness, not a wall
 });
 
 /**
- * Walk to a spot until the game says you can reach what is there.
+ * Walk to a spot until the game says you can reach the pickup that is there.
  *
  * In short steps, stopping between each one. Holding the key down and watching
  * the distance does not work: on a slow machine the player keeps walking for as
  * long as it takes to let go, which is long enough to sail straight past.
  *
  * The condition is the game's own answer rather than a distance we work out
- * here, so the test ends up where the player would actually get the prompt.
+ * here, so the test ends up where the player would actually get the prompt -
+ * and it names the item it came for, because it is not always the only thing in
+ * reach: the bag lies a few steps from where everyone spawns, so "something is
+ * in reach" is already true before the first step towards the axe.
  */
-async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void> {
+async function walkWithinReachOf(page: Page, x: number, z: number, item: string): Promise<void> {
   for (let step = 0; step < 80; step++) {
     const reachable = await page.evaluate(() => window.acornDebug?.nearbyItem() ?? null);
-    if (reachable !== null) return;
+    if (reachable === item) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
@@ -453,7 +527,7 @@ async function walkWithinReachOf(page: Page, x: number, z: number): Promise<void
     // Let them come to a stop before looking again.
     await page.waitForTimeout(200);
   }
-  throw new Error(`Never got within reach of ${x}, ${z}`);
+  throw new Error(`Never got within reach of the ${item} at ${x}, ${z}`);
 }
 
 /**
@@ -497,6 +571,17 @@ async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Pr
     await page.waitForTimeout(200);
   }
   throw new Error(`Never got within reach of the gather spot at ${x}, ${z}`);
+}
+
+/** Wait until the server says this is in the pack - the bag in there already does not count. */
+async function waitUntilCarrying(page: Page, item: string): Promise<void> {
+  await expect
+    .poll(async () =>
+      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
+        (entry) => entry.item === item,
+      ),
+    )
+    .toBe(true);
 }
 
 /** How many of something we carry right now, as the server says. */
@@ -578,7 +663,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   // One browser context throughout, so the second visit is the same player
   // coming back rather than a stranger: the key that identifies them lives in
   // this browser's storage.
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   // A fresh world, so the axe is definitely still in its stump.
   const page = await context.newPage();
   await page.goto(`/?world=axe-${Date.now()}`);
@@ -588,16 +673,14 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   // Nothing to start with, and the axe is out there waiting.
   expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
-    'nothing yet',
-  );
+  await expect(page.locator('.hotbar-slot-icon')).toHaveCount(0);
 
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   expect(axe).toBeDefined();
   if (axe === undefined) throw new Error('no axe in the clearing');
 
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
 
   // Standing next to it, the game offers it.
   await expect(page.locator('.hud-hint')).toContainText(
@@ -613,7 +696,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
     { item: 'axe', count: 1 },
   ]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Axe');
+  await expect(page.locator('.hotbar-slot-icon')).toHaveCount(1);
 
   // Reload the page: the world server still knows it is ours.
   const url = page.url();
@@ -639,8 +722,8 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
 }) => {
   test.setTimeout(180_000);
   const worldId = `equip-${Date.now()}`;
-  const equipper = await browser.newPage();
-  const watcher = await browser.newPage();
+  const equipper = await openTab(browser);
+  const watcher = await openTab(browser);
 
   await equipper.goto(`/?world=${worldId}`);
   await watcher.goto(`/?world=${worldId}`);
@@ -659,7 +742,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   if (bag === undefined || axe === undefined) throw new Error('no bag or axe in the clearing');
 
   // Find the bag first, the way a new player would - not that the axe needs it.
-  await walkWithinReachOf(equipper, bag.x, bag.z);
+  await walkWithinReachOf(equipper, bag.x, bag.z, 'bag');
   await equipper.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -669,7 +752,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
     )
     .toBe(true);
 
-  await walkWithinReachOf(equipper, axe.x, axe.z);
+  await walkWithinReachOf(equipper, axe.x, axe.z, 'axe');
   await equipper.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -975,7 +1058,7 @@ async function equip(page: Page, item: string): Promise<void> {
 test('you can chop a tree down, and the stump is still there next time', async ({ browser }) => {
   test.setTimeout(240_000);
   // One context throughout, so coming back is the same player returning.
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=chop-${Date.now()}`);
   await waitForConnected(page);
@@ -988,11 +1071,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   // The big oak stands right beside the axe's stump.
@@ -1014,7 +1095,6 @@ test('you can chop a tree down, and the stump is still there next time', async (
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Logs');
 
   // Nothing left to swing at where it stood.
   await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0), [oak.x, oak.z]);
@@ -1043,11 +1123,9 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   // The big oak takes several ordinary swings - one charged attack should
@@ -1080,7 +1158,7 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
 test('a chopped tree grows back on its own', async ({ browser }) => {
   // Locally a tree takes two to four minutes to come back, and this waits it out.
   test.setTimeout(600_000);
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=regrow-${Date.now()}`);
   await waitForConnected(page);
@@ -1090,11 +1168,9 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).length)
-    .toBeGreaterThan(0);
+  await waitUntilCarrying(page, 'axe');
   await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
@@ -1143,7 +1219,7 @@ async function click(page: Page): Promise<void> {
 
 test('you can find the rod, cast into the pond and land a fish', async ({ browser }) => {
   test.setTimeout(180_000);
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   await page.goto(`/?world=fish-${Date.now()}`);
   await waitForConnected(page);
@@ -1153,7 +1229,7 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const rod = pickups.find((entry) => entry.item === 'rod');
   if (rod === undefined) throw new Error('no rod in the clearing');
-  await walkWithinReachOf(page, rod.x, rod.z);
+  await walkWithinReachOf(page, rod.x, rod.z, 'rod');
   await expect(page.locator('.hud-hint')).toContainText(
     'Right-click or press E to pick up the fishing rod',
   );
@@ -1223,9 +1299,6 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
       ),
     )
     .toBe(true);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText(
-    /Perch|Trout|Golden carp/,
-  );
   expect(await page.evaluate(() => window.acornDebug?.fishing())).toBeNull();
 
   await context.close();
@@ -1358,7 +1431,7 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1392,7 +1465,6 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
     .toBe('You caught some meat!');
@@ -1416,7 +1488,7 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1454,7 +1526,6 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
   ).toBe(false);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).toContainText('Meat');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
     .toBe('You caught some meat!');
@@ -1477,7 +1548,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1632,7 +1703,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
 }) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
-  const context = await browser.newContext();
+  const context = await openBrowserContext(browser);
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
 
@@ -1649,7 +1720,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1711,7 +1782,6 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(await page.evaluate(() => window.acornDebug?.carrying() ?? [])).toEqual([
     { item: 'axe', count: 1 },
   ]);
-  await expect(page.locator('.hud-row', { hasText: 'Carrying' }).first()).not.toContainText('Log');
 
   // The Phase 1 promise, for a campfire this time: log out, come back, it is
   // still there.
@@ -1748,7 +1818,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z);
+  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
   await page.keyboard.press('KeyE');
   await expect
     .poll(async () =>
@@ -1913,7 +1983,7 @@ test.describe('woods interaction polish', () => {
     );
     if (bag === undefined) throw new Error('No bag in the clearing');
     await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [bag.x, bag.z]);
-    await walkWithinReachOf(page, bag.x, bag.z);
+    await walkWithinReachOf(page, bag.x, bag.z, 'bag');
     const point = await page.evaluate(
       ([x, z]) => window.acornDebug?.screenPoint(x!, 0.12, z!),
       [bag.x, bag.z],
