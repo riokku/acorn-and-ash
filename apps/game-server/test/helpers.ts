@@ -85,8 +85,15 @@ export class TestClient {
     socket.accept();
   }
 
-  static async connect(worldId = 'test-world', playerKey?: string): Promise<TestClient> {
-    const query = playerKey === undefined ? '' : `?player=${playerKey}`;
+  static async connect(
+    worldId = 'test-world',
+    playerKey?: string,
+    season?: string,
+  ): Promise<TestClient> {
+    const params = new URLSearchParams();
+    if (playerKey !== undefined) params.set('player', playerKey);
+    if (season !== undefined) params.set('season', season);
+    const query = params.size === 0 ? '' : `?${params}`;
     const response = await SELF.fetch(`https://game.test/worlds/${worldId}/ws${query}`, {
       headers: { Upgrade: 'websocket' },
     });

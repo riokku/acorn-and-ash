@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import { createAuth } from './accounts/auth';
-import { isProvider, offeredProviders, testSignInMode } from './accounts/options';
+import { isProvider, isTestHost, offeredProviders, testSignInMode } from './accounts/options';
 import { isPlayerKey } from './accounts/player-key';
 import {
   AccountsNotConfiguredError,
@@ -179,7 +179,8 @@ app.get('/api/worlds/:worldId/ws', async (c) => {
   // From here on the key is in use, so it can never be swapped for another.
   if (!account.entered) await markEntered(c.env.DB, account.id);
 
-  return connectToWorld(asPlayer(c.req.raw, account.playerKey), c.env, worldId);
+  const request = asPlayer(c.req.raw, account.playerKey, isTestHost(new URL(c.req.url).hostname));
+  return connectToWorld(request, c.env, worldId);
 });
 
 app.get('/api/worlds/:worldId/status', (c) =>
@@ -199,11 +200,15 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
  * The same request, saying who is really connecting.
  *
  * Whatever player the browser put in the address is thrown away: the world
- * believes only the key this Worker looked up from the session.
+ * believes only the key this Worker looked up from the session. The same goes
+ * for a season asked for with `?season=` (decision 0089), which only goes on
+ * to the world from your own machine and pull request previews: anywhere else
+ * the seasons follow the world's own clock.
  */
-function asPlayer(request: Request, playerKey: string): Request {
+function asPlayer(request: Request, playerKey: string, mayPickSeason = false): Request {
   const url = new URL(request.url);
   url.searchParams.set('player', playerKey);
+  if (!mayPickSeason) url.searchParams.delete('season');
   return new Request(url, request);
 }
 

@@ -1529,6 +1529,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (view.getUint8(19) !== state.displays) return null;
       return { type: 'fishRecords', ...state };
     }
+    case ServerMessageType.LakeIce: {
+      if (data.byteLength !== 2) return null;
+      const frozen = view.getUint8(1);
+      return frozen > 1 ? null : { type: 'lakeIce', frozen: frozen === 1 };
+    }
     case ServerMessageType.RareReel: {
       if (data.byteLength !== 5) return null;
       const age = view.getUint16(1, true),
@@ -2150,6 +2155,14 @@ export function encodeFishRecords(records: FishRecords): ArrayBuffer {
   state.counts.forEach((count, i) => view.setUint32(1 + i * 4, count, true));
   state.bestCm.forEach((cm, i) => view.setUint16(13 + i * 2, cm, true));
   view.setUint8(19, state.displays);
+  return data;
+}
+/** The lake froze over (true) or thawed (false): type(1) + frozen(1). */
+export function encodeLakeIce(frozen: boolean): ArrayBuffer {
+  const data = new ArrayBuffer(2),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.LakeIce);
+  view.setUint8(1, frozen ? 1 : 0);
   return data;
 }
 export function encodeRareReel(state: ReelView): ArrayBuffer {

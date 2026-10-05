@@ -31,6 +31,7 @@ import {
   encodeCooked,
   encodeFishing,
   encodeHealth,
+  encodeLakeIce,
   encodeHello,
   encodeHunger,
   encodeRoster,
@@ -1323,5 +1324,20 @@ describe('targeted loot messages', () => {
     expect(decodeClientMessage(oversized.buffer)).toBeNull();
     new DataView(valid).setUint8(1, 3);
     expect(decodeClientMessage(valid)).toBeNull();
+  });
+});
+
+describe('the lake freezing and thawing', () => {
+  it.each([true, false])('round trips frozen = %s', (frozen) => {
+    expect(decodeServerMessage(encodeLakeIce(frozen))).toEqual({ type: 'lakeIce', frozen });
+  });
+  it('rejects truncated, oversized and nonsense messages', () => {
+    const valid = encodeLakeIce(true);
+    expect(decodeServerMessage(valid.slice(0, 1))).toBeNull();
+    const oversized = new Uint8Array(3);
+    oversized.set(new Uint8Array(valid));
+    expect(decodeServerMessage(oversized.buffer)).toBeNull();
+    new DataView(valid).setUint8(1, 2);
+    expect(decodeServerMessage(valid)).toBeNull();
   });
 });

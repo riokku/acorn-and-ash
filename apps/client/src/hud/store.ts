@@ -184,14 +184,15 @@ export interface HudState {
   readonly restingNearby: 'chair' | 'bed' | null;
   /**
    * What a press of E would do about a rowboat right now (see decision 0093):
-   * climb into one that is free, find one that somebody else has, or - while
-   * rowing - climb out at a shore, or find the shore too far to step to.
+   * climb into one that is free, find one that somebody else has, find one
+   * frozen in the ice (decision 0095), or - while rowing - climb out at a
+   * shore, or find the shore too far to step to.
    */
   readonly boat: BoatHint;
 }
 
 /** What E does about a rowboat, or null when there is no boat to speak of. */
-export type BoatHint = 'board' | 'taken' | 'climbOut' | 'tooFar' | null;
+export type BoatHint = 'board' | 'taken' | 'frozen' | 'climbOut' | 'tooFar' | null;
 
 const INITIAL: HudState = {
   expedition: { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' },

@@ -25,11 +25,15 @@
   // A picked-clean stick or flower patch is back somewhere new in thirty
   // seconds to a minute rather than three to six. Skeletons raid every
   // minute or so outdoors rather than every four to six.
+  //
+  // `?season=winter` in the address is honoured here, on the browser tests and
+  // on previews, and nowhere real (decision 0095).
   "vars": {
     "WORLD_REGROW_SECONDS": "120",
     "WORLD_HUNGER_EMPTY_SECONDS": "180",
     "WORLD_PATCH_REGROW_SECONDS": "30",
     "WORLD_RAID_SECONDS": "60",
+    "WORLD_ALLOW_TEST_SEASON": "1",
   },
 
   "env": {
@@ -48,6 +52,7 @@
         "WORLD_HUNGER_EMPTY_SECONDS": "180",
         "WORLD_PATCH_REGROW_SECONDS": "30",
         "WORLD_RAID_SECONDS": "86400",
+        "WORLD_ALLOW_TEST_SEASON": "1",
       },
     },
     // One of these is deployed per pull request, renamed on the command line to
@@ -73,6 +78,7 @@
         "WORLD_HUNGER_EMPTY_SECONDS": "180",
         "WORLD_PATCH_REGROW_SECONDS": "30",
         "WORLD_RAID_SECONDS": "60",
+        "WORLD_ALLOW_TEST_SEASON": "1",
       },
     },
     "staging": {

@@ -20,6 +20,20 @@ describe('finding the world server', () => {
     const url = worldSocketUrl('home-clearing', 'https://acorn.example/');
     expect(new URL(url).searchParams.has('player')).toBe(false);
   });
+
+  it('carries a season asked for while testing, and nothing else of the address', () => {
+    const url = worldSocketUrl(
+      'home-clearing',
+      'https://acorn.example/?x=1&season=autumn',
+      'winter',
+    );
+    expect(url).toBe('wss://acorn.example/api/worlds/home-clearing/ws?season=winter');
+  });
+
+  it('asks for no season when the address did not', () => {
+    const url = worldSocketUrl('home-clearing', 'https://acorn.example/?season=winter');
+    expect(new URL(url).searchParams.has('season')).toBe(false);
+  });
 });
 
 describe('settings', () => {

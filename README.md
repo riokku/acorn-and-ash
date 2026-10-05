@@ -286,7 +286,8 @@ along the shore. You can't wade in: the shore holds you back, and you slide
 along it if you walk at it on a slant. The islands, with their own trees and
 rocks, are out of reach on foot: you reach them by rowboat. It shows on
 the minimap and the big map. You can cast a rod onto the lake the same as onto
-the pond (a cast never lands on an island). The code is in
+the pond (a cast never lands on an island). In winter the lake freezes over: see
+[Rowboat](#rowboat) below. The code is in
 `packages/shared/src/world/lake.ts` and `apps/client/src/scene/lake.ts`. See
 [decision 0090](docs/decisions/0090-the-lake.md).
 
@@ -331,6 +332,17 @@ another. It leaves half its materials (three logs and a rope) in a pile on the
 island's shore for anybody to pick up. A boat on the mainland shore, one that
 somebody else is rowing, and anybody else's boat are left alone. See
 [decision 0094](docs/decisions/0094-boat-falls-apart.md).
+
+In winter the lake freezes over, and you can walk on it. Nobody can climb into a
+boat or moor a new one until spring, and nobody can cast a line onto the ice. A
+boat that is out on the water when the ice comes freezes where it is, and
+whoever was rowing it steps out onto the ice beside it. When spring comes the
+boat floats again, and anyone still out on the lake is put on the nearest shore.
+The server decides when it freezes and tells every browser; the ice is a pale
+sheet drawn over the water. The rules are in `packages/shared/src/sim/seasons.ts`
+(`lakeIsFrozen`) and `sim/world-sim.ts`, and the ice is drawn by
+`apps/client/src/scene/lake.ts`. See
+[decision 0095](docs/decisions/0095-lake-freezes-in-winter.md).
 
 ### Wind in the grass
 
@@ -520,6 +532,11 @@ Their weapons are simple stand-in shapes for now. See
 `WORLD_RAID_SECONDS` in
 [`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Staging and
 production use the real wait.
+
+`WORLD_ALLOW_TEST_SEASON` is `1` in the same places (local runs, the browser tests
+and previews) and unset on staging and production. It is what lets `?season=` in
+the address set the season on the server, so you can see the lake frozen without
+waiting for winter.
 
 ### Fishing
 
@@ -785,6 +802,12 @@ Add these to the end of the URL:
 | `?world=some-name` | Join a different world                              |
 | `?season=winter`   | See the world in that season, whatever the calendar |
 | `?gallery`         | Look at all of the game's own art, in daylight      |
+
+`?season=` also reaches the server on your own machine and on pull request
+previews, where the first browser into an empty world sets its season, so the lake
+freezes too. Use a new world name so nobody else is in it already, for example
+`?world=winter-test&season=winter`. On the real game the switch only changes what
+your own browser draws, and the server's seasons follow its own clock.
 
 The gallery also includes `?gallery=tent`, `?gallery=teepee`, and
 `?gallery=largeCabin`; `?gallery=home&tier=tent` (or another home kind) shows

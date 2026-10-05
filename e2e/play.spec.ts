@@ -55,6 +55,7 @@ declare global {
       faceTowards(x: number, z: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       lake(): { basin: Array<{ x: number; z: number; radius: number }>; islands: string[] };
+      lakeFrozen(): boolean;
       canCast(): boolean;
       fishing(): 'waiting' | 'biting' | 'reeling' | null;
       fishingNews(): string | null;

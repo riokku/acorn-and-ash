@@ -18,6 +18,6 @@ A rowboat can be built and moored (decision 0092) but nobody can use it. Chris c
 
 ## Consequences
 
-One rider per boat. Boats do not bump into each other or a moored boat yet. The rider's arms hold still on their knees; the oars sweep on their own. Building is ignored while rowing, and so are swings and casts: fishing from the boat comes with the lake fish. Winter ice (Lake 3) will have to decide what happens to a boat and its rider when the lake freezes under them.
+One rider per boat. Boats do not bump into each other or a moored boat yet. The rider's arms hold still on their knees; the oars sweep on their own. Building is ignored while rowing, and so are swings and casts: fishing from the boat comes with the lake fish. Decision 0095 settles what happens to a boat and its rider when the lake freezes under them: the boat freezes where it is and the rider steps out onto the ice.
 
 A crash or a deploy while rowing restores the boat to where it was last released, and the rider to the bank. The islands can now be reached. A boat left at an island stays there, and you may only have one, so a player who is knocked out on an island wakes in bed with their only boat across the water. Decision 0094 settles that: the boat falls apart where it lies, into half its materials, and they can build another.

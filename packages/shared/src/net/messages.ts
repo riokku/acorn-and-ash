@@ -97,6 +97,7 @@ export const ServerMessageType = {
   RaiderVitals: 0x3a,
   FishRecords: 0x3b,
   RareReel: 0x3c,
+  LakeIce: 0x3d,
 } as const;
 
 export const RejectReason = {
@@ -591,6 +592,8 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
+  | { readonly type: 'lakeIce'; readonly frozen: boolean }
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }
   | (ExpeditionView & { readonly type: 'expedition' })
   | (FishRecords & { readonly type: 'fishRecords' })

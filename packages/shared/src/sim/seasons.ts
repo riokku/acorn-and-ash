@@ -113,3 +113,12 @@ export function clockShiftForSeason(
     SEASONS.indexOf(season) * DAYS_PER_SEASON + clamp(dayOfSeason, 1, DAYS_PER_SEASON) - 1;
   return modulo(wanted - today, DAYS_PER_YEAR) * DAY_LENGTH_MS;
 }
+
+/**
+ * Whether the lake is frozen over: all of winter, from its first morning to
+ * the first morning of spring (decision 0095). The server works this out and
+ * tells every browser, so it never depends on anybody's own clock.
+ */
+export function lakeIsFrozen(calendar: Calendar): boolean {
+  return calendar.season === 'winter';
+}

@@ -7,7 +7,14 @@ import {
   type Collider,
   type CylinderCollider,
 } from '../world/colliders';
-import { isNearLake, lakeSlopeAt, type Lake, type LakeSlope } from '../world/lake';
+import {
+  basinDepthAt,
+  isNearLake,
+  lakeIceHeight,
+  lakeSlopeAt,
+  type Lake,
+  type LakeSlope,
+} from '../world/lake';
 import type { Terrain } from '../world/terrain';
 
 /**
@@ -48,12 +55,43 @@ export function createCollisionWorld(
   boundsHalfExtent: number = PLAYABLE_HALF_EXTENT,
   lake: Lake | null = null,
 ): CollisionWorld {
+  if (lake === null) {
+    return { terrain, colliders: [...colliders], boundsHalfExtent, lakeWall: null };
+  }
+  const wall: LakeWall = { lake, up: true };
   return {
-    terrain,
+    terrain: withLakeIce(terrain, wall),
     colliders: [...colliders],
     boundsHalfExtent,
-    lakeWall: lake === null ? null : { lake, up: true },
+    lakeWall: wall,
   };
+}
+
+/**
+ * The ground, with the ice on it while the lake is frozen: wherever the lake
+ * is, the ground is the top of the ice (or the island, where that is higher).
+ * Everywhere else, and whenever the wall is up, it is the ground as it was.
+ */
+function withLakeIce(ground: Terrain, wall: LakeWall): Terrain {
+  return {
+    kind: ground.kind,
+    heightAt: (x, z) => {
+      const height = ground.heightAt(x, z);
+      if (wall.up || !isNearLake(wall.lake, x, z)) return height;
+      if (basinDepthAt(wall.lake, x, z) <= 0) return height;
+      return Math.max(height, lakeIceHeight(wall.lake));
+    },
+  };
+}
+
+/** Freeze or thaw the lake: frozen, the wall comes down and the water can be walked on. */
+export function setLakeFrozen(world: CollisionWorld, frozen: boolean): void {
+  if (world.lakeWall !== null) world.lakeWall.up = !frozen;
+}
+
+/** Is the lake frozen over right now? */
+export function isLakeFrozen(world: CollisionWorld): boolean {
+  return world.lakeWall !== null && !world.lakeWall.up;
 }
 
 /** Swap one collider out, for when a tree comes down. */

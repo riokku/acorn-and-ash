@@ -1,4 +1,5 @@
 import { encodeRaiderVitals } from '@acorn/shared';
+import { clockShiftForSeason, encodeLakeIce, SEASONS, type SeasonId } from '@acorn/shared';
 import {
   encodeFishRecords,
   encodeRareReel,
@@ -215,9 +216,18 @@ export class World extends DurableObject<WorldEnv> {
       colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
     } satisfies ConnectionAttachment);
 
+    // A season asked for while testing, by the first one into an empty world.
+    const season = this.testSeason(url);
+    if (season !== null && earlier === null && simulation.playerCount === 0)
+      simulation.setCalendarShift(
+        clockShiftForSeason(simulation.seed, simulation.tick * TICK_MILLISECONDS, season),
+      );
+
     if (earlier !== null) simulation.handOver(netId);
     else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
+    // Whether the lake is ice, before anything that depends on it.
+    server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
@@ -507,6 +517,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceThreatHits(simulation);
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
+    this.announceLakeIce(simulation);
     this.announceBoats(simulation);
     this.announceBrokenBoats(simulation);
     this.announceFishing(simulation);
@@ -777,6 +788,27 @@ export class World extends DurableObject<WorldEnv> {
       for (const result of feedback)
         if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
     }
+  }
+
+  /**
+   * The lake froze over or thawed (decision 0095): tell everybody, so their
+   * browsers let them walk out on it, or not. Anybody stepped out of a boat or
+   * put ashore by the change is announced with the rest of the boats.
+   */
+  private announceLakeIce(simulation: WorldSimulation): void {
+    const frozen = simulation.drainLakeFreezeChange();
+    if (frozen !== null) this.broadcast(encodeLakeIce(frozen));
+  }
+
+  /**
+   * The season a browser asked to see with `?season=` (decision 0089), but
+   * only where this server is set up for testing: local runs, the browser
+   * tests and previews. The real worlds never take it.
+   */
+  private testSeason(url: URL): SeasonId | null {
+    if (this.env.WORLD_ALLOW_TEST_SEASON !== '1') return null;
+    const asked = url.searchParams.get('season');
+    return SEASONS.find((season) => season === asked) ?? null;
   }
 
   /**

@@ -8,8 +8,8 @@ import { defineConfig } from 'vitest/config';
  * These tests stand a stub game server next to it under the same script name, so
  * that the binding itself is exercised rather than assumed.
  *
- * The stub says which player key it was told about, because the web Worker is
- * what decides that, not the browser.
+ * The stub says which player key and season it was told about, because the web
+ * Worker is what decides those, not the browser.
  */
 const stubGameServer = `
   export class World {
@@ -22,6 +22,7 @@ const stubGameServer = `
         path: url.pathname,
         upgrade: request.headers.get('Upgrade'),
         player: url.searchParams.get('player'),
+        season: url.searchParams.get('season'),
       });
     }
   }

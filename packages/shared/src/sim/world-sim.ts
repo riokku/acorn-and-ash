@@ -128,10 +128,11 @@ import {
   SPAWN_RING_RADIUS,
   SPRINT_REPORTING_SPEED,
   SWING_COOLDOWN_TICKS,
+  TICK_MILLISECONDS,
   TICK_SECONDS,
   TICK_HZ,
 } from '../constants';
-import { createCollisionWorld, type CollisionWorld } from '../collision/capsule';
+import { createCollisionWorld, setLakeFrozen, type CollisionWorld } from '../collision/capsule';
 import {
   AimYaw,
   AnimalTag,
@@ -193,7 +194,8 @@ import {
   type PlacedSpot,
   type RestingPlace,
 } from '../world/home';
-import { LAKE } from '../world/lake';
+import { BOAT_ICE_STEP_OUT } from '../world/boat';
+import { LAKE, lakeDepthAt } from '../world/lake';
 import {
   beachedBoat,
   boatSalvage,
@@ -206,6 +208,7 @@ import {
 } from './rowing';
 import { isReedPatch, REED_PATCHES } from '../world/reeds';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
+import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { buildEncounterSites, encounterColliders, type EncounterSite } from '../world/encounters';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
@@ -1304,6 +1307,14 @@ export class WorldSimulation {
   /** Rowboats somebody climbed into or out of since this was last asked, by built-prop id. */
   private readonly boatChanges = new Set<number>();
   private readonly brokenBoats: number[] = [];
+  /** Whole days the calendar is pushed on, to look at a season while testing (decision 0095). */
+  private calendarShiftMs = 0;
+  /** Whether the lake is frozen over, as of the last time the calendar was looked at. */
+  private lakeFrozen = false;
+  /** Set until the first look at the calendar, which does not wait for a whole second. */
+  private lakeUnchecked = true;
+  /** The lake freezing or thawing since this was last asked, for telling everybody. */
+  private lakeFreezeChange: boolean | null = null;
   /** When each currently-lit campfire should go out on its own, by prop id. Absent while unlit. */
   private readonly campfireLitUntilMs = new Map<number, number>();
   private readonly campfireLitEvents: CampfireLitEvent[] = [];
@@ -1521,7 +1532,7 @@ export class WorldSimulation {
       home !== null
         ? { x: wake.x, y: 0, z: wake.z }
         : saved
-          ? { x: saved.x, y: saved.y, z: saved.z }
+          ? this.savedSpot(saved)
           : this.nextSpawnPosition();
     const facingYaw = home !== null ? HOME_WAKE_SPOT.yaw : (saved?.facingYaw ?? 0);
 
@@ -1826,6 +1837,7 @@ export class WorldSimulation {
     this.nowMs = nowMs;
     this.revealLandedLogs(nowMs);
     this.tick += 1;
+    this.updateLakeIce();
     for (const plots of this.homeGardens.values())
       for (const plot of plots) if (plot.crop !== null && plot.growTicks > 0) plot.growTicks--;
     const scratch = this.scratch;
@@ -3314,7 +3326,7 @@ export class WorldSimulation {
       canAttack &&
       toolKind(held) === 'rod' &&
       runtime.swingCooldownTicks === 0 &&
-      castLanding(position, aimYaw, this.clearing.water, LAKE) !== null;
+      castLanding(position, aimYaw, this.clearing.water, this.openLake()) !== null;
     return {
       canAttack,
       castInstead,
@@ -3438,6 +3450,8 @@ export class WorldSimulation {
    */
   private tryBoardBoat(runtime: PlayerRuntime, motion: PlayerMotion): boolean {
     if (runtime.health <= 0 || runtime.cast !== null || runtime.boatId !== null) return false;
+    // Frozen in the ice until spring.
+    if (this.lakeFrozen) return false;
     let nearest: BuiltProp | null = null;
     let nearestDistance = Infinity;
     for (const prop of this.builtProps) {
@@ -3551,6 +3565,112 @@ export class WorldSimulation {
   }
 
   /**
+   * Where in the year this world is (decision 0089): worked out from the
+   * world's own clock - the ticks it has run, which is the time everybody is
+   * told - plus a whole number of days when a test asked for a season.
+   */
+  calendar(): Calendar {
+    return calendarAt(this.seed, this.tick * TICK_MILLISECONDS + this.calendarShiftMs);
+  }
+
+  /** Push the calendar on by this many milliseconds, a whole number of days, to see a season while testing. */
+  setCalendarShift(shiftMs: number): void {
+    this.calendarShiftMs = shiftMs;
+    this.lakeUnchecked = true;
+  }
+
+  /** Is the lake frozen over right now? */
+  isLakeFrozen(): boolean {
+    return this.lakeFrozen;
+  }
+
+  /**
+   * Whether the calendar says the lake is frozen, which is what a browser that
+   * is just arriving should be told: the first tick of a world that has only
+   * just woken has not yet frozen it.
+   */
+  lakeFrozenByCalendar(): boolean {
+    return lakeIsFrozen(this.calendar());
+  }
+
+  /**
+   * Where a saved player stands again. Somebody who logged out on the ice and
+   * comes back after it has thawed is put on the nearest shore instead of in
+   * the water (decision 0095).
+   */
+  private savedSpot(saved: PersistedPlayer): Vec3 {
+    const overTheLake = lakeDepthAt(LAKE, saved.x, saved.z) > -PLAYER_RADIUS;
+    if (!overTheLake || this.lakeFrozenByCalendar()) return { x: saved.x, y: saved.y, z: saved.z };
+    const shore = landingBeside(saved.x, saved.z);
+    return { x: shore.x, y: this.collision.terrain.heightAt(shore.x, shore.z), z: shore.z };
+  }
+
+  /**
+   * The lake as a cast line, a boat or a mooring sees it: open water, or
+   * nothing at all while it is frozen (decision 0095).
+   */
+  private openLake(): typeof LAKE | null {
+    return this.lakeFrozen ? null : LAKE;
+  }
+
+  /** Once a second, and at the very start: freeze or thaw the lake when the calendar says so. */
+  private updateLakeIce(): void {
+    if (!this.lakeUnchecked && this.tick % TICK_HZ !== 0) return;
+    this.lakeUnchecked = false;
+    const frozen = lakeIsFrozen(this.calendar());
+    if (frozen === this.lakeFrozen) return;
+    this.lakeFrozen = frozen;
+    this.lakeFreezeChange = frozen;
+    setLakeFrozen(this.collision, frozen);
+    for (const runtime of this.players.values()) {
+      if (frozen) this.stepOntoIce(runtime);
+      else this.washAshore(runtime);
+    }
+  }
+
+  /**
+   * The lake froze under somebody rowing: the boat stays where it is, stuck
+   * in the ice until spring, and they step out onto the ice beside it.
+   */
+  private stepOntoIce(runtime: PlayerRuntime): void {
+    const boat = this.boatOf(runtime);
+    const position = runtime.entity.get(Position);
+    const facing = runtime.entity.get(Facing);
+    if (boat === undefined || position === undefined || facing === undefined) return;
+    this.carryBoat(runtime, position, facing.yaw);
+    this.releaseBoat(runtime, boat);
+    // Out over the side of the boat: its beam runs square to its length.
+    const x = boat.x + Math.sin(boat.yaw) * BOAT_ICE_STEP_OUT;
+    const z = boat.z + Math.cos(boat.yaw) * BOAT_ICE_STEP_OUT;
+    this.placePlayer(runtime.netId, { x, y: this.collision.terrain.heightAt(x, z), z }, facing.yaw);
+  }
+
+  /**
+   * The ice has gone: anybody still out on the lake is put on the nearest
+   * shore, without being woken, stood up or told to get off whatever they
+   * were doing.
+   */
+  private washAshore(runtime: PlayerRuntime): void {
+    const position = runtime.entity.get(Position);
+    if (position === undefined || runtime.space !== OUTDOORS) return;
+    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) return;
+    const shore = landingBeside(position.x, position.z);
+    runtime.entity.set(Position, {
+      x: shore.x,
+      y: this.collision.terrain.heightAt(shore.x, shore.z),
+      z: shore.z,
+    });
+    runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
+  }
+
+  /** The lake freezing or thawing since this was last asked, or null if it did neither. */
+  drainLakeFreezeChange(): boolean | null {
+    const change = this.lakeFreezeChange;
+    this.lakeFreezeChange = null;
+    return change;
+  }
+
+  /**
    * Hand over every rowboat somebody has climbed into or out of since this
    * was last asked, as it is now - for broadcasting the built pieces again
    * and saving where it was left.
@@ -3573,7 +3693,8 @@ export class WorldSimulation {
    * A boat on the mainland shore stays put.
    */
   private breakUpStrandedBoats(runtime: PlayerRuntime): void {
-    if (runtime.playerKey === null) return;
+    // Over the ice, any island can be walked to.
+    if (runtime.playerKey === null || this.lakeFrozen) return;
     const owned: BuiltProp[] = [];
     for (const [id, owner] of this.ownedBuiltProps) {
       if (owner !== runtime.playerKey) continue;
@@ -3809,7 +3930,7 @@ export class WorldSimulation {
     if (runtime.swingCooldownTicks > 0) return;
     if (!this.isActiveItem(runtime, 'rod')) return;
 
-    const spot = castLanding(position, aimYaw, this.clearing.water, LAKE);
+    const spot = castLanding(position, aimYaw, this.clearing.water, this.openLake());
     if (spot === null) return;
 
     runtime.cast = startCast(
@@ -3954,6 +4075,7 @@ export class WorldSimulation {
       this.keepOutWater,
       this.buildFootprints(undefined, true),
       true,
+      this.lakeFrozen,
     );
     if (refusal !== null) return refuse('blocked');
 

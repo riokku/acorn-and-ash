@@ -617,6 +617,12 @@ describe('the hint at a rowboat', () => {
     expect(hint({ ...BASE_STATE, boat: 'taken' })).toBe('Somebody is already rowing this boat');
   });
 
+  it('says a boat is frozen in, in winter', () => {
+    expect(hint({ ...BASE_STATE, boat: 'frozen' })).toBe(
+      'The rowboat is frozen in the ice · it floats again in spring',
+    );
+  });
+
   it('cuts reeds first: a patch beside the boat is what E does', () => {
     const state: HudState = { ...BASE_STATE, boat: 'board', nearGatherSpot: 'reed' };
     expect(hint(state)).not.toBe('Press E to climb into the rowboat');
