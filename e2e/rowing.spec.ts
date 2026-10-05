@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import * as shared from '../packages/shared/src/index';
+import { skipDrawing } from './skip-drawing';
 
 /**
  * Climbing into a rowboat, rowing it and climbing out (decision 0093).
@@ -88,6 +89,9 @@ test('you can climb into a rowboat, row it, and climb out again', async ({ page 
     sim.queueInput(BOT, shared.createInput(++botSeq, 0, 0, 0, 0));
   };
 
+  // Nothing here looks at the picture, and drawing it in software left the page too slow to row
+  // seven metres in time (decision 0100). Screenshots need the real drawing.
+  if (!SHOTS) await skipDrawing(page);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://fonts.googleapis.com/**', (route) =>

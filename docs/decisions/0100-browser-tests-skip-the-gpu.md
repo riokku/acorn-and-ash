@@ -29,4 +29,4 @@ A few tests had also gone out of date in ways that had nothing to do with speed:
 
 - The browser suite can be trusted again: a red result now means something changed in how the game behaves.
 - Screenshots the tests save are blank unless `ACORN_E2E_DRAW=1` is set. The two tagged tests are what guard drawing, so a rendering problem in a scene they do not look at would be seen by eye, not by the suite.
-- New tests in `play.spec.ts` get this for free. Specs that use their own fake server (`woodland`, `fishing-collection` and the like) draw as before.
+- New tests in `play.spec.ts` get this for free. Specs that use their own fake server draw as before, except the reeds test (decision 0101) and the rowing test, which call `skipDrawing` themselves. The rowing test rows seven metres in thirty seconds, and in GitHub's slower browsers it fell just short (6.1 m and 6.9 m) in one run and needed its retry in the next. Run alone with the drawing it took 2.3 minutes here; with the drawing skipped, three runs together took 1.3 minutes. Its screenshots (`SHOT_DIR`) still draw.
