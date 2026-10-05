@@ -649,6 +649,23 @@ describe('the hint at a rowboat', () => {
   });
 });
 
+describe('the hint at the expedition board', () => {
+  const atBoard: HudState = { ...BASE_STATE, atExpeditionBoard: true };
+
+  it('says E reads the board when you stand at it', () => {
+    expect(hint(atBoard)).toBe('Press E to read the expedition board');
+  });
+
+  it('keeps to what is already waiting on E: a pickup, a campfire', () => {
+    expect(hint({ ...atBoard, nearbyItem: 'axe' })).not.toMatch(/expedition board/);
+    expect(hint({ ...atBoard, nearCampfire: 'unlit' })).toBe('Press E to light the campfire');
+  });
+
+  it('says nothing about the board away from it', () => {
+    expect(hint(BASE_STATE)).not.toMatch(/expedition board/);
+  });
+});
+
 describe('the paused curtain', () => {
   it('welcomes the player back by name', () => {
     expect(curtainMessage(BASE_STATE)).toBe('Welcome, Acorn. Click to play');

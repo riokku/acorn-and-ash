@@ -244,3 +244,54 @@ describe('right-click loot and dodge gestures', () => {
     expect(controls.takeRightClickPoint()).toBeNull();
   });
 });
+
+describe('taking a press of E for something done on this side', () => {
+  let controls: Controls;
+  let windowEvents: EventTarget;
+
+  beforeEach(() => {
+    windowEvents = new EventTarget();
+    vi.stubGlobal('window', windowEvents);
+    vi.stubGlobal('document', new EventTarget());
+    controls = new Controls(new EventTarget() as HTMLCanvasElement);
+  });
+
+  afterEach(() => {
+    controls.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  function key(type: 'keydown' | 'keyup'): void {
+    windowEvents.dispatchEvent(Object.assign(new Event(type), { code: 'KeyE' }));
+  }
+
+  it('sends interact to the server when nobody takes the press', () => {
+    key('keydown');
+    expect(controls.buttons() & PlayerButton.Interact).toBe(PlayerButton.Interact);
+  });
+
+  it('keeps a claimed press from being sent as interact, however long E is held', () => {
+    key('keydown');
+    expect(controls.claimInteractPress()).toBe(true);
+    expect(controls.buttons() & PlayerButton.Interact).toBe(0);
+    // The key repeating while held is neither a new claim nor a leaked interact.
+    key('keydown');
+    expect(controls.claimInteractPress()).toBe(false);
+    expect(controls.buttons() & PlayerButton.Interact).toBe(0);
+  });
+
+  it('is back to normal for the next press once E is let go', () => {
+    key('keydown');
+    controls.claimInteractPress();
+    key('keydown');
+    key('keyup');
+    expect(controls.buttons() & PlayerButton.Interact).toBe(0);
+    key('keydown');
+    expect(controls.buttons() & PlayerButton.Interact).toBe(PlayerButton.Interact);
+    expect(controls.claimInteractPress()).toBe(true);
+  });
+
+  it('has nothing to claim when E was not pressed', () => {
+    expect(controls.claimInteractPress()).toBe(false);
+  });
+});

@@ -35,6 +35,12 @@ export interface HudState {
   readonly fishRecords?: FishRecords;
   readonly reel?: ReelView | null;
   readonly nearExpeditionBoard?: boolean;
+  /**
+   * Standing at the board on the doorstep itself, free to act and clear of
+   * the doorway, so a press of E could read it (see `expeditionBoardClaimsInteract`).
+   * Unlike `nearExpeditionBoard`, never true inside your home.
+   */
+  readonly atExpeditionBoard?: boolean;
   readonly expeditionPending?: boolean;
   readonly connection: ConnectionState;
   readonly connectionDetail: string;
@@ -200,6 +206,7 @@ export type BoatHint = 'board' | 'taken' | 'frozen' | 'climbOut' | 'tooFar' | nu
 const INITIAL: HudState = {
   expedition: { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' },
   nearExpeditionBoard: false,
+  atExpeditionBoard: false,
   fishRecords: fishRecordsFromSaved(null),
   reel: null,
   expeditionPending: false,

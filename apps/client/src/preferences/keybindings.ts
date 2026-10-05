@@ -19,6 +19,7 @@ export const KEYBINDINGS = [
         'Pick up nearby loot, gather, inspect discoveries, dig up your stash, use a campfire, or eat equipped food',
       ],
       ['E near a chair / bed', 'Sit / lie down; move or press E to get up'],
+      ['E at your expedition board', 'Read the board; press E again to put it away'],
       ['Left mouse', 'Face your target; chop, fight, cast or hook a fish'],
       ['Left mouse when the rare-fish marker is green', 'Two gentle pulls land a rare fish'],
       ['Left mouse (hold, release)', 'Charge a heavy attack'],

@@ -57,6 +57,7 @@ import {
 import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
 import { vitalsThrob } from './vitals';
+import { expeditionBoardClaimsInteract } from './board-claim';
 import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { amountOf, gainedLabel } from './item-words';
@@ -171,7 +172,7 @@ export function Hud({
           className="expedition-board-open"
           onClick={() => onJournalTabChange?.('expeditions')}
         >
-          Read expedition board
+          Read expedition board{expeditionBoardClaimsInteract(state) ? ' · E' : ''}
         </button>
       ) : null}
       {state.craftMenuOpen ? (
@@ -886,6 +887,9 @@ export function hint(state: HudState): string {
     return state.home === null
       ? 'Press E to put out the campfire'
       : 'Cooking station · C for learned recipes';
+  // The board on the doorstep answers to E like anything else, once nothing
+  // above has already claimed the press.
+  if (expeditionBoardClaimsInteract(state)) return 'Press E to read the expedition board';
   // Doors - see decision 0055.
   if (state.door === 'enter') return 'Walk in, or press E, to go inside';
   if (state.door === 'visit') return 'Walk in, or press E, to visit';

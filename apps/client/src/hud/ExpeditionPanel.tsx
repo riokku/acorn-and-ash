@@ -45,7 +45,7 @@ export function ExpeditionPanel({
     <section className="hud-journal expedition-panel" aria-label="Expedition board">
       <div className="hud-journal-header">
         <h2 className="hud-journal-title">The next trail</h2>
-        <span className="hud-journal-closehint">C to close</span>
+        <span className="hud-journal-closehint">C or E to close</span>
       </div>
       <JournalTabs
         selected="expeditions"

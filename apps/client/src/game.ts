@@ -273,6 +273,11 @@ import type { BoatHint, FishingPhase, HudStore, RaidBanner } from './hud/store';
 import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
 import { CombatFeed, type ThreatMark } from './hud/combat-feed';
 import { raidBannerFor } from './hud/raid-banner';
+import {
+  expeditionBoardClaimsInteract,
+  expeditionBoardOpen,
+  type BoardClaimState,
+} from './hud/board-claim';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
@@ -304,6 +309,8 @@ const DOOR_FADE_GIVE_UP_MS = 800;
  * appears on screen at all rather than merely appearing late.
  */
 const NEWS_MS = 8000;
+/** How close to the expedition board's spot you can stand and still use it. */
+const EXPEDITION_BOARD_REACH = 2.5;
 /**
  * How far down the camera looks while a line is out. At the usual angle a
  * float five metres out sits right behind your own back; from a little higher
@@ -2777,6 +2784,7 @@ export class Game {
     this.handleInventoryToggleInput(controls);
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
+    this.handleExpeditionBoardInput(controls);
     if (!this.buildMenuOpen && !this.craftMenuOpen && this.placing === null) {
       this.handleHotbarInput(controls);
     }
@@ -3346,8 +3354,81 @@ export class Game {
     const player = this.localPlayer;
     if (home === undefined || player === null) return false;
     const spot = expeditionBoardSpot(home);
-    return Math.hypot(player.motion.position.x - spot.x, player.motion.position.z - spot.z) <= 2.5;
+    return (
+      Math.hypot(player.motion.position.x - spot.x, player.motion.position.z - spot.z) <=
+      EXPEDITION_BOARD_REACH
+    );
   }
+  /**
+   * Standing at the board on the doorstep, free to read it with a press of E:
+   * not inside, not mid-swing or mid-cast, and not in the doorway, which keeps
+   * the press for the door. Reaching it from inside your home stays with the
+   * button on screen, since there is no board in there to stand at.
+   */
+  private atOwnExpeditionBoard(): boolean {
+    const player = this.localPlayer;
+    if (this.space !== OUTDOORS || player === null) return false;
+    if (!isFreeToInteract(player.action) || this.fishingPhase !== null) return false;
+    const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
+    if (home === undefined) return false;
+    const { x, z } = player.motion.position;
+    const spot = expeditionBoardSpot(home);
+    if (Math.hypot(x - spot.x, z - spot.z) > EXPEDITION_BOARD_REACH) return false;
+    return !isEnteringDoorway(home, x, z, 0, 0, true);
+  }
+
+  /**
+   * E reads the expedition board when you are standing at it, and puts it
+   * away again the next time. The press is taken here so it is not also sent
+   * on to the server as "interact", where it would go on to eat or sit.
+   */
+  private handleExpeditionBoardInput(controls: Controls): void {
+    if (!this.playing) return;
+    if (expeditionBoardOpen({ craftMenuOpen: this.craftMenuOpen, journalTab: this.journalTab })) {
+      if (controls.claimInteractPress()) {
+        this.craftMenuOpen = false;
+        // Not left for the next HUD update, so a quick second press opens it again.
+        this.options.hud.publish({ craftMenuOpen: false });
+      }
+      return;
+    }
+    if (expeditionBoardClaimsInteract(this.boardClaimState()) && controls.claimInteractPress()) {
+      this.setJournalTab('expeditions');
+    }
+  }
+
+  /** Who E belongs to right now, read fresh from the game rather than the HUD's slower copy. */
+  private boardClaimState(): BoardClaimState {
+    return {
+      atExpeditionBoard: this.atOwnExpeditionBoard(),
+      craftMenuOpen: this.craftMenuOpen,
+      buildMenuOpen: this.buildMenuOpen,
+      inventoryOpen: this.inventoryOpen,
+      mapOpen: this.mapOpen,
+      placing: this.placing,
+      nearbyItem: this.nearbyItem,
+      nearbyPile: this.nearbyPile,
+      nearGatherSpot: this.nearGatherSpot,
+      nearBuriedCache: this.nearBuriedCache,
+      nearbyDiscovery: this.nearbyDiscoveryName(),
+      nearCampfire: this.nearCampfire,
+      boat: this.space === OUTDOORS ? this.boatHint : null,
+    };
+  }
+
+  /** The name of an unclaimed find within reach, outdoors, or null. */
+  private nearbyDiscoveryName(): string | null {
+    const player = this.localPlayer;
+    if (this.space !== OUTDOORS || player === null) return null;
+    return (
+      this.discoverySites.find(
+        (site) =>
+          !discoveryKnown(this.discoveriesClaimed, site.id) &&
+          Math.hypot(player.motion.position.x - site.x, player.motion.position.z - site.z) < 2.7,
+      )?.name ?? null
+    );
+  }
+
   setJournalTab(tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing'): void {
     this.journalTab = tab;
     this.craftMenuOpen = true;
@@ -4605,6 +4686,7 @@ export class Game {
       expedition: this.expedition,
       expeditionPending: performance.now() < this.expeditionPendingUntil,
       nearExpeditionBoard: this.nearOwnExpeditionBoard(),
+      atExpeditionBoard: this.atOwnExpeditionBoard(),
       trackHint:
         this.space === OUTDOORS && player !== null
           ? (() => {
@@ -4618,17 +4700,7 @@ export class Game {
               return track === undefined ? null : woodlandTrackHint(track.kind);
             })()
           : null,
-      nearbyDiscovery:
-        this.space === OUTDOORS && this.localPlayer !== null
-          ? (this.discoverySites.find(
-              (site) =>
-                !discoveryKnown(this.discoveriesClaimed, site.id) &&
-                Math.hypot(
-                  this.localPlayer!.motion.position.x - site.x,
-                  this.localPlayer!.motion.position.z - site.z,
-                ) < 2.7,
-            )?.name ?? null)
-          : null,
+      nearbyDiscovery: this.nearbyDiscoveryName(),
       buildAreaRadius: (() => {
         const kind =
           this.placing !== null && isHomeKind(this.placing.kind)
