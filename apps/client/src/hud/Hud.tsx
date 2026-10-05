@@ -2,13 +2,25 @@ import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acor
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
 import type { ExpeditionRequest, SeasonId } from '@acorn/shared';
-import { DECORATION_KINDS, isIndoorOnlyKind } from '@acorn/shared';
-import { MEAL_BENEFITS, TICK_HZ, isMealItem } from '@acorn/shared';
+import { DECORATION_KINDS } from '@acorn/shared';
+import { MEAL_BENEFITS, TICK_HZ } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { GardenJournal } from './GardenJournal';
 import type { GardenRequest } from '@acorn/shared';
-import { nextHome, knowsHome, isHomeKind, toolKind } from '@acorn/shared';
+import { isHomeKind, toolKind } from '@acorn/shared';
 import { PickupNotice } from './PickupNotice';
+import {
+  CRAFT_GROUPS,
+  CRAFT_HOTKEY_COUNT,
+  choosingPiece,
+  craftMenuEntries,
+  craftTabs,
+  entriesOnTab,
+  shownTab,
+  type CraftAction,
+  type CraftEntry,
+  type CraftTabId,
+} from './craft-menu';
 import { LoadingScreen } from './LoadingScreen';
 import { ChestPanel } from './ChestPanel';
 import type { ChestRequest } from '@acorn/shared';
@@ -16,27 +28,20 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import {
   BUILDABLE_KINDS,
-  BUILDABLE_KIND_ORDER,
   HEALTH_LOW_THRESHOLD,
   HEALTH_MAX,
   HUNGER_LOW_THRESHOLD,
   HUNGER_MAX,
   ITEM_KINDS,
-  RECIPE_ITEMS,
-  canAfford,
-  combineHomeSupplies,
-  canCraft,
   canCook,
   cookedItemFor,
   hasItem,
   inventoryFromEntries,
   isDiscardable,
   isFood,
-  recipeFor,
   roomFor,
   type BuildableKindId,
   type ItemId,
-  type Recipe,
 } from '@acorn/shared';
 
 import type { HudStore, HudState, RaidBanner } from './store';
@@ -69,7 +74,8 @@ interface HudProps {
   readonly onJournalTabChange?: (
     tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing',
   ) => void;
-  readonly onPickRecipe?: (index: number) => void;
+  readonly onPickCraft?: (action: CraftAction) => void;
+  readonly onCraftTabChange?: (tab: CraftTabId) => void;
   readonly store: HudStore;
   readonly onPlay: () => void;
   readonly onToggleInventory: () => void;
@@ -111,7 +117,8 @@ export function Hud({
   onChestTransfer,
   onCloseChest,
   onJournalTabChange,
-  onPickRecipe,
+  onPickCraft,
+  onCraftTabChange,
   onGardenUse,
   onMoveDecoration,
   onReclaimDecoration,
@@ -176,11 +183,10 @@ export function Hud({
         ) : state.journalTab === 'discoveries' ? (
           <DiscoveryJournal state={state} onChange={onJournalTabChange} />
         ) : (
-          <JournalPanel
-            title="Field journal · Crafting"
-            entries={craftEntries(state)}
-            closeHint="Choose a recipe, or C to close"
-            onPick={onPickRecipe}
+          <CraftPanel
+            state={state}
+            onPick={onPickCraft}
+            onTabChange={onCraftTabChange}
             navigation={
               <JournalTabs
                 selected="craft"
@@ -194,7 +200,7 @@ export function Hud({
       {state.ready &&
       state.playing &&
       state.home === null &&
-      (state.buildMenuOpen || state.placing !== null) &&
+      (choosingPiece(state) || state.placing !== null) &&
       state.placing?.name !== BUILDABLE_KINDS.rowboat.displayName ? (
         <p className="build-area-note" role="status">
           {state.buildAreaRadius === null
@@ -279,19 +285,6 @@ export function Hud({
           {state.decorNote ? <p role="status">{state.decorNote}</p> : null}
         </section>
       ) : null}
-      {state.buildMenuOpen && state.home === null ? (
-        <JournalPanel
-          title="Things I can build"
-          groups={['Home', 'Camp & lighting', 'Garden & boundaries', 'Lake', 'Trophies']}
-          entries={buildEntries(state)}
-          closeHint="Pick one below, or B to close"
-          onPick={(index) => {
-            const kind = BUILDABLE_KIND_ORDER[index - 1];
-            if (kind !== undefined) onPickBuildable(kind);
-          }}
-        />
-      ) : null}
-
       {state.ready && state.playing && !state.mapOpen && state.home?.yours === true ? (
         <DoorLock locked={state.home.locked} onSetDoorLock={onSetDoorLock} />
       ) : null}
@@ -634,206 +627,133 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
   return indoors ? 'Finishing touches' : 'Trophies';
 }
 
-/** One row of the craft or build journal panel. */
-interface RecipeEntry {
-  readonly group?: string;
-  readonly index: number;
-  readonly icon: React.ReactNode;
-  readonly displayName: string;
-  readonly costs: Recipe['costs'];
-  readonly ready: boolean;
-  readonly locked?: boolean;
-  readonly supplyNote?: string;
-  readonly benefitNote?: string;
-}
-
-/** Every recipe this player could pick, in menu order. */
-function craftEntries(state: HudState): RecipeEntry[] {
-  const inventory = inventoryFromEntries(state.carrying);
-  return RECIPE_ITEMS.flatMap((item, index) => {
-    const recipe = recipeFor(item);
-    if (recipe === null) return [];
-    const kind = ITEM_KINDS[item];
-    return [
-      {
-        index: index + 1,
-        icon: (
-          <ItemIcon
-            item={item}
-            color={colorOf(kind.placeholderColor)}
-            className="hud-journal-stamp-icon"
-          />
-        ),
-        displayName: `${kind.displayName}${
-          recipe.discoveryId !== undefined &&
-          !(state.discoveriesClaimed & (1 << recipe.discoveryId))
-            ? ' · discover its recipe'
-            : recipe.station === 'campfire' && state.nearCampfire !== 'lit'
-              ? ' · lit campfire needed'
-              : recipe.station === 'workbench' && !state.nearWorkbench
-                ? ' · cabin workbench needed'
-                : ''
-        }`,
-        costs: recipe.costs,
-        benefitNote: isMealItem(item)
-          ? `${MEAL_BENEFITS[item]} · 10 active minutes · replaces your previous meal`
-          : undefined,
-        ready:
-          canCraft(inventory, item, state.discoveriesClaimed) &&
-          (recipe.station !== 'campfire' || state.nearCampfire === 'lit') &&
-          (recipe.station !== 'workbench' || state.nearWorkbench),
-      },
-    ];
-  });
-}
-
-/** Every buildable kind this player could pick, in menu order. */
-function buildEntries(state: HudState): RecipeEntry[] {
-  const inventory = inventoryFromEntries(state.carrying);
-  return BUILDABLE_KIND_ORDER.flatMap((original, index) => {
-    if (isIndoorOnlyKind(original) || (isHomeKind(original) && original !== 'cabin')) return [];
-    const target = nextHome(state.homeKind);
-    if (original === 'cabin' && target === null) return [];
-    const kind = original === 'cabin' ? target! : original;
-    const buildable = BUILDABLE_KINDS[kind];
-    return {
-      group: buildGroup(kind),
-      index: index + 1,
-      icon: (
-        <BuildableIcon
-          kind={kind}
-          color={colorOf(buildable.placeholderColor)}
-          className="hud-journal-stamp-icon"
-        />
-      ),
-      displayName: `${state.homeKind !== null && isHomeKind(kind) ? 'Upgrade to ' : ''}${buildable.displayName}${isHomeKind(kind) && !knowsHome(state.homeSkills, kind) ? ' · blueprint needed' : ''}`,
-      costs: buildable.costs,
-      locked:
-        (kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1)) ||
-        !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords)),
-      supplyNote:
-        isHomeKind(kind) && state.homeKind !== null
-          ? 'Uses backpack first, then your private home chest'
-          : kind === 'trailPennant' && !((state.expedition?.cosmetics ?? 0) & 1)
-            ? 'Complete three outings to learn this recipe'
-            : !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords))
-              ? 'Earn this recipe in your fishing collection'
-              : undefined,
-      ready:
-        canAfford(
-          isHomeKind(kind) && state.homeKind !== null
-            ? combineHomeSupplies(inventory, state.homeStoredSupplies)
-            : inventory,
-          buildable,
-        ) &&
-        (!isHomeKind(kind) || knowsHome(state.homeSkills, kind)) &&
-        (kind !== 'trailPennant' || !!((state.expedition?.cosmetics ?? 0) & 1)) &&
-        fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords)),
-    };
-  });
-}
-
 /**
- * The craft (C) and build (B) menus, both drawn as a page from the same
- * journal: a stamped icon, a name, its ingredients (each with its own small
- * icon), and a Ready/Need more mark - replacing the plain-text list that
- * used to live inside the debug stats panel.
+ * The Craft menu (C, or B outside): one page of the field journal listing
+ * everything you can make, whether it goes into your pack or onto the ground
+ * (see decision 0096). Each entry is a stamped icon, a name, its ingredients
+ * (each with its own small icon) and a Ready/Need more mark.
+ *
+ * The title, the page tabs and the category pills stay put while the list
+ * scrolls, so a small screen never hides the way to another category.
  */
-function JournalPanel({
-  title,
-  entries,
-  closeHint,
+function CraftPanel({
+  state,
   onPick,
+  onTabChange,
   navigation,
-  groups,
 }: {
-  groups?: readonly string[];
-  navigation?: React.ReactNode;
-  title: string;
-  entries: readonly RecipeEntry[];
-  closeHint: string;
-  /** Clicking an entry does the same as pressing its number. Absent, entries are not clickable. */
-  onPick?: (index: number) => void;
+  state: HudState;
+  /** Clicking an entry does the same as pressing its number. */
+  onPick?: (action: CraftAction) => void;
+  onTabChange?: (tab: CraftTabId) => void;
+  navigation: React.ReactNode;
 }): React.JSX.Element {
-  const renderEntry = (entry: RecipeEntry): React.JSX.Element => (
-    <div
-      className={
-        onPick === undefined ? 'hud-journal-entry' : 'hud-journal-entry hud-journal-entry-pickable'
-      }
-      key={entry.index}
-      aria-disabled={entry.locked || undefined}
-      onClick={onPick === undefined || entry.locked ? undefined : () => onPick(entry.index)}
-      role={onPick === undefined ? undefined : 'button'}
-      tabIndex={onPick === undefined ? undefined : 0}
-      onKeyDown={
-        onPick === undefined
-          ? undefined
-          : (event) => {
-              if (entry.locked) return;
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                event.stopPropagation();
-                onPick(entry.index);
-              }
-            }
-      }
-    >
-      <div className="hud-journal-stamp">{entry.icon}</div>
-      <div className="hud-journal-entry-main">
-        <div className="hud-journal-entry-name">
-          {groups === undefined || entry.index <= 6 ? `${entry.index} · ` : ''}
-          {entry.displayName}
-        </div>
-        {entry.benefitNote && <div className="hud-journal-supply-note">{entry.benefitNote}</div>}
-        {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
-        <div className="hud-journal-ingredients">
-          {entry.costs.map((cost) => {
-            const costKind = ITEM_KINDS[cost.item];
-            const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
-            return (
-              <span className="hud-journal-ingredient" key={cost.item}>
-                <ItemIcon
-                  item={cost.item}
-                  color="#7a6a4d"
-                  className="hud-journal-ingredient-icon"
-                />
-                {cost.amount} {name.toLowerCase()}
-              </span>
-            );
-          })}
-        </div>
-      </div>
-      <span
-        className={
-          entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
-        }
+  const entries = craftMenuEntries(state);
+  const tab = shownTab(entries, state.craftTab);
+  const shown = entriesOnTab(entries, tab);
+  const renderEntry = (entry: CraftEntry, index: number): React.JSX.Element => {
+    const pick = (): void => {
+      if (!entry.locked) onPick?.(entry.action);
+    };
+    const color =
+      'item' in entry.icon
+        ? colorOf(ITEM_KINDS[entry.icon.item].placeholderColor)
+        : colorOf(BUILDABLE_KINDS[entry.icon.buildable].placeholderColor);
+    return (
+      <div
+        className="hud-journal-entry hud-journal-entry-pickable"
+        key={`${entry.action.kind}-${'item' in entry.action ? entry.action.item : entry.action.buildable}`}
+        aria-disabled={entry.locked || undefined}
+        onClick={pick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            pick();
+          }
+        }}
       >
-        {entry.ready ? 'Ready' : 'Need more'}
-      </span>
-    </div>
-  );
+        <div className="hud-journal-stamp">
+          {'item' in entry.icon ? (
+            <ItemIcon item={entry.icon.item} color={color} className="hud-journal-stamp-icon" />
+          ) : (
+            <BuildableIcon
+              kind={entry.icon.buildable}
+              color={color}
+              className="hud-journal-stamp-icon"
+            />
+          )}
+        </div>
+        <div className="hud-journal-entry-main">
+          <div className="hud-journal-entry-name">
+            {index < CRAFT_HOTKEY_COUNT ? (
+              <kbd className="craft-key" aria-label={`Key ${index + 1}`}>
+                {index + 1}
+              </kbd>
+            ) : null}
+            {entry.displayName}
+          </div>
+          {entry.benefitNote && <div className="hud-journal-supply-note">{entry.benefitNote}</div>}
+          {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
+          <div className="hud-journal-ingredients">
+            {entry.costs.map((cost) => {
+              const costKind = ITEM_KINDS[cost.item];
+              const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
+              return (
+                <span className="hud-journal-ingredient" key={cost.item}>
+                  <ItemIcon
+                    item={cost.item}
+                    color="#7a6a4d"
+                    className="hud-journal-ingredient-icon"
+                  />
+                  {cost.amount} {name.toLowerCase()}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+        <span
+          className={
+            entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
+          }
+        >
+          {entry.ready ? 'Ready' : 'Need more'}
+        </span>
+      </div>
+    );
+  };
   return (
-    <div className={groups === undefined ? 'hud-journal' : 'hud-journal build-panel'}>
+    <div className="hud-journal craft-panel">
       <div className="hud-journal-header">
-        <span className="hud-journal-title">{title}</span>
-        <span className="hud-journal-closehint">{closeHint}</span>
+        <span className="hud-journal-title">Field journal · Crafting</span>
+        <span className="hud-journal-closehint">Keys 1-9 pick · C to close</span>
       </div>
       {navigation}
-      {groups === undefined ? (
-        entries.map(renderEntry)
-      ) : (
-        <div className="build-groups">
-          {groups.map((group) => {
-            const items = entries.filter((entry) => entry.group === group);
-            return items.length === 0 ? null : (
-              <section className="build-group" key={group} aria-label={group}>
-                <h2>{group}</h2>
-                {items.map(renderEntry)}
-              </section>
-            );
-          })}
-        </div>
-      )}
+      <nav className="craft-tabs" aria-label="Craft categories">
+        {craftTabs(entries).map((id) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={tab === id}
+            onClick={() => onTabChange?.(id)}
+          >
+            {id === 'all' ? 'All' : (CRAFT_GROUPS.find((group) => group.id === id)?.tab ?? id)}
+          </button>
+        ))}
+      </nav>
+      <div className="craft-list">
+        {CRAFT_GROUPS.map((group) => {
+          const items = shown.filter((entry) => entry.group === group.id);
+          return items.length === 0 ? null : (
+            <section className="craft-group" key={group.id} aria-label={group.heading}>
+              <h2>{group.heading}</h2>
+              {items.map((entry) => renderEntry(entry, shown.indexOf(entry)))}
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -978,7 +898,8 @@ function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): s
 
 /** What E would do beside a patch: gather from it, or nothing until a slot frees up. */
 function gatherHint(state: HudState, item: ItemId): string {
-  const plural = ITEM_KINDS[item].pluralName.toLowerCase();
+  // What grows in the shallows and can be cut is called mature reeds, to tell it from the scenery.
+  const plural = item === 'reed' ? 'mature reeds' : ITEM_KINDS[item].pluralName.toLowerCase();
   if (roomFor(inventoryFromEntries(state.carrying), item) > 0)
     return `Right-click or press E to gather ${plural}${item === 'mushroom' && state.forestWeather?.mushroomsAbundant ? ' · rain-fed clusters yield up to two' : ''}`;
   return `Your pack is full · no room for more ${plural}`;
@@ -1045,7 +966,7 @@ function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
   return `Left click to fight off the ${name} · ${hits}`;
 }
 
-/** The journal panel itself now shows every choice by name, so this stays short. */
+/** Decorating a room: the panel shows every choice by name, so this stays short. */
 function buildMenuHint(): string {
   return 'Pick one below, or B to close';
 }

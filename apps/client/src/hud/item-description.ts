@@ -28,7 +28,7 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   log: 'Build a home, a campfire, fences, and garden paths.',
   stick: 'Craft tools and torches, or build a garden lantern.',
   flower: 'Plant a flower bed to brighten your home.',
-  reed: 'Cut from the shallows at the lake. Twist three together into a length of rope.',
+  reed: 'Cut from the tall golden mature reeds at the lake, which return somewhere else along the shore. Twist three together into a length of rope.',
   rope: 'Twisted from lake reeds. Strong enough to lash a rowboat together.',
   bone: 'Left behind by skeletons in the wilderness.',
 };

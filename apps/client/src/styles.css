@@ -387,6 +387,12 @@ body {
   font-size: 15px;
 }
 
+.hud-journal-supply-note {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-warm-dim);
+}
+
 .hud-journal-ingredients {
   display: flex;
   gap: 10px;
@@ -2620,17 +2626,96 @@ body {
   }
 }
 
-/* Build categories share room without hiding costs or changing number shortcuts. */
-.build-panel {
+/*
+ * The Craft menu (decision 0096): the title, page tabs and category pills stay
+ * put and only the list scrolls, so a short screen never hides a recipe or the
+ * way to another category.
+ */
+.craft-panel {
   z-index: 5;
-  width: min(920px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
   max-height: calc(100dvh - 180px);
   bottom: 130px;
-  padding: 24px;
+  padding: 18px 20px;
+  overflow: hidden;
 }
-.build-panel .hud-journal-header {
+.craft-panel .hud-journal-header {
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  flex: none;
+}
+.craft-panel .hud-journal-tabs {
+  flex: none;
+  padding-bottom: 0.5rem;
+}
+.craft-tabs {
+  pointer-events: auto;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 10px;
+}
+.craft-tabs button {
+  border: 1px solid rgba(58, 42, 20, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-warm);
+  padding: 2px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.craft-tabs button[aria-pressed='true'] {
+  background: var(--ink-warm);
+  color: var(--parchment);
+  border-color: var(--ink-warm);
+}
+.craft-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  /* A thin fade at the foot tells you more is below without a scrollbar. */
+  scrollbar-width: thin;
+}
+.craft-group h2 {
+  margin: 10px 0 2px;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 15px;
+  color: var(--ink-warm-dim);
+}
+.craft-group:first-child h2 {
+  margin-top: 0;
+}
+.craft-panel .hud-journal-entry {
+  gap: 10px;
+  padding: 10px 4px;
+}
+.craft-panel .hud-journal-entry:focus-visible {
+  outline: 2px solid var(--accent-warm);
+  outline-offset: 2px;
+  background: rgba(58, 42, 20, 0.08);
+}
+.craft-panel .hud-journal-entry[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.craft-panel .hud-journal-entry-name {
+  overflow-wrap: anywhere;
+}
+.craft-key {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: 8px;
+  padding: 0 4px;
+  border: 1px solid rgba(58, 42, 20, 0.35);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  color: var(--ink-warm-dim);
 }
 .build-groups {
   display: grid;
@@ -2674,10 +2759,10 @@ body {
   .build-groups {
     grid-template-columns: 1fr;
   }
-  .build-panel {
-    padding: 16px;
+  .craft-panel {
+    padding: 14px;
   }
-  .build-panel .hud-journal-closehint {
+  .craft-panel .hud-journal-closehint {
     white-space: normal;
   }
 }

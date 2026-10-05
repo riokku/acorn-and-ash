@@ -6,11 +6,12 @@ import { plainMaterial } from '../art/materials';
 import { waterPlantMaterials } from './water-plants';
 
 /**
- * The reeds that can be cut at the lake, and what they are twisted into (see
- * decision 0091). Built from the same plain shapes and shared colours as the
- * scenery reeds around them, so a patch you can cut reads as part of the
- * shore and not a sign; the ground items add and remove its tufts as it is
- * cut and as it grows back.
+ * The mature reeds at the lake that can be cut, and what they are twisted into
+ * (see decisions 0091 and 0099). They stand out from the scenery reeds all
+ * round them: taller, golden instead of green, with fat brown cattails, so
+ * the ones worth walking to can be picked out from across the water. They are
+ * still built from the same plain shapes; the ground items add and remove
+ * their tufts as they are cut and as they come back.
  */
 
 /** What each of these models hands back: the parts to show one at a time, and how to free what it owns. */
@@ -33,26 +34,34 @@ const TUFT_PLACES: readonly { x: number; z: number; tall: number; turn: number }
   { x: 0.36, z: -0.12, tall: 0.78, turn: 0.9 },
 ];
 
-/** How tall a full tuft stands above the water, in metres. */
-const TUFT_HEIGHT = 1.15;
+/** How tall a full tuft stands above the water, in metres - well above the scenery reeds around it. */
+const TUFT_HEIGHT = 1.9;
+/** The gold of a mature reed's blades, and the paler gold of the odd one among them. */
+const MATURE_BLADE_COLOUR = 0xd2a93c;
+const MATURE_BLADE_PALE_COLOUR = 0xeccb6e;
+/** The deep brown of its cattail. */
+const MATURE_CATTAIL_COLOUR = 0x5a3a22;
 
 /**
- * A patch of cuttable reeds standing in the shallows: a tuft of flat blades
- * for every reed left in it, with a brown cattail on the tallest.
+ * A patch of cuttable mature reeds standing in the shallows: a tuft of flat
+ * golden blades for every reed left in it, with a fat brown cattail on each.
  *
  * The group sits on the lake bed, which is `REED_PATCH_DEPTH` under the water,
  * so every blade starts that much taller than it shows.
  */
 export function createReedPatchModel(): PartsModel {
-  const materials = waterPlantMaterials();
+  // Shared with everything else of the same colour (see materials.ts), so never disposed here.
+  const gold = plainMaterial(MATURE_BLADE_COLOUR, { roughness: 0.85, flatShading: true });
+  const paleGold = plainMaterial(MATURE_BLADE_PALE_COLOUR, { roughness: 0.85, flatShading: true });
+  const brown = plainMaterial(MATURE_CATTAIL_COLOUR, { roughness: 1, flatShading: true });
   const bladeHeight = TUFT_HEIGHT + REED_PATCH_DEPTH;
-  const bladeGeometry = new THREE.ConeGeometry(0.04, bladeHeight, 4);
+  const bladeGeometry = new THREE.ConeGeometry(0.05, bladeHeight, 4);
   bladeGeometry.translate(0, bladeHeight / 2, 0);
-  const stalkHeight = bladeHeight + 0.2;
-  const stalkGeometry = new THREE.CylinderGeometry(0.009, 0.013, stalkHeight, 4);
+  const stalkHeight = bladeHeight + 0.25;
+  const stalkGeometry = new THREE.CylinderGeometry(0.011, 0.016, stalkHeight, 4);
   stalkGeometry.translate(0, stalkHeight / 2, 0);
-  const headGeometry = new THREE.CapsuleGeometry(0.03, 0.15, 2, 6);
-  headGeometry.translate(0, stalkHeight - 0.12, 0);
+  const headGeometry = new THREE.CapsuleGeometry(0.045, 0.24, 2, 6);
+  headGeometry.translate(0, stalkHeight - 0.16, 0);
 
   const group = new THREE.Group();
   const tufts: THREE.Group[] = [];
@@ -62,7 +71,7 @@ export function createReedPatchModel(): PartsModel {
     tuft.rotation.y = place.turn;
     tuft.scale.y = place.tall;
     for (let blade = 0; blade < 3; blade++) {
-      const mesh = new THREE.Mesh(bladeGeometry, blade === 1 ? materials.reedPale : materials.reed);
+      const mesh = new THREE.Mesh(bladeGeometry, blade === 1 ? paleGold : gold);
       const around = (blade / 3) * Math.PI * 2 + place.turn;
       mesh.position.set(Math.cos(around) * 0.05, 0, Math.sin(around) * 0.05);
       mesh.rotation.set(Math.sin(around) * 0.16, around, -Math.cos(around) * 0.16);
@@ -70,9 +79,9 @@ export function createReedPatchModel(): PartsModel {
       mesh.castShadow = true;
       tuft.add(mesh);
     }
-    const stalk = new THREE.Mesh(stalkGeometry, materials.reed);
+    const stalk = new THREE.Mesh(stalkGeometry, gold);
     stalk.position.set(0.03, 0, 0);
-    const head = new THREE.Mesh(headGeometry, materials.cattail);
+    const head = new THREE.Mesh(headGeometry, brown);
     head.position.set(0.03, 0, 0);
     head.castShadow = true;
     tuft.add(stalk, head);

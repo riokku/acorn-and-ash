@@ -48,6 +48,9 @@ export function treeInReach(
 
     const dx = prop.x - position.x;
     const dz = prop.z - position.z;
+    // Most trees in a forest are nowhere near: skip them before any square root.
+    const farthest = CHOP_REACH + kind.colliderRadius * prop.scale;
+    if (Math.abs(dx) > farthest || Math.abs(dz) > farthest) continue;
     const distance = Math.hypot(dx, dz);
     // Standing inside the trunk should not count as reaching it from outside.
     if (distance < 1e-6) continue;

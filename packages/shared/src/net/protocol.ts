@@ -129,10 +129,10 @@ export const MAX_SNAPSHOT_ENTITIES = 255;
 export const MAX_INVENTORY_ENTRIES = 255;
 export const MAX_TAKEN_PICKUPS = 255;
 /**
- * The clearing has about a hundred and forty trees, so a world where every one
- * has been touched still fits. A bigger world will need a two-byte count.
+ * The clearing and the forest together have well over a thousand trees, so the
+ * count travels in two bytes.
  */
-export const MAX_CHANGED_TREES = 255;
+export const MAX_CHANGED_TREES = 0xffff;
 /** Handful of these for now; a one-byte count leaves plenty of room to grow. */
 export const MAX_BUILT_PROPS = 255;
 /** Only ever one per knockout, so this ceiling is not expected to matter in practice. */
@@ -167,6 +167,8 @@ const BYTES_PER_TAKEN_PICKUP = 2;
 const BYTES_PER_TREE_STATE = 16;
 const TREE_FELLED_FLAG = 1;
 const TREE_FALL_FLAG = 2;
+const TREE_STATES_HEADER_BYTES = 4;
+const TREE_WHOLE_LIST_FLAG = 1;
 /** id(2) + kind(1) + x(2) + z(2) + yaw(2) + flags(1) */
 const BYTES_PER_BUILT_PROP = 10;
 /** Only a campfire ever sets this, but the bit costs nothing on anything else. */
@@ -753,14 +755,19 @@ export function encodePickupsTaken(pickupIds: readonly number[]): ArrayBuffer {
   return buffer;
 }
 
-export function encodeTreeStates(trees: readonly TreeState[]): ArrayBuffer {
+/**
+ * type(1) + whole-list flag(1) + count(2), then the trees. `whole` is the
+ * list sent on arrival; otherwise these are only the trees that just changed.
+ */
+export function encodeTreeStates(trees: readonly TreeState[], whole = true): ArrayBuffer {
   const count = Math.min(trees.length, MAX_CHANGED_TREES);
-  const buffer = new ArrayBuffer(2 + count * BYTES_PER_TREE_STATE);
+  const buffer = new ArrayBuffer(TREE_STATES_HEADER_BYTES + count * BYTES_PER_TREE_STATE);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.TreeStates);
-  view.setUint8(1, count);
+  view.setUint8(1, whole ? TREE_WHOLE_LIST_FLAG : 0);
+  view.setUint16(2, count, true);
 
-  let offset = 2;
+  let offset = TREE_STATES_HEADER_BYTES;
   for (let i = 0; i < count; i++) {
     const tree = trees[i];
     if (tree === undefined) break;
@@ -1778,13 +1785,22 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     }
     case ServerMessageType.TreeStates: {
       if (data.byteLength < 2) return null;
-      const count = view.getUint8(1);
-      // Old servers only sent the four-byte standing/stump state.
+      // Older servers sent a one-byte count straight after the type, and every
+      // one was the whole list. The lengths of the two layouts can never match,
+      // so the size says which one this is.
+      const current =
+        data.byteLength >= TREE_STATES_HEADER_BYTES &&
+        data.byteLength ===
+          TREE_STATES_HEADER_BYTES + view.getUint16(2, true) * BYTES_PER_TREE_STATE;
+      const whole = current ? (view.getUint8(1) & TREE_WHOLE_LIST_FLAG) !== 0 : true;
+      const count = current ? view.getUint16(2, true) : view.getUint8(1);
+      const start = current ? TREE_STATES_HEADER_BYTES : 2;
+      // Servers before the fall timings only sent the four-byte standing/stump state.
       const stride =
-        data.byteLength === 2 + count * BYTES_PER_TREE_STATE ? BYTES_PER_TREE_STATE : 4;
-      if (data.byteLength !== 2 + count * stride) return null;
+        current || data.byteLength === 2 + count * BYTES_PER_TREE_STATE ? BYTES_PER_TREE_STATE : 4;
+      if (data.byteLength !== start + count * stride) return null;
       const trees: TreeState[] = [];
-      let offset = 2;
+      let offset = start;
       for (let i = 0; i < count; i++) {
         const hasFall =
           stride === BYTES_PER_TREE_STATE && (view.getUint8(offset + 3) & TREE_FALL_FLAG) !== 0;
@@ -1807,7 +1823,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         });
         offset += stride;
       }
-      return { type: 'treeStates', trees };
+      return { type: 'treeStates', whole, trees };
     }
     case ServerMessageType.BuiltProps: {
       if (data.byteLength < 2) return null;

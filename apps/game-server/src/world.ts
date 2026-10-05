@@ -668,20 +668,28 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.drainChopEvents();
     if (events.length === 0) return;
 
-    let anythingFell = false;
     for (const event of events) {
       this.broadcast(encodeTreeHit(event.treeId, event.swingsLeft, event.netId));
-      if (event.swingsLeft === 0) anythingFell = true;
     }
 
-    if (anythingFell) {
-      // Sending the whole list is cheap while a clearing has a hundred and
-      // forty trees; a bigger world would want to send only what changed.
-      this.broadcast(encodeTreeStates(simulation.changedTrees()));
-    }
+    // Only the trees this swing touched: a forest has over a thousand, and
+    // neither everybody's connection nor the database should be sent them all
+    // for the sake of one chop. A tree that was only hit has nothing new to
+    // look like, so only a felled one is announced.
+    this.announceTreeChanges(simulation);
+  }
 
-    // Only the trees that are down or part cut, which is a short list.
-    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
+  /**
+   * Tell everybody how the trees that just changed now stand, and write them
+   * to storage straight away rather than at the next save: nobody should have
+   * to chop the same tree twice.
+   */
+  private announceTreeChanges(simulation: WorldSimulation): void {
+    const changed = simulation.drainTreeChanges();
+    if (changed.length === 0) return;
+    const looks = simulation.changedTrees(changed);
+    if (looks.length > 0) this.broadcast(encodeTreeStates(looks, false));
+    for (const tree of simulation.persistableTrees(changed)) this.writeTree(tree);
   }
 
   /**
@@ -1081,8 +1089,7 @@ export class World extends DurableObject<WorldEnv> {
     const grown = simulation.regrowTrees(nowMs);
     if (grown.length === 0) return;
 
-    this.broadcast(encodeTreeStates(simulation.changedTrees()));
-    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
+    this.announceTreeChanges(simulation);
   }
 
   /**
@@ -1394,6 +1401,7 @@ export class World extends DurableObject<WorldEnv> {
       seed: this.seed(),
       regrowMinSeconds: this.regrowMinSeconds(),
       patchRegrowMinSeconds: this.patchRegrowMinSeconds(),
+      reedRegrowMinSeconds: this.reedRegrowMinSeconds(),
       hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
       raidIntervalSeconds: this.raidIntervalSeconds(),
       forestEncounters: (this.raidIntervalSeconds() ?? 240) < 86400,
@@ -1528,6 +1536,17 @@ export class World extends DurableObject<WorldEnv> {
    */
   private patchRegrowMinSeconds(): number | undefined {
     const configured = Number(this.env.WORLD_PATCH_REGROW_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
+  }
+
+  /**
+   * How long a cut-clean bed of mature reeds takes to come back, if the
+   * environment says. Only honoured when it is a sensible positive number,
+   * the same as `regrowMinSeconds`.
+   */
+  private reedRegrowMinSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_REED_REGROW_SECONDS);
     if (!Number.isFinite(configured) || configured <= 0) return undefined;
     return configured;
   }
@@ -2412,7 +2431,10 @@ export class World extends DurableObject<WorldEnv> {
     for (const garden of simulation.savedGardens()) this.writeGarden(garden);
     this.writeMeta('tick', String(simulation.tick));
     this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
-    for (const tree of simulation.persistableTrees()) this.writeTree(tree);
+    // Trees are written the moment they change; this only catches anything left over.
+    for (const tree of simulation.persistableTrees(simulation.drainTreeChanges())) {
+      this.writeTree(tree);
+    }
 
     const byNetId = new Map<number, ConnectionAttachment>();
     for (const ws of this.ctx.getWebSockets()) {

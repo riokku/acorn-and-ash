@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../src/constants';
-import { RejectReason } from '../src/net/messages';
+import { RejectReason, ServerMessageType } from '../src/net/messages';
 import {
   decodeClientMessage,
   decodeServerMessage,
@@ -352,6 +352,7 @@ describe('telling players how the trees stand', () => {
   it('survives a round trip', () => {
     expect(decodeServerMessage(encodeTreeStates(trees))).toEqual({
       type: 'treeStates',
+      whole: true,
       trees,
     });
   });
@@ -359,7 +360,45 @@ describe('telling players how the trees stand', () => {
   it('says so plainly when the clearing is untouched', () => {
     expect(decodeServerMessage(encodeTreeStates([]))).toEqual({
       type: 'treeStates',
+      whole: true,
       trees: [],
+    });
+  });
+
+  it('says whether it is every changed tree or only the ones a swing just touched', () => {
+    const everything = decodeServerMessage(encodeTreeStates(trees, true));
+    const justNow = decodeServerMessage(encodeTreeStates(trees.slice(0, 1), false));
+    expect(everything).toMatchObject({ type: 'treeStates', whole: true });
+    expect(justNow).toMatchObject({ type: 'treeStates', whole: false });
+    if (justNow?.type !== 'treeStates') throw new Error('expected tree states');
+    expect(justNow.trees).toEqual(trees.slice(0, 1));
+  });
+
+  it('counts more than two hundred and fifty-five trees, as a forest can have', () => {
+    const forest = Array.from({ length: 1400 }, (_, i) => ({
+      treeId: 1000 + i,
+      generation: i % 3,
+      felled: i % 2 === 0,
+    }));
+    const decoded = decodeServerMessage(encodeTreeStates(forest));
+    if (decoded?.type !== 'treeStates') throw new Error('expected tree states');
+    expect(decoded.trees).toHaveLength(1400);
+    expect(decoded.trees[1399]).toEqual(forest[1399]);
+  });
+
+  it('still reads what a server from before the forest could be felled sent', () => {
+    // type, then a one-byte count, then one 16-byte tree: the layout before the whole-list flag.
+    const old = new ArrayBuffer(2 + 16);
+    const view = new DataView(old);
+    view.setUint8(0, ServerMessageType.TreeStates);
+    view.setUint8(1, 1);
+    view.setUint16(2, 9, true);
+    view.setUint8(4, 2);
+    view.setUint8(5, 1);
+    expect(decodeServerMessage(old)).toEqual({
+      type: 'treeStates',
+      whole: true,
+      trees: [{ treeId: 9, generation: 2, felled: true }],
     });
   });
 

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import * as shared from '../packages/shared/src/index';
 
 /**
- * Building a rowboat (decision 0092): the build menu has a Lake section, the
+ * Building a rowboat (decision 0092): the Craft menu has a Lake section, the
  * see-through preview floats on the water beside the bank (green where a boat
  * fits, red where it cannot float), one click moors it and takes six logs and
  * two rope, and it stays there.
@@ -94,8 +94,9 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
   await page.locator('.hud-curtain').click();
   await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [water.x, water.z]);
 
-  // The build menu has a Lake section with the rowboat and its price.
+  // The Craft menu has a Lake section with the rowboat and its price.
   await page.keyboard.press('KeyB');
+  await page.locator('.craft-tabs').getByRole('button', { name: 'Lake', exact: true }).click();
   const entry = page.locator('.hud-journal-entry').filter({ hasText: 'Rowboat' });
   await expect(page.locator('.hud-journal')).toContainText('Lake');
   await expect(entry).toContainText('6');

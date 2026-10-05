@@ -136,6 +136,13 @@ export const GATHER_PATCH_MAX_COUNT = 6;
 /** The shortest a picked-clean patch takes to grow back. It returns between this and twice it. */
 export const PATCH_REGROW_MIN_SECONDS = 3 * 60;
 /**
+ * Mature reeds at the lake (see decision 0099). Cut clean, a bed of them is
+ * gone for somewhere between these many seconds - about twenty minutes - and
+ * then comes back somewhere else around the water.
+ */
+export const REED_REGROW_MIN_SECONDS = 15 * 60;
+export const REED_REGROW_MAX_SECONDS = 25 * 60;
+/**
  * How far from the middle of the clearing a patch can grow back: the open
  * ground inside the ring of trees, not tucked in among their trunks.
  */
@@ -357,6 +364,16 @@ export const REGROW_CLEARANCE = 1.5;
  * turn that is about five days of chopping the same stump without pause.
  */
 export const MAX_TREE_GENERATION = 255;
+
+/**
+ * The first number given to a tree or rock in the wilderness.
+ *
+ * The hand-built clearing numbers its own from 1 (it has fewer than two
+ * hundred), and a tree is saved and sent by its number, so the wilderness
+ * starts well clear of that and no two trees ever share one. Numbers travel in
+ * two bytes, which leaves room for tens of thousands of trees.
+ */
+export const WILDERNESS_PROP_FIRST_ID = 1000;
 
 /**
  * Wildlife.

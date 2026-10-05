@@ -16,6 +16,12 @@ export interface ForestPoint {
 export interface ForestEnvironment {
   surfaceAt(x: number, z: number): FootstepSurface;
   treesNear(x: number, z: number): readonly ForestPoint[];
+  /**
+   * Which trees are standing now. Trees come down and grow back all through
+   * the forest, so this is called often; it only re-sorts the trees, and
+   * leaves the ground as it was.
+   */
+  setStandingProps(standingProps: readonly PlacedProp[]): void;
 }
 
 /** Reuses the painted ground's classification, including terrain slope. */
@@ -26,15 +32,20 @@ export function createForestEnvironment(
   standingProps: readonly PlacedProp[] = props,
 ): ForestEnvironment {
   const ground = createGroundShader({ props, water, lake: LAKE });
-  const cells = new Map<string, ForestPoint[]>();
-  for (const prop of standingProps) {
-    if (PROP_KINDS[prop.kind].shape.family !== 'tree') continue;
-    const key = `${Math.floor(prop.x / 16)},${Math.floor(prop.z / 16)}`;
-    const bucket = cells.get(key) ?? [];
-    bucket.push(prop);
-    cells.set(key, bucket);
-  }
+  let cells = new Map<string, ForestPoint[]>();
+  const sortTrees = (standing: readonly PlacedProp[]): void => {
+    cells = new Map<string, ForestPoint[]>();
+    for (const prop of standing) {
+      if (PROP_KINDS[prop.kind].shape.family !== 'tree') continue;
+      const key = `${Math.floor(prop.x / 16)},${Math.floor(prop.z / 16)}`;
+      const bucket = cells.get(key) ?? [];
+      bucket.push(prop);
+      cells.set(key, bucket);
+    }
+  };
+  sortTrees(standingProps);
   return {
+    setStandingProps: sortTrees,
     surfaceAt(x, z) {
       if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < 3) return 'soil';
       const dx = terrain.heightAt(x + 0.5, z) - terrain.heightAt(x - 0.5, z);

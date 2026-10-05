@@ -3,7 +3,7 @@ import * as shared from '../packages/shared/src/index';
 
 /**
  * Reeds and rope (decision 0091): reeds grow along the lake's bank, E cuts one,
- * and three of them twist into a rope from the craft menu.
+ * and three of them twist into a rope from the Craft menu.
  *
  * The server is played by an in-page copy of the simulation standing in for
  * it, with the player already on the bank beside a patch. That keeps the test
@@ -12,9 +12,6 @@ import * as shared from '../packages/shared/src/index';
  */
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(240_000);
-
-/** The craft menu lists recipes in item order, and rope was added last. */
-const ROPE_KEY = `Digit${shared.RECIPE_ITEMS.indexOf('rope') + 1}`;
 
 async function enterWorld(page: Page, world: string): Promise<void> {
   await page.goto(`/?renderer=webgl2&world=${world}`);
@@ -94,7 +91,9 @@ test('you can cut reeds at the lake and twist them into rope', async ({ page }) 
   // The browser knows about every clump along the bank, drawn from what the server says.
   const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
   expect(spots.filter((spot) => spot.item === 'reed')).toHaveLength(shared.REED_PATCHES.length);
-  await expect(page.locator('.hud-hint')).toContainText('Right-click or press E to gather reeds');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Right-click or press E to gather mature reeds',
+  );
 
   // Taps, not a hold: gathering is paced the same way a swing is.
   const reedsCarried = async () =>
@@ -107,9 +106,16 @@ test('you can cut reeds at the lake and twist them into rope', async ({ page }) 
   }
   expect(await reedsCarried()).toBe(3);
 
-  // Three reeds, one rope, from the craft menu and no workbench.
+  // Three reeds, one rope, from the Craft menu and no workbench. Rope is on its
+  // Lake page (decision 0096), first in the list there, so it is key 1. It reads
+  // "Ready" the moment the third reed is in the pack - the bug that started this
+  // was a rope you could not see because the list ran off the bottom of the screen.
   await page.keyboard.press('KeyC');
-  await page.keyboard.press(ROPE_KEY);
+  await page.locator('.craft-tabs').getByRole('button', { name: 'Lake', exact: true }).click();
+  const ropeEntry = page.locator('.hud-journal-entry').filter({ hasText: /^\d?Rope/ });
+  await expect(ropeEntry).toBeVisible();
+  await expect(ropeEntry).toContainText('Ready');
+  await page.keyboard.press('Digit1');
   await expect
     .poll(() =>
       page.evaluate(

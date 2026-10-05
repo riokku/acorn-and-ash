@@ -134,10 +134,9 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `E` beside a rowboat                 | Climb in (one rider to a boat); in a boat at a shore, climb out          |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
-| `C`                                  | Open the craft menu                                                      |
-| `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                                       |
-| `B`                                  | Open the build menu                                                      |
-| `1`–`6` (build menu open)            | Pick a campfire, next home tier, flower bed, lantern, fence or path      |
+| `C` (or `B` outdoors)                | Open the Craft menu: everything you can make or place, on one list       |
+| `1`–`9` (Craft menu open)            | Pick the entry with that number on the page showing (axe, rod, torch...) |
+| `B` indoors                          | Decorate the room                                                        |
 | Left mouse (piece picked)            | Place it where its preview stands                                        |
 | Mouse wheel (piece picked)           | Turn it                                                                  |
 | `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence                 |
@@ -272,9 +271,12 @@ Past the clearing's own ring of trees the ground rolls into hills, and the
 forest thickens the further out you go, out to a wall 150 m from the centre.
 It's generated from the world's seed, so the server and every browser draw
 the same hills and the same trees without anything about them going over the
-wire - the same trick the clearing itself already uses. Nothing out there can
-be chopped or picked up yet; it's somewhere to walk, for now. See
-[decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+wire - the same trick the clearing itself already uses. Every tree out there
+can be chopped down with the axe, exactly like the clearing's: the same number
+of swings, a stump, logs to gather, and the tree grows back (see "Trees growing back"
+below). See [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md)
+for the forest itself and
+[decision 0098](docs/decisions/0098-every-tree-can-be-chopped.md) for chopping it.
 
 ### The lake
 
@@ -293,19 +295,26 @@ the pond (a cast never lands on an island). In winter the lake freezes over: see
 
 ### Reeds and rope
 
-Six clumps of reeds grow in the shallows along the lake's bank, a long walk
-apart. Stand at the water's edge beside one and press E (or right-click) to cut
-a reed; a clump holds two to six, and once it is cut bare it grows back in the
-same place after a few minutes. Open the craft menu (`C`) and twist three reeds
-into a length of rope, by hand with no workbench. Rope is for the rowboat, below.
+Most of the reeds at the lake are just scenery. A few are **mature reeds**:
+taller and golden, with fat brown cattails, so they stand out across the water.
+Six of them start out along the lake's bank, a long walk apart. Stand at the
+water's edge beside one and press E (or right-click) to cut a reed; a bed holds
+two to six. Once it is cut bare it comes back after a random fifteen to
+twenty-five minutes, at a different place round the shore. Open the Craft menu
+(`C`), turn to its **Lake** page and twist three reeds into a length of rope, by
+hand with no workbench. Rope is for the rowboat, below.
+
 The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
-`apps/client/src/scene/reed-models.ts`. See
-[decision 0091](docs/decisions/0091-reeds-and-rope.md).
+`apps/client/src/scene/reed-models.ts`. `local` runs and preview links bring a
+bed back in 45 to 75 seconds instead, set by `WORLD_REED_REGROW_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). See
+[decision 0091](docs/decisions/0091-reeds-and-rope.md) and
+[decision 0099](docs/decisions/0099-mature-reeds.md).
 
 ### Rowboat
 
-With six logs and two rope, open the build menu (`B`) and pick **Rowboat** under
-Lake. Stand on the bank, point at the water a step or two out, and a see-through
+With six logs and two rope, open the Craft menu (`C` or `B`) and pick **Rowboat** on
+the Lake page. Stand on the bank, point at the water a step or two out, and a see-through
 boat floats there: green where it fits, red where it can't. Scroll to turn it
 along the bank, then click to moor it. You can have one, and it stays where you
 built it. A boat needs water under all of it (so not on the sand) and can't be
@@ -351,6 +360,12 @@ rolling gusts and a little flutter. Water, bare ground, spawn traffic, paths and
 building footprints stay clear. The distant painted ground remains in place.
 Settings → General includes a grass-density slider; zero turns blades off, and
 reduced-motion preferences stop their wind animation.
+
+Tufts differ from one another: unlike blades, every facing, mostly short with a
+few tall, a slight lean, and colours from lush to dry, in patches. They shrink
+smoothly into the ground at the far edge, with no popping or hovering as you
+walk, and new ground is prepared a tile at a time so crossing into it does not
+stutter. See [decision 0097](docs/decisions/0097-steadier-and-more-varied-grass.md).
 
 ### The map
 
@@ -1095,7 +1110,7 @@ During a dodge, tap left mouse for an aerial spin slash or click right mouse for
 
 Players can read a cedar expedition board beside their own home, or open its page from inside. Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
 
-The build menu opens a wider, responsive page with Home, Camp & lighting, Garden & boundaries and Trophies sections. Indoor decorations are grouped into Furniture, Lighting and Finishing touches. Number shortcuts keep their existing assignments; costs and availability stay visible alongside each choice.
+The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (`B` inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
 
 A crowned, moss-armored ruin sentinel guards the old ruin clearings. It can be fought solo; actual helpers increase its health, with stable character identity across reconnects. Nearby contributors receive protected materials and their existing housing blueprint roll. A first victory earns a personal placeable trophy that stays available if the backpack is full; subsequent victories award materials.
 

@@ -95,7 +95,6 @@ import {
   treeLogSpots,
   RAIDER_KINDS,
   PlayerButton,
-  RECIPE_ITEMS,
   SPAWN_POSITION,
   SnapshotFlag,
   TINT_COLORS,
@@ -135,6 +134,7 @@ import {
   isWithinBoardingReach,
   landingFrom,
   pickupInReach,
+  isReedPatch,
   reedFootprints,
   replaceCollider,
   roundFootprint,
@@ -195,6 +195,15 @@ import { ForestAudio } from './audio/forest-sounds';
 import { createForestEnvironment, type ForestEnvironment } from './audio/forest-environment';
 import { TreeLandingEffects } from './scene/tree-landing';
 import { PickupNoticeShelf } from './hud/pickup-notice';
+import {
+  choosingPiece,
+  craftMenuEntries,
+  entriesOnTab,
+  shownTab,
+  type CraftAction,
+  type CraftEntry,
+  type CraftTabId,
+} from './hud/craft-menu';
 import { playPickupRefused, playTreeLanding, playCollection } from './audio/feedback';
 import {
   buildClearingScene,
@@ -371,6 +380,8 @@ const HURT_FULL_FLASH = 30;
  */
 const CLICK_TRUNK_MIN_RADIUS = 0.35;
 const CLICK_CANOPY_FRACTION = 0.8;
+/** Trees further than this from the player are not worth testing a click against. */
+const CLICK_TREE_RANGE = 60;
 /** How big a skeleton is to click on: about as wide and tall as one stands. */
 const CLICK_RAIDER_RADIUS = 0.45;
 const CLICK_RAIDER_HEIGHT = 1.5;
@@ -563,9 +574,9 @@ export interface GameDebug {
   raidBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
-  /** Whether the build menu (opened with B) is currently showing. */
+  /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
   buildMenuOpen(): boolean;
-  /** Whether the craft menu (opened with C) is currently showing. */
+  /** Whether the Craft menu (opened with C, or B outdoors) is currently showing. */
   craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{
@@ -736,6 +747,7 @@ export class Game {
   private expedition: ExpeditionView = { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' };
   private expeditionPendingUntil = 0;
   private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
+  private craftTab: CraftTabId = 'all';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoverySites: readonly DiscoverySite[] = [];
@@ -851,6 +863,8 @@ export class Game {
   private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
   private forestEnvironment: ForestEnvironment | null = null;
   private wildernessProps: readonly PlacedProp[] = [];
+  /** Where each forest tree sits in `wildernessProps` (and so in the walkable world). */
+  private wildernessIndexById: ReadonlyMap<number, number> = new Map();
   private readonly gatheringFocus = new GatheringFocus();
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
@@ -1198,7 +1212,7 @@ export class Game {
 
   /**
    * Start placing one of these, the same as pressing its number with the
-   * build menu open - called when an entry in that menu is clicked.
+   * Craft menu open - called when an entry in that menu is clicked.
    */
   moveDecoration(id: number): void {
     const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
@@ -1325,7 +1339,7 @@ export class Game {
       treeGenerations: () =>
         [...this.treeStates].map(([id, state]) => ({ id, generation: state.generation })),
       trees: () =>
-        (this.clearing?.props ?? [])
+        [...(this.clearing?.props ?? []), ...this.wildernessProps]
           .map((prop) => ({
             id: prop.id,
             kind: prop.kind,
@@ -1782,7 +1796,8 @@ export class Game {
         break;
       }
       case 'treeStates': {
-        this.treeStates.clear();
+        // The whole list comes on arrival; after that, only the trees that changed.
+        if (message.whole) this.treeStates.clear();
         for (const tree of message.trees) {
           this.treeStates.set(tree.treeId, {
             generation: tree.generation,
@@ -2288,6 +2303,7 @@ export class Game {
       this.outdoors.add(this.seasonFallArt.group);
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
+      this.wildernessIndexById = wilderness.indexById;
       const encounterSites = buildEncounterSites(
         seed,
         terrain,
@@ -2415,33 +2431,45 @@ export class Game {
    * tree that grew back starts blocking again at its new size.
    */
   private applyTreeStates(): void {
-    this.clearingScene?.setTreeStates(this.treeStates, this.estimatedServerTimeMs());
+    const now = this.estimatedServerTimeMs();
+    this.clearingScene?.setTreeStates(this.treeStates, now);
+    this.wildernessScene?.setTreeStates(this.treeStates, now);
 
     const clearing = this.clearing;
     const collision = this.collision;
     if (clearing === null || collision === null) return;
 
-    const standing = [...clearing.props];
+    // The clearing's trees, then the forest's, in the order the server keeps them.
+    const forestFirst = clearing.props.length;
+    const standing = [...clearing.props, ...this.wildernessProps];
     for (const [treeId, state] of this.treeStates) {
-      const index = clearing.indexById.get(treeId);
-      const original = index === undefined ? undefined : clearing.props[index];
-      if (index === undefined || original === undefined) continue;
+      const inClearing = clearing.indexById.get(treeId);
+      const inForest = this.wildernessIndexById.get(treeId);
+      const slot = inClearing ?? (inForest === undefined ? undefined : forestFirst + inForest);
+      const original = slot === undefined ? undefined : standing[slot];
+      if (slot === undefined || original === undefined) continue;
 
       const grown = treeAtGeneration(clearing.seed, original, state.generation);
-      standing[index] = grown;
+      standing[slot] = grown;
+      // Colliders are laid out the same way: the clearing's, then the forest's.
       replaceCollider(
         collision,
-        index,
+        inClearing ?? clearing.colliders.length + (inForest ?? 0),
         state.felled ? stumpColliderFor(grown) : colliderForProp(grown),
       );
     }
     this.standingProps = standing;
-    this.forestEnvironment = createForestEnvironment(
-      [...clearing.props, ...this.wildernessProps],
-      clearing.water,
-      collision.terrain,
-      [...standing.filter((prop) => !this.isFelled(prop.id)), ...this.wildernessProps],
-    );
+    const trees = standing.filter((prop) => !this.isFelled(prop.id));
+    if (this.forestEnvironment === null) {
+      this.forestEnvironment = createForestEnvironment(
+        standing,
+        clearing.water,
+        collision.terrain,
+        trees,
+      );
+    } else {
+      this.forestEnvironment.setStandingProps(trees);
+    }
   }
 
   private isFelled(treeId: number): boolean {
@@ -2797,7 +2825,10 @@ export class Game {
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
-    for (const landing of this.clearingScene?.drainLandings() ?? []) {
+    for (const landing of [
+      ...(this.clearingScene?.drainLandings() ?? []),
+      ...(this.wildernessScene?.drainLandings() ?? []),
+    ]) {
       this.showTreeLanding(landing, camera);
     }
     this.treeLandingEffects.update(deltaSeconds, camera.camera);
@@ -3024,11 +3055,13 @@ export class Game {
   }
 
   /**
-   * B opens or closes the build menu, closing the craft menu if that was open
-   * instead - only one ever shows at once, so a digit key always means one
-   * thing. While it is open, a digit key picks from it and starts placing
-   * that piece (see decision 0052); while a piece is being placed, the same
-   * digit keys swap it for another without going back to the menu.
+   * B outdoors opens the Craft menu, the same one C does, on its Craft page:
+   * what you make and what you place are listed together (see decision 0096).
+   * While it is open, a digit key picks the entry numbered beside it; picking a
+   * piece starts placing it (see decision 0052), and while a piece is being
+   * placed the same digit keys swap it for another without going back.
+   *
+   * Indoors B is the room's decorating panel, which has pieces of its own.
    */
   private handleBuildMenuInput(controls: Controls): void {
     if (this.space !== OUTDOORS) {
@@ -3049,27 +3082,17 @@ export class Game {
       }
       return;
     }
+    this.buildMenuOpen = false;
     if (controls.takeBuildMenuToggle()) {
-      this.buildMenuOpen = !this.buildMenuOpen;
-      if (this.buildMenuOpen) {
-        this.stopPlacing();
-        this.craftMenuOpen = false;
-        this.inventoryOpen = false;
-      }
+      if (this.craftMenuOpen && this.journalTab === 'craft') this.craftMenuOpen = false;
+      else this.openCraftMenu();
     }
-    if (!this.buildMenuOpen && this.placing === null) return;
-    for (const index of controls.takeBuildTaps()) {
-      const original = BUILDABLE_KIND_ORDER[index];
-      const home = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
-      const kind =
-        original === 'cabin'
-          ? nextHome(home !== undefined && isHomeKind(home.kind) ? home.kind : null)
-          : original;
-      if (kind === null || (original !== 'cabin' && original !== undefined && isHomeKind(original)))
-        continue;
-      if (kind === undefined) continue;
-      this.buildMenuOpen = false;
-      this.startPlacing(kind);
+    if (this.placing === null || this.craftMenuOpen) return;
+    // A piece in hand: a digit swaps it for another, the way it always has.
+    for (const index of controls.takeCraftTaps()) {
+      const entry = this.craftMenuEntriesShown()[index];
+      if (entry === undefined || entry.locked || entry.action.kind !== 'build') continue;
+      this.pickBuildable(entry.action.buildable);
       break;
     }
   }
@@ -3282,7 +3305,7 @@ export class Game {
   /** Every tree, rock and stump, as the same footprints the server checks a build against. */
   private sceneryFootprints(): Footprint[] {
     return [
-      ...[...this.standingProps, ...this.wildernessProps].map((prop) =>
+      ...this.standingProps.map((prop) =>
         roundFootprint(
           prop.x,
           prop.z,
@@ -3290,17 +3313,21 @@ export class Game {
           this.isFelled(prop.id) ? 'stump' : PROP_KINDS[prop.kind].displayName.toLowerCase(),
         ),
       ),
-      ...reedFootprints(),
+      // Mature reeds move round the shore as they are cut and come back, so
+      // this is where they stand now.
+      ...reedFootprints(
+        this.gatherPatches.filter((patch) => isReedPatch(patch.id) && patch.remaining > 0),
+      ),
     ];
   }
 
   /**
-   * C opens or closes the craft menu, closing the build menu if that was
-   * open instead, the same reason opening the build menu closes this one.
-   * While it is open, a digit key sends a craft request - unlike the build
-   * menu this stays open afterwards, since crafting several things in a row
-   * is common and nothing about a craft needs a fresh aim the way a
-   * placement does.
+   * C opens or closes the Craft menu (see decision 0096), closing the room
+   * decorating panel if that was open instead. While it is open, a digit key
+   * picks the entry numbered beside it. Crafting something leaves the menu
+   * open, since making several things in a row is common and nothing about
+   * a craft needs a fresh aim the way a placement does; picking a piece to
+   * place closes it.
    */
   private showJournalNotice(text: string, now: number): void {
     this.craftingNews = { text, until: now + NEWS_MS };
@@ -3338,9 +3365,40 @@ export class Game {
     this.connection?.sendGarden(request);
   }
 
-  craftRecipe(index: number): void {
-    const item = RECIPE_ITEMS[index - 1];
-    if (item !== undefined) this.connection?.sendCraft(item);
+  /** Switch the Craft menu to another page: everything, or one kind of thing. */
+  setCraftTab(tab: CraftTabId): void {
+    this.craftTab = tab;
+    this.options.hud.publish({ craftTab: tab });
+  }
+
+  /** Open the Craft menu on its Craft page, putting away whatever else was open. */
+  private openCraftMenu(): void {
+    this.journalTab = 'craft';
+    this.craftMenuOpen = true;
+    this.buildMenuOpen = false;
+    this.inventoryOpen = false;
+    this.stopPlacing();
+    this.options.hud.publish({ journalTab: 'craft', craftMenuOpen: true, inventoryOpen: false });
+  }
+
+  /**
+   * The entries on the page of the Craft menu that is showing, in the order
+   * the number keys count them. Read from the HUD's own state, so a key always
+   * agrees with what the panel lists beside its number.
+   */
+  private craftMenuEntriesShown(): CraftEntry[] {
+    const state = this.options.hud.getSnapshot();
+    const entries = craftMenuEntries(state);
+    return entriesOnTab(entries, shownTab(entries, this.craftTab));
+  }
+
+  /**
+   * Pick an entry from the Craft menu: make a thing into the pack, which leaves
+   * the menu open for the next one, or pick up a piece to place, which closes it.
+   */
+  pickCraftEntry(action: CraftAction): void {
+    if (action.kind === 'craft') this.connection?.sendCraft(action.item);
+    else this.pickBuildable(action.buildable);
   }
 
   private updateDiscoveryMarkers(): void {
@@ -3358,9 +3416,12 @@ export class Game {
       }
     }
     if (!this.craftMenuOpen) return;
-    for (const index of controls.takeCraftTaps()) {
-      const item = RECIPE_ITEMS[index];
-      if (item !== undefined && this.journalTab === 'craft') this.connection?.sendCraft(item);
+    const taps = controls.takeCraftTaps();
+    if (this.journalTab !== 'craft') return;
+    const entries = this.craftMenuEntriesShown();
+    for (const index of taps) {
+      const entry = entries[index];
+      if (entry !== undefined && !entry.locked) this.pickCraftEntry(entry.action);
     }
   }
 
@@ -3443,7 +3504,7 @@ export class Game {
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
     return lootUnderRay(this.clickRaycaster, candidates, [
       this.clearingScene.cameraBlockers,
-      ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraBlockers]),
+      ...(this.wildernessScene?.cameraBlockers ?? []),
       ...this.homeCameraBlockers,
     ]);
   }
@@ -3503,7 +3564,7 @@ export class Game {
     const clearing = this.clearingScene;
     if (wilderness !== null && clearing !== null) {
       camera.update(from, 0, [
-        wilderness.cameraBlockers,
+        ...wilderness.cameraBlockers,
         clearing.cameraBlockers,
         ...this.homeCameraBlockers,
       ]);
@@ -3526,17 +3587,21 @@ export class Game {
   /**
    * Everything a click can land on, as upright cylinders: each standing
    * tree as a trunk and a canopy that both face its trunk, and each animal.
-   * Rebuilt per click rather than kept up to date - a click is rare, and a
-   * couple of hundred small objects is nothing to make once.
+   * Rebuilt per click rather than kept up to date - a click is rare, and the
+   * few hundred small objects within reach are nothing to make once.
    */
   private clickCandidates(): ClickCandidate[] {
     const candidates: ClickCandidate[] = [];
     // A room's own coordinates overlap the clearing's: nothing out there is clickable from in here.
     if (this.space !== OUTDOORS) return candidates;
+    const here = this.localPlayer?.motion.position;
     for (const prop of this.standingProps) {
       if (this.isFelled(prop.id)) continue;
       const kind = PROP_KINDS[prop.kind];
       if (kind.shape.family !== 'tree') continue;
+      if (here !== undefined && Math.hypot(prop.x - here.x, prop.z - here.z) > CLICK_TREE_RANGE) {
+        continue;
+      }
       const base = prop.y ?? 0;
       const trunkTop = base + kind.shape.trunkHeight * prop.scale;
       candidates.push({
@@ -3709,7 +3774,7 @@ export class Game {
       position,
       deltaSeconds,
       this.space === OUTDOORS
-        ? [wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
+        ? [...wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
         : [],
     );
     this.updatePlacement(camera, player);
@@ -3723,12 +3788,18 @@ export class Game {
       proposal !== undefined
     )
       area = homeBuildArea({ id: ownHome?.id ?? 0, kind: this.placing.kind, ...proposal });
+    // The home's boundary shows while a piece is in hand, or the Craft menu is open on a page that lists pieces.
+    const choosingAPiece = choosingPiece({
+      craftMenuOpen: this.craftMenuOpen,
+      journalTab: this.journalTab,
+      craftTab: this.craftTab,
+    });
     this.mapFeed.buildArea =
-      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+      this.playing && this.space === OUTDOORS && (choosingAPiece || this.placing !== null)
         ? area
         : null;
     this.buildBoundary?.show(
-      this.playing && this.space === OUTDOORS && (this.buildMenuOpen || this.placing !== null)
+      this.playing && this.space === OUTDOORS && (choosingAPiece || this.placing !== null)
         ? area
         : null,
       this.placing?.plan.refusal !== null && this.placing?.plan.refusal !== undefined,
@@ -4337,6 +4408,7 @@ export class Game {
     );
     this.bursts.burst('wood', at, -away.x, -away.z, strength);
     this.clearingScene?.shakeTree(tree.id, away.x, away.z, strength);
+    this.wildernessScene?.shakeTree(tree.id, away.x, away.z, strength);
   }
 
   /** A blow landing on an animal, from somebody at `from`: fur flies and it is knocked back a step. */
@@ -4498,7 +4570,10 @@ export class Game {
               this.controls?.isPointerLocked
             ? null
             : {
-                name: ITEM_KINDS[this.hoveredLoot.item].displayName,
+                name:
+                  this.hoveredLoot.request.kind === 'patch' && this.hoveredLoot.item === 'reed'
+                    ? 'Mature reeds'
+                    : ITEM_KINDS[this.hoveredLoot.item].displayName,
                 count: this.hoveredLoot.count,
                 detail: this.lootDetail(this.hoveredLoot),
                 x: this.controls?.pointerPosition()?.x ?? 0,
@@ -4526,6 +4601,7 @@ export class Game {
       discoveriesClaimed: this.discoveriesClaimed,
       discoverySites: this.discoverySites,
       journalTab: this.journalTab,
+      craftTab: this.craftTab,
       expedition: this.expedition,
       expeditionPending: performance.now() < this.expeditionPendingUntil,
       nearExpeditionBoard: this.nearOwnExpeditionBoard(),

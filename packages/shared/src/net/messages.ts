@@ -285,15 +285,22 @@ export interface TreeState {
 }
 
 /**
- * Every tree that has changed since the clearing was built.
+ * Trees that are not as the seed left them.
  *
- * The clearing itself comes from the seed, so a tree nobody has touched is not
- * in here at all. A tree that has grown back is, because its size is not the
- * one the seed gave it: both ends work that size out from the generation
+ * The clearing and the forest come from the seed, so a tree nobody has touched
+ * is not in here at all. A tree that has grown back is, because its size is not
+ * the one the seed gave it: both ends work that size out from the generation
  * rather than it being sent.
+ *
+ * `whole` says what the list is. True: every tree that has ever changed, sent
+ * on arrival, and anything not in it stands as the seed made it. False: only
+ * the trees a swing or a regrowth just touched - a forest has over a thousand
+ * trees, and one chop must not resend them all - and every other tree stays as
+ * it was.
  */
 export interface TreeStatesMessage {
   readonly type: 'treeStates';
+  readonly whole: boolean;
   readonly trees: readonly TreeState[];
 }
 

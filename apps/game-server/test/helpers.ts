@@ -222,10 +222,19 @@ export class TestClient {
     return messages[messages.length - 1]?.pickupIds ?? [];
   }
 
-  /** The newest word on the trees that are not as the seed left them. */
+  /**
+   * How the trees that are not as the seed left them stand now: the whole
+   * list the server sent on arrival, with every later word about the trees
+   * that changed laid over it.
+   */
   treeStates(): TreeStatesMessage['trees'] {
-    const messages = this.received.filter((entry) => entry.type === 'treeStates');
-    return messages[messages.length - 1]?.trees ?? [];
+    const standing = new Map<number, TreeStatesMessage['trees'][number]>();
+    for (const message of this.received) {
+      if (message.type !== 'treeStates') continue;
+      if (message.whole) standing.clear();
+      for (const tree of message.trees) standing.set(tree.treeId, tree);
+    }
+    return [...standing.values()];
   }
 
   /** The first word on the trees, sent the moment you join. */

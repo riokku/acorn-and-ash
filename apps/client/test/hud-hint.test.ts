@@ -53,6 +53,7 @@ const BASE_STATE: HudState = {
   trackHint: null,
   nearbyDiscovery: null,
   journalTab: 'craft',
+  craftTab: 'all',
   homeKind: null,
   buildAreaRadius: null,
   canBuild: false,
@@ -143,7 +144,7 @@ describe('the hint along the bottom', () => {
     expect(hint(state)).toBe('');
   });
 
-  it('walks you through the build menu once it is open, ahead of everything else', () => {
+  it('walks you through decorating a room once the panel is open, ahead of everything else', () => {
     const state: HudState = {
       ...BASE_STATE,
       buildMenuOpen: true,
@@ -208,6 +209,15 @@ describe('the hint along the bottom', () => {
       nearGatherSpot: 'flower',
     };
     expect(hint(state)).toBe('Right-click or press E to gather flowers');
+  });
+
+  it('calls the reeds that can be cut mature reeds, to tell them from the scenery', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'bag', count: 1 }],
+      nearGatherSpot: 'reed',
+    };
+    expect(hint(state)).toBe('Right-click or press E to gather mature reeds');
   });
 
   it('offers a patch with no bag at all - six slots come before any bag', () => {
