@@ -366,6 +366,16 @@ export const MAX_TREE_GENERATION = 255;
  */
 export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
 /**
+ * The first number given to a tree or rock in the wilderness.
+ *
+ * The hand-built clearing numbers its own from 1 (it has fewer than two
+ * hundred), and a tree is saved and sent by its number, so the wilderness
+ * starts well clear of that and no two trees ever share one. Numbers travel in
+ * two bytes, which leaves room for tens of thousands of trees.
+ */
+export const WILDERNESS_PROP_FIRST_ID = 1000;
+
+/**
  * How long a caught animal stays gone before it is back at its den.
  *
  * Short enough that a session never runs out of rabbits to catch, long

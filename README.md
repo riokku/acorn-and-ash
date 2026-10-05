@@ -271,9 +271,12 @@ Past the clearing's own ring of trees the ground rolls into hills, and the
 forest thickens the further out you go, out to a wall 150 m from the centre.
 It's generated from the world's seed, so the server and every browser draw
 the same hills and the same trees without anything about them going over the
-wire - the same trick the clearing itself already uses. Nothing out there can
-be chopped or picked up yet; it's somewhere to walk, for now. See
-[decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md).
+wire - the same trick the clearing itself already uses. Every tree out there
+can be chopped down with the axe, exactly like the clearing's: the same number
+of swings, a stump, logs to gather, and the tree grows back (see "Trees growing back"
+below). See [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.md)
+for the forest itself and
+[decision 0098](docs/decisions/0098-every-tree-can-be-chopped.md) for chopping it.
 
 ### The lake
 

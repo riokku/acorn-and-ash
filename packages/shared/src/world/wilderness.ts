@@ -3,15 +3,18 @@
  * clearing's own ring of trees.
  *
  * Built from the seed alone, the same way the clearing is, so the client and
- * the server always agree without anything about it going over the wire. None
- * of it is ever chopped or picked up, so unlike the clearing's trees it never
- * changes once the world is built - there is nothing here for a save to
- * remember.
+ * the server always agree without anything about it going over the wire. This
+ * is only how the forest starts out: its trees can be chopped down and grow
+ * back like the clearing's (see decision 0098), and the server remembers
+ * which ones are down. Rocks never change.
+ *
+ * Every prop is numbered from `WILDERNESS_PROP_FIRST_ID`, so a tree's number
+ * means one tree across the clearing and the wilderness together.
  */
 
 import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import { forestTreeScale } from './tree-stature';
-import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
+import { PLAYABLE_HALF_EXTENT, WILDERNESS, WILDERNESS_PROP_FIRST_ID } from '../constants';
 import { hashSeed, createRng } from '../rng';
 import { lerp } from '../math/vec3';
 import type { PropKindId } from '../data/props';
@@ -31,7 +34,13 @@ const DENSITY_SEED_OFFSET = 7919;
 
 export interface Wilderness {
   readonly props: readonly PlacedProp[];
+  /** Each prop's collider, in the same order as `props`. */
   readonly colliders: readonly Collider[];
+  /**
+   * Where each prop sits in `props` and `colliders`, by its number. A felled
+   * tree swaps its trunk for a stump by finding its collider this way.
+   */
+  readonly indexById: ReadonlyMap<number, number>;
   /** Original scenery keeps previously discovered encounter sites stable. */
   readonly siteColliders: readonly Collider[];
 }
@@ -54,7 +63,7 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
   const props: PlacedProp[] = [];
   const outerRadius = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
   const steps = Math.floor(outerRadius / WILDERNESS.cellSize);
-  let nextId = 1;
+  let nextId = WILDERNESS_PROP_FIRST_ID;
 
   for (let ix = -steps; ix <= steps; ix++) {
     for (let iz = -steps; iz <= steps; iz++) {
@@ -116,6 +125,7 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
   return {
     props: standing,
     colliders: standing.map(colliderForProp),
+    indexById: new Map(standing.map((prop, index) => [prop.id, index])),
     siteColliders: props.map(colliderForProp),
   };
 }

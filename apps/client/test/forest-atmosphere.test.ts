@@ -19,6 +19,7 @@ const listener: ForestListener = {
 const environment: ForestEnvironment = {
   surfaceAt: () => 'forestFloor',
   treesNear: () => [{ x: 4, z: 0 }],
+  setStandingProps: () => {},
 };
 function setup() {
   const events: ForestSound[] = [];

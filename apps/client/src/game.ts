@@ -380,6 +380,8 @@ const HURT_FULL_FLASH = 30;
 const CLICK_TRUNK_MIN_RADIUS = 0.35;
 const CLICK_CANOPY_FRACTION = 0.8;
 /** How big a skeleton is to click on: about as wide and tall as one stands. */
+/** Trees further than this from the player are not worth testing a click against. */
+const CLICK_TREE_RANGE = 60;
 const CLICK_RAIDER_RADIUS = 0.45;
 const CLICK_RAIDER_HEIGHT = 1.5;
 /** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
@@ -861,6 +863,8 @@ export class Game {
   private forestEnvironment: ForestEnvironment | null = null;
   private wildernessProps: readonly PlacedProp[] = [];
   private readonly gatheringFocus = new GatheringFocus();
+  /** Where each forest tree sits in `wildernessProps` (and so in the walkable world). */
+  private wildernessIndexById: ReadonlyMap<number, number> = new Map();
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
    * Whether `carrying` is this connection's first word on the pack yet. The
@@ -1334,7 +1338,7 @@ export class Game {
       treeGenerations: () =>
         [...this.treeStates].map(([id, state]) => ({ id, generation: state.generation })),
       trees: () =>
-        (this.clearing?.props ?? [])
+        [...(this.clearing?.props ?? []), ...this.wildernessProps]
           .map((prop) => ({
             id: prop.id,
             kind: prop.kind,
@@ -1791,7 +1795,8 @@ export class Game {
         break;
       }
       case 'treeStates': {
-        this.treeStates.clear();
+        // The whole list comes on arrival; after that, only the trees that changed.
+        if (message.whole) this.treeStates.clear();
         for (const tree of message.trees) {
           this.treeStates.set(tree.treeId, {
             generation: tree.generation,
@@ -2298,6 +2303,7 @@ export class Game {
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
       const encounterSites = buildEncounterSites(
+      this.wildernessIndexById = wilderness.indexById;
         seed,
         terrain,
         [...clearing.colliders, ...wilderness.siteColliders],
@@ -2424,33 +2430,45 @@ export class Game {
    * tree that grew back starts blocking again at its new size.
    */
   private applyTreeStates(): void {
-    this.clearingScene?.setTreeStates(this.treeStates, this.estimatedServerTimeMs());
+    const now = this.estimatedServerTimeMs();
+    this.clearingScene?.setTreeStates(this.treeStates, now);
+    this.wildernessScene?.setTreeStates(this.treeStates, now);
 
     const clearing = this.clearing;
     const collision = this.collision;
     if (clearing === null || collision === null) return;
 
-    const standing = [...clearing.props];
+    // The clearing's trees, then the forest's, in the order the server keeps them.
+    const forestFirst = clearing.props.length;
+    const standing = [...clearing.props, ...this.wildernessProps];
     for (const [treeId, state] of this.treeStates) {
-      const index = clearing.indexById.get(treeId);
-      const original = index === undefined ? undefined : clearing.props[index];
-      if (index === undefined || original === undefined) continue;
+      const inClearing = clearing.indexById.get(treeId);
+      const inForest = this.wildernessIndexById.get(treeId);
+      const slot = inClearing ?? (inForest === undefined ? undefined : forestFirst + inForest);
+      const original = slot === undefined ? undefined : standing[slot];
+      if (slot === undefined || original === undefined) continue;
 
       const grown = treeAtGeneration(clearing.seed, original, state.generation);
-      standing[index] = grown;
+      standing[slot] = grown;
+      // Colliders are laid out the same way: the clearing's, then the forest's.
       replaceCollider(
         collision,
-        index,
+        inClearing ?? clearing.colliders.length + (inForest ?? 0),
         state.felled ? stumpColliderFor(grown) : colliderForProp(grown),
       );
     }
     this.standingProps = standing;
-    this.forestEnvironment = createForestEnvironment(
-      [...clearing.props, ...this.wildernessProps],
-      clearing.water,
-      collision.terrain,
-      [...standing.filter((prop) => !this.isFelled(prop.id)), ...this.wildernessProps],
-    );
+    const trees = standing.filter((prop) => !this.isFelled(prop.id));
+    if (this.forestEnvironment === null) {
+      this.forestEnvironment = createForestEnvironment(
+        standing,
+        clearing.water,
+        collision.terrain,
+        trees,
+      );
+    } else {
+      this.forestEnvironment.setStandingProps(trees);
+    }
   }
 
   private isFelled(treeId: number): boolean {
@@ -2806,7 +2824,10 @@ export class Game {
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
-    for (const landing of this.clearingScene?.drainLandings() ?? []) {
+    for (const landing of [
+      ...(this.clearingScene?.drainLandings() ?? []),
+      ...(this.wildernessScene?.drainLandings() ?? []),
+    ]) {
       this.showTreeLanding(landing, camera);
     }
     this.treeLandingEffects.update(deltaSeconds, camera.camera);
@@ -3283,7 +3304,7 @@ export class Game {
   /** Every tree, rock and stump, as the same footprints the server checks a build against. */
   private sceneryFootprints(): Footprint[] {
     return [
-      ...[...this.standingProps, ...this.wildernessProps].map((prop) =>
+      ...this.standingProps.map((prop) =>
         roundFootprint(
           prop.x,
           prop.z,
@@ -3478,7 +3499,7 @@ export class Game {
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
     return lootUnderRay(this.clickRaycaster, candidates, [
       this.clearingScene.cameraBlockers,
-      ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraBlockers]),
+      ...(this.wildernessScene?.cameraBlockers ?? []),
       ...this.homeCameraBlockers,
     ]);
   }
@@ -3538,7 +3559,7 @@ export class Game {
     const clearing = this.clearingScene;
     if (wilderness !== null && clearing !== null) {
       camera.update(from, 0, [
-        wilderness.cameraBlockers,
+        ...wilderness.cameraBlockers,
         clearing.cameraBlockers,
         ...this.homeCameraBlockers,
       ]);
@@ -3561,8 +3582,8 @@ export class Game {
   /**
    * Everything a click can land on, as upright cylinders: each standing
    * tree as a trunk and a canopy that both face its trunk, and each animal.
-   * Rebuilt per click rather than kept up to date - a click is rare, and a
-   * couple of hundred small objects is nothing to make once.
+   * Rebuilt per click rather than kept up to date - a click is rare, and the
+   * few hundred small objects within reach are nothing to make once.
    */
   private clickCandidates(): ClickCandidate[] {
     const candidates: ClickCandidate[] = [];
@@ -3573,10 +3594,14 @@ export class Game {
       const kind = PROP_KINDS[prop.kind];
       if (kind.shape.family !== 'tree') continue;
       const base = prop.y ?? 0;
+    const here = this.localPlayer?.motion.position;
       const trunkTop = base + kind.shape.trunkHeight * prop.scale;
       candidates.push({
         x: prop.x,
         z: prop.z,
+      if (here !== undefined && Math.hypot(prop.x - here.x, prop.z - here.z) > CLICK_TREE_RANGE) {
+        continue;
+      }
         radius: Math.max(kind.colliderRadius * prop.scale, CLICK_TRUNK_MIN_RADIUS),
         bottom: base,
         top: trunkTop,
@@ -3744,7 +3769,7 @@ export class Game {
       position,
       deltaSeconds,
       this.space === OUTDOORS
-        ? [wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
+        ? [...wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
         : [],
     );
     this.updatePlacement(camera, player);
@@ -4383,6 +4408,7 @@ export class Game {
   /** A blow landing on an animal, from somebody at `from`: fur flies and it is knocked back a step. */
   private showBlowOnAnimal(animalId: number, from: Readonly<Vec3>, strength: number): void {
     const pose = this.remoteAnimals.poseOf(animalId);
+    this.wildernessScene?.shakeTree(tree.id, away.x, away.z, strength);
     if (pose === undefined) return;
     const away = awayFrom(from, pose);
     const at = this.scratchBlow.set(pose.x, pose.y + BLOW_HEIGHT_ON_ANIMAL, pose.z);

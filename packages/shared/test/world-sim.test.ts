@@ -30,6 +30,7 @@ import {
   TICK_HZ,
   TICK_MILLISECONDS,
   TICK_SECONDS,
+  WILDERNESS_PROP_FIRST_ID,
 } from '../src/constants';
 import { COLLISION_SKIN_WIDTH } from '../src/collision/capsule';
 import { ANIMAL_KINDS } from '../src/data/animals';
@@ -38,7 +39,7 @@ import { ITEM_KINDS, type ItemId } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { DAY_LENGTH_MS } from '../src/sim/day-night';
-import { regrowDueAtMs } from '../src/sim/regrowth';
+import { regrowDueAtMs, treeAtGeneration } from '../src/sim/regrowth';
 import { TREE_BREAK_SECONDS } from '../src/sim/tree-fall';
 import { patchRegrowDelayMs } from '../src/sim/gathering';
 import { overlapsWater } from '../src/world/water';
@@ -2237,6 +2238,233 @@ describe('chopping a tree down', () => {
     swingOnce(sim, 1, 1);
     expect(sim.drainChopEvents()).toHaveLength(1);
     expect(sim.drainChopEvents()).toEqual([]);
+  });
+});
+
+describe('trees in the wilderness', () => {
+  const withAxe = (netId: number): PersistedPlayer => ({
+    netId,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    items: [
+      { item: 'bag', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
+    hunger: HUNGER_MAX,
+  });
+
+  /** A forest tree with nothing else within five metres, so there is room to stand and swing at it. */
+  function loneForestTree(sim: WorldSimulation, kind: 'oak' | 'birch' | 'pine') {
+    const tree = sim.wilderness.props.find(
+      (prop) =>
+        prop.kind === kind &&
+        sim.wilderness.props.every(
+          (other) => other === prop || Math.hypot(other.x - prop.x, other.z - prop.z) > 5,
+        ) &&
+        // Keep to open ground well inside the world, away from the lake and its islands.
+        Math.hypot(prop.x, prop.z) < 120 &&
+        Math.hypot(prop.x - 90, prop.z + 90) > 80,
+    );
+    if (tree === undefined) throw new Error(`no lone ${kind} in the forest`);
+    return tree;
+  }
+
+  function standBy(
+    sim: WorldSimulation,
+    netId: number,
+    tree: { x: number; z: number; kind: string; scale: number },
+  ) {
+    const radius = PROP_KINDS[tree.kind as keyof typeof PROP_KINDS].colliderRadius * tree.scale;
+    sim.placePlayer(netId, { x: tree.x, y: 0, z: tree.z + radius + 1 }, 0);
+  }
+
+  /** Swing until the tree is down; returns the moment it fell. */
+  function swingUntilDown(sim: WorldSimulation, netId: number, treeId: number): number {
+    let seq = 1;
+    for (let tick = 0; tick < 200; tick++) {
+      sim.queueInput(netId, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      const now = tickClock();
+      sim.step(now);
+      if (sim.isFelled(treeId)) return now;
+    }
+    throw new Error('the tree never came down');
+  }
+
+  it('numbers the forest apart from the clearing, so no tree shares a number', () => {
+    const sim = createWorld();
+    const ids = [...sim.clearing.props, ...sim.wilderness.props].map((prop) => prop.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(Math.max(...sim.clearing.props.map((prop) => prop.id))).toBeLessThan(
+      WILDERNESS_PROP_FIRST_ID,
+    );
+    expect(Math.min(...sim.wilderness.props.map((prop) => prop.id))).toBeGreaterThanOrEqual(
+      WILDERNESS_PROP_FIRST_ID,
+    );
+  });
+
+  it('takes the same swings to fell a forest tree as a clearing tree of its kind', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'pine');
+    standBy(sim, 1, tree);
+
+    expect(sim.treeInReachOf({ x: tree.x, y: 0, z: tree.z + 2 }, 0)?.prop.id).toBe(tree.id);
+    let landed = 0;
+    let seq = 1;
+    for (let tick = 0; tick < 200 && !sim.isFelled(tree.id); tick++) {
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+      landed += sim.drainChopEvents().length;
+    }
+    expect(landed).toBe(choppingRuleFor(PROP_KINDS.pine)?.swingsToFell);
+    expect(sim.felledTreeIds()).toEqual([tree.id]);
+    expect(sim.swingsLeftOn(tree.id)).toBeNull();
+  });
+
+  it('leaves a stump you can walk over, and drops the logs where it fell', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'oak');
+    standBy(sim, 1, tree);
+    const trunk =
+      sim.collision.colliders[
+        sim.clearing.colliders.length + (sim.wilderness.indexById.get(tree.id) ?? -1)
+      ];
+    if (trunk?.shape !== 'cylinder') throw new Error('expected a cylinder trunk');
+    const trunkHeight = trunk.height;
+
+    swingUntilDown(sim, 1, tree.id);
+
+    const stump =
+      sim.collision.colliders[
+        sim.clearing.colliders.length + (sim.wilderness.indexById.get(tree.id) ?? -1)
+      ];
+    if (stump?.shape !== 'cylinder') throw new Error('expected a cylinder stump');
+    expect(stump.height).toBeLessThan(trunkHeight);
+    expect(stump.height).toBeLessThan(1);
+    // The logs show once the tree has finished falling.
+    sim.step(clockMs + (TREE_BREAK_SECONDS + 1) * 1000);
+    expect(sim.droppedPilesList().length).toBeGreaterThan(0);
+  });
+
+  it('no longer offers a felled forest tree to the next swing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'birch');
+    standBy(sim, 1, tree);
+    swingUntilDown(sim, 1, tree.id);
+
+    expect(sim.treeInReachOf({ x: tree.x, y: 0, z: tree.z + 2 }, 0)).toBeNull();
+  });
+
+  it('does not put a log inside the trunk of the tree beside it', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    // The densest stretch of forest, so a log landing on a neighbour is likely if nothing stops it.
+    const crowded = sim.wilderness.props
+      .filter((prop) => choppingRuleFor(PROP_KINDS[prop.kind]) !== null)
+      .map((prop) => ({
+        prop,
+        near: sim.wilderness.props.filter(
+          (other) => other !== prop && Math.hypot(other.x - prop.x, other.z - prop.z) < 3.5,
+        ).length,
+      }))
+      .filter((entry) => Math.hypot(entry.prop.x, entry.prop.z) < 110)
+      .sort((a, b) => b.near - a.near)[0];
+    if (crowded === undefined) throw new Error('no crowded tree');
+    const tree = crowded.prop;
+    sim.placePlayer(1, { x: tree.x, y: 0, z: tree.z + 2.5 }, 0);
+    swingUntilDown(sim, 1, tree.id);
+
+    for (const log of sim.droppedPilesList()) {
+      for (const other of sim.wilderness.props) {
+        if (other.id === tree.id) continue;
+        const reach = PROP_KINDS[other.kind].colliderRadius * other.scale;
+        expect(Math.hypot(other.x - log.x, other.z - log.z)).toBeGreaterThanOrEqual(reach - 1e-6);
+      }
+    }
+  });
+
+  it('hands over only the trees that changed, once', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'birch');
+    standBy(sim, 1, tree);
+    expect(sim.drainTreeChanges()).toEqual([]);
+
+    swingUntilDown(sim, 1, tree.id);
+
+    const changed = sim.drainTreeChanges();
+    expect(changed).toEqual([tree.id]);
+    expect(sim.drainTreeChanges()).toEqual([]);
+    expect(sim.changedTrees(changed)).toEqual([
+      expect.objectContaining({ treeId: tree.id, felled: true, generation: 0 }),
+    ]);
+    expect(sim.persistableTrees(changed).map((saved) => saved.treeId)).toEqual([tree.id]);
+  });
+
+  it('remembers a felled forest tree across a restart, stump and all', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'oak');
+    standBy(sim, 1, tree);
+    swingUntilDown(sim, 1, tree.id);
+
+    const later = createWorld();
+    later.restoreTrees(sim.persistableTrees());
+
+    expect(later.felledTreeIds()).toEqual([tree.id]);
+    const stump =
+      later.collision.colliders[
+        later.clearing.colliders.length + (later.wilderness.indexById.get(tree.id) ?? -1)
+      ];
+    if (stump?.shape !== 'cylinder') throw new Error('expected a cylinder');
+    expect(stump.height).toBeLessThan(1);
+    // What was only read back is not news to be saved again.
+    expect(later.drainTreeChanges()).toEqual([]);
+  });
+
+  it('grows a forest tree back at its own size once its time is up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'birch');
+    standBy(sim, 1, tree);
+    const felledAt = swingUntilDown(sim, 1, tree.id);
+    sim.drainTreeChanges();
+    const dueAt = regrowDueAtMs(sim.seed, tree.id, 0, felledAt);
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+
+    expect(sim.regrowTrees(dueAt - 60_000)).toEqual([]);
+    expect(sim.regrowTrees(dueAt)).toEqual([{ treeId: tree.id, generation: 1 }]);
+    expect(sim.isFelled(tree.id)).toBe(false);
+    expect(sim.generationOf(tree.id)).toBe(1);
+    expect(sim.drainTreeChanges()).toEqual([tree.id]);
+    // It can be chopped again, at whatever size it came back.
+    const grown = treeAtGeneration(sim.seed, tree, 1);
+    const beside = {
+      x: tree.x,
+      y: 0,
+      z: tree.z + PROP_KINDS.birch.colliderRadius * grown.scale + 1,
+    };
+    const target = sim.treeInReachOf(beside, 0);
+    expect(target?.prop.id).toBe(tree.id);
+    expect(target?.prop.scale).toBe(grown.scale);
+  });
+
+  it('waits for somebody to step away before a forest tree grows back', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = loneForestTree(sim, 'birch');
+    standBy(sim, 1, tree);
+    const felledAt = swingUntilDown(sim, 1, tree.id);
+    const dueAt = regrowDueAtMs(sim.seed, tree.id, 0, felledAt);
+
+    // Still right beside the stump.
+    expect(sim.regrowTrees(dueAt + 60_000)).toEqual([]);
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+    expect(sim.regrowTrees(dueAt + 60_000)).toHaveLength(1);
   });
 });
 

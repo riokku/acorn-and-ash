@@ -835,6 +835,20 @@ interface PlayerRuntime {
    * every reconnect - this is what a home belongs to.
    */
   readonly playerKey: string | null;
+/**
+ * Where a prop sits in the world's lists, so felling a tree can find its
+ * collider to swap for a stump and growing it back can put the new one in
+ * the same place.
+ */
+interface TreeSlot {
+  /** Which list it is in: the hand-built clearing, or the generated wilderness. */
+  readonly wilderness: boolean;
+  /** Its place in that list (`props`, and the matching list of standing props). */
+  readonly index: number;
+  /** Its place in the collision world's flat list of colliders. */
+  readonly colliderIndex: number;
+}
+
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
@@ -991,9 +1005,16 @@ export class WorldSimulation {
   /** Everywhere the pond or the lake reaches, for the checks that only need to keep clear of water. */
   private readonly keepOutWater: readonly WaterCircle[];
   /**
-   * The generated forest beyond the clearing. Built once from the seed and
-   * never touched again: none of it is ever chopped or picked up, so unlike
-   * `clearing` it has no state worth keeping past construction.
+   * The generated forest beyond the clearing, as the seed lays it out. Its
+   * trees can be chopped down and grow back like the clearing's, so what
+   * stands there now is `standingWilderness`; this is how it started.
+/**
+ * How far from a spot a tree or rock can be and still matter to a log or a
+ * pile put down there: the farthest a log is nudged (4 m) plus the widest
+ * trunk, with room to spare.
+ */
+const LOG_SEARCH_REACH = 8;
+
    */
   readonly wilderness: Wilderness;
   readonly encounterSites: readonly EncounterSite[];
@@ -1278,6 +1299,10 @@ export class WorldSimulation {
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
   private readonly collectionEvents: CollectedEvent[] = [];
+  /** Where every prop sits in the lists above, by its number. */
+  private readonly treeSlots = new Map<number, TreeSlot>();
+  /** Trees chopped, felled or grown back since this was last asked, so only those are sent and saved. */
+  private readonly treeChanges = new Set<number>();
   private readonly pickupRefusals: PickupRefusal[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
@@ -1352,6 +1377,8 @@ export class WorldSimulation {
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
+  /** The same, for the wilderness: what stands there now, in the same order as `wilderness.props`. */
+  private readonly standingWilderness: PlacedProp[];
     this.encounterSites = buildEncounterSites(
       options.seed,
       terrain,
@@ -1393,6 +1420,18 @@ export class WorldSimulation {
 
     for (const den of ANIMAL_DENS) {
       this.spawnAnimal(den, terrain);
+    }
+    this.standingWilderness = [...this.wilderness.props];
+    for (const [id, index] of this.clearing.indexById) {
+      this.treeSlots.set(id, { wilderness: false, index, colliderIndex: index });
+    }
+    // The wilderness's colliders follow all of the clearing's, walls round the water included.
+    for (const [id, index] of this.wilderness.indexById) {
+      this.treeSlots.set(id, {
+        wilderness: true,
+        index,
+        colliderIndex: this.clearing.colliders.length + index,
+      });
     }
 
     this.raids = new RaidDirector(
@@ -2875,7 +2914,7 @@ export class WorldSimulation {
    */
   regrowPatches(nowMs: number): void {
     for (const patch of this.patches) {
-      if (!patchIsDue(this.seed, patch, nowMs, this.patchRegrowMinSeconds)) continue;
+      if (!this.patchIsDueBack(patch, nowMs)) continue;
       const generation = patch.generation + 1;
       if (!this.movePatch(patch, generation, nowMs)) continue;
       patch.remaining = patchCount(this.seed, patch.id, generation);
@@ -3105,10 +3144,18 @@ export class WorldSimulation {
   }
 
   /** Whether something dropped here would lie on open ground, not in the pond or inside a trunk. */
-  private dropSpotIsClear(x: number, z: number): boolean {
+  private dropSpotIsClear(
+    x: number,
+    z: number,
+    footprints: readonly Footprint[] = this.buildFootprints(undefined, true, {
+      x,
+      z,
+      reach: LOG_SEARCH_REACH,
+    }),
+  ): boolean {
     if (overlapsWater(this.keepOutWater, x, z, 0)) return false;
     const here = roundFootprint(x, z, 0, 'pile');
-    return !this.buildFootprints().some((footprint) => footprintGap(here, footprint) < 0);
+    return !footprints.some((footprint) => footprintGap(here, footprint) < 0);
   }
 
   /**
@@ -3430,13 +3477,19 @@ export class WorldSimulation {
     spot: { x: number; z: number },
     cutter: Readonly<Vec3>,
   ): { x: number; z: number } {
-    if (this.dropSpotIsClear(spot.x, spot.z)) return spot;
+    // Worked out once: the search below tries up to a hundred spots, all close to this one.
+    const footprints = this.buildFootprints(undefined, true, {
+      x: spot.x,
+      z: spot.z,
+      reach: LOG_SEARCH_REACH,
+    });
+    if (this.dropSpotIsClear(spot.x, spot.z, footprints)) return spot;
     for (let radius = 0.5; radius <= 4; radius += 0.5) {
       for (let direction = 0; direction < 12; direction++) {
         const angle = (direction / 12) * Math.PI * 2;
         const x = spot.x + Math.sin(angle) * radius;
         const z = spot.z + Math.cos(angle) * radius;
-        if (this.dropSpotIsClear(x, z)) return { x, z };
+        if (this.dropSpotIsClear(x, z, footprints)) return { x, z };
       }
     }
     return { x: cutter.x, z: cutter.z };
@@ -3466,6 +3519,7 @@ export class WorldSimulation {
     if (nearest === null) return false;
 
     nearest.rower = runtime.netId;
+      this.treeChanges.add(target.prop.id);
     runtime.boatId = nearest.id;
     runtime.interactSpent = true;
     this.boatChanges.add(nearest.id);
@@ -4114,16 +4168,43 @@ export class WorldSimulation {
     ];
   }
 
-  private buildFootprints(excludeId?: number, includeWilderness = false): Footprint[] {
-    return [
-      ...[...this.standing, ...(includeWilderness ? this.wilderness.props : [])].map((prop) =>
+  /**
+   * Every tree and rock as a footprint, the clearing's and, if asked, the
+   * forest's - or only those within `near.reach` metres either way of a spot,
+   * which is all a log or a pile needs and saves a thousand footprints.
+   */
+  private propFootprints(
+    includeWilderness: boolean,
+    near?: { x: number; z: number; reach: number },
+  ): Footprint[] {
+    const footprints: Footprint[] = [];
+    const add = (prop: PlacedProp): void => {
+      if (
+        near !== undefined &&
+        (Math.abs(prop.x - near.x) > near.reach || Math.abs(prop.z - near.z) > near.reach)
+      )
+        return;
+      footprints.push(
         roundFootprint(
           prop.x,
           prop.z,
           PROP_KINDS[prop.kind].colliderRadius * prop.scale,
           PROP_KINDS[prop.kind].displayName.toLowerCase(),
         ),
-      ),
+      );
+    };
+    this.standing.forEach(add);
+    if (includeWilderness) this.standingWilderness.forEach(add);
+    return footprints;
+  }
+
+  private buildFootprints(
+    excludeId?: number,
+    includeWilderness = false,
+    near?: { x: number; z: number; reach: number },
+  ): Footprint[] {
+    return [
+      ...this.propFootprints(includeWilderness, near),
       ...this.builtProps
         .filter((built) => built.id !== excludeId)
         .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),
@@ -4223,10 +4304,8 @@ export class WorldSimulation {
     state.swingsTaken = 0;
     state.felledAtMs = felledAtMs;
 
-    const index = this.clearing.indexById.get(treeId);
-    const tree = index === undefined ? undefined : this.standing[index];
-    if (index === undefined || tree === undefined) return;
-    replaceCollider(this.collision, index, stumpColliderFor(tree));
+  private standIn(slot: TreeSlot, prop: PlacedProp): void {
+    (slot.wilderness ? this.standingWilderness : this.standing)[slot.index] = prop;
   }
 
   /**
@@ -4241,13 +4320,13 @@ export class WorldSimulation {
     state.swingsTaken = 0;
     state.generation = nextGeneration(state.generation);
 
-    const index = this.clearing.indexById.get(treeId);
-    const original = index === undefined ? undefined : this.clearing.props[index];
-    if (index === undefined || original === undefined) return;
+    const slot = this.treeSlots.get(treeId);
+    const original = slot === undefined ? undefined : this.originalAt(slot);
+    if (slot === undefined || original === undefined) return;
 
     const grown = treeAtGeneration(this.seed, original, state.generation);
-    this.standing[index] = grown;
-    replaceCollider(this.collision, index, colliderForProp(grown));
+    this.standIn(slot, grown);
+    replaceCollider(this.collision, slot.colliderIndex, colliderForProp(grown));
     this.regrowthEvents.push({ treeId, generation: state.generation });
   }
 
@@ -4290,9 +4369,26 @@ export class WorldSimulation {
       );
       if (nowMs < dueAt) continue;
 
-      const index = this.clearing.indexById.get(treeId);
-      const original = index === undefined ? undefined : this.clearing.props[index];
-      if (index === undefined || original === undefined) continue;
+    this.treeChanges.add(treeId);
+
+    const slot = this.treeSlots.get(treeId);
+    const tree = slot === undefined ? undefined : this.standingAt(slot);
+    if (slot === undefined || tree === undefined) return;
+    replaceCollider(this.collision, slot.colliderIndex, stumpColliderFor(tree));
+  }
+
+  /** The prop standing in this slot now, which is not the one the seed laid out once a tree has grown back. */
+  private standingAt(slot: TreeSlot): PlacedProp | undefined {
+    return (slot.wilderness ? this.standingWilderness : this.standing)[slot.index];
+  }
+
+  /** The prop the seed laid out in this slot. */
+  private originalAt(slot: TreeSlot): PlacedProp | undefined {
+    return (slot.wilderness ? this.wilderness.props : this.clearing.props)[slot.index];
+  }
+      const slot = this.treeSlots.get(treeId);
+      const original = slot === undefined ? undefined : this.originalAt(slot);
+      if (slot === undefined || original === undefined) continue;
 
       // The same tree `growTree` is about to put here, so the room it asks for
       // is the room it will take.
@@ -4308,8 +4404,18 @@ export class WorldSimulation {
   }
 
   /** The tree this player would hit if they swung, or null. Used by tests. */
+    this.treeChanges.add(treeId);
   treeInReachOf(position: Readonly<Vec3>, aimYaw: number): ChopTarget | null {
-    return treeInReach(position, aimYaw, this.standing, (id) => this.isFelled(id));
+    const target = treeInReach(position, aimYaw, this.standing, (id) => this.isFelled(id));
+    const further = treeInReach(position, aimYaw, this.standingWilderness, (id) =>
+      this.isFelled(id),
+    );
+    if (target === null || further === null) return target ?? further;
+    // The clearing's trees and the forest's are separate lists; the nearer one wins.
+    return Math.hypot(further.prop.x - position.x, further.prop.z - position.z) <
+      Math.hypot(target.prop.x - position.x, target.prop.z - position.z)
+      ? further
+      : target;
   }
 
   isFelled(treeId: number): boolean {
@@ -4346,8 +4452,8 @@ export class WorldSimulation {
   swingsLeftOn(treeId: number): number | null {
     const state = this.trees.get(treeId);
     if (state?.felled === true) return null;
-    const index = this.clearing.indexById.get(treeId);
-    const tree = index === undefined ? undefined : this.standing[index];
+    const slot = this.treeSlots.get(treeId);
+    const tree = slot === undefined ? undefined : this.standingAt(slot);
     if (tree === undefined) return null;
     const rule = choppingRuleFor(PROP_KINDS[tree.kind]);
     if (rule === null) return null;
@@ -4366,11 +4472,17 @@ export class WorldSimulation {
     return this.trees.get(treeId)?.generation ?? 0;
   }
 
-  /** What the client needs to draw the trees that are not as the seed left them. */
-  changedTrees(): Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> {
+  /**
+   * What the client needs to draw the trees that are not as the seed left
+   * them: every one, or only the ids asked for - the trees a change just
+   * touched, so one swing of an axe does not resend the whole forest.
+   */
+  changedTrees(
+    only?: Iterable<number>,
+  ): Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> {
     const changed: Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> =
       [];
-    for (const [treeId, state] of this.trees) {
+    for (const [treeId, state] of this.treesOf(only)) {
       if (!state.felled && state.generation === 0) continue;
       changed.push({
         treeId,
@@ -4384,10 +4496,13 @@ export class WorldSimulation {
     return changed;
   }
 
-  /** Everything worth saving about the trees. Untouched trees are not saved. */
-  persistableTrees(): PersistedTree[] {
+  /**
+   * Everything worth saving about the trees - or only the ids asked for.
+   * Untouched trees are not saved.
+   */
+  persistableTrees(only?: Iterable<number>): PersistedTree[] {
     const saved: PersistedTree[] = [];
-    for (const [treeId, state] of this.trees) {
+    for (const [treeId, state] of this.treesOf(only)) {
       if (!state.felled && state.swingsTaken === 0 && state.generation === 0) continue;
       saved.push({
         treeId,
@@ -4409,12 +4524,12 @@ export class WorldSimulation {
       state.swingsTaken = tree.swingsTaken;
       state.fallYaw = tree.fallYaw ?? null;
 
-      const index = this.clearing.indexById.get(tree.treeId);
-      const original = index === undefined ? undefined : this.clearing.props[index];
-      if (index !== undefined && original !== undefined && tree.generation > 0) {
+      const slot = this.treeSlots.get(tree.treeId);
+      const original = slot === undefined ? undefined : this.originalAt(slot);
+      if (slot !== undefined && original !== undefined && tree.generation > 0) {
         const grown = treeAtGeneration(this.seed, original, tree.generation);
-        this.standing[index] = grown;
-        replaceCollider(this.collision, index, colliderForProp(grown));
+        this.standIn(slot, grown);
+        replaceCollider(this.collision, slot.colliderIndex, colliderForProp(grown));
       }
 
       if (tree.felled) this.fellTree(tree.treeId, tree.felledAtMs);
@@ -4469,6 +4584,29 @@ export class WorldSimulation {
 
   /** Put buried caches back as they were after the world wakes from storage. */
   restoreBuriedCaches(caches: Iterable<BuriedCache>): void {
+  /** The trees the caller asked about, or every tree anybody has touched. */
+  private treesOf(only?: Iterable<number>): Iterable<[number, TreeState]> {
+    if (only === undefined) return this.trees;
+    const found: Array<[number, TreeState]> = [];
+    for (const treeId of only) {
+      const state = this.trees.get(treeId);
+      if (state !== undefined) found.push([treeId, state]);
+    }
+    return found;
+  }
+
+  /**
+   * Which trees were chopped, felled or grown back since this was last asked.
+   *
+   * A forest has over a thousand trees and a world saves and sends only what
+   * changed: asking hands the list over and starts it afresh.
+   */
+  drainTreeChanges(): number[] {
+    const ids = [...this.treeChanges];
+    this.treeChanges.clear();
+    return ids;
+  }
+
     for (const cache of caches) {
       this.buriedCaches.push(cache);
       this.nextBuriedCacheId = Math.max(this.nextBuriedCacheId, cache.id + 1);
@@ -4487,6 +4625,8 @@ export class WorldSimulation {
   /** Hand over every change to anybody's own buried cache since this was last asked. */
   drainCacheEvents(): CacheChange[] {
     return this.cacheEvents.splice(0);
+    // What was just read back is already saved; only later changes are news.
+    this.treeChanges.clear();
   }
 
   /** Hand over every swing that landed since this was last asked. */
