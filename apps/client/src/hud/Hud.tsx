@@ -866,6 +866,11 @@ export function hint(state: HudState): string {
     return 'Resting at home · safe and sheltered · move or press E to get up';
   if (state.resting === 'bed')
     return 'Snug in bed · safe and sheltered · move or press E to get up';
+  // Out on the water, the oars are all there is to think about.
+  if (state.boat === 'climbOut')
+    return 'Rowing · move to steer, Shift to pull harder · press E to climb out here';
+  if (state.boat === 'tooFar')
+    return 'Rowing · move to steer, Shift to pull harder · row up to a shore to climb out';
   // A held raw food beside a lit campfire is deliberately saved for cooking
   // even while hungry, so say what E will really do before the hunger nudge.
   const cookingNow = campfireCookingHint(state);
@@ -891,6 +896,9 @@ export function hint(state: HudState): string {
   // clearing to be found, then something dropped, then a patch.
   if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
+  // A boat comes after the reeds: the press cuts them first, the way the server does.
+  if (state.boat === 'board') return 'Press E to climb into the rowboat';
+  if (state.boat === 'taken') return 'Somebody is already rowing this boat';
   if (state.nearBuriedCache) return 'Press E to recover belongings · leftovers stay safely here';
   if (state.nearbyDiscovery === 'The elk grove')
     return 'Press E to sketch the elk · give it room to settle';

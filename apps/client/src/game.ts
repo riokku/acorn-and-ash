@@ -131,6 +131,8 @@ import {
   exploredFraction,
   nearestBuriedCache,
   nearestCampfire,
+  isWithinBoardingReach,
+  landingFrom,
   pickupInReach,
   reedFootprints,
   replaceCollider,
@@ -174,6 +176,7 @@ import {
   type RosterEntry,
   type ServerMessage,
   type SnapshotEntity,
+  type ActionState,
   type Vec3,
 } from '@acorn/shared';
 
@@ -209,7 +212,7 @@ import { preloadCharacterModels } from './scene/character-model';
 import { preloadCharacterAnimations } from './scene/character-animations';
 import { preloadRaiderModels } from './scene/raider-model';
 import { RaiderCrowd, type FlatPoint } from './scene/raiders';
-import { MoveMemory, restSpotFor, rollDirection } from './scene/character-driver';
+import { MoveMemory, boatSeatAt, restSpotFor, rollDirection } from './scene/character-driver';
 import {
   playSwoosh,
   playThreatHit,
@@ -252,10 +255,11 @@ import { installBvhRaycasting } from './scene/bvh';
 import { createRenderer, type RendererSetup } from './scene/renderer';
 import { createBuildGhost, type BuildGhost } from './scene/build-ghost';
 import { createRowboat, type Rowboat } from './scene/rowboat';
+import { RowingBoats } from './scene/rowing-boats';
 import { createGrass, type GrassScene } from './scene/grass';
 import { createHomeInterior, type HomeInterior } from './scene/home-interior';
 import { planPlacement, type PlacementPlan } from './building/placement';
-import type { FishingPhase, HudStore, RaidBanner } from './hud/store';
+import type { BoatHint, FishingPhase, HudStore, RaidBanner } from './hud/store';
 import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
 import { CombatFeed, type ThreatMark } from './hud/combat-feed';
 import { raidBannerFor } from './hud/raid-banner';
@@ -571,7 +575,17 @@ export interface GameDebug {
     yaw: number;
     lit: boolean;
     yours: boolean;
+    /** A rowboat somebody is rowing. */
+    occupied?: boolean;
   }>;
+  /**
+   * Boats on the water (see decision 0093): how many moored ones are drawn,
+   * and the ones drawn under riders, wherever they are this frame.
+   */
+  boats(): {
+    moored: number;
+    rowed: Array<{ netId: number; x: number; z: number; yaw: number }>;
+  };
   /**
    * The piece being placed, if any: which kind, where its preview stands
    * right now, and why a click would not place it, if it would not.
@@ -701,6 +715,8 @@ export class Game {
   private ownCacheCompass: Compass | null = null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   private nearCampfire: 'lit' | 'unlit' | null = null;
+  /** What E would do about a rowboat right now, for the hint line. */
+  private boatHint: BoatHint = null;
   private nearWorkbench = false;
   private nearGarden = false;
   private garden: GardenState = {
@@ -738,6 +754,8 @@ export class Game {
   private pendingSpace: { space: number; x: number; z: number; yaw: number } | null = null;
   /** Everything out in the world, hidden all at once while we are inside a home. */
   private readonly outdoors = new THREE.Group();
+  /** The boat under everybody who is rowing one, drawn wherever they are this frame. */
+  private readonly rowingBoats = new RowingBoats(this.outdoors);
   /** The room inside a home, built the first time anybody goes in. */
   private homeInterior: HomeInterior | null = null;
   /** The walls and furniture of a room, shared by every home, in its own coordinates. */
@@ -1334,6 +1352,12 @@ export class Game {
       buildMenuOpen: () => this.buildMenuOpen,
       craftMenuOpen: () => this.craftMenuOpen,
       builtProps: () => this.builtProps.map((prop) => ({ ...prop })),
+      boats: () => ({
+        moored: this.builtProps.filter(
+          (prop) => prop.kind === 'rowboat' && this.builtMeshes.get(prop.id)?.group.visible,
+        ).length,
+        rowed: this.rowingBoats.drawnBoats(),
+      }),
       buildPreview: () =>
         this.placing === null
           ? null
@@ -1434,6 +1458,7 @@ export class Game {
     this.critters.clear();
     for (const built of this.builtMeshes.values()) built.dispose();
     this.builtMeshes.clear();
+    this.rowingBoats.dispose();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
     this.raiders.dispose();
@@ -2441,6 +2466,14 @@ export class Game {
         // campfire lighting up or going out, so an existing mesh needs to
         // hear about it too, not just a freshly created one.
         if ('setLit' in existing) existing.setLit(prop.lit);
+        // A boat is the one piece that moves, and only when somebody climbs
+        // in or out: it is hidden while it is being rowed, because the boat
+        // under the rider is the one drawn.
+        if (prop.kind === 'rowboat') {
+          existing.group.position.set(prop.x, LAKE.level, prop.z);
+          existing.group.rotation.y = prop.yaw;
+          existing.group.visible = prop.occupied !== true;
+        }
         continue;
       }
       const built = createBuiltMesh(prop.kind);
@@ -2449,6 +2482,7 @@ export class Game {
       if ('setLit' in built) built.setLit(prop.lit);
       built.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
       built.group.rotation.y = prop.yaw;
+      built.group.visible = prop.occupied !== true;
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
       this.builtMeshes.set(prop.id, built);
@@ -2745,6 +2779,8 @@ export class Game {
         forestWeather(this.weatherSeed, this.estimatedServerTimeMs()).wind,
       );
     this.updateRemotePlayers(deltaSeconds);
+    // After everybody, ours included, has been placed: boats of those who stopped rowing go.
+    this.rowingBoats.sweep();
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
     this.bursts.update(deltaSeconds);
@@ -3621,12 +3657,26 @@ export class Game {
     );
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
+    const rowing = action.kind === ActionKind.Row;
     character.setRestSpot(
-      restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+      rowing
+        ? boatSeatAt(position.x, position.z, player.renderYaw())
+        : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
     );
+    const speed = Math.hypot(velocity.x, velocity.z);
+    if (rowing)
+      this.rowingBoats.place(
+        this.selfNetId,
+        position.x,
+        position.z,
+        player.renderYaw(),
+        speed,
+        deltaSeconds,
+      );
     const pose = character.update(deltaSeconds, {
       move,
-      locomotion: { speed: Math.hypot(velocity.x, velocity.z), airborne: !player.motion.grounded },
+      // Seated, so the legs never walk while the boat carries them along.
+      locomotion: { speed: rowing ? 0 : speed, airborne: !player.motion.grounded && !rowing },
     });
     this.sweepTrail(this.selfNetId, character, pose, deltaSeconds);
     this.showKnockout(action.kind, action.age);
@@ -3808,6 +3858,7 @@ export class Game {
     // whether a press lights it, puts it out, or does nothing at all.
     const nearbyCampfire = nearestCampfire(player.motion.position, this.builtProps);
     this.nearCampfire = nearbyCampfire === null ? null : nearbyCampfire.lit ? 'lit' : 'unlit';
+    this.boatHint = this.boatHintFor(player.motion.position, action);
 
     // A skeleton in reach beats anything else a swing could find, the same
     // way the server's own `landBlow` decides it (see decision 0063).
@@ -4007,6 +4058,24 @@ export class Game {
   private restingNow(): 'chair' | 'bed' | null {
     const kind = this.localPlayer?.action.kind;
     return kind === ActionKind.Sit ? 'chair' : kind === ActionKind.Lie ? 'bed' : null;
+  }
+
+  /**
+   * What a press of E would do about a rowboat, for the hint line. Only a
+   * hint: climbing in or out is the server's call, made by the same rules
+   * (see decision 0093).
+   */
+  private boatHintFor(position: Readonly<Vec3>, action: Readonly<ActionState>): BoatHint {
+    if (action.kind === ActionKind.Row)
+      return landingFrom(position.x, position.z) === null ? 'tooFar' : 'climbOut';
+    if (!isFreeToInteract(action) || this.fishingPhase !== null) return null;
+    let taken = false;
+    for (const prop of this.builtProps) {
+      if (prop.kind !== 'rowboat' || !isWithinBoardingReach(position, prop)) continue;
+      if (prop.occupied !== true) return 'board';
+      taken = true;
+    }
+    return taken ? 'taken' : null;
   }
 
   private doorHintAt(position: Readonly<Vec3>): 'enter' | 'visit' | 'locked' | 'leave' | null {
@@ -4317,12 +4386,16 @@ export class Game {
         rollDirection(pose.actionHeading, pose.yaw),
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
+      const rowing = action.kind === ActionKind.Row;
       character.setRestSpot(
-        restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+        rowing
+          ? boatSeatAt(pose.x, pose.z, pose.yaw)
+          : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
       );
+      if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw, pose.speed, deltaSeconds);
       const drawn = character.update(deltaSeconds, {
         move,
-        locomotion: { speed: pose.speed, airborne: pose.airborne },
+        locomotion: { speed: rowing ? 0 : pose.speed, airborne: pose.airborne && !rowing },
       });
       this.sweepTrail(netId, character, drawn, deltaSeconds);
     }
@@ -4506,6 +4579,7 @@ export class Game {
       decorations: this.decorations.filter((piece) => piece.homeId === this.space),
       decorNote: this.decorNote,
       resting: this.restingNow(),
+      boat: this.space === OUTDOORS ? this.boatHint : null,
       restingNearby: this.space === OUTDOORS ? null : this.restingNearby,
     });
   }

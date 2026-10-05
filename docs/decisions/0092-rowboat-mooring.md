@@ -18,4 +18,4 @@ On the screen, the boat is a placeholder hull (`apps/client/src/scene/rowboat.ts
 
 ## Consequences
 
-A moored boat is saved with the rest of the world's built pieces and comes back as it was. Nothing can climb in yet, and nobody collides with it, so for now it is something to look at. The next change makes the boat the thing a rider is carried by. It will have to keep the boat in water at least this deep, and decide what happens to a boat when the lake freezes in winter, so that is worth settling there and not here. The build menu's number keys still cover only the first six pieces, so the boat is reached by clicking.
+A moored boat is saved with the rest of the world's built pieces and comes back as it was. Climbing in and rowing came next, in decision 0093, which keeps the boat in water at least this deep. Nobody collides with a moored boat. What happens to a boat when the lake freezes in winter is still to settle. The build menu's number keys still cover only the first six pieces, so the boat is reached by clicking.

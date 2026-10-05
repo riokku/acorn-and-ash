@@ -448,6 +448,8 @@ export class World extends DurableObject<WorldEnv> {
     if (simulation !== null) {
       this.savePlayer(simulation, attachment);
       simulation.removePlayer(attachment.netId);
+      // Somebody leaving a boat out on the water has it put ashore for them.
+      this.announceBoats(simulation);
       this.broadcast(encodePlayerLeft(attachment.netId), ws);
 
       if (simulation.playerCount === 0) {
@@ -505,6 +507,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceThreatHits(simulation);
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
+    this.announceBoats(simulation);
     this.announceFishing(simulation);
     this.announceHunger(simulation);
     this.announceCooking(simulation);
@@ -773,6 +776,28 @@ export class World extends DurableObject<WorldEnv> {
       for (const result of feedback)
         if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
     }
+  }
+
+  /**
+   * Somebody climbed into or out of a rowboat: tell everybody, so it is drawn
+   * under its rider or moored where it was left, and write down where it is.
+   * Only these moments are sent: while a boat is being rowed, its rider's own
+   * position in every snapshot is where it is (see decision 0093).
+   */
+  private announceBoats(simulation: WorldSimulation): void {
+    const boats = simulation.drainBoatChanges();
+    if (boats.length === 0) return;
+    this.ctx.storage.transactionSync(() => {
+      for (const boat of boats)
+        this.ctx.storage.sql.exec(
+          'UPDATE built_props SET x = ?, z = ?, yaw = ? WHERE id = ?',
+          boat.x,
+          boat.z,
+          boat.yaw,
+          boat.id,
+        );
+    });
+    this.broadcastBuiltProps(simulation);
   }
 
   /**

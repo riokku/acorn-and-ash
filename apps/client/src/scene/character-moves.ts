@@ -346,6 +346,18 @@ export function movePose(move: MoveView): MovePose {
       };
     }
 
+    case ActionKind.Row:
+      // Sat on the rower's seat from the moment they climb in, the oars
+      // being the boat's own business (see `scene/rowboat.ts`).
+      return {
+        ...NO_MOVE,
+        clip: 'sitIdle',
+        time: move.age * TICK_SECONDS,
+        loop: true,
+        rest: smoothstep(0, 9, move.age),
+        handsFree: true,
+      };
+
     case ActionKind.Lie: {
       const settle = SETTLE.bed;
       const down = move.age < settle;

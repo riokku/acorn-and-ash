@@ -21,3 +21,40 @@ export const BOAT_HULL_MIN_DEPTH = 1.2;
  * built, and not out in the deep water where nobody could have reached.
  */
 export const BOAT_BERTH_MAX_DEPTH = 4;
+
+/**
+ * Climbing in: the middle of a boat is this close to somebody on the bank, in
+ * metres. A boat moored from the bank can be 4 m out, and the water's edge is
+ * a step further than where its builder stood, so this reaches the furthest
+ * berth from anywhere along the beach.
+ */
+export const BOAT_BOARD_REACH = 4.8;
+
+/**
+ * Climbing out: the middle of the boat is no further than this from a shore,
+ * in metres. Any further and the step to the beach would be a swim.
+ */
+export const BOAT_EXIT_MAX_DEPTH = 3;
+
+/** Where a rider lands, in metres inland of the water's edge. */
+export const BOAT_LANDING_DISTANCE = 0.7;
+
+/**
+ * A boat that has to be put ashore - its rider left the game or was knocked
+ * out far from any beach - is left this far from the shore, lying along it.
+ */
+export const BOAT_BEACHED_DEPTH = 2.5;
+
+/** The height of the top of the rower's seat above the water, in metres: where a rider sits. */
+export const BOAT_SEAT_HEIGHT = 0.15;
+
+/** Rowing speeds, in metres per second: steady, and pulling hard (shift). */
+export const BOAT_ROW_SPEED = 3;
+export const BOAT_SPRINT_SPEED = 4.2;
+
+/** How quickly the boat picks up speed while rowing, and loses it gliding, in m/s². */
+export const BOAT_ACCELERATION = 2;
+export const BOAT_GLIDE_DECELERATION = 0.9;
+
+/** How fast the bow swings round to where the rower wants to go, in radians per second. */
+export const BOAT_TURN_RATE = 1.9;

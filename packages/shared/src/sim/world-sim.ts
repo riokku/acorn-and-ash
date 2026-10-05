@@ -101,6 +101,7 @@ import type { LootRequest } from '../net/messages';
 import {
   ANIMAL_RESPAWN_SECONDS,
   BUILD_REACH,
+  PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYABLE_HALF_EXTENT,
   BUILD_REACH_SLACK,
@@ -193,6 +194,15 @@ import {
   type RestingPlace,
 } from '../world/home';
 import { LAKE } from '../world/lake';
+import {
+  beachedBoat,
+  boatYawFor,
+  isWithinBoardingReach,
+  landingBeside,
+  landingFrom,
+  riderFacingFor,
+  stepBoat,
+} from './rowing';
 import { isReedPatch, REED_PATCHES } from '../world/reeds';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -525,13 +535,18 @@ export interface HealthEvent {
 export interface BuiltProp {
   readonly id: number;
   readonly kind: BuildableKindId;
-  readonly x: number;
-  readonly z: number;
+  /**
+   * Where it stands. Fixed for everything except a rowboat, which is carried
+   * across the lake by whoever rows it and stays wherever it was left (see
+   * decision 0093) - only `WorldSimulation.carryBoat` ever changes these.
+   */
+  x: number;
+  z: number;
   /**
    * Which way it was turned when placed, the same way a model's `rotation.y`
    * reads. Zero for everything built before pieces could be turned.
    */
-  readonly yaw: number;
+  yaw: number;
   /**
    * Only meaningful for a campfire - always false for every other kind.
    * Atmosphere only: it burns down on its own after `CAMPFIRE_BURN_SECONDS`,
@@ -545,6 +560,12 @@ export interface BuiltProp {
    * before doors could be locked, and for every other kind.
    */
   locked?: boolean;
+  /**
+   * Only meaningful for a rowboat: the network id of whoever is rowing it, so
+   * nobody else can climb in. Never saved - a world that wakes from storage
+   * has nobody aboard anything.
+   */
+  rower?: number;
 }
 
 /** Outdoors: where every player is unless they have gone inside a home. */
@@ -898,6 +919,14 @@ interface PlayerRuntime {
   space: number;
   /** Ticks before a door will take them through again, so one push is one trip. */
   doorCooldownTicks: number;
+  /** The built-prop id of the rowboat they are rowing, or null on foot (see `sim/rowing.ts`). */
+  boatId: number | null;
+  /**
+   * Whether the press of interact that is still held was already spent on
+   * climbing in or out of a boat, so holding it on does not go on to cut the
+   * reeds or eat something the moment they land.
+   */
+  interactSpent: boolean;
 }
 
 /** Everything the world keeps about one wild animal, between ticks. */
@@ -1271,6 +1300,8 @@ export class WorldSimulation {
   private readonly builtPropsById = new Map<number, BuiltProp>();
   private nextBuiltPropId = 1;
   private readonly buildEvents: BuildEvent[] = [];
+  /** Rowboats somebody climbed into or out of since this was last asked, by built-prop id. */
+  private readonly boatChanges = new Set<number>();
   /** When each currently-lit campfire should go out on its own, by prop id. Absent while unlit. */
   private readonly campfireLitUntilMs = new Map<number, number>();
   private readonly campfireLitEvents: CampfireLitEvent[] = [];
@@ -1558,6 +1589,8 @@ export class WorldSimulation {
       exploredChanged: true,
       space: home?.id ?? OUTDOORS,
       doorCooldownTicks: 0,
+      boatId: null,
+      interactSpent: false,
     });
   }
 
@@ -1733,6 +1766,8 @@ export class WorldSimulation {
   removePlayer(netId: number): boolean {
     const runtime = this.players.get(netId);
     if (!runtime) return false;
+    // Whoever was rowing leaves their boat on the bank, not out on the water.
+    this.putBoatAshore(runtime);
     runtime.entity.destroy();
     this.players.delete(netId);
     this.expeditionChanges.delete(netId);
@@ -1838,6 +1873,7 @@ export class WorldSimulation {
 
         let wantsToInteract = false;
         let wantsToToggleCampfire = false;
+        let wantsToLeaveBoat = false;
         let wantsToCast = false;
         let aimedYaw = aim.yaw;
         // Which way the last input was walking, as a world direction: walking
@@ -1862,7 +1898,9 @@ export class WorldSimulation {
           // are, and whatever they were doing waits for the next one, the same
           // way it waits in their own browser.
           const idle = idleInput(runtime.lastProcessedSeq, aim.yaw, aim.yaw);
-          if (runtime.action.kind === ActionKind.Idle) {
+          if (runtime.action.kind === ActionKind.Row) {
+            stepBoat(scratch, idle, TICK_SECONDS, collision);
+          } else if (runtime.action.kind === ActionKind.Idle) {
             stepPlayer(scratch, idle, TICK_SECONDS, collision);
           } else if (
             runtime.action.kind !== ActionKind.Dodge &&
@@ -1899,6 +1937,8 @@ export class WorldSimulation {
               stepDodge(scratch, runtime.action, collision);
             } else if (tick.footing === 'aerial') {
               stepDodgeAttack(scratch, runtime.action, collision, input.aimYaw);
+            } else if (tick.footing === 'rowing') {
+              stepBoat(scratch, input, TICK_SECONDS, collision);
             } else {
               stepPlayer(
                 scratch,
@@ -1921,6 +1961,7 @@ export class WorldSimulation {
             const interactHeld = isHeld(input, PlayerButton.Interact);
             const freshInteract = interactHeld && !runtime.interactWasHeld;
             runtime.interactWasHeld = interactHeld;
+            if (!interactHeld) runtime.interactSpent = false;
             if (freshInteract) runtime.pickupRefused = false;
             const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
@@ -1928,8 +1969,10 @@ export class WorldSimulation {
             // Reaching for things is only for somebody free to do it: not
             // mid-swing, mid-roll, down, or sat down.
             if (isFreeToInteract(runtime.action)) {
-              if (interactHeld) wantsToInteract = true;
+              if (interactHeld && !runtime.interactSpent) wantsToInteract = true;
               if (freshInteract) wantsToToggleCampfire = true;
+            } else if (runtime.action.kind === ActionKind.Row && freshInteract) {
+              wantsToLeaveBoat = true;
             }
             if (runtime.cast !== null) {
               // With a line out, the button is for the fish and nothing else,
@@ -1957,6 +2000,10 @@ export class WorldSimulation {
           aim.yaw = scratch.facingYaw;
           aimedYaw = scratch.facingYaw;
         }
+
+        // Climbing out of a boat is one press of interact, and the only thing
+        // it does: it lands them on the bank, if there is one close enough.
+        if (wantsToLeaveBoat) this.tryClimbOut(runtime, scratch);
 
         // Reaching and swinging are judged where the player ended up, not where
         // they started, and only the server ever decides what happens. Inside
@@ -2011,7 +2058,10 @@ export class WorldSimulation {
             this.tryPickUpPile(runtime, scratch.position);
           if (!pickedUp) {
             const gathered = this.tryGather(runtime, scratch.position);
-            if (!gathered) {
+            const boarded =
+              !gathered && wantsToToggleCampfire && this.tryBoardBoat(runtime, scratch);
+            if (boarded) aim.yaw = scratch.facingYaw;
+            if (!gathered && !boarded) {
               const dugUp = this.tryDigUpCache(runtime, scratch.position);
               if (!dugUp) {
                 // A campfire in reach always claims the button, whether or not
@@ -2042,7 +2092,8 @@ export class WorldSimulation {
           if (runtime.pendingBuild !== null) {
             const request = runtime.pendingBuild;
             runtime.pendingBuild = null;
-            this.tryBuild(runtime, scratch.position, request);
+            // Nothing is built from the middle of the lake.
+            if (runtime.boatId === null) this.tryBuild(runtime, scratch.position, request);
           }
         }
         position.x = scratch.position.x;
@@ -2054,6 +2105,7 @@ export class WorldSimulation {
         facing.yaw = scratch.facingYaw;
         grounded.value = scratch.grounded;
         lastProcessed.seq = runtime.lastProcessedSeq;
+        if (runtime.boatId !== null) this.carryBoat(runtime, position, facing.yaw);
         // A room has its own coordinates, nowhere on the map.
         if (runtime.space === OUTDOORS) this.exploreAround(runtime, position.x, position.z);
 
@@ -2250,6 +2302,16 @@ export class WorldSimulation {
         };
       }
       return { ...SPAWN_POSITION, yaw: facing.yaw };
+    }
+    if (runtime.boatId !== null) {
+      // Rowing: they come back on the bank, where they would climb out.
+      const bank = landingBeside(position.x, position.z);
+      return {
+        x: bank.x,
+        y: this.collision.terrain.heightAt(bank.x, bank.z),
+        z: bank.z,
+        yaw: facing.yaw,
+      };
     }
     if (runtime.space === OUTDOORS) return { ...position, yaw: facing.yaw };
     const home = this.builtPropsById.get(runtime.space);
@@ -3366,6 +3428,141 @@ export class WorldSimulation {
     return { x: cutter.x, z: cutter.z };
   }
 
+  /**
+   * Climb into the nearest boat that is close enough and has nobody in it
+   * (see decision 0093): anybody's, not only their own. They are put in the
+   * middle of the boat, facing out over its bow, and from here on the boat
+   * is carried wherever they row.
+   */
+  private tryBoardBoat(runtime: PlayerRuntime, motion: PlayerMotion): boolean {
+    if (runtime.health <= 0 || runtime.cast !== null || runtime.boatId !== null) return false;
+    let nearest: BuiltProp | null = null;
+    let nearestDistance = Infinity;
+    for (const prop of this.builtProps) {
+      if (prop.kind !== 'rowboat' || prop.rower !== undefined) continue;
+      if (!isWithinBoardingReach(motion.position, prop)) continue;
+      const distance = Math.hypot(motion.position.x - prop.x, motion.position.z - prop.z);
+      if (distance < nearestDistance) {
+        nearest = prop;
+        nearestDistance = distance;
+      }
+    }
+    if (nearest === null) return false;
+
+    nearest.rower = runtime.netId;
+    runtime.boatId = nearest.id;
+    runtime.interactSpent = true;
+    this.boatChanges.add(nearest.id);
+    motion.position.x = nearest.x;
+    motion.position.y = LAKE.level;
+    motion.position.z = nearest.z;
+    motion.velocity.x = 0;
+    motion.velocity.y = 0;
+    motion.velocity.z = 0;
+    motion.facingYaw = riderFacingFor(nearest.yaw);
+    motion.grounded = true;
+    beginAction(runtime.action, ActionKind.Row);
+    return true;
+  }
+
+  /**
+   * Step out of the boat onto the bank, if it is close enough to one. The
+   * boat stays exactly where it is, for whoever comes next.
+   */
+  private tryClimbOut(runtime: PlayerRuntime, motion: PlayerMotion): boolean {
+    const boat = this.boatOf(runtime);
+    if (boat === undefined) return false;
+    const bank = landingFrom(motion.position.x, motion.position.z);
+    if (bank === null) return false;
+
+    this.carryBoat(runtime, motion.position, motion.facingYaw);
+    this.releaseBoat(runtime, boat);
+    motion.position.x = bank.x;
+    motion.position.z = bank.z;
+    // Still in the middle of a lake's worth of trees or rocks is possible,
+    // if rarely: the same push-out as any walk.
+    motion.position.y = this.collision.terrain.heightAt(bank.x, bank.z);
+    resolveCapsule(motion.position, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision);
+    motion.position.y = this.collision.terrain.heightAt(motion.position.x, motion.position.z);
+    motion.velocity.x = 0;
+    motion.velocity.y = 0;
+    motion.velocity.z = 0;
+    motion.grounded = true;
+    // Facing the way they stepped, not back out over the water.
+    motion.facingYaw = Math.atan2(bank.towardX, bank.towardZ) + Math.PI;
+    runtime.interactSpent = true;
+    return true;
+  }
+
+  /**
+   * Put the boat ashore and its rider on the bank, wherever they are: for a
+   * player who leaves the game, or is knocked out, in the middle of the
+   * lake. The boat is moved in beside the nearest shore, lying along it, and
+   * left there.
+   */
+  private putBoatAshore(runtime: PlayerRuntime): void {
+    const boat = this.boatOf(runtime);
+    const position = runtime.entity.get(Position);
+    if (boat === undefined || position === undefined) {
+      runtime.boatId = null;
+      return;
+    }
+    const bank = landingBeside(position.x, position.z);
+    const berth = beachedBoat(position.x, position.z);
+    boat.x = berth.x;
+    boat.z = berth.z;
+    boat.yaw = berth.yaw;
+    this.releaseBoat(runtime, boat);
+    const height = this.collision.terrain.heightAt(bank.x, bank.z);
+    this.placePlayer(
+      runtime.netId,
+      { x: bank.x, y: height, z: bank.z },
+      Math.atan2(bank.towardX, bank.towardZ) + Math.PI,
+    );
+  }
+
+  /** The boat somebody is rowing, if they are rowing one. */
+  private boatOf(runtime: PlayerRuntime): BuiltProp | undefined {
+    return runtime.boatId === null ? undefined : this.builtPropsById.get(runtime.boatId);
+  }
+
+  /** Nobody is rowing this boat any more: it stays where it is. */
+  private releaseBoat(runtime: PlayerRuntime, boat: BuiltProp): void {
+    delete boat.rower;
+    runtime.boatId = null;
+    this.boatChanges.add(boat.id);
+    beginAction(runtime.action, ActionKind.Idle);
+  }
+
+  /**
+   * The boat goes where its rider goes: its middle under them, its bow the
+   * way they face. It is only told to everybody else when somebody climbs in
+   * or out (see `drainBoatChanges`) - while it is being rowed, the rider's
+   * own position is how everybody sees it.
+   */
+  private carryBoat(runtime: PlayerRuntime, position: Readonly<Vec3>, facingYaw: number): void {
+    const boat = this.boatOf(runtime);
+    if (boat === undefined) return;
+    boat.x = position.x;
+    boat.z = position.z;
+    boat.yaw = boatYawFor(facingYaw);
+  }
+
+  /**
+   * Hand over every rowboat somebody has climbed into or out of since this
+   * was last asked, as it is now - for broadcasting the built pieces again
+   * and saving where it was left.
+   */
+  drainBoatChanges(): BuiltProp[] {
+    const changed: BuiltProp[] = [];
+    for (const id of this.boatChanges) {
+      const boat = this.builtPropsById.get(id);
+      if (boat !== undefined) changed.push(boat);
+    }
+    this.boatChanges.clear();
+    return changed;
+  }
+
   /** Whether nobody else is already in this chair, or in this bed. */
   private isRestingPlaceFree(runtime: PlayerRuntime, place: RestingPlace): boolean {
     const kind = place.kind === 'chair' ? ActionKind.Sit : ActionKind.Lie;
@@ -3496,6 +3693,8 @@ export class WorldSimulation {
     runtime.health = knockedOut ? HEALTH_MAX : remaining;
 
     if (knockedOut) {
+      // Out of the boat first, so what they buried is on dry ground.
+      this.putBoatAshore(runtime);
       // Where they fell is where it stays buried.
       const position = runtime.entity.get(Position);
       if (position !== undefined) {
@@ -3516,7 +3715,8 @@ export class WorldSimulation {
       runtime.pendingBuild = null;
       beginAction(runtime.action, ActionKind.KnockedOut);
       runtime.knockedOutAtTick = this.tick;
-    } else {
+    } else if (runtime.boatId === null) {
+      // A rower takes the blow, but there is nothing to flinch with: they stay in the boat.
       beginAction(runtime.action, ActionKind.Flinch);
     }
 

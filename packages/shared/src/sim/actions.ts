@@ -73,6 +73,12 @@ export const ActionKind = {
   DodgeLight: 11,
   /** A somersault slam started during a dodge. */
   DodgeHeavy: 12,
+  /**
+   * Sat in a rowboat, rowing it: the rider's position is the middle of the
+   * boat (see `sim/rowing.ts`). Climbing in and out is the server's call
+   * alone, like sitting down.
+   */
+  Row: 13,
 } as const;
 export type ActionKind = (typeof ActionKind)[keyof typeof ActionKind];
 
@@ -144,8 +150,9 @@ export interface ActionContext {
  * - `planted`: no walking or jumping, but still turning to face their aim.
  * - `still`: no walking, jumping or turning - sitting, lying, down, getting up.
  * - `dodging`: carried along the dodge instead of walking (see `stepDodge`).
+ * - `rowing`: carried by the boat instead of walking (see `stepBoat`).
  */
-export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging' | 'aerial';
+export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging' | 'aerial' | 'rowing';
 
 /** A blow landing on this tick. */
 export type Impact =
@@ -333,6 +340,11 @@ export function advanceAction(
       return startFromIdle(state, input, previousButtons, context, tryDodge);
     }
 
+    case ActionKind.Row:
+      // Nothing to swing, roll or cast from a boat; only the server says when
+      // the rider climbs out.
+      return { footing: 'rowing', impact: null, cast: false };
+
     case ActionKind.Sit:
     case ActionKind.Lie: {
       const wantsUp = moving || fresh(PlayerButton.Interact) || fresh(PlayerButton.Jump);
@@ -503,7 +515,7 @@ export function packActionByte(state: Readonly<ActionState>): number {
 
 export function unpackActionByte(byte: number, into: ActionState): ActionState {
   const kind = byte & 0x1f;
-  into.kind = kind <= ActionKind.DodgeHeavy ? (kind as ActionKind) : ActionKind.Idle;
+  into.kind = kind <= ActionKind.Row ? (kind as ActionKind) : ActionKind.Idle;
   into.step = (byte >> 5) & 0x3;
   into.queued = (byte & 0x80) !== 0;
   return into;

@@ -380,8 +380,13 @@ export interface BuiltPropsMessage {
  * than turning green for one the server will refuse. Only ever about the
  * player it was sent to - nobody learns who else owns what.
  */
-export interface BuiltPropView extends BuiltProp {
+export interface BuiltPropView extends Omit<BuiltProp, 'rower'> {
   readonly yours: boolean;
+  /**
+   * A rowboat with somebody rowing it, which is drawn under that rider, not
+   * here (see decision 0093). Absent, like false, for everything else.
+   */
+  readonly occupied?: boolean;
 }
 
 /**
