@@ -1706,8 +1706,11 @@ async function buildFacing(
       [target.x, target.z],
     );
     if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) === null) {
-      await page.keyboard.press('KeyB');
-      await page.waitForTimeout(150);
+      // Wait for the menu itself rather than a fixed moment: at a few frames a
+      // second a key pressed just after another can be taken for the same press.
+      const menuOpen = async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? false);
+      if (!(await menuOpen())) await page.keyboard.press('KeyB');
+      await expect.poll(menuOpen).toBe(true);
       await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
       await page.keyboard.press(digit);
     }
@@ -1991,7 +1994,9 @@ test('you can gather flowers and plant something pretty for the garden', async (
   await expect(page.locator('.hud-journal')).toContainText('Fence');
   await expect(page.locator('.hud-journal')).toContainText('Garden path');
   await page.keyboard.press('KeyB');
-  await page.waitForTimeout(150);
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true))
+    .toBe(false);
 
   // The lantern needs a building area, so the first tent goes up before it.
   const tent = await buildFirstTent(page, spawnSpot);
@@ -2099,11 +2104,12 @@ test.describe('woods interaction polish', () => {
     try {
       await expect
         .poll(() => countHeld(page, 'stick'), { timeout: 60_000, intervals: [1000] })
-        .toBeGreaterThan(0);
+        .toBeGreaterThan(1);
     } finally {
       await page.keyboard.up('KeyW');
       await page.keyboard.up('KeyE');
     }
+    // "Drop one" is only offered when there is more than one to drop.
     await page.keyboard.press('KeyI');
     await page.getByTestId('pack-slot-stick').click({ button: 'right' });
     await expect(page.locator('.slot-menu')).toBeVisible();
