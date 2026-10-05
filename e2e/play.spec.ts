@@ -1409,6 +1409,25 @@ async function walkWithinReachOfAnimal(page: Page, animalId: number): Promise<vo
 }
 
 /**
+ * The animal of one kind that stands nearest the player, for a hunt that does
+ * not have to cross the whole wilderness. Some dens sit right at the edge of
+ * the world, where a fleeing animal can run out past the line the player may
+ * not cross, so the nearest one is also the one that can be caught.
+ */
+async function nearestAnimalOfKind(
+  page: Page,
+  kind: string,
+): Promise<{ id: number; kind: string; x: number; z: number } | undefined> {
+  const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
+  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
+  return animals
+    .filter((entry) => entry.kind === kind)
+    .sort(
+      (a, b) => Math.hypot(a.x - here.x, a.z - here.z) - Math.hypot(b.x - here.x, b.z - here.z),
+    )[0];
+}
+
+/**
  * Close in on an animal and swing whenever a swing would land, all in one loop.
  *
  * Reaching it and then looking at the hint, or reaching it and then swinging,
@@ -1527,9 +1546,8 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const rabbit = animals[0];
-  if (rabbit === undefined) throw new Error('no wildlife nearby to hunt');
+  const rabbit = await nearestAnimalOfKind(page, 'rabbit');
+  if (rabbit === undefined) throw new Error('no rabbit nearby to hunt');
 
   await walkWithinReachOfAnimal(page, rabbit.id);
   // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
@@ -1584,8 +1602,7 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const fox = animals.find((entry) => entry.kind === 'fox');
+  const fox = await nearestAnimalOfKind(page, 'fox');
   if (fox === undefined) throw new Error('no fox in the wilderness');
 
   // The same helpers the rabbit hunt uses: neither cares which kind of
@@ -1644,8 +1661,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
     .toBe(true);
   await equip(page, 'axe');
 
-  const animals = await page.evaluate(() => window.acornDebug?.animals() ?? []);
-  const raccoon = animals.find((entry) => entry.kind === 'maskedRaccoon');
+  const raccoon = await nearestAnimalOfKind(page, 'maskedRaccoon');
   if (raccoon === undefined) throw new Error('no masked raccoon in the wilderness');
 
   // The same helpers the rabbit hunt uses: neither cares which kind of
