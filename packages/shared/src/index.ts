@@ -49,6 +49,7 @@ export * from './sim/chopping';
 export * from './sim/tree-fall';
 export * from './sim/hunting';
 export * from './sim/building';
+export * from './sim/rowing';
 export * from './sim/crafting';
 export * from './sim/regrowth';
 export * from './sim/fishing';

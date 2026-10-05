@@ -1,19 +1,31 @@
 import * as THREE from 'three/webgpu';
 
+import { BOAT_SEAT_HEIGHT } from '@acorn/shared';
+
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 
 /**
- * A rowboat (see decision 0092): a plain timber hull with a pointed bow, two
- * seats, a coil of rope in the bow and a pair of oars laid along the bottom.
+ * A rowboat (see decisions 0092 and 0093): a plain timber hull with a pointed
+ * bow, a seat for the rower in the middle and one in the stern, a coil of rope
+ * in the bow and a pair of oars - laid along the bottom while it is moored,
+ * out over the sides and sweeping while somebody rows.
  *
  * Its length runs along the model's own X axis with the bow at +X, and the
  * waterline is at local y = 0: the hull reaches a little below it (hidden
  * under the water) and its rim stands a little above. It is about 3.2 m long
- * and 1.2 m across, which is the room its footprint keeps clear.
+ * and 1.2 m across, which is the room its footprint keeps clear. Whoever
+ * rows sits on the middle seat, which is at the model's origin.
  */
 export interface Rowboat {
   readonly group: THREE.Group;
+  /**
+   * Put the oars out and sweep them, or ship them again. `stroke` is how far
+   * through a stroke the rower is, from 0 to 1 (and on round again), or null
+   * for the oars laid along the bottom. With `pulling` false the oars are out
+   * and resting just above the water, as when gliding.
+   */
+  setRowing(stroke: number | null, pulling?: boolean): void;
   dispose(): void;
 }
 
@@ -116,31 +128,25 @@ export function createRowboat(): Rowboat {
     ),
   );
 
-  // Two seats across the boat; the forward one is shorter, where the bow narrows.
+  // The rower's seat across the middle, and one in the stern.
   for (const [x, width] of [
-    [-0.4, 1.06],
-    [0.5, 0.86],
+    [0, 1.08],
+    [-0.9, 0.9],
   ] as const) {
-    builder.add(trim, plankGeometry(0.22, 0.045, width, 'z', 0.6, x * 10), placed(x, 0.12, 0));
+    builder.add(
+      trim,
+      plankGeometry(0.22, 0.045, width, 'z', 0.6, x * 10 + 3),
+      placed(x, BOAT_SEAT_HEIGHT - 0.03, 0),
+    );
   }
 
-  // Oarlocks on the rim, a little behind the middle.
+  // Oarlocks on the rim, level with the rower.
   for (const side of [-1, 1]) {
     builder.add(
       trim,
       new THREE.CylinderGeometry(0.025, 0.03, 0.14, 6),
-      placed(0.05, RIM_Y + 0.05, side * (HALF_BEAM - WALL / 2)),
+      placed(0, RIM_Y + 0.05, side * OARLOCK_Z),
     );
-  }
-
-  // A pair of oars laid along the bottom, blades towards the stern.
-  for (const side of [-1, 1]) {
-    builder.add(
-      trim,
-      new THREE.CylinderGeometry(0.022, 0.022, 1.7, 6),
-      placed(0.1, -0.1, side * 0.3, { z: Math.PI / 2 }),
-    );
-    builder.add(planking, new THREE.BoxGeometry(0.4, 0.015, 0.11), placed(-0.95, -0.1, side * 0.3));
   }
 
   // A coil of rope in the bow, the rope it was lashed with.
@@ -150,5 +156,92 @@ export function createRowboat(): Rowboat {
     placed(1.05, -0.12, 0, { x: Math.PI / 2 }),
   );
 
-  return builder.build();
+  const built = builder.build();
+  const oars = ([1, -1] as const).map((side) => createOar(side, planking, trim));
+  for (const oar of oars) built.group.add(oar.pivot);
+  const setRowing = (stroke: number | null, pulling = true): void => {
+    for (const oar of oars) {
+      if (stroke === null) shipOar(oar);
+      else swingOar(oar, stroke, pulling);
+    }
+  };
+  setRowing(null);
+
+  return {
+    group: built.group,
+    setRowing,
+    dispose: () => {
+      built.dispose();
+      for (const oar of oars) for (const geometry of oar.geometries) geometry.dispose();
+    },
+  };
+}
+
+/** Where the oarlock stands across the boat, in metres from its middle line. */
+const OARLOCK_Z = HALF_BEAM - WALL / 2 - 0.02;
+/** The oarlock's height above the waterline, where an oar turns. */
+const OARLOCK_Y = RIM_Y + 0.06;
+/** How far an oar reaches inboard of the oarlock, and out over the side to the blade's end. */
+const OAR_INBOARD = 0.5;
+const OAR_OUTBOARD = 1.4;
+/** How far the blade sweeps either way of straight out, and how deep it dips on the power stroke. */
+const STROKE_SWEEP = 0.5;
+const STROKE_DIP = 0.34;
+/** How far it tips on the way back, clear of the water. */
+const STROKE_RAISED = 0.18;
+/** Where the blade rests, skimming just above the water, when gliding. */
+const GLIDE_DIP = 0.13;
+
+interface Oar {
+  /** Which side of the boat it is on: 1 to starboard, -1 to port. */
+  readonly side: 1 | -1;
+  /** Turns about the oarlock; the oar's length runs along its own Z with the blade at +Z. */
+  readonly pivot: THREE.Group;
+  readonly geometries: readonly THREE.BufferGeometry[];
+}
+
+function createOar(
+  side: 1 | -1,
+  bladeMaterial: THREE.Material,
+  shaftMaterial: THREE.Material,
+): Oar {
+  const shaftLength = OAR_INBOARD + OAR_OUTBOARD - 0.4;
+  const shaft = new THREE.CylinderGeometry(0.022, 0.022, shaftLength, 6);
+  shaft.rotateX(Math.PI / 2);
+  shaft.translate(0, 0, shaftLength / 2 - OAR_INBOARD);
+  const blade = new THREE.BoxGeometry(0.11, 0.015, 0.4);
+  blade.translate(0, 0, OAR_OUTBOARD - 0.2);
+
+  const pivot = new THREE.Group();
+  pivot.rotation.order = 'YXZ';
+  for (const [geometry, material] of [
+    [shaft, shaftMaterial],
+    [blade, bladeMaterial],
+  ] as const) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    pivot.add(mesh);
+  }
+  return { side, pivot, geometries: [shaft, blade] };
+}
+
+/** Laid along the bottom of the boat, blade towards the stern. */
+function shipOar(oar: Oar): void {
+  oar.pivot.position.set(0.55, -0.1, oar.side * 0.3);
+  // Local +Z (the blade) turned to point at -X, the stern.
+  oar.pivot.rotation.set(0, -Math.PI / 2, 0);
+}
+
+/** Out over the side, the blade sweeping fore and aft and dipping in on the power stroke. */
+function swingOar(oar: Oar, stroke: number, pulling: boolean): void {
+  const turn = stroke * Math.PI * 2;
+  // Forward at the start of the stroke, drawn back through the middle of it.
+  const sweep = pulling ? STROKE_SWEEP * Math.cos(turn) : 0.15;
+  const dip = pulling
+    ? STROKE_RAISED + (STROKE_DIP - STROKE_RAISED) * Math.max(0, Math.sin(turn))
+    : GLIDE_DIP;
+  oar.pivot.position.set(0, OARLOCK_Y, oar.side * OARLOCK_Z);
+  // A turn of the whole oar about the oarlock: starboard's blade points out
+  // to +Z, port's to -Z, and a positive sweep carries either one forward.
+  oar.pivot.rotation.set(dip, oar.side === 1 ? sweep : Math.PI - sweep, 0);
 }

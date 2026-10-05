@@ -82,6 +82,7 @@ const BASE_STATE: HudState = {
   home: null,
   resting: null,
   restingNearby: null,
+  boat: null,
 };
 
 describe('the hint along the bottom', () => {
@@ -607,6 +608,28 @@ describe('the hint at the chair and the bed', () => {
     expect(hint({ ...inside, resting: 'bed' })).toBe(
       'Snug in bed · safe and sheltered · move or press E to get up',
     );
+  });
+});
+
+describe('the hint at a rowboat', () => {
+  it('offers to climb into a free boat, and says when somebody else has it', () => {
+    expect(hint({ ...BASE_STATE, boat: 'board' })).toBe('Press E to climb into the rowboat');
+    expect(hint({ ...BASE_STATE, boat: 'taken' })).toBe('Somebody is already rowing this boat');
+  });
+
+  it('cuts reeds first: a patch beside the boat is what E does', () => {
+    const state: HudState = { ...BASE_STATE, boat: 'board', nearGatherSpot: 'reed' };
+    expect(hint(state)).not.toBe('Press E to climb into the rowboat');
+  });
+
+  it('tells a rower how to row, and whether they can climb out here', () => {
+    expect(hint({ ...BASE_STATE, boat: 'climbOut' })).toMatch(/press E to climb out here$/);
+    expect(hint({ ...BASE_STATE, boat: 'tooFar' })).toMatch(/row up to a shore to climb out$/);
+  });
+
+  it('puts rowing ahead of anything lying around in the reeds', () => {
+    const state: HudState = { ...BASE_STATE, boat: 'climbOut', nearGatherSpot: 'reed' };
+    expect(hint(state)).toMatch(/climb out here$/);
   });
 });
 

@@ -175,6 +175,8 @@ const BUILT_PROP_LIT_FLAG = 1;
 const BUILT_PROP_YOURS_FLAG = 2;
 /** Only a home ever sets this: its owner has locked the door to visitors. */
 const BUILT_PROP_LOCKED_FLAG = 4;
+/** Only a rowboat ever sets this: somebody is rowing it, so it is drawn under them instead. */
+const BUILT_PROP_OCCUPIED_FLAG = 8;
 /** id(2) + ownerNetId(2) + x(2) + z(2) */
 const BYTES_PER_BURIED_CACHE = 8;
 /** id(1) + item(1) + x(2) + z(2) + how many are left(1) */
@@ -805,7 +807,8 @@ export function encodeBuiltProps(
       offset + 9,
       (prop.lit ? BUILT_PROP_LIT_FLAG : 0) |
         (isYours(prop.id) ? BUILT_PROP_YOURS_FLAG : 0) |
-        (prop.locked === true ? BUILT_PROP_LOCKED_FLAG : 0),
+        (prop.locked === true ? BUILT_PROP_LOCKED_FLAG : 0) |
+        (prop.rower !== undefined ? BUILT_PROP_OCCUPIED_FLAG : 0),
     );
     offset += BYTES_PER_BUILT_PROP;
   }
@@ -1820,6 +1823,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           lit: (flags & BUILT_PROP_LIT_FLAG) !== 0,
           yours: (flags & BUILT_PROP_YOURS_FLAG) !== 0,
           locked: (flags & BUILT_PROP_LOCKED_FLAG) !== 0,
+          ...((flags & BUILT_PROP_OCCUPIED_FLAG) !== 0 ? { occupied: true } : {}),
         });
         offset += BYTES_PER_BUILT_PROP;
       }

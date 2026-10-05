@@ -41,7 +41,12 @@ declare global {
         yaw: number;
         lit: boolean;
         yours: boolean;
+        occupied?: boolean;
       }>;
+      boats(): {
+        moored: number;
+        rowed: Array<{ netId: number; x: number; z: number; yaw: number }>;
+      };
       buildPreview(): {
         kind: string;
         spot: { x: number; z: number; yaw: number } | null;

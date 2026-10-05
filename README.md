@@ -131,6 +131,8 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | Right mouse on world loot (tap)      | Pick up the clicked item or gather one from a patch                      |
 | `E`                                  | Pick up nearby loot, gather, dig up a cache, use/cook at a campfire, eat |
 | `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)                     |
+| `E` beside a rowboat                 | Climb in (one rider to a boat); in a boat at a shore, climb out          |
+| `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
 | `C`                                  | Open the craft menu                                                      |
 | `1` / `2` / `3` (craft menu open)    | Craft an axe / fishing rod / torch                                       |
@@ -282,7 +284,7 @@ every world. The ground slopes down to a gentle beach, the water goes from clear
 green in the shallows to deep blue, and there are reeds, lily pads and stones
 along the shore. You can't wade in: the shore holds you back, and you slide
 along it if you walk at it on a slant. The islands, with their own trees and
-rocks, are out of reach for now; they are waiting for the rowboat. It shows on
+rocks, are out of reach on foot: you reach them by rowboat. It shows on
 the minimap and the big map. You can cast a rod onto the lake the same as onto
 the pond (a cast never lands on an island). The code is in
 `packages/shared/src/world/lake.ts` and `apps/client/src/scene/lake.ts`. See
@@ -307,10 +309,21 @@ boat floats there: green where it fits, red where it can't. Scroll to turn it
 along the bank, then click to moor it. You can have one, and it stays where you
 built it. A boat needs water under all of it (so not on the sand) and can't be
 moored far out in the deep; unlike a cabin, it doesn't need a home or flat
-ground. You can't climb in or row it yet; that comes next. The mooring rule is
-in `packages/shared/src/world/boat.ts` and `sim/building.ts`, and the model is
-`apps/client/src/scene/rowboat.ts`. See
+ground. The mooring rule is in `packages/shared/src/world/boat.ts` and
+`sim/building.ts`, and the model is `apps/client/src/scene/rowboat.ts`. See
 [decision 0092](docs/decisions/0092-rowboat-mooring.md).
+
+Stand within a few steps of a boat and press `E` to climb in. You sit in the
+middle with the bow ahead of you. Move to row: the boat turns toward the way you
+point (relative to the camera, like walking) and picks up speed as it comes
+round, and `Shift` pulls harder. Let go and it glides to a stop; it never runs
+aground, it slides along the bank. Press `E` near a shore to climb out onto the
+bank (further out, `E` does nothing). Anyone can climb into anybody's boat,
+one rider to a boat, and a boat you leave stays where you left it. If you leave
+the game or are knocked out on the water, the boat is put ashore and you are on
+the bank. The rowing rules are in `packages/shared/src/sim/rowing.ts`, and the
+boat under each rider is drawn by `apps/client/src/scene/rowing-boats.ts`. See
+[decision 0093](docs/decisions/0093-rowing.md).
 
 ### Wind in the grass
 

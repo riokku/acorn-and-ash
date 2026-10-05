@@ -11,6 +11,7 @@ import {
   distance,
   footedInput,
   stepDodge,
+  stepBoat,
   stepDodgeAttack,
   stepPlayer,
   unpackActionByte,
@@ -285,7 +286,7 @@ export class LocalPlayer {
     return this.previousYaw + delta * alpha;
   }
 
-  /** Walk, stand planted, or roll, whichever the move asks of the feet this tick. */
+  /** Walk, stand planted, roll or row, whichever the move asks of the feet this tick. */
   private stepFeet(
     motion: PlayerMotion,
     input: PlayerInput,
@@ -294,6 +295,7 @@ export class LocalPlayer {
   ): void {
     if (footing === 'dodging') stepDodge(motion, action, this.collision);
     else if (footing === 'aerial') stepDodgeAttack(motion, action, this.collision, input.aimYaw);
+    else if (footing === 'rowing') stepBoat(motion, input, TICK_SECONDS, this.collision);
     else
       stepPlayer(
         motion,

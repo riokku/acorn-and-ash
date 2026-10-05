@@ -8,6 +8,7 @@
 
 import {
   ActionKind,
+  BOAT_SEAT_HEIGHT,
   HOME_BED,
   homeRestingPlace,
   type HomeKind,
@@ -35,6 +36,15 @@ export function rollDirection(heading: number, facingYaw: number): RollDirection
   const forward = -(direction.x * sin + direction.z * cos);
   if (Math.abs(forward) >= Math.abs(right)) return forward >= 0 ? 'forward' : 'backward';
   return right >= 0 ? 'right' : 'left';
+}
+
+/**
+ * Where a rower sits: on the middle seat of their own boat, in the middle of
+ * it, facing out over the bow. Wherever they are drawn, that is where the
+ * boat is, so the seat only needs lifting to the height of the thwart.
+ */
+export function boatSeatAt(x: number, z: number, facingYaw: number): RestSpot {
+  return { x, y: BOAT_SEAT_HEIGHT, z, yaw: facingYaw };
 }
 
 /**
