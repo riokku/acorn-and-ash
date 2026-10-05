@@ -194,7 +194,8 @@ export function Hud({
       {state.ready &&
       state.playing &&
       state.home === null &&
-      (state.buildMenuOpen || state.placing !== null) ? (
+      (state.buildMenuOpen || state.placing !== null) &&
+      state.placing?.name !== BUILDABLE_KINDS.rowboat.displayName ? (
         <p className="build-area-note" role="status">
           {state.buildAreaRadius === null
             ? 'Place your first tent to establish a 12 m building area'
@@ -281,7 +282,7 @@ export function Hud({
       {state.buildMenuOpen && state.home === null ? (
         <JournalPanel
           title="Things I can build"
-          groups={['Home', 'Camp & lighting', 'Garden & boundaries', 'Trophies']}
+          groups={['Home', 'Camp & lighting', 'Garden & boundaries', 'Lake', 'Trophies']}
           entries={buildEntries(state)}
           closeHint="Pick one below, or B to close"
           onPick={(index) => {
@@ -622,6 +623,7 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
   if (kind === 'lantern' || kind === 'fernLantern' || kind === 'moonLantern')
     return indoors ? 'Lighting' : 'Camp & lighting';
   if (kind === 'campfire') return 'Camp & lighting';
+  if (kind === 'rowboat') return 'Lake';
   if (
     kind === 'flowerBed' ||
     kind === 'fence' ||

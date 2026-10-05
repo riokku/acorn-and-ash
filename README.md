@@ -294,10 +294,23 @@ Six clumps of reeds grow in the shallows along the lake's bank, a long walk
 apart. Stand at the water's edge beside one and press E (or right-click) to cut
 a reed; a clump holds two to six, and once it is cut bare it grows back in the
 same place after a few minutes. Open the craft menu (`C`) and twist three reeds
-into a length of rope, by hand with no workbench. Rope is for the rowboat, which
-comes next. The places are worked out in `packages/shared/src/world/reeds.ts`
-and drawn in `apps/client/src/scene/reed-models.ts`. See
+into a length of rope, by hand with no workbench. Rope is for the rowboat, below.
+The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
+`apps/client/src/scene/reed-models.ts`. See
 [decision 0091](docs/decisions/0091-reeds-and-rope.md).
+
+### Rowboat
+
+With six logs and two rope, open the build menu (`B`) and pick **Rowboat** under
+Lake. Stand on the bank, point at the water a step or two out, and a see-through
+boat floats there: green where it fits, red where it can't. Scroll to turn it
+along the bank, then click to moor it. You can have one, and it stays where you
+built it. A boat needs water under all of it (so not on the sand) and can't be
+moored far out in the deep; unlike a cabin, it doesn't need a home or flat
+ground. You can't climb in or row it yet; that comes next. The mooring rule is
+in `packages/shared/src/world/boat.ts` and `sim/building.ts`, and the model is
+`apps/client/src/scene/rowboat.ts`. See
+[decision 0092](docs/decisions/0092-rowboat-mooring.md).
 
 ### Wind in the grass
 

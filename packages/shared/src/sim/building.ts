@@ -22,6 +22,9 @@ import {
 } from '../constants';
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import type { Vec3 } from '../math/vec3';
+import { BOAT_BERTH_MAX_DEPTH, BOAT_HULL_MIN_DEPTH } from '../world/boat';
+import { LAKE, lakeDepthAt } from '../world/lake';
+import { REED_PATCHES } from '../world/reeds';
 import { overlapsWater, type WaterCircle } from '../world/water';
 
 /** Something on the ground, or about to be, as far as fitting pieces together goes. */
@@ -47,6 +50,10 @@ export type BuildRefusal =
   | { readonly reason: 'pastTreeLine' }
   | { readonly reason: 'worldEdge' }
   | { readonly reason: 'water' }
+  /** A boat that is not floating: on the bank, or too near the shore for water under it. */
+  | { readonly reason: 'needsWater' }
+  /** A boat built so far out that it could never have been reached from the bank. */
+  | { readonly reason: 'tooFarOut' }
   | { readonly reason: 'tooClose'; readonly what: string };
 
 interface Point {
@@ -71,6 +78,14 @@ export function buildableFootprint(
     kind,
     name: buildable.displayName.toLowerCase(),
   };
+}
+
+/** How much room a clump of lake reeds keeps clear of anything built beside it, in metres. */
+const REED_CLEAR_RADIUS = 0.7;
+
+/** The lake's cuttable reeds, as things a boat must not be moored on top of. */
+export function reedFootprints(): Footprint[] {
+  return REED_PATCHES.map((spot) => roundFootprint(spot.x, spot.z, REED_CLEAR_RADIUS, 'reeds'));
 }
 
 /** A tree, rock or stump, which is always round. */
@@ -115,10 +130,12 @@ export function checkBuildSpot(
     return { reason: 'onPlayer' };
   }
 
-  // Building is a clearing thing, not a wilderness one.
+  // Building is a clearing thing, not a wilderness one - except a boat, which
+  // goes wherever the lake is.
   const ends = footprintEnds(piece);
+  const isBoat = piece.kind === 'rowboat';
   for (const end of ends) {
-    if (allowWilderness) {
+    if (allowWilderness || isBoat) {
       if (
         Math.abs(end.x) + piece.radius > PLAYABLE_HALF_EXTENT ||
         Math.abs(end.z) + piece.radius > PLAYABLE_HALF_EXTENT
@@ -129,9 +146,14 @@ export function checkBuildSpot(
     }
   }
 
-  const waterReach = piece.radius + BUILD_SPACING;
-  for (const point of pointsAlong(ends[0], ends[1])) {
-    if (overlapsWater(water, point.x, point.z, waterReach)) return { reason: 'water' };
+  if (isBoat) {
+    const berth = boatBerthRefusal(piece, ends);
+    if (berth !== null) return berth;
+  } else {
+    const waterReach = piece.radius + BUILD_SPACING;
+    for (const point of pointsAlong(ends[0], ends[1])) {
+      if (overlapsWater(water, point.x, point.z, waterReach)) return { reason: 'water' };
+    }
   }
 
   let nearest: Footprint | null = null;
@@ -146,6 +168,25 @@ export function checkBuildSpot(
   }
   if (nearest !== null) return { reason: 'tooClose', what: nearest.name };
 
+  return null;
+}
+
+/**
+ * Whether a boat floats where it would go: every point of its hull, along its
+ * middle line and round its edge, has water under it (see `BOAT_HULL_MIN_DEPTH`),
+ * and its middle is near enough the bank to have been built from it.
+ */
+function boatBerthRefusal(piece: Footprint, ends: readonly [Point, Point]): BuildRefusal | null {
+  for (const point of pointsAlong(ends[0], ends[1])) {
+    if (lakeDepthAt(LAKE, point.x, point.z) < BOAT_HULL_MIN_DEPTH) return { reason: 'needsWater' };
+    for (let side = 0; side < 8; side++) {
+      const angle = (side * Math.PI) / 4;
+      const x = point.x + Math.cos(angle) * piece.radius;
+      const z = point.z + Math.sin(angle) * piece.radius;
+      if (lakeDepthAt(LAKE, x, z) < BOAT_HULL_MIN_DEPTH) return { reason: 'needsWater' };
+    }
+  }
+  if (lakeDepthAt(LAKE, piece.x, piece.z) > BOAT_BERTH_MAX_DEPTH) return { reason: 'tooFarOut' };
   return null;
 }
 

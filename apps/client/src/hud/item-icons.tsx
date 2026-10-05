@@ -32,6 +32,15 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <path d="M19 14L20 17L23 18L20 19L19 22L18 19L15 18L18 17Z" />
     </>
   ),
+  rowboat: (
+    <>
+      <path d="M1 12H23C22 18 17 21 12 21C7 21 2 18 1 12Z" />
+      <g transform="rotate(-38 12 8)">
+        <rect x="11" y="1" width="2" height="14" rx="1" />
+        <ellipse cx="12" cy="2.5" rx="2.2" ry="2.8" />
+      </g>
+    </>
+  ),
   fishDisplay: (
     <path d="M3 21H21V19H13V16Q5 17 3 10Q7 3 15 7L22 4V15L16 12Q15 15 13 16V19H11V16H9V19H3Z" />
   ),

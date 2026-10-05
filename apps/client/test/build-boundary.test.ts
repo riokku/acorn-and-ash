@@ -16,6 +16,22 @@ describe('wilderness building feedback', () => {
       groundAlongRay({ x: 0, y: 10, z: 0 }, { x: 0, y: 1, z: 0 }, createFlatTerrain(4)),
     ).toBeNull();
   });
+  it('aims at the surface of the water, not the bed under it, when given a floor', () => {
+    const bed = createFlatTerrain(-2);
+    const slantDown = { x: 0, y: -Math.SQRT1_2, z: -Math.SQRT1_2 };
+    // Down to the bed, the ray lands 12 m away; down to the surface, 10 m.
+    expect(groundAlongRay({ x: 0, y: 10, z: 0 }, slantDown, bed)?.z).toBeCloseTo(-12, 2);
+    expect(groundAlongRay({ x: 0, y: 10, z: 0 }, slantDown, bed, 0)?.z).toBeCloseTo(-10, 2);
+  });
+  it('still lands on dry ground higher than the floor', () => {
+    const hit = groundAlongRay(
+      { x: 0, y: 10, z: 0 },
+      { x: 0, y: -Math.SQRT1_2, z: -Math.SQRT1_2 },
+      createFlatTerrain(4),
+      0,
+    );
+    expect(hit?.z).toBeCloseTo(-6, 2);
+  });
   it('follows the ground at its full radius and releases its geometry', () => {
     const boundary = createBuildBoundary(createFlatTerrain(4));
     boundary.show({ x: 90, z: 80, radius: 36 }, false);
