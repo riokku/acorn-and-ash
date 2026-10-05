@@ -351,6 +351,12 @@ building footprints stay clear. The distant painted ground remains in place.
 Settings → General includes a grass-density slider; zero turns blades off, and
 reduced-motion preferences stop their wind animation.
 
+Tufts differ from one another: unlike blades, every facing, mostly short with a
+few tall, a slight lean, and colours from lush to dry, in patches. They shrink
+smoothly into the ground at the far edge, with no popping or hovering as you
+walk, and new ground is prepared a tile at a time so crossing into it does not
+stutter. See [decision 0097](docs/decisions/0097-steadier-and-more-varied-grass.md).
+
 ### The map
 
 A round minimap in the top right shows the land around you, turned so that
