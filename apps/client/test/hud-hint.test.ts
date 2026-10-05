@@ -211,6 +211,15 @@ describe('the hint along the bottom', () => {
     expect(hint(state)).toBe('Right-click or press E to gather flowers');
   });
 
+  it('calls the reeds that can be cut mature reeds, to tell them from the scenery', () => {
+    const state: HudState = {
+      ...BASE_STATE,
+      carrying: [{ item: 'bag', count: 1 }],
+      nearGatherSpot: 'reed',
+    };
+    expect(hint(state)).toBe('Right-click or press E to gather mature reeds');
+  });
+
   it('offers a patch with no bag at all - six slots come before any bag', () => {
     const state: HudState = { ...BASE_STATE, carrying: [], nearGatherSpot: 'stick' };
     expect(hint(state)).toBe('Right-click or press E to gather sticks');

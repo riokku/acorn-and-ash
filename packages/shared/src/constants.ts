@@ -136,6 +136,13 @@ export const GATHER_PATCH_MAX_COUNT = 6;
 /** The shortest a picked-clean patch takes to grow back. It returns between this and twice it. */
 export const PATCH_REGROW_MIN_SECONDS = 3 * 60;
 /**
+ * Mature reeds at the lake (see decision 0099). Cut clean, a bed of them is
+ * gone for somewhere between these many seconds - about twenty minutes - and
+ * then comes back somewhere else around the water.
+ */
+export const REED_REGROW_MIN_SECONDS = 15 * 60;
+export const REED_REGROW_MAX_SECONDS = 25 * 60;
+/**
  * How far from the middle of the clearing a patch can grow back: the open
  * ground inside the ring of trees, not tucked in among their trunks.
  */
@@ -359,13 +366,6 @@ export const REGROW_CLEARANCE = 1.5;
 export const MAX_TREE_GENERATION = 255;
 
 /**
- * Wildlife.
- *
- * What a rabbit is - its speed, how easily it startles - lives per kind in
- * `ANIMAL_KINDS`; these are the numbers every kind shares.
- */
-export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
-/**
  * The first number given to a tree or rock in the wilderness.
  *
  * The hand-built clearing numbers its own from 1 (it has fewer than two
@@ -375,6 +375,13 @@ export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
  */
 export const WILDERNESS_PROP_FIRST_ID = 1000;
 
+/**
+ * Wildlife.
+ *
+ * What a rabbit is - its speed, how easily it startles - lives per kind in
+ * `ANIMAL_KINDS`; these are the numbers every kind shares.
+ */
+export const ANIMAL_TARGET_REACHED_DISTANCE = 0.4;
 /**
  * How long a caught animal stays gone before it is back at its den.
  *

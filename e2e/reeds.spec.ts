@@ -91,7 +91,9 @@ test('you can cut reeds at the lake and twist them into rope', async ({ page }) 
   // The browser knows about every clump along the bank, drawn from what the server says.
   const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
   expect(spots.filter((spot) => spot.item === 'reed')).toHaveLength(shared.REED_PATCHES.length);
-  await expect(page.locator('.hud-hint')).toContainText('Right-click or press E to gather reeds');
+  await expect(page.locator('.hud-hint')).toContainText(
+    'Right-click or press E to gather mature reeds',
+  );
 
   // Taps, not a hold: gathering is paced the same way a swing is.
   const reedsCarried = async () =>

@@ -1401,6 +1401,7 @@ export class World extends DurableObject<WorldEnv> {
       seed: this.seed(),
       regrowMinSeconds: this.regrowMinSeconds(),
       patchRegrowMinSeconds: this.patchRegrowMinSeconds(),
+      reedRegrowMinSeconds: this.reedRegrowMinSeconds(),
       hungerEmptyAfterSeconds: this.hungerEmptyAfterSeconds(),
       raidIntervalSeconds: this.raidIntervalSeconds(),
       forestEncounters: (this.raidIntervalSeconds() ?? 240) < 86400,
@@ -1535,6 +1536,17 @@ export class World extends DurableObject<WorldEnv> {
    */
   private patchRegrowMinSeconds(): number | undefined {
     const configured = Number(this.env.WORLD_PATCH_REGROW_SECONDS);
+    if (!Number.isFinite(configured) || configured <= 0) return undefined;
+    return configured;
+  }
+
+  /**
+   * How long a cut-clean bed of mature reeds takes to come back, if the
+   * environment says. Only honoured when it is a sensible positive number,
+   * the same as `regrowMinSeconds`.
+   */
+  private reedRegrowMinSeconds(): number | undefined {
+    const configured = Number(this.env.WORLD_REED_REGROW_SECONDS);
     if (!Number.isFinite(configured) || configured <= 0) return undefined;
     return configured;
   }

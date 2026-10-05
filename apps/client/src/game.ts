@@ -134,6 +134,7 @@ import {
   isWithinBoardingReach,
   landingFrom,
   pickupInReach,
+  isReedPatch,
   reedFootprints,
   replaceCollider,
   roundFootprint,
@@ -379,9 +380,9 @@ const HURT_FULL_FLASH = 30;
  */
 const CLICK_TRUNK_MIN_RADIUS = 0.35;
 const CLICK_CANOPY_FRACTION = 0.8;
-/** How big a skeleton is to click on: about as wide and tall as one stands. */
 /** Trees further than this from the player are not worth testing a click against. */
 const CLICK_TREE_RANGE = 60;
+/** How big a skeleton is to click on: about as wide and tall as one stands. */
 const CLICK_RAIDER_RADIUS = 0.45;
 const CLICK_RAIDER_HEIGHT = 1.5;
 /** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
@@ -862,9 +863,9 @@ export class Game {
   private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
   private forestEnvironment: ForestEnvironment | null = null;
   private wildernessProps: readonly PlacedProp[] = [];
-  private readonly gatheringFocus = new GatheringFocus();
   /** Where each forest tree sits in `wildernessProps` (and so in the walkable world). */
   private wildernessIndexById: ReadonlyMap<number, number> = new Map();
+  private readonly gatheringFocus = new GatheringFocus();
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
    * Whether `carrying` is this connection's first word on the pack yet. The
@@ -2302,8 +2303,8 @@ export class Game {
       this.outdoors.add(this.seasonFallArt.group);
       const wilderness = buildWilderness(seed, terrain);
       this.wildernessProps = wilderness.props;
-      const encounterSites = buildEncounterSites(
       this.wildernessIndexById = wilderness.indexById;
+      const encounterSites = buildEncounterSites(
         seed,
         terrain,
         [...clearing.colliders, ...wilderness.siteColliders],
@@ -3312,7 +3313,11 @@ export class Game {
           this.isFelled(prop.id) ? 'stump' : PROP_KINDS[prop.kind].displayName.toLowerCase(),
         ),
       ),
-      ...reedFootprints(),
+      // Mature reeds move round the shore as they are cut and come back, so
+      // this is where they stand now.
+      ...reedFootprints(
+        this.gatherPatches.filter((patch) => isReedPatch(patch.id) && patch.remaining > 0),
+      ),
     ];
   }
 
@@ -3589,19 +3594,19 @@ export class Game {
     const candidates: ClickCandidate[] = [];
     // A room's own coordinates overlap the clearing's: nothing out there is clickable from in here.
     if (this.space !== OUTDOORS) return candidates;
+    const here = this.localPlayer?.motion.position;
     for (const prop of this.standingProps) {
       if (this.isFelled(prop.id)) continue;
       const kind = PROP_KINDS[prop.kind];
       if (kind.shape.family !== 'tree') continue;
+      if (here !== undefined && Math.hypot(prop.x - here.x, prop.z - here.z) > CLICK_TREE_RANGE) {
+        continue;
+      }
       const base = prop.y ?? 0;
-    const here = this.localPlayer?.motion.position;
       const trunkTop = base + kind.shape.trunkHeight * prop.scale;
       candidates.push({
         x: prop.x,
         z: prop.z,
-      if (here !== undefined && Math.hypot(prop.x - here.x, prop.z - here.z) > CLICK_TREE_RANGE) {
-        continue;
-      }
         radius: Math.max(kind.colliderRadius * prop.scale, CLICK_TRUNK_MIN_RADIUS),
         bottom: base,
         top: trunkTop,
@@ -4403,12 +4408,12 @@ export class Game {
     );
     this.bursts.burst('wood', at, -away.x, -away.z, strength);
     this.clearingScene?.shakeTree(tree.id, away.x, away.z, strength);
+    this.wildernessScene?.shakeTree(tree.id, away.x, away.z, strength);
   }
 
   /** A blow landing on an animal, from somebody at `from`: fur flies and it is knocked back a step. */
   private showBlowOnAnimal(animalId: number, from: Readonly<Vec3>, strength: number): void {
     const pose = this.remoteAnimals.poseOf(animalId);
-    this.wildernessScene?.shakeTree(tree.id, away.x, away.z, strength);
     if (pose === undefined) return;
     const away = awayFrom(from, pose);
     const at = this.scratchBlow.set(pose.x, pose.y + BLOW_HEIGHT_ON_ANIMAL, pose.z);
@@ -4565,7 +4570,10 @@ export class Game {
               this.controls?.isPointerLocked
             ? null
             : {
-                name: ITEM_KINDS[this.hoveredLoot.item].displayName,
+                name:
+                  this.hoveredLoot.request.kind === 'patch' && this.hoveredLoot.item === 'reed'
+                    ? 'Mature reeds'
+                    : ITEM_KINDS[this.hoveredLoot.item].displayName,
                 count: this.hoveredLoot.count,
                 detail: this.lootDetail(this.hoveredLoot),
                 x: this.controls?.pointerPosition()?.x ?? 0,

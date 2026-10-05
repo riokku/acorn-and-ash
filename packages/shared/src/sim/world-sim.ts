@@ -123,6 +123,7 @@ import {
   PATCH_SPACING,
   PATCH_SPAWN_CLEARANCE,
   PREDATOR_CATCH_RADIUS,
+  REED_REGROW_MIN_SECONDS,
   REGROW_MIN_SECONDS,
   SPAWN_POSITION,
   SPAWN_RING_RADIUS,
@@ -206,7 +207,14 @@ import {
   riderFacingFor,
   stepBoat,
 } from './rowing';
-import { isReedPatch, REED_PATCHES } from '../world/reeds';
+import {
+  isReedPatch,
+  isReedSpot,
+  REED_BED_SPACING,
+  REED_PATCHES,
+  reedIsDue,
+  reedRegrowSpot,
+} from '../world/reeds';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -265,6 +273,7 @@ import {
   checkBuildSpot,
   footprintGap,
   nearestCampfire,
+  REED_CLEAR_RADIUS,
   reedFootprints,
   roundFootprint,
   type Footprint,
@@ -341,6 +350,14 @@ export interface WorldSimulationOptions {
    * is, so a patch moving can be watched rather than waited out.
    */
   readonly patchRegrowMinSeconds?: number;
+  /**
+   * The shortest a cut-clean bed of mature reeds takes to come back, in
+   * seconds. Reeds return somewhere between this and a bit over half as long
+   * again (fifteen to twenty-five minutes, by default).
+   *
+   * Turned down for previews and local runs, like `patchRegrowMinSeconds`.
+   */
+  readonly reedRegrowMinSeconds?: number;
   /**
    * How long a full hunger meter takes to empty, in seconds, if nothing is
    * eaten.
@@ -818,6 +835,20 @@ export interface TreeRegrown {
   readonly generation: number;
 }
 
+/**
+ * Where a prop sits in the world's lists, so felling a tree can find its
+ * collider to swap for a stump and growing it back can put the new one in
+ * the same place.
+ */
+interface TreeSlot {
+  /** Which list it is in: the hand-built clearing, or the generated wilderness. */
+  readonly wilderness: boolean;
+  /** Its place in that list (`props`, and the matching list of standing props). */
+  readonly index: number;
+  /** Its place in the collision world's flat list of colliders. */
+  readonly colliderIndex: number;
+}
+
 /** Everything the world knows about one tree. */
 interface TreeState {
   swingsTaken: number;
@@ -835,20 +866,6 @@ interface PlayerRuntime {
    * every reconnect - this is what a home belongs to.
    */
   readonly playerKey: string | null;
-/**
- * Where a prop sits in the world's lists, so felling a tree can find its
- * collider to swap for a stump and growing it back can put the new one in
- * the same place.
- */
-interface TreeSlot {
-  /** Which list it is in: the hand-built clearing, or the generated wilderness. */
-  readonly wilderness: boolean;
-  /** Its place in that list (`props`, and the matching list of standing props). */
-  readonly index: number;
-  /** Its place in the collision world's flat list of colliders. */
-  readonly colliderIndex: number;
-}
-
   readonly entity: Entity;
   readonly queue: PlayerInput[];
   readonly inventory: Inventory;
@@ -992,6 +1009,13 @@ interface AnimalRuntime {
 const ANIMAL_TRAIL_TICKS = 10;
 
 /**
+ * How far from a spot a tree or rock can be and still matter to a log or a
+ * pile put down there: the farthest a log is nudged (4 m) plus the widest
+ * trunk, with room to spare.
+ */
+const LOG_SEARCH_REACH = 8;
+
+/**
  * The authoritative world.
  *
  * This is the server's copy of the truth. It is plain TypeScript with no Worker
@@ -1008,13 +1032,6 @@ export class WorldSimulation {
    * The generated forest beyond the clearing, as the seed lays it out. Its
    * trees can be chopped down and grow back like the clearing's, so what
    * stands there now is `standingWilderness`; this is how it started.
-/**
- * How far from a spot a tree or rock can be and still matter to a log or a
- * pile put down there: the farthest a log is nudged (4 m) plus the widest
- * trunk, with room to spare.
- */
-const LOG_SEARCH_REACH = 8;
-
    */
   readonly wilderness: Wilderness;
   readonly encounterSites: readonly EncounterSite[];
@@ -1031,6 +1048,7 @@ const LOG_SEARCH_REACH = 8;
   );
   readonly regrowMinSeconds: number;
   readonly patchRegrowMinSeconds: number;
+  readonly reedRegrowMinSeconds: number;
   readonly hungerDrainPerSecond: number;
   /** Every skeleton raid, and when the next one comes (see `sim/raids.ts`). */
   readonly raids: RaidDirector;
@@ -1281,6 +1299,10 @@ const LOG_SEARCH_REACH = 8;
   private readonly pickupEvents: PickupTaken[] = [];
   /** Every tree anybody has touched, by prop id. Untouched trees are not here. */
   private readonly trees = new Map<number, TreeState>();
+  /** Where every prop sits in the lists above, by its number. */
+  private readonly treeSlots = new Map<number, TreeSlot>();
+  /** Trees chopped, felled or grown back since this was last asked, so only those are sent and saved. */
+  private readonly treeChanges = new Set<number>();
   private readonly chopEvents: TreeChopped[] = [];
   private readonly catchEvents: AnimalCaught[] = [];
   private readonly threatHitEvents: ThreatHit[] = [];
@@ -1299,10 +1321,6 @@ const LOG_SEARCH_REACH = 8;
   /** Who gathered something this tick, so the world server knows whose pack to send. */
   private readonly gatherEvents: number[] = [];
   private readonly collectionEvents: CollectedEvent[] = [];
-  /** Where every prop sits in the lists above, by its number. */
-  private readonly treeSlots = new Map<number, TreeSlot>();
-  /** Trees chopped, felled or grown back since this was last asked, so only those are sent and saved. */
-  private readonly treeChanges = new Set<number>();
   private readonly pickupRefusals: PickupRefusal[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
@@ -1359,6 +1377,8 @@ const LOG_SEARCH_REACH = 8;
    * which one is there.
    */
   private readonly standing: PlacedProp[];
+  /** The same, for the wilderness: what stands there now, in the same order as `wilderness.props`. */
+  private readonly standingWilderness: PlacedProp[];
   private spawnCounter = 0;
   /** Reused every tick so a busy world does not allocate per player. */
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
@@ -1369,6 +1389,7 @@ const LOG_SEARCH_REACH = 8;
     this.seed = options.seed;
     this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
     this.patchRegrowMinSeconds = options.patchRegrowMinSeconds ?? PATCH_REGROW_MIN_SECONDS;
+    this.reedRegrowMinSeconds = options.reedRegrowMinSeconds ?? REED_REGROW_MIN_SECONDS;
     this.hungerDrainPerSecond = hungerDrainPerSecond(
       options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
     );
@@ -1377,8 +1398,6 @@ const LOG_SEARCH_REACH = 8;
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
-  /** The same, for the wilderness: what stands there now, in the same order as `wilderness.props`. */
-  private readonly standingWilderness: PlacedProp[];
     this.encounterSites = buildEncounterSites(
       options.seed,
       terrain,
@@ -1402,6 +1421,18 @@ const LOG_SEARCH_REACH = 8;
       LAKE,
     );
     this.standing = [...this.clearing.props];
+    this.standingWilderness = [...this.wilderness.props];
+    for (const [id, index] of this.clearing.indexById) {
+      this.treeSlots.set(id, { wilderness: false, index, colliderIndex: index });
+    }
+    // The wilderness's colliders follow all of the clearing's, walls round the water included.
+    for (const [id, index] of this.wilderness.indexById) {
+      this.treeSlots.set(id, {
+        wilderness: true,
+        index,
+        colliderIndex: this.clearing.colliders.length + index,
+      });
+    }
     this.world = createWorld();
 
     if (options.withProps !== false) {
@@ -1420,18 +1451,6 @@ const LOG_SEARCH_REACH = 8;
 
     for (const den of ANIMAL_DENS) {
       this.spawnAnimal(den, terrain);
-    }
-    this.standingWilderness = [...this.wilderness.props];
-    for (const [id, index] of this.clearing.indexById) {
-      this.treeSlots.set(id, { wilderness: false, index, colliderIndex: index });
-    }
-    // The wilderness's colliders follow all of the clearing's, walls round the water included.
-    for (const [id, index] of this.wilderness.indexById) {
-      this.treeSlots.set(id, {
-        wilderness: true,
-        index,
-        colliderIndex: this.clearing.colliders.length + index,
-      });
     }
 
     this.raids = new RaidDirector(
@@ -2928,8 +2947,17 @@ const LOG_SEARCH_REACH = 8;
    * them is.
    */
   private movePatch(patch: GatherPatch, generation: number, nowMs = this.nowMs): boolean {
-    // A reed is rooted: it grows back where it stood, with a fresh count.
+    // Mature reeds come back somewhere else round the shore.
     if (isReedPatch(patch.id)) {
+      const footprints = this.buildFootprints(undefined, true);
+      const spot = reedRegrowSpot(this.seed, patch.id, generation, patch, (x, z) =>
+        this.reedSpotIsClear(patch.id, x, z, footprints),
+      );
+      // With nowhere better, it comes back where it grew.
+      if (spot !== null) {
+        patch.x = spot.x;
+        patch.z = spot.z;
+      }
       patch.generation = generation;
       this.patchChanges.add(patch.id);
       return true;
@@ -2971,6 +2999,44 @@ const LOG_SEARCH_REACH = 8;
     return true;
   }
 
+  /** Whether a picked-clean patch is due back: mature reeds on their own, longer timer. */
+  private patchIsDueBack(patch: Readonly<GatherPatch>, nowMs: number): boolean {
+    if (patch.remaining > 0) return false;
+    if (!isReedPatch(patch.id)) {
+      return patchIsDue(this.seed, patch, nowMs, this.patchRegrowMinSeconds);
+    }
+    return reedIsDue(
+      this.seed,
+      patch.id,
+      patch.generation,
+      patch.emptiedAtMs,
+      nowMs,
+      this.reedRegrowMinSeconds,
+    );
+  }
+
+  /**
+   * Whether a bed of mature reeds could come back here: nothing built or
+   * growing on top of it, and well away from any other bed that still has
+   * reeds, so they are spread round the shore and not bunched.
+   */
+  private reedSpotIsClear(
+    patchId: number,
+    x: number,
+    z: number,
+    footprints: readonly Footprint[],
+  ): boolean {
+    const here = roundFootprint(x, z, REED_CLEAR_RADIUS, 'reeds');
+    if (footprints.some((footprint) => footprintGap(here, footprint) < 0)) return false;
+    return !this.patches.some(
+      (other) =>
+        other.id !== patchId &&
+        isReedPatch(other.id) &&
+        other.remaining > 0 &&
+        Math.hypot(other.x - x, other.z - z) < REED_BED_SPACING,
+    );
+  }
+
   /**
    * Whether a patch could grow here: on open ground, not in the pond, not on
    * a tree, rock or anything built, not right where people arrive, and not
@@ -3009,7 +3075,7 @@ const LOG_SEARCH_REACH = 8;
    */
   private movePatchesFrom(piece: Footprint): void {
     for (const patch of this.patches) {
-      // Nothing is ever built in the lake, and a reed stays where it is rooted.
+      // Nothing is built on top of mature reeds (see `buildFootprints`), so none is ever moved for a build.
       if (patch.remaining === 0 || isReedPatch(patch.id)) continue;
       const here = roundFootprint(patch.x, patch.z, PATCH_CLEARANCE, 'patch');
       if (footprintGap(here, piece) < 0) this.movePatch(patch, patch.generation + 1);
@@ -3447,6 +3513,7 @@ const LOG_SEARCH_REACH = 8;
 
     if (swingsLeft > 0) {
       state.swingsTaken = swingsTaken;
+      this.treeChanges.add(target.prop.id);
       this.chopEvents.push({
         netId: runtime.netId,
         treeId: target.prop.id,
@@ -3519,7 +3586,6 @@ const LOG_SEARCH_REACH = 8;
     if (nearest === null) return false;
 
     nearest.rower = runtime.netId;
-      this.treeChanges.add(target.prop.id);
     runtime.boatId = nearest.id;
     runtime.interactSpent = true;
     this.boatChanges.add(nearest.id);
@@ -4208,8 +4274,10 @@ const LOG_SEARCH_REACH = 8;
       ...this.builtProps
         .filter((built) => built.id !== excludeId)
         .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),
-      // Nothing is moored on top of the reeds that are cut for rope.
-      ...reedFootprints(),
+      // Nothing is moored on top of the mature reeds that are cut for rope.
+      ...reedFootprints(
+        this.patches.filter((patch) => isReedPatch(patch.id) && patch.remaining > 0),
+      ),
     ];
   }
 
@@ -4303,6 +4371,23 @@ const LOG_SEARCH_REACH = 8;
     state.felled = true;
     state.swingsTaken = 0;
     state.felledAtMs = felledAtMs;
+    this.treeChanges.add(treeId);
+
+    const slot = this.treeSlots.get(treeId);
+    const tree = slot === undefined ? undefined : this.standingAt(slot);
+    if (slot === undefined || tree === undefined) return;
+    replaceCollider(this.collision, slot.colliderIndex, stumpColliderFor(tree));
+  }
+
+  /** The prop standing in this slot now, which is not the one the seed laid out once a tree has grown back. */
+  private standingAt(slot: TreeSlot): PlacedProp | undefined {
+    return (slot.wilderness ? this.standingWilderness : this.standing)[slot.index];
+  }
+
+  /** The prop the seed laid out in this slot. */
+  private originalAt(slot: TreeSlot): PlacedProp | undefined {
+    return (slot.wilderness ? this.wilderness.props : this.clearing.props)[slot.index];
+  }
 
   private standIn(slot: TreeSlot, prop: PlacedProp): void {
     (slot.wilderness ? this.standingWilderness : this.standing)[slot.index] = prop;
@@ -4319,6 +4404,7 @@ const LOG_SEARCH_REACH = 8;
     state.fallYaw = null;
     state.swingsTaken = 0;
     state.generation = nextGeneration(state.generation);
+    this.treeChanges.add(treeId);
 
     const slot = this.treeSlots.get(treeId);
     const original = slot === undefined ? undefined : this.originalAt(slot);
@@ -4369,23 +4455,6 @@ const LOG_SEARCH_REACH = 8;
       );
       if (nowMs < dueAt) continue;
 
-    this.treeChanges.add(treeId);
-
-    const slot = this.treeSlots.get(treeId);
-    const tree = slot === undefined ? undefined : this.standingAt(slot);
-    if (slot === undefined || tree === undefined) return;
-    replaceCollider(this.collision, slot.colliderIndex, stumpColliderFor(tree));
-  }
-
-  /** The prop standing in this slot now, which is not the one the seed laid out once a tree has grown back. */
-  private standingAt(slot: TreeSlot): PlacedProp | undefined {
-    return (slot.wilderness ? this.standingWilderness : this.standing)[slot.index];
-  }
-
-  /** The prop the seed laid out in this slot. */
-  private originalAt(slot: TreeSlot): PlacedProp | undefined {
-    return (slot.wilderness ? this.wilderness.props : this.clearing.props)[slot.index];
-  }
       const slot = this.treeSlots.get(treeId);
       const original = slot === undefined ? undefined : this.originalAt(slot);
       if (slot === undefined || original === undefined) continue;
@@ -4404,7 +4473,6 @@ const LOG_SEARCH_REACH = 8;
   }
 
   /** The tree this player would hit if they swung, or null. Used by tests. */
-    this.treeChanges.add(treeId);
   treeInReachOf(position: Readonly<Vec3>, aimYaw: number): ChopTarget | null {
     const target = treeInReach(position, aimYaw, this.standing, (id) => this.isFelled(id));
     const further = treeInReach(position, aimYaw, this.standingWilderness, (id) =>
@@ -4516,6 +4584,29 @@ const LOG_SEARCH_REACH = 8;
     return saved;
   }
 
+  /** The trees the caller asked about, or every tree anybody has touched. */
+  private treesOf(only?: Iterable<number>): Iterable<[number, TreeState]> {
+    if (only === undefined) return this.trees;
+    const found: Array<[number, TreeState]> = [];
+    for (const treeId of only) {
+      const state = this.trees.get(treeId);
+      if (state !== undefined) found.push([treeId, state]);
+    }
+    return found;
+  }
+
+  /**
+   * Which trees were chopped, felled or grown back since this was last asked.
+   *
+   * A forest has over a thousand trees and a world saves and sends only what
+   * changed: asking hands the list over and starts it afresh.
+   */
+  drainTreeChanges(): number[] {
+    const ids = [...this.treeChanges];
+    this.treeChanges.clear();
+    return ids;
+  }
+
   /** Put the trees back as they were after the world wakes from storage. */
   restoreTrees(trees: Iterable<PersistedTree>): void {
     for (const tree of trees) {
@@ -4534,6 +4625,8 @@ const LOG_SEARCH_REACH = 8;
 
       if (tree.felled) this.fellTree(tree.treeId, tree.felledAtMs);
     }
+    // What was just read back is already saved; only later changes are news.
+    this.treeChanges.clear();
   }
 
   /** Everything anybody has ever built, for sending to a client or saving to storage. */
@@ -4584,29 +4677,6 @@ const LOG_SEARCH_REACH = 8;
 
   /** Put buried caches back as they were after the world wakes from storage. */
   restoreBuriedCaches(caches: Iterable<BuriedCache>): void {
-  /** The trees the caller asked about, or every tree anybody has touched. */
-  private treesOf(only?: Iterable<number>): Iterable<[number, TreeState]> {
-    if (only === undefined) return this.trees;
-    const found: Array<[number, TreeState]> = [];
-    for (const treeId of only) {
-      const state = this.trees.get(treeId);
-      if (state !== undefined) found.push([treeId, state]);
-    }
-    return found;
-  }
-
-  /**
-   * Which trees were chopped, felled or grown back since this was last asked.
-   *
-   * A forest has over a thousand trees and a world saves and sends only what
-   * changed: asking hands the list over and starts it afresh.
-   */
-  drainTreeChanges(): number[] {
-    const ids = [...this.treeChanges];
-    this.treeChanges.clear();
-    return ids;
-  }
-
     for (const cache of caches) {
       this.buriedCaches.push(cache);
       this.nextBuriedCacheId = Math.max(this.nextBuriedCacheId, cache.id + 1);
@@ -4625,8 +4695,6 @@ const LOG_SEARCH_REACH = 8;
   /** Hand over every change to anybody's own buried cache since this was last asked. */
   drainCacheEvents(): CacheChange[] {
     return this.cacheEvents.splice(0);
-    // What was just read back is already saved; only later changes are news.
-    this.treeChanges.clear();
   }
 
   /** Hand over every swing that landed since this was last asked. */
@@ -4900,7 +4968,9 @@ const LOG_SEARCH_REACH = 8;
         row.remaining <= GATHER_PATCH_MAX_COUNT &&
         Number.isInteger(row.generation) &&
         row.generation >= 0 &&
-        Number.isFinite(row.emptiedAtMs);
+        Number.isFinite(row.emptiedAtMs) &&
+        // A bed of reeds can only stand at the lake's edge.
+        (!isReedPatch(row.id) || isReedSpot(row.x, row.z));
       if (!sensible) continue;
       patch.x = row.x;
       patch.z = row.z;

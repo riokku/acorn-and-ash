@@ -898,7 +898,8 @@ function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): s
 
 /** What E would do beside a patch: gather from it, or nothing until a slot frees up. */
 function gatherHint(state: HudState, item: ItemId): string {
-  const plural = ITEM_KINDS[item].pluralName.toLowerCase();
+  // What grows in the shallows and can be cut is called mature reeds, to tell it from the scenery.
+  const plural = item === 'reed' ? 'mature reeds' : ITEM_KINDS[item].pluralName.toLowerCase();
   if (roomFor(inventoryFromEntries(state.carrying), item) > 0)
     return `Right-click or press E to gather ${plural}${item === 'mushroom' && state.forestWeather?.mushroomsAbundant ? ' · rain-fed clusters yield up to two' : ''}`;
   return `Your pack is full · no room for more ${plural}`;

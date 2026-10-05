@@ -83,11 +83,17 @@ export function buildableFootprint(
 }
 
 /** How much room a clump of lake reeds keeps clear of anything built beside it, in metres. */
-const REED_CLEAR_RADIUS = 0.7;
+export const REED_CLEAR_RADIUS = 0.7;
 
-/** The lake's cuttable reeds, as things a boat must not be moored on top of. */
-export function reedFootprints(): Footprint[] {
-  return REED_PATCHES.map((spot) => roundFootprint(spot.x, spot.z, REED_CLEAR_RADIUS, 'reeds'));
+/**
+ * The mature reeds that are cut for rope, as things a boat must not be moored
+ * on top of. Given the beds as they stand now (they move: see decision 0099);
+ * with none given, the beds where a world starts.
+ */
+export function reedFootprints(
+  beds: readonly { x: number; z: number }[] = REED_PATCHES,
+): Footprint[] {
+  return beds.map((spot) => roundFootprint(spot.x, spot.z, REED_CLEAR_RADIUS, 'reeds'));
 }
 
 /** A tree, rock or stump, which is always round. */
