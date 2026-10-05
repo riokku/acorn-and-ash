@@ -56,6 +56,7 @@ async function enterWorld(page: Page, world: string): Promise<void> {
 
 test('a tree out in the forest can be chopped down and grows back', async ({ page }) => {
   const { tree, x, z, yaw } = aForestTreeAndAPlaceToStand();
+  const terrain = shared.createWildernessTerrain(SEED);
   expect(tree.id).toBeGreaterThanOrEqual(shared.WILDERNESS_PROP_FIRST_ID);
 
   const sim = new shared.WorldSimulation({ seed: SEED, hungerEmptyAfterSeconds: Infinity });
@@ -84,9 +85,14 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
     route.fulfill({ body: '', contentType: 'text/css' }),
   );
   let send: (data: ArrayBuffer) => void = () => {};
+  const chopsSeen: string[] = [];
+  let inputsSeen = 0;
+  let stepping: ReturnType<typeof setInterval> | undefined;
+  let swingsSent = 0;
   /** What the real server announces after a step: swings, trees that changed, logs lying about. */
   const announce = (): void => {
     for (const event of sim.drainChopEvents()) {
+      chopsSeen.push(`${event.treeId}:${event.swingsLeft}`);
       send(shared.encodeTreeHit(event.treeId, event.swingsLeft, event.netId));
     }
     const changed = sim.drainTreeChanges();
@@ -94,8 +100,11 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
       const looks = sim.changedTrees(changed);
       if (looks.length > 0) send(shared.encodeTreeStates(looks, false));
     }
-    send(shared.encodeDroppedPiles(sim.droppedPilesList(1)));
-    send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+    // Logs on the ground and what is carried change slowly: twice a second is plenty.
+    if (sim.tick % 10 === 0) {
+      send(shared.encodeDroppedPiles(sim.droppedPilesList(1)));
+      send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+    }
   };
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     send = (data) => socket.send(Buffer.from(data));
@@ -109,17 +118,22 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
       if (typeof message === 'string') return;
       const request = shared.decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(shared.encodePong(request.clientTimeMs, Date.now()));
+      // Like the real server, inputs wait in a queue and the world steps on its own clock.
       if (request?.type === 'input') {
         for (const input of request.inputs) {
+          inputsSeen++;
+          if ((input.buttons & shared.PlayerButton.Swing) !== 0) swingsSent++;
           sim.queueInput(1, input);
-          sim.step(Date.now());
         }
-        send(
-          shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
-        );
-        announce();
       }
     });
+    stepping = setInterval(() => {
+      sim.step(Date.now());
+      send(
+        shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
+      );
+      announce();
+    }, 1000 / shared.TICK_HZ);
   });
 
   await enterWorld(page, 'forest-trees');
@@ -139,7 +153,7 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
   // Taps, not a hold, the same as the clearing's tree: swings are paced by the server.
   const viewport = page.viewportSize() ?? { width: 960, height: 640 };
   await page.mouse.move(viewport.width / 2, viewport.height / 2);
-  for (let step = 0; step < 60; step++) {
+  for (let step = 0; step < 240; step++) {
     const felled = await page.evaluate(() => window.acornDebug?.felledTrees() ?? []);
     if (felled.includes(tree.id)) break;
     await page.evaluate(
@@ -151,7 +165,21 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
     await page.mouse.up();
     await page.waitForTimeout(150);
   }
-  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([tree.id]);
+  const diagnostics = {
+    chopsSeen,
+    inputsSeen,
+    swingsSent,
+    equipped: sim.equippedList(),
+    simAt: sim.outdoorPositionOf(1),
+    wanted: { x, z, yaw },
+    aimed: await page.evaluate(() => window.acornDebug?.aimedTree()),
+    localAt: await page.evaluate(() => window.acornDebug?.localPosition()),
+    equippedClient: await page.evaluate(() => window.acornDebug?.equippedItem()),
+  };
+  expect(
+    await page.evaluate(() => window.acornDebug?.felledTrees()),
+    JSON.stringify(diagnostics),
+  ).toEqual([tree.id]);
 
   // The server has left the logs where it fell.
   await expect
@@ -159,6 +187,8 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
     .toBe(true);
 
   // Later, with nobody standing on the spot, it comes back at a size of its own.
+  // (A tree will not grow back through somebody standing at its foot, so step away first.)
+  sim.placePlayer(1, { x: x + 15, y: terrain.heightAt(x + 15, z), z }, yaw);
   sim.regrowTrees(Date.now() + 3 * 60 * 60 * 1000);
   announce();
   await expect
@@ -171,4 +201,6 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
   ).toBe(1);
 
   expect(errors).toEqual([]);
+  clearInterval(stepping);
+  sim.dispose();
 });
