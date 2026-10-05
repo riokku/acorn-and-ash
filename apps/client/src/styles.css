@@ -1661,11 +1661,20 @@ body {
   pointer-events: none;
 }
 
-/* Health, bottom left, in the same warm material as the hotbar. */
-.health-bar {
+/* Hunger over health, bottom left, in the same warm material as the hotbar. */
+.vitals {
   position: absolute;
   left: 16px;
   bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.health-bar,
+.hunger-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1676,6 +1685,73 @@ body {
   color: var(--ink-warm);
 }
 
+/* Slimmer than health: it matters, but it is the quieter of the two. */
+.hunger-bar {
+  padding-block: 6px;
+}
+
+.hunger-bar-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  stroke: rgba(58, 42, 20, 0.5);
+  stroke-width: 1.2;
+}
+
+.hunger-bar-meat {
+  fill: #c9803c;
+}
+
+.hunger-bar-bone {
+  fill: none;
+  stroke: #f3ead2;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.hunger-bar-bone-end {
+  fill: #f3ead2;
+}
+
+.hunger-bar-track {
+  position: relative;
+  width: 180px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(58, 42, 20, 0.22);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.hunger-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, #e7a257 0%, #c47a2d 100%);
+  transition: width 400ms ease-out;
+}
+
+.hunger-bar-number {
+  min-width: 26px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Nearly empty: the whole pill swells and settles, slowly, like a stomach. */
+.hunger-bar-low {
+  animation: hunger-throb 1.4s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+.hunger-bar-low .hunger-bar-fill {
+  background: linear-gradient(180deg, #e0713a 0%, #b4491a 100%);
+}
+
+.hunger-bar-low .hunger-bar-icon {
+  animation: heart-beat 1.4s infinite;
+}
+
 .health-bar-heart {
   width: 20px;
   height: 20px;
@@ -1683,6 +1759,10 @@ body {
   fill: #d9473a;
   stroke: rgba(58, 42, 20, 0.5);
   stroke-width: 1.2;
+}
+
+.health-bar-low {
+  animation: health-throb 1s ease-in-out infinite;
 }
 
 .health-bar-low .health-bar-heart {
@@ -1740,6 +1820,51 @@ body {
   }
   to {
     opacity: 0;
+  }
+}
+
+@keyframes health-throb {
+  0%,
+  100% {
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 8px 18px rgba(0, 0, 0, 0.3),
+      0 0 0 3px rgba(217, 71, 58, 0.6);
+  }
+}
+
+@keyframes hunger-throb {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow:
+      0 8px 18px rgba(0, 0, 0, 0.3),
+      0 0 0 3px rgba(224, 113, 58, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .health-bar-low,
+  .hunger-bar-low,
+  .health-bar-low .health-bar-heart,
+  .hunger-bar-low .hunger-bar-icon {
+    animation: none;
+  }
+  .health-bar-low {
+    box-shadow:
+      0 8px 18px rgba(0, 0, 0, 0.3),
+      0 0 0 3px rgba(217, 71, 58, 0.6);
+  }
+  .hunger-bar-low {
+    box-shadow:
+      0 8px 18px rgba(0, 0, 0, 0.3),
+      0 0 0 3px rgba(224, 113, 58, 0.55);
   }
 }
 

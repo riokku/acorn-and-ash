@@ -335,6 +335,10 @@ export const HEALTH_MAX = 100;
 export const HUNGER_LOW_THRESHOLD = 30;
 /** Below this the HUD warns you plainly: one more hit like the last one and you are down. */
 export const HEALTH_LOW_THRESHOLD = 25;
+/** Below this the hunger bar throbs: nearly empty, and worth a look. */
+export const HUNGER_THROB_BELOW = 10;
+/** Below this the health bar throbs. */
+export const HEALTH_THROB_BELOW = 20;
 
 /**
  * Growing back.

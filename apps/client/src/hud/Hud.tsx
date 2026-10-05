@@ -56,6 +56,7 @@ import {
 } from './InventoryPanel';
 import { Minimap } from './Minimap';
 import { Tooltip } from './Tooltip';
+import { vitalsThrob } from './vitals';
 import { WorldMap } from './WorldMap';
 import { assignSlot, clearSlot, resolveHotbarSlots, type HotbarPins } from './hotbar-layout';
 import { amountOf, gainedLabel } from './item-words';
@@ -307,7 +308,12 @@ export function Hud({
           onClose={onCloseChest}
         />
       ) : null}
-      {showingWorld ? <HealthBar health={state.health} /> : null}
+      {showingWorld ? (
+        <div className="vitals">
+          <HungerBar hunger={state.hunger} />
+          <HealthBar health={state.health} />
+        </div>
+      ) : null}
       {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
         <div
           className="meal-benefit"
@@ -505,14 +511,46 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
 }
 
 /**
+ * How full you are, just above the health bar in the bottom left corner. It
+ * throbs once it is nearly empty, so it is noticed before the nudge along the
+ * bottom has to say anything.
+ */
+function HungerBar({ hunger }: { hunger: number }): React.JSX.Element {
+  const fraction = Math.min(1, Math.max(0, hunger / HUNGER_MAX));
+  const low = vitalsThrob(hunger, HEALTH_MAX).hunger;
+  return (
+    <div
+      className={low ? 'hunger-bar hunger-bar-low' : 'hunger-bar'}
+      data-testid="hunger-bar"
+      role="meter"
+      aria-label="Hunger"
+      aria-valuemin={0}
+      aria-valuemax={HUNGER_MAX}
+      aria-valuenow={Math.round(hunger)}
+    >
+      {/* A drumstick: meat on a bone. */}
+      <svg className="hunger-bar-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path className="hunger-bar-bone" d="M10.2 13.8 5.4 18.6" />
+        <circle className="hunger-bar-bone-end" cx="4.6" cy="19.4" r="1.9" />
+        <circle className="hunger-bar-meat" cx="15" cy="9" r="6.6" />
+      </svg>
+      <div className="hunger-bar-track">
+        <div className="hunger-bar-fill" style={{ width: `${fraction * 100}%` }} />
+      </div>
+      <span className="hunger-bar-number">{Math.round(hunger)}</span>
+    </div>
+  );
+}
+
+/**
  * How much health is left, in the bottom left corner where it is always in
  * view (see decision 0063): the bar drops the moment a blow lands, a pale
  * strip behind it shows what that blow took and catches up a beat later,
- * and the whole thing flashes. Red and beating once there is little left.
+ * and the whole thing flashes. Red and throbbing once there is little left.
  */
 function HealthBar({ health }: { health: number }): React.JSX.Element {
   const fraction = Math.min(1, Math.max(0, health / HEALTH_MAX));
-  const low = health <= HEALTH_LOW_THRESHOLD;
+  const low = vitalsThrob(HUNGER_MAX, health).health;
   // Counts every blow taken, so the flash plays again for each one.
   const [hits, setHits] = useState(0);
   const [last, setLast] = useState(health);
