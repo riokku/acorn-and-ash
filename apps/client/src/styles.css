@@ -262,28 +262,31 @@ body {
 }
 
 /*
- * A small hover label, anchored above whatever it wraps - a hotbar slot or
- * an inventory item. `pointer-events: none` so the bubble itself is never
- * what a drag lands on.
+ * A small hover label over whatever it wraps - a hotbar slot or an inventory
+ * item. It is drawn on the page itself (see Tooltip.tsx) and placed from the
+ * window, so no panel's scrolling or clipping can touch it. Long text wraps
+ * instead of running off sideways. `pointer-events: none` so the bubble
+ * itself is never what a drag lands on.
  */
 .hud-tooltip-anchor {
   position: relative;
 }
 
 .hud-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 16px));
   padding: 6px 10px;
   border-radius: 8px;
   background: rgba(24, 28, 24, 0.92);
   color: var(--ink);
   font-size: 12px;
-  white-space: nowrap;
+  line-height: 1.4;
+  overflow-wrap: break-word;
   pointer-events: none;
-  z-index: 1;
+  z-index: 60;
 }
 
 /*
@@ -566,6 +569,7 @@ body {
   transform: translate(-50%, -50%);
   width: min(560px, calc(100vw - 32px));
   max-height: min(70vh, 560px);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 18px 20px;
   border-radius: 4px 16px 4px 16px;
