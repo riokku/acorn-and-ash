@@ -631,7 +631,8 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
  * The Craft menu (C, or B outside): one page of the field journal listing
  * everything you can make, whether it goes into your pack or onto the ground
  * (see decision 0096). Each entry is a stamped icon, a name, its ingredients
- * (each with its own small icon) and a Ready/Need more mark.
+ * (each with its own small icon) and a mark saying whether it is ready or
+ * exactly what is in the way (see `CraftStatusId`).
  *
  * The title, the page tabs and the category pills stay put while the list
  * scrolls, so a small screen never hides the way to another category.
@@ -701,14 +702,24 @@ function CraftPanel({
             {entry.costs.map((cost) => {
               const costKind = ITEM_KINDS[cost.item];
               const name = cost.amount === 1 ? costKind.displayName : costKind.pluralName;
+              const short = entry.shortfalls.find((shortfall) => shortfall.item === cost.item);
               return (
-                <span className="hud-journal-ingredient" key={cost.item}>
+                <span
+                  className={
+                    short === undefined
+                      ? 'hud-journal-ingredient'
+                      : 'hud-journal-ingredient hud-journal-ingredient-missing'
+                  }
+                  key={cost.item}
+                >
                   <ItemIcon
                     item={cost.item}
                     color="#7a6a4d"
                     className="hud-journal-ingredient-icon"
                   />
-                  {cost.amount} {name.toLowerCase()}
+                  {/* What is missing says how much of it there is: 2/6 logs. */}
+                  {short === undefined ? cost.amount : `${short.have}/${cost.amount}`}{' '}
+                  {name.toLowerCase()}
                 </span>
               );
             })}
@@ -716,10 +727,14 @@ function CraftPanel({
         </div>
         <span
           className={
-            entry.ready ? 'hud-journal-status hud-journal-status-ready' : 'hud-journal-status'
+            entry.ready
+              ? 'hud-journal-status hud-journal-status-ready'
+              : entry.status === 'needMore' || entry.status === 'locked'
+                ? 'hud-journal-status'
+                : 'hud-journal-status hud-journal-status-blocked'
           }
         >
-          {entry.ready ? 'Ready' : 'Need more'}
+          {entry.statusLabel}
         </span>
       </div>
     );

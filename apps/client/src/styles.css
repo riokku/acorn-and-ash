@@ -412,13 +412,29 @@ body {
   height: 13px;
 }
 
+/* What the pack falls short of: it says how many there are, in a warmer ink. */
+.hud-journal-ingredient-missing {
+  color: #9a4a22;
+  font-weight: 600;
+}
+
 .hud-journal-status {
   flex-shrink: 0;
+  max-width: 120px;
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(122, 106, 77, 0.16);
   color: var(--ink-warm-dim);
   font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+/* Not about how much you carry: a missing item, a full pack, a blueprint, a fire... */
+.hud-journal-status-blocked {
+  background: rgba(193, 121, 74, 0.2);
+  color: #8a4a22;
+  font-weight: 600;
 }
 
 .hud-journal-status-ready {
