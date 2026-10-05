@@ -638,9 +638,17 @@ async function gatherFromPatches(
  * it: where you stop depends on which way you came in, and the difference
  * between two and three metres is the difference between chopping and flailing.
  */
-async function walkWithinReachOfTree(page: Page, tree: { x: number; z: number }): Promise<void> {
+async function walkWithinReachOfTree(
+  page: Page,
+  tree: { x: number; z: number; kind: string },
+): Promise<void> {
+  // Every tree in the forest can be chopped now, so the first tree faced on the
+  // way over is often a different one. Only the kind we came for counts.
+  const simplified = (name: string): string => name.toLowerCase().replace(/[^a-z]/g, '');
+  const wanted = simplified(tree.kind);
   for (let step = 0; step < 80; step++) {
-    if ((await page.evaluate(() => window.acornDebug?.aimedTree() ?? null)) !== null) return;
+    const aimed = await page.evaluate(() => window.acornDebug?.aimedTree() ?? null);
+    if (aimed !== null && simplified(aimed.name) === wanted) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - tree.x, (here?.z ?? 0) - tree.z);
@@ -673,7 +681,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   // Nothing to start with, and the axe is out there waiting.
   expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([]);
-  await expect(page.locator('.hotbar-slot-icon')).toHaveCount(0);
+  await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(0);
 
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
@@ -696,7 +704,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
     { item: 'axe', count: 1 },
   ]);
   expect(await page.evaluate(() => window.acornDebug?.takenPickups())).toEqual([axe.id]);
-  await expect(page.locator('.hotbar-slot-icon')).toHaveCount(1);
+  await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(1);
 
   // Reload the page: the world server still knows it is ours.
   const url = page.url();
