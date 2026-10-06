@@ -1,10 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { FrontDoor, Trouble, type FrontDoorProps } from './FrontDoor';
 import { Home } from './Home';
 import type { PlayerIdentity } from './identity';
-import { SignIn, Trouble } from './SignIn';
-import type { SessionStatus } from '../net/account';
 import type { Preferences } from '../preferences/preferences';
 
 /** What the Home screen needs to know about who is signed in. */
@@ -44,17 +43,12 @@ export function mountHome(
   return () => root.unmount();
 }
 
-/** Mounts the sign-in screen for somebody who is not signed in. */
-export function mountSignIn(
-  container: HTMLElement,
-  status: SessionStatus,
-  notice: string | null,
-  onTestSignIn: () => void,
-): () => void {
+/** Mounts the front page: the Play button, then Create account and Log in. */
+export function mountFrontDoor(container: HTMLElement, props: FrontDoorProps): () => void {
   const root = createRoot(container);
   root.render(
     <StrictMode>
-      <SignIn status={status} notice={notice} onTestSignIn={onTestSignIn} />
+      <FrontDoor {...props} />
     </StrictMode>,
   );
   return () => root.unmount();

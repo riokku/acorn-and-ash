@@ -5,8 +5,14 @@ import { Game } from './game';
 import { HudStore } from './hud/store';
 import { mountHud } from './hud/mount';
 import { readHotbarLayout, writeHotbarLayout } from './hud/hotbar-layout';
-import { mountHome, mountSignIn, mountTrouble } from './home/mount';
-import { findEntrance } from './home/entrance';
+import { mountFrontDoor, mountHome, mountTrouble } from './home/mount';
+import { findEntrance, type Entrance } from './home/entrance';
+import {
+  firstTab,
+  hasPassedFrontDoor,
+  markFrontDoorPassed,
+  resetFrontDoor,
+} from './home/front-door';
 import { SignInError, signInAsTestPlayer, signOut } from './net/account';
 import { readIdentity, writeIdentity } from './home/identity';
 import { readPreferences, writePreferences, type Preferences } from './preferences/preferences';
@@ -137,9 +143,36 @@ function takeSignInNotice(): string | null {
 
 let unmountEntrance: (() => void) | null = null;
 
+/** The Home screen, with the character the player already has when they have one. */
+const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): void => {
+  unmountEntrance = mountHome(
+    homeContainer,
+    readIdentity(window.localStorage),
+    {
+      name: entrance.accountName,
+      saved: entrance.saved,
+      onSignOut: () => {
+        resetFrontDoor(window.sessionStorage);
+        void signOut().finally(() => window.location.reload());
+      },
+    },
+    (identity) => {
+      unmountEntrance?.();
+      unmountEntrance = null;
+      enterWorld(identity);
+    },
+    startingPreferences,
+    applyPreferences,
+  );
+};
+
 /**
- * The first screen: sign in, or the Home screen with the character the player
- * already has. Run again after anything that changes who is signed in.
+ * The first screen (decision 0103): the front page with its Play button, then
+ * either the sign-in choices or, for somebody already signed in, the character
+ * screen. Run again after anything that changes who is signed in.
+ *
+ * Somebody who has pressed Play in this tab, or who came back from a login that
+ * did not work, is not asked to press it again.
  */
 const showEntrance = async (notice: string | null = null): Promise<void> => {
   unmountEntrance?.();
@@ -148,34 +181,35 @@ const showEntrance = async (notice: string | null = null): Promise<void> => {
 
   try {
     const entrance = await findEntrance(window.localStorage, worldId);
-    if (entrance.kind === 'sign-in') {
-      unmountEntrance = mountSignIn(homeContainer, entrance.status, notice, () => {
+    const pastFrontDoor =
+      !entrance.frontPage || notice !== null || hasPassedFrontDoor(window.sessionStorage);
+
+    if (entrance.kind === 'home' && pastFrontDoor) {
+      showCharacterScreen(entrance);
+      return;
+    }
+
+    // Coming back from a login that did not work, they already pressed Play.
+    if (notice !== null) markFrontDoorPassed(window.sessionStorage);
+    unmountEntrance = mountFrontDoor(homeContainer, {
+      status: entrance.kind === 'sign-in' ? entrance.status : null,
+      notice,
+      startAtChoices: pastFrontDoor,
+      firstTab: firstTab(readIdentity(window.localStorage).name),
+      onPlay: () => {
+        markFrontDoorPassed(window.sessionStorage);
+        if (entrance.kind !== 'home') return;
+        unmountEntrance?.();
+        unmountEntrance = null;
+        showCharacterScreen(entrance);
+      },
+      onTestSignIn: () => {
         signInAsTestPlayer().then(
           () => void showEntrance(),
           (error: unknown) => void showEntrance(describeSignInProblem(error)),
         );
-      });
-      return;
-    }
-
-    unmountEntrance = mountHome(
-      homeContainer,
-      readIdentity(window.localStorage),
-      {
-        name: entrance.accountName,
-        saved: entrance.saved,
-        onSignOut: () => {
-          void signOut().finally(() => window.location.reload());
-        },
       },
-      (identity) => {
-        unmountEntrance?.();
-        unmountEntrance = null;
-        enterWorld(identity);
-      },
-      startingPreferences,
-      applyPreferences,
-    );
+    });
   } catch (error) {
     unmountEntrance = mountTrouble(homeContainer, describeSignInProblem(error), () => {
       void showEntrance();

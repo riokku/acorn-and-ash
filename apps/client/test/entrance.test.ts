@@ -46,6 +46,7 @@ describe('the first screen', () => {
     expect(entrance).toEqual({
       kind: 'sign-in',
       status: { signedIn: false, name: null, providers: ['google', 'discord'], testSignIn: null },
+      frontPage: true,
     });
     // Nothing about a world is asked until somebody is signed in.
     expect(asked).toEqual(['GET /api/session']);
@@ -62,6 +63,7 @@ describe('the first screen', () => {
       kind: 'home',
       accountName: 'Ada',
       saved: null,
+      frontPage: true,
     });
   });
 
@@ -81,6 +83,7 @@ describe('the first screen', () => {
       kind: 'home',
       accountName: 'Ada',
       saved: { name: 'Acorn', character: 'knight', color: 'moss' },
+      frontPage: true,
     });
   });
 
@@ -116,6 +119,8 @@ describe('where test sign-in is automatic', () => {
 
     const entrance = await findEntrance(fakeStorage(), 'home-clearing', send);
     expect(entrance.kind).toBe('home');
+    // Every browser test starts at the Home screen, not at a Play button.
+    expect(entrance.frontPage).toBe(false);
   });
 
   it('still shows the sign-in screen where the test sign-in is a button', async () => {
@@ -125,6 +130,8 @@ describe('where test sign-in is automatic', () => {
 
     const entrance = await findEntrance(fakeStorage(), 'home-clearing', send);
     expect(entrance.kind).toBe('sign-in');
+    // A preview is where somebody sees the real front page.
+    expect(entrance.frontPage).toBe(true);
   });
 });
 

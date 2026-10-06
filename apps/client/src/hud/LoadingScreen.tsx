@@ -1,4 +1,4 @@
-import landscape from '../../../../assets/ui/entering-the-woods.webp?url';
+import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import type { HudState } from './store';
 
 /** The progress bar reports completed preparation stages, rather than elapsed time. */
@@ -15,12 +15,7 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
           : state.loadingStage);
   return (
     <div className="loading-screen" data-testid="loading-screen">
-      <img
-        className="loading-landscape"
-        src={landscape}
-        alt="Misty evergreen mountains above a quiet river in the Pacific Northwest"
-      />
-      <div className="loading-shade" />
+      <PaintingBackdrop />
       <div className="loading-brand">
         <span className="loading-brand-mark" aria-hidden="true">
           ✦
