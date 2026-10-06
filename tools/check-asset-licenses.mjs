@@ -31,7 +31,7 @@ const REQUIRED_VALUES = ['file', 'source_url', 'author', 'license', 'date_added'
 /** Notes and the licence file itself are not assets. */
 const IGNORED_FILES = new Set(['LICENSES.csv', 'README.md', '.gitkeep']);
 
-const ALLOWED_AI_TOOLS = new Set(['', 'Meshy', 'Tripo', 'OpenAI']);
+const ALLOWED_AI_TOOLS = new Set(['', 'Meshy', 'Tripo', 'OpenAI', 'Hyper3D Rodin']);
 const BANNED_AI_TOOLS = new Set(['Hunyuan3D', 'hunyuan3d', 'Hunyuan']);
 
 const problems = [];
@@ -75,6 +75,9 @@ rows.forEach((row, index) => {
 
   if (record.ai_tool === 'Tripo' && record.ai_plan !== 'paid') {
     fail(`Line ${lineNumber}: Tripo may only be used on a paid plan.`);
+  }
+  if (record.ai_tool === 'Hyper3D Rodin' && record.ai_plan !== 'paid') {
+    fail(`Line ${lineNumber}: Hyper3D Rodin may only be used on a paid plan.`);
   }
   if (record.ai_tool === 'Meshy' && record.ai_plan === 'free' && record.license !== 'CC BY 4.0') {
     fail(`Line ${lineNumber}: Meshy on the free plan must be credited as CC BY 4.0.`);
