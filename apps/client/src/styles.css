@@ -850,10 +850,8 @@ body {
 
 /*
  * The Home screen: shown before the game connects, so a player can pick a
- * name, a character and a tint. Styled as a sunlit clearing in the forest -
- * the direction Chris picked over the alternative dusk/firelight mockup -
- * rather than the HUD's own dark palette, since this is the first thing
- * anyone sees, before they've even entered the world.
+ * name, a character and a tint. It sits on the painted valley (decision 0103)
+ * in a warm cream panel, the same palette Chris signed off on for this screen.
  */
 .home-screen {
   position: fixed;
@@ -862,9 +860,7 @@ body {
   place-items: center;
   padding: 32px 16px;
   overflow-y: auto;
-  background:
-    radial-gradient(ellipse 900px 520px at 50% 6%, rgba(255, 241, 199, 0.9), transparent 60%),
-    linear-gradient(180deg, #fbf3df 0%, #f3e6c6 55%, #e9dcb2 100%);
+  background: #183f40;
   color: #2f2210;
   --home-ink: #2f2210;
   --home-ink-dim: #7a6a4d;
@@ -872,12 +868,35 @@ body {
   --home-accent: #c1794a;
 }
 
-.home-backdrop {
-  position: absolute;
+/*
+ * The painted valley behind the front page, sign-in, character screen and
+ * loading screen. Fixed, so a screen that scrolls on a short window never
+ * scrolls the painting away.
+ */
+.painting-backdrop {
+  position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.6;
+  overflow: hidden;
+  background: #183f40;
   pointer-events: none;
+}
+
+.painting-image,
+.painting-shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.painting-image {
+  object-fit: cover;
+  object-position: center;
+}
+
+.painting-shade {
+  background: linear-gradient(180deg, #092c3033, transparent 25%, #092c3066 48%, #071e2bd9 100%);
 }
 
 .home-card {
@@ -889,6 +908,19 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: 32px 36px 28px;
+  border-radius: 24px;
+  background: rgba(251, 243, 223, 0.94);
+  box-shadow:
+    0 24px 80px rgba(7, 30, 43, 0.55),
+    0 0 0 1px rgba(255, 250, 235, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+@media (max-width: 560px) {
+  .home-card {
+    padding: 24px 18px 22px;
+  }
 }
 
 .home-kicker {
@@ -1113,49 +1145,7 @@ body {
   color: var(--home-ink-faint);
 }
 
-/* The sign-in screen and the welcome-back card (decisions 0086 and 0087). */
-
-.home-signins {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 320px;
-  margin-top: 30px;
-}
-
-.home-signin {
-  display: block;
-  padding: 14px 24px;
-  border-radius: 999px;
-  border: 2px solid var(--home-accent);
-  background: #fffaf0;
-  color: var(--home-ink);
-  font-size: 16px;
-  font-weight: 700;
-  font-family: inherit;
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    filter 0.15s ease,
-    transform 0.15s ease;
-}
-
-.home-signin:hover {
-  filter: brightness(0.97);
-  transform: translateY(-1px);
-}
-
-.home-signin-discord {
-  background: #5865f2;
-  border-color: #5865f2;
-  color: #ffffff;
-}
-
-.home-signin-test {
-  border-style: dashed;
-}
+/* The welcome-back card (decision 0087). */
 
 .home-notice {
   margin: 20px 0 0;
@@ -1199,6 +1189,267 @@ body {
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The front page: Play, then Create account and Log in (decision 0103)      */
+/* ------------------------------------------------------------------------ */
+
+.front-door {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 32px 16px clamp(48px, 13vh, 140px);
+  overflow-y: auto;
+  background: #183f40;
+  color: #fff5de;
+  text-align: center;
+}
+
+.front-door-choices {
+  justify-content: center;
+  padding-bottom: 32px;
+}
+
+.front-brand {
+  position: absolute;
+  top: 7%;
+  left: 7%;
+  z-index: 1;
+  font-family: Georgia, serif;
+  font-size: clamp(20px, 2.2vw, 32px);
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 16px #0d343d;
+}
+
+.front-brand-mark {
+  margin-right: 10px;
+  color: #e8c493;
+}
+
+.front-copy,
+.front-panel {
+  position: relative;
+  z-index: 1;
+  width: min(640px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.front-eyebrow {
+  margin: 0 0 16px;
+  font-size: 12px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #e1d6b9;
+  text-shadow: 0 2px 12px #092b35;
+}
+
+.front-title {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(44px, 8vw, 92px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-shadow: 0 4px 30px #092b35;
+}
+
+.front-title-small {
+  font-size: clamp(30px, 4.4vw, 44px);
+}
+
+.front-tagline {
+  margin: 18px 0 32px;
+  font-size: 16px;
+  color: #e8eee6;
+  text-shadow: 0 2px 14px #092b35;
+}
+
+.front-play {
+  padding: 16px 64px;
+  border: none;
+  border-radius: 999px;
+  background: #d98f4a;
+  color: #2a1808;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px #ffe4b455,
+    0 10px 34px #d98f4a55;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+
+.front-play:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+.front-play:focus-visible,
+.front-tab:focus-visible,
+.front-signin:focus-visible,
+.front-back:focus-visible {
+  outline: 3px solid #ffe4b4;
+  outline-offset: 3px;
+}
+
+/* Create account / Log in. Dark glass over the painting, readable in any season. */
+.front-panel {
+  padding: 28px 32px 22px;
+  border-radius: 24px;
+  background: rgba(8, 30, 38, 0.78);
+  box-shadow:
+    0 24px 80px rgba(3, 14, 20, 0.6),
+    0 0 0 1px rgba(255, 245, 222, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.front-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 22px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 245, 222, 0.1);
+}
+
+.front-tab {
+  padding: 9px 26px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #e1d6b9;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.front-tab:hover:not(.front-tab-selected) {
+  color: #fff5de;
+}
+
+.front-tab-selected {
+  background: #fff5de;
+  color: #2a1808;
+}
+
+.front-lede {
+  margin: 20px 0 0;
+  max-width: 400px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e1e8df;
+}
+
+.front-signins {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(340px, 100%);
+  margin: 24px auto 0;
+}
+
+.front-signin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 13px 24px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+
+.front-signin:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.signin-icon {
+  flex: none;
+}
+
+/* Google's and Discord's own button colours, so players know them on sight. */
+.front-signin-google {
+  background: #ffffff;
+  border-color: #dadce0;
+  color: #1f1f1f;
+}
+
+.front-signin-discord {
+  background: #5865f2;
+  color: #ffffff;
+}
+
+.front-signin-test {
+  border: 2px dashed #e1d6b9;
+  background: none;
+  color: #fff5de;
+}
+
+.front-notice {
+  margin: 20px 0 0;
+  max-width: 400px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 245, 222, 0.14);
+  font-size: 14px;
+  color: #fff5de;
+}
+
+.front-footnote {
+  margin: 16px 0 0;
+  max-width: 400px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b9c8c0;
+}
+
+.front-back {
+  margin-top: 14px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: #b9c8c0;
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.front-back:hover {
+  color: #fff5de;
+}
+
+@media (max-width: 560px) {
+  .front-panel {
+    padding: 22px 16px 18px;
+  }
+  .front-tab {
+    padding: 9px 18px;
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -2087,20 +2338,6 @@ body {
   background: #183f40;
   color: #fff5de;
   pointer-events: auto;
-}
-.loading-landscape,
-.loading-shade {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.loading-landscape {
-  object-fit: cover;
-  object-position: center;
-}
-.loading-shade {
-  background: linear-gradient(180deg, #092c3033, transparent 25%, #092c3066 48%, #071e2bd9 100%);
 }
 .loading-brand {
   position: absolute;

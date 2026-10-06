@@ -213,6 +213,16 @@ in the bottom right says so, such as "+3 Sticks", adding repeats together
 rather than stacking them up. See
 [decision 0061](docs/decisions/0061-patches-run-out-and-dropping.md).
 
+### The front door
+
+The first thing anyone sees is the painted forest valley with a **Play** button.
+Play leads to **Create account** and **Log in** (both are Google and Discord
+buttons, with their logos, worded to match), and a player who is already signed
+in goes straight to their character. The same painting sits behind the
+character screen and the loading screen. Your own machine and the browser tests
+skip the front page; previews and the real game show it. See
+[decision 0103](docs/decisions/0103-the-front-door.md).
+
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a
