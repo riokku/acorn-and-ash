@@ -161,6 +161,10 @@ describe('test players and signing out', () => {
     await signOut(send);
     expect(send).toHaveBeenCalledWith('/api/sign-out', expect.objectContaining({ method: 'POST' }));
   });
+
+  it('says so when the site would not sign the player out', async () => {
+    await expect(signOut(answer(500))).rejects.toThrow('Signing out failed');
+  });
 });
 
 describe('the character already made in a world', () => {

@@ -201,6 +201,13 @@ export interface HudState {
    * shore, or find the shore too far to step to.
    */
   readonly boat: BoatHint;
+  /**
+   * Whole seconds left before the player is signed out, or null when they are
+   * not signing out (decision 0104). The HUD shows the count and a Cancel button.
+   */
+  readonly signOutSecondsLeft: number | null;
+  /** Why a sign-out was cancelled, or failed, for a few seconds afterwards. */
+  readonly signOutNotice: string | null;
 }
 
 /** What E does about a rowboat, or null when there is no boat to speak of. */
@@ -292,6 +299,8 @@ const INITIAL: HudState = {
   resting: null,
   restingNearby: null,
   boat: null,
+  signOutSecondsLeft: null,
+  signOutNotice: null,
 };
 
 /**

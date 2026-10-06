@@ -848,6 +848,110 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Settings -> Account: where Sign out lives (decision 0104). */
+.settings-account {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(58, 42, 20, 0.22);
+}
+
+.settings-account h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-account-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-warm-dim);
+}
+
+.settings-signout {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(58, 42, 20, 0.28);
+  border-radius: 999px;
+  background: rgba(58, 42, 20, 0.08);
+  color: var(--ink-warm);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.settings-signout:hover {
+  background: rgba(58, 42, 20, 0.16);
+}
+
+.settings-signout:focus-visible {
+  outline: 3px solid var(--accent-warm);
+  outline-offset: 2px;
+}
+
+/* The countdown over the game while signing out, and why one was cancelled. */
+.signout-banner {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  z-index: 40;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px 10px 20px;
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 0 1px var(--panel-edge);
+  font-size: 15px;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.signout-banner p {
+  margin: 0;
+}
+
+.signout-banner-notice {
+  padding: 10px 20px;
+  pointer-events: none;
+}
+
+.signout-hint {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.signout-cancel {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 999px;
+  background: #d98f4a;
+  color: #2a1808;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.signout-cancel:hover {
+  filter: brightness(1.08);
+}
+
+.signout-cancel:focus-visible {
+  outline: 3px solid #ffe4b4;
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .signout-banner {
+    max-width: calc(100vw - 32px);
+    white-space: normal;
+  }
+}
+
 /*
  * The Home screen: shown before the game connects, so a player can pick a
  * name, a character and a tint. It sits on the painted valley (decision 0103)

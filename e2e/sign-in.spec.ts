@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { skipDrawing } from './skip-drawing';
+
 /**
  * The front page, signing in, and having one character per world (decisions
  * 0103, 0086 and 0087).
@@ -219,6 +221,104 @@ test.describe('one character per world', () => {
 
     // Test sign-in is automatic here, so signing out lands on a brand new test
     // player, who has no character yet.
+    await expect(page.locator('#home-name')).toBeVisible();
+    await expect(page.getByTestId('saved-character')).toHaveCount(0);
+  });
+});
+
+test.describe('signing out', () => {
+  /** A new character in a world of its own, standing in the clearing and playing. */
+  async function startPlaying(page: Page, name: string): Promise<void> {
+    // Without a graphics card a frame takes seconds, and the count is real time (decision 0100).
+    await skipDrawing(page);
+    await page.goto(`/?renderer=webgl2&world=signout-game-${Date.now()}`);
+    await page.locator('#home-name').fill(name);
+    await page.locator('.home-play').click();
+    await expect(page.locator('.hud-curtain')).toContainText(`Welcome, ${name}`, {
+      timeout: 120_000,
+    });
+    // The character can only walk once the world has answered.
+    await expect(page.locator('.hud-row', { hasText: 'Server' }).first()).toContainText(
+      'Connected',
+    );
+    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
+  }
+
+  async function pressSignOutInSettings(page: Page): Promise<void> {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+    await expect(dialog.getByRole('heading', { name: 'Account' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Sign out', exact: true }).click();
+    // The panel steps aside so the player can see the count and stand still.
+    await expect(dialog).toHaveCount(0);
+  }
+
+  test('from the Settings menu: a ten second count, cancelled by moving', async ({ page }) => {
+    await startPlaying(page, 'Hazel');
+    const banner = page.getByTestId('signout-banner');
+
+    await pressSignOutInSettings(page);
+    await expect(banner).toContainText('Signing out in');
+
+    // Walking says "I'm still here": the count stops and says why.
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(1500);
+    await page.keyboard.up('KeyW');
+    await expect(banner).toHaveCount(0);
+    await expect(page.getByText('Sign-out cancelled because you moved.')).toBeVisible();
+  });
+
+  test('can be cancelled with the Cancel button, from the count or from Settings', async ({
+    page,
+  }) => {
+    await startPlaying(page, 'Hazel');
+    const banner = page.getByTestId('signout-banner');
+
+    await pressSignOutInSettings(page);
+    await banner.getByRole('button', { name: 'Cancel' }).click();
+    await expect(banner).toHaveCount(0);
+
+    await pressSignOutInSettings(page);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Settings', exact: true })
+      .getByRole('button', { name: 'Cancel sign out' })
+      .click();
+    await page.keyboard.press('Escape');
+    await expect(banner).toHaveCount(0);
+  });
+
+  test('goes through after ten still seconds, back to the start', async ({ page }) => {
+    await startPlaying(page, 'Hazel');
+    const signedOut = page.waitForRequest(
+      (request) => request.url().endsWith('/api/sign-out') && request.method() === 'POST',
+      { timeout: 20_000 },
+    );
+
+    await pressSignOutInSettings(page);
+    await signedOut;
+
+    // Test sign-in is automatic here, so the page starts over as a brand new
+    // test player, who has no character yet.
+    await expect(page.locator('#home-name')).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('is also in Settings on the character screen, and goes at once', async ({ page }) => {
+    const world = `signout-home-${Date.now()}`;
+    await page.goto(`/?renderer=webgl2&world=${world}`);
+    await page.locator('#home-name').fill('Hazel');
+    await page.locator('.home-play').click();
+    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+
+    await page.goto(`/?renderer=webgl2&world=${world}`);
+    await expect(page.getByTestId('saved-character')).toContainText('Hazel');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Settings', exact: true })
+      .getByRole('button', { name: 'Sign out', exact: true })
+      .click();
+
     await expect(page.locator('#home-name')).toBeVisible();
     await expect(page.getByTestId('saved-character')).toHaveCount(0);
   });

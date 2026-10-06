@@ -135,9 +135,14 @@ export async function signInAsTestPlayer(send: Send = sendNormally): Promise<voi
   if (!response.ok) throw new SignInError(response.status);
 }
 
-/** Let the player go. */
+/**
+ * Let the player go. Rejects when the site could not be reached or did not
+ * agree, so the game can say so rather than land the player back on a screen
+ * that still has them signed in (decision 0104).
+ */
 export async function signOut(send: Send = sendNormally): Promise<void> {
-  await send('/api/sign-out', { method: 'POST', credentials: 'same-origin' });
+  const response = await send('/api/sign-out', { method: 'POST', credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`Signing out failed (${response.status})`);
 }
 
 /**

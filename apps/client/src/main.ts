@@ -60,6 +60,17 @@ declare global {
   }
 }
 
+/**
+ * Sign out and start again from the front page. Where signing out did not work
+ * this rejects and nothing is forgotten, so the player stays signed in and is
+ * told, instead of being sent to a screen that still knows who they are.
+ */
+const signOutToFrontPage = async (): Promise<void> => {
+  await signOut();
+  resetFrontDoor(window.sessionStorage);
+  window.location.reload();
+};
+
 const enterWorld = (identity: PlayerIdentity): void => {
   writeIdentity(window.localStorage, identity);
 
@@ -74,6 +85,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
     forceWebGL: settings.forceWebGL,
     season: settings.season,
+    signOut: signOutToFrontPage,
     lookSensitivity: preferencesNow.lookSensitivity,
     grassDensity: preferencesNow.grassDensity,
   });
@@ -114,6 +126,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onMoveDecoration: (id) => game.moveDecoration(id),
       onReclaimDecoration: (id) => game.reclaimDecoration(id),
     },
+    { onSignOut: () => game.beginSignOut(), onCancelSignOut: () => game.cancelSignOut() },
   );
   window.acornDebug = game.debug();
 
@@ -151,9 +164,13 @@ const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): voi
     {
       name: entrance.accountName,
       saved: entrance.saved,
+      // Straight away, with nobody standing in a world to wait for. Even if the
+      // site cannot be reached the page starts over, as it always has here.
       onSignOut: () => {
         resetFrontDoor(window.sessionStorage);
-        void signOut().finally(() => window.location.reload());
+        signOut()
+          .catch(() => undefined)
+          .finally(() => window.location.reload());
       },
     },
     (identity) => {
