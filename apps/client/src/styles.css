@@ -986,7 +986,6 @@ body {
   pointer-events: none;
 }
 
-.painting-image,
 .painting-shade {
   position: absolute;
   inset: 0;
@@ -994,9 +993,61 @@ body {
   height: 100%;
 }
 
-.painting-image {
-  object-fit: cover;
-  object-position: center;
+/*
+ * The painting and everything drawn over it share one "stage" with the
+ * painting's own shape, sized to cover the window the way the painting used to,
+ * so a spot in the picture (the chimney, a window) is the same share of the
+ * stage at any window size. The stage drifts slowly: the camera creeping in
+ * and sideways, then back (decision 0106).
+ */
+.painting-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100vw, calc(100vh * 1672 / 941));
+  height: max(100vh, calc(100vw * 941 / 1672));
+  transform: translate(-50%, -50%) scale(1.04);
+  animation: painting-drift 120s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.painting-image,
+.painting-graded,
+.painting-effects {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.painting-graded {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.painting-graded.is-ready {
+  opacity: 1;
+}
+
+@keyframes painting-drift {
+  from {
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  to {
+    transform: translate(-51.2%, -50.8%) scale(1.09);
+  }
+}
+
+/* The computer could not keep up, so the camera holds still where it is. */
+.painting-stage.is-still {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .painting-stage {
+    animation: none;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .painting-shade {

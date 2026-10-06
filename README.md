@@ -223,6 +223,16 @@ character screen and the loading screen. Your own machine and the browser tests
 skip the front page; previews and the real game show it. See
 [decision 0103](docs/decisions/0103-the-front-door.md).
 
+The painting is alive and follows the seasons. Mist drifts, the lake glints,
+smoke rises from the chimney, the cabin window glows and the camera moves very
+slowly. In autumn the leaves turn gold and red and fall, in winter the trees go
+frosty, the lake freezes and light snow falls, and in spring there is blossom.
+It uses the same calendar as the game. To look at one season, add `?season=`
+to the address, such as `?season=winter` (also `spring`, `summer`, `autumn`).
+Someone who has asked their computer for less motion gets a still picture, and
+a computer that cannot keep up gets fewer leaves and then stillness. See
+[decision 0106](docs/decisions/0106-a-living-seasonal-backdrop.md).
+
 ### Signing out
 
 **Settings** (the gear) has an **Account** section with **Sign out**. In the

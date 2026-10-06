@@ -157,6 +157,63 @@ test.describe('the front page', () => {
   });
 });
 
+test.describe('the painting behind the front page', () => {
+  /** True once something has been drawn on the cabin's windows: the backdrop is running. */
+  const windowsAreGlowing = (page: Page) =>
+    page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.painting-effects');
+      const pixels = canvas?.getContext('2d')?.getImageData(1300, 535, 30, 30).data;
+      return pixels !== undefined && pixels.some((value, at) => at % 4 === 3 && value > 20);
+    });
+
+  test('is alive: the cabin windows glow and the camera drifts', async ({ page }) => {
+    await pretendSignedOut(page, { providers: ['google'], testSignIn: null });
+    await page.goto('/');
+
+    await expect(page.locator('.painting-effects')).toBeAttached();
+    await expect.poll(() => windowsAreGlowing(page)).toBe(true);
+    await expect(page.locator('.painting-stage')).toHaveCSS('animation-name', 'painting-drift');
+  });
+
+  test('keeps going, in the same place, from the front page to the choices', async ({ page }) => {
+    await pretendSignedOut(page, { providers: ['google'], testSignIn: null });
+    await page.goto('/?season=winter');
+    await expect(page.locator('.painting-graded')).toHaveClass(/is-ready/);
+    await page.getByRole('button', { name: 'Play' }).click();
+
+    // The next screen's painting is recoloured at once, with no flash of the plain one.
+    await expect(page.getByTestId('front-choices')).toBeVisible();
+    await expect(page.locator('.painting-graded')).toHaveClass(/is-ready/);
+    await expect.poll(() => windowsAreGlowing(page)).toBe(true);
+  });
+
+  test('is recoloured for the season: winter is, summer is the painting as it was made', async ({
+    page,
+  }) => {
+    await pretendSignedOut(page, { providers: ['google'], testSignIn: null });
+    for (const season of ['autumn', 'winter']) {
+      await page.goto(`/?season=${season}`);
+      await expect(page.locator('.painting-graded')).toHaveClass(/is-ready/);
+    }
+    await page.goto('/?season=summer');
+    await expect.poll(() => windowsAreGlowing(page)).toBe(true);
+    await expect(page.locator('.painting-graded')).not.toHaveClass(/is-ready/);
+  });
+
+  test.describe('for somebody who asked for less motion', () => {
+    test.use({ reducedMotion: 'reduce' });
+
+    test('keeps the camera still and draws a single frame', async ({ page }) => {
+      await pretendSignedOut(page, { providers: ['google'], testSignIn: null });
+      await page.goto('/?season=winter');
+
+      await expect(page.locator('.painting-stage')).toHaveCSS('animation-name', 'none');
+      await expect(page.locator('.painting-graded')).toHaveClass(/is-ready/);
+      await expect.poll(() => windowsAreGlowing(page)).toBe(true);
+    });
+  });
+});
+
 test.describe('one character per world', () => {
   test('is made once, and every later visit is a welcome back to it', async ({ page }) => {
     const world = `welcome-${Date.now()}`;
