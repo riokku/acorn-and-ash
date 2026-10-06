@@ -194,16 +194,18 @@ function fromHsv(hue: number, saturation: number, value: number): [number, numbe
   const sector = (((hue % 360) + 360) % 360) / 60;
   const second = chroma * (1 - Math.abs((sector % 2) - 1));
   const base = value - chroma;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (sector < 1) [r, g, b] = [chroma, second, 0];
-  else if (sector < 2) [r, g, b] = [second, chroma, 0];
-  else if (sector < 3) [r, g, b] = [0, chroma, second];
-  else if (sector < 4) [r, g, b] = [0, second, chroma];
-  else if (sector < 5) [r, g, b] = [second, 0, chroma];
-  else [r, g, b] = [chroma, 0, second];
+  const [r, g, b] = rgbForSector(sector, chroma, second);
   return [r + base, g + base, b + base];
+}
+
+/** The red, green and blue of a colour before its brightness is lifted, for the sixth of the colour wheel it is in. */
+function rgbForSector(sector: number, chroma: number, second: number): [number, number, number] {
+  if (sector < 1) return [chroma, second, 0];
+  if (sector < 2) return [second, chroma, 0];
+  if (sector < 3) return [0, chroma, second];
+  if (sector < 4) return [0, second, chroma];
+  if (sector < 5) return [second, 0, chroma];
+  return [chroma, 0, second];
 }
 
 /** The shortest way round the colour wheel from one hue to another, from -180 to 180. */
