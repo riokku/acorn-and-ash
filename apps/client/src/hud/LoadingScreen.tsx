@@ -15,7 +15,7 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
           : state.loadingStage);
   return (
     <div className="loading-screen" data-testid="loading-screen">
-      <PaintingBackdrop />
+      <PaintingBackdrop still />
       <div className="loading-brand">
         <span className="loading-brand-mark" aria-hidden="true">
           ✦
