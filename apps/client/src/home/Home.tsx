@@ -16,6 +16,8 @@ import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
+import { StageView, useWideScreen } from './StageView';
+import type { Placement } from './showcase';
 
 interface HomeProps {
   readonly initial: PlayerIdentity;
@@ -29,10 +31,24 @@ interface HomeProps {
   readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
+/** Where the character stands on the screen, with the card beside them or below (decision 0107). */
+const MAKING: Record<'wide' | 'narrow', Placement> = {
+  wide: { across: 0.3, feet: 0.15, share: 0.64 },
+  narrow: { across: 0.5, feet: 0.66, share: 0.28 },
+};
+const WELCOMING: Record<'wide' | 'narrow', Placement> = {
+  wide: { across: 0.5, feet: 0.3, share: 0.5 },
+  narrow: { across: 0.5, feet: 0.36, share: 0.4 },
+};
+
+const STAGE_HINT = 'Drag to turn \u00b7 Click for a flourish';
+
 /**
- * Shown before the game connects. A player with no character in this world
- * picks a name, a character and a tint, once; a player who has one is welcomed
- * back to it and goes straight in.
+ * Shown before the game connects. The player's character stands in front of the
+ * painted valley, in the game's own idle stance: drag to turn them, click for
+ * a flourish. A player with no character in this world picks a name, a
+ * character and a tint, once, and sees them change as they choose; a player who
+ * has one is welcomed back to it and presses Enter World.
  *
  * All six of the pack's characters have real art now (see decisions 0036
  * and 0044) - the lock/"Coming soon" styling below stays in place for
@@ -59,6 +75,7 @@ export function Home({
     onCancelSignOut: () => undefined,
   };
 
+  const wide = useWideScreen();
   const trimmed = sanitizePlayerName(name);
   const canPlay = isValidPlayerName(trimmed);
 
@@ -69,27 +86,35 @@ export function Home({
   };
 
   if (saved !== null) {
+    const kind = CHARACTER_KINDS[saved.character].displayName;
     return (
       <form
-        className="home-screen"
+        className="home-screen has-stage is-welcome"
         onSubmit={(event) => {
           event.preventDefault();
           onPlay(saved);
         }}
       >
         <PaintingBackdrop />
+        <StageView
+          look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
+          placement={WELCOMING[wide ? 'wide' : 'narrow']}
+          label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
+        />
         <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
-        <div className="home-card">
+        <header className="stage-header">
           <p className="home-kicker">Welcome back</p>
           <h1 className="home-title">Acorn &amp; Ash</h1>
+        </header>
+        <div className="home-card home-card-plate">
           <div className="home-saved" data-testid="saved-character">
-            <PersonIcon color={hexString(TINT_COLORS[saved.color].hex)} />
             <span className="home-saved-name">{saved.name}</span>
-            <span className="home-saved-kind">{CHARACTER_KINDS[saved.character].displayName}</span>
+            <span className="home-saved-kind">{kind}</span>
           </div>
           <button type="submit" className="home-play" autoFocus>
-            Enter the clearing as {saved.name}
+            Enter World
           </button>
+          <p className="home-footnote stage-hint">{STAGE_HINT}</p>
           <AccountLine accountName={accountName} onSignOut={onSignOut} />
         </div>
       </form>
@@ -97,8 +122,22 @@ export function Home({
   }
 
   return (
-    <form className="home-screen" onSubmit={handleSubmit}>
+    <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
+      <StageView
+        look={{ character, tint: TINT_COLORS[color].hex }}
+        placement={MAKING[wide ? 'wide' : 'narrow']}
+        label={`${CHARACTER_KINDS[character].displayName}, the character you are choosing. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
+      />
+      <div
+        className="stage-caption"
+        style={{ left: `${MAKING[wide ? 'wide' : 'narrow'].across * 100}%` }}
+        aria-hidden="true"
+      >
+        <span className="stage-caption-name">{trimmed === '' ? 'Your name' : trimmed}</span>
+        <span className="stage-caption-kind">{CHARACTER_KINDS[character].displayName}</span>
+        <span className="stage-hint">{STAGE_HINT}</span>
+      </div>
       <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
       <div className="home-card">
         <p className="home-kicker">Cozy wilderness survival</p>
@@ -190,7 +229,7 @@ export function Home({
         </div>
 
         <button type="submit" className="home-play" disabled={!canPlay}>
-          {canPlay ? `Enter the clearing as ${trimmed}` : 'Enter the clearing'}
+          Enter World
         </button>
         <p className="home-footnote">
           Others in the clearing will see this name. You get one character in this world, so choose

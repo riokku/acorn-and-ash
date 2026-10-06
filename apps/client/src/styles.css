@@ -1347,6 +1347,150 @@ body {
 }
 
 /* ------------------------------------------------------------------------ */
+/* The character on the character screen (decision 0107)                     */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A transparent canvas over the painting with the real character standing on
+ * it. The canvas takes the pointer (drag to turn, click for a flourish); the
+ * wrapper around it does not, so nothing else on the screen is blocked.
+ */
+.character-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.character-stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: grab;
+  /* Up and down still scrolls a narrow page; sideways turns the character. */
+  touch-action: pan-y;
+  outline: none;
+  transition: opacity 0.6s ease;
+}
+
+.character-stage-canvas[data-state='ready'] {
+  opacity: 1;
+}
+
+.character-stage-canvas.is-turning {
+  cursor: grabbing;
+}
+
+.character-stage-canvas:focus-visible {
+  outline: 2px dashed rgba(255, 244, 214, 0.5);
+  outline-offset: -12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-stage-canvas {
+    transition: none;
+  }
+}
+
+.home-screen.has-stage .home-card {
+  max-width: 480px;
+}
+
+/* A wide window holds the character on the left and the card on the right. */
+@media (min-width: 900px) and (min-height: 540px) {
+  .home-screen.has-stage:not(.is-welcome) {
+    justify-items: end;
+    padding-right: max(24px, 6vw);
+  }
+}
+
+/* The name and kind under the character, and how to play with them. */
+.stage-caption {
+  position: fixed;
+  bottom: 4vh;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  color: #fff7e3;
+  text-shadow: 0 2px 14px rgba(7, 30, 43, 0.8);
+  pointer-events: none;
+}
+
+.stage-caption-name {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(22px, 3vw, 34px);
+  font-weight: 700;
+}
+
+.stage-caption-kind {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.stage-caption .stage-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.home-card .stage-hint {
+  margin: 12px 0 0;
+}
+
+@media (max-width: 899px), (max-height: 539px) {
+  .stage-caption {
+    display: none;
+  }
+}
+
+/* Welcome back: the character stands in the middle, a nameplate at the bottom. */
+.home-screen.is-welcome {
+  place-items: end center;
+  padding-bottom: 4vh;
+}
+
+.stage-header {
+  position: fixed;
+  top: 4vh;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  text-align: center;
+  color: #fff7e3;
+  text-shadow: 0 2px 18px rgba(7, 30, 43, 0.75);
+  pointer-events: none;
+}
+
+.stage-header .home-kicker {
+  margin-bottom: 6px;
+  color: rgba(255, 247, 227, 0.85);
+}
+
+.stage-header .home-title {
+  color: #fff7e3;
+}
+
+.home-card-plate {
+  max-width: 420px;
+  padding: 20px 32px 16px;
+}
+
+.home-card-plate .home-saved {
+  margin-top: 0;
+}
+
+.home-card-plate .home-play {
+  margin-top: 16px;
+}
+
+/* ------------------------------------------------------------------------ */
 /* The front page: Play, then Create account and Log in (decision 0103)      */
 /* ------------------------------------------------------------------------ */
 
