@@ -273,6 +273,7 @@ import type { BoatHint, FishingPhase, HudStore, RaidBanner } from './hud/store';
 import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
 import { CombatFeed, type ThreatMark } from './hud/combat-feed';
 import { raidBannerFor } from './hud/raid-banner';
+import { SignOutCountdown } from './hud/sign-out';
 import {
   expeditionBoardClaimsInteract,
   expeditionBoardOpen,
@@ -358,6 +359,14 @@ function awayFrom(
 const KNOCKOUT_DARKENS_AT_TICKS = 18;
 /** Camera-shake strength for taking damage ourselves - sharper than landing one. */
 const TOOK_DAMAGE_SHAKE = 0.55;
+
+/** Buttons that count as "still playing" for the sign-out countdown (decision 0104). */
+const ACTIVE_BUTTONS =
+  PlayerButton.Jump |
+  PlayerButton.Swing |
+  PlayerButton.Charge |
+  PlayerButton.Dodge |
+  PlayerButton.Fish;
 /**
  * Skeleton raids (see decision 0063): how far off somebody else's raid
  * still gets the horn and a banner, and how long a banner stays up - the
@@ -677,6 +686,11 @@ export interface GameOptions {
   readonly grassDensity: number;
   /** Look at the world in this season whatever the calendar says: `?season=` in the address, for testing. */
   readonly season?: SeasonId;
+  /**
+   * Forget who is signed in and go back to the front page (decision 0104). Called
+   * once the sign-out countdown runs out; rejects if the site could not be reached.
+   */
+  readonly signOut: () => Promise<void>;
 }
 
 /** Everything that makes up a running game. */
@@ -764,6 +778,7 @@ export class Game {
   /** Whether the curtain has been dismissed - see `resume`/`pause`. */
   private playing = false;
   private settingsOpen = false;
+  private readonly signOutCountdown: SignOutCountdown;
   private inventoryOpen = false;
   /** Whether the big map (M) is open - see decision 0054. */
   private mapOpen = false;
@@ -971,6 +986,20 @@ export class Game {
     this.options = options;
     this.lookSensitivity = options.lookSensitivity;
     this.grassDensity = options.grassDensity;
+    this.signOutCountdown = new SignOutCountdown({
+      leave: options.signOut,
+      show: (view) =>
+        options.hud.publish({ signOutSecondsLeft: view.secondsLeft, signOutNotice: view.notice }),
+    });
+  }
+
+  /** Sign out of the game, after a short wait that moving or getting hurt cancels. */
+  beginSignOut(): void {
+    this.signOutCountdown.begin();
+  }
+
+  cancelSignOut(): void {
+    this.signOutCountdown.cancel('cancelled');
   }
 
   async start(): Promise<void> {
@@ -1460,6 +1489,7 @@ export class Game {
     window.removeEventListener('resize', this.handleResize);
     document.removeEventListener('visibilitychange', this.handleForestVisibility);
     this.setup?.renderer.setAnimationLoop(null);
+    this.signOutCountdown.dispose();
     this.controls?.dispose();
     this.connection?.close();
     this.clearingScene?.dispose();
@@ -2029,6 +2059,7 @@ export class Game {
   /** Only ever about us: nobody else's health is any of our business. */
   private hearAboutHealth(event: HealthEvent): void {
     if (event.health < this.health) {
+      this.signOutCountdown.noteHurt();
       this.camera?.shake(TOOK_DAMAGE_SHAKE);
       playTookDamage();
       this.combatFeed.hurt(
@@ -3776,6 +3807,13 @@ export class Game {
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+    // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
+    if (
+      this.signOutCountdown.counting &&
+      (intent.x !== 0 || intent.z !== 0 || (buttons & ACTIVE_BUTTONS) !== 0)
+    ) {
+      this.signOutCountdown.noteMovement();
+    }
 
     // Walking off lets go of whatever was clicked: the character aims the
     // way it walks again. Not while mid-move with the feet planted, which

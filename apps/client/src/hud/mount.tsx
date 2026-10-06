@@ -44,6 +44,7 @@ export function mountHud(
     onMoveDecoration?: (id: number) => void;
     onReclaimDecoration?: (id: number) => void;
   },
+  accountActions?: { onSignOut: () => void; onCancelSignOut: () => void },
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -64,6 +65,8 @@ export function mountHud(
         combatFeed={combatFeed}
         onChestTransfer={onChestTransfer}
         onCloseChest={onCloseChest}
+        onSignOut={accountActions?.onSignOut}
+        onCancelSignOut={accountActions?.onCancelSignOut}
         onJournalTabChange={journalActions?.onTabChange}
         onCraftTabChange={journalActions?.onCraftTab}
         onPickCraft={journalActions?.onPickCraft}

@@ -16,6 +16,21 @@ interface SettingsMenuProps {
    */
   readonly onChange: (preferences: Preferences) => void;
   readonly onOpenChange?: (open: boolean) => void;
+  /** Where the Account section's Sign out lives. Left out, there is no such section. */
+  readonly account?: SettingsAccount;
+}
+
+/**
+ * What the Account section needs (decision 0104). It is told what is going on
+ * and reports what was pressed; the countdown itself lives with the game.
+ */
+export interface SettingsAccount {
+  /** How long signing out takes: 0 signs out at once, as on the character screen. */
+  readonly waitSeconds: number;
+  /** Seconds left while a sign-out is counting down, or null when none is. */
+  readonly secondsLeft: number | null;
+  readonly onSignOut: () => void;
+  readonly onCancelSignOut: () => void;
 }
 
 /**
@@ -28,6 +43,7 @@ export function SettingsMenu({
   initial,
   onChange,
   onOpenChange,
+  account,
 }: SettingsMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const gear = useRef<HTMLButtonElement>(null);
@@ -176,6 +192,14 @@ export function SettingsMenu({
                   max={MAX_SENSITIVITY}
                   onChange={(value) => change({ lookSensitivity: value })}
                 />
+                {account !== undefined ? (
+                  <AccountSection
+                    account={account}
+                    // With a wait, the panel gets out of the way so the player can see the
+                    // count and stand still; without one they are about to leave anyway.
+                    onSignedOut={() => changeOpen(false)}
+                  />
+                ) : null}
               </div>
             ) : (
               <div
@@ -208,6 +232,42 @@ export function SettingsMenu({
         </div>
       ) : null}
     </>
+  );
+}
+
+function AccountSection({
+  account,
+  onSignedOut,
+}: {
+  account: SettingsAccount;
+  onSignedOut: () => void;
+}): React.JSX.Element {
+  const counting = account.secondsLeft !== null;
+  return (
+    <section className="settings-account" aria-labelledby="settings-account-heading">
+      <h3 id="settings-account-heading">Account</h3>
+      <p className="settings-account-note" role="status">
+        {counting
+          ? `Signing out in ${account.secondsLeft}…`
+          : account.waitSeconds > 0
+            ? `Takes ${account.waitSeconds} seconds. Stand still and stay safe: moving or getting hurt cancels it.`
+            : 'Takes you back to the front page. Your character is kept for next time.'}
+      </p>
+      <button
+        type="button"
+        className="settings-signout"
+        onClick={() => {
+          if (counting) {
+            account.onCancelSignOut();
+            return;
+          }
+          account.onSignOut();
+          if (account.waitSeconds > 0) onSignedOut();
+        }}
+      >
+        {counting ? 'Cancel sign out' : 'Sign out'}
+      </button>
+    </section>
   );
 }
 

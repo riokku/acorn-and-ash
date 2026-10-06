@@ -14,7 +14,7 @@ import {
 
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
-import { SettingsMenu } from '../preferences/SettingsMenu';
+import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
 
 interface HomeProps {
@@ -51,6 +51,14 @@ export function Home({
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
 
+  // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
+  const account: SettingsAccount = {
+    waitSeconds: 0,
+    secondsLeft: null,
+    onSignOut,
+    onCancelSignOut: () => undefined,
+  };
+
   const trimmed = sanitizePlayerName(name);
   const canPlay = isValidPlayerName(trimmed);
 
@@ -70,7 +78,7 @@ export function Home({
         }}
       >
         <PaintingBackdrop />
-        <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
+        <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
         <div className="home-card">
           <p className="home-kicker">Welcome back</p>
           <h1 className="home-title">Acorn &amp; Ash</h1>
@@ -91,7 +99,7 @@ export function Home({
   return (
     <form className="home-screen" onSubmit={handleSubmit}>
       <PaintingBackdrop />
-      <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} />
+      <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
       <div className="home-card">
         <p className="home-kicker">Cozy wilderness survival</p>
         <h1 className="home-title">Acorn &amp; Ash</h1>

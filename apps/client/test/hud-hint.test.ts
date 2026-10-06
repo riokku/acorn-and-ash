@@ -84,6 +84,8 @@ const BASE_STATE: HudState = {
   resting: null,
   restingNearby: null,
   boat: null,
+  signOutSecondsLeft: null,
+  signOutNotice: null,
 };
 
 describe('the hint along the bottom', () => {

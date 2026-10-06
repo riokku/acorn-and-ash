@@ -223,6 +223,14 @@ character screen and the loading screen. Your own machine and the browser tests
 skip the front page; previews and the real game show it. See
 [decision 0103](docs/decisions/0103-the-front-door.md).
 
+### Signing out
+
+**Settings** (the gear) has an **Account** section with **Sign out**. In the
+game it takes ten seconds: a banner counts down with a **Cancel** button, and
+moving, swinging or getting hit cancels it. On the character screen it signs
+out at once. Either way you land back on the front page. See
+[decision 0104](docs/decisions/0104-sign-out-from-the-game.md).
+
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a

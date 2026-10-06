@@ -64,6 +64,8 @@ import { amountOf, gainedLabel } from './item-words';
 import { itemDescription, itemUseHint } from './item-description';
 import type { ToastView } from './toasts';
 import { SettingsMenu } from '../preferences/SettingsMenu';
+import { SIGN_OUT_SECONDS } from './sign-out';
+import { SignOutBanner } from './SignOutBanner';
 import type { Preferences } from '../preferences/preferences';
 import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
@@ -98,6 +100,9 @@ interface HudProps {
   readonly combatFeed: CombatFeed;
   readonly onChestTransfer: (request: ChestRequest) => void;
   readonly onCloseChest: () => void;
+  /** Start and cancel signing out from inside the game - see decision 0104. */
+  readonly onSignOut?: () => void;
+  readonly onCancelSignOut?: () => void;
 }
 
 export function Hud({
@@ -118,6 +123,8 @@ export function Hud({
   combatFeed,
   onChestTransfer,
   onCloseChest,
+  onSignOut,
+  onCancelSignOut,
   onJournalTabChange,
   onPickCraft,
   onCraftTabChange,
@@ -393,9 +400,24 @@ export function Hud({
             initial={initialPreferences}
             onChange={onSettingsChange}
             onOpenChange={onSettingsOpenChange}
+            account={
+              onSignOut !== undefined && onCancelSignOut !== undefined
+                ? {
+                    waitSeconds: SIGN_OUT_SECONDS,
+                    secondsLeft: state.signOutSecondsLeft,
+                    onSignOut,
+                    onCancelSignOut,
+                  }
+                : undefined
+            }
           />
         </div>
       ) : null}
+      <SignOutBanner
+        secondsLeft={state.signOutSecondsLeft}
+        notice={state.signOutNotice}
+        onCancel={onCancelSignOut}
+      />
 
       {state.ready && !state.playing ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
