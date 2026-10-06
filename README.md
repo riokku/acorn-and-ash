@@ -1062,6 +1062,36 @@ rest are built in code from those painted parts (see
 [`apps/client/src/art`](apps/client/src/art) and
 [decision 0053](docs/decisions/0053-painted-textures-and-real-shapes.md)).
 Nothing to download and nothing to license - all of it is this game's own.
+That is how the art made so far works; new and replacement art is made in
+Blender (below), one family of things at a time.
+
+### Making art with Blender
+
+New models and textures are made in Blender, with Claude driving it through the
+Blender MCP. Because Blender is open on your computer, **art sessions run on
+your computer**, in Claude Code there; a cloud session can't reach Blender and
+will say so instead of faking it.
+
+To start an art session:
+
+1. Open Blender and start the Blender MCP connection from its side panel, the
+   way you did when you set it up. Tick the libraries you want Claude to be able
+   to search (Poly Haven, Sketchfab, Hyper3D Rodin).
+2. Open Claude Code on your computer in this project's folder.
+3. Ask in plain words, one thing at a time: "make a lower-poly woodpile that
+   matches the trees" or "replace the lantern with a proper model". Claude shows
+   screenshots as it goes, so you can steer it.
+
+When you are happy, Claude saves the Blender file and the game-ready model into
+[`assets/`](assets/), adds the licence rows, and opens a pull request with
+before and after pictures. The How to test step opens the new piece in the art
+gallery on the preview (`<preview link>/?gallery=<name>`).
+
+The rules that keep it safe and legal (where models may come from, the
+triangle limits, what goes in the licence rows) are in
+[`assets/README.md`](assets/README.md) and in the "Making art with Blender"
+section of [`CLAUDE.md`](CLAUDE.md). See
+[decision 0105](docs/decisions/0105-art-is-made-in-blender.md).
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
