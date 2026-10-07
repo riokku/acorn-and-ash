@@ -1775,17 +1775,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding: 32px 16px clamp(48px, 13vh, 140px);
+  justify-content: center;
+  padding: 32px 16px;
   overflow-y: auto;
   background: #183f40;
   color: #fff5de;
   text-align: center;
-}
-
-.front-door-choices {
-  justify-content: center;
-  padding-bottom: 32px;
 }
 
 .front-copy,

@@ -75,6 +75,22 @@ test.describe('on the home screens', () => {
   });
 });
 
+test.describe('the front page', () => {
+  for (const height of [500, 720, 1000]) {
+    test(`has its content in the middle of a ${height} px tall window`, async ({ page }) => {
+      await pretendSignedOut(page);
+      await page.setViewportSize({ width: 1280, height });
+      await page.goto('/?season=summer');
+      const copy = await page.locator('.front-copy').boundingBox();
+      expect(copy).not.toBeNull();
+      const above = copy!.y;
+      const below = height - (copy!.y + copy!.height);
+      // The same room above the title as below the Play button, give or take a pixel.
+      expect(Math.abs(above - below)).toBeLessThanOrEqual(2);
+    });
+  }
+});
+
 test.describe('in the game', () => {
   async function enterWorld(page: Page, search: string): Promise<void> {
     await page.goto(`/?renderer=webgl2&world=${newWorld()}${search}`);
