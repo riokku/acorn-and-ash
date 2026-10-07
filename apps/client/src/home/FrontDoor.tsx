@@ -51,12 +51,6 @@ export function FrontDoor({
     return (
       <div className="front-door" data-testid="front-door">
         <PaintingBackdrop />
-        <div className="front-brand">
-          <span className="front-brand-mark" aria-hidden="true">
-            ✦
-          </span>{' '}
-          Acorn &amp; Ash
-        </div>
         <div className="front-copy">
           <p className="front-eyebrow">A little further from the everyday</p>
           <h1 className="front-title">Acorn &amp; Ash</h1>

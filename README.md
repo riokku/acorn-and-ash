@@ -276,8 +276,8 @@ online-game login. They stand in front of the painted valley in their real
 idle stance (the same model and moves as in the game), tinted and named as you
 choose. **Drag** to turn them, **click** for a little flourish (a hop, then a
 reach, then a pick-up), or use the arrow keys and Space. A returning player
-sees their own character in the middle of the painting with an **Enter World**
-button under them. Someone who asked for less motion gets them holding their
+sees their own character in the middle of the painting, under the title and
+above an **Enter World** card, all centred on the screen. Someone who asked for less motion gets them holding their
 pose, and a computer that cannot draw the character still gets the whole
 screen without it. See
 [decision 0107](docs/decisions/0107-the-character-screen.md).

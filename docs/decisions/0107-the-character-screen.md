@@ -20,3 +20,11 @@ Chris wanted the screen before the game to feel like the one in World of Warcraf
 - The character screen now draws a second 3D scene before the game's own. It is one small model and runs only while the screen is up; the stage is taken down when the player goes in.
 - A new character model or move shows up here without extra work. A new flourish is a line in `FLOURISHES`.
 - The character stands empty-handed. Showing what they carry (axe, rod) would be a later, separate change.
+
+## Update · 2026-10-07: smaller and centred
+
+Chris asked for the character to be about half the size and for the content to sit in the vertical middle of the screen.
+
+- **Half the size.** The character fills a third of the window's height while a new one is made, and a quarter on the welcome-back screen (they were 64% and 50%).
+- **Centred.** While making one, the character stands level with the card, which is centred, and their name hangs just under their feet. On welcome-back, the title, the character and the plate are one column centred from top to bottom, instead of the title at the very top and the plate at the very bottom. The character fills an empty slot in that column; `useSlotPlacement` measures the slot and `placementOfBox` (in `showcase.ts`, unit tested) turns it into where the stage stands, so it stays right at any window size or title height.
+- **The front page** loses its small "Acorn & Ash" mark in the upper left, which repeated the big title below it.

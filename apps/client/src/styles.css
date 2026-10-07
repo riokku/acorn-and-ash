@@ -1518,7 +1518,6 @@ body {
 /* The name and kind under the character, and how to play with them. */
 .stage-caption {
   position: fixed;
-  bottom: 4vh;
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -1558,18 +1557,39 @@ body {
   }
 }
 
-/* Welcome back: the character stands in the middle, a nameplate at the bottom. */
+/*
+ * Welcome back: the title, the character and the card are one column, centred
+ * from top to bottom. The character is drawn on the canvas behind, standing in
+ * the empty slot between the title and the card.
+ */
 .home-screen.is-welcome {
-  place-items: end center;
-  padding-bottom: 4vh;
+  place-items: safe center;
+}
+
+.welcome-column {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  /* Only the title's and card's own pixels catch the pointer: the rest is the character's. */
+  pointer-events: none;
+}
+
+.welcome-column .home-card {
+  pointer-events: auto;
+}
+
+.welcome-slot {
+  flex: none;
+  width: min(100%, 320px);
 }
 
 .stage-header {
-  position: fixed;
-  top: 4vh;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 1;
+  margin-bottom: 8px;
   text-align: center;
   color: #fff7e3;
   text-shadow: 0 2px 18px rgba(7, 30, 43, 0.75);
@@ -1620,22 +1640,6 @@ body {
 .front-door-choices {
   justify-content: center;
   padding-bottom: 32px;
-}
-
-.front-brand {
-  position: absolute;
-  top: 7%;
-  left: 7%;
-  z-index: 1;
-  font-family: Georgia, serif;
-  font-size: clamp(20px, 2.2vw, 32px);
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 16px #0d343d;
-}
-
-.front-brand-mark {
-  margin-right: 10px;
-  color: #e8c493;
 }
 
 .front-copy,
