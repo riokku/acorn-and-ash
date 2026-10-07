@@ -3,6 +3,7 @@ import { encodeDecorationRequest, type DecorationRequest } from '@acorn/shared';
 import {
   encodeGardenRequest,
   type GardenRequest,
+  CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
@@ -32,8 +33,12 @@ import {
  * `elsewhere`: this player has since joined the same world from another tab
  * or window, which carries on with them (see decision 0057). This one waits
  * to be asked to play here again rather than reconnecting by itself.
+ *
+ * `deleted`: this player's character was deleted, from here or from another
+ * tab (decision 0108). There is nobody left to reconnect as, so it stays shut.
  */
-export type ConnectionState = 'connecting' | 'connected' | 'offline' | 'rejected' | 'elsewhere';
+export type ConnectionState =
+  'connecting' | 'connected' | 'offline' | 'rejected' | 'elsewhere' | 'deleted';
 
 export interface ConnectionHandlers {
   onMessage(message: ServerMessage): void;
@@ -132,6 +137,7 @@ export class WorldConnection {
     socket.addEventListener('close', (event) => {
       if (this.socket !== socket) return;
       if (event.code === CLOSE_PLAYING_ELSEWHERE) this.standDown();
+      else if (event.code === CLOSE_CHARACTER_DELETED) this.giveUp('deleted');
       else this.handleDrop('The connection closed');
     });
     socket.addEventListener('error', () => {
@@ -281,10 +287,16 @@ export class WorldConnection {
   /** Playing somewhere else now: stay quiet until asked to play here again. */
   private standDown(): void {
     this.standingDown = true;
+    this.giveUp('elsewhere');
+  }
+
+  /** Stop for good, without trying again: the server has said there is nothing to come back to. */
+  private giveUp(state: 'elsewhere' | 'deleted'): void {
     this.stopTimers();
     this.socket = null;
     this.outgoing = [];
-    this.handlers.onStateChange('elsewhere');
+    if (state === 'deleted') this.closed = true;
+    this.handlers.onStateChange(state);
   }
 
   private stopTimers(): void {

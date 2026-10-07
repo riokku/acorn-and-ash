@@ -28,6 +28,9 @@
   // than fifteen to twenty-five. Skeletons raid every
   // minute or so outdoors rather than every four to six.
   //
+  // A deleted character's cabin and everything else they built stays up for two
+  // minutes rather than half an hour, so the end of it can be watched.
+  //
   // `?season=winter` in the address is honoured here, on the browser tests and
   // on previews, and nowhere real (decision 0095).
   "vars": {
@@ -36,6 +39,7 @@
     "WORLD_PATCH_REGROW_SECONDS": "30",
     "WORLD_REED_REGROW_SECONDS": "45",
     "WORLD_RAID_SECONDS": "60",
+    "WORLD_ABANDONED_SECONDS": "120",
     "WORLD_ALLOW_TEST_SEASON": "1",
   },
 
@@ -56,6 +60,7 @@
         "WORLD_PATCH_REGROW_SECONDS": "30",
         "WORLD_REED_REGROW_SECONDS": "45",
         "WORLD_RAID_SECONDS": "86400",
+        "WORLD_ABANDONED_SECONDS": "120",
         "WORLD_ALLOW_TEST_SEASON": "1",
       },
     },
@@ -83,6 +88,7 @@
         "WORLD_PATCH_REGROW_SECONDS": "30",
         "WORLD_REED_REGROW_SECONDS": "45",
         "WORLD_RAID_SECONDS": "60",
+        "WORLD_ABANDONED_SECONDS": "120",
         "WORLD_ALLOW_TEST_SEASON": "1",
       },
     },
@@ -103,6 +109,7 @@
         "WORLD_PATCH_REGROW_SECONDS": "180",
         "WORLD_REED_REGROW_SECONDS": "900",
         "WORLD_RAID_SECONDS": "240",
+        "WORLD_ABANDONED_SECONDS": "1800",
       },
     },
     "production": {
@@ -117,6 +124,7 @@
         "WORLD_PATCH_REGROW_SECONDS": "180",
         "WORLD_REED_REGROW_SECONDS": "900",
         "WORLD_RAID_SECONDS": "240",
+        "WORLD_ABANDONED_SECONDS": "1800",
       },
     },
   },

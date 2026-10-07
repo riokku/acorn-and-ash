@@ -241,6 +241,22 @@ moving, swinging or getting hit cancels it. On the character screen it signs
 out at once. Either way you land back on the front page. See
 [decision 0104](docs/decisions/0104-sign-out-from-the-game.md).
 
+### Deleting your character
+
+**Settings** (the gear) → **Account** has **Delete character…**, and the
+character screen has a small **Delete this character** link. Both ask you to
+type the character's name, then **Delete forever**. The character is gone at
+once (pack, hunger, map, fish collection, home) and you land back on a fresh
+character screen to pick a new name and look. Everything they built (the cabin,
+campfires, fences, decorations) stays standing but **locked**, so nobody can
+use or break it, and disappears all together after 30 minutes, counted in real
+time even while the world is asleep. Previews and local runs use two minutes,
+set by `WORLD_ABANDONED_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Caches
+buried after a knockout go immediately. Each character finds their own axe, bag
+and rod. See [decision 0108](docs/decisions/0108-deleting-a-character.md) and
+[decision 0109](docs/decisions/0109-everyone-finds-their-own-tools.md).
+
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a

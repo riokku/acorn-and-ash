@@ -25,6 +25,12 @@ export function forwardToWorld(
   env: WorldEnv,
   worldId: string,
 ): Promise<Response> {
+  // Deleting a character is only ever done on behalf of the signed-in player,
+  // through `apps/web`, which knows who that is. Anybody can reach these
+  // routes, so they must not be a way round it.
+  if (request.method === 'DELETE') {
+    return Promise.resolve(Response.json({ error: 'Not found' }, { status: 404 }));
+  }
   const id = env.WORLD.idFromName(worldId);
   return env.WORLD.get(id).fetch(request);
 }

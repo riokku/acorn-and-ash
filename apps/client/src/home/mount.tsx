@@ -12,6 +12,10 @@ export interface HomeAccount {
   /** The character already made in this world, if there is one. */
   readonly saved: PlayerIdentity | null;
   readonly onSignOut: () => void;
+  /** Delete the saved character. Rejects when it could not be done. */
+  readonly onDeleteCharacter?: () => Promise<void>;
+  /** Said once above the new-character card, after a character was just deleted. */
+  readonly notice?: string | null;
 }
 
 /**
@@ -34,6 +38,8 @@ export function mountHome(
         saved={account.saved}
         accountName={account.name}
         onSignOut={account.onSignOut}
+        onDeleteCharacter={account.onDeleteCharacter}
+        notice={account.notice}
         onPlay={onPlay}
         initialPreferences={initialPreferences}
         onSettingsChange={onSettingsChange}

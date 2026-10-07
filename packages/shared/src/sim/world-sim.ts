@@ -466,6 +466,13 @@ export interface PersistedPlayer {
   readonly discoveriesFound?: number;
   readonly discoveriesClaimed?: number;
   readonly expedition?: ExpeditionState;
+  /**
+   * The axe, bag and rod (and anything else lying in the clearing) this
+   * character has already picked up. Every character finds their own, so this
+   * is theirs, not the world's. Optional: a save from before this was kept
+   * starts with none taken.
+   */
+  readonly takenPickups?: readonly number[];
 }
 
 /** Somebody picked something up. The world server turns these into messages. */
@@ -577,9 +584,13 @@ export interface BuiltProp {
    */
   lit: boolean;
   /**
-   * Only meaningful for a home: whether its owner has locked the door to
-   * visitors (see decision 0055). Absent, like false, for anything built
-   * before doors could be locked, and for every other kind.
+   * For a home: whether its owner has locked the door to visitors (see
+   * decision 0055). Absent, like false, for anything built before doors could
+   * be locked.
+   *
+   * Of every kind, it also means the character who built it has been deleted:
+   * it stands there for a while longer, but nobody can enter it, light it, row
+   * it or use it, and then it is gone (decision 0108).
    */
   locked?: boolean;
   /**
@@ -617,6 +628,20 @@ export interface SpaceChange {
 export interface CampfireLitEvent {
   readonly propId: number;
   readonly lit: boolean;
+}
+
+/**
+ * Who a build belongs to once its character has been deleted: nobody. No
+ * account is ever given this key, so none can ever own, open or decorate it.
+ */
+export const ABANDONED_OWNER = '~abandoned';
+
+/** What was left behind, and what was cleared away, when a character was deleted. */
+export interface ForgottenCharacter {
+  /** Every build that now stands abandoned and locked, with when it will disappear. */
+  readonly abandoned: readonly { readonly prop: BuiltProp; readonly expiresAtMs: number }[];
+  /** The ids of the buried caches that went at once, for storage to forget. */
+  readonly cacheIds: readonly number[];
 }
 
 /**
@@ -876,6 +901,8 @@ interface PlayerRuntime {
   discoveriesClaimed: number;
   expedition: ExpeditionState;
   sentinelVictories: number;
+  /** Clearing pickups this character has already taken, by id. Each character finds their own. */
+  readonly takenPickups: Set<number>;
   fishRecords: FishRecords;
   reel: RareReel | null;
   /** Ticks left before this player may swing, cast or gather again. */
@@ -1294,8 +1321,6 @@ export class WorldSimulation {
   private readonly homeChests = new Map<number, ChestSlot[]>();
   private readonly players = new Map<number, PlayerRuntime>();
   private readonly animals = new Map<number, AnimalRuntime>();
-  /** Pickups that somebody has already taken, by id. */
-  private readonly takenPickups = new Set<number>();
   /** Drained by the world server each tick and turned into messages. */
   private readonly pickupEvents: PickupTaken[] = [];
   /** Every tree anybody has touched, by prop id. Untouched trees are not here. */
@@ -1364,6 +1389,9 @@ export class WorldSimulation {
   private readonly campfireLitEvents: CampfireLitEvent[] = [];
   /** Built-prop id -> whoever it belongs to, for anything capped per player. */
   private readonly ownedBuiltProps = new Map<number, string>();
+  /** When each abandoned build disappears, in real time, by built-prop id. */
+  private readonly abandonedUntilMs = new Map<number, number>();
+  private readonly removedBuilds: number[] = [];
   /** Everything currently buried, waiting to be dug back up. */
   private readonly buriedCaches: BuriedCache[] = [];
   private nextBuriedCacheId = 1;
@@ -1631,6 +1659,11 @@ export class WorldSimulation {
         saved!.sentinelVictories! <= 0xffffffff
           ? saved!.sentinelVictories!
           : 0,
+      takenPickups: new Set(
+        (saved?.takenPickups ?? []).filter((id) =>
+          this.clearing.pickups.some((pickup) => pickup.id === id),
+        ),
+      ),
       swingCooldownTicks: 0,
       swingWasHeld: false,
       interactWasHeld: false,
@@ -2802,13 +2835,13 @@ export class WorldSimulation {
       targetId === undefined
         ? this.clearing.pickups
         : this.clearing.pickups.filter((pickup) => pickup.id === targetId),
-      (id) => this.takenPickups.has(id),
+      (id) => runtime.takenPickups.has(id),
     );
     if (pickup === null) return false;
     if (addItem(runtime.inventory, pickup.item) === 0)
       return this.refusePickup(runtime, pickup.item);
 
-    this.takenPickups.add(pickup.id);
+    runtime.takenPickups.add(pickup.id);
     this.collectionEvents.push({
       netId: runtime.netId,
       item: pickup.item,
@@ -3051,8 +3084,10 @@ export class WorldSimulation {
     for (const other of this.patches) {
       if (other.id !== patchId && other.remaining > 0 && tooClose(other)) return true;
     }
+    // Every character has their own copy of each pickup, so some character may
+    // still be able to reach any of them.
     for (const pickup of this.clearing.pickups) {
-      if (!this.takenPickups.has(pickup.id) && tooClose(pickup)) return true;
+      if (tooClose(pickup)) return true;
     }
     return this.droppedPiles.some(tooClose) || this.buriedCaches.some(tooClose);
   }
@@ -3589,7 +3624,7 @@ export class WorldSimulation {
     let nearest: BuiltProp | null = null;
     let nearestDistance = Infinity;
     for (const prop of this.builtProps) {
-      if (prop.kind !== 'rowboat' || prop.rower !== undefined) continue;
+      if (prop.kind !== 'rowboat' || prop.rower !== undefined || prop.locked === true) continue;
       if (!isWithinBoardingReach(motion.position, prop)) continue;
       const distance = Math.hypot(motion.position.x - prop.x, motion.position.z - prop.z);
       if (distance < nearestDistance) {
@@ -3848,16 +3883,132 @@ export class WorldSimulation {
 
   /** Take a boat out of the world altogether. */
   private removeBoat(boat: BuiltProp): void {
-    this.builtProps.splice(this.builtProps.indexOf(boat), 1);
-    this.builtPropsById.delete(boat.id);
-    this.ownedBuiltProps.delete(boat.id);
-    this.boatChanges.delete(boat.id);
+    this.detachBuiltProp(boat);
     this.brokenBoats.push(boat.id);
+  }
+
+  /** Forget a built prop everywhere the simulation keeps track of one. */
+  private detachBuiltProp(prop: BuiltProp): void {
+    const index = this.builtProps.indexOf(prop);
+    if (index >= 0) this.builtProps.splice(index, 1);
+    this.builtPropsById.delete(prop.id);
+    this.ownedBuiltProps.delete(prop.id);
+    this.abandonedUntilMs.delete(prop.id);
+    this.campfireLitUntilMs.delete(prop.id);
+    this.boatChanges.delete(prop.id);
   }
 
   /** Hand over the id of every boat that has fallen apart since this was last asked. */
   drainBrokenBoats(): number[] {
     return this.brokenBoats.splice(0);
+  }
+
+  /**
+   * A character has been deleted (decision 0108). Everything they built stays
+   * standing but is locked for everybody, owned by nobody, until
+   * `removeExpiredBuilds` takes it all away together at `nowMs + lifetimeMs`.
+   * What is only theirs to find again - buried caches, and piles set aside
+   * for them alone - goes at once, since nobody could ever collect it.
+   *
+   * Does not touch the player themself: the game server lets their
+   * connection go and forgets their saved character separately.
+   */
+  forgetCharacter(playerKey: string, nowMs: number, lifetimeMs: number): ForgottenCharacter {
+    const expiresAtMs = nowMs + lifetimeMs;
+    const abandoned: { prop: BuiltProp; expiresAtMs: number }[] = [];
+    for (const [id, owner] of [...this.ownedBuiltProps]) {
+      if (owner !== playerKey) continue;
+      const prop = this.builtPropsById.get(id);
+      if (prop === undefined) continue;
+      this.ownedBuiltProps.set(id, ABANDONED_OWNER);
+      this.abandonedUntilMs.set(id, expiresAtMs);
+      prop.locked = true;
+      if (BUILDABLE_KINDS[prop.kind].isHome) this.sendVisitorsOutside(prop);
+      abandoned.push({ prop, expiresAtMs });
+    }
+
+    const cacheIds: number[] = [];
+    for (let index = this.buriedCaches.length - 1; index >= 0; index--) {
+      const cache = this.buriedCaches[index];
+      if (cache === undefined || cache.ownerPlayerKey !== playerKey) continue;
+      this.buriedCaches.splice(index, 1);
+      cacheIds.push(cache.id);
+    }
+
+    for (let index = this.droppedPiles.length - 1; index >= 0; index--) {
+      const pile = this.droppedPiles[index];
+      if (pile === undefined || pile.ownerKey !== playerKey) continue;
+      this.droppedPiles.splice(index, 1);
+      this.pendingPiles.delete(pile.id);
+      this.pileChanges.add(pile.id);
+    }
+
+    return { abandoned, cacheIds };
+  }
+
+  /**
+   * Take away every abandoned build whose time is up, and hand back the ids
+   * of what went, for storage to forget and everybody to be told.
+   *
+   * Called with real time, the same reason `extinguishBurnedOutCampfires` is:
+   * a world with nobody in it does not tick, so on waking, anything that
+   * should have gone while nobody was here goes at once. A boat somebody is
+   * still rowing goes the moment they climb out.
+   */
+  removeExpiredBuilds(nowMs: number): number[] {
+    for (const [id, dueAt] of [...this.abandonedUntilMs]) {
+      if (nowMs < dueAt) continue;
+      const prop = this.builtPropsById.get(id);
+      if (prop === undefined) {
+        this.abandonedUntilMs.delete(id);
+        continue;
+      }
+      if (prop.rower !== undefined) continue;
+      this.removeAbandonedBuild(prop);
+    }
+    return this.removedBuilds.splice(0);
+  }
+
+  /** When this abandoned build disappears, or null for anything that is not abandoned. */
+  abandonedUntilMsFor(propId: number): number | null {
+    return this.abandonedUntilMs.get(propId) ?? null;
+  }
+
+  private removeAbandonedBuild(prop: BuiltProp): void {
+    if (BUILDABLE_KINDS[prop.kind].isHome) {
+      this.sendVisitorsOutside(prop);
+      const solid = this.homeSolids.get(prop.id);
+      if (solid !== undefined) {
+        this.collision.colliders.splice(this.collision.colliders.indexOf(solid), 1);
+        this.homeSolids.delete(prop.id);
+      }
+      this.homeChests.delete(prop.id);
+      this.homeGardens.delete(prop.id);
+      this.decorations = this.decorations.filter((piece) => piece.homeId !== prop.id);
+      this.decoratedHomes.delete(prop.id);
+      this.decoratedRooms.delete(prop.id);
+    }
+    this.detachBuiltProp(prop);
+    this.removedBuilds.push(prop.id);
+  }
+
+  /** Put anybody inside this home back out on its doorstep, and tell them. */
+  private sendVisitorsOutside(home: BuiltProp): void {
+    const doorstep = cabinDoorstep(home);
+    const y = this.collision.terrain.heightAt(doorstep.x, doorstep.z);
+    for (const visitor of this.players.values()) {
+      if (visitor.space !== home.id) continue;
+      if (visitor.cast !== null) this.endCast(visitor, { outcome: 'walkedAway' });
+      this.placePlayer(visitor.netId, { x: doorstep.x, y, z: doorstep.z }, doorstep.yaw);
+      visitor.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
+      this.spaceChanges.push({
+        netId: visitor.netId,
+        space: OUTDOORS,
+        x: doorstep.x,
+        z: doorstep.z,
+        yaw: doorstep.yaw,
+      });
+    }
   }
 
   /** Whether nobody else is already in this chair, or in this bed. */
@@ -4655,19 +4806,31 @@ export class WorldSimulation {
    * `ownerKey` travels separately from the rest of `BuiltProp` - it is
    * server-only bookkeeping that a client has no business seeing. Null for
    * anything that was not lit when it was saved.
+   *
+   * `expiresAtMs` is the same kind of thing for a build left behind by a
+   * deleted character: when it disappears. Absent, like null, for everything
+   * still in use.
    */
   restoreBuiltProps(
     props: Iterable<
-      BuiltProp & { readonly ownerKey: string | null; readonly litUntilMs: number | null }
+      BuiltProp & {
+        readonly ownerKey: string | null;
+        readonly litUntilMs: number | null;
+        readonly expiresAtMs?: number | null;
+      }
     >,
   ): void {
-    for (const { ownerKey, litUntilMs, ...prop } of props) {
+    for (const { ownerKey, litUntilMs, expiresAtMs, ...prop } of props) {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
       if (BUILDABLE_KINDS[prop.kind].isHome) this.addHomeSolid(prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
       if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);
+      if (expiresAtMs !== undefined && expiresAtMs !== null) {
+        this.abandonedUntilMs.set(prop.id, expiresAtMs);
+        prop.locked = true;
+      }
     }
   }
 
@@ -4773,9 +4936,10 @@ export class WorldSimulation {
 
   /** What this player could pick up right now, or null. Used by tests. */
   reachablePickup(netId: number): PlacedPickup | null {
-    const position = this.players.get(netId)?.entity.get(Position);
-    if (position === undefined) return null;
-    return pickupInReach(position, this.clearing.pickups, (id) => this.takenPickups.has(id));
+    const runtime = this.players.get(netId);
+    const position = runtime?.entity.get(Position);
+    if (runtime === undefined || position === undefined) return null;
+    return pickupInReach(position, this.clearing.pickups, (id) => runtime.takenPickups.has(id));
   }
 
   /** What a player is carrying. The client is told this; it never decides it. */
@@ -4934,14 +5098,13 @@ export class WorldSimulation {
     return this.gatherEvents.splice(0);
   }
 
-  /** Pickups already taken, for sending to a client and for saving. */
-  takenPickupIds(): number[] {
-    return [...this.takenPickups];
-  }
-
-  /** Put back the set of taken pickups after the world wakes from storage. */
-  restoreTakenPickups(ids: Iterable<number>): void {
-    for (const id of ids) this.takenPickups.add(id);
+  /**
+   * The pickups this character has already taken, for telling their browser
+   * and for saving. Each character finds their own axe, bag and rod, so
+   * somebody else having taken theirs changes nothing here.
+   */
+  takenPickupIdsOf(netId: number): number[] {
+    return [...(this.players.get(netId)?.takenPickups ?? [])];
   }
 
   /** Hand over everything that happened since this was last asked. */
@@ -5372,6 +5535,7 @@ export class WorldSimulation {
         discoveriesFound: runtime.discoveriesFound,
         discoveriesClaimed: runtime.discoveriesClaimed,
         sentinelVictories: runtime.sentinelVictories,
+        takenPickups: [...runtime.takenPickups],
         fishRecords: fishRecordsFromSaved(runtime.fishRecords),
         expedition: { ...runtime.expedition, progress: [...runtime.expedition.progress] },
       });

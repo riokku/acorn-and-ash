@@ -20,6 +20,7 @@ const stubGameServer = `
         stub: true,
         objectId: this.ctx.id.toString(),
         path: url.pathname,
+        method: request.method,
         upgrade: request.headers.get('Upgrade'),
         player: url.searchParams.get('player'),
         season: url.searchParams.get('season'),

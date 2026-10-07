@@ -890,6 +890,114 @@ body {
   outline-offset: 2px;
 }
 
+/* Settings -> Account -> Delete character, and the same panel on the character screen (decision 0108). */
+.settings-delete-character {
+  display: block;
+  margin: 12px auto 0;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #a33a28;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.settings-delete-character:focus-visible {
+  outline: 3px solid var(--accent-warm);
+  outline-offset: 2px;
+}
+
+.delete-character {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(163, 58, 40, 0.4);
+  border-radius: 10px;
+  background: rgba(163, 58, 40, 0.07);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-warm);
+}
+
+.delete-character p {
+  margin: 0 0 8px;
+}
+
+.delete-character-note {
+  color: var(--ink-warm-dim);
+}
+
+.delete-character-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.delete-character-field input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(58, 42, 20, 0.28);
+  border-radius: 8px;
+  background: #fffdf7;
+  color: var(--ink-warm);
+  font: inherit;
+  font-size: 14px;
+}
+
+.delete-character-field input:focus-visible {
+  outline: 3px solid var(--accent-warm);
+  outline-offset: 1px;
+}
+
+.delete-character-error {
+  color: #a33a28;
+  font-weight: 650;
+}
+
+.delete-character-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.delete-character-actions button {
+  padding: 10px 14px;
+  border: 1px solid rgba(58, 42, 20, 0.28);
+  border-radius: 999px;
+  background: rgba(58, 42, 20, 0.08);
+  color: var(--ink-warm);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.delete-character-actions button:focus-visible {
+  outline: 3px solid var(--accent-warm);
+  outline-offset: 2px;
+}
+
+.delete-character-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-character-actions .delete-character-confirm {
+  border-color: #8f2f1f;
+  background: #a33a28;
+  color: #fffaf0;
+}
+
+.delete-character-actions .delete-character-confirm:not(:disabled):hover {
+  background: #8f2f1f;
+}
+
+.delete-character-card .delete-character {
+  margin-top: 0;
+}
+
 /* The countdown over the game while signing out, and why one was cancelled. */
 .signout-banner {
   position: absolute;

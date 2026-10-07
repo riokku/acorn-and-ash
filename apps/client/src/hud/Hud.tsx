@@ -103,6 +103,8 @@ interface HudProps {
   /** Start and cancel signing out from inside the game - see decision 0104. */
   readonly onSignOut?: () => void;
   readonly onCancelSignOut?: () => void;
+  /** Delete this player's character (decision 0108). Rejects when it could not be done. */
+  readonly onDeleteCharacter?: () => Promise<void>;
 }
 
 export function Hud({
@@ -125,6 +127,7 @@ export function Hud({
   onCloseChest,
   onSignOut,
   onCancelSignOut,
+  onDeleteCharacter,
   onJournalTabChange,
   onPickCraft,
   onCraftTabChange,
@@ -407,6 +410,10 @@ export function Hud({
                     secondsLeft: state.signOutSecondsLeft,
                     onSignOut,
                     onCancelSignOut,
+                    deleteCharacter:
+                      onDeleteCharacter !== undefined && state.playerName !== ''
+                        ? { characterName: state.playerName, onDelete: onDeleteCharacter }
+                        : undefined,
                   }
                 : undefined
             }
@@ -505,6 +512,7 @@ function Connection({ state }: { state: HudState }): React.JSX.Element {
     offline: ['Offline', 'hud-status-bad'],
     rejected: ['World full', 'hud-status-bad'],
     elsewhere: ['Playing elsewhere', 'hud-status-warn'],
+    deleted: ['Character deleted', 'hud-status-bad'],
   };
   const entry = labels[state.connection];
   return <span className={entry[1]}>{entry[0]}</span>;
@@ -1382,5 +1390,6 @@ export function curtainMessage(state: HudState): string {
   if (state.connection === 'elsewhere') {
     return 'You are playing in another tab or window. Click to play here instead';
   }
+  if (state.connection === 'deleted') return 'This character was deleted. Starting over…';
   return state.playerName ? `Welcome, ${state.playerName}. Click to play` : 'Click to play';
 }

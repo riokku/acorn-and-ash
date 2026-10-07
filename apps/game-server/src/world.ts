@@ -16,7 +16,12 @@ import { DurableObject } from 'cloudflare:workers';
 
 import { encodeGardenState, TICK_HZ, type GardenState } from '@acorn/shared';
 import {
+  ABANDONED_BUILD_SECONDS,
+  ABANDONED_OWNER,
+  AXE_PICKUP_ID,
+  BAG_PICKUP_ID,
   CHARACTER_KINDS,
+  CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   DEFAULT_CHARACTER,
   DEFAULT_TINT_COLOR,
@@ -25,6 +30,7 @@ import {
   HUNGER_MAX,
   MAX_GESTURES_PER_MESSAGE,
   MAX_PLAYERS_PER_WORLD,
+  ROD_PICKUP_ID,
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
   SNAPSHOT_EVERY_N_TICKS,
@@ -112,6 +118,25 @@ interface ConnectionAttachment {
 const PLAYER_KEY_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
+ * Every table that holds one row per player, keyed by `player_key`: all there
+ * is of a character apart from what they built, buried and dropped. Playtest
+ * resets and deleting a character both clear exactly these, so a table added
+ * here is forgotten by both.
+ */
+const PER_PLAYER_TABLES = [
+  'player_items',
+  'players',
+  'player_meals',
+  'player_home_skills',
+  'player_sentinel',
+  'player_blueprint_progress',
+  'player_discoveries',
+  'player_expeditions',
+  'player_fishing_collection',
+  'player_pickups_taken',
+] as const;
+
+/**
  * One world.
  *
  * The object wakes when the first player connects, runs a 20 Hz tick loop while
@@ -161,6 +186,16 @@ export class World extends DurableObject<WorldEnv> {
         );
       }
       return Response.json(this.resetPlayers());
+    }
+
+    // Delete this player's character (decision 0108). Only ever reached through
+    // `apps/web`, which puts the signed-in player's own key in the address.
+    if (url.pathname.endsWith('/character') && request.method === 'DELETE') {
+      const requestedKey = url.searchParams.get('player');
+      if (requestedKey === null || !PLAYER_KEY_PATTERN.test(requestedKey)) {
+        return Response.json({ ok: false, reason: 'Missing player' }, { status: 400 });
+      }
+      return Response.json(this.deleteCharacter(requestedKey));
     }
 
     // Who this player already is in this world, so the Home screen can show
@@ -234,7 +269,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeHomeSupplies(simulation.homeSuppliesOf(netId)));
     server.send(encodeMeal(simulation.mealStateOf(netId)));
     server.send(encodeDecorationState({ pieces: simulation.decorationsList(), reason: null }));
-    server.send(encodePickupsTaken(simulation.takenPickupIds()));
+    server.send(encodePickupsTaken(simulation.takenPickupIdsOf(netId)));
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
@@ -532,6 +567,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announcePatches(simulation, startedAt);
     this.announcePiles(simulation, startedAt);
     this.announceCampfireLighting(simulation, startedAt);
+    this.announceRemovedBuilds(simulation, startedAt);
     this.announceSpaceChanges(simulation);
     if (simulation.tick % TICK_HZ === 0) this.announceGardens(simulation);
     this.announceGestures(simulation);
@@ -560,31 +596,37 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
-   * Tell everybody about anything that was picked up this tick.
+   * Tell whoever picked something up this tick what they now carry and which
+   * pickups are theirs to find no more. Every character finds their own axe,
+   * bag and rod (decision 0109), so what one player took is nobody else's
+   * news: the others see the bend to pick it up, as they always have, and
+   * nothing about what they can still find changes.
    *
-   * The taker is told what they now carry, everybody is told the thing is gone,
-   * and it is written to storage straight away rather than waiting for the next
-   * save: finding the axe is not something anybody should have to do twice.
+   * It is written to storage straight away rather than waiting for the next
+   * save, together with the pack that now holds it: finding the axe is not
+   * something anybody should have to do twice.
    */
   private announcePickups(simulation: WorldSimulation): void {
     const events = simulation.drainPickupEvents();
     if (events.length === 0) return;
 
-    for (const event of events) this.writeTakenPickup(event.pickupId, event.netId);
-
-    const takenMessage = encodePickupsTaken(simulation.takenPickupIds());
     const takers = new Set(events.map((event) => event.netId));
-
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.attachmentFor(ws);
-      if (attachment === null) continue;
-      this.trySend(ws, takenMessage);
-      if (!takers.has(attachment.netId)) continue;
+      if (attachment === null || !takers.has(attachment.netId)) continue;
 
       const items = inventoryEntries(simulation.inventoryOf(attachment.netId));
+      const { playerKey } = attachment;
+      if (playerKey !== null) {
+        this.ctx.storage.transactionSync(() => {
+          for (const event of events)
+            if (event.netId === attachment.netId) this.writeTakenPickup(playerKey, event.pickupId);
+          this.writePlayerItems(playerKey, items);
+        });
+      }
+      this.trySend(ws, encodePickupsTaken(simulation.takenPickupIdsOf(attachment.netId)));
       this.trySend(ws, encodeInventory(items));
       this.trySend(ws, encodeHomeSupplies(simulation.homeSuppliesOf(attachment.netId)));
-      if (attachment.playerKey !== null) this.writePlayerItems(attachment.playerKey, items);
     }
   }
 
@@ -1198,6 +1240,89 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
+   * Take away every abandoned build whose time is up (decision 0108), and tell
+   * everybody. Run every tick and once when the world wakes, the same way
+   * `announceCampfireLighting` is, so a world nobody was in still clears
+   * whatever ran out meanwhile before the first player sees it.
+   */
+  private announceRemovedBuilds(simulation: WorldSimulation, nowMs: number): void {
+    const removed = simulation.removeExpiredBuilds(nowMs);
+    if (removed.length === 0) return;
+
+    const sql = this.ctx.storage.sql;
+    this.ctx.storage.transactionSync(() => {
+      for (const id of removed) {
+        sql.exec('DELETE FROM built_props WHERE id = ?', id);
+        sql.exec('DELETE FROM home_chests WHERE home_id = ?', id);
+        sql.exec('DELETE FROM home_gardens WHERE home_id = ?', id);
+      }
+      this.writeMeta('home-decorations', JSON.stringify(simulation.decorationsList()));
+    });
+    this.broadcastBuiltProps(simulation);
+    this.broadcast(encodeDecorationState({ pieces: simulation.decorationsList(), reason: null }));
+    this.announceSpaceChanges(simulation);
+  }
+
+  /**
+   * Delete a player's character and let go of everything about it (decision
+   * 0108). What they were carrying, where they stood, their map, their fish,
+   * their home unlocks and their first finds are gone at once, and so are the
+   * caches a knockout buried for them. What they built stays standing but
+   * locked for a while (`WORLD_ABANDONED_SECONDS`, half an hour), then goes
+   * all together - see `announceRemovedBuilds`.
+   *
+   * One path whether the player is in the world or not: a sleeping world is
+   * woken for it, and put back to sleep afterwards if nobody is there.
+   * Deleting twice is harmless - the second time there is nothing left.
+   */
+  deleteCharacter(playerKey: string): { ok: true; abandonedBuilds: number } {
+    const simulation = this.ensureSimulation();
+    const nowMs = Date.now();
+
+    // Every connection playing as them - the tab they pressed the button in,
+    // and any other - is told, and forgotten without being saved again.
+    const departed: { ws: WebSocket; netId: number }[] = [];
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment?.playerKey !== playerKey) continue;
+      simulation.removePlayer(attachment.netId);
+      departed.push({ ws, netId: attachment.netId });
+      this.letGo(ws, CLOSE_CHARACTER_DELETED, 'Character deleted');
+    }
+    // Anybody rowing was put ashore by that.
+    this.announceBoats(simulation);
+
+    const forgotten = simulation.forgetCharacter(playerKey, nowMs, this.abandonedLifetimeMs());
+    this.ctx.storage.transactionSync(() => {
+      for (const { prop, expiresAtMs } of forgotten.abandoned) {
+        this.ctx.storage.sql.exec(
+          'UPDATE built_props SET owner_key = ?, locked = 1, expires_at_ms = ? WHERE id = ?',
+          ABANDONED_OWNER,
+          expiresAtMs,
+          prop.id,
+        );
+      }
+      for (const cacheId of forgotten.cacheIds) this.deleteBuriedCache(cacheId);
+      for (const table of PER_PLAYER_TABLES)
+        this.ctx.storage.sql.exec(`DELETE FROM ${table} WHERE player_key = ?`, playerKey);
+    });
+
+    // Their piles, then what everybody else needs to hear.
+    this.announcePiles(simulation, nowMs);
+    this.broadcastBuiltProps(simulation);
+    this.broadcast(encodeBuriedCaches(simulation.buriedCachesList()));
+    this.announceSpaceChanges(simulation);
+    for (const { ws, netId } of departed) this.broadcast(encodePlayerLeft(netId), ws);
+
+    if (simulation.playerCount === 0) {
+      this.save(simulation);
+      this.stopTicking();
+      this.releaseSimulation();
+    }
+    return { ok: true, abandonedBuilds: forgotten.abandoned.length };
+  }
+
+  /**
    * Tell everybody what anybody did with their hands this tick - picked
    * something up, dug, reached out, ate - so every browser can play it on
    * them (see decision 0056). One small message for the lot.
@@ -1409,7 +1534,6 @@ export class World extends DurableObject<WorldEnv> {
     this.simulation = simulation;
     const weatherCycle = this.readMeta('weather-cycle');
     simulation.restoreWeatherCycle(weatherCycle === null ? null : Number(weatherCycle));
-    simulation.restoreTakenPickups(this.loadTakenPickups());
     simulation.restoreTrees(this.loadTrees());
     simulation.restoreBuiltProps(this.loadBuiltProps());
     const decor = this.readMeta('home-decorations');
@@ -1484,6 +1608,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announcePatches(simulation, Date.now());
     this.announcePiles(simulation, Date.now());
     this.announceCampfireLighting(simulation, Date.now());
+    this.announceRemovedBuilds(simulation, Date.now());
     if (simulation.playerCount > 0) this.startTicking();
     return simulation;
   }
@@ -1574,6 +1699,18 @@ export class World extends DurableObject<WorldEnv> {
     return configured;
   }
 
+  /**
+   * How long a deleted character's builds stay standing before they go, if the
+   * environment says. Only honoured when it is a sensible positive number, so a
+   * typo in a dashboard variable cannot make them vanish at once.
+   */
+  private abandonedLifetimeMs(): number {
+    const configured = Number(this.env.WORLD_ABANDONED_SECONDS);
+    const seconds =
+      Number.isFinite(configured) && configured > 0 ? configured : ABANDONED_BUILD_SECONDS;
+    return seconds * 1000;
+  }
+
   /** Time since the world began, derived from the tick count rather than a clock. */
   private worldTimeMs(): number {
     const tick = this.simulation?.tick ?? 0;
@@ -1638,13 +1775,10 @@ export class World extends DurableObject<WorldEnv> {
       count INTEGER NOT NULL,
       PRIMARY KEY (player_key, item_index)
     )`);
-    // Things somebody has taken out of the world. The clearing itself is built
-    // from the seed, so only what has changed since has to be stored.
-    sql.exec(`CREATE TABLE IF NOT EXISTS pickups_taken (
-      pickup_id INTEGER PRIMARY KEY,
-      net_id INTEGER NOT NULL,
-      taken_at INTEGER NOT NULL
-    )`);
+    // The axe, bag and rod each character has already picked up. The clearing
+    // itself is built from the seed, so only what has changed since has to be
+    // stored, and every character finds their own copy (decision 0109).
+    this.createPlayerPickups();
     sql.exec(
       'CREATE TABLE IF NOT EXISTS home_chests (home_id INTEGER PRIMARY KEY, slots TEXT NOT NULL)',
     );
@@ -1715,6 +1849,9 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('built_props', 'yaw', 'REAL');
     // Every door was open before doors could be locked.
     this.addColumn('built_props', 'locked', 'INTEGER NOT NULL DEFAULT 0');
+    // Only a build left behind by a deleted character sets this: the real time
+    // it disappears (decision 0108). Null for everything still in use.
+    this.addColumn('built_props', 'expires_at_ms', 'INTEGER');
     // What a knockout buries, until it is dug back up - unlike built props,
     // this one is deleted once its reason for existing is gone.
     sql.exec(`CREATE TABLE IF NOT EXISTS buried_caches (
@@ -1760,6 +1897,46 @@ export class World extends DurableObject<WorldEnv> {
       dropped_at_ms INTEGER NOT NULL
     )`);
     this.addColumn('dropped_piles', 'owner_key', 'TEXT');
+  }
+
+  /**
+   * The table of pickups each character has taken. A world saved before this
+   * kept one list for the whole world, which it no longer reads. The
+   * characters it already has keep what they are carrying as taken, so the
+   * axe is not back on its stump for someone already holding it; anyone not
+   * holding a thing finds their own, as everybody now does.
+   */
+  private createPlayerPickups(): void {
+    const sql = this.ctx.storage.sql;
+    const tableExists = (name: string): boolean =>
+      sql
+        .exec<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+          name,
+        )
+        .toArray().length > 0;
+    const isNew = !tableExists('player_pickups_taken');
+    sql.exec(`CREATE TABLE IF NOT EXISTS player_pickups_taken (
+      player_key TEXT NOT NULL,
+      pickup_id INTEGER NOT NULL,
+      PRIMARY KEY (player_key, pickup_id)
+    )`);
+    if (!isNew || !tableExists('pickups_taken')) return;
+    const found: readonly (readonly [number, ItemId])[] = [
+      [AXE_PICKUP_ID, 'axe'],
+      [ROD_PICKUP_ID, 'rod'],
+      [BAG_PICKUP_ID, 'bag'],
+    ];
+    for (const [pickupId, item] of found) {
+      sql.exec(
+        'INSERT OR IGNORE INTO player_pickups_taken (player_key, pickup_id) ' +
+          'SELECT player_key, ? FROM player_items WHERE item_index = ? ' +
+          'AND EXISTS (SELECT 1 FROM pickups_taken WHERE pickup_id = ?)',
+        pickupId,
+        itemIndex(item),
+        pickupId,
+      );
+    }
   }
 
   /** Add a column to an existing table, unless it is already there. */
@@ -1827,6 +2004,7 @@ export class World extends DurableObject<WorldEnv> {
       )
       .toArray()[0];
     return {
+      takenPickups: this.loadTakenPickups(playerKey),
       expedition: this.readExpedition(playerKey),
       fishRecords: this.readFishRecords(playerKey),
       meal: mealFromSaved(
@@ -1968,10 +2146,12 @@ export class World extends DurableObject<WorldEnv> {
   private loadBuiltProps(): (BuiltProp & {
     readonly ownerKey: string | null;
     readonly litUntilMs: number | null;
+    readonly expiresAtMs: number | null;
   })[] {
     const props: (BuiltProp & {
       readonly ownerKey: string | null;
       readonly litUntilMs: number | null;
+      readonly expiresAtMs: number | null;
     })[] = [];
     const rows = this.ctx.storage.sql
       .exec<{
@@ -1983,7 +2163,10 @@ export class World extends DurableObject<WorldEnv> {
         lit_until_ms: number | null;
         yaw: number | null;
         locked: number;
-      }>('SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw, locked FROM built_props')
+        expires_at_ms: number | null;
+      }>(
+        'SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw, locked, expires_at_ms FROM built_props',
+      )
       .toArray();
     for (const row of rows) {
       const kind = buildableKindFromIndex(row.kind_index);
@@ -2004,6 +2187,7 @@ export class World extends DurableObject<WorldEnv> {
         locked: row.locked !== 0,
         ownerKey: row.owner_key,
         litUntilMs: row.lit_until_ms,
+        expiresAtMs: row.expires_at_ms,
       });
     }
     return props;
@@ -2197,9 +2381,12 @@ export class World extends DurableObject<WorldEnv> {
     this.ctx.storage.sql.exec('DELETE FROM dropped_piles WHERE id = ?', id);
   }
 
-  private loadTakenPickups(): number[] {
+  private loadTakenPickups(playerKey: string): number[] {
     return this.ctx.storage.sql
-      .exec<{ pickup_id: number }>('SELECT pickup_id FROM pickups_taken')
+      .exec<{ pickup_id: number }>(
+        'SELECT pickup_id FROM player_pickups_taken WHERE player_key = ?',
+        playerKey,
+      )
       .toArray()
       .map((row) => row.pickup_id);
   }
@@ -2416,13 +2603,12 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private writeTakenPickup(pickupId: number, netId: number): void {
+  private writeTakenPickup(playerKey: string, pickupId: number): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO pickups_taken (pickup_id, net_id, taken_at) VALUES (?, ?, ?) ' +
-        'ON CONFLICT(pickup_id) DO NOTHING',
+      'INSERT INTO player_pickups_taken (player_key, pickup_id) VALUES (?, ?) ' +
+        'ON CONFLICT(player_key, pickup_id) DO NOTHING',
+      playerKey,
       pickupId,
-      netId,
-      Date.now(),
     );
   }
 
@@ -2515,16 +2701,8 @@ export class World extends DurableObject<WorldEnv> {
     const clearedPlayers = sql
       .exec<{ player_key: string }>('SELECT player_key FROM players')
       .toArray().length;
-    sql.exec('DELETE FROM player_items');
-    sql.exec('DELETE FROM players');
-    sql.exec('DELETE FROM player_meals');
-    sql.exec('DELETE FROM player_home_skills');
-    sql.exec('DELETE FROM player_sentinel');
-    sql.exec('DELETE FROM player_blueprint_progress');
-    sql.exec('DELETE FROM player_discoveries');
-    sql.exec('DELETE FROM player_expeditions');
-    sql.exec('DELETE FROM player_fishing_collection');
-    sql.exec('DELETE FROM pickups_taken');
+    // The players table is counted above, so read before anything is cleared.
+    for (const table of PER_PLAYER_TABLES) sql.exec(`DELETE FROM ${table}`);
     return { ok: true, clearedPlayers };
   }
 }

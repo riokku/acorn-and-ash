@@ -13,8 +13,9 @@ import {
   markFrontDoorPassed,
   resetFrontDoor,
 } from './home/front-door';
-import { SignInError, signInAsTestPlayer, signOut } from './net/account';
-import { readIdentity, writeIdentity } from './home/identity';
+import { SignInError, deleteCharacter, signInAsTestPlayer, signOut } from './net/account';
+import { clearIdentity, readIdentity, writeIdentity } from './home/identity';
+import { rememberCharacterDeleted, takeCharacterDeletedNotice } from './home/delete-character';
 import { readPreferences, writePreferences, type Preferences } from './preferences/preferences';
 import { setMusicVolume, setSfxVolume } from './audio/sound';
 import type { PlayerIdentity } from './home/identity';
@@ -71,6 +72,26 @@ const signOutToFrontPage = async (): Promise<void> => {
   window.location.reload();
 };
 
+/**
+ * Start over as somebody new after the character was deleted (decision 0108),
+ * from this tab or any other. Forgets the name and look it had and reloads, so
+ * the character screen asks for a fresh one with a note saying what happened.
+ */
+const restartAfterDeletion = (): void => {
+  clearIdentity(window.localStorage);
+  rememberCharacterDeleted(window.sessionStorage);
+  window.location.reload();
+};
+
+/**
+ * Delete this player's character in this world. Rejects when the site could not
+ * do it, so nothing is forgotten here and the player is told it did not work.
+ */
+const deleteCharacterAndRestart = async (): Promise<void> => {
+  await deleteCharacter(settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK);
+  restartAfterDeletion();
+};
+
 const enterWorld = (identity: PlayerIdentity): void => {
   writeIdentity(window.localStorage, identity);
 
@@ -86,6 +107,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     forceWebGL: settings.forceWebGL,
     season: settings.season,
     signOut: signOutToFrontPage,
+    onCharacterDeleted: restartAfterDeletion,
     lookSensitivity: preferencesNow.lookSensitivity,
     grassDensity: preferencesNow.grassDensity,
   });
@@ -126,7 +148,11 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onMoveDecoration: (id) => game.moveDecoration(id),
       onReclaimDecoration: (id) => game.reclaimDecoration(id),
     },
-    { onSignOut: () => game.beginSignOut(), onCancelSignOut: () => game.cancelSignOut() },
+    {
+      onSignOut: () => game.beginSignOut(),
+      onCancelSignOut: () => game.cancelSignOut(),
+      onDeleteCharacter: deleteCharacterAndRestart,
+    },
   );
   window.acornDebug = game.debug();
 
@@ -164,6 +190,9 @@ const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): voi
     {
       name: entrance.accountName,
       saved: entrance.saved,
+      onDeleteCharacter: deleteCharacterAndRestart,
+      // Only somebody starting a new character is shown it.
+      notice: entrance.saved === null ? takeCharacterDeletedNotice(window.sessionStorage) : null,
       // Straight away, with nobody standing in a world to wait for. Even if the
       // site cannot be reached the page starts over, as it always has here.
       onSignOut: () => {

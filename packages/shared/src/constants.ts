@@ -457,6 +457,19 @@ export const MAX_PLAYERS_PER_WORLD = 50;
  */
 export const CLOSE_PLAYING_ELSEWHERE = 4002;
 
+/**
+ * Close code for a player whose character has just been deleted, from this tab
+ * or another one. A browser told this does not reconnect: there is nothing left
+ * to connect to, and it goes back to making a new character instead.
+ */
+export const CLOSE_CHARACTER_DELETED = 4003;
+
+/**
+ * How long a deleted character's builds stay standing, locked and unusable,
+ * before they all disappear together.
+ */
+export const ABANDONED_BUILD_SECONDS = 30 * 60;
+
 /** A 20-minute day. Night never skips in multiplayer. */
 export const DAY_LENGTH_SECONDS = 20 * 60;
 

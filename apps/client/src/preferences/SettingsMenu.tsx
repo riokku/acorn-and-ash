@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { DeleteCharacterPanel, type DeleteCharacter } from '../home/DeleteCharacterPanel';
 import { KEYBINDINGS } from './keybindings';
 
 import { MAX_SENSITIVITY, MIN_SENSITIVITY, type Preferences } from './preferences';
@@ -31,6 +32,11 @@ export interface SettingsAccount {
   readonly secondsLeft: number | null;
   readonly onSignOut: () => void;
   readonly onCancelSignOut: () => void;
+  /**
+   * Where Delete character lives (decision 0108). Left out, there is no such button:
+   * somebody with no character in this world has nothing to delete.
+   */
+  readonly deleteCharacter?: DeleteCharacter;
 }
 
 /**
@@ -243,6 +249,8 @@ function AccountSection({
   onSignedOut: () => void;
 }): React.JSX.Element {
   const counting = account.secondsLeft !== null;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { deleteCharacter } = account;
   return (
     <section className="settings-account" aria-labelledby="settings-account-heading">
       <h3 id="settings-account-heading">Account</h3>
@@ -267,6 +275,21 @@ function AccountSection({
       >
         {counting ? 'Cancel sign out' : 'Sign out'}
       </button>
+      {deleteCharacter === undefined ? null : confirmingDelete ? (
+        <DeleteCharacterPanel
+          characterName={deleteCharacter.characterName}
+          onDelete={deleteCharacter.onDelete}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          className="settings-delete-character"
+          onClick={() => setConfirmingDelete(true)}
+        >
+          Delete character…
+        </button>
+      )}
     </section>
   );
 }

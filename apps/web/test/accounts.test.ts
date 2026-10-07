@@ -190,6 +190,46 @@ describe('the character a player made in a world', () => {
   });
 });
 
+describe('deleting the character a player made', () => {
+  const characterUrl = `${SITE}/api/worlds/home-clearing/character`;
+
+  it('is asked of the world, as the signed-in player and nobody else', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(`${characterUrl}?player=somebody-elses-key`, {
+      method: 'DELETE',
+      headers: { cookie },
+    });
+    const body = (await response.json()) as { method: string; path: string; player: string };
+
+    expect(response.status).toBe(200);
+    expect(body.method).toBe('DELETE');
+    expect(body.path).toBe('/api/worlds/home-clearing/character');
+    expect(body.player).toBe((await playerSeenByWorld(cookie)).player);
+  });
+
+  it('needs somebody signed in', async () => {
+    expect((await SELF.fetch(characterUrl, { method: 'DELETE' })).status).toBe(401);
+  });
+
+  it('is refused when it comes from some other site', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(characterUrl, {
+      method: 'DELETE',
+      headers: { cookie, Origin: 'https://elsewhere.example' },
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('is only asked of a world that exists', async () => {
+    const { cookie } = await startAsTestPlayer();
+    const response = await SELF.fetch(`${SITE}/api/worlds/..%2Fetc/character`, {
+      method: 'DELETE',
+      headers: { cookie },
+    });
+    expect(response.status).toBe(404);
+  });
+});
+
 describe('characters from before accounts', () => {
   const earlierKey = '0123456789abcdef01234567';
 

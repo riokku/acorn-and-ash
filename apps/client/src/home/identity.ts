@@ -54,3 +54,12 @@ export function readIdentity(storage: Storage): PlayerIdentity {
 export function writeIdentity(storage: Storage, identity: PlayerIdentity): void {
   storage.setItem(STORAGE_KEY, JSON.stringify(identity));
 }
+
+/** Forget the name and look chosen last time, so a new character starts from a blank card. */
+export function clearIdentity(storage: Storage): void {
+  try {
+    storage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage switched off: there was nothing remembered to forget.
+  }
+}

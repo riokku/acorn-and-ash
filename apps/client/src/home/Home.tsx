@@ -12,6 +12,7 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
+import { DeleteCharacterDialog } from './DeleteCharacterPanel';
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
@@ -26,6 +27,13 @@ interface HomeProps {
   /** Who is signed in, shown back to them so they know it is the right account. */
   readonly accountName: string;
   readonly onSignOut: () => void;
+  /**
+   * Delete the saved character (decision 0108). Rejects when it could not be done.
+   * Left out, there is no way to delete from here.
+   */
+  readonly onDeleteCharacter?: () => Promise<void>;
+  /** Said once above the card, for example after a character has just been deleted. */
+  readonly notice?: string | null;
   readonly onPlay: (identity: PlayerIdentity) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
@@ -59,6 +67,8 @@ export function Home({
   saved,
   accountName,
   onSignOut,
+  onDeleteCharacter,
+  notice = null,
   onPlay,
   initialPreferences,
   onSettingsChange,
@@ -66,6 +76,7 @@ export function Home({
   const [name, setName] = useState(initial.name);
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
   const account: SettingsAccount = {
@@ -73,6 +84,10 @@ export function Home({
     secondsLeft: null,
     onSignOut,
     onCancelSignOut: () => undefined,
+    deleteCharacter:
+      saved !== null && onDeleteCharacter !== undefined
+        ? { characterName: saved.name, onDelete: onDeleteCharacter }
+        : undefined,
   };
 
   const wide = useWideScreen();
@@ -88,36 +103,61 @@ export function Home({
   if (saved !== null) {
     const kind = CHARACTER_KINDS[saved.character].displayName;
     return (
-      <form
-        className="home-screen has-stage is-welcome"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onPlay(saved);
-        }}
-      >
-        <PaintingBackdrop />
-        <StageView
-          look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
-          placement={WELCOMING[wide ? 'wide' : 'narrow']}
-          label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
-        />
-        <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
-        <header className="stage-header">
-          <p className="home-kicker">Welcome back</p>
-          <h1 className="home-title">Acorn &amp; Ash</h1>
-        </header>
-        <div className="home-card home-card-plate">
-          <div className="home-saved" data-testid="saved-character">
-            <span className="home-saved-name">{saved.name}</span>
-            <span className="home-saved-kind">{kind}</span>
+      <>
+        <form
+          className="home-screen has-stage is-welcome"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onPlay(saved);
+          }}
+        >
+          <PaintingBackdrop />
+          <StageView
+            look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
+            placement={WELCOMING[wide ? 'wide' : 'narrow']}
+            label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
+          />
+          <SettingsMenu
+            initial={initialPreferences}
+            onChange={onSettingsChange}
+            account={account}
+          />
+          <header className="stage-header">
+            <p className="home-kicker">Welcome back</p>
+            <h1 className="home-title">Acorn &amp; Ash</h1>
+          </header>
+          <div className="home-card home-card-plate">
+            <div className="home-saved" data-testid="saved-character">
+              <span className="home-saved-name">{saved.name}</span>
+              <span className="home-saved-kind">{kind}</span>
+            </div>
+            <button type="submit" className="home-play" autoFocus>
+              Enter World
+            </button>
+            <p className="home-footnote stage-hint">{STAGE_HINT}</p>
+            <AccountLine accountName={accountName} onSignOut={onSignOut} />
+            {onDeleteCharacter !== undefined ? (
+              <p className="home-footnote home-account">
+                <button
+                  type="button"
+                  className="home-link"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  Delete this character
+                </button>
+              </p>
+            ) : null}
           </div>
-          <button type="submit" className="home-play" autoFocus>
-            Enter World
-          </button>
-          <p className="home-footnote stage-hint">{STAGE_HINT}</p>
-          <AccountLine accountName={accountName} onSignOut={onSignOut} />
-        </div>
-      </form>
+        </form>
+        {/* Outside the form, so nothing typed in it can ever count as pressing Enter World. */}
+        {confirmingDelete && onDeleteCharacter !== undefined ? (
+          <DeleteCharacterDialog
+            characterName={saved.name}
+            onDelete={onDeleteCharacter}
+            onCancel={() => setConfirmingDelete(false)}
+          />
+        ) : null}
+      </>
     );
   }
 
@@ -140,6 +180,11 @@ export function Home({
       </div>
       <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
       <div className="home-card">
+        {notice !== null ? (
+          <p className="home-notice" role="status" data-testid="character-deleted-notice">
+            {notice}
+          </p>
+        ) : null}
         <p className="home-kicker">Cozy wilderness survival</p>
         <h1 className="home-title">Acorn &amp; Ash</h1>
         <p className="home-subtitle">Pick who you&rsquo;ll be in the clearing.</p>

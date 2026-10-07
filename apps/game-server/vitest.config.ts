@@ -23,6 +23,9 @@ export default defineConfig({
           WORLD_HUNGER_EMPTY_SECONDS: '3',
           WORLD_PATCH_REGROW_SECONDS: '2',
           WORLD_RAID_SECONDS: '86400',
+          // A deleted character's builds are gone in three seconds, so a test
+          // can watch them stand locked and then disappear.
+          WORLD_ABANDONED_SECONDS: '3',
           WORLD_ALLOW_TEST_SEASON: '1',
         },
       },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BLANK_IDENTITY, readIdentity, writeIdentity } from '../src/home/identity';
+import { BLANK_IDENTITY, clearIdentity, readIdentity, writeIdentity } from '../src/home/identity';
 
 const fakeStorage = (): Storage => {
   const map = new Map<string, string>();
@@ -59,5 +59,23 @@ describe('remembering who you picked to be', () => {
     const storage = fakeStorage();
     storage.setItem('acorn.identity', 'not json at all');
     expect(readIdentity(storage)).toEqual(BLANK_IDENTITY);
+  });
+});
+
+describe('forgetting who you picked to be', () => {
+  it('leaves the next visit with a blank card', () => {
+    const storage = fakeStorage();
+    writeIdentity(storage, { name: 'Acorn', character: 'knight', color: 'moss' });
+    clearIdentity(storage);
+    expect(readIdentity(storage)).toEqual(BLANK_IDENTITY);
+  });
+
+  it('is not an error when the browser will not let us', () => {
+    const locked = {
+      removeItem: () => {
+        throw new Error('storage is switched off');
+      },
+    } as unknown as Storage;
+    expect(() => clearIdentity(locked)).not.toThrow();
   });
 });

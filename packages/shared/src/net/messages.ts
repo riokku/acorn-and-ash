@@ -264,7 +264,9 @@ export interface InventoryMessage {
 }
 
 /**
- * Which pickups are gone.
+ * Which pickups this player has already taken, so their own copy of each is
+ * gone from their view (decision 0109): every character finds their own axe,
+ * bag and rod, so this is never about anybody else.
  *
  * The client already knows where every pickup in the clearing is, because the
  * clearing is built from the seed, so only the ids have to travel.

@@ -691,6 +691,12 @@ export interface GameOptions {
    * once the sign-out countdown runs out; rejects if the site could not be reached.
    */
   readonly signOut: () => Promise<void>;
+  /**
+   * The world says this character was deleted, from this tab or another one
+   * (decision 0108). Forget the look chosen for it and start again from the
+   * character screen: there is nobody left to reconnect as.
+   */
+  readonly onCharacterDeleted: () => void;
 }
 
 /** Everything that makes up a running game. */
@@ -1545,6 +1551,10 @@ export class Game {
           // Playing in another tab now: the curtain comes down here, and
           // clicking it is how to play in this one again (see `resume`).
           if (state === 'elsewhere') this.setPlaying(false);
+          if (state === 'deleted') {
+            this.setPlaying(false);
+            this.options.onCharacterDeleted();
+          }
         },
       },
       // Checked before every attempt. A session that has ended means going back
@@ -4290,6 +4300,8 @@ export class Game {
     let taken = false;
     for (const prop of this.builtProps) {
       if (prop.kind !== 'rowboat' || !isWithinBoardingReach(position, prop)) continue;
+      // Left behind by a deleted character: nobody can climb in.
+      if (prop.locked === true) continue;
       if (this.lakeFrozen) return 'frozen';
       if (prop.occupied !== true) return 'board';
       taken = true;
