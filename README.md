@@ -1130,6 +1130,13 @@ triangle limits, what goes in the licence rows) are in
 section of [`CLAUDE.md`](CLAUDE.md). See
 [decision 0105](docs/decisions/0105-art-is-made-in-blender.md).
 
+The dwarves (Dorrin and Hilde) and the iron axe are built by Python scripts in
+[`tools/art/`](tools/art/) that Claude runs inside Blender, so a change is made
+in the script and the model rebuilt. Their colours are painted on as vertex
+colours rather than a texture. See them in the gallery with `?gallery=dwarves`,
+and [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
+for why.
+
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
 
