@@ -263,10 +263,15 @@ and rod. See [decision 0108](docs/decisions/0108-deleting-a-character.md) and
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a
-character and a tint. All six characters from a free pack - Knight,
-Barbarian, Mage, Ranger, Rogue and Rogue Hooded - now have real art and can
-be picked, each walking, running and jumping for real rather than sliding
-around as a placeholder capsule. Your name, tint and character travel to
+character and a tint. All six characters from a free pack can be picked, each
+walking, running and jumping for real rather than sliding around as a
+placeholder capsule. They are called Body 1 to Body 6: a character is a body,
+and the outfits the pack drew on them (the Knight's armour, the Mage's hat and
+so on) are meant to become gear you find along the way, so everyone starts in
+plain clothes. The names are changed already; the plain-clothes art and the
+gear are still to come (see
+[decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
+Your name, tint and character travel to
 the server and out to everybody else in the clearing, with a small name tag
 floating over your head the same way it does over anyone else's. Picked
 once, remembered the next time you visit. See

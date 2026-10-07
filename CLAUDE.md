@@ -24,6 +24,7 @@ A cozy, third-person survival game that runs in the browser. The player lives in
 | World | Hand-built home clearing (about 64 × 64 m) surrounded by wilderness generated from a seed |
 | Time | 20-minute day. Night never skips in multiplayer. |
 | Characters | Tied to one world, never carried between worlds |
+| Gear | Everyone starts in plain clothes: six bodies, shown as Body 1 to Body 6. Outfits are gear found along the way (discovery-site rewards, hidden caches, creature drops, crafting). Gear changes looks only. See `docs/decisions/0112-plain-clothes-start-and-found-gear.md` |
 | Devices | Desktop keyboard and mouse first. Gamepad later. No mobile at launch. |
 | Art | Stylized low-poly that matches Quaternius "Ultimate Stylized Nature" (CC0) |
 | Goal | Free to play on the web |
