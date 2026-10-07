@@ -18,6 +18,7 @@ declare global {
   interface Window {
     acornDebug?: {
       selfNetId(): number;
+      selectedTargetId(): number | null;
       grassClumps(): number;
       combatMove(): { kind: number; age: number; grounded: boolean };
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;

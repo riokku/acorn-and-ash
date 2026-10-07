@@ -21,6 +21,7 @@ export const KEYBINDINGS = [
       ],
       ['E near a chair / bed', 'Sit / lie down; move or press E to get up'],
       ['E at your expedition board', 'Read the board; press E again to put it away'],
+      ['Tab / Shift + Tab', 'Select the next / previous nearby hostile target'],
       ['Left mouse', 'Face your target; chop, fight, cast or hook a fish'],
       ['Left mouse when the rare-fish marker is green', 'Two gentle pulls land a rare fish'],
       ['Left mouse (hold, release)', 'Charge a heavy attack'],
@@ -43,7 +44,7 @@ export const KEYBINDINGS = [
       ['B', 'Open the Craft menu outdoors or decoration inside your home'],
       ['1–9 in Crafting / Click an entry', 'Make a recipe or pick a piece to place'],
       ['M / Click the minimap', 'Open or close the map'],
-      ['Escape', 'Close the current panel'],
+      ['Escape', 'Close the current panel or clear your target'],
     ],
   },
   {

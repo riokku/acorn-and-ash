@@ -183,6 +183,7 @@ import {
 
 import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
+import { TabTargeting, type HostileTarget } from './input/tab-target';
 import { clickAimYaw, yawTowards, type ClickCandidate } from './input/click-target';
 import { lootUnderRay, type LootTarget } from './input/loot-target';
 import { SignInError, resumeAccount } from './net/account';
@@ -535,6 +536,7 @@ const HOME_CAMERA_BLOCKER_HEIGHT = 5;
 /** What the smoke tests and the browser console can read out of a running game. */
 export interface GameDebug {
   selfNetId(): number;
+  selectedTargetId(): number | null;
   grassClumps(): number;
   combatMove(): { kind: number; age: number; grounded: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
@@ -831,6 +833,7 @@ export class Game {
    * drag turns the camera (see decision 0051).
    */
   private aimYaw: number | null = null;
+  private readonly targeting = new TabTargeting();
   /** Scratch objects for `aimTowardsClickPoint` and the build preview, reused rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
@@ -1038,16 +1041,20 @@ export class Game {
     this.options.canvas.insertAdjacentElement('afterend', fade);
     this.sceneFade = fade;
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
-    this.controls = new Controls(this.options.canvas, () => {
-      const player = this.localPlayer;
-      if (player === null || player.action.kind !== ActionKind.Dodge || this.placing !== null)
-        return false;
-      const context = this.actionContext(
-        player.motion.position,
-        this.aimYaw ?? player.motion.facingYaw,
-      );
-      return context.canAttack && !context.castInstead;
-    });
+    this.controls = new Controls(
+      this.options.canvas,
+      () => {
+        const player = this.localPlayer;
+        if (player === null || player.action.kind !== ActionKind.Dodge || this.placing !== null)
+          return false;
+        const context = this.actionContext(
+          player.motion.position,
+          this.aimYaw ?? player.motion.facingYaw,
+        );
+        return context.canAttack && !context.castInstead;
+      },
+      () => this.canTabTarget(),
+    );
     this.controls.setGameplayEnabled(false);
 
     this.options.hud.publish({
@@ -1091,6 +1098,7 @@ export class Game {
     else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
     else if (this.inventoryOpen) this.inventoryOpen = false;
+    else if (this.targeting.id !== null) this.targeting.clear();
   }
 
   setSettingsOpen(open: boolean): void {
@@ -1340,6 +1348,7 @@ export class Game {
   debug(): GameDebug {
     return {
       selfNetId: () => this.selfNetId,
+      selectedTargetId: () => this.targeting.id,
       buildBoundaryVisible: () => this.buildBoundary?.group.visible ?? false,
       grassClumps: () => this.grass?.mesh.count ?? 0,
       combatMove: () => ({
@@ -1546,7 +1555,10 @@ export class Game {
             this.meal = this.currentMeal();
           this.mealHeardAt = performance.now();
           this.connectionState = state;
-          if (state !== 'connected') this.closeChest();
+          if (state !== 'connected') {
+            this.closeChest();
+            this.targeting.clear();
+          }
           this.options.hud.publish({ connection: state, connectionDetail: detail ?? '' });
           // Playing in another tab now: the curtain comes down here, and
           // clicking it is how to play in this one again (see `resume`).
@@ -2843,6 +2855,7 @@ export class Game {
       void this.enterWorld(DEFAULT_WORLD_SEED);
     }
 
+    this.updateTargetSelection(controls);
     this.updateLocalPlayer(deltaSeconds, camera);
     const forestActive = this.playing && !document.hidden;
     this.forestAudio.update(forestActive);
@@ -2874,7 +2887,11 @@ export class Game {
     // After everybody, ours included, has been placed: boats of those who stopped rowing go.
     this.rowingBoats.sweep();
     this.updateRemoteAnimals(deltaSeconds);
-    this.raiders.update(deltaSeconds, this.listenerPoint(), this.aimedRaiderId);
+    this.raiders.update(
+      deltaSeconds,
+      this.listenerPoint(),
+      this.targeting.id ?? this.aimedRaiderId,
+    );
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
     for (const landing of [
@@ -2983,6 +3000,80 @@ export class Game {
     }
   }
 
+  private canTabTarget(): boolean {
+    return (
+      this.playing &&
+      this.connectionState === 'connected' &&
+      this.space === OUTDOORS &&
+      this.localPlayer !== null &&
+      this.localPlayer.action.kind !== ActionKind.KnockedOut &&
+      !this.settingsOpen &&
+      !this.chestOpen &&
+      !this.chestPending &&
+      !this.mapOpen &&
+      !this.inventoryOpen &&
+      !this.buildMenuOpen &&
+      !this.craftMenuOpen &&
+      this.placing === null
+    );
+  }
+
+  /** Adapt the existing enemy registries; peaceful wildlife and players never enter this list. */
+  private hostileTargets(): HostileTarget[] {
+    if (this.space !== OUTDOORS) return [];
+    const targets: HostileTarget[] = this.raiders.targets().flatMap((target) => {
+      const about = this.raiders.describe(target.id);
+      return about === null || about.hitsLeft <= 0
+        ? []
+        : [{ ...target, name: RAIDER_KINDS[about.kind].displayName }];
+    });
+    for (const id of this.remoteAnimals.netIds()) {
+      const kind = animalKindOf(id);
+      const pose = this.remoteAnimals.poseOf(id);
+      // Animals use bit 3 for their defeated pose, independently of player action bytes.
+      if (
+        kind === null ||
+        kind === undefined ||
+        !('threat' in ANIMAL_KINDS[kind]) ||
+        pose === undefined ||
+        (pose.action & 8) !== 0
+      )
+        continue;
+      targets.push({ id, x: pose.x, y: pose.y, z: pose.z, name: ANIMAL_KINDS[kind].displayName });
+    }
+    return targets;
+  }
+
+  private selectedTarget(): HostileTarget | null {
+    const player = this.localPlayer;
+    if (
+      player === null ||
+      player.action.kind === ActionKind.KnockedOut ||
+      this.connectionState !== 'connected' ||
+      this.space !== OUTDOORS
+    ) {
+      this.targeting.clear();
+      return null;
+    }
+    if (this.targeting.id === null) return null;
+    return this.targeting.update(player.motion.position, this.hostileTargets());
+  }
+
+  private updateTargetSelection(controls: Controls): void {
+    this.selectedTarget();
+    const cycles = controls.takeTargetCycles();
+    const player = this.localPlayer;
+    if (!this.canTabTarget() || player === null) return;
+    for (const direction of cycles) {
+      this.targeting.cycle(
+        player.motion.position,
+        player.motion.facingYaw,
+        this.hostileTargets(),
+        direction,
+      );
+    }
+  }
+
   /**
    * What the combat overlay draws this frame (see decision 0063): an arrow
    * for every skeleton close enough to matter that is not on screen, and
@@ -2992,12 +3083,30 @@ export class Game {
   private updateCombatFeed(camera: FollowCamera): void {
     const feed = this.combatFeed;
     const me = this.listenerPoint();
+    const selected = this.selectedTarget();
+    feed.target = null;
     feed.showing = this.playing && !this.mapOpen && me !== null;
     feed.health = this.health / HEALTH_MAX;
     feed.cameraYaw = camera.look.yaw;
     if (!feed.showing || me === null) {
       feed.threats = [];
       return;
+    }
+    if (selected !== null) {
+      const dx = selected.x - me.x;
+      const dz = selected.z - me.z;
+      const point = this.scratchProject
+        .set(selected.x, selected.y + 1, selected.z)
+        .project(camera.camera);
+      feed.target = {
+        name: selected.name,
+        distance: Math.hypot(dx, dz),
+        bearing: wrapAngle(camera.look.yaw - Math.atan2(-dx, -dz)),
+        screen:
+          point.z > -1 && point.z < 1 && Math.abs(point.x) < 0.92 && Math.abs(point.y) < 0.9
+            ? { x: (point.x + 1) / 2, y: (1 - point.y) / 2 }
+            : null,
+      };
     }
     const threats: ThreatMark[] = [];
     for (const marker of this.raiders.markers()) {
@@ -3044,6 +3153,14 @@ export class Game {
     intent: { readonly x: number; readonly z: number },
     cameraYaw: number,
   ): number | null {
+    const selected = this.selectedTarget();
+    if (
+      selected !== null &&
+      Math.hypot(selected.x - position.x, selected.y - position.y, selected.z - position.z) <=
+        SOFT_LOCK_RANGE
+    ) {
+      return yawTowards(position, selected);
+    }
     const walk = worldMoveDirection(intent.x, intent.z, cameraYaw);
     const meant = walk.x !== 0 || walk.z !== 0 ? Math.atan2(-walk.x, -walk.z) : cameraYaw;
     let best: number | null = null;
@@ -4262,6 +4379,7 @@ export class Game {
         this.removeCritter(id);
       }
       this.raiders.clear();
+      this.targeting.clear();
       this.stopPlacing();
       this.buildMenuOpen = false;
       this.aimYaw = null;

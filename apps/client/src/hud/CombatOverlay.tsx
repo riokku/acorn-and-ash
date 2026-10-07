@@ -88,6 +88,7 @@ export function CombatOverlay({ feed }: { readonly feed: CombatFeed }): React.JS
 function worthDrawing(feed: CombatFeed, now: number): boolean {
   if (!feed.showing) return false;
   return (
+    feed.target !== null ||
     feed.threats.length > 0 ||
     now - feed.hurtAtMs < Math.max(HURT_FLASH_MS, HURT_ARC_MS) ||
     (feed.health > 0 && feed.health <= LOW_HEALTH)
@@ -114,6 +115,42 @@ function drawCombat(
   if (sinceHurt < HURT_ARC_MS && feed.hurtYaw !== null) {
     const bearing = wrapAngle(feed.cameraYaw - feed.hurtYaw);
     hurtArc(context, ring, bearing, 1 - sinceHurt / HURT_ARC_MS);
+  }
+  const target = feed.target;
+  if (target !== null) {
+    const x =
+      target.screen === null
+        ? ring.centreX + Math.sin(target.bearing) * ring.radiusX
+        : target.screen.x * width;
+    const y =
+      target.screen === null
+        ? ring.centreY - Math.cos(target.bearing) * ring.radiusY
+        : target.screen.y * height;
+    context.save();
+    context.strokeStyle = '#ffd45c';
+    context.lineWidth = 3;
+    context.shadowColor = '#241608';
+    context.shadowBlur = 5;
+    // A gold diamond remains distinct from the ordinary threat arrowheads.
+    context.beginPath();
+    context.moveTo(x, y - 24);
+    context.lineTo(x + 20, y);
+    context.lineTo(x, y + 24);
+    context.lineTo(x - 20, y);
+    context.closePath();
+    context.stroke();
+    context.font = '600 16px system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'bottom';
+    const label = `Target: ${target.name} · ${Math.round(target.distance)} m`;
+    const labelX = Math.max(150, Math.min(width - 150, x));
+    const labelY = Math.max(42, y - 30);
+    context.lineWidth = 4;
+    context.strokeStyle = '#241608';
+    context.strokeText(label, labelX, labelY);
+    context.fillStyle = '#ffd45c';
+    context.fillText(label, labelX, labelY);
+    context.restore();
   }
   // The calm ones first, so one about to swing is always drawn on top.
   for (const threat of feed.threats) {
