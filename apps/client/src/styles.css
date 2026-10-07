@@ -198,27 +198,34 @@ body {
   pointer-events: none;
 }
 
+:root {
+  --season-spring: #8cc66b;
+  --season-summer: #f0c24b;
+  --season-autumn: #e0813a;
+  --season-winter: #8cc7ec;
+}
+
 .season-banner-spring,
 .season-ring-spring {
-  --season: #8cc66b;
+  --season: var(--season-spring);
   --season-ink: #1f3a16;
 }
 
 .season-banner-summer,
 .season-ring-summer {
-  --season: #f0c24b;
+  --season: var(--season-summer);
   --season-ink: #4a3208;
 }
 
 .season-banner-autumn,
 .season-ring-autumn {
-  --season: #e0813a;
+  --season: var(--season-autumn);
   --season-ink: #4a2208;
 }
 
 .season-banner-winter,
 .season-ring-winter {
-  --season: #8cc7ec;
+  --season: var(--season-winter);
   --season-ink: #123049;
 }
 
@@ -312,12 +319,13 @@ body {
 }
 
 /*
- * The season ring round the minimap (decision 0110). It goes just outside the
+ * The year as a ring round the minimap (decision 0110). It goes just outside the
  * map's own rim (the map is 188px across, the ring 94 to 99px from its middle),
- * so none of the map is covered. One piece for each day of the season, filling
- * clockwise from the top: days gone are bright, today pulses, days to come are
- * dim. The badge sits on the ring at the bottom left, clear of the N that swings
- * round the rim; hovering it or the ring says the season and the day.
+ * so none of the map is covered. One piece for each day of the year, filling
+ * clockwise from the top, each in its own season's colour: days gone are bright,
+ * today pulses, days to come are dim. The badge sits outside the ring in the
+ * middle of the current season's quarter (the page works out where), clear of the
+ * N that swings round the rim; hovering it or the ring says the season and the day.
  */
 .season-ring {
   /* --season and --season-ink come from the season's own class, above. */
@@ -346,9 +354,24 @@ body {
 }
 
 .season-ring-day {
-  stroke: var(--season);
   stroke-width: 5;
-  opacity: 0.3;
+  opacity: 0.4;
+}
+
+.season-ring-day-spring {
+  stroke: var(--season-spring);
+}
+
+.season-ring-day-summer {
+  stroke: var(--season-summer);
+}
+
+.season-ring-day-autumn {
+  stroke: var(--season-autumn);
+}
+
+.season-ring-day-winter {
+  stroke: var(--season-winter);
 }
 
 .season-ring-day.is-past {
@@ -381,10 +404,8 @@ body {
 }
 
 .season-ring-badge {
+  /* Where it goes is set in the page: 113px from the middle of the ring, in the middle of the season's quarter. */
   position: absolute;
-  /* Centred 113px from the middle of the ring, toward the bottom left. */
-  left: 7px;
-  top: 167px;
   display: grid;
   place-items: center;
   width: 26px;

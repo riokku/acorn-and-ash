@@ -465,11 +465,13 @@ The year turns round spring, summer, autumn and winter, six game days (two
 real hours) to a season, so a full year takes eight hours. Like day and
 night it runs off the server's clock, so everybody in a world sees the same
 season, and each world starts its year on a different day so they are not all
-in step. In the game the season is a ring round the minimap, in the style of
-Northgard's banner: six pieces, one for each day of the season, filling
-clockwise from the top, with today's piece pulsing gently. A round badge on the
-ring shows the season (a sprout, sun, leaf or snowflake), and pointing at the
-badge or the ring says it in words ("Autumn · Day 3 of 6"). The front page and
+in step. In the game the whole year is a ring round the minimap: 24 pieces,
+one for each day, running clockwise from the top (spring first, then summer,
+autumn and winter), each in its season's colour. Days gone are bright, today's
+piece pulses gently and days to come are dim. A round badge outside the ring,
+in the middle of the current season's quarter, shows its icon (a sprout, sun,
+leaf or snowflake), and pointing at the badge or the ring says it in words
+("Autumn · Day 3 of 6"). The front page and
 the character screen have a bigger banner in the top-left corner with the
 season's name and a line of advice, using the calendar the painted backdrop
 follows (`?season=` works there too). Neither shows a year, because no world is

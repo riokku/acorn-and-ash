@@ -5,7 +5,8 @@ import { skipDrawing } from './skip-drawing';
 /**
  * The season banner (decision 0110). On the front page and the character screen
  * it is the season's name with a line of advice, up in the corner. In the game it
- * is a ring round the minimap: six pieces, a badge, and words only on hover.
+ * is a ring round the minimap: the whole year in 24 pieces, coloured by season,
+ * a badge for the current season, and words only on hover.
  *
  * `?season=` shows the first day of a season, so these can name the season they
  * expect. Which one it is without that switch depends on the date, so the
@@ -13,6 +14,16 @@ import { skipDrawing } from './skip-drawing';
  */
 
 const newWorld = (): string => `season-banner-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+/** The seasons in the order they go round the ring, which is where each one's quarter starts. */
+const SEASON_ORDER = ['spring', 'summer', 'autumn', 'winter'];
+/** What each season's colour comes to once the browser has worked it out. */
+const SEASON_COLOURS: Record<string, string> = {
+  spring: 'rgb(140, 198, 107)',
+  summer: 'rgb(240, 194, 75)',
+  autumn: 'rgb(224, 129, 58)',
+  winter: 'rgb(140, 199, 236)',
+};
 
 test.beforeEach(async ({ page }) => {
   await skipDrawing(page);
@@ -114,21 +125,67 @@ test.describe('in the game', () => {
     const [name, day] = /^(\w+), day (\d) of 6$/.exec(line)!.slice(1) as [string, string];
     await expect(ring).toHaveAttribute('data-season', name.toLowerCase());
     await expect(ring).toHaveAttribute('aria-label', `${name}, day ${day} of 6`);
-    // One piece of the ring for each day, and today's is lit.
-    await expect(ring.locator('.season-ring-day')).toHaveCount(6);
+    // One piece of the ring for each day of the whole year, and today's is lit.
+    const today = SEASON_ORDER.indexOf(name.toLowerCase()) * 6 + Number(day);
+    await expect(ring.locator('.season-ring-day')).toHaveCount(24);
     await expect(ring.locator('.season-ring-day.is-today')).toHaveCount(1);
-    await expect(ring.locator('.season-ring-day.is-past')).toHaveCount(Number(day) - 1);
-    await expect(ring.locator('.season-ring-day.is-today')).toHaveAttribute('data-day', day);
+    await expect(ring.locator('.season-ring-day.is-past')).toHaveCount(today - 1);
+    await expect(ring.locator('.season-ring-day.is-future')).toHaveCount(24 - today);
+    await expect(ring.locator('.season-ring-day.is-today')).toHaveAttribute(
+      'data-day',
+      String(today),
+    );
   });
 
   test('follows ?season= and starts on the first day of it', async ({ page }) => {
     await enterWorld(page, '&season=winter');
     const ring = page.getByTestId('season-ring');
     await expect(ring).toHaveAttribute('data-season', 'winter');
-    // First day of the season: nothing before today.
-    await expect(ring.locator('.season-ring-day.is-past')).toHaveCount(0);
-    await expect(ring.locator('.season-ring-day.is-today')).toHaveAttribute('data-day', '1');
+    // First day of winter is day 19 of the year: spring, summer and autumn have all gone.
+    await expect(ring.locator('.season-ring-day.is-past')).toHaveCount(18);
+    await expect(ring.locator('.season-ring-day.is-today')).toHaveAttribute('data-day', '19');
+    await expect(ring.locator('.season-ring-day.is-future')).toHaveCount(5);
   });
+
+  test('colours each quarter of the year for its season', async ({ page }) => {
+    await enterWorld(page, '&season=autumn');
+    const ring = page.getByTestId('season-ring');
+    for (const season of SEASON_ORDER) {
+      const pieces = ring.locator(`.season-ring-day[data-season="${season}"]`);
+      await expect(pieces).toHaveCount(6);
+      // Every piece of a season has that season's colour, whether it has gone, is today or is to come.
+      for (let piece = 0; piece < 6; piece += 1) {
+        await expect(pieces.nth(piece)).toHaveCSS('stroke', SEASON_COLOURS[season]!);
+      }
+    }
+    // Spring runs first, from the top of the ring, and winter is last.
+    await expect(ring.locator('.season-ring-day').first()).toHaveAttribute('data-season', 'spring');
+    await expect(ring.locator('.season-ring-day').last()).toHaveAttribute('data-season', 'winter');
+  });
+
+  for (const [index, season] of SEASON_ORDER.entries()) {
+    test(`puts the ${season} badge in the middle of ${season}'s quarter of the ring`, async ({
+      page,
+    }) => {
+      await enterWorld(page, `&season=${season}`);
+      const ring = await page.getByTestId('season-ring').boundingBox();
+      const badge = await page.locator('.season-ring-badge').boundingBox();
+      expect(ring).not.toBeNull();
+      expect(badge).not.toBeNull();
+      const dx = badge!.x + badge!.width / 2 - (ring!.x + ring!.width / 2);
+      const dy = badge!.y + badge!.height / 2 - (ring!.y + ring!.height / 2);
+      // Degrees clockwise from straight up, the way the ring is laid out.
+      const degrees = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+      expect(Math.abs(degrees - (index * 90 + 45))).toBeLessThan(2);
+      // Outside the ring, not on top of it or the map.
+      expect(Math.hypot(dx, dy)).toBeGreaterThan(105);
+      // And it shows the icon for the season, which the ring's own class names.
+      await expect(page.getByTestId('season-ring')).toHaveClass(
+        new RegExp(`season-ring-${season}`),
+      );
+      await expect(page.locator('.season-ring-badge svg')).toBeVisible();
+    });
+  }
 
   test('goes round the minimap just outside its edge, clear of the zoom buttons', async ({
     page,

@@ -1,25 +1,37 @@
 /**
  * The geometry of the season ring around the minimap (decision 0110): one arc
- * for each day of the season, running clockwise from the top, so the year's
- * progress reads like a clock hand going round the map.
+ * for each day of the year, running clockwise from the top, so the year's
+ * progress reads like a clock hand going round the map. Spring takes the first
+ * quarter, then summer, autumn and winter, six days to each.
  *
  * Plain numbers in, plain numbers out, so the drawing code has nothing to get
  * wrong and the shape can be tested without a browser.
  */
 
+import { DAYS_PER_SEASON, DAYS_PER_YEAR, SEASONS, type SeasonId } from '@acorn/shared';
+
 /** Which way each piece of the ring is lit. */
 export type RingDayState = 'past' | 'today' | 'future';
 
 export interface RingSegment {
-  /** Which day of the season this piece stands for, from 1. */
+  /** Which day of the year this piece stands for, from 1 to `DAYS_PER_YEAR`. */
   readonly day: number;
+  readonly season: SeasonId;
+  /** Which day of its season, from 1 to `DAYS_PER_SEASON`. */
+  readonly dayOfSeason: number;
   readonly state: RingDayState;
   /** An SVG path for the arc, ready to stroke. */
   readonly path: string;
 }
 
-/** The empty slice between two pieces, in degrees, so the days read as separate. */
-export const RING_GAP_DEGREES = 5;
+/** The empty slice between two days of the same season, in degrees. */
+export const RING_DAY_GAP_DEGREES = 2;
+/** A wider one where one season ends and the next begins, so the four read as four. */
+export const RING_SEASON_GAP_DEGREES = 8;
+
+/** How far round the ring one season goes, in degrees. */
+const SEASON_DEGREES = 360 / SEASONS.length;
+const DAY_DEGREES = 360 / DAYS_PER_YEAR;
 
 /**
  * A point on a circle, with 0 degrees straight up and angles growing clockwise.
@@ -47,24 +59,42 @@ export function ringArc(
   return `M ${round(start.x)} ${round(start.y)} A ${radius} ${radius} 0 ${largeArc} 1 ${round(end.x)} ${round(end.y)}`;
 }
 
+/** The angle at the middle of a season's quarter of the ring, where its badge goes. */
+export function seasonMiddleDegrees(seasonIndex: number): number {
+  return (seasonIndex + 0.5) * SEASON_DEGREES;
+}
+
 /**
- * The pieces of the ring for a season: days gone are `past`, the day it is now
- * is `today` and the rest are `future`. The first piece starts at the top, just
- * after the gap, and the last ends just before it.
+ * The pieces of the ring for a year: days gone are `past`, the day it is now
+ * is `today` and the rest are `future`. `todayOfYear` counts from 0, like the
+ * calendar's `dayOfYear`. The year starts at the top, just after the gap, and
+ * the last piece ends just before it.
  */
 export function ringSegments(
-  daysInSeason: number,
-  today: number,
+  todayOfYear: number,
   radius: number,
   centre = 0,
 ): readonly RingSegment[] {
-  const slice = 360 / daysInSeason;
-  return Array.from({ length: daysInSeason }, (_, index) => {
-    const day = index + 1;
-    const from = index * slice + RING_GAP_DEGREES / 2;
-    const to = (index + 1) * slice - RING_GAP_DEGREES / 2;
-    const state: RingDayState = day < today ? 'past' : day === today ? 'today' : 'future';
-    return { day, state, path: ringArc(radius, from, to, centre) };
+  return Array.from({ length: DAYS_PER_YEAR }, (_, index) => {
+    const seasonIndex = Math.floor(index / DAYS_PER_SEASON);
+    const dayOfSeason = (index % DAYS_PER_SEASON) + 1;
+    // Each day is trimmed by half a day gap each side. The first and last day of a
+    // season are trimmed a little more, up to half a season gap, on the side that
+    // faces the neighbouring season.
+    const startTrim = (dayOfSeason === 1 ? RING_SEASON_GAP_DEGREES : RING_DAY_GAP_DEGREES) / 2;
+    const endTrim =
+      (dayOfSeason === DAYS_PER_SEASON ? RING_SEASON_GAP_DEGREES : RING_DAY_GAP_DEGREES) / 2;
+    const from = index * DAY_DEGREES + startTrim;
+    const to = (index + 1) * DAY_DEGREES - endTrim;
+    const state: RingDayState =
+      index < todayOfYear ? 'past' : index === todayOfYear ? 'today' : 'future';
+    return {
+      day: index + 1,
+      season: SEASONS[seasonIndex] as SeasonId,
+      dayOfSeason,
+      state,
+      path: ringArc(radius, from, to, centre),
+    };
   });
 }
 

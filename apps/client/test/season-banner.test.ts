@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DAYS_PER_SEASON,
+  DAYS_PER_YEAR,
   DAY_LENGTH_MS,
   DEFAULT_WORLD_SEED,
   SEASONS,
@@ -47,6 +48,15 @@ describe('what the season banner says', () => {
     const view = seasonBannerView(on('spring', 4));
     expect(view.day).toBe(4);
     expect(view.daysInSeason).toBe(DAYS_PER_SEASON);
+  });
+
+  it('says where in the year it is, so the ring round the minimap can light the right piece', () => {
+    const view = seasonBannerView(on('autumn', 4));
+    expect(view.seasonIndex).toBe(2);
+    // Spring and summer are twelve days, then three autumn days have gone.
+    expect(view.dayOfYear).toBe(2 * DAYS_PER_SEASON + 3);
+    expect(seasonBannerView(on('spring', 1)).dayOfYear).toBe(0);
+    expect(seasonBannerView(on('winter', DAYS_PER_SEASON)).dayOfYear).toBe(DAYS_PER_YEAR - 1);
   });
 
   it('has a name and a line for every season', () => {

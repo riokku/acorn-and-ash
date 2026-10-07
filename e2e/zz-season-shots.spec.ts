@@ -48,31 +48,47 @@ async function enterGame(page: Page, season: string): Promise<void> {
   await page.waitForTimeout(4000);
 }
 
+/** The minimap and its ring, with a little room round them, for a close look. */
+async function ringClip(
+  page: Page,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await page.getByTestId('season-ring').boundingBox();
+  if (box === null) throw new Error('no ring on the page');
+  const margin = 24;
+  const x = Math.max(0, box.x - margin);
+  const y = Math.max(0, box.y - margin);
+  return { x, y, width: Math.min(1280 - x, box.width + 2 * margin), height: box.height + 90 };
+}
+
 // One test per season, so a slow software-rendered load cannot run the clock out on all four.
 for (const season of ['autumn', 'winter', 'spring', 'summer']) {
   test(`in the game, ${season}`, async ({ page }) => {
     await enterGame(page, season);
     await page.screenshot({ path: `${OUT}/banner-game-${season}.png` });
+    await page.screenshot({ path: `${OUT}/banner-ring-${season}.png`, clip: await ringClip(page) });
   });
 }
 
 // `?season=` can only jump to the first day of a season, so this edits the ring on the
-// page to show day 4, and says so in the pull request. It is a picture of the layout.
+// page to show day 4 of autumn (day 15 of the year), and says so in the pull request. It
+// is a picture of the layout.
 test('in the game, autumn day 4, and hovering', async ({ page }) => {
   await enterGame(page, 'autumn');
   await page.evaluate(() => {
     document.querySelectorAll('.season-ring-day').forEach((piece) => {
       const day = Number(piece.getAttribute('data-day'));
       piece.classList.remove('is-past', 'is-today', 'is-future');
-      piece.classList.add(day < 4 ? 'is-past' : day === 4 ? 'is-today' : 'is-future');
+      piece.classList.add(day < 15 ? 'is-past' : day === 15 ? 'is-today' : 'is-future');
     });
     const tip = document.querySelector('.season-ring-tip');
     if (tip !== null) tip.textContent = 'Autumn · Day 4 of 6';
   });
   await page.screenshot({ path: `${OUT}/banner-game-day4.png` });
+  await page.screenshot({ path: `${OUT}/banner-ring-day4.png`, clip: await ringClip(page) });
   await page.locator('.season-ring-badge').hover();
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/banner-game-hover.png` });
+  await page.screenshot({ path: `${OUT}/banner-ring-hover.png`, clip: await ringClip(page) });
 });
 
 // Last, so the character made by the game tests above is the one waiting on this screen.
