@@ -35,25 +35,45 @@ test('making wide spring', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/banner-making-spring.png` });
 });
 
+async function enterGame(page: Page, season: string): Promise<void> {
+  await page.goto(`/?renderer=webgl2&world=${shotWorld}&season=${season}`);
+  await expect(page.getByTestId('saved-character').or(page.locator('#home-name'))).toBeVisible({
+    timeout: 90_000,
+  });
+  if (await page.locator('#home-name').isVisible()) await page.locator('#home-name').fill('Hazel');
+  await page.getByRole('button', { name: 'Enter World' }).click();
+  await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', { timeout: 120_000 });
+  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-curtain')).toHaveCount(0);
+  await page.waitForTimeout(4000);
+}
+
 // One test per season, so a slow software-rendered load cannot run the clock out on all four.
 for (const season of ['autumn', 'winter', 'spring', 'summer']) {
   test(`in the game, ${season}`, async ({ page }) => {
-    await page.goto(`/?renderer=webgl2&world=${shotWorld}&season=${season}`);
-    await expect(page.getByTestId('saved-character').or(page.locator('#home-name'))).toBeVisible({
-      timeout: 90_000,
-    });
-    if (await page.locator('#home-name').isVisible())
-      await page.locator('#home-name').fill('Hazel');
-    await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
-      timeout: 120_000,
-    });
-    await page.locator('.hud-curtain').click();
-    await expect(page.locator('.hud-curtain')).toHaveCount(0);
-    await page.waitForTimeout(4000);
+    await enterGame(page, season);
     await page.screenshot({ path: `${OUT}/banner-game-${season}.png` });
   });
 }
+
+// `?season=` can only jump to the first day of a season, so this edits the ring on the
+// page to show day 4, and says so in the pull request. It is a picture of the layout.
+test('in the game, autumn day 4, and hovering', async ({ page }) => {
+  await enterGame(page, 'autumn');
+  await page.evaluate(() => {
+    document.querySelectorAll('.season-ring-day').forEach((piece) => {
+      const day = Number(piece.getAttribute('data-day'));
+      piece.classList.remove('is-past', 'is-today', 'is-future');
+      piece.classList.add(day < 4 ? 'is-past' : day === 4 ? 'is-today' : 'is-future');
+    });
+    const tip = document.querySelector('.season-ring-tip');
+    if (tip !== null) tip.textContent = 'Autumn · Day 4 of 6';
+  });
+  await page.screenshot({ path: `${OUT}/banner-game-day4.png` });
+  await page.locator('.season-ring-badge').hover();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/banner-game-hover.png` });
+});
 
 // Last, so the character made by the game tests above is the one waiting on this screen.
 test('character screen with a saved character, winter', async ({ page }) => {
