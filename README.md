@@ -465,7 +465,13 @@ The year turns round spring, summer, autumn and winter, six game days (two
 real hours) to a season, so a full year takes eight hours. Like day and
 night it runs off the server's clock, so everybody in a world sees the same
 season, and each world starts its year on a different day so they are not all
-in step. The HUD's "Season" row says which season it is and which day of it.
+in step. A banner at the top of the screen, in the style of Northgard's, says
+"Year 2 · Autumn" with a round badge and a line of advice, and its coloured
+stripe has a piece for each day of the season, lit up to today. The same banner
+hangs in the top-left corner of the front page and the character screen, using
+the calendar the painted backdrop follows (`?season=` works there too). The
+HUD's "Season" row still says which day it is, for the tests. See
+[decision 0110](docs/decisions/0110-the-season-banner.md).
 For the last day and a half of a season the forest eases into the next one,
 so it changes colour slowly rather than all at once: the grass turns gold in
 autumn, the sky goes pale and cold in winter, and winter puts snow on the

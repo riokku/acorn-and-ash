@@ -4,6 +4,7 @@ import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { loginPath, providerName, type Provider, type SessionStatus } from '../net/account';
 import { DiscordIcon, GoogleIcon } from './brand-icons';
 import type { AccountTab } from './front-door';
+import { HomeSeasonBanner } from './HomeSeasonBanner';
 
 export interface FrontDoorProps {
   /**
@@ -51,6 +52,7 @@ export function FrontDoor({
     return (
       <div className="front-door" data-testid="front-door">
         <PaintingBackdrop />
+        <HomeSeasonBanner />
         <div className="front-copy">
           <p className="front-eyebrow">A little further from the everyday</p>
           <h1 className="front-title">Acorn &amp; Ash</h1>
@@ -68,6 +70,7 @@ export function FrontDoor({
   return (
     <div className="front-door front-door-choices" data-testid="front-choices">
       <PaintingBackdrop />
+      <HomeSeasonBanner />
       <div className="front-panel">
         <h1 className="front-title front-title-small">Acorn &amp; Ash</h1>
         <ChoiceTabs tab={tab} onChange={setTab} />

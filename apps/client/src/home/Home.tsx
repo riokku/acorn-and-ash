@@ -13,6 +13,7 @@ import {
 } from '@acorn/shared';
 
 import { DeleteCharacterDialog } from './DeleteCharacterPanel';
+import { HomeSeasonBanner } from './HomeSeasonBanner';
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
@@ -128,6 +129,7 @@ export function Home({
           }}
         >
           <PaintingBackdrop />
+          <HomeSeasonBanner />
           <StageView
             look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
             placement={welcomePlacement}
@@ -189,6 +191,7 @@ export function Home({
   return (
     <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
+      <HomeSeasonBanner className="home-season-banner-making" />
       <StageView
         look={{ character, tint: TINT_COLORS[color].hex }}
         placement={MAKING[wide ? 'wide' : 'narrow']}
