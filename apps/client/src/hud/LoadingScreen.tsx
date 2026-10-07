@@ -18,12 +18,6 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
   return (
     <div className="loading-screen" data-testid="loading-screen">
       <PaintingBackdrop still />
-      <div className="loading-brand">
-        <span className="loading-brand-mark" aria-hidden="true">
-          ✦
-        </span>{' '}
-        Acorn &amp; Ash
-      </div>
       <div className="loading-copy">
         <p className="loading-eyebrow">A little further from the everyday</p>
         <h1>Entering the woods…</h1>

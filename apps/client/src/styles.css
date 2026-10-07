@@ -1861,15 +1861,21 @@ body {
   pointer-events: auto;
 }
 
+/*
+ * The character fills this slot from head to feet, so the gaps above and below
+ * it (the title's bottom margin and this one) are what keep them from touching
+ * the title and the card. They shrink on a short window.
+ */
 .welcome-slot {
   flex: none;
   width: min(100%, 320px);
+  margin-bottom: clamp(16px, 4.5vh, 44px);
 }
 
 .stage-header {
   position: relative;
   z-index: 1;
-  margin-bottom: 8px;
+  margin-bottom: clamp(16px, 4.5vh, 44px);
   text-align: center;
   color: #fff7e3;
   text-shadow: 0 2px 18px rgba(7, 30, 43, 0.75);
@@ -3025,19 +3031,6 @@ body {
   background: #183f40;
   color: #fff5de;
   pointer-events: auto;
-}
-.loading-brand {
-  position: absolute;
-  top: 7%;
-  left: 7%;
-  font-family: Georgia, serif;
-  font-size: clamp(20px, 2.2vw, 32px);
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 16px #0d343d;
-}
-.loading-brand-mark {
-  margin-right: 10px;
-  color: #e8c493;
 }
 .loading-copy {
   position: absolute;
