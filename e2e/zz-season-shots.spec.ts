@@ -5,6 +5,8 @@ import { expect, test, type Page } from '@playwright/test';
 const OUT = process.env.SHOT_DIR ?? '';
 test.skip(!OUT, 'Screenshot helper: set SHOT_DIR to run it');
 const world = (): string => `shots-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+// One world for the whole file, so the character made in the first game test is there for the rest.
+const shotWorld = world();
 
 async function signedOut(page: Page): Promise<void> {
   await page.route('**/api/session', (route) => {
@@ -33,18 +35,15 @@ test('making wide spring', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/banner-making-spring.png` });
 });
 
-test('welcome winter and in game', async ({ page }) => {
-  const w = world();
-  await page.goto(`/?renderer=webgl2&world=${w}`);
-  await page.locator('#home-name').fill('Hazel');
-  await page.getByRole('button', { name: 'Enter World' }).click();
-  await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', { timeout: 120_000 });
-  await page.goto(`/?renderer=webgl2&world=${w}&season=winter`);
-  await expect(page.getByTestId('saved-character')).toContainText('Hazel');
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: `${OUT}/banner-welcome-winter.png` });
-  for (const season of ['autumn', 'winter', 'spring', 'summer']) {
-    await page.goto(`/?renderer=webgl2&world=${w}&season=${season}`);
+// One test per season, so a slow software-rendered load cannot run the clock out on all four.
+for (const season of ['autumn', 'winter', 'spring', 'summer']) {
+  test(`in the game, ${season}`, async ({ page }) => {
+    await page.goto(`/?renderer=webgl2&world=${shotWorld}&season=${season}`);
+    await expect(page.getByTestId('saved-character').or(page.locator('#home-name'))).toBeVisible({
+      timeout: 90_000,
+    });
+    if (await page.locator('#home-name').isVisible())
+      await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
     await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
       timeout: 120_000,
@@ -53,5 +52,15 @@ test('welcome winter and in game', async ({ page }) => {
     await expect(page.locator('.hud-curtain')).toHaveCount(0);
     await page.waitForTimeout(4000);
     await page.screenshot({ path: `${OUT}/banner-game-${season}.png` });
-  }
+  });
+}
+
+// Last, so the character made by the game tests above is the one waiting on this screen.
+test('character screen with a saved character, winter', async ({ page }) => {
+  await page.goto(`/?renderer=webgl2&world=${shotWorld}&season=winter`);
+  await expect(page.getByTestId('saved-character').or(page.locator('#home-name'))).toBeVisible({
+    timeout: 90_000,
+  });
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: `${OUT}/banner-welcome-winter.png` });
 });

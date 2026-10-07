@@ -36,12 +36,13 @@ const SEASON_ENDING_HINTS: Record<SeasonId, string> = {
 /** Everything the banner draws, ready to print. */
 export interface SeasonBannerView {
   readonly season: SeasonId;
-  readonly year: number;
+  /** The world's year, counted from 1. Absent where no world is known (the home screens). */
+  readonly year: number | undefined;
   readonly seasonName: string;
   /** Which day of the season, from 1 to `DAYS_PER_SEASON`. */
   readonly day: number;
   readonly daysInSeason: number;
-  /** "Year 2 · Autumn": the title, as a screen reader says it. */
+  /** "Year 2 · Autumn", or just "Autumn" with no year: the title, as a screen reader says it. */
   readonly title: string;
   readonly hint: string;
   /** How far through the season, from 0 to 1, for the stripe. */
@@ -53,16 +54,24 @@ export function seasonIsEnding(calendar: Calendar): boolean {
   return calendar.dayOfSeason >= DAYS_PER_SEASON;
 }
 
-export function seasonBannerView(calendar: Calendar): SeasonBannerView {
+/**
+ * `showYear: false` is for the home screens. No world is chosen there, so the
+ * calendar comes from the browser's clock, and that clock's "year" is a number
+ * like 62201. A world's year counts from 1, so printing it would be wrong.
+ */
+export function seasonBannerView(
+  calendar: Calendar,
+  { showYear = true }: { readonly showYear?: boolean } = {},
+): SeasonBannerView {
   const seasonName = SEASON_NAMES[calendar.season];
   const hints = seasonIsEnding(calendar) ? SEASON_ENDING_HINTS : SEASON_HINTS;
   return {
     season: calendar.season,
-    year: calendar.year,
+    year: showYear ? calendar.year : undefined,
     seasonName,
     day: calendar.dayOfSeason,
     daysInSeason: DAYS_PER_SEASON,
-    title: `Year ${calendar.year} · ${seasonName}`,
+    title: showYear ? `Year ${calendar.year} · ${seasonName}` : seasonName,
     hint: hints[calendar.season],
     progress: Math.min(1, Math.max(0, calendar.seasonProgress)),
   };

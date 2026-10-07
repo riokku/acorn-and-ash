@@ -32,8 +32,9 @@ test.describe('on the home screens', () => {
 
     const banner = page.getByTestId('season-banner');
     await expect(banner).toHaveAttribute('data-season', 'autumn');
-    await expect(banner).toContainText('Year');
     await expect(banner).toContainText('Autumn');
+    // No world is chosen here, so no year: the browser clock's "year" is a number like 62201.
+    await expect(banner).not.toContainText('Year');
     await expect(banner).toContainText('Winter is coming');
 
     await page.getByRole('button', { name: 'Play' }).click();

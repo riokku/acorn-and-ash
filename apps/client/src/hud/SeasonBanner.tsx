@@ -45,11 +45,17 @@ export function SeasonBanner({
         <SeasonIcon season={view.season} />
       </span>
       <div className="season-banner-text" aria-hidden="true">
-        <p className="season-banner-title">
-          <strong>Year {view.year}</strong>
-          <span className="season-banner-dot"> · </span>
-          <em>{view.seasonName}</em>
-        </p>
+        {view.year === undefined ? (
+          <p className="season-banner-title">
+            <strong>{view.seasonName}</strong>
+          </p>
+        ) : (
+          <p className="season-banner-title">
+            <strong>Year {view.year}</strong>
+            <span className="season-banner-dot"> · </span>
+            <em>{view.seasonName}</em>
+          </p>
+        )}
         <p className="season-banner-hint">{view.hint}</p>
       </div>
     </div>

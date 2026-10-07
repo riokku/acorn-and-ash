@@ -36,6 +36,13 @@ describe('what the season banner says', () => {
     expect(view.season).toBe('autumn');
   });
 
+  it('leaves the year out where no world is known, so the home screens never print the clock year', () => {
+    const view = seasonBannerView(backdropCalendar(NOW), { showYear: false });
+    expect(view.year).toBeUndefined();
+    expect(view.title).toBe(SEASON_NAMES[view.season]);
+    expect(view.title).not.toMatch(/\d/);
+  });
+
   it('counts the days of the season, so the stripe can be cut to match', () => {
     const view = seasonBannerView(on('spring', 4));
     expect(view.day).toBe(4);

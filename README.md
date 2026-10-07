@@ -469,7 +469,8 @@ in step. A banner at the top of the screen, in the style of Northgard's, says
 "Year 2 · Autumn" with a round badge and a line of advice, and its coloured
 stripe has a piece for each day of the season, lit up to today. The same banner
 hangs in the top-left corner of the front page and the character screen, using
-the calendar the painted backdrop follows (`?season=` works there too). The
+the calendar the painted backdrop follows (`?season=` works there too). There
+it says just "Autumn", with no year, because no world is chosen yet. The
 HUD's "Season" row still says which day it is, for the tests. See
 [decision 0110](docs/decisions/0110-the-season-banner.md).
 For the last day and a half of a season the forest eases into the next one,

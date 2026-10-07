@@ -13,7 +13,8 @@ const REFRESH_MS = 60_000;
  *
  * Nobody is connected yet, so this reads the same calendar the painted backdrop
  * behind it follows, and the banner and the picture agree. `?season=` shows a
- * season on purpose, as it does in the game and for the backdrop.
+ * season on purpose, as it does in the game and for the backdrop. It leaves the
+ * year out: that calendar comes from the browser's clock, not from a world.
  */
 export function HomeSeasonBanner({
   className = '',
@@ -26,6 +27,6 @@ export function HomeSeasonBanner({
     return () => window.clearInterval(timer);
   }, []);
   const forced = readSettings(window.location.search).season;
-  const view = seasonBannerView(backdropCalendar(now, forced));
+  const view = seasonBannerView(backdropCalendar(now, forced), { showYear: false });
   return <SeasonBanner view={view} className={`home-season-banner ${className}`.trim()} />;
 }
