@@ -268,7 +268,7 @@ walking, running and jumping for real rather than sliding around as a
 placeholder capsule. They are called Body 1 to Body 6: a character is a body,
 and the outfits the pack drew on them (the Knight's armour, the Mage's hat and
 so on) are meant to become gear you find along the way, so everyone starts in
-plain clothes. The names are changed already; the plain-clothes art and the
+just a shirt and shorts. The names are changed already; the shirt-and-shorts art and the
 gear are still to come (see
 [decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
 Your name, tint and character travel to

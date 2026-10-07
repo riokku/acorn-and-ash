@@ -10,7 +10,7 @@ Chris wants characters to start with minimal clothing and find gear as the journ
 
 Settled with Chris:
 
-- **Six bodies, in plain clothes.** The six stay as a choice, but each becomes a plain-clothes version of itself (simple tunic, trousers and boots). On the character screen they are called **Body 1 to Body 6**, in this order: Knight, Barbarian, Mage, Ranger, Rogue, Rogue Hooded. The ids behind the scenes (`knight`, `mage` and so on) do not change, because worlds and browsers have already saved them.
+- **Six bodies, in plain clothes.** The six stay as a choice, but each becomes a plain body wearing just a shirt and shorts, and nothing else. On the character screen they are called **Body 1 to Body 6**, in this order: Knight, Barbarian, Mage, Ranger, Rogue, Rogue Hooded. The ids behind the scenes (`knight`, `mage` and so on) do not change, because worlds and browsers have already saved them.
 - **The current outfits become gear.** Each outfit's pieces (helmet, hat, cape, quiver, mask, armour or robe) are gear a character can find and wear.
 - **Gear changes looks only.** No protection and no perks, in keeping with cozy-light survival.
 - **Gear can be found four ways**, each its own change: rewards at discovery sites, hidden caches, creature drops, and crafting at home.
@@ -25,7 +25,8 @@ Settled with Chris:
 
 ## Brief for the art session
 
-- For each of the six, make a plain-clothes body on the **same skeleton** (`Rig_Medium`), with the **same part names** (`Body`, `ArmLeft`, `ArmRight`, `LegLeft`, `LegRight`, `Head`), the same size and the same pose, so every move the game plays still works. Keep each one's own head and hair. Nothing on the head, back or face: no helmet, hat, hood, mask, cape or quiver.
+- For each of the six, make a plain body wearing **just a shirt and shorts** (Chris's words), on the **same skeleton** (`Rig_Medium`), with the **same part names** (`Body`, `ArmLeft`, `ArmRight`, `LegLeft`, `LegRight`, `Head`), the same size and the same pose, so every move the game plays still works. The shirt and shorts are drawn into those same parts, so none of the armour, robe, tunic, belts, straps, pauldrons or gloves from today's outfits is left on them. Keep each one's own head and hair. Nothing on the head, back or face: no helmet, hat, hood, mask, cape or quiver.
+- Feet: "just a shirt and shorts" is read literally, so **bare feet**, with no boots. This is a default for Chris to correct, not a settled choice.
 - Soft, plain colours that sit with the Quaternius forest. Keep each body under 10k triangles (the player budget).
 - Save today's outfits as separate gear files: one per head piece (helmet and visor, bear hat, mage hat, mask), one per back piece (cape, quiver), and one per body outfit (chest, arms, legs).
 - Try every gear piece on every body. The Barbarian is the stockiest, so note any piece that clips.
@@ -34,5 +35,5 @@ Settled with Chris:
 ## Consequences
 
 - Until the art session is done, characters look exactly as before; only the names changed.
-- A character already made keeps its body, so it becomes that body in plain clothes when the new art lands. **Not yet decided:** whether such a character gets their old outfit back as gear to find.
+- A character already made keeps its body, so it becomes that body in a shirt and shorts when the new art lands. **Not yet decided:** whether such a character gets their old outfit back as gear to find.
 - Whether a piece drawn for one body fits another is unknown until it is tried. If it clips, pieces may be limited to the bodies they fit, or scaled.
