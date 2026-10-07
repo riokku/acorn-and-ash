@@ -137,7 +137,9 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
   });
 
   await enterWorld(page, 'forest-trees');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // The browser knows about the forest's trees, and offers the swing at this one.
   const known = await page.evaluate(() => window.acornDebug?.trees() ?? []);

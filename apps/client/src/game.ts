@@ -783,7 +783,7 @@ export class Game {
   private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
   private receivedDiscoveryState = false;
-  /** Whether the curtain has been dismissed - see `resume`/`pause`. */
+  /** Gameplay is active once the world is ready, unless another tab takes over. */
   private playing = false;
   private settingsOpen = false;
   private readonly signOutCountdown: SignOutCountdown;
@@ -1066,6 +1066,8 @@ export class Game {
     });
     window.addEventListener('resize', this.handleResize);
     document.addEventListener('visibilitychange', this.handleForestVisibility);
+    window.addEventListener('pointerdown', this.startMusicFromInput);
+    window.addEventListener('keydown', this.startMusicFromInput);
 
     this.offlineFallbackAt = performance.now() + OFFLINE_FALLBACK_MS;
     this.connect();
@@ -1074,7 +1076,11 @@ export class Game {
     setup.renderer.setAnimationLoop(this.frame);
   }
 
-  /** Called when the player clicks the curtain to start or come back to playing. */
+  private readonly startMusicFromInput = (): void => {
+    if (this.playing) startAmbientMusic();
+  };
+
+  /** Reclaim play from another tab after an explicit click. */
   resume(): void {
     this.connection?.playHere();
     this.setPlaying(true);
@@ -1083,14 +1089,7 @@ export class Game {
     startAmbientMusic();
   }
 
-  /**
-   * Whichever menu is open closes first; only once none are does Escape
-   * bring the curtain back - the same one-layer-at-a-time shape most games
-   * give the key. A panel closing this way just rides the next HUD publish,
-   * same as opening one with B, C or I always has; only pausing itself
-   * publishes straight away, the same responsiveness the curtain always had
-   * back when losing the mouse and losing the game were the same thing.
-   */
+  /** Escape closes the current panel or placement; the world stays playable. */
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
     if (this.chestOpen || this.chestPending) this.closeChest();
@@ -1100,7 +1099,6 @@ export class Game {
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
     else if (this.inventoryOpen) this.inventoryOpen = false;
     else if (this.targeting.id !== null) this.targeting.clear();
-    else this.setPlaying(false);
   }
 
   setSettingsOpen(open: boolean): void {
@@ -1503,6 +1501,8 @@ export class Game {
   stop(): void {
     window.removeEventListener('resize', this.handleResize);
     document.removeEventListener('visibilitychange', this.handleForestVisibility);
+    window.removeEventListener('pointerdown', this.startMusicFromInput);
+    window.removeEventListener('keydown', this.startMusicFromInput);
     this.setup?.renderer.setAnimationLoop(null);
     this.signOutCountdown.dispose();
     this.controls?.dispose();
@@ -2472,6 +2472,9 @@ export class Game {
       await new Promise<void>((resolve) => {
         this.firstWorldFrame = resolve;
       });
+      if (this.connectionState !== 'elsewhere' && this.connectionState !== 'deleted') {
+        this.setPlaying(true);
+      }
       this.options.hud.publish({
         ready: true,
         loadingProgress: 100,

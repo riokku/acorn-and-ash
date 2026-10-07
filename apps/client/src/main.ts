@@ -79,6 +79,7 @@ const signOutToFrontPage = async (): Promise<void> => {
  */
 const restartAfterDeletion = (): void => {
   clearIdentity(window.localStorage);
+  writeHotbarLayout(window.localStorage, [null, null, null, null, null, null]);
   rememberCharacterDeleted(window.sessionStorage);
   window.location.reload();
 };
@@ -184,6 +185,11 @@ let unmountEntrance: (() => void) | null = null;
 
 /** The Home screen, with the character the player already has when they have one. */
 const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): void => {
+  if (entrance.saved === null) {
+    const empty = [null, null, null, null, null, null];
+    writeHotbarLayout(window.localStorage, empty);
+    hud.publish({ hotbarSlots: empty });
+  }
   unmountEntrance = mountHome(
     homeContainer,
     readIdentity(window.localStorage),

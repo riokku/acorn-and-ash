@@ -51,7 +51,9 @@ test('turns real left and right dodge clicks into distinct airborne attacks', as
     await page.locator('#home-name').fill('Trail Fighter');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await page.mouse.move(480, 260);
     for (const [kind, strong] of [
       [shared.ActionKind.DodgeLight, false],

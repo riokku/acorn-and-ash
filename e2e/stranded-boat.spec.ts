@@ -100,7 +100,9 @@ test('a boat cut off on an island turns into a pile when its owner is knocked ou
   });
 
   await enterWorld(page, 'stranded-boat');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const boats = () => page.evaluate(() => window.acornDebug!.boats());
   const piles = () => page.evaluate(() => window.acornDebug!.droppedPiles());

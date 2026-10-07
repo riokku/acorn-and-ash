@@ -64,7 +64,10 @@ test.describe('on the home screens', () => {
 
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
       timeout: 120_000,
     });
 
@@ -108,10 +111,15 @@ test.describe('in the game', () => {
     await page.goto(`/?renderer=webgl2&world=${newWorld()}${search}`);
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-curtain')).toHaveCount(0);
   }
 

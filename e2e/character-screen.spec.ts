@@ -76,7 +76,10 @@ test.describe('making a character', () => {
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
 
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
       timeout: 120_000,
     });
     await expect(page.getByTestId('character-stage')).toHaveCount(0);
@@ -149,7 +152,10 @@ test.describe('coming back', () => {
     await page.getByRole('button', { name: 'Barbarian' }).click();
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
       timeout: 120_000,
     });
 
@@ -162,7 +168,10 @@ test.describe('coming back', () => {
     await expect(stage).toHaveAttribute('data-turn', '90');
 
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
       timeout: 120_000,
     });
   });
@@ -188,7 +197,10 @@ test.describe('on a screen that cannot draw it', () => {
     });
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
       timeout: 120_000,
     });
   });

@@ -154,7 +154,11 @@ export function Hud({
     <>
       {/* First, so it sits under everything else: it is part of the world, not a panel. */}
       <CombatOverlay feed={combatFeed} />
-      <div className="hud-panel">
+      <div
+        className="hud-panel"
+        data-world-ready={state.ready && state.playing}
+        data-player-name={state.playerName}
+      >
         <p className="hud-title">Acorn &amp; Ash</p>
         <Row label="Server" value={<Connection state={state} />} />
         <Row label="Players" value={state.playersOnline} />
@@ -436,11 +440,10 @@ export function Hud({
         onCancel={onCancelSignOut}
       />
 
-      {state.ready && !state.playing ? (
+      {state.ready && state.connection === 'elsewhere' ? (
         <div className="hud-curtain" onClick={onPlay} role="presentation">
           <h1>Acorn &amp; Ash</h1>
           <p>{curtainMessage(state)}</p>
-          <p>Find your controls in Settings → Keybindings.</p>
         </div>
       ) : null}
 

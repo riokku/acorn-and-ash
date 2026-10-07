@@ -220,7 +220,10 @@ test.describe('one character per world', () => {
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('#home-name').fill('Hazel');
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     await page.goto(`/?renderer=webgl2&world=${world}`);
     const saved = page.getByTestId('saved-character');
@@ -228,7 +231,10 @@ test.describe('one character per world', () => {
     await expect(page.locator('#home-name')).toHaveCount(0);
 
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
   });
 
   test('is kept by the server, whatever a browser says later', async ({ page }) => {
@@ -236,7 +242,10 @@ test.describe('one character per world', () => {
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('#home-name').fill('Hazel');
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     // Pretend the browser's own memory says somebody else, as a changed
     // browser or an edited page might.
@@ -248,7 +257,10 @@ test.describe('one character per world', () => {
     );
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     const reply = await page.request.get(`/api/worlds/${world}/character`);
     expect(await reply.json()).toMatchObject({ made: true, name: 'Hazel' });
@@ -259,7 +271,10 @@ test.describe('one character per world', () => {
     await page.goto(`/?renderer=webgl2&world=${first}`);
     await page.locator('#home-name').fill('Hazel');
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     await page.goto(`/?renderer=webgl2&world=second-${Date.now()}`);
     await expect(page.locator('#home-name')).toBeVisible();
@@ -270,7 +285,10 @@ test.describe('one character per world', () => {
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('#home-name').fill('Hazel');
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await expect(page.getByTestId('saved-character')).toContainText('Hazel');
@@ -291,14 +309,19 @@ test.describe('signing out', () => {
     await page.goto(`/?renderer=webgl2&world=signout-game-${Date.now()}`);
     await page.locator('#home-name').fill(name);
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText(`Welcome, ${name}`, {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', `${name}`, {
       timeout: 120_000,
     });
     // The character can only walk once the world has answered.
     await expect(page.locator('.hud-row', { hasText: 'Server' }).first()).toContainText(
       'Connected',
     );
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-curtain')).toHaveCount(0);
   }
 
@@ -366,7 +389,10 @@ test.describe('signing out', () => {
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('#home-name').fill('Hazel');
     await page.locator('.home-play').click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel');
 
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await expect(page.getByTestId('saved-character')).toContainText('Hazel');

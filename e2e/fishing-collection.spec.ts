@@ -90,7 +90,9 @@ test('lands a rare fish with real clicks and illustrates the saved collection', 
     await page.locator('#home-name').fill('Water Walker');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await page.evaluate(
       ([x, z]) =>
         (
@@ -191,7 +193,9 @@ test('keeps saved species pages and journal tabs readable in wide and narrow win
     await page.locator('#home-name').fill('River Reader');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await page.keyboard.press('KeyC');
     await page.getByRole('button', { name: 'Fishing', exact: true }).click();
     const journal = page.locator('.fishing-journal');

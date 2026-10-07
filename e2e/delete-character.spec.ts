@@ -19,7 +19,10 @@ async function makeCharacter(page: Page, world: string, name: string): Promise<v
   await page.goto(`/?renderer=webgl2&world=${world}`);
   await page.locator('#home-name').fill(name);
   await page.getByRole('button', { name: 'Enter World' }).click();
-  await expect(page.locator('.hud-curtain')).toContainText(`Welcome, ${name}`, {
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', `${name}`, {
     timeout: 120_000,
   });
   // The character exists on the server once it has answered.
@@ -78,6 +81,12 @@ test.describe('from the Enter World screen', () => {
   test('lets the same account make a different character straight away', async ({ page }) => {
     const world = newWorld();
     await makeCharacter(page, world, 'Hazel');
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'acorn.hotbarLayout',
+        JSON.stringify([null, 'rod', 'axe', null, null, null]),
+      ),
+    );
 
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.getByRole('button', { name: 'Delete this character' }).click();
@@ -87,9 +96,17 @@ test.describe('from the Enter World screen', () => {
 
     await page.locator('#home-name').fill('Birch');
     await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Birch', {
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Birch', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
+    await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(0);
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('acorn.hotbarLayout') ?? 'null')),
+    ).toEqual([null, null, null, null, null, null]);
   });
 });
 
@@ -97,7 +114,9 @@ test.describe('from Settings, in the world', () => {
   test('is under Account, and ends the game for that character', async ({ page }) => {
     const world = newWorld();
     await makeCharacter(page, world, 'Hazel');
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-curtain')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

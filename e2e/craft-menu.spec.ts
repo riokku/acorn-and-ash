@@ -21,7 +21,9 @@ test('one Craft menu fits a laptop screen and lists rope with the other things t
   await page.locator('#home-name').fill('Menu Tester');
   await page.locator('.home-play').click();
   await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // C opens it, every page of it is on screen, and only the list scrolls.
   await page.keyboard.press('KeyC');

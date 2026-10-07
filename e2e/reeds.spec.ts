@@ -103,7 +103,9 @@ async function cutReedsAndTwistRope(page: Page, water: 'lake' | 'pond'): Promise
   });
 
   await enterWorld(page, `reeds-${water}`);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // The browser knows about every clump along every bank, drawn from what the server says.
   const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);

@@ -44,7 +44,7 @@ export const KEYBINDINGS = [
       ['B', 'Open the Craft menu outdoors or decoration inside your home'],
       ['1–9 in Crafting / Click an entry', 'Make a recipe or pick a piece to place'],
       ['M / Click the minimap', 'Open or close the map'],
-      ['Escape', 'Close the current panel, clear your target, or pause'],
+      ['Escape', 'Close the current panel or clear your target'],
     ],
   },
   {

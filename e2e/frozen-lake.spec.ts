@@ -110,7 +110,9 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
   });
 
   await enterWorld(page, 'frozen-lake');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const here = () => page.evaluate(() => window.acornDebug!.localPosition());
   const move = () => page.evaluate(() => window.acornDebug!.combatMove().kind);

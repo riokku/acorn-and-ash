@@ -42,11 +42,18 @@ test('opens settings during play, shows a wide guide and resumes controls on clo
     await page.locator('#home-name').fill('Settings Explorer');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-curtain')).toHaveCount(0);
+    await expect(page.locator('.hotbar-slot .hotbar-slot-icon')).toHaveCount(0);
+    await page.keyboard.down('KeyW');
+    await expect.poll(() => walkingInputs).toBeGreaterThan(0);
+    await page.keyboard.up('KeyW');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
     await expect(dialog).toBeVisible();
+    walkingInputs = 0;
     await page.getByRole('tab', { name: 'Keybindings' }).click();
     expect(
       await dialog.evaluate((element) => element.getBoundingClientRect().width),
@@ -84,11 +91,16 @@ test('opens settings during play, shows a wide guide and resumes controls on clo
     await expect.poll(() => walkingInputs).toBeGreaterThan(0);
     await page.keyboard.up('KeyW');
     await page.keyboard.press('Escape');
-    await expect(page.locator('.hud-curtain')).toBeVisible();
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await expect(page.locator('.hud-curtain')).toBeVisible();
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true');
+    const beforeWalking = walkingInputs;
+    await page.keyboard.down('KeyW');
+    await expect.poll(() => walkingInputs).toBeGreaterThan(beforeWalking);
+    await page.keyboard.up('KeyW');
     expect(errors).toEqual([]);
   } finally {
     sim.dispose();

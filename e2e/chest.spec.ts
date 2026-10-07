@@ -52,7 +52,9 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     await page.locator('#home-name').fill('Chest Keeper');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect
       .poll(() => page.evaluate(() => window.acornDebug?.localPosition().x))
       .toBeCloseTo(HOME_WAKE_SPOT.x, 1);

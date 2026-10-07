@@ -67,19 +67,22 @@ export function clearSlot(pins: HotbarPins, slotIndex: number): HotbarPins {
  * the two can never disagree about what a given slot means. A pack never
  * fills a slot on its own: it has its own button at the end of the bar
  * (see decision 0060), and there is nothing to do with it from a number key.
+ * An uncarried pin reserves its slot but stays empty until that item is carried.
  */
 export function resolveHotbarSlots(
   carrying: readonly { readonly item: ItemId; readonly count: number }[],
   pins: HotbarPins,
 ): readonly (ItemId | null)[] {
+  const carried = new Set(carrying.filter((entry) => entry.count > 0).map((entry) => entry.item));
   const pinned = new Set(pins.filter((pin): pin is ItemId => pin !== null));
   const autoOrder = carrying
+    .filter((entry) => entry.count > 0)
     .map((entry) => entry.item)
     .filter((item) => !pinned.has(item) && !isPack(item));
 
   let autoIndex = 0;
   return pins.map((pin) => {
-    if (pin !== null) return pin;
+    if (pin !== null) return carried.has(pin) && !isPack(pin) ? pin : null;
     const next = autoOrder[autoIndex] ?? null;
     autoIndex += 1;
     return next;

@@ -52,7 +52,9 @@ test('renders wind grass and remembers a lower density setting', async ({ page }
   await page.locator('#home-name').fill('Grass Walker');
   await page.locator('.home-play').click();
   await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await expect
     .poll(() => page.evaluate(() => window.acornDebug?.grassClumps() ?? 0))
     .toBeGreaterThan(1000);

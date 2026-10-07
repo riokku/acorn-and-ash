@@ -122,7 +122,9 @@ test('you can climb into a rowboat, row it, and climb out again', async ({ page 
   });
 
   await enterWorld(page, 'rowing-boat');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const here = () => page.evaluate(() => window.acornDebug!.localPosition());
   const move = () => page.evaluate(() => window.acornDebug!.combatMove().kind);

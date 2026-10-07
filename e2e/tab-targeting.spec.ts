@@ -58,7 +58,9 @@ test('Tab selects, cycles, draws, and clears hostile targets through the game in
     await page.locator('#home-name').fill('Target Tester');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await page.keyboard.press('Tab');
     await expect.poll(selected).toBe(front);
     // Gold selection feedback is painted on the existing combat canvas.

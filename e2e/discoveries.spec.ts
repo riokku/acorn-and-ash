@@ -53,7 +53,9 @@ test('records a discovery, inspects its personal reward and crafts the learned r
     await page.locator('#home-name').fill('Forest Explorer');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await page.keyboard.press('KeyC');
     await page.getByRole('button', { name: 'Discoveries', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Discovery journal' })).toContainText(

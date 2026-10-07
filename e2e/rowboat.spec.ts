@@ -91,7 +91,9 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
   });
 
   await enterWorld(page, 'rowboat-berth');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [water.x, water.z]);
 
   // The Craft menu has a Lake section with the rowboat and its price.

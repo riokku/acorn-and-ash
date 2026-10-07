@@ -82,7 +82,9 @@ test('right-clicks a personal blueprint reward and learns its housing tier', asy
     await page.locator('#home-name').fill('Forest Explorer');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     const point = await page.evaluate(
       ({ x, z }) => window.acornDebug?.screenPoint(x, 0.1, z),
       reward,
