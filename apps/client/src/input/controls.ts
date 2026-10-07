@@ -79,6 +79,7 @@ const GAME_KEYS = new Set([
 
 export class Controls {
   private gameplayEnabled = true;
+  private targetCycles: Array<1 | -1> = [];
   private readonly held = new Set<string>();
   /**
    * Keys pressed since the last tick was built.
@@ -117,6 +118,7 @@ export class Controls {
   constructor(
     canvas: HTMLCanvasElement,
     private readonly canDodgeAttack: () => boolean = () => false,
+    private readonly canTarget: () => boolean = () => true,
   ) {
     this.canvas = canvas;
 
@@ -307,6 +309,13 @@ export class Controls {
     return indices;
   }
 
+  /** One entry per physical press, preserving Shift even if released before the frame. */
+  takeTargetCycles(): Array<1 | -1> {
+    const cycles = this.targetCycles;
+    this.targetCycles = [];
+    return cycles;
+  }
+
   /** Whether either Shift key is down right now. */
   isShiftHeld(): boolean {
     return this.held.has('ShiftLeft') || this.held.has('ShiftRight');
@@ -386,6 +395,7 @@ export class Controls {
    * does not silently keep going underneath the curtain.
    */
   releaseAll(): void {
+    this.targetCycles = [];
     this.held.clear();
     this.tapped.clear();
     this.interactClaimed = false;
@@ -419,6 +429,22 @@ export class Controls {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || (!this.gameplayEnabled && event.code !== 'Escape')) return;
+    if (event.code === 'Tab') {
+      const target = event.target as Element | null;
+      if (
+        !this.canTarget() ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        target?.closest?.(
+          'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="dialog"]',
+        )
+      )
+        return;
+      event.preventDefault();
+      if (!event.repeat) this.targetCycles.push(event.shiftKey ? -1 : 1);
+      return;
+    }
     if (GAME_KEYS.has(event.code)) event.preventDefault();
     this.held.add(event.code);
     this.tapped.add(event.code);

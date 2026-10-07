@@ -147,12 +147,15 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                              |
 | `M`, or click the minimap            | Open or close the map                                                    |
 | Walk into your door, or `E` there    | Go inside your home, or back out                                         |
+| `Tab` / `Shift+Tab`                  | Select the next / previous nearby hostile target (30 m; favors in front) |
 | Left mouse (quick click)             | Aim on press; release to chop/fight; cast or hook on press               |
 | Left mouse (click as a swing lands)  | Carry on into the next swing, up to three in a row                       |
 | Left mouse (held, then released)     | Charge without a light swing; release to strike                          |
 | Right mouse (held), then drag        | Turn the camera                                                          |
 | Left `Ctrl`                          | Dodge roll                                                               |
-| `Esc`                                | Close a panel, or pause                                                  |
+| `Esc`                                | Close a panel, clear your target, or pause                                |
+
+Tab targeting marks the selected enemy with a gold diamond and name, including a directional marker when off screen. Escape clears selection after closing any open panel. Targets clear on death, despawn, or leaving the 30 m range. In melee range, attack aim assistance favors the selected enemy; hits still use normal weapon reach. See [tab targeting](docs/decisions/0111-tab-targeting.md).
 
 There is nothing to land on yet, so a jump is a hop in place.
 

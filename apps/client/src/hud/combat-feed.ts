@@ -20,7 +20,16 @@ export interface ThreatMark {
   readonly attacking: boolean;
 }
 
+export interface SelectedTargetMark {
+  readonly name: string;
+  readonly distance: number;
+  readonly bearing: number;
+  /** Normalized screen coordinates, or null when off screen. */
+  readonly screen: { readonly x: number; readonly y: number } | null;
+}
+
 export class CombatFeed {
+  target: SelectedTargetMark | null = null;
   /** Whether to draw anything at all: playing, out of doors, with the map shut. */
   showing = false;
   /** Every raider worth pointing at that is not on screen right now. */
