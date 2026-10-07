@@ -65,7 +65,6 @@ import { itemDescription, itemUseHint } from './item-description';
 import type { ToastView } from './toasts';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import { SIGN_OUT_SECONDS } from './sign-out';
-import { SeasonBanner } from './SeasonBanner';
 import { SEASON_NAMES, seasonBannerView } from './season-banner';
 import { SignOutBanner } from './SignOutBanner';
 import type { Preferences } from '../preferences/preferences';
@@ -303,16 +302,21 @@ export function Hud({
         <DoorLock locked={state.home.locked} onSetDoorLock={onSetDoorLock} />
       ) : null}
 
-      {state.ready && state.playing && !state.mapOpen && state.season !== undefined ? (
-        <SeasonBanner view={seasonBannerView(state.season)} />
-      ) : null}
-
       {state.ready && state.playing && !state.mapOpen && state.ownCacheCompass !== null ? (
         <CacheCompass compass={state.ownCacheCompass} />
       ) : null}
 
       {state.ready && state.playing && !state.mapOpen && state.chestSlots === null ? (
-        <Minimap feed={mapFeed} fog={fog} onOpenMap={onToggleMap} />
+        <Minimap
+          feed={mapFeed}
+          fog={fog}
+          season={
+            state.season === undefined
+              ? undefined
+              : seasonBannerView(state.season, { showYear: false })
+          }
+          onOpenMap={onToggleMap}
+        />
       ) : null}
 
       {state.ready && state.playing && state.chestSlots !== null ? (

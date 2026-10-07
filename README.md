@@ -465,13 +465,18 @@ The year turns round spring, summer, autumn and winter, six game days (two
 real hours) to a season, so a full year takes eight hours. Like day and
 night it runs off the server's clock, so everybody in a world sees the same
 season, and each world starts its year on a different day so they are not all
-in step. A banner at the top of the screen, in the style of Northgard's, says
-"Year 2 · Autumn" with a round badge and a line of advice, and its coloured
-stripe has a piece for each day of the season, lit up to today. The same banner
-hangs in the top-left corner of the front page and the character screen, using
-the calendar the painted backdrop follows (`?season=` works there too). There
-it says just "Autumn", with no year, because no world is chosen yet. The
-HUD's "Season" row still says which day it is, for the tests. See
+in step. In the game the whole year is a ring round the minimap: 24 pieces,
+one for each day, running clockwise from the top (spring first, then summer,
+autumn and winter), each in its season's colour. Days gone are bright, today's
+piece pulses gently and days to come are dim. A round badge outside the ring,
+in the middle of the current season's quarter, shows its icon (a sprout, sun,
+leaf or snowflake), and pointing at the badge or the ring says it in words
+("Autumn · Day 3 of 6"). The front page and
+the character screen have a bigger banner in the top-left corner with the
+season's name and a line of advice, using the calendar the painted backdrop
+follows (`?season=` works there too). Neither shows a year, because no world is
+chosen on those screens and the game does not need one. The HUD's "Season" row
+still says which day it is, for the tests. See
 [decision 0110](docs/decisions/0110-the-season-banner.md).
 For the last day and a half of a season the forest eases into the next one,
 so it changes colour slowly rather than all at once: the grass turns gold in

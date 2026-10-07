@@ -147,7 +147,7 @@ body {
  */
 .cache-compass {
   position: absolute;
-  top: calc(12px + var(--season-banner-space));
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -172,22 +172,15 @@ body {
 /*
  * The season banner (decision 0110), after Northgard's: a dark plaque, a stripe
  * in the season's colour across the top (one piece for each day of the season),
- * a round badge, "Year 2 · Autumn" and a line of advice. In the game it hangs
- * at the top centre, and everything else that lives up there sits below it.
+ * a round badge, the season's name and a line of advice. It is the home
+ * screens' version, pinned to the top-left corner. In the game the season is a
+ * ring round the minimap instead (below).
  */
-:root {
-  /* The banner's height and the gap under it. */
-  --season-banner-space: 72px;
-}
-
 .season-banner {
   --season: #8cc66b;
   --season-ink: #1f3a16;
   position: absolute;
-  top: 12px;
-  left: 50%;
   z-index: 2;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -205,23 +198,34 @@ body {
   pointer-events: none;
 }
 
-.season-banner-spring {
-  --season: #8cc66b;
+:root {
+  --season-spring: #8cc66b;
+  --season-summer: #f0c24b;
+  --season-autumn: #e0813a;
+  --season-winter: #8cc7ec;
+}
+
+.season-banner-spring,
+.season-ring-spring {
+  --season: var(--season-spring);
   --season-ink: #1f3a16;
 }
 
-.season-banner-summer {
-  --season: #f0c24b;
+.season-banner-summer,
+.season-ring-summer {
+  --season: var(--season-summer);
   --season-ink: #4a3208;
 }
 
-.season-banner-autumn {
-  --season: #e0813a;
+.season-banner-autumn,
+.season-ring-autumn {
+  --season: var(--season-autumn);
   --season-ink: #4a2208;
 }
 
-.season-banner-winter {
-  --season: #8cc7ec;
+.season-banner-winter,
+.season-ring-winter {
+  --season: var(--season-winter);
   --season-ink: #123049;
 }
 
@@ -305,7 +309,6 @@ body {
 .home-season-banner {
   top: 20px;
   left: 24px;
-  transform: none;
 }
 
 /* A short or narrow character-creation window has no spare corner for it. */
@@ -313,6 +316,137 @@ body {
   .home-season-banner-making {
     display: none;
   }
+}
+
+/*
+ * The year as a ring round the minimap (decision 0110). It goes just outside the
+ * map's own rim (the map is 188px across, the ring 94 to 99px from its middle),
+ * so none of the map is covered. One piece for each day of the year, filling
+ * clockwise from the top, each in its own season's colour: days gone are bright,
+ * today pulses, days to come are dim. The badge sits outside the ring in the
+ * middle of the current season's quarter (the page works out where), clear of the
+ * N that swings round the rim; hovering it or the ring says the season and the day.
+ */
+.season-ring {
+  /* --season and --season-ink come from the season's own class, above. */
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+}
+
+.season-ring svg {
+  display: block;
+  overflow: visible;
+}
+
+.season-ring-track,
+.season-ring-day,
+.season-ring-hit {
+  fill: none;
+}
+
+.season-ring-track {
+  stroke: rgba(22, 19, 16, 0.62);
+  stroke-width: 7;
+}
+
+.season-ring-day {
+  stroke-width: 5;
+  opacity: 0.4;
+}
+
+.season-ring-day-spring {
+  stroke: var(--season-spring);
+}
+
+.season-ring-day-summer {
+  stroke: var(--season-summer);
+}
+
+.season-ring-day-autumn {
+  stroke: var(--season-autumn);
+}
+
+.season-ring-day-winter {
+  stroke: var(--season-winter);
+}
+
+.season-ring-day.is-past {
+  opacity: 0.85;
+}
+
+.season-ring-day.is-today {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px var(--season));
+  animation: season-ring-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes season-ring-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .season-ring-day.is-today {
+    animation: none;
+  }
+}
+
+/* A wider, invisible band over the ring, so it is easy to point at. */
+.season-ring-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+}
+
+.season-ring-badge {
+  /* Where it goes is set in the page: 113px from the middle of the ring, in the middle of the season's quarter. */
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid #d9b46a;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6dc 0%, var(--season) 55%);
+  color: var(--season-ink);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.45),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+}
+
+.season-ring-badge svg {
+  width: 15px;
+  height: 15px;
+}
+
+.season-ring-tip {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
+  padding: 4px 9px;
+  border: 1px solid rgba(212, 168, 98, 0.5);
+  border-radius: 6px;
+  background: rgba(27, 25, 22, 0.95);
+  color: #f3e9d4;
+  font:
+    600 12px/1.2 'Fraunces',
+    Georgia,
+    serif;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.season-ring:hover .season-ring-tip {
+  opacity: 1;
 }
 
 /*
@@ -1147,7 +1281,7 @@ body {
 /* The countdown over the game while signing out, and why one was cancelled. */
 .signout-banner {
   position: absolute;
-  top: calc(76px + var(--season-banner-space));
+  top: 76px;
   left: 50%;
   z-index: 40;
   transform: translateX(-50%);
@@ -2022,13 +2156,14 @@ body {
   cursor: pointer;
 }
 
+/* A row under the map, so the buttons do not sit on the season ring. */
 .minimap-buttons {
   position: absolute;
-  right: -2px;
-  bottom: 4px;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .minimap-buttons button {
@@ -2698,7 +2833,7 @@ body {
 .raid-banner {
   --band: rgba(110, 16, 10, 0.86);
   position: absolute;
-  top: calc(64px + var(--season-banner-space));
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   min-width: 340px;
@@ -2759,7 +2894,7 @@ body {
 /* How many are still standing, once the banner has gone. */
 .raid-tracker {
   position: absolute;
-  top: calc(64px + var(--season-banner-space));
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

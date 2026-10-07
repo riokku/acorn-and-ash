@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { type FogCache, drawMinimap, fitCanvas } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
+import type { SeasonBannerView } from './season-banner';
+import { SeasonRing } from './SeasonRing';
 
 /** The minimap's width on screen, in CSS pixels. */
 const MINIMAP_SIZE = 188;
@@ -20,10 +22,13 @@ const ZOOM_LEVELS = [1.05, 1.5, 2.3] as const;
 export function Minimap({
   feed,
   fog,
+  season,
   onOpenMap,
 }: {
   readonly feed: MapFeed;
   readonly fog: FogCache;
+  /** Where the year is, drawn as a ring round the map (decision 0110). Left out until the server says. */
+  readonly season?: SeasonBannerView;
   readonly onOpenMap: () => void;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -70,6 +75,7 @@ export function Minimap({
         onClick={onOpenMap}
         title="Open the map (M)"
       />
+      {season === undefined ? null : <SeasonRing view={season} />}
       <div className="minimap-buttons">
         <button type="button" aria-label="Zoom the minimap in" onClick={() => zoomBy(1)}>
           +

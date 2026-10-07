@@ -41,6 +41,10 @@ export interface SeasonBannerView {
   readonly seasonName: string;
   /** Which day of the season, from 1 to `DAYS_PER_SEASON`. */
   readonly day: number;
+  /** Which season of the year, from 0 for spring to 3 for winter. */
+  readonly seasonIndex: number;
+  /** Which day of the year, from 0 to `DAYS_PER_YEAR - 1`, for the ring round the minimap. */
+  readonly dayOfYear: number;
   readonly daysInSeason: number;
   /** "Year 2 · Autumn", or just "Autumn" with no year: the title, as a screen reader says it. */
   readonly title: string;
@@ -70,6 +74,8 @@ export function seasonBannerView(
     year: showYear ? calendar.year : undefined,
     seasonName,
     day: calendar.dayOfSeason,
+    seasonIndex: calendar.seasonIndex,
+    dayOfYear: calendar.dayOfYear,
     daysInSeason: DAYS_PER_SEASON,
     title: showYear ? `Year ${calendar.year} · ${seasonName}` : seasonName,
     hint: hints[calendar.season],
