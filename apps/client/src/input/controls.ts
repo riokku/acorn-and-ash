@@ -281,7 +281,7 @@ export class Controls {
     return pressed;
   }
 
-  /** Whether Escape was pressed since this was last asked - closes a panel, or pauses. */
+  /** Whether Escape was pressed since this was last asked - closes the current panel. */
   takeEscapeToggle(): boolean {
     const pressed = this.tapped.has('Escape');
     this.tapped.delete('Escape');
@@ -382,7 +382,7 @@ export class Controls {
 
   /**
    * Let go of every held key and button, as if the player had released them
-   * all at once. Used when the game pauses, so a walk or a chop in progress
+   * all at once. Used when gameplay is disabled, so a walk or a chop in progress
    * does not silently keep going underneath the curtain.
    */
   releaseAll(): void {

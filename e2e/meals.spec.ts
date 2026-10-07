@@ -74,7 +74,9 @@ test('prepares at full hunger, shows one benefit, replaces it and clears expiry'
     await page.locator('#home-name').fill('Trail Cook');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.meal-benefit')).toHaveCount(0);
     await page.keyboard.down('KeyI');
     await expect(page.locator('.inventory-panel')).toBeVisible();

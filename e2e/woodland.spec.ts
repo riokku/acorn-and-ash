@@ -96,7 +96,9 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     await page.locator('#home-name').fill('Woodland Tracker');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-hint')).toContainText('Split hoofprints');
     await page.screenshot({
       path: process.env.CI

@@ -64,7 +64,9 @@ test('holds a walker back at the shore instead of letting them wade in', async (
   });
 
   await enterWorld(page, 'lake-shore');
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await page.evaluate(() => window.acornDebug?.faceTowards(88, -88));
   await page.keyboard.down('KeyW');
   // Long enough to have walked thirty metres out, if the water were not there.

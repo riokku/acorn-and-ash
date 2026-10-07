@@ -203,7 +203,10 @@ test.describe('the Home screen', () => {
     await expect(page.locator('.hud-row', { hasText: 'Server' }).first()).toContainText(
       'Connected',
     );
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Chestnut');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Chestnut');
   });
 });
 
@@ -237,18 +240,17 @@ test.describe('the Settings menu', () => {
     expect(JSON.parse(stored ?? '{}').musicVolume).toBe(0);
   });
 
-  test('is reachable once inside the world too, from the paused curtain', async ({ page }) => {
+  test('is reachable inside the world after Escape', async ({ page }) => {
     await page.goto('/');
     await waitForConnected(page);
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     await expect(page.locator('.hud-curtain')).toBeHidden();
 
-    // Escape backs all the way out to the curtain, gear included, once no
-    // craft, build or inventory panel is open to close first - see decision
-    // 0050. The mouse is free throughout now, so there is no pointer lock
-    // for this to release the way there used to be.
+    // With no panel open, Escape keeps play active and Settings reachable.
     await page.keyboard.press('Escape');
-    await expect(page.locator('.hud-curtain')).toBeVisible();
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
 
     await page.locator('.settings-button').click();
     await expect(page.locator('.settings-card')).toContainText('Mouse sensitivity');
@@ -265,8 +267,10 @@ test(
     await page.goto('/');
     await waitForConnected(page);
 
-    // The curtain only lifts once the world has been built.
-    await expect(page.locator('.hud-curtain')).toContainText('Click to play');
+    // Play begins automatically once the world has been built.
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
 
     const backend = await hudValue(page, 'Renderer');
     expect(backend).toMatch(/WebGPU|WebGL 2/);
@@ -281,7 +285,9 @@ test(
 test('the map fills in around you, and M opens it over the game', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await expect(page.locator('.hud-curtain')).toBeHidden();
 
   // The minimap is up, and the ground around the start is already marked seen.
@@ -322,11 +328,15 @@ test('shows whether it is day or night', async ({ page }) => {
 test('walking moves the player, and the server agrees', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
-  // Connecting can precede model loading; the loading curtain has no play handler.
-  await expect(page.locator('.hud-curtain')).toContainText('Click to play', { timeout: 120_000 });
+  // Connecting can precede model loading; wait until the world is playable.
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const before = positionOf(await hudValue(page, 'Position'));
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await hold(page, 'KeyW', 1200);
   await page.waitForTimeout(400);
 
@@ -355,7 +365,9 @@ test('two tabs see each other move', async ({ browser }) => {
   // A background tab stops animating, so bring each one to the front before
   // asking it to do anything, the way a person switching windows would.
   await walker.bringToFront();
-  await walker.locator('.hud-curtain').click();
+  await expect(walker.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   const walkerStart = await walker.evaluate(() => window.acornDebug?.localPosition());
   await hold(walker, 'KeyW', 1500);
   await walker.waitForTimeout(400);
@@ -379,7 +391,9 @@ test('two tabs see each other move', async ({ browser }) => {
 test('sprinting covers more ground than walking', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const beforeWalk = positionOf(await hudValue(page, 'Position'));
   await hold(page, 'KeyW', 1000);
@@ -402,7 +416,9 @@ test('sprinting covers more ground than walking', async ({ page }) => {
 test('dodging moves you a decisive step, on command', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const before = positionOf(await hudValue(page, 'Position'));
   await hold(page, 'ControlLeft', 100);
@@ -420,7 +436,9 @@ test('dodging moves you a decisive step, on command', async ({ page }) => {
 test('jumping lifts the player off the ground and puts them back', async ({ page }) => {
   await page.goto('/');
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const heightNow = async (): Promise<number> =>
     (await page.evaluate(() => window.acornDebug?.localPosition()))?.y ?? 0;
@@ -440,7 +458,9 @@ test('walking away from the clearing leads into generated wilderness, not a wall
 }) => {
   await page.goto('/');
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Straight out from the clearing, away from its own ring of trees, which
   // stops around 40 m out.
@@ -657,7 +677,9 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   const page = await context.newPage();
   await page.goto(`/?world=axe-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Nothing to start with, and the axe is out there waiting.
   expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
@@ -720,7 +742,9 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   await waitForConnected(watcher);
 
   await equipper.bringToFront();
-  await equipper.locator('.hud-curtain').click();
+  await expect(equipper.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   expect(await equipper.evaluate(() => window.acornDebug?.equippedItem() ?? null)).toBeNull();
 
   const pickups = await equipper.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -793,7 +817,9 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
 
   await page.goto(`/?world=craft-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   expect(await page.evaluate(() => window.acornDebug?.carrying())).toEqual([]);
 
@@ -849,7 +875,9 @@ test('crafting a torch lets you equip it, lighting up in your hand', async ({ pa
 
   await page.goto(`/?world=torch-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const spots = await page.evaluate(() => window.acornDebug?.gatherSpots() ?? []);
   const spot = spots.find((entry) => entry.item === 'stick');
@@ -891,7 +919,9 @@ test('you can drop sticks to pick up again, or destroy them for good', async ({ 
 
   await page.goto(`/?world=drop-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   await gatherFromPatches(page, 'stick', 2);
   const held = await countHeld(page, 'stick');
@@ -1051,7 +1081,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
   const page = await context.newPage();
   await page.goto(`/?world=chop-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Nothing is down to begin with.
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([]);
@@ -1109,7 +1141,9 @@ test('you can chop a tree down, and the stump is still there next time', async (
 test('a charged attack fells a tree in one go', async ({ page }) => {
   await page.goto(`/?world=charge-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
   const axe = pickups.find((entry) => entry.item === 'axe');
@@ -1155,7 +1189,9 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   const page = await context.newPage();
   await page.goto(`/?world=regrow-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Fetch the axe and fell the oak beside it.
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -1216,7 +1252,9 @@ test('you can find the rod, cast into the pond and land a fish', async ({ browse
   const page = await context.newPage();
   await page.goto(`/?world=fish-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // The rod is lying on the bank.
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -1573,7 +1611,9 @@ test('you can find a rabbit, catch it with your axe, and it pays out meat', asyn
 
   await page.goto(`/?world=hunt-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Fetch the axe first: no axe, no catching, the same rule as chopping.
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -1624,7 +1664,9 @@ test('you can find a fox and catch it, the same way you catch a rabbit', async (
 
   await page.goto(`/?world=fox-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Fetch the axe first: no axe, no catching, the same rule as chopping.
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -1679,7 +1721,9 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
 
   await page.goto(`/?world=raccoon-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Fetch the axe first: no axe, no fighting back, the same rule as chopping.
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
@@ -1900,7 +1944,9 @@ test('you can chop enough logs to build a campfire, and it is still there next t
 
   await page.goto(`/?world=build-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Remembered before walking anywhere: wherever a fresh player spawns is
   // guaranteed clear of every landmark, so it is always somewhere to build.
@@ -2010,7 +2056,9 @@ test('you can light a campfire and put it out again', async ({ page }) => {
 
   await page.goto(`/?world=light-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
 
@@ -2076,7 +2124,9 @@ test('you can gather flowers and plant something pretty for the garden', async (
 
   await page.goto(`/?world=flowers-${Date.now()}`);
   await waitForConnected(page);
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
 
   // Remembered before wandering off to a flower patch, the same reason the
   // campfire test remembers it: guaranteed clear of every landmark to build on.
@@ -2167,14 +2217,22 @@ test.describe('woods interaction polish', () => {
     expect(progress).toBeGreaterThanOrEqual(0);
     expect(progress).toBeLessThan(100);
     await expect(loading).toBeHidden({ timeout: 120_000 });
-    await expect(page.locator('.hud-curtain')).toContainText('Welcome, Woodland Wanderer');
-    await expect(page.locator('.hud-curtain')).not.toContainText('WASD');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(page.locator('.hud-panel')).toHaveAttribute(
+      'data-player-name',
+      'Woodland Wanderer',
+    );
+    await expect(page.locator('.hud-curtain')).toHaveCount(0);
   });
 
   test('right-clicks world loot and keeps camera drags from looting', async ({ page }) => {
     await page.goto(`/?renderer=webgl2&world=polish-${Date.now()}`);
     await waitForConnected(page);
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     const bag = await page.evaluate(() =>
       window.acornDebug?.pickups().find((pickup) => pickup.item === 'bag'),
     );
@@ -2209,7 +2267,9 @@ test.describe('woods interaction polish', () => {
   test('preserves inventory right-click menus', async ({ page }) => {
     await page.goto(`/?renderer=webgl2&world=inventory-polish-${Date.now()}`);
     await waitForConnected(page);
-    await page.locator('.hud-curtain').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
     const patch = await page.evaluate(() =>
       window.acornDebug?.gatherSpots().find((spot) => spot.item === 'stick' && spot.remaining > 0),
     );

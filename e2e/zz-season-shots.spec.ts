@@ -42,8 +42,15 @@ async function enterGame(page: Page, season: string): Promise<void> {
   });
   if (await page.locator('#home-name').isVisible()) await page.locator('#home-name').fill('Hazel');
   await page.getByRole('button', { name: 'Enter World' }).click();
-  await expect(page.locator('.hud-curtain')).toContainText('Welcome, Hazel', { timeout: 120_000 });
-  await page.locator('.hud-curtain').click();
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
+    timeout: 120_000,
+  });
+  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+    timeout: 120_000,
+  });
   await expect(page.locator('.hud-curtain')).toHaveCount(0);
   await page.waitForTimeout(4000);
 }

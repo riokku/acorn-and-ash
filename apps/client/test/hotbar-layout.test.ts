@@ -63,9 +63,31 @@ describe('resolving what a hotbar slot shows', () => {
     ]);
   });
 
-  it('keeps showing a pin even if that item is not currently carried', () => {
+  it('leaves an uncarried pin empty', () => {
     const pins = assignSlot(NOTHING_PINNED, 2, 'torch');
-    expect(resolveHotbarSlots([], pins)).toEqual([null, null, 'torch', null, null, null]);
+    expect(resolveHotbarSlots([], pins)).toEqual(NOTHING_PINNED);
+    expect(resolveHotbarSlots([{ item: 'torch', count: 1 }], pins)).toEqual([
+      null,
+      null,
+      'torch',
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it('starts empty with stale tool pins and ignores zero-count entries', () => {
+    const pins = assignSlot(assignSlot(NOTHING_PINNED, 1, 'rod'), 2, 'axe');
+    expect(resolveHotbarSlots([], pins)).toEqual(NOTHING_PINNED);
+    expect(
+      resolveHotbarSlots(
+        [
+          { item: 'rod', count: 0 },
+          { item: 'log', count: 0 },
+        ],
+        pins,
+      ),
+    ).toEqual(NOTHING_PINNED);
   });
 });
 
