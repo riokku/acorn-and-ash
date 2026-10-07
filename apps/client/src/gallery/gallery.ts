@@ -44,15 +44,14 @@ import { preloadPropModels } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
-import { createDwarf, createIronAxe, preloadDwarfModels } from './dwarves';
+import { createIronAxe, preloadIronAxe } from './iron-axe';
 
 /**
  * The art gallery: every piece of the game's own art laid out in daylight on
  * a patch of painted ground, with no server and no Home screen - open the
  * game with `?gallery` to see it (see decision 0053).
  *
- * `?gallery=cabin` looks at one piece up close (`?gallery=dwarves` frames
- * Dorrin, Hilde and the iron axe together); `?gallery=moves` and
+ * `?gallery=cabin` looks at one piece up close; `?gallery=moves` and
  * `?gallery=raiders` play the characters' and the skeletons' moves (see
  * moves.ts and raiders.ts); `&time=0.3` picks a time of
  * day from 0 (midnight) through 0.5 (noon); `&spin` turns the view slowly
@@ -173,9 +172,7 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'rabbit', x: 6.4, z: 1.4, view: 1.6, create: createCritter },
   { name: 'raccoon', x: 7.4, z: 1.1, view: 2, create: createRaccoon },
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: createFox },
-  // The dwarves and their iron axe, made in Blender (see dwarves.ts).
-  { name: 'dorrin', x: -17.6, z: -4, view: 3, create: () => createDwarf('dorrin') },
-  { name: 'hilde', x: -16.2, z: -4, view: 3, create: () => createDwarf('hilde') },
+  // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
 ];
 
@@ -190,7 +187,6 @@ const VIEWPOINTS: Record<
   ground: { x: -2, y: 0, z: 4, distance: 5, height: 2.2 },
   animals: { x: 7.5, y: 0.25, z: 1.2, distance: 3.2, height: 0.9, angle: 0.9 },
   stump: { x: -6.5, y: 0.3, z: 2.4, distance: 2, height: 0.9 },
-  dwarves: { x: -16.9, y: 0.6, z: -3.8, distance: 4.2, height: 1.1, angle: 0.15 },
 };
 
 /** Scenery behind the exhibits, drawn exactly the way the clearing draws it. */
@@ -222,7 +218,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadFlowerModel(),
     preloadCampfireModels(),
     preloadFoxModel(),
-    preloadDwarfModels(),
+    preloadIronAxe(),
   ]);
 
   const scene = new THREE.Scene();

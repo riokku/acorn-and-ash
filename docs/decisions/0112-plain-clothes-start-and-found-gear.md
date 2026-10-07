@@ -14,7 +14,7 @@ Settled with Chris:
 - **The current outfits become gear.** Each outfit's pieces (helmet, hat, cape, quiver, mask, armour or robe) are gear a character can find and wear.
 - **Gear changes looks only.** No protection and no perks, in keeping with cozy-light survival.
 - **Gear can be found four ways**, each its own change: rewards at discovery sites, hidden caches, creature drops, and crafting at home.
-- **The dwarves are not the player characters** for now. They stay in the art gallery only.
+- **The dwarves are not used.** Their models, scripts and gallery entries are deleted (see the update at the end of decision 0107).
 
 ## What is done, and what is next
 

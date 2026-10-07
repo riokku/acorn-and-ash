@@ -19,3 +19,9 @@ Chris chose dwarves (one male, one female) as the game's own people, in a chibi 
 - The dwarves only appear in the art gallery for now (`?gallery=dwarves`). Making one the player character is its own change: the animator, the hand bone for held items, and the collision shape all need matching up.
 - Vertex colours suit flat, painted colour. Anything that needs real detail (wood grain, a printed pattern) would still use a texture, kept large enough not to bleed.
 - Scripts are the source of truth, so hand edits made directly in a `.blend` would be lost on the next rebuild unless they are copied back into the script.
+
+## Update · 2026-10-07: the dwarves are deleted
+
+Chris decided the player characters stay the Adventurers pack's six bodies in plain clothes (decision 0112), so the dwarves are not needed. Dorrin, Hilde, their Blender file, the scripts that built and animated them (`dwarf_build.py`, `dwarves_species.py`, `dwarf_anim.py`, `dwarf_preview.py`), their licence rows and their gallery entries are gone. They can still be found in the git history.
+
+The iron axe stays. Its script used a few helpers from `dwarf_build.py`, so it now carries its own copy and builds on its own. Everything above that is about the dwarves is how they were made, kept as the record.

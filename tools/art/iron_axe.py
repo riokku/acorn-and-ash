@@ -1,12 +1,33 @@
-# The iron axe, built in Blender through the Blender MCP. Exec after dwarf_build.py (it reuses
-# make_material, hexc and the shading constants), then call build_iron_axe().
+# The iron axe, built in Blender through the Blender MCP. Exec this file, then call build_iron_axe().
 # Chunky, readable and low-poly: tapered wooden haft with a knob, wrapped leather grip, iron collar,
 # a curved bevelled head with a bright cutting edge and two rivets. Colours are vertex colours with
-# the same soft top-lit shading as the dwarves, so it sits with them and can't bleed at a distance.
+# a soft top-lit shading (tops lighter, undersides darker, like the Quaternius pieces), so there is
+# no texture to blur and nothing bleeds at a distance.
 # Origin at the bottom of the haft, 1 unit = 1 m, the blade points along +X before export.
 import math
 import bpy
 import bmesh
+
+# how much darker a corner facing down is, and lighter one facing up
+SHADE_DOWN, SHADE_UP = .80, 1.06
+
+
+def make_material(name):
+    """One soft, matte material that takes its colour from the mesh's vertex colours."""
+    mat = bpy.data.materials.new(name + "_mat")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    vc = nt.nodes.new("ShaderNodeVertexColor"); vc.layer_name = "Col"
+    b = nt.nodes["Principled BSDF"]
+    nt.links.new(vc.outputs["Color"], b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.85
+    return mat
+
+
+def hexc(h):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
 
 AXE_COLOURS = {
     'wood': '#a0703f', 'wood_dark': '#7a5030', 'leather': '#5e3a24', 'leather_light': '#7a4c2e',
