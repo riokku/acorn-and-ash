@@ -1105,6 +1105,11 @@ staging's default world, that's
 `https://acorn-ash-web-staging.chrisistinson.workers.dev/api/worlds/home-clearing/reset-players?confirm=clear-everyone`.
 See [decision 0042](docs/decisions/0042-hotbar-icons-and-a-way-to-reset-testing.md).
 
+When a world next wakes, buildings whose saved owner no longer exists are
+removed, including their chests, gardens and indoor decorations. This cleans up
+old playtest leftovers. Buildings belonging to saved characters and communal
+objects remain; recently deleted characters still use their normal removal deadline.
+
 ## Assets and licensing
 
 Every file under `assets/`, and anything served from R2, needs a row in

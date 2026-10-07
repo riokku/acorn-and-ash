@@ -34,6 +34,12 @@ const characterOf = async (worldId: string, playerKey: string): Promise<{ made: 
 /** Chris's cabin, in storage and, if the world is awake, in the simulation too. */
 async function buildCabinFor(worldId: string, playerKey: string): Promise<void> {
   await runInDurableObject(stubFor(worldId), (instance, state) => {
+    state.storage.sql.exec(
+      'INSERT OR IGNORE INTO players (player_key,x,y,z,facing_yaw,updated_at,name) VALUES (?,0,0,0,0,?,?)',
+      playerKey,
+      Date.now(),
+      'Acorn',
+    );
     const sim = (instance as unknown as { simulation: WorldSimulation | null }).simulation;
     sim?.restoreBuiltProps([
       {
