@@ -153,7 +153,7 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | Left mouse (held, then released)     | Charge without a light swing; release to strike                          |
 | Right mouse (held), then drag        | Turn the camera                                                          |
 | Left `Ctrl`                          | Dodge roll                                                               |
-| `Esc`                                | Close a panel, clear your target, or pause                                |
+| `Esc`                                | Close a panel, clear your target, or pause                               |
 
 Tab targeting marks the selected enemy with a gold diamond and name, including a directional marker when off screen. Escape clears selection after closing any open panel. Targets clear on death, despawn, or leaving the 30 m range. In melee range, attack aim assistance favors the selected enemy; hits still use normal weapon reach. See [tab targeting](docs/decisions/0111-tab-targeting.md).
 
@@ -263,10 +263,15 @@ and rod. See [decision 0108](docs/decisions/0108-deleting-a-character.md) and
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a
-character and a tint. All six characters from a free pack - Knight,
-Barbarian, Mage, Ranger, Rogue and Rogue Hooded - now have real art and can
-be picked, each walking, running and jumping for real rather than sliding
-around as a placeholder capsule. Your name, tint and character travel to
+character and a tint. All six characters from a free pack can be picked, each
+walking, running and jumping for real rather than sliding around as a
+placeholder capsule. They are called Body 1 to Body 6: a character is a body,
+and the outfits the pack drew on them (the Knight's armour, the Mage's hat and
+so on) are meant to become gear you find along the way, so everyone starts in
+plain clothes. The names are changed already; the plain-clothes art and the
+gear are still to come (see
+[decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
+Your name, tint and character travel to
 the server and out to everybody else in the clearing, with a small name tag
 floating over your head the same way it does over anyone else's. Picked
 once, remembered the next time you visit. See
@@ -1145,12 +1150,13 @@ triangle limits, what goes in the licence rows) are in
 section of [`CLAUDE.md`](CLAUDE.md). See
 [decision 0105](docs/decisions/0105-art-is-made-in-blender.md).
 
-The dwarves (Dorrin and Hilde) and the iron axe are built by Python scripts in
-[`tools/art/`](tools/art/) that Claude runs inside Blender, so a change is made
-in the script and the model rebuilt. Their colours are painted on as vertex
-colours rather than a texture. See them in the gallery with `?gallery=dwarves`,
-and [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
-for why.
+The iron axe is built by a Python script in [`tools/art/`](tools/art/) that
+Claude runs inside Blender, so a change is made in the script and the model
+rebuilt. Its colours are painted on as vertex colours rather than a texture.
+See it in the gallery with `?gallery=iron-axe`, and
+[decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
+for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
+deleted.)
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.

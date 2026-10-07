@@ -54,10 +54,10 @@ test.describe('making a character', () => {
     await expect(stage).toHaveAttribute('data-character', 'knight');
     await expect(page.locator('.home-play')).toHaveText('Enter World');
 
-    await page.getByRole('button', { name: 'Mage' }).click();
+    await page.getByRole('button', { name: 'Body 3' }).click();
     await expect(stage).toHaveAttribute('data-character', 'mage');
 
-    await page.getByRole('button', { name: 'Ranger' }).click();
+    await page.getByRole('button', { name: 'Body 4' }).click();
     await expect(stage).toHaveAttribute('data-character', 'ranger');
   });
 
@@ -68,7 +68,7 @@ test.describe('making a character', () => {
 
     await page.locator('#home-name').fill('Hazel');
     await expect(caption).toContainText('Hazel');
-    await expect(caption).toContainText('Knight');
+    await expect(caption).toContainText('Body 1');
   });
 
   test('goes into the world, by name, with Enter World', async ({ page }) => {
@@ -149,7 +149,7 @@ test.describe('coming back', () => {
   test('welcomes you to your own character, shown off the same way', async ({ page }) => {
     const world = newWorld();
     await openScreen(page, world);
-    await page.getByRole('button', { name: 'Barbarian' }).click();
+    await page.getByRole('button', { name: 'Body 2' }).click();
     await page.locator('#home-name').fill('Hazel');
     await page.getByRole('button', { name: 'Enter World' }).click();
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {

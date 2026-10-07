@@ -28,7 +28,7 @@ describe('remembering who you picked to be', () => {
     expect(readIdentity(storage)).toEqual(identity);
   });
 
-  it('falls back to Knight for a character this build no longer knows', () => {
+  it('falls back to Body 1 for a character this build no longer knows', () => {
     const storage = fakeStorage();
     storage.setItem(
       'acorn.identity',
