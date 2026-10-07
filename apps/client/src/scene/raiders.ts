@@ -195,7 +195,7 @@ export class RaiderCrowd {
     const targets: RaiderTarget[] = [];
     for (const id of this.positions.netIds()) {
       const pose = this.positions.poseOf(id);
-      if (pose === undefined) continue;
+      if (pose === undefined || !this.kinds.has(id) || (this.hitsLeft.get(id) ?? 0) <= 0) continue;
       if (unpackActionByte(pose.action, this.action).kind === ActionKind.KnockedOut) continue;
       targets.push({ id, x: pose.x, y: pose.y, z: pose.z });
     }

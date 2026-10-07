@@ -345,3 +345,61 @@ describe('X, to sit down on the ground', () => {
     expect(state.kind).toBe(ActionKind.SitGround);
   });
 });
+
+describe('Tab target input', () => {
+  let controls: Controls;
+  let events: EventTarget;
+  let canTarget: boolean;
+  beforeEach(() => {
+    events = new EventTarget();
+    vi.stubGlobal('window', events);
+    vi.stubGlobal('document', new EventTarget());
+    canTarget = true;
+    controls = new Controls(
+      new EventTarget() as HTMLCanvasElement,
+      () => false,
+      () => canTarget,
+    );
+  });
+  afterEach(() => {
+    controls.dispose();
+    vi.unstubAllGlobals();
+  });
+  const press = (props = {}): Event => {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), {
+      code: 'Tab',
+      ...props,
+    });
+    events.dispatchEvent(event);
+    return event;
+  };
+  it('queues individual presses with their original direction, without key repeats', () => {
+    expect(press().defaultPrevented).toBe(true);
+    press({ repeat: true });
+    press({ shiftKey: true });
+    controls.forgetTaps();
+    expect(controls.takeTargetCycles()).toEqual([1, -1]);
+    expect(controls.takeTargetCycles()).toEqual([]);
+    expect(controls.buttons()).toBe(0);
+  });
+  it('preserves browser Tab navigation when paused, in panels, or using browser shortcuts', () => {
+    controls.setGameplayEnabled(false);
+    expect(press().defaultPrevented).toBe(false);
+    controls.setGameplayEnabled(true);
+    canTarget = false;
+    expect(press().defaultPrevented).toBe(false);
+    canTarget = true;
+    expect(press({ ctrlKey: true }).defaultPrevented).toBe(false);
+    Object.assign(events, { closest: () => ({}) });
+    expect(press().defaultPrevented).toBe(false);
+    expect(controls.takeTargetCycles()).toEqual([]);
+  });
+  it('drops pending presses on blur and pause', () => {
+    press();
+    events.dispatchEvent(new Event('blur'));
+    expect(controls.takeTargetCycles()).toEqual([]);
+    press();
+    controls.setGameplayEnabled(false);
+    expect(controls.takeTargetCycles()).toEqual([]);
+  });
+});
