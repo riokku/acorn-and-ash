@@ -1,7 +1,7 @@
 import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
-import type { ExpeditionRequest, SeasonId } from '@acorn/shared';
+import type { ExpeditionRequest } from '@acorn/shared';
 import { DECORATION_KINDS } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
@@ -65,6 +65,8 @@ import { itemDescription, itemUseHint } from './item-description';
 import type { ToastView } from './toasts';
 import { SettingsMenu } from '../preferences/SettingsMenu';
 import { SIGN_OUT_SECONDS } from './sign-out';
+import { SeasonBanner } from './SeasonBanner';
+import { SEASON_NAMES, seasonBannerView } from './season-banner';
 import { SignOutBanner } from './SignOutBanner';
 import type { Preferences } from '../preferences/preferences';
 import { FogCache } from '../map/draw-map';
@@ -299,6 +301,10 @@ export function Hud({
       ) : null}
       {state.ready && state.playing && !state.mapOpen && state.home?.yours === true ? (
         <DoorLock locked={state.home.locked} onSetDoorLock={onSetDoorLock} />
+      ) : null}
+
+      {state.ready && state.playing && !state.mapOpen && state.season !== undefined ? (
+        <SeasonBanner view={seasonBannerView(state.season)} />
       ) : null}
 
       {state.ready && state.playing && !state.mapOpen && state.ownCacheCompass !== null ? (
@@ -1365,13 +1371,6 @@ function timeOfDay(state: HudState): string {
   const kind = state.forestWeather?.kind;
   return kind === undefined || kind === 'clear' ? time : `${time} · ${kind}`;
 }
-
-const SEASON_NAMES: Record<SeasonId, string> = {
-  spring: 'Spring',
-  summer: 'Summer',
-  autumn: 'Autumn',
-  winter: 'Winter',
-};
 
 /** "Autumn, day 3 of 6": where in the year the world is. */
 function seasonLine(state: HudState): string {

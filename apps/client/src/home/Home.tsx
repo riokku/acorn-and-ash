@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   CHARACTER_KINDS,
@@ -13,11 +13,12 @@ import {
 } from '@acorn/shared';
 
 import { DeleteCharacterDialog } from './DeleteCharacterPanel';
+import { HomeSeasonBanner } from './HomeSeasonBanner';
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
-import { StageView, useWideScreen } from './StageView';
+import { StageView, useSlotPlacement, useWideScreen } from './StageView';
 import type { Placement } from './showcase';
 
 interface HomeProps {
@@ -39,15 +40,23 @@ interface HomeProps {
   readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
-/** Where the character stands on the screen, with the card beside them or below (decision 0107). */
+/**
+ * Where the character stands while a new one is being made: in the middle of the
+ * window from top to bottom, level with the card, which is centred too, at half
+ * the size they once were (decision 0107). The name and kind hang just below
+ * their feet. On a narrow window the card is below them instead.
+ */
 const MAKING: Record<'wide' | 'narrow', Placement> = {
-  wide: { across: 0.3, feet: 0.15, share: 0.64 },
-  narrow: { across: 0.5, feet: 0.66, share: 0.28 },
+  wide: { across: 0.3, feet: 0.38, share: 0.32 },
+  narrow: { across: 0.5, feet: 0.8, share: 0.14 },
 };
-const WELCOMING: Record<'wide' | 'narrow', Placement> = {
-  wide: { across: 0.5, feet: 0.3, share: 0.5 },
-  narrow: { across: 0.5, feet: 0.36, share: 0.4 },
-};
+
+/**
+ * Welcome back: the title, the character and the card are one column, centred
+ * from top to bottom. The character fills an empty slot in that column this
+ * share of the window tall, wherever the column puts it (see `useSlotPlacement`).
+ */
+const WELCOME_SLOT_SHARE: Record<'wide' | 'narrow', number> = { wide: 0.25, narrow: 0.2 };
 
 const STAGE_HINT = 'Drag to turn \u00b7 Click for a flourish';
 
@@ -91,6 +100,14 @@ export function Home({
   };
 
   const wide = useWideScreen();
+  const welcomeSlot = useRef<HTMLDivElement>(null);
+  const welcomeShare = WELCOME_SLOT_SHARE[wide ? 'wide' : 'narrow'];
+  // Until the slot has been measured, stand where it will be: centred.
+  const welcomePlacement = useSlotPlacement(welcomeSlot, {
+    across: 0.5,
+    feet: 0.5 - welcomeShare / 2,
+    share: welcomeShare,
+  });
   const trimmed = sanitizePlayerName(name);
   const canPlay = isValidPlayerName(trimmed);
 
@@ -112,9 +129,10 @@ export function Home({
           }}
         >
           <PaintingBackdrop />
+          <HomeSeasonBanner />
           <StageView
             look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
-            placement={WELCOMING[wide ? 'wide' : 'narrow']}
+            placement={welcomePlacement}
             label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
           />
           <SettingsMenu
@@ -122,31 +140,40 @@ export function Home({
             onChange={onSettingsChange}
             account={account}
           />
-          <header className="stage-header">
-            <p className="home-kicker">Welcome back</p>
-            <h1 className="home-title">Acorn &amp; Ash</h1>
-          </header>
-          <div className="home-card home-card-plate">
-            <div className="home-saved" data-testid="saved-character">
-              <span className="home-saved-name">{saved.name}</span>
-              <span className="home-saved-kind">{kind}</span>
+          <div className="welcome-column">
+            <header className="stage-header">
+              <p className="home-kicker">Welcome back</p>
+              <h1 className="home-title">Acorn &amp; Ash</h1>
+            </header>
+            {/* Empty: the character on the canvas behind stands here. */}
+            <div
+              ref={welcomeSlot}
+              className="welcome-slot"
+              style={{ height: `${welcomeShare * 100}vh` }}
+              aria-hidden="true"
+            />
+            <div className="home-card home-card-plate">
+              <div className="home-saved" data-testid="saved-character">
+                <span className="home-saved-name">{saved.name}</span>
+                <span className="home-saved-kind">{kind}</span>
+              </div>
+              <button type="submit" className="home-play" autoFocus>
+                Enter World
+              </button>
+              <p className="home-footnote stage-hint">{STAGE_HINT}</p>
+              <AccountLine accountName={accountName} onSignOut={onSignOut} />
+              {onDeleteCharacter !== undefined ? (
+                <p className="home-footnote home-account">
+                  <button
+                    type="button"
+                    className="home-link"
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    Delete this character
+                  </button>
+                </p>
+              ) : null}
             </div>
-            <button type="submit" className="home-play" autoFocus>
-              Enter World
-            </button>
-            <p className="home-footnote stage-hint">{STAGE_HINT}</p>
-            <AccountLine accountName={accountName} onSignOut={onSignOut} />
-            {onDeleteCharacter !== undefined ? (
-              <p className="home-footnote home-account">
-                <button
-                  type="button"
-                  className="home-link"
-                  onClick={() => setConfirmingDelete(true)}
-                >
-                  Delete this character
-                </button>
-              </p>
-            ) : null}
           </div>
         </form>
         {/* Outside the form, so nothing typed in it can ever count as pressing Enter World. */}
@@ -164,6 +191,7 @@ export function Home({
   return (
     <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
+      <HomeSeasonBanner className="home-season-banner-making" />
       <StageView
         look={{ character, tint: TINT_COLORS[color].hex }}
         placement={MAKING[wide ? 'wide' : 'narrow']}
@@ -171,7 +199,10 @@ export function Home({
       />
       <div
         className="stage-caption"
-        style={{ left: `${MAKING[wide ? 'wide' : 'narrow'].across * 100}%` }}
+        style={{
+          left: `${MAKING[wide ? 'wide' : 'narrow'].across * 100}%`,
+          top: `calc(${(1 - MAKING[wide ? 'wide' : 'narrow'].feet) * 100}vh + 14px)`,
+        }}
         aria-hidden="true"
       >
         <span className="stage-caption-name">{trimmed === '' ? 'Your name' : trimmed}</span>

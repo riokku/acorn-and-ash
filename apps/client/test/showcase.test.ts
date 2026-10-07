@@ -14,6 +14,7 @@ import {
   frame,
   isClick,
   normalizeYaw,
+  placementOfBox,
   turnedByDrag,
 } from '../src/home/showcase';
 
@@ -132,6 +133,26 @@ describe('where the camera stands', () => {
     const half = Math.tan((VIEW_DEGREES * Math.PI) / 360);
     const width = narrow.distance * 2 * half * 0.35;
     expect(width).toBeGreaterThan(1.1 * 0.7);
+  });
+});
+
+describe('standing the character in a box on the page', () => {
+  it('puts their middle at the box’s middle and their feet on its bottom edge', () => {
+    // A 200 px tall box, centred in a 1280 by 800 window.
+    const placement = placementOfBox({ left: 540, top: 300, width: 200, height: 200 }, 1280, 800);
+    expect(placement?.across).toBeCloseTo(0.5, 5);
+    expect(placement?.feet).toBeCloseTo(0.375, 5);
+    expect(placement?.share).toBeCloseTo(0.25, 5);
+  });
+
+  it('follows the box when the page moves it', () => {
+    const lower = placementOfBox({ left: 540, top: 400, width: 200, height: 200 }, 1280, 800);
+    expect(lower?.feet).toBeCloseTo(0.25, 5);
+  });
+
+  it('gives nothing before the box or the window has a size', () => {
+    expect(placementOfBox({ left: 0, top: 0, width: 0, height: 0 }, 1280, 800)).toBeNull();
+    expect(placementOfBox({ left: 0, top: 0, width: 10, height: 10 }, 0, 0)).toBeNull();
   });
 });
 

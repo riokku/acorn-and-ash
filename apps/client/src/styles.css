@@ -147,7 +147,7 @@ body {
  */
 .cache-compass {
   position: absolute;
-  top: 12px;
+  top: calc(12px + var(--season-banner-space));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -167,6 +167,152 @@ body {
   display: inline-block;
   color: var(--warn);
   transition: transform 0.15s ease;
+}
+
+/*
+ * The season banner (decision 0110), after Northgard's: a dark plaque, a stripe
+ * in the season's colour across the top (one piece for each day of the season),
+ * a round badge, "Year 2 · Autumn" and a line of advice. In the game it hangs
+ * at the top centre, and everything else that lives up there sits below it.
+ */
+:root {
+  /* The banner's height and the gap under it. */
+  --season-banner-space: 72px;
+}
+
+.season-banner {
+  --season: #8cc66b;
+  --season-ink: #1f3a16;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+  padding: 15px 26px 10px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(212, 168, 98, 0.5);
+  border-radius: 4px 4px 12px 12px;
+  background: linear-gradient(180deg, rgba(48, 43, 37, 0.96), rgba(27, 25, 22, 0.96));
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px rgba(255, 227, 171, 0.1);
+  color: #f3e9d4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.season-banner-spring {
+  --season: #8cc66b;
+  --season-ink: #1f3a16;
+}
+
+.season-banner-summer {
+  --season: #f0c24b;
+  --season-ink: #4a3208;
+}
+
+.season-banner-autumn {
+  --season: #e0813a;
+  --season-ink: #4a2208;
+}
+
+.season-banner-winter {
+  --season: #8cc7ec;
+  --season-ink: #123049;
+}
+
+.season-banner-days {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 2px;
+  height: 5px;
+}
+
+.season-banner-day {
+  flex: 1;
+  background: var(--season);
+  opacity: 0.25;
+}
+
+.season-banner-day.is-past {
+  opacity: 0.8;
+}
+
+.season-banner-day.is-today {
+  opacity: 1;
+  box-shadow: 0 0 8px var(--season);
+}
+
+.season-banner-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #d9b46a;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6dc 0%, var(--season) 55%);
+  color: var(--season-ink);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.18);
+}
+
+.season-banner-title,
+.season-banner-hint {
+  margin: 0;
+}
+
+.season-banner-title {
+  font:
+    500 20px/1.15 'Fraunces',
+    Georgia,
+    serif;
+  letter-spacing: 0.01em;
+}
+
+.season-banner-title strong {
+  font-weight: 700;
+}
+
+.season-banner-title em {
+  font-style: italic;
+}
+
+.season-banner-dot {
+  color: #d9b46a;
+}
+
+.season-banner-hint {
+  margin-top: 3px;
+  color: #cfc3aa;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/*
+ * On the home screens it hangs in the top-left corner: the middle of those
+ * screens is the title, the character and the card, and the settings gear holds
+ * the top-right.
+ */
+.home-season-banner {
+  top: 20px;
+  left: 24px;
+  transform: none;
+}
+
+/* A short or narrow character-creation window has no spare corner for it. */
+@media (max-width: 899px), (max-height: 539px) {
+  .home-season-banner-making {
+    display: none;
+  }
 }
 
 /*
@@ -1001,7 +1147,7 @@ body {
 /* The countdown over the game while signing out, and why one was cancelled. */
 .signout-banner {
   position: absolute;
-  top: 76px;
+  top: calc(76px + var(--season-banner-space));
   left: 50%;
   z-index: 40;
   transform: translateX(-50%);
@@ -1518,7 +1664,6 @@ body {
 /* The name and kind under the character, and how to play with them. */
 .stage-caption {
   position: fixed;
-  bottom: 4vh;
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -1558,18 +1703,39 @@ body {
   }
 }
 
-/* Welcome back: the character stands in the middle, a nameplate at the bottom. */
+/*
+ * Welcome back: the title, the character and the card are one column, centred
+ * from top to bottom. The character is drawn on the canvas behind, standing in
+ * the empty slot between the title and the card.
+ */
 .home-screen.is-welcome {
-  place-items: end center;
-  padding-bottom: 4vh;
+  place-items: safe center;
+}
+
+.welcome-column {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  /* Only the title's and card's own pixels catch the pointer: the rest is the character's. */
+  pointer-events: none;
+}
+
+.welcome-column .home-card {
+  pointer-events: auto;
+}
+
+.welcome-slot {
+  flex: none;
+  width: min(100%, 320px);
 }
 
 .stage-header {
-  position: fixed;
-  top: 4vh;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 1;
+  margin-bottom: 8px;
   text-align: center;
   color: #fff7e3;
   text-shadow: 0 2px 18px rgba(7, 30, 43, 0.75);
@@ -1609,33 +1775,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding: 32px 16px clamp(48px, 13vh, 140px);
+  justify-content: center;
+  padding: 32px 16px;
   overflow-y: auto;
   background: #183f40;
   color: #fff5de;
   text-align: center;
-}
-
-.front-door-choices {
-  justify-content: center;
-  padding-bottom: 32px;
-}
-
-.front-brand {
-  position: absolute;
-  top: 7%;
-  left: 7%;
-  z-index: 1;
-  font-family: Georgia, serif;
-  font-size: clamp(20px, 2.2vw, 32px);
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 16px #0d343d;
-}
-
-.front-brand-mark {
-  margin-right: 10px;
-  color: #e8c493;
 }
 
 .front-copy,
@@ -2553,7 +2698,7 @@ body {
 .raid-banner {
   --band: rgba(110, 16, 10, 0.86);
   position: absolute;
-  top: 64px;
+  top: calc(64px + var(--season-banner-space));
   left: 50%;
   transform: translateX(-50%);
   min-width: 340px;
@@ -2614,7 +2759,7 @@ body {
 /* How many are still standing, once the banner has gone. */
 .raid-tracker {
   position: absolute;
-  top: 64px;
+  top: calc(64px + var(--season-banner-space));
   left: 50%;
   transform: translateX(-50%);
   display: flex;

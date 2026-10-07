@@ -125,6 +125,34 @@ export interface Placement {
   readonly share: number;
 }
 
+/** A box on the page, in pixels from the window's top left, as the browser reports it. */
+export interface PageBox {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The placement that makes the character stand exactly in a box on the page:
+ * their middle at the box's middle, their feet on its bottom edge, and as tall
+ * as the box. That lets the page lay out the title, an empty slot and the card
+ * in a column, centre the whole column, and have the character fill the slot
+ * wherever the column ends up. A window with no size yet gives nothing.
+ */
+export function placementOfBox(
+  box: PageBox,
+  windowWidth: number,
+  windowHeight: number,
+): Placement | null {
+  if (windowWidth <= 0 || windowHeight <= 0 || box.height <= 0) return null;
+  return {
+    across: (box.left + box.width / 2) / windowWidth,
+    feet: 1 - (box.top + box.height) / windowHeight,
+    share: box.height / windowHeight,
+  };
+}
+
 /** The camera that puts a character of this height where the placement asks. */
 export interface Framing {
   readonly distance: number;

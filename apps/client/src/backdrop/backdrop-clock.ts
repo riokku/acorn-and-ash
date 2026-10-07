@@ -3,6 +3,7 @@ import {
   calendarAt,
   clockShiftForSeason,
   seasonMix,
+  type Calendar,
   type SeasonId,
   type SeasonMix,
 } from '@acorn/shared';
@@ -20,9 +21,18 @@ import {
  * switch the game has: it shows the first day of that season.
  */
 export function backdropSeasonMix(nowMs: number, forced?: SeasonId): SeasonMix {
+  return seasonMix(backdropCalendar(nowMs, forced));
+}
+
+/**
+ * Where in the year the backdrop is, for the season banner (decision 0110) that
+ * sits over it: the same calendar `backdropSeasonMix` paints from, so the banner
+ * and the picture behind it can never disagree.
+ */
+export function backdropCalendar(nowMs: number, forced?: SeasonId): Calendar {
   const shifted =
     forced === undefined ? nowMs : nowMs + clockShiftForSeason(DEFAULT_WORLD_SEED, nowMs, forced);
-  return seasonMix(calendarAt(DEFAULT_WORLD_SEED, shifted));
+  return calendarAt(DEFAULT_WORLD_SEED, shifted);
 }
 
 /**

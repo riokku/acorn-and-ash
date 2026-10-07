@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { RefObject } from 'react';
 
 import { CharacterStage, type StageLook } from './character-stage';
-import type { Placement } from './showcase';
+import { placementOfBox, type Placement } from './showcase';
 
 interface StageViewProps {
   readonly look: StageLook;
@@ -90,4 +91,61 @@ export function useWideScreen(): boolean {
     () => window.matchMedia(WIDE_SCREEN).matches,
     () => true,
   );
+}
+
+/** Placements closer than this, as a share of the window, are the same place. */
+const SAME_PLACE = 0.0005;
+
+function samePlace(a: Placement, b: Placement): boolean {
+  return (
+    Math.abs(a.across - b.across) < SAME_PLACE &&
+    Math.abs(a.feet - b.feet) < SAME_PLACE &&
+    Math.abs(a.share - b.share) < SAME_PLACE
+  );
+}
+
+/**
+ * Where the character should stand to fill an empty slot in the page's layout.
+ *
+ * The page lays out its title, the slot and the card in one column and centres
+ * the whole column, so the character ends up in the middle of the window with
+ * the text above and below them, whatever size the text turns out to be. This
+ * measures the slot, and again whenever the window or anything beside it
+ * changes size or the page scrolls, and says where they should stand. Until
+ * the first measurement they stand where `fallback` says.
+ */
+export function useSlotPlacement(
+  slot: RefObject<HTMLElement | null>,
+  fallback: Placement,
+): Placement {
+  const [placement, setPlacement] = useState(fallback);
+
+  useLayoutEffect(() => {
+    const element = slot.current;
+    if (element === null) return undefined;
+    const measure = (): void => {
+      const next = placementOfBox(
+        element.getBoundingClientRect(),
+        window.innerWidth,
+        window.innerHeight,
+      );
+      if (next !== null) setPlacement((before) => (samePlace(before, next) ? before : next));
+    };
+    measure();
+
+    // The title and card can change height once the page's fonts arrive.
+    const watcher = new ResizeObserver(measure);
+    const column = element.parentElement;
+    if (column !== null) for (const child of Array.from(column.children)) watcher.observe(child);
+    const scroller = element.closest('.home-screen');
+    window.addEventListener('resize', measure);
+    scroller?.addEventListener('scroll', measure);
+    return () => {
+      watcher.disconnect();
+      window.removeEventListener('resize', measure);
+      scroller?.removeEventListener('scroll', measure);
+    };
+  }, [slot]);
+
+  return placement;
 }
