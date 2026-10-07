@@ -1535,6 +1535,7 @@ export class World extends DurableObject<WorldEnv> {
     const weatherCycle = this.readMeta('weather-cycle');
     simulation.restoreWeatherCycle(weatherCycle === null ? null : Number(weatherCycle));
     simulation.restoreTrees(this.loadTrees());
+    this.expireOrphanedBuilds();
     simulation.restoreBuiltProps(this.loadBuiltProps());
     const decor = this.readMeta('home-decorations');
     if (decor !== null) {
@@ -2140,6 +2141,22 @@ export class World extends DurableObject<WorldEnv> {
       tree.generation,
       tree.fallYaw ?? null,
       Date.now(),
+    );
+  }
+
+  /**
+   * Older playtest resets removed characters without retiring their builds.
+   * Give only those orphaned builds an already-due deadline, then let the
+   * normal removal path clear their collision, chest, garden and decorations.
+   * Communal builds and the deletion grace period are left intact.
+   */
+  private expireOrphanedBuilds(): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE built_props SET owner_key = ?, locked = 1, expires_at_ms = 0 ' +
+        'WHERE owner_key IS NOT NULL AND owner_key != ? AND expires_at_ms IS NULL ' +
+        'AND NOT EXISTS (SELECT 1 FROM players WHERE players.player_key = built_props.owner_key)',
+      ABANDONED_OWNER,
+      ABANDONED_OWNER,
     );
   }
 
