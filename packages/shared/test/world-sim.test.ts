@@ -627,7 +627,7 @@ describe('finding the bag', () => {
     reachForTheBag(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'bag')).toBe(1);
-    expect(sim.takenPickupIds()).toEqual([BAG_PICKUP_ID]);
+    expect(sim.takenPickupIdsOf(1)).toEqual([BAG_PICKUP_ID]);
     expect(sim.drainPickupEvents()).toEqual([{ netId: 1, pickupId: BAG_PICKUP_ID, item: 'bag' }]);
   });
 
@@ -673,7 +673,7 @@ describe('picking the axe up', () => {
     sim.addPlayer(1, withBag(1));
     drive(sim, 1, 0, 0, 1, 1, PlayerButton.Interact);
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
-    expect(sim.takenPickupIds()).toEqual([]);
+    expect(sim.takenPickupIdsOf(1)).toEqual([]);
   });
 
   it('does nothing while the player stands there without asking', () => {
@@ -692,7 +692,7 @@ describe('picking the axe up', () => {
     reachForTheAxe(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
-    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
+    expect(sim.takenPickupIdsOf(1)).toEqual([AXE_PICKUP_ID]);
   });
 
   it('leaves the axe where it is for a player whose every slot is taken', () => {
@@ -705,7 +705,7 @@ describe('picking the axe up', () => {
     reachForTheAxe(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
-    expect(sim.takenPickupIds()).toEqual([]);
+    expect(sim.takenPickupIdsOf(1)).toEqual([]);
   });
 
   it('explains why a tool stays on the ground when the pack is full', () => {
@@ -721,7 +721,7 @@ describe('picking the axe up', () => {
     reachForTheAxe(sim, 1);
 
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
-    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
+    expect(sim.takenPickupIdsOf(1)).toEqual([AXE_PICKUP_ID]);
     expect(sim.drainPickupEvents()).toEqual([{ netId: 1, pickupId: AXE_PICKUP_ID, item: 'axe' }]);
   });
 
@@ -734,7 +734,7 @@ describe('picking the axe up', () => {
     expect(sim.drainPickupEvents()).toEqual([]);
   });
 
-  it('gives it to one player, not to both', () => {
+  it('gives each of two players their own axe, even in the same tick', () => {
     const sim = createWorld();
     sim.addPlayer(1, withBag(1));
     sim.addPlayer(2, withBag(2));
@@ -744,10 +744,23 @@ describe('picking the axe up', () => {
     sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
     sim.step(tickClock());
 
-    const held = countOf(sim.inventoryOf(1), 'axe') + countOf(sim.inventoryOf(2), 'axe');
-    expect(held).toBe(1);
-    expect(sim.takenPickupIds()).toEqual([AXE_PICKUP_ID]);
-    expect(sim.drainPickupEvents()).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(countOf(sim.inventoryOf(2), 'axe')).toBe(1);
+    expect(sim.takenPickupIdsOf(1)).toEqual([AXE_PICKUP_ID]);
+    expect(sim.takenPickupIdsOf(2)).toEqual([AXE_PICKUP_ID]);
+    expect(sim.drainPickupEvents()).toHaveLength(2);
+  });
+
+  it('leaves the axe on the stump for a second player after the first has taken theirs', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withBag(1));
+    reachForTheAxe(sim, 1);
+    sim.addPlayer(2, withBag(2));
+    sim.placePlayer(2, { x: AXE_STUMP.x + 1, y: 0, z: AXE_STUMP.z }, 0);
+
+    expect(sim.takenPickupIdsOf(2)).toEqual([]);
+    expect(sim.reachablePickup(2)?.id).toBe(AXE_PICKUP_ID);
+    expect(sim.reachablePickup(1)).toBeNull();
   });
 
   it('will not hand out the same axe twice, however long you hold the button', () => {
@@ -776,7 +789,6 @@ describe('picking the axe up', () => {
     sim.removePlayer(1);
 
     const later = createWorld();
-    later.restoreTakenPickups(sim.takenPickupIds());
     if (saved === undefined) throw new Error('nothing was saved');
     later.addPlayer(9, saved);
 
@@ -4933,7 +4945,7 @@ describe('targeted right-click looting', () => {
     sim.step(tickClock());
     expect(countOf(sim.inventoryOf(1), 'axe')).toBe(0);
   });
-  it('collects a world pickup only once across competing players', () => {
+  it('lets each competing player collect their own copy of a pickup, once', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     sim.addPlayer(2);
@@ -4942,8 +4954,13 @@ describe('targeted right-click looting', () => {
       sim.requestLoot(id, { kind: 'pickup', id: AXE_PICKUP_ID });
     }
     sim.step(tickClock());
-    expect(countOf(sim.inventoryOf(1), 'axe') + countOf(sim.inventoryOf(2), 'axe')).toBe(1);
-    expect(sim.drainPickupEvents()).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'axe')).toBe(1);
+    expect(countOf(sim.inventoryOf(2), 'axe')).toBe(1);
+    expect(sim.drainPickupEvents()).toHaveLength(2);
+    // Asking again gives nothing more: each has taken theirs.
+    for (const id of [1, 2]) sim.requestLoot(id, { kind: 'pickup', id: AXE_PICKUP_ID });
+    sim.step(tickClock());
+    expect(sim.drainPickupEvents()).toEqual([]);
   });
   it('gathers exactly one from a clicked patch and respects gathering cooldown', () => {
     const sim = createWorld();

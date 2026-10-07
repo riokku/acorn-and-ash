@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CLOSE_PLAYING_ELSEWHERE } from '@acorn/shared';
+import { CLOSE_CHARACTER_DELETED, CLOSE_PLAYING_ELSEWHERE } from '@acorn/shared';
 
 import { WorldConnection, worldSocketUrl, type ConnectionState } from '../src/net/connection';
 import { readSettings } from '../src/settings';
@@ -119,6 +119,17 @@ describe('staying connected to the world', () => {
     connection.playHere();
     expect(FakeSocket.made).toHaveLength(2);
     expect(states.at(-1)).toBe('connecting');
+  });
+
+  it('stays shut for good once the character was deleted, and says so', () => {
+    FakeSocket.made[0]?.hangUp(CLOSE_CHARACTER_DELETED);
+    expect(states.at(-1)).toBe('deleted');
+    vi.advanceTimersByTime(60_000);
+    expect(FakeSocket.made).toHaveLength(1);
+
+    // Unlike playing elsewhere, there is nothing to ask to play here again as.
+    connection.playHere();
+    expect(FakeSocket.made).toHaveLength(1);
   });
 
   it('does not open a second connection when asked to play here mid-reconnect', () => {

@@ -10,9 +10,11 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
       ? 'This world is full. Try again in a moment.'
       : state.connection === 'elsewhere'
         ? 'You are playing in another tab or window.'
-        : state.connection === 'offline'
-          ? 'Cannot reach the world server. Retrying…'
-          : state.loadingStage);
+        : state.connection === 'deleted'
+          ? 'This character was deleted. Starting over…'
+          : state.connection === 'offline'
+            ? 'Cannot reach the world server. Retrying…'
+            : state.loadingStage);
   return (
     <div className="loading-screen" data-testid="loading-screen">
       <PaintingBackdrop still />

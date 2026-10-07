@@ -170,3 +170,18 @@ export async function fetchSavedCharacter(
   if (typeof color !== 'string' || !(color in TINT_COLORS)) return null;
   return { name: cleaned, character: character as CharacterId, color: color as TintColorId };
 }
+
+/**
+ * Delete this player's character in this world (decision 0108). The world
+ * forgets them at once and lets their cabin and other builds fade away later.
+ * Rejects when the site could not be reached or would not do it, so the player
+ * is told instead of left thinking it worked.
+ */
+export async function deleteCharacter(worldId: string, send: Send = sendNormally): Promise<void> {
+  const response = await send(`/api/worlds/${encodeURIComponent(worldId)}/character`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  });
+  if (response.status === 401) throw new SignInError(401);
+  if (!response.ok) throw new Error(`Deleting the character failed (${response.status})`);
+}

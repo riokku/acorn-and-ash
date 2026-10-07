@@ -241,6 +241,22 @@ moving, swinging or getting hit cancels it. On the character screen it signs
 out at once. Either way you land back on the front page. See
 [decision 0104](docs/decisions/0104-sign-out-from-the-game.md).
 
+### Deleting your character
+
+**Settings** (the gear) → **Account** has **Delete character…**, and the
+character screen has a small **Delete this character** link. Both ask you to
+type the character's name, then **Delete forever**. The character is gone at
+once (pack, hunger, map, fish collection, home) and you land back on a fresh
+character screen to pick a new name and look. Everything they built (the cabin,
+campfires, fences, decorations) stays standing but **locked**, so nobody can
+use or break it, and disappears all together after 30 minutes, counted in real
+time even while the world is asleep. Previews and local runs use two minutes,
+set by `WORLD_ABANDONED_SECONDS` in
+[`apps/game-server/wrangler.jsonc`](apps/game-server/wrangler.jsonc). Caches
+buried after a knockout go immediately. Each character finds their own axe, bag
+and rod. See [decision 0108](docs/decisions/0108-deleting-a-character.md) and
+[decision 0109](docs/decisions/0109-everyone-finds-their-own-tools.md).
+
 ### Your character
 
 Before the clearing loads, a Home screen asks who you are: a name, a
@@ -254,6 +270,17 @@ once, remembered the next time you visit. See
 [decision 0037](docs/decisions/0037-choosing-a-name-and-a-character.md),
 [decision 0036](docs/decisions/0036-a-real-moving-character.md) and
 [decision 0044](docs/decisions/0044-the-rest-of-the-adventurers.md).
+
+The character screen shows your character off, in the style of a classic
+online-game login. They stand in front of the painted valley in their real
+idle stance (the same model and moves as in the game), tinted and named as you
+choose. **Drag** to turn them, **click** for a little flourish (a hop, then a
+reach, then a pick-up), or use the arrow keys and Space. A returning player
+sees their own character in the middle of the painting with an **Enter World**
+button under them. Someone who asked for less motion gets them holding their
+pose, and a computer that cannot draw the character still gets the whole
+screen without it. See
+[decision 0107](docs/decisions/0107-the-character-screen.md).
 
 Whatever hotbar slot you last pressed shows in your hand - the axe, the rod,
 or whatever fish or meat you picked - parented straight onto the character's

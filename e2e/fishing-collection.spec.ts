@@ -19,6 +19,8 @@ test('lands a rare fish with real clicks and illustrates the saved collection', 
       ...pos,
       facingYaw: yaw,
       items: [{ item: 'rod', count: 1 }],
+      // Their own rod is already in hand, so it is not back on its post for them.
+      takenPickups: [shared.ROD_PICKUP_ID],
       equippedItem: 'rod',
       hunger: 100,
       fishRecords: shared.fishRecordsFromSaved({ counts: [3, 1, 0], bestCm: [28, 42, 0] }),
@@ -26,7 +28,6 @@ test('lands a rare fish with real clicks and illustrates the saved collection', 
     'fish-ui',
   );
   sim.placePlayer(1, pos, yaw);
-  sim.restoreTakenPickups([shared.ROD_PICKUP_ID]);
   let closed = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   const errors: string[] = [];

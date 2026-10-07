@@ -793,7 +793,7 @@ describe('finding the axe', () => {
     second.close();
   });
 
-  it('tells a second player the axe is already gone', async () => {
+  it('leaves the axe on its stump for a second player, who finds their own', async () => {
     const worldId = nextWorldId();
     const finder = await TestClient.connect(worldId, 'the-finder');
     await findTheBag(finder);
@@ -804,8 +804,18 @@ describe('finding the axe', () => {
     const latecomer = await TestClient.connect(worldId, 'the-latecomer');
     await waitFor('the opening messages', () => latecomer.countOfMessages('inventory') > 0);
 
+    // Nothing is gone as far as they are concerned: every character has their own.
     expect(latecomer.inventory()).toEqual([]);
-    expect(latecomer.takenPickups()).toContain(AXE_PICKUP_ID);
+    expect(latecomer.takenPickups()).toEqual([]);
+    await walkToTheAxe(latecomer);
+    latecomer.walk(0, 0, 0, 3, PlayerButton.Interact);
+    await waitFor('their own axe', () =>
+      latecomer.inventory().some((entry) => entry.item === 'axe'),
+    );
+    // And the first player was not told anything about it.
+    expect([...finder.takenPickups()].sort((a, b) => a - b)).toEqual(
+      [AXE_PICKUP_ID, BAG_PICKUP_ID].sort((a, b) => a - b),
+    );
     finder.close();
     latecomer.close();
   });
@@ -925,7 +935,7 @@ describe('a world that empties and fills again', () => {
     first.close();
     await sleep(300);
 
-    const second = await TestClient.connect(worldId, 'somebody-else');
+    const second = await TestClient.connect(worldId, 'the-finder');
     await waitFor('some snapshots', () => second.snapshots().length >= 2);
 
     expect([...second.takenPickups()].sort((a, b) => a - b)).toEqual(

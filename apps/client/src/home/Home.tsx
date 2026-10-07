@@ -12,10 +12,13 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
+import { DeleteCharacterDialog } from './DeleteCharacterPanel';
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
 import type { Preferences } from '../preferences/preferences';
+import { StageView, useWideScreen } from './StageView';
+import type { Placement } from './showcase';
 
 interface HomeProps {
   readonly initial: PlayerIdentity;
@@ -24,15 +27,36 @@ interface HomeProps {
   /** Who is signed in, shown back to them so they know it is the right account. */
   readonly accountName: string;
   readonly onSignOut: () => void;
+  /**
+   * Delete the saved character (decision 0108). Rejects when it could not be done.
+   * Left out, there is no way to delete from here.
+   */
+  readonly onDeleteCharacter?: () => Promise<void>;
+  /** Said once above the card, for example after a character has just been deleted. */
+  readonly notice?: string | null;
   readonly onPlay: (identity: PlayerIdentity) => void;
   readonly initialPreferences: Preferences;
   readonly onSettingsChange: (preferences: Preferences) => void;
 }
 
+/** Where the character stands on the screen, with the card beside them or below (decision 0107). */
+const MAKING: Record<'wide' | 'narrow', Placement> = {
+  wide: { across: 0.3, feet: 0.15, share: 0.64 },
+  narrow: { across: 0.5, feet: 0.66, share: 0.28 },
+};
+const WELCOMING: Record<'wide' | 'narrow', Placement> = {
+  wide: { across: 0.5, feet: 0.3, share: 0.5 },
+  narrow: { across: 0.5, feet: 0.36, share: 0.4 },
+};
+
+const STAGE_HINT = 'Drag to turn \u00b7 Click for a flourish';
+
 /**
- * Shown before the game connects. A player with no character in this world
- * picks a name, a character and a tint, once; a player who has one is welcomed
- * back to it and goes straight in.
+ * Shown before the game connects. The player's character stands in front of the
+ * painted valley, in the game's own idle stance: drag to turn them, click for
+ * a flourish. A player with no character in this world picks a name, a
+ * character and a tint, once, and sees them change as they choose; a player who
+ * has one is welcomed back to it and presses Enter World.
  *
  * All six of the pack's characters have real art now (see decisions 0036
  * and 0044) - the lock/"Coming soon" styling below stays in place for
@@ -43,6 +67,8 @@ export function Home({
   saved,
   accountName,
   onSignOut,
+  onDeleteCharacter,
+  notice = null,
   onPlay,
   initialPreferences,
   onSettingsChange,
@@ -50,6 +76,7 @@ export function Home({
   const [name, setName] = useState(initial.name);
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
   const account: SettingsAccount = {
@@ -57,8 +84,13 @@ export function Home({
     secondsLeft: null,
     onSignOut,
     onCancelSignOut: () => undefined,
+    deleteCharacter:
+      saved !== null && onDeleteCharacter !== undefined
+        ? { characterName: saved.name, onDelete: onDeleteCharacter }
+        : undefined,
   };
 
+  const wide = useWideScreen();
   const trimmed = sanitizePlayerName(name);
   const canPlay = isValidPlayerName(trimmed);
 
@@ -69,38 +101,90 @@ export function Home({
   };
 
   if (saved !== null) {
+    const kind = CHARACTER_KINDS[saved.character].displayName;
     return (
-      <form
-        className="home-screen"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onPlay(saved);
-        }}
-      >
-        <PaintingBackdrop />
-        <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
-        <div className="home-card">
-          <p className="home-kicker">Welcome back</p>
-          <h1 className="home-title">Acorn &amp; Ash</h1>
-          <div className="home-saved" data-testid="saved-character">
-            <PersonIcon color={hexString(TINT_COLORS[saved.color].hex)} />
-            <span className="home-saved-name">{saved.name}</span>
-            <span className="home-saved-kind">{CHARACTER_KINDS[saved.character].displayName}</span>
+      <>
+        <form
+          className="home-screen has-stage is-welcome"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onPlay(saved);
+          }}
+        >
+          <PaintingBackdrop />
+          <StageView
+            look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
+            placement={WELCOMING[wide ? 'wide' : 'narrow']}
+            label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
+          />
+          <SettingsMenu
+            initial={initialPreferences}
+            onChange={onSettingsChange}
+            account={account}
+          />
+          <header className="stage-header">
+            <p className="home-kicker">Welcome back</p>
+            <h1 className="home-title">Acorn &amp; Ash</h1>
+          </header>
+          <div className="home-card home-card-plate">
+            <div className="home-saved" data-testid="saved-character">
+              <span className="home-saved-name">{saved.name}</span>
+              <span className="home-saved-kind">{kind}</span>
+            </div>
+            <button type="submit" className="home-play" autoFocus>
+              Enter World
+            </button>
+            <p className="home-footnote stage-hint">{STAGE_HINT}</p>
+            <AccountLine accountName={accountName} onSignOut={onSignOut} />
+            {onDeleteCharacter !== undefined ? (
+              <p className="home-footnote home-account">
+                <button
+                  type="button"
+                  className="home-link"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  Delete this character
+                </button>
+              </p>
+            ) : null}
           </div>
-          <button type="submit" className="home-play" autoFocus>
-            Enter the clearing as {saved.name}
-          </button>
-          <AccountLine accountName={accountName} onSignOut={onSignOut} />
-        </div>
-      </form>
+        </form>
+        {/* Outside the form, so nothing typed in it can ever count as pressing Enter World. */}
+        {confirmingDelete && onDeleteCharacter !== undefined ? (
+          <DeleteCharacterDialog
+            characterName={saved.name}
+            onDelete={onDeleteCharacter}
+            onCancel={() => setConfirmingDelete(false)}
+          />
+        ) : null}
+      </>
     );
   }
 
   return (
-    <form className="home-screen" onSubmit={handleSubmit}>
+    <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
+      <StageView
+        look={{ character, tint: TINT_COLORS[color].hex }}
+        placement={MAKING[wide ? 'wide' : 'narrow']}
+        label={`${CHARACTER_KINDS[character].displayName}, the character you are choosing. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
+      />
+      <div
+        className="stage-caption"
+        style={{ left: `${MAKING[wide ? 'wide' : 'narrow'].across * 100}%` }}
+        aria-hidden="true"
+      >
+        <span className="stage-caption-name">{trimmed === '' ? 'Your name' : trimmed}</span>
+        <span className="stage-caption-kind">{CHARACTER_KINDS[character].displayName}</span>
+        <span className="stage-hint">{STAGE_HINT}</span>
+      </div>
       <SettingsMenu initial={initialPreferences} onChange={onSettingsChange} account={account} />
       <div className="home-card">
+        {notice !== null ? (
+          <p className="home-notice" role="status" data-testid="character-deleted-notice">
+            {notice}
+          </p>
+        ) : null}
         <p className="home-kicker">Cozy wilderness survival</p>
         <h1 className="home-title">Acorn &amp; Ash</h1>
         <p className="home-subtitle">Pick who you&rsquo;ll be in the clearing.</p>
@@ -190,7 +274,7 @@ export function Home({
         </div>
 
         <button type="submit" className="home-play" disabled={!canPlay}>
-          {canPlay ? `Enter the clearing as ${trimmed}` : 'Enter the clearing'}
+          Enter World
         </button>
         <p className="home-footnote">
           Others in the clearing will see this name. You get one character in this world, so choose

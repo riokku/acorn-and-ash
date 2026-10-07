@@ -165,6 +165,25 @@ app.get('/api/worlds/:worldId/character', async (c) => {
   return connectToWorld(asPlayer(c.req.raw, account.playerKey), c.env, worldId);
 });
 
+/**
+ * Delete this player's character in this world (decision 0108). Always the
+ * signed-in player's own: the key sent on to the world is the one looked up
+ * from the session, never anything the browser put in the address.
+ */
+app.delete('/api/worlds/:worldId/character', async (c) => {
+  const worldId = c.req.param('worldId');
+  if (!isValidWorldId(worldId)) return c.json({ error: 'Unknown world' }, 404);
+
+  // A request from some other site could only be deleting somebody's
+  // character unasked.
+  if (!isSameSite(c.req.raw)) return c.json({ error: 'Not from this site' }, 403);
+
+  const account = await signedInAccount(c.req.raw, c.env);
+  if (!account) return c.json({ error: 'Sign in first' }, 401);
+
+  return connectToWorld(asPlayer(c.req.raw, account.playerKey), c.env, worldId);
+});
+
 app.get('/api/worlds/:worldId/ws', async (c) => {
   const worldId = c.req.param('worldId');
   if (!isValidWorldId(worldId)) return c.json({ error: 'Unknown world' }, 404);

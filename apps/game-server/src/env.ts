@@ -52,6 +52,14 @@ export interface WorldEnv extends Env {
    */
   readonly WORLD_RAID_SECONDS?: string;
   /**
+   * How long the builds of a deleted character stay standing, locked and
+   * unusable, before they all disappear together, in seconds (decision 0108).
+   *
+   * Set low on previews and local runs so the end of it can be watched in one
+   * sitting. Half an hour everywhere real.
+   */
+  readonly WORLD_ABANDONED_SECONDS?: string;
+  /**
    * Set to "1" to let a browser pick the season with `?season=` (decision
    * 0089), for looking at winter without waiting for it.
    *

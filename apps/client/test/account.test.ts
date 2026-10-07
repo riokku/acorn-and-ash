@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   SignInError,
+  deleteCharacter,
   earlierPlayerKey,
   fetchSavedCharacter,
   fetchSessionStatus,
@@ -164,6 +165,27 @@ describe('test players and signing out', () => {
 
   it('says so when the site would not sign the player out', async () => {
     await expect(signOut(answer(500))).rejects.toThrow('Signing out failed');
+  });
+});
+
+describe('deleting the character', () => {
+  it('asks the site to delete it with a DELETE, for the world it was given', async () => {
+    const send = answer(200);
+    await deleteCharacter('home clearing', send);
+    expect(send).toHaveBeenCalledWith('/api/worlds/home%20clearing/character', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+  });
+
+  it('says so when the site would not delete it, so nothing is forgotten here', async () => {
+    await expect(deleteCharacter('home-clearing', answer(500))).rejects.toThrow(
+      'Deleting the character failed',
+    );
+  });
+
+  it('says the player is not signed in when the session has ended', async () => {
+    await expect(deleteCharacter('home-clearing', answer(401))).rejects.toBeInstanceOf(SignInError);
   });
 });
 

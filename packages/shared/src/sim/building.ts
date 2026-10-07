@@ -356,13 +356,17 @@ export interface CampfireSpot {
   readonly kind: BuildableKindId;
   readonly x: number;
   readonly z: number;
+  /** Set on anything left behind by a deleted character: nobody can use it. */
+  readonly locked?: boolean;
 }
 
 /**
  * The nearest campfire this player could light or put out, or null.
  *
  * Anyone can toggle any campfire - unlike a buried cache, nothing here is
- * owned - so there is no `isMine`-style filter to pass in.
+ * owned - so there is no `isMine`-style filter to pass in. The one exception
+ * is a campfire left behind by a deleted character, which is locked for
+ * everybody until it disappears.
  */
 export function nearestCampfire<T extends CampfireSpot>(
   position: Readonly<Vec3>,
@@ -372,7 +376,7 @@ export function nearestCampfire<T extends CampfireSpot>(
   let bestDistanceSquared = PICKUP_REACH * PICKUP_REACH;
 
   for (const prop of builtProps) {
-    if (prop.kind !== 'campfire') continue;
+    if (prop.kind !== 'campfire' || prop.locked === true) continue;
     const dx = prop.x - position.x;
     const dz = prop.z - position.z;
     const distanceSquared = dx * dx + dz * dz;
