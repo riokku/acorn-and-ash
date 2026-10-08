@@ -34,7 +34,8 @@ describe('what counts as gear', () => {
   it('fits every piece to at least one slot, and nothing else is gear', () => {
     expect(GEAR_ITEMS.length).toBeGreaterThanOrEqual(GEAR_SLOTS.length);
     for (const item of GEAR_ITEMS) expect(gearSlotsOf(item).length).toBeGreaterThan(0);
-    expect(isGear('axe')).toBe(false);
+    expect(isGear('axe')).toBe(true);
+    expect(isGear('rod')).toBe(true);
     expect(isGear('log')).toBe(false);
   });
 
@@ -53,11 +54,20 @@ describe('what counts as gear', () => {
     expect(canWearIn('huntingKnife', 'offHand')).toBe(true);
   });
 
+  it('keeps the axe and the fishing rod to the main hand only', () => {
+    for (const tool of ['axe', 'rod'] as const) {
+      expect(canWearIn(tool, 'mainHand')).toBe(true);
+      expect(canWearIn(tool, 'offHand')).toBe(false);
+      expect(canWearIn(tool, 'helm')).toBe(false);
+    }
+  });
+
   it('chooses the empty hand for a knife that fits either', () => {
     expect(slotToWear('huntingKnife', {})).toBe('mainHand');
     expect(slotToWear('huntingKnife', { mainHand: 'ironSword' })).toBe('offHand');
     expect(slotToWear('knightHelmet', { helm: 'mageHat' })).toBe('helm');
-    expect(slotToWear('axe', {})).toBeNull();
+    expect(slotToWear('axe', {})).toBe('mainHand');
+    expect(slotToWear('log', {})).toBeNull();
   });
 });
 
@@ -90,7 +100,7 @@ describe('putting gear on and taking it off', () => {
       reason: 'wrongSlot',
     });
     expect(wearGear(worn, pack, 'bearHat', 'helm')).toEqual({ ok: false, reason: 'missing' });
-    expect(wearGear(worn, pack, 'axe', 'mainHand')).toEqual({ ok: false, reason: 'wrongSlot' });
+    expect(wearGear(worn, pack, 'log', 'mainHand')).toEqual({ ok: false, reason: 'wrongSlot' });
     expect(worn).toEqual({});
     expect(countOf(pack, 'knightHelmet')).toBe(1);
   });
@@ -269,6 +279,21 @@ describe('changing gear in the world', () => {
     // Take it off and the hand is empty again.
     expect(sim.takeOffGear(1, 'mainHand').ok).toBe(true);
     expect(sim.equippedItemOf(1)).toBeNull();
+  });
+
+  it('keeps a worn axe and rod in hand, ready to chop and cast', () => {
+    const sim = playerWith([
+      { item: 'axe', count: 1 },
+      { item: 'rod', count: 1 },
+    ]);
+    expect(sim.wearGear(1, 'axe', 'mainHand').ok).toBe(true);
+    expect(sim.inventoryOf(1)?.axe).toBeUndefined();
+    expect(sim.equippedItemOf(1)).toBe('axe');
+    expect(sim.wearGear(1, 'rod', 'offHand')).toEqual({ ok: false, reason: 'wrongSlot' });
+    // A rod swapped in takes the hand; the axe goes back to the pack.
+    expect(sim.wearGear(1, 'rod', 'mainHand').ok).toBe(true);
+    expect(sim.equippedItemOf(1)).toBe('rod');
+    expect(countOf(sim.inventoryOf(1) ?? createInventory(), 'axe')).toBe(1);
   });
 
   it('lets a worn weapon be swung', () => {
