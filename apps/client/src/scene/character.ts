@@ -685,9 +685,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   let torchGlow: FireGlow | undefined;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
+    // A tool that is also main-hand gear (the axe, the rod) is in both lists.
     const things: readonly HeldThing[] = [
-      ...HELD_ITEM_IDS,
-      ...GEAR_WEAPON_IDS,
+      ...new Set<ItemId>([...HELD_ITEM_IDS, ...GEAR_WEAPON_IDS]),
       'shovel',
       ...(look.weapon === undefined ? [] : ['weapon' as const]),
     ];

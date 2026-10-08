@@ -131,6 +131,7 @@ export const ITEM_KINDS = {
     restoresHunger: undefined,
     keepOnKnockout: true,
     equippable: true,
+    gearSlots: ['mainHand'],
   },
   log: {
     id: 'log',
@@ -155,6 +156,7 @@ export const ITEM_KINDS = {
     restoresHunger: undefined,
     keepOnKnockout: true,
     equippable: true,
+    gearSlots: ['mainHand'],
   },
   perch: {
     id: 'perch',
