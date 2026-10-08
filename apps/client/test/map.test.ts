@@ -124,7 +124,9 @@ describe('the painted map', () => {
       Math.floor(((z + MAP_HALF_EXTENT) / (MAP_HALF_EXTENT * 2)) * size),
     );
 
-  it('paints the same page every time', () => {
+  // Painting samples the whole 600 m world's ground twice, which takes a few
+  // seconds on a slow build machine, so this one is given longer.
+  it('paints the same page every time', { timeout: 30_000 }, () => {
     expect(paintWorldMap(world, 48).toBytes()).toEqual(paintWorldMap(world, 48).toBytes());
   });
 
