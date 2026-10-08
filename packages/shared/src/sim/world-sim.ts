@@ -1712,7 +1712,12 @@ export class WorldSimulation {
       knockedOutAtTick: 0,
       dodgeStartedAtTick: -Infinity,
       dodgeAttackStartedAtTick: Infinity,
-      equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
+      // With a weapon already in the main hand, nothing chosen from the pack
+      // means the weapon is drawn, not that a tool should be picked up.
+      equippedItem:
+        saved?.equippedItem == null && wornFromEntries(saved?.worn).mainHand !== undefined
+          ? null
+          : initialEquippedItem(inventory, saved?.equippedItem ?? null),
       worn: wornFromEntries(saved?.worn),
       lastCombatTick: -Infinity,
       explored: exploredMapFrom(saved?.explored),
@@ -5126,6 +5131,16 @@ export class WorldSimulation {
    */
   drainEquipEvents(): number[] {
     return this.equipEvents.splice(0);
+  }
+
+  /**
+   * What they last chose from the pack, if they still hold it - not the
+   * weapon in their main hand, which is saved with what they wear.
+   */
+  packChoiceOf(netId: number): ItemId | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined || runtime.equippedItem === null) return null;
+    return hasItem(runtime.inventory, runtime.equippedItem) ? runtime.equippedItem : null;
   }
 
   /** What this player is wearing, slot by slot. */

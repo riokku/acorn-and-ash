@@ -688,6 +688,8 @@ export interface GameOptions {
   readonly grassDensity: number;
   /** Look at the world in this season whatever the calendar says: `?season=` in the address, for testing. */
   readonly season?: SeasonId;
+  /** Ask the world for one of every piece of gear: `?gear=all` in the address, for testing. */
+  readonly gear?: boolean;
   /**
    * Forget who is signed in and go back to the front page (decision 0104). Called
    * once the sign-out countdown runs out; rejects if the site could not be reached.
@@ -1545,7 +1547,12 @@ export class Game {
   /* ---------------------------------------------------------------------- */
 
   private connect(): void {
-    const url = worldSocketUrl(this.options.worldId, undefined, this.options.season);
+    const url = worldSocketUrl(
+      this.options.worldId,
+      undefined,
+      this.options.season,
+      this.options.gear,
+    );
     this.connection = new WorldConnection(
       url,
       {

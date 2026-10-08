@@ -107,6 +107,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
     forceWebGL: settings.forceWebGL,
     season: settings.season,
+    gear: settings.gear,
     signOut: signOutToFrontPage,
     onCharacterDeleted: restartAfterDeletion,
     lookSensitivity: preferencesNow.lookSensitivity,

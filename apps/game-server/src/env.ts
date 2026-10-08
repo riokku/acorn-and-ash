@@ -67,4 +67,12 @@ export interface WorldEnv extends Env {
    * staging and production, where the seasons follow the world's own clock.
    */
   readonly WORLD_ALLOW_TEST_SEASON?: string;
+  /**
+   * Set to "1" to let a browser ask for one of every piece of gear with
+   * `?gear=` (decision 0113), until gear can be found in the world.
+   *
+   * Set on local runs, the browser tests and previews only. Left unset on
+   * staging and production.
+   */
+  readonly WORLD_ALLOW_TEST_GEAR?: string;
 }

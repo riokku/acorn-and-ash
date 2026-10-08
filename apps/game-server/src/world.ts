@@ -1,4 +1,13 @@
 import { encodeRaiderVitals } from '@acorn/shared';
+import {
+  encodeGearRefused,
+  encodeWorn,
+  gearSlotFromIndex,
+  gearSlotIndex,
+  wornEntries,
+  GEAR_ITEMS,
+  type GearSlot,
+} from '@acorn/shared';
 import { clockShiftForSeason, encodeLakeIce, SEASONS, type SeasonId } from '@acorn/shared';
 import {
   encodeFishRecords,
@@ -134,6 +143,7 @@ const PER_PLAYER_TABLES = [
   'player_expeditions',
   'player_fishing_collection',
   'player_pickups_taken',
+  'player_gear',
 ] as const;
 
 /**
@@ -260,6 +270,7 @@ export class World extends DurableObject<WorldEnv> {
 
     if (earlier !== null) simulation.handOver(netId);
     else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
+    if (this.testGear(url)) simulation.giveTestGear(netId, ['bag', ...GEAR_ITEMS]);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
@@ -297,7 +308,9 @@ export class World extends DurableObject<WorldEnv> {
     // Who else is already here. This player's own Hello, sent right after
     // Welcome, is what tells everybody else about them in turn.
     server.send(encodeRoster(this.currentRoster()));
-    server.send(encodeEquipped(simulation.equippedList()));
+    // To everybody, so those already here see what the newcomer holds and wears.
+    this.broadcast(encodeEquipped(simulation.equippedList()));
+    this.broadcast(encodeWorn(simulation.wornList()));
     // Their map as they left it, before the first step has a chance to add
     // anything to it - see decision 0054.
     const explored = simulation.exploredMapOf(netId);
@@ -383,6 +396,26 @@ export class World extends DurableObject<WorldEnv> {
       }
       this.announceHunger(simulation);
       this.announceMeals(simulation);
+      this.announceEquipped(simulation);
+      return;
+    }
+    if (decoded.type === 'gear') {
+      // Settled the moment it arrives, like crafting; the server may refuse
+      // (decision 0113), and only the one who asked is told so.
+      const netId = attachment.netId;
+      const change =
+        decoded.action === 'wear'
+          ? simulation.wearGear(netId, decoded.item, decoded.slot)
+          : decoded.action === 'takeOff'
+            ? simulation.takeOffGear(netId, decoded.slot)
+            : simulation.swapGear(netId, decoded.from, decoded.to);
+      if (!change.ok) {
+        this.trySend(ws, encodeGearRefused(change.reason));
+        return;
+      }
+      this.ctx.storage.transactionSync(() => this.savePlayer(simulation, attachment));
+      this.trySend(ws, encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
+      this.announceWorn(simulation);
       this.announceEquipped(simulation);
       return;
     }
@@ -559,6 +592,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceHunger(simulation);
     this.announceCooking(simulation);
     this.announceEquipped(simulation);
+    this.announceWorn(simulation);
     this.announceHealth(simulation);
     this.announceExpeditions(simulation);
     this.announceMeals(simulation);
@@ -855,6 +889,15 @@ export class World extends DurableObject<WorldEnv> {
    * only where this server is set up for testing: local runs, the browser
    * tests and previews. The real worlds never take it.
    */
+  /**
+   * Whether a browser asked for one of every piece of gear with `?gear=`,
+   * only where this server is set up for testing (decision 0113): gear cannot
+   * be found in the world yet, so a preview needs another way to try it on.
+   */
+  private testGear(url: URL): boolean {
+    return this.env.WORLD_ALLOW_TEST_GEAR === '1' && url.searchParams.has('gear');
+  }
+
   private testSeason(url: URL): SeasonId | null {
     if (this.env.WORLD_ALLOW_TEST_SEASON !== '1') return null;
     const asked = url.searchParams.get('season');
@@ -1431,6 +1474,15 @@ export class World extends DurableObject<WorldEnv> {
   }
 
   /**
+   * Tell everybody what everybody currently wears, whole, whenever any one
+   * player changes it (decision 0113). As public as what is in your hand.
+   */
+  private announceWorn(simulation: WorldSimulation): void {
+    if (simulation.drainWornEvents().length === 0) return;
+    this.broadcast(encodeWorn(simulation.wornList()));
+  }
+
+  /**
    * Everything built, to everybody - each with their own copy, since whether
    * a piece is theirs travels with it (see `BuiltPropView`).
    */
@@ -1775,6 +1827,13 @@ export class World extends DurableObject<WorldEnv> {
       count INTEGER NOT NULL,
       PRIMARY KEY (player_key, item_index)
     )`);
+    // What each character is wearing (decision 0113): one row per slot in use.
+    sql.exec(`CREATE TABLE IF NOT EXISTS player_gear (
+      player_key TEXT NOT NULL,
+      slot INTEGER NOT NULL,
+      item_index INTEGER NOT NULL,
+      PRIMARY KEY (player_key, slot)
+    )`);
     // The axe, bag and rod each character has already picked up. The clearing
     // itself is built from the seed, so only what has changed since has to be
     // stored, and every character finds their own copy (decision 0109).
@@ -2049,6 +2108,7 @@ export class World extends DurableObject<WorldEnv> {
       equippedItem:
         row.equipped_item_index === null ? null : itemFromIndex(row.equipped_item_index),
       explored: row.explored === null ? null : new Uint8Array(row.explored),
+      worn: this.loadPlayerGear(playerKey),
     };
   }
 
@@ -2084,6 +2144,24 @@ export class World extends DurableObject<WorldEnv> {
     const row = rows[0];
     if (row === undefined || row.name === null) return undefined;
     return { name: row.name, characterIndex: row.character_index, colorIndex: row.color_index };
+  }
+
+  private loadPlayerGear(playerKey: string): { slot: GearSlot; item: ItemId }[] {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        slot: number;
+        item_index: number;
+      }>('SELECT slot, item_index FROM player_gear WHERE player_key = ?', playerKey)
+      .toArray();
+    const worn: { slot: GearSlot; item: ItemId }[] = [];
+    for (const row of rows) {
+      const slot = gearSlotFromIndex(row.slot);
+      const item = itemFromIndex(row.item_index);
+      // A row from a build that knew a slot or piece this one does not.
+      if (slot === null || item === null) continue;
+      worn.push({ slot, item });
+    }
+    return worn;
   }
 
   private loadPlayerItems(playerKey: string): { item: ItemId; count: number }[] {
@@ -2398,7 +2476,7 @@ export class World extends DurableObject<WorldEnv> {
     // coordinates mean nothing out in the world (see decision 0055).
     const outside = simulation.outdoorPositionOf(attachment.netId);
     if (outside === null) return;
-    const equipped = simulation.equippedItemOf(attachment.netId);
+    const equipped = simulation.packChoiceOf(attachment.netId);
     this.writePlayer(
       attachment.playerKey,
       outside.x,
@@ -2413,6 +2491,7 @@ export class World extends DurableObject<WorldEnv> {
       attachment.playerKey,
       inventoryEntries(simulation.inventoryOf(attachment.netId)),
     );
+    this.writePlayerGear(attachment.playerKey, wornEntries(simulation.wornOf(attachment.netId)));
     this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
     this.writeExpedition(attachment.playerKey, simulation.expeditionStateOf(attachment.netId));
     this.writeFishRecords(attachment.playerKey, simulation.fishRecordsOf(attachment.netId));
@@ -2573,6 +2652,22 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
+  private writePlayerGear(
+    playerKey: string,
+    worn: readonly { readonly slot: GearSlot; readonly item: ItemId }[],
+  ): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec('DELETE FROM player_gear WHERE player_key = ?', playerKey);
+    for (const entry of worn) {
+      sql.exec(
+        'INSERT INTO player_gear (player_key, slot, item_index) VALUES (?, ?, ?)',
+        playerKey,
+        gearSlotIndex(entry.slot),
+        itemIndex(entry.item),
+      );
+    }
+  }
+
   private writePlayerItems(
     playerKey: string,
     items: readonly { readonly item: ItemId; readonly count: number }[],
@@ -2644,6 +2739,7 @@ export class World extends DurableObject<WorldEnv> {
         player.equippedItem == null ? null : itemIndex(player.equippedItem),
       );
       this.writePlayerItems(attachment.playerKey, player.items);
+      this.writePlayerGear(attachment.playerKey, player.worn ?? []);
       this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
       this.writeExpedition(attachment.playerKey, expeditionFromSaved(player.expedition));
       this.writeFishRecords(attachment.playerKey, fishRecordsFromSaved(player.fishRecords));
