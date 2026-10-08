@@ -12,6 +12,8 @@ import {
 } from 'three/tsl';
 import {
   LAKE,
+  STREAM,
+  nearStream,
   PLAYABLE_HALF_EXTENT,
   SPAWN_POSITION,
   buildableFootprint,
@@ -77,6 +79,7 @@ export function createGrass(
   const shader = createGroundShader({
     water: clearing.water,
     lake: LAKE,
+    stream: STREAM,
     props: [...clearing.props, ...wilderness.props],
   });
   const geometry = bladeClump();
@@ -197,7 +200,9 @@ export function createGrass(
           (water) => Math.hypot(x - water.x, z - water.z) < water.radius + 0.35,
         ) ||
         // The lake's own shore, which on an island is the island's beach.
-        lakeDepthAt(LAKE, x, z) > -0.35
+        lakeDepthAt(LAKE, x, z) > -0.35 ||
+        // The stream's water and its bed.
+        nearStream(STREAM, x, z, 0.2)
       )
         continue;
       const y = terrain.heightAt(x, z);

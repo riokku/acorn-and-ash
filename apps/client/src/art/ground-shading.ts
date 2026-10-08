@@ -21,8 +21,11 @@ import {
   SPAWN_POSITION,
   isNearLake,
   lakeDepthAt,
+  nearestOnStream,
+  streamWaterHalfWidthAt,
   type Lake,
   type PlacedProp,
+  type Stream,
   type WaterCircle,
 } from '@acorn/shared';
 
@@ -43,9 +46,14 @@ export interface GroundContext {
   readonly water: readonly WaterCircle[];
   /** The lake, if there is one: its bank stays lush like the pond's. */
   readonly lake?: Lake | null;
+  /** The stream, if there is one: pebbles under the water and a lush, damp bank. */
+  readonly stream?: Stream | null;
   /** Every tree and rock anywhere, the clearing's and the wilderness's alike. */
   readonly props: readonly PlacedProp[];
 }
+
+/** How far from the stream's middle the bank's dampness is looked for, in metres. */
+const STREAM_BANK_REACH = 12;
 
 /** How big a square of the lookup grid is, so a spot only checks the props near it. */
 const GRID_CELL = 6;
@@ -128,12 +136,24 @@ export function createGroundShader(context: GroundContext): GroundShader {
         shore = Math.max(shore, 1 - smoothstep(0, 3, -lakeDepthAt(context.lake, x, z)));
       }
 
+      // The stream: a bed of grey pebbles under the water, then a damp, lush bank.
+      let pebbles = 0;
+      if (context.stream != null) {
+        const spot = nearestOnStream(context.stream, x, z, STREAM_BANK_REACH);
+        if (spot !== null) {
+          const gap = spot.distance - streamWaterHalfWidthAt(context.stream, spot.along);
+          shore = Math.max(shore, 1 - smoothstep(0, 3, gap));
+          pebbles = 1 - smoothstep(-0.3, 0.8, gap);
+        }
+      }
+
       const wildPatches = smoothstep(0.4, 0.7, patches) * inWilderness * 0.6;
       const underTrees = smoothstep(0.1, 0.9, cover) * (0.55 + inWilderness * 0.45);
       // Up the mountain: bare rock where it is steep or above the trees, and
       // snow on the tops. The lines wander a few metres so they are not level.
       const wander = worldFbm(x * 0.05 + 9, z * 0.05 - 31, 3, 73) * 6;
       const rock = Math.max(
+        pebbles * 0.6,
         smoothstep(0.7, 1.15, slope),
         smoothstep(MOUNTAINS.treeLine - 6 + wander, MOUNTAINS.treeLine + 4 + wander, height),
       );
@@ -142,7 +162,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         (1 - smoothstep(1.4, 2.4, slope));
       // Steep hillsides lose their grass too, and rock and snow have none.
       const floor = clamp01(
-        Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock) *
+        Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock, pebbles) *
           (1 - shore * 0.8),
       );
 

@@ -28,7 +28,9 @@ import { colliderForProp, type PlacedProp } from './clearing';
 import { wildernessHillWeight, type Terrain } from './terrain';
 import { fractalNoise2D } from './noise';
 import { buildIslandProps } from './islands';
+import { mountainWeight } from './mountains';
 import { basinDepthAt, LAKE, LAKE_PROP_CLEARANCE, type Lake } from './lake';
+import { nearStream, STREAM, STREAM_PROP_CLEARANCE, type Stream } from './stream';
 
 const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
@@ -39,8 +41,26 @@ const HIGH_ROCK_CHANCE = 0.6;
 /** Trees thin out from here up to the tree line, and only pines grow in the thin air. */
 const TREE_THINNING_START = 16;
 const HIGH_PINE_HEIGHT = 14;
+/** The steepest ground a tree or rock is set on, rise over run, measured over a few metres. */
+const PROP_MAX_GRADIENT = 0.6;
+const PROP_SLOPE_PROBE = 1.5;
+
+/** The steepest rise over run in any direction a few metres either side of a spot. */
+function steepnessAt(terrain: Terrain, x: number, z: number): number {
+  const here = terrain.heightAt(x, z);
+  const rises = [
+    terrain.heightAt(x + PROP_SLOPE_PROBE, z),
+    terrain.heightAt(x - PROP_SLOPE_PROBE, z),
+    terrain.heightAt(x, z + PROP_SLOPE_PROBE),
+    terrain.heightAt(x, z - PROP_SLOPE_PROBE),
+  ].map((height) => Math.abs(height - here) / PROP_SLOPE_PROBE);
+  return Math.max(...rises);
+}
 /** Well clear of the octave offsets `fractalNoise2D` uses internally, so the noise that decides where a glade sits never lines up with the noise that decides how tall the ground is there. */
 const DENSITY_SEED_OFFSET = 7919;
+
+/** Trunks and boulders have some width, so they keep this much further back from the water, in metres. */
+const PROP_STREAM_MARGIN = 0.9;
 
 export interface Wilderness {
   readonly props: readonly PlacedProp[];
@@ -69,7 +89,12 @@ export interface Wilderness {
  * a few trees and rocks of its own, numbered after all the others so no
  * existing tree changes its number.
  */
-export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAKE): Wilderness {
+export function buildWilderness(
+  seed: number,
+  terrain: Terrain,
+  lake: Lake = LAKE,
+  stream: Stream = STREAM,
+): Wilderness {
   const props: PlacedProp[] = [];
   // The scatter fills the square of the playable world, plus a margin.
   const outerExtent = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
@@ -109,6 +134,9 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
 
       // Up the mountain the trees thin out and give way to bare rock.
       const y = terrain.heightAt(x, z);
+      // Nothing is set on a steep face: it would sink into the slope on one
+      // side and hang in the air on the other.
+      if (mountainWeight(x, z) > 0 && steepnessAt(terrain, x, z) > PROP_MAX_GRADIENT) continue;
       const treeShare = 1 - smoothstep(y, TREE_THINNING_START, MOUNTAINS.treeLine);
       const rockChance = lerp(ROCK_CHANCE, HIGH_ROCK_CHANCE, 1 - treeShare);
       const isRock = cellRng.nextFloat() < rockChance;
@@ -135,6 +163,7 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
   const kept = props.filter(
     (prop) =>
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
+      !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !WOODLAND_ENCOUNTERS.some(
         (site) => Math.hypot(prop.x - site.x, prop.z - site.z) < site.radius + 2,
       ),

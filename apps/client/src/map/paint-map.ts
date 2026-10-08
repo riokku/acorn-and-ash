@@ -14,6 +14,10 @@
 
 import {
   LAKE,
+  STREAM,
+  nearestOnStream,
+  streamWaterHalfWidthAt,
+  type Stream,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   buildTestClearing,
@@ -76,6 +80,8 @@ export interface MapWorld {
   readonly water: readonly WaterCircle[];
   /** The lake, with its islands, if the world has one. */
   readonly lake?: Lake | null;
+  /** The stream, if the world has one. */
+  readonly stream?: Stream | null;
   readonly props: readonly PlacedProp[];
 }
 
@@ -87,6 +93,7 @@ export function mapWorldFromSeed(seed: number): MapWorld {
     terrain,
     water: clearing.water,
     lake: LAKE,
+    stream: STREAM,
     props: [...clearing.props, ...wilderness.props],
   };
 }
@@ -182,7 +189,12 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
   const count = Math.ceil((MAP_HALF_EXTENT * 2) / SAMPLE_SPACING) + 1;
   const fields = 8;
   const grid = new Float32Array(count * count * fields);
-  const shader = createGroundShader({ water: world.water, lake: world.lake, props: world.props });
+  const shader = createGroundShader({
+    water: world.water,
+    lake: world.lake,
+    stream: world.stream,
+    props: world.props,
+  });
   const step = SAMPLE_SPACING;
 
   for (let row = 0; row < count; row++) {
@@ -200,6 +212,15 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
       }
       // Depth is positive on the water, so the gap to the water's edge is its opposite.
       if (world.lake != null) waterGap = Math.min(waterGap, -lakeDepthAt(world.lake, x, z));
+      if (world.stream != null) {
+        const spot = nearestOnStream(world.stream, x, z, 8);
+        if (spot !== null) {
+          waterGap = Math.min(
+            waterGap,
+            spot.distance - streamWaterHalfWidthAt(world.stream, spot.along),
+          );
+        }
+      }
       const index = (row * count + column) * fields;
       grid[index] = height;
       grid[index + 1] = slope;

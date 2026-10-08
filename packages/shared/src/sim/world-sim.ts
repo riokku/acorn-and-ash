@@ -212,6 +212,7 @@ import {
 } from '../world/home';
 import { BOAT_ICE_STEP_OUT } from '../world/boat';
 import { LAKE, lakeDepthAt } from '../world/lake';
+import { STREAM_KEEP_OUT } from '../world/stream';
 import {
   beachedBoat,
   boatSalvage,
@@ -1582,7 +1583,7 @@ export class WorldSimulation {
       options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
     );
     this.clearing = buildTestClearing(options.seed);
-    this.keepOutWater = [...this.clearing.water, ...LAKE.basin];
+    this.keepOutWater = [...this.clearing.water, ...LAKE.basin, ...STREAM_KEEP_OUT];
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
     const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);

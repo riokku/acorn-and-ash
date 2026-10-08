@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { PLAYER_RADIUS } from '../src/constants';
 import { createCollisionWorld } from '../src/collision/capsule';
 import {
   MAX_WALKABLE_GRADIENT,
@@ -103,6 +104,22 @@ describe('the mountain range', () => {
     for (const tree of trees) expect(tree.y ?? 0).toBeLessThanOrEqual(MOUNTAINS.treeLine);
   });
 
+  it('sets nothing on a steep face', () => {
+    const { props } = buildWilderness(SEED, terrain);
+    for (const prop of props) {
+      if (mountainWeight(prop.x, prop.z) === 0) continue;
+      for (const [dx, dz] of [
+        [1.5, 0],
+        [-1.5, 0],
+        [0, 1.5],
+        [0, -1.5],
+      ] as const) {
+        const rise = Math.abs(terrain.heightAt(prop.x + dx, prop.z + dz) - (prop.y ?? 0)) / 1.5;
+        expect(rise).toBeLessThanOrEqual(0.6 + 1e-9);
+      }
+    }
+  });
+
   it('puts only pines and rocks on the high ground', () => {
     const { props } = buildWilderness(SEED, terrain);
     const high = props.filter((prop) => (prop.y ?? 0) > 14);
@@ -185,5 +202,28 @@ describe('walking on the mountain', () => {
     const end = walk(start, 0, 1, -Math.PI / 2, 60, PlayerButton.Jump);
     // A jump peaks at about a metre and a quarter; the cliff is far taller.
     expect(end.y - startHeight).toBeLessThan(steepest - 1);
+  });
+
+  it('keeps the whole body clear of a cliff face, not just the feet', () => {
+    let spot: { x: number; z: number } | null = null;
+    let steepest = 0;
+    for (let x = -300; x <= -60; x += 1) {
+      for (let z = 60; z <= 300; z += 4) {
+        const rise = terrain.heightAt(x + 1, z) - terrain.heightAt(x, z);
+        if (rise > steepest) {
+          steepest = rise;
+          spot = { x, z };
+        }
+      }
+    }
+    const end = walk({ x: spot!.x - 3, z: spot!.z }, 0, 1, -Math.PI / 2, 80);
+    // Every point round the body's edge is no higher than a stride above the feet.
+    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+      const edgeHeight = terrain.heightAt(
+        end.x + Math.cos(angle) * PLAYER_RADIUS,
+        end.z + Math.sin(angle) * PLAYER_RADIUS,
+      );
+      expect(edgeHeight - end.y).toBeLessThan(1);
+    }
   });
 });

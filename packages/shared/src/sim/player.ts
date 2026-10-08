@@ -210,6 +210,10 @@ export function stepPlayer(
  * cliff? Gentle slopes and small lips pass; a face steeper than
  * `MAX_WALKABLE_GRADIENT` does not, for a walker or for a jumper that has not
  * got high enough to be above it.
+ *
+ * The body is as wide as the player, so the ground a body's width ahead is
+ * checked too: otherwise a walker's feet stop at the foot of a cliff while
+ * their shoulders are already inside it.
  */
 function canReachOnFoot(
   world: CollisionWorld,
@@ -221,7 +225,24 @@ function canReachOnFoot(
 ): boolean {
   const run = Math.hypot(toX - fromX, toZ - fromZ);
   if (run === 0) return true;
-  const rise = world.terrain.heightAt(toX, toZ) - feetY;
+  if (!canStandOn(world, fromX, fromZ, toX, toZ, feetY)) return false;
+  const reach = PLAYER_RADIUS + BODY_MARGIN;
+  const aheadX = toX + ((toX - fromX) / run) * reach;
+  const aheadZ = toZ + ((toZ - fromZ) / run) * reach;
+  return canStandOn(world, fromX, fromZ, aheadX, aheadZ, feetY);
+}
+
+/** Is the ground at the second spot no steeper a climb from the first than a walker can manage? */
+function canStandOn(
+  world: CollisionWorld,
+  fromX: number,
+  fromZ: number,
+  atX: number,
+  atZ: number,
+  feetY: number,
+): boolean {
+  const run = Math.hypot(atX - fromX, atZ - fromZ);
+  const rise = world.terrain.heightAt(atX, atZ) - feetY;
   return rise <= MAX_WALKABLE_GRADIENT * run + WALKABLE_STEP_ALLOWANCE;
 }
 
@@ -256,6 +277,9 @@ function holdToWalkableGround(
   velocity.x = 0;
   velocity.z = 0;
 }
+
+/** Extra metres past the body's edge that must be walkable too, to absorb the ground mesh being coarser than the ground itself. */
+const BODY_MARGIN = 0.3;
 
 /** Is this button held down in the given input? */
 export function isHeld(input: PlayerInput, button: number): boolean {

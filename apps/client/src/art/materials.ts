@@ -169,6 +169,54 @@ export function createWaterMaterial(
 }
 
 /**
+ * The stream's surface: clear and green in the shallows at its edges, bluer
+ * down the middle, two layers of ripples running downstream at different
+ * speeds, and white foam where it tumbles over a fall and laps at its banks.
+ * Each vertex of the ribbon says how far across and along the stream it is
+ * (see scene/stream.ts), so the ripples follow the water round every bend.
+ */
+export function createStreamMaterial(): THREE.MeshStandardNodeMaterial {
+  const ripples = artTexture('ripples');
+  const across = attribute('streamAcross', 'float');
+  const along = attribute('streamAlong', 'float');
+  const edge = attribute('streamEdge', 'float');
+  const fall = attribute('streamFall', 'float');
+  const pace = attribute('streamPace', 'float');
+
+  const first = texture(
+    ripples,
+    vec2(across.mul(0.27), along.mul(0.34).sub(time.mul(pace).mul(0.16))),
+  ).r;
+  const second = texture(
+    ripples,
+    vec2(across.mul(0.41).add(0.37), along.mul(0.22).sub(time.mul(pace).mul(0.27))),
+  ).r;
+  const glint = smoothstep(0.25, 0.95, first.add(second).mul(0.5));
+  // Over a fall the ripples stretch into long streaks that run downhill.
+  const streaks = texture(ripples, vec2(across.mul(1.3), along.mul(0.12).sub(time.mul(0.9)))).r;
+
+  const shallows = color(0x62ad9c);
+  const middle = color(0x3b7f93);
+  let surface = mix(middle, shallows, smoothstep(0.1, 0.95, edge));
+  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.2));
+  const lapping = smoothstep(0.72, 0.98, edge.add(first.mul(0.08)));
+  surface = mix(surface, color(0xe4f1ea), lapping.mul(0.5));
+  const foam = fall.mul(smoothstep(0.1, 0.7, streaks.mul(0.7).add(0.4)));
+  surface = mix(surface, color(0xf4fbff), foam.mul(0.85));
+
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
+  material.colorNode = surface;
+  // Clear at the very edge, so the bank shows through and there is no hard line.
+  material.opacityNode = smoothstep(1.02, 0.78, edge);
+  material.transparent = true;
+  material.depthWrite = false;
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -2;
+  material.name = 'painted-stream';
+  return material;
+}
+
+/**
  * The lake's ice in winter (see decision 0095): a pale, slightly glossy sheet,
  * clearer blue where it is thin and frosted white where it has clouded, with
  * no ripples. The same painted ripple texture, read at two scales, is what

@@ -6,6 +6,7 @@ import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { smoothstep } from '../math/vec3';
 import { LAKE, lakeGroundHeight, type Lake } from './lake';
 import { mountainHeightAt } from './mountains';
+import { STREAM, streamGroundHeight, type Stream } from './stream';
 import { fractalNoise2D } from './noise';
 
 export interface Terrain {
@@ -65,9 +66,20 @@ export function wildernessHillWeight(
   return Math.min(risingIn, flattenOut);
 }
 
-export function wildernessHeightAt(seed: number, x: number, z: number, lake: Lake = LAKE): number {
-  const ground = hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z);
-  return lakeGroundHeight(lake, x, z, ground);
+export function wildernessHeightAt(
+  seed: number,
+  x: number,
+  z: number,
+  lake: Lake = LAKE,
+  stream: Stream | null = STREAM,
+): number {
+  const ground = lakeGroundHeight(
+    lake,
+    x,
+    z,
+    hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z),
+  );
+  return stream === null ? ground : streamGroundHeight(stream, lake, x, z, ground);
 }
 
 /** What the hills alone would make the ground, before the lake shapes it. */
