@@ -33,6 +33,7 @@ export * from './data/animals';
 export * from './data/buildables';
 export * from './data/characters';
 export * from './data/moves';
+export * from './data/gear';
 export * from './data/raiders';
 
 export * from './collision/capsule';
@@ -42,6 +43,7 @@ export * from './ecs/traits';
 export * from './sim/player';
 export * from './sim/actions';
 export * from './sim/inventory';
+export * from './sim/gear';
 export * from './sim/pickups';
 export * from './sim/gathering';
 export * from './sim/dropping';
