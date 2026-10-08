@@ -55,6 +55,8 @@ Each step is its own small pull request that Chris can play.
 - **The collision loop got a grid.** The bigger forest means about 7,000 trees and rocks rather than about 1,500, and checking every one for every player blew the 10 ms tick budget (about 17 ms with 50 players). Collision now looks only at the trees near the player, which is faster than before the change (about 1.5 ms mean with 50 players) and gives the same results (a test checks it against the full scan).
 - **Fewer, bigger map squares.** The explored map is now 8 m squares (was 4 m) so it stays under a kilobyte, and a player reveals 40 m around them (was 36 m).
 
+**Smoother, and nothing inside the walls.** The cliff faces are wider (about 6 m from foot to top rather than 3 m), so the ground mesh, which is drawn every 2.5 m, can follow them without jagged steps. A walker is stopped a body's width plus a little more before a cliff face, so shoulders no longer sink into the rock. Trees and rocks are not set on steep ground, so none are half buried in a slope.
+
 Resets for existing worlds: because the world is larger, trees are numbered in a different order, so any tree already chopped down in a saved world is forgotten, and everybody's explored map starts again.
 
 Still to come: the stream and waterfalls (step 2), the shovel and ore (step 3), digging (step 4) and art (step 5).

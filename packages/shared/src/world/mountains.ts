@@ -51,7 +51,7 @@ export function mountainHeightAt(seed: number, x: number, z: number): number {
   const mass = Math.pow(weight, 1.3) * MOUNTAINS.peakHeight * (0.55 + 0.45 * peaks);
 
   // Rocky unevenness, strongest on the high ground.
-  const detail = (fractalNoise2D(seed + DETAIL_SEED_OFFSET, x / 22, z / 22, 3) * 2 - 1) * 3.5;
+  const detail = (fractalNoise2D(seed + DETAIL_SEED_OFFSET, x / 30, z / 30, 3) * 2 - 1) * 3.5;
 
   // Cliff bands: a narrow stretch of the noise field is a sheer face. Kept off
   // the foot so the way in from the hills is always a gentle one.
@@ -61,7 +61,7 @@ export function mountainHeightAt(seed: number, x: number, z: number): number {
     z * MOUNTAINS.cliffNoiseScale,
     3,
   );
-  const cliffBands = smoothstep(cliffField, 0.5, 0.53) + smoothstep(cliffField, 0.6, 0.63) * 0.8;
+  const cliffBands = smoothstep(cliffField, 0.5, 0.57) + smoothstep(cliffField, 0.6, 0.67) * 0.8;
   const cliff = cliffBands * MOUNTAINS.cliffHeight * smoothstep(weight, 0.25, 0.55);
 
   return mass + detail * weight + cliff;
