@@ -502,9 +502,20 @@ almost nothing; they stay outdoors only, and nothing falls if your computer
 asks for reduced motion (`art/season-fall.ts` holds the rules,
 `scene/season-fall.ts` draws them).
 
-So far the seasons only change how the world looks; what each season changes
-in play (what you can gather, which fish bite, how creatures behave) comes
-next. See [decision 0089](docs/decisions/0089-seasons.md).
+Some winters now have a three-day blizzard: heavier, wind-driven snow, reduced
+visibility and 22% slower outdoor walking. Winter ice remains throughout the
+season. Footsteps leave impressions that gradually fill with snow.
+
+Summer storms can strike trees with lightning. Flames spread to nearby trees
+and wooden buildings, hurt nearby players, and burn out on their own. Trees
+leave stumps and regrow; destroyed homes spill their chest contents and move
+occupants outside. Leave space around homes to limit spread.
+
+On local and preview servers, join an empty test world with `?weather=blizzard`
+or `?weather=storm` to try these events immediately (combine with `&world=` for
+a separate test world). Storm lightning begins within 18 seconds; ignition is
+probabilistic. These controls are ignored in production. See
+[decision 0113](docs/decisions/0113-blizzards-and-wildfires.md).
 
 ### Wildlife
 

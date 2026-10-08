@@ -33,6 +33,8 @@ export interface LakeWall {
 
 /** Everything the movement code needs to know about the world around it. */
 export interface CollisionWorld {
+  /** Shared outdoor weather slowdown; rooms keep normal walking speed. */
+  movementScale?: number;
   readonly terrain: Terrain;
   /**
    * What the player bumps into.

@@ -1,3 +1,4 @@
+import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
 import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
 import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
 import {
@@ -1537,6 +1538,72 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (view.getUint8(19) !== state.displays) return null;
       return { type: 'fishRecords', ...state };
     }
+    case ServerMessageType.Wildfire: {
+      if (data.byteLength < 30) return null;
+      const count = view.getUint8(1);
+      if (count > FIRE_LIMIT || data.byteLength !== 30 + count * 39) return null;
+      const now = view.getFloat64(2, true);
+      const serial = view.getInt32(10, true);
+      const lightning =
+        serial < 0
+          ? null
+          : {
+              serial,
+              x: view.getFloat32(14, true),
+              y: view.getFloat32(18, true),
+              z: view.getFloat32(22, true),
+            };
+      if (
+        !Number.isFinite(now) ||
+        now < 0 ||
+        (lightning && ![lightning.x, lightning.y, lightning.z].every(Number.isFinite))
+      )
+        return null;
+      const fires: Wildfire[] = [];
+      const keys = new Set<string>();
+      for (let i = 0; i < count; i++) {
+        const at = 30 + i * 39;
+        const kind = view.getUint8(at);
+        const fire: Wildfire = {
+          kind: kind === 0 ? 'tree' : 'building',
+          id: view.getUint32(at + 1, true),
+          x: view.getFloat32(at + 5, true),
+          y: view.getFloat32(at + 9, true),
+          z: view.getFloat32(at + 13, true),
+          height: view.getFloat32(at + 17, true),
+          radius: view.getFloat32(at + 21, true),
+          startedAt: view.getFloat64(at + 25, true),
+          generation: view.getUint8(at + 33),
+          spread: view.getUint8(at + 34) === 1,
+        };
+        const key = `${kind}:${fire.id}`;
+        if (
+          kind > 1 ||
+          keys.has(key) ||
+          ![fire.x, fire.y, fire.z, fire.height, fire.radius, fire.startedAt].every(
+            Number.isFinite,
+          ) ||
+          fire.height <= 0 ||
+          fire.radius < 0 ||
+          fire.startedAt < 0 ||
+          fire.startedAt > now ||
+          fire.generation > 3 ||
+          view.getUint8(at + 34) > 1
+        )
+          return null;
+        keys.add(key);
+        fires.push(fire);
+      }
+      const test = view.getUint8(26);
+      if (test > 2) return null;
+      return {
+        type: 'wildfire',
+        now,
+        lightning,
+        fires,
+        testWeather: test === 1 ? 'storm' : test === 2 ? 'blizzard' : null,
+      };
+    }
     case ServerMessageType.LakeIce: {
       if (data.byteLength !== 2) return null;
       const frozen = view.getUint8(1);
@@ -2189,5 +2256,36 @@ export function encodeRareReel(state: ReelView): ArrayBuffer {
   view.setUint16(1, state.age, true);
   view.setUint8(3, state.hits);
   view.setUint8(4, state.misses);
+  return data;
+}
+
+/** Bounded full fire state, including the last bolt so packet loss cannot lose an ignition. */
+export function encodeWildfire(state: WildfireView): ArrayBuffer {
+  const fires = state.fires.slice(0, FIRE_LIMIT);
+  const data = new ArrayBuffer(30 + fires.length * 39);
+  const view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Wildfire);
+  view.setUint8(1, fires.length);
+  view.setFloat64(2, state.now, true);
+  view.setUint8(26, state.testWeather === 'storm' ? 1 : state.testWeather === 'blizzard' ? 2 : 0);
+  view.setInt32(10, state.lightning?.serial ?? -1, true);
+  if (state.lightning) {
+    view.setFloat32(14, state.lightning.x, true);
+    view.setFloat32(18, state.lightning.y, true);
+    view.setFloat32(22, state.lightning.z, true);
+  }
+  fires.forEach((fire, i) => {
+    const at = 30 + i * 39;
+    view.setUint8(at, fire.kind === 'tree' ? 0 : 1);
+    view.setUint32(at + 1, fire.id, true);
+    view.setFloat32(at + 5, fire.x, true);
+    view.setFloat32(at + 9, fire.y, true);
+    view.setFloat32(at + 13, fire.z, true);
+    view.setFloat32(at + 17, fire.height, true);
+    view.setFloat32(at + 21, fire.radius, true);
+    view.setFloat64(at + 25, fire.startedAt, true);
+    view.setUint8(at + 33, fire.generation);
+    view.setUint8(at + 34, fire.spread ? 1 : 0);
+  });
   return data;
 }

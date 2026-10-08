@@ -6,6 +6,11 @@ import {
   weatherPlan,
   WEATHER_CYCLE_MS,
   createInput,
+  calendarAt,
+  blizzardPlan,
+  isBlizzard,
+  DAY_LENGTH_MS,
+  worldStartDay,
 } from '../src/index';
 const sims: WorldSimulation[] = [];
 afterEach(() => sims.splice(0).forEach((s) => s.dispose()));
@@ -20,15 +25,14 @@ it('shares a gentle, deterministic forecast with bounded rain and occasional sho
     const p = weatherPlan(DEFAULT_WORLD_SEED, cycle);
     expect(p.rainEnds - p.rainStarts).toBeGreaterThanOrEqual(180_000);
     expect(p.rainEnds - p.rainStarts).toBeLessThanOrEqual(300_000);
-    expect(forestWeather(DEFAULT_WORLD_SEED, cycle * WEATHER_CYCLE_MS + 100_000).kind).toBe(
-      'clear',
-    );
-    expect(
-      forestWeather(DEFAULT_WORLD_SEED, cycle * WEATHER_CYCLE_MS + p.rainStarts - 1000).kind,
-    ).toBe('drizzle');
-    expect(
-      forestWeather(DEFAULT_WORLD_SEED, cycle * WEATHER_CYCLE_MS + p.rainStarts + 1000).kind,
-    ).toBe('rain');
+    const mildWeather = (now: number) =>
+      forestWeather(DEFAULT_WORLD_SEED, now, {
+        ...calendarAt(DEFAULT_WORLD_SEED, now),
+        season: 'spring',
+      });
+    expect(mildWeather(cycle * WEATHER_CYCLE_MS + 100_000).kind).toBe('clear');
+    expect(mildWeather(cycle * WEATHER_CYCLE_MS + p.rainStarts - 1000).kind).toBe('drizzle');
+    expect(mildWeather(cycle * WEATHER_CYCLE_MS + p.rainStarts + 1000).kind).toBe('rain');
     if (p.storm) {
       storms++;
       expect(p.stormMs).toBeGreaterThanOrEqual(60_000);
@@ -96,4 +100,35 @@ it('does not stockpile missed storms or create retrospective loot for new worlds
   sim.restoreWeatherCycle(1);
   sim.updateWeather(WEATHER_CYCLE_MS * 1000);
   expect(sim.droppedPilesList().length).toBeLessThanOrEqual(6);
+});
+
+it('has exactly three consecutive blizzard days in some winters, with no summer blizzards', () => {
+  let winters = 0;
+  for (let year = 1; year <= 80; year++) {
+    const plan = blizzardPlan(DEFAULT_WORLD_SEED, year);
+    const winter = ((year - 1) * 24 + 18 - worldStartDay(DEFAULT_WORLD_SEED)) * DAY_LENGTH_MS;
+    let snowyDays = 0;
+    for (let day = 0; day < 6; day++) {
+      const now = winter + day * DAY_LENGTH_MS;
+      if (isBlizzard(DEFAULT_WORLD_SEED, calendarAt(DEFAULT_WORLD_SEED, now))) snowyDays++;
+    }
+    expect(snowyDays).toBe(plan.occurs ? 3 : 0);
+    if (plan.occurs) {
+      winters++;
+      const start = winter + (plan.startDay - 1) * DAY_LENGTH_MS;
+      expect(forestWeather(DEFAULT_WORLD_SEED, start - 1).kind).not.toBe('blizzard');
+      expect(forestWeather(DEFAULT_WORLD_SEED, start).kind).toBe('blizzard');
+      expect(forestWeather(DEFAULT_WORLD_SEED, start + 3 * DAY_LENGTH_MS - 1).kind).toBe(
+        'blizzard',
+      );
+      expect(forestWeather(DEFAULT_WORLD_SEED, start + 3 * DAY_LENGTH_MS).kind).not.toBe(
+        'blizzard',
+      );
+    }
+    expect(forestWeather(DEFAULT_WORLD_SEED, winter - 12 * DAY_LENGTH_MS).kind).not.toBe(
+      'blizzard',
+    );
+  }
+  expect(winters).toBeGreaterThan(15);
+  expect(winters).toBeLessThan(65);
 });

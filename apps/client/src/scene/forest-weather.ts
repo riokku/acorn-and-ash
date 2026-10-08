@@ -76,7 +76,7 @@ export function createForestWeather(seed: number, heightAt: (x: number, z: numbe
       geometry.attributes.position!.needsUpdate = true;
       const day = dayProgress(nowMs);
       const dusk = day >= 0.67 && day <= 0.9;
-      fireflies.visible = dusk && weather.kind !== 'storm';
+      fireflies.visible = dusk && weather.kind !== 'storm' && weather.kind !== 'blizzard';
       if (fireflies.visible) {
         for (let i = 0; i < 32; i++) {
           const o = offsets[i]!,

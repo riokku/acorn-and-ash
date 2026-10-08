@@ -1,3 +1,9 @@
+import {
+  WildfireSimulation,
+  LIGHTNING_INTERVAL_MS,
+  type FireTarget,
+  type WildfireView,
+} from './wildfire';
 import { FISHING_LEASH } from '../constants';
 import {
   fishDisplayLearned,
@@ -32,7 +38,7 @@ import {
   type DecorationState,
   type HomeDecoration,
 } from './decorations';
-import { forestWeather, weatherPlan, WEATHER_CYCLE_MS } from './weather';
+import { forestWeather, weatherPlan, WEATHER_CYCLE_MS, BLIZZARD_SPEED } from './weather';
 import {
   advanceMeal,
   mealCooldown,
@@ -148,7 +154,7 @@ import {
   StaticTag,
   Velocity,
 } from '../ecs/traits';
-import { PROP_KINDS, choppingRuleFor, propKindIndex } from '../data/props';
+import { PROP_KINDS, choppingRuleFor, propKindIndex, propHeight } from '../data/props';
 import {
   ANIMAL_KINDS,
   type AnimalKind,
@@ -1086,6 +1092,133 @@ export class WorldSimulation {
 
   /** Real time as of the tick being simulated, supplied by the caller. */
   private nowMs = 0;
+  readonly wildfire = new WildfireSimulation();
+  private testWeather: 'storm' | 'blizzard' | null = null;
+  setTestWeather(weather: 'storm' | 'blizzard' | null): void {
+    this.testWeather = weather;
+  }
+  weather() {
+    const weather = forestWeather(this.seed, this.tick * TICK_MILLISECONDS, this.calendar());
+    return this.testWeather === null
+      ? weather
+      : {
+          ...weather,
+          kind: this.testWeather,
+          precipitation: 1,
+          wind: this.testWeather === 'blizzard' ? 1.6 : 0.85,
+        };
+  }
+  private fireTargets(): FireTarget[] {
+    const targets: FireTarget[] = [];
+    for (const [id, slot] of this.treeSlots) {
+      const prop = this.standingAt(slot);
+      if (!prop || !choppingRuleFor(PROP_KINDS[prop.kind]) || this.trees.get(id)?.felled) continue;
+      targets.push({
+        id,
+        kind: 'tree',
+        x: prop.x,
+        y: prop.y ?? 0,
+        z: prop.z,
+        height: propHeight(PROP_KINDS[prop.kind]) * prop.scale,
+        radius: 1,
+      });
+    }
+    for (const prop of this.builtProps) {
+      const rule = BUILDABLE_KINDS[prop.kind];
+      if (
+        !rule.isHome &&
+        prop.kind !== 'fence' &&
+        prop.kind !== 'cedarBench' &&
+        prop.kind !== 'timberTable'
+      )
+        continue;
+      targets.push({
+        id: prop.id,
+        kind: 'building',
+        x: prop.x,
+        y: this.collision.terrain.heightAt(prop.x, prop.z),
+        z: prop.z,
+        height: rule.isHome ? 4 : 1.5,
+        radius: rule.footprintRadius,
+      });
+    }
+    return targets;
+  }
+  wildfireView(): WildfireView {
+    return { ...this.wildfire.view(this.tick * TICK_MILLISECONDS), testWeather: this.testWeather };
+  }
+  restoreWildfire(saved: string): void {
+    this.wildfire.restore(saved, this.fireTargets());
+  }
+  /** Server-side entry point also used by simulation tests; clients cannot ignite things. */
+  igniteTree(id: number): boolean {
+    const target = this.fireTargets().find((target) => target.kind === 'tree' && target.id === id);
+    return target !== undefined && this.wildfire.ignite(target, this.tick * TICK_MILLISECONDS);
+  }
+  private updateWildfire(): void {
+    if (this.tick % TICK_HZ !== 0) return;
+    const now = this.tick * TICK_MILLISECONDS;
+    const targets = this.fireTargets();
+    const slot = Math.floor(now / LIGHTNING_INTERVAL_MS);
+    if (this.wildfire.lastStrike < 0) this.wildfire.lastStrike = slot;
+    if (slot > this.wildfire.lastStrike) {
+      this.wildfire.lastStrike = slot;
+      if (this.calendar().season === 'summer' && this.weather().kind === 'storm') {
+        const nearby = targets.filter(
+          (target) =>
+            target.kind === 'tree' &&
+            [...this.players.values()].some((player) => {
+              if (player.space !== OUTDOORS) return false;
+              const position = player.entity.get(Position)!;
+              return Math.hypot(position.x - target.x, position.z - target.z) < 65;
+            }),
+        );
+        const target = nearby[hashSeed('lightning-target', this.seed, slot) % nearby.length];
+        if (target) {
+          this.wildfire.lightning = {
+            serial: slot,
+            x: target.x,
+            y: target.y + target.height,
+            z: target.z,
+          };
+          if (hashSeed('lightning-ignite', this.seed, slot) % 100 < 45)
+            this.wildfire.ignite(target, now);
+        }
+      }
+    }
+    const burned = this.wildfire.advance(this.seed, now, targets);
+    for (const target of burned) {
+      if (target.kind === 'tree') this.fellTree(target.id, this.nowMs);
+      else {
+        const prop = this.builtPropsById.get(target.id);
+        if (!prop) continue;
+        const stacks = [...(this.homeChests.get(prop.id) ?? [])];
+        this.removeAbandonedBuild(prop);
+        for (const [index, stack] of stacks.entries()) {
+          if (!stack) continue;
+          const spot = this.reachableLogSpot(
+            { x: prop.x + index * 0.35, z: prop.z },
+            { x: prop.x, y: this.collision.terrain.heightAt(prop.x, prop.z), z: prop.z },
+          );
+          this.addPile(stack.item, stack.count, spot.x, spot.z, this.nowMs);
+        }
+      }
+    }
+    for (const player of this.players.values()) {
+      const position = player.entity.get(Position)!;
+      for (const fire of this.wildfire.fires.values()) {
+        if (
+          (player.space === OUTDOORS &&
+            Math.hypot(position.x - fire.x, position.z - fire.z) < fire.radius + 1.2 &&
+            Math.abs(position.y - fire.y) < fire.height + 1) ||
+          (fire.kind === 'building' && player.space === fire.id)
+        ) {
+          this.damagePlayer(player, 8);
+          break;
+        }
+      }
+    }
+  }
   private weatherCycle: number | null = null;
   private weatherCycleChanged = false;
   restoreWeatherCycle(value: number | null): void {
@@ -1930,6 +2063,7 @@ export class WorldSimulation {
     this.revealLandedLogs(nowMs);
     this.tick += 1;
     this.updateLakeIce();
+    this.updateWildfire();
     for (const plots of this.homeGardens.values())
       for (const plot of plots) if (plot.crop !== null && plot.growTicks > 0) plot.growTicks--;
     const scratch = this.scratch;
@@ -1993,6 +2127,8 @@ export class WorldSimulation {
         // into, and nothing out in the world is in reach.
         const outdoors = runtime.space === OUTDOORS;
         const collision = outdoors ? this.collision : this.roomFor(runtime.space);
+        collision.movementScale =
+          outdoors && this.weather().kind === 'blizzard' ? BLIZZARD_SPEED : 1;
 
         // A line in the water keeps its own time: the fish bites when it bites,
         // and wandering off brings the line in, whether or not inputs arrived.

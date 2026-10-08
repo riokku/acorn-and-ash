@@ -22,6 +22,8 @@ declare global {
       grassClumps(): number;
       combatMove(): { kind: number; age: number; grounded: boolean };
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
+      snowFootprints(): number;
+      wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
       weatherEffects(): { rainDrops: number; fireflies: number };
       snowOnGround(): number;
       seasonFall(): { petals: number; pollen: number; leaves: number; snow: number };
