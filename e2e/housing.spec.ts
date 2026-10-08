@@ -86,7 +86,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
-    await page.keyboard.press('KeyB');
+    await page.keyboard.press('KeyC');
     await expect(page.locator('.hud-journal')).toContainText('Teepee · blueprint needed');
     await expect(page.locator('.hud-journal')).toContainText(
       'Uses backpack first, then your private home chest',
@@ -101,7 +101,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
     await page.keyboard.press('KeyI');
     await page.getByRole('button', { name: /Teepee blueprint, 1/ }).click();
     await expect.poll(() => sim.homeSkillsOf(1)).toBe(1);
-    await page.keyboard.press('KeyB');
+    await page.keyboard.press('KeyC');
     await page.locator('.craft-tabs').getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page.locator('.hud-journal')).toContainText('Upgrade to Teepee');
     await expect(page.locator('.hud-journal')).not.toContainText('blueprint needed');
@@ -120,9 +120,9 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
         page.evaluate(() => window.acornDebug?.builtProps().find((prop) => prop.id === 7)?.kind),
       )
       .toBe('teepee');
-    await page.keyboard.down('KeyB');
+    await page.keyboard.down('KeyC');
     await expect.poll(() => page.evaluate(() => window.acornDebug?.craftMenuOpen())).toBe(true);
-    await page.keyboard.up('KeyB');
+    await page.keyboard.up('KeyC');
     await expect(page.locator('.build-area-note')).toContainText('18 m radius');
     await expect
       .poll(() => page.evaluate(() => window.acornDebug?.buildBoundaryVisible()))
@@ -132,7 +132,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
         ? 'test-results/homestead-boundary.png'
         : '/workspace/acorn-homestead-boundary.png',
     });
-    await page.keyboard.press('KeyB');
+    await page.keyboard.press('KeyC');
     await expect(page.locator('.build-area-note')).toHaveCount(0);
     await expect
       .poll(() => page.evaluate(() => window.acornDebug?.buildBoundaryVisible()))

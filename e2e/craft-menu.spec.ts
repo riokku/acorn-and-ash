@@ -6,7 +6,7 @@ import { skipDrawing } from './skip-drawing';
  * ran off the bottom of a laptop screen and the Build menu, which Chris opened
  * instead, never listed it. These check the menu on a laptop-sized screen:
  * everything on screen and reachable, rope and the boat on their Lake page,
- * and B and the number keys picking pieces to place.
+ * and C and the number keys picking pieces to place.
  *
  * It needs no walking, so it runs the same however slowly the browser draws.
  */
@@ -105,9 +105,25 @@ test('one Craft menu fits a laptop screen and lists rope with the other things t
   await page.keyboard.press('KeyC');
   await expect(page.locator('.hud-journal')).toHaveCount(0);
 
-  // B outdoors opens the same menu, on its Craft page. A page, then a number,
-  // starts placing a piece - even one you cannot afford yet, which shows red.
+  // B toggles the pack and closes the journal; C switches back to the journal.
+  await page.keyboard.press('KeyC');
+  await expect(panel).toBeVisible();
   await page.keyboard.press('KeyB');
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator('.inventory-panel')).toBeVisible();
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('.inventory-panel')).toHaveCount(0);
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('.inventory-panel')).toBeVisible();
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('.inventory-panel')).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  await page.keyboard.press('KeyC');
+  await expect(panel).toHaveCount(0);
+
+  // C opens the journal again. A page, then a number,
+  // starts placing a piece - even one you cannot afford yet, which shows red.
+  await page.keyboard.press('KeyC');
   await expect(panel).toBeVisible();
   await page.locator('.craft-tabs').getByRole('button', { name: 'Camp', exact: true }).click();
   await page.keyboard.press('Digit1');

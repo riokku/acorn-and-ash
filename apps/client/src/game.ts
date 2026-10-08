@@ -597,9 +597,9 @@ export interface GameDebug {
   raidBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
-  /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
+  /** Whether the room-decorating panel (opened with the Decorate button) is currently showing. */
   buildMenuOpen(): boolean;
-  /** Whether the Craft menu (opened with C, or B outdoors) is currently showing. */
+  /** Whether the Craft menu (opened with C) is currently showing. */
   craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{
@@ -3265,23 +3265,24 @@ export class Game {
           });
   }
 
-  /**
-   * B outdoors opens the Craft menu, the same one C does, on its Craft page:
-   * what you make and what you place are listed together (see decision 0096).
-   * While it is open, a digit key picks the entry numbered beside it; picking a
-   * piece starts placing it (see decision 0052), and while a piece is being
-   * placed the same digit keys swap it for another without going back.
-   *
-   * Indoors B is the room's decorating panel, which has pieces of its own.
-   */
+  /** Open or close the room's decorating panel from the HUD button. */
+  toggleDecorations(): void {
+    if (this.space === OUTDOORS || this.homeHere()?.yours !== true) return;
+    this.closeChest();
+    this.stopPlacing();
+    this.buildMenuOpen = !this.buildMenuOpen;
+    this.craftMenuOpen = false;
+    this.inventoryOpen = false;
+    this.options.hud.publish({
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: false,
+      inventoryOpen: false,
+    });
+  }
+
+  /** Number keys select decorations indoors or swap a placed piece outdoors. */
   private handleBuildMenuInput(controls: Controls): void {
     if (this.space !== OUTDOORS) {
-      if (controls.takeBuildMenuToggle()) {
-        this.stopPlacing();
-        this.buildMenuOpen = !this.buildMenuOpen;
-        this.craftMenuOpen = false;
-        this.inventoryOpen = false;
-      }
       if (this.buildMenuOpen && this.homeHere()?.yours === true) {
         for (const index of controls.takeBuildTaps()) {
           const kind = DECORATION_KINDS[index];
@@ -3294,10 +3295,6 @@ export class Game {
       return;
     }
     this.buildMenuOpen = false;
-    if (controls.takeBuildMenuToggle()) {
-      if (this.craftMenuOpen && this.journalTab === 'craft') this.craftMenuOpen = false;
-      else this.openCraftMenu();
-    }
     if (this.placing === null || this.craftMenuOpen) return;
     // A piece in hand: a digit swaps it for another, the way it always has.
     for (const index of controls.takeCraftTaps()) {
@@ -3655,16 +3652,6 @@ export class Game {
     this.options.hud.publish({ craftTab: tab });
   }
 
-  /** Open the Craft menu on its Craft page, putting away whatever else was open. */
-  private openCraftMenu(): void {
-    this.journalTab = 'craft';
-    this.craftMenuOpen = true;
-    this.buildMenuOpen = false;
-    this.inventoryOpen = false;
-    this.stopPlacing();
-    this.options.hud.publish({ journalTab: 'craft', craftMenuOpen: true, inventoryOpen: false });
-  }
-
   /**
    * The entries on the page of the Craft menu that is showing, in the order
    * the number keys count them. Read from the HUD's own state, so a key always
@@ -3695,6 +3682,7 @@ export class Game {
     if (controls.takeCraftMenuToggle()) {
       this.craftMenuOpen = !this.craftMenuOpen;
       if (this.craftMenuOpen) {
+        this.stopPlacing();
         this.buildMenuOpen = false;
         this.inventoryOpen = false;
       }
@@ -3709,14 +3697,10 @@ export class Game {
     }
   }
 
-  /** I opens or closes the inventory panel, closing craft or build if either was open. */
+  /** B (or I) toggles the pack, closing the journal or decorating panel. */
   private handleInventoryToggleInput(controls: Controls): void {
     if (!controls.takeInventoryToggle()) return;
-    this.inventoryOpen = !this.inventoryOpen;
-    if (this.inventoryOpen) {
-      this.buildMenuOpen = false;
-      this.craftMenuOpen = false;
-    }
+    this.toggleInventory();
   }
 
   /**

@@ -73,6 +73,7 @@ import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
   readonly onExpedition?: (request: ExpeditionRequest) => void;
+  readonly onToggleDecorations?: () => void;
   readonly onMoveDecoration?: (id: number) => void;
   readonly onReclaimDecoration?: (id: number) => void;
   readonly onGardenUse?: (request: GardenRequest) => void;
@@ -133,6 +134,7 @@ export function Hud({
   onPickCraft,
   onCraftTabChange,
   onGardenUse,
+  onToggleDecorations,
   onMoveDecoration,
   onReclaimDecoration,
 }: HudProps): React.JSX.Element {
@@ -224,6 +226,16 @@ export function Hud({
             ? 'Place your first tent to establish a 12 m building area'
             : `Your home boundary · ${state.buildAreaRadius} m radius`}
         </p>
+      ) : null}
+      {showingWorld && state.home?.yours === true ? (
+        <button
+          type="button"
+          className="decorate-toggle"
+          aria-expanded={state.buildMenuOpen}
+          onClick={onToggleDecorations}
+        >
+          {state.buildMenuOpen ? 'Close decorating' : 'Decorate'}
+        </button>
       ) : null}
       {state.buildMenuOpen && state.home !== null ? (
         <section className="decor-panel" aria-label="Home decoration">
@@ -710,7 +722,7 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
 }
 
 /**
- * The Craft menu (C, or B outside): one page of the field journal listing
+ * The Craft menu (C): one page of the field journal listing
  * everything you can make, whether it goes into your pack or onto the ground
  * (see decision 0096). Each entry is a stamped icon, a name, its ingredients
  * (each with its own small icon) and a mark saying whether it is ready or
@@ -1070,7 +1082,7 @@ function catchHint(animal: NonNullable<HudState['aimedAnimal']>): string {
 
 /** Decorating a room: the panel shows every choice by name, so this stays short. */
 function buildMenuHint(): string {
-  return 'Pick one below, or B to close';
+  return 'Pick one below · Decorate button or Esc to close';
 }
 
 /**

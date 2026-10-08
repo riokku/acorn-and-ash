@@ -153,7 +153,7 @@ describe('the hint along the bottom', () => {
       aimedTree: { name: 'Oak', swingsLeft: 3 },
       carrying: [{ item: 'axe', count: 1 }],
     };
-    expect(hint(state)).toBe('Pick one below, or B to close');
+    expect(hint(state)).toBe('Pick one below · Decorate button or Esc to close');
   });
 
   it('says how to place a piece, turn it and put it away while one is out', () => {

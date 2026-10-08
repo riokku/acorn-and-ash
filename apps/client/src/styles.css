@@ -3499,6 +3499,20 @@ body {
   height: 1rem;
 }
 
+.decorate-toggle {
+  position: absolute;
+  z-index: 6;
+  right: 280px;
+  top: 12px;
+  pointer-events: auto;
+  padding: 10px 16px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: var(--parchment);
+  color: var(--ink-warm);
+  cursor: pointer;
+}
+
 .decor-panel {
   z-index: 5;
   position: absolute;

@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { skipDrawing } from './skip-drawing';
 import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 0.75 });
 test.setTimeout(240_000);
 test('places, rotates, moves and packs up decorations in a private home', async ({ page }) => {
   page.setDefaultTimeout(30_000);
+  await skipDrawing(page);
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     hungerEmptyAfterSeconds: Infinity,
@@ -56,9 +58,8 @@ test('places, rotates, moves and packs up decorations in a private home', async 
     });
   });
   const menu = async () => {
-    await page.keyboard.down('KeyB');
+    await page.getByRole('button', { name: 'Decorate', exact: true }).click();
     await expect(page.locator('.decor-panel')).toBeVisible();
-    await page.keyboard.up('KeyB');
   };
   const moveFloor = async (x: number, z: number) => {
     await expect(page.locator('.decor-panel')).toHaveCount(0);
@@ -92,6 +93,16 @@ test('places, rotates, moves and packs up decorations in a private home', async 
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
+    // Indoor B opens the pack too; the button owns decorating in every home.
+    await page.keyboard.press('KeyB');
+    await expect(page.locator('.inventory-panel')).toBeVisible();
+    await expect(page.locator('.decor-panel')).toHaveCount(0);
+    await page.keyboard.press('KeyB');
+    await expect(page.locator('.inventory-panel')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Decorate', exact: true }).click();
+    await expect(page.locator('.decor-panel')).toBeVisible();
+    await page.getByRole('button', { name: 'Close decorating', exact: true }).click();
+    await expect(page.locator('.decor-panel')).toHaveCount(0);
     await menu();
     await page.getByRole('button', { name: /1 · Cedar bench/ }).click();
     await clickFloor(-0.5, -0.125);
