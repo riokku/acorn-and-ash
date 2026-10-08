@@ -291,7 +291,13 @@ export class World extends DurableObject<WorldEnv> {
 
     if (earlier !== null) simulation.handOver(netId);
     else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
-    if (this.testGear(url)) simulation.giveTestGear(netId, ['bag', ...GEAR_ITEMS]);
+    // The axe and rod are main-hand gear too, but they are found in the world;
+    // leaving them out keeps the hand-out inside the pack's slots.
+    if (this.testGear(url))
+      simulation.giveTestGear(netId, [
+        'bag',
+        ...GEAR_ITEMS.filter((item) => item !== 'axe' && item !== 'rod'),
+      ]);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
