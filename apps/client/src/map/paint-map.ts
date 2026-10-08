@@ -54,6 +54,8 @@ const TREE_COLOURS: Record<string, Rgb> = {
 };
 const TREE_SHADOW = hex(0x55603f);
 const ROCK = hex(0x9d998e);
+const MOUNTAIN_ROCK = hex(0xa59f92);
+const SNOW = hex(0xf6f4ee);
 const MOSS = hex(0x8c9a70);
 
 /** Metres between two samples of the ground's height and shading, blended smoothly in between. */
@@ -65,6 +67,8 @@ const SAMPLE_SPACING = 2;
 const SYMBOL_SCALE = 1.35;
 /** Height between two ink contour lines on the hills, in metres. */
 const CONTOUR_INTERVAL = 1.25;
+/** The same, up on the mountain. */
+const CONTOUR_INTERVAL_HIGH = 5;
 
 /** Everything about the world the map needs, built from the seed the same way the game builds it. */
 export interface MapWorld {
@@ -109,6 +113,8 @@ export function paintWorldMap(world: MapWorld, size: number = MAP_IMAGE_SIZE): R
       const lush = 1 - smoothstep(0, 5, ground.waterGap);
       const grass = mixRgb(GRASS, GRASS_LUSH, lush * 0.6);
       let land = mixRgb(grass, FLOOR, ground.floor);
+      land = mixRgb(land, MOUNTAIN_ROCK, ground.rock);
+      land = mixRgb(land, SNOW, ground.snow);
       // Sunny and shady patches, from the same tint the 3D ground uses.
       land = scaleRgb(land, 0.9 + (ground.light - 0.9) * 0.9);
       // Hills lit from the top left of the page, as maps usually are.
@@ -126,8 +132,10 @@ export function paintWorldMap(world: MapWorld, size: number = MAP_IMAGE_SIZE): R
         colour = mixRgb(colour, water, 0.92);
       } else {
         // Faint sepia contour lines, about a pixel wide whatever the slope.
-        const level = ground.height / CONTOUR_INTERVAL - 0.5;
-        const heightToLine = Math.abs(level - Math.round(level)) * CONTOUR_INTERVAL;
+        // Wider apart up the mountain, where lines every 1.25 m would be a solid grey.
+        const interval = ground.height > 8 ? CONTOUR_INTERVAL_HIGH : CONTOUR_INTERVAL;
+        const level = ground.height / interval - 0.5;
+        const heightToLine = Math.abs(level - Math.round(level)) * interval;
         const metresToLine = heightToLine / Math.max(ground.slope, 1e-3);
         const line =
           (1 - smoothstep(0.2, 0.9, metresToLine / metresPerPixel)) *
@@ -159,6 +167,10 @@ interface GroundSample {
   readonly hillShade: number;
   /** Metres to the nearest water's edge, negative inside it. */
   readonly waterGap: number;
+  /** 0 to 1: bare rock on the mountain. */
+  readonly rock: number;
+  /** 0 to 1: snow on the mountain tops. */
+  readonly snow: number;
 }
 
 /**
@@ -168,7 +180,7 @@ interface GroundSample {
  */
 function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample } {
   const count = Math.ceil((MAP_HALF_EXTENT * 2) / SAMPLE_SPACING) + 1;
-  const fields = 6;
+  const fields = 8;
   const grid = new Float32Array(count * count * fields);
   const shader = createGroundShader({ water: world.water, lake: world.lake, props: world.props });
   const step = SAMPLE_SPACING;
@@ -181,7 +193,7 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
       const dx = (world.terrain.heightAt(x + 1, z) - world.terrain.heightAt(x - 1, z)) / 2;
       const dz = (world.terrain.heightAt(x, z + 1) - world.terrain.heightAt(x, z - 1)) / 2;
       const slope = Math.hypot(dx, dz);
-      const shade = shader.shadeAt(x, z, slope);
+      const shade = shader.shadeAt(x, z, slope, height);
       let waterGap = Infinity;
       for (const circle of world.water) {
         waterGap = Math.min(waterGap, Math.hypot(circle.x - x, circle.z - z) - circle.radius);
@@ -197,6 +209,8 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
       // brighten, slopes facing down and right darken.
       grid[index + 4] = Math.max(-0.14, Math.min(0.14, (dx + dz) * -0.35));
       grid[index + 5] = Math.min(waterGap, 50);
+      grid[index + 6] = shade.rock;
+      grid[index + 7] = shade.snow;
     }
   }
 
@@ -222,6 +236,8 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
         light: read(3),
         hillShade: read(4),
         waterGap: read(5),
+        rock: read(6),
+        snow: read(7),
       };
     },
   };

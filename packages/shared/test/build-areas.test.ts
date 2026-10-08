@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  PLAYABLE_HALF_EXTENT,
   HOME_BUILD_RADII,
   buildableFootprint,
   footprintInBuildArea,
@@ -56,7 +57,9 @@ describe('private building areas', () => {
     );
   });
   it('protects world edges and encounter clearings', () => {
-    expect(checkHomeBuildArea({ x: 140, z: 0, radius: 12 }, [], [])).toBe('worldEdge');
+    expect(checkHomeBuildArea({ x: PLAYABLE_HALF_EXTENT - 10, z: 0, radius: 12 }, [], [])).toBe(
+      'worldEdge',
+    );
     expect(
       checkHomeBuildArea(
         { x: 0, z: 0, radius: 12 },

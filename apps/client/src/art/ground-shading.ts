@@ -16,6 +16,7 @@
 
 import {
   CLEARING_TREE_LINE_INNER,
+  MOUNTAINS,
   PROP_KINDS,
   SPAWN_POSITION,
   isNearLake,
@@ -30,6 +31,10 @@ import { smoothstep, worldFbm } from './noise';
 export interface GroundShade {
   /** 0 is lawn grass, 1 is bare forest floor. */
   readonly floor: number;
+  /** 0 is soil and grass, 1 is bare grey rock: steep faces and the high ground above the trees. */
+  readonly rock: number;
+  /** 0 is clear, 1 is snow: the mountain tops, which keep it all year. */
+  readonly snow: number;
   readonly tint: readonly [number, number, number];
 }
 
@@ -50,8 +55,10 @@ export interface GroundShader {
   /**
    * How the ground looks here. `slope` is how steep it is - rise over run,
    * 0 for flat - which the caller already knows from the ground's own shape.
+   * `height` is the ground's height there, which decides where the rock and
+   * the snow begin on the mountain; flat ground at sea level by default.
    */
-  shadeAt(x: number, z: number, slope: number): GroundShade;
+  shadeAt(x: number, z: number, slope: number, height?: number): GroundShade;
 }
 
 export function createGroundShader(context: GroundContext): GroundShader {
@@ -75,7 +82,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
   }
 
   return {
-    shadeAt(x, z, slope) {
+    shadeAt(x, z, slope, height = 0) {
       // How much the trees and rocks nearby cover this spot.
       let cover = 0;
       let shade = 0;
@@ -123,9 +130,20 @@ export function createGroundShader(context: GroundContext): GroundShader {
 
       const wildPatches = smoothstep(0.4, 0.7, patches) * inWilderness * 0.6;
       const underTrees = smoothstep(0.1, 0.9, cover) * (0.55 + inWilderness * 0.45);
-      // Steep hillsides lose their grass too.
+      // Up the mountain: bare rock where it is steep or above the trees, and
+      // snow on the tops. The lines wander a few metres so they are not level.
+      const wander = worldFbm(x * 0.05 + 9, z * 0.05 - 31, 3, 73) * 6;
+      const rock = Math.max(
+        smoothstep(0.7, 1.15, slope),
+        smoothstep(MOUNTAINS.treeLine - 6 + wander, MOUNTAINS.treeLine + 4 + wander, height),
+      );
+      const snow =
+        smoothstep(MOUNTAINS.snowLine - 2 + wander, MOUNTAINS.snowLine + 5 + wander, height) *
+        (1 - smoothstep(1.4, 2.4, slope));
+      // Steep hillsides lose their grass too, and rock and snow have none.
       const floor = clamp01(
-        Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope)) * (1 - shore * 0.8),
+        Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock) *
+          (1 - shore * 0.8),
       );
 
       // Warmer and brighter where it catches the sun, cooler and darker in
@@ -137,7 +155,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         light * (1 + warmth * 0.4) * (1 + shore * 0.05),
         light * (1 - warmth) * (1 - shore * 0.04),
       ];
-      return { floor, tint };
+      return { floor, rock, snow, tint };
     },
   };
 }

@@ -1,4 +1,4 @@
-import { PLAYABLE_HALF_EXTENT } from '../constants';
+import { ORIGINAL_HALF_EXTENT } from '../constants';
 import { colliderFootprintRadius, cylinder, type Collider } from './colliders';
 import type { Terrain } from './terrain';
 import { overlapsWater, type WaterCircle } from './water';
@@ -55,7 +55,7 @@ export function buildEncounterSites(
     const rng = createRng(hashSeed(seed, 'encounter-site', index));
     for (let attempt = 0; attempt < 400; attempt++) {
       const angle = rng.nextRange(0, Math.PI * 2);
-      const distance = rng.nextRange(62, PLAYABLE_HALF_EXTENT - 18);
+      const distance = rng.nextRange(62, ORIGINAL_HALF_EXTENT - 18);
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       if (overlapsWater(water, x, z, 4)) continue;

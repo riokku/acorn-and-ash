@@ -338,7 +338,11 @@ hits the ground. See
 ### The wilderness
 
 Past the clearing's own ring of trees the ground rolls into hills, and the
-forest thickens the further out you go, out to a wall 150 m from the centre.
+forest thickens the further out you go, out to a wall 300 m from the centre.
+In the far south-west a mountain range rises out of the hills (see
+[decision 0114](docs/decisions/0114-mountain-stream-and-digging.md)): pine forest
+thins to bare rock, snow caps the top, and cliffs block the way while gentle
+slopes can be walked.
 It's generated from the world's seed, so the server and every browser draw
 the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Every tree out there

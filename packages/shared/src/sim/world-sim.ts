@@ -1607,6 +1607,7 @@ export class WorldSimulation {
       ],
       PLAYABLE_HALF_EXTENT,
       LAKE,
+      true,
     );
     this.standing = [...this.clearing.props];
     this.standingWilderness = [...this.wilderness.props];

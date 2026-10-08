@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import {
+  PLAYABLE_HALF_EXTENT,
   resolveCapsule,
   WorldSimulation,
   DEFAULT_WORLD_SEED,
@@ -153,10 +154,12 @@ it('returns the guardian to its hollow when a chase leaves the encounter and kee
   const guardian = sim.snapshotFor(1).find((entity) => entity.netId === 1010)!;
   expect(guardian.vx).toBeLessThan(0);
   expect(guardian.action & 4).toBe(0);
-  sim.placeAnimal(1008, { x: 160, y: 0, z: site.z });
-  sim.placePlayer(1, { x: 145, y: 0, z: site.z }, 0);
+  sim.placeAnimal(1008, { x: PLAYABLE_HALF_EXTENT + 10, y: 0, z: site.z });
+  sim.placePlayer(1, { x: PLAYABLE_HALF_EXTENT - 5, y: 0, z: site.z }, 0);
   tick();
-  expect(sim.snapshotFor(1).find((entity) => entity.netId === 1008)!.x).toBeLessThan(150);
+  expect(sim.snapshotFor(1).find((entity) => entity.netId === 1008)!.x).toBeLessThan(
+    PLAYABLE_HALF_EXTENT,
+  );
 });
 
 it('guides an approaching visitor back toward the raccoon cache', () => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COLLISION_SKIN_WIDTH,
   createCollisionWorld,
+  replaceCollider,
   resolveCapsule,
 } from '../src/collision/capsule';
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../src/constants';
@@ -98,5 +99,40 @@ describe('capsule collision', () => {
     expect(resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(true);
     expect(position.x).toBe(38);
     expect(position.z).toBe(-38);
+  });
+});
+
+describe('the collision grid', () => {
+  const trunks = Array.from({ length: 400 }, (_, i) =>
+    cylinder(((i * 37) % 200) - 100, ((i * 53) % 200) - 100, 0.4 + (i % 5) * 0.1, 6),
+  );
+
+  it('pushes a player exactly as checking every collider would', () => {
+    const plain = createCollisionWorld(terrain, trunks, 300);
+    const gridded = createCollisionWorld(terrain, trunks, 300, null, true);
+    for (let i = 0; i < 300; i++) {
+      const start = { x: ((i * 7) % 200) - 100 + 0.3, y: 0, z: ((i * 11) % 200) - 100 - 0.2 };
+      const a = { ...start };
+      const b = { ...start };
+      const touchedA = resolveCapsule(a, PLAYER_RADIUS, PLAYER_HEIGHT, plain);
+      const touchedB = resolveCapsule(b, PLAYER_RADIUS, PLAYER_HEIGHT, gridded);
+      expect(touchedB).toBe(touchedA);
+      expect(b).toEqual(a);
+    }
+  });
+
+  it('follows a tree being swapped for its stump, and still checks later additions', () => {
+    const world = createCollisionWorld(terrain, [cylinder(0, 0, 1, 6)], 300, null, true);
+    const inside = { x: 0.5, y: 0, z: 0 };
+    expect(resolveCapsule(inside, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(true);
+
+    replaceCollider(world, 0, cylinder(0, 0, 0.2, 0.4));
+    const overStump = { x: 0.5, y: 1, z: 0 };
+    expect(resolveCapsule(overStump, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(false);
+
+    // A cabin built later is not in the grid, but it still stops a player.
+    world.colliders.push(box(30, 1, 30, 2, 1, 2));
+    const atCabin = { x: 30, y: 0, z: 30 };
+    expect(resolveCapsule(atCabin, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(true);
   });
 });

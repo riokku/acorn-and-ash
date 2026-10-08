@@ -79,10 +79,16 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // thinner under the trees, where the bare forest floor is, and keeping the
   // soft patches of light and shade, so snow is not a flat white sheet.
   const shaded = mix(grassColour, floorColour, bare).mul(attribute('tint', 'vec3'));
-  const seasonal = shaded.mul(seasonUniforms.ground);
-  const snowCover = seasonUniforms.snow
+  // Up the mountain the ground turns to bare grey rock, speckled by the same
+  // forest-floor texture so it is not a flat colour (see decision 0114).
+  const rockColour = vec3(0.5, 0.48, 0.45).mul(floorNear.r.mul(0.9).add(0.55));
+  const rocky = mix(shaded, rockColour.mul(attribute('tint', 'vec3')), attribute('rock', 'float'));
+  const seasonal = rocky.mul(seasonUniforms.ground);
+  const winterSnow = seasonUniforms.snow
     .mul(float(1).sub(bare.mul(float(0.45).mul(float(1).sub(seasonUniforms.blizzard)))))
     .mul(0.88);
+  // The mountain tops keep their snow in every season.
+  const snowCover = max(winterSnow, attribute('snow', 'float').mul(0.95));
   const snow = vec3(0.9, 0.93, 0.98).mul(attribute('tint', 'vec3'));
 
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, metalness: 0 });

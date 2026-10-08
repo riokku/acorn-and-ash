@@ -1,6 +1,6 @@
 # 0114 · A mountain range, a stream down to the lake, and digging tunnels
 
-**Status:** proposed · **Date:** 2026-10-08
+**Status:** accepted; step 1 (the mountain terrain) built · **Date:** 2026-10-08
 
 ## Context
 
@@ -46,3 +46,15 @@ Each step is its own small pull request that Chris can play.
 - A world with a lot of digging grows its save data. A cap on dig size and depth keeps this inside the Durable Object limits, and we need to measure it before opening digging to 50 players.
 - Permanent, shared tunnels mean one player can dig up the part of the mountain everyone shares. We can add limits or refilling later.
 - Free digging is the largest build in this plan and may take several pull requests.
+
+## What step 1 built
+
+- **The world is 600 × 600 m** (the wall moved from 150 m to 300 m out). Hills, the forest and the edge taper now follow the square wall, so the corners are wooded too, not empty. Woodland encounter sites still choose their spots inside the old 150 m reach, so they did not move.
+- **The mountain range** (`packages/shared/src/world/mountains.ts`) runs along a ridge in the far south-west, peaking at about 70 m, with a wide gentle foot, and cliff bands across its flanks. Pines grow up to the tree line (30 m), only rocks above that, and the ground is bare grey rock and then snow (from 46 m). Rock and snow show on the map too.
+- **Cliffs block the way.** The steepest slope a player can walk up is 0.85 (about 40 degrees), rise over run. The server and the browser use the same rule: walking into a cliff slides along it, and a jump cannot carry anyone up a face. A test finds the highest ground reachable on foot and checks that you can get most of the way up the range.
+- **The collision loop got a grid.** The bigger forest means about 7,000 trees and rocks rather than about 1,500, and checking every one for every player blew the 10 ms tick budget (about 17 ms with 50 players). Collision now looks only at the trees near the player, which is faster than before the change (about 1.5 ms mean with 50 players) and gives the same results (a test checks it against the full scan).
+- **Fewer, bigger map squares.** The explored map is now 8 m squares (was 4 m) so it stays under a kilobyte, and a player reveals 40 m around them (was 36 m).
+
+Resets for existing worlds: because the world is larger, trees are numbered in a different order, so any tree already chopped down in a saved world is forgotten, and everybody's explored map starts again.
+
+Still to come: the stream and waterfalls (step 2), the shovel and ore (step 3), digging (step 4) and art (step 5).

@@ -445,17 +445,23 @@ function createGround(
   const normal = geometry.attributes.normal;
   if (normal === undefined) throw new Error('Plane geometry has no normal attribute');
   const floor = new Float32Array(position.count);
+  const rock = new Float32Array(position.count);
+  const snow = new Float32Array(position.count);
   const tint = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
     const up = Math.max(0.05, normal.getY(i));
     const slope = Math.sqrt(Math.max(0, 1 - up * up)) / up;
-    const shade = shader.shadeAt(position.getX(i), position.getZ(i), slope);
+    const shade = shader.shadeAt(position.getX(i), position.getZ(i), slope, position.getY(i));
     floor[i] = shade.floor;
+    rock[i] = shade.rock;
+    snow[i] = shade.snow;
     tint[i * 3] = shade.tint[0];
     tint[i * 3 + 1] = shade.tint[1];
     tint[i * 3 + 2] = shade.tint[2];
   }
   geometry.setAttribute('floor', new THREE.BufferAttribute(floor, 1));
+  geometry.setAttribute('rock', new THREE.BufferAttribute(rock, 1));
+  geometry.setAttribute('snow', new THREE.BufferAttribute(snow, 1));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
 
   const material = createGroundMaterial();
