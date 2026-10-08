@@ -1007,7 +1007,13 @@ describe("word that a player's own cache changed", () => {
 describe('introducing yourself', () => {
   it('survives a round trip', () => {
     const decoded = decodeClientMessage(encodeHello('Acorn', 'knight', 'amber'));
-    expect(decoded).toEqual({ type: 'hello', name: 'Acorn', character: 'knight', color: 'amber' });
+    expect(decoded).toEqual({
+      type: 'hello',
+      name: 'Acorn',
+      character: 'knight',
+      color: 'amber',
+      skin: 'natural',
+    });
   });
 
   it('carries a name with real unicode in it', () => {
@@ -1017,6 +1023,7 @@ describe('introducing yourself', () => {
       name: 'Amélie 🌲',
       character: 'knight',
       color: 'moss',
+      skin: 'natural',
     });
   });
 
@@ -1026,6 +1033,18 @@ describe('introducing yourself', () => {
       name: '',
       character: 'knight',
       color: 'amber',
+      skin: 'natural',
+    });
+  });
+
+  it('carries the skin tone picked', () => {
+    const decoded = decodeClientMessage(encodeHello('Acorn', 'mage', 'teal', 'darkest'));
+    expect(decoded).toEqual({
+      type: 'hello',
+      name: 'Acorn',
+      character: 'mage',
+      color: 'teal',
+      skin: 'darkest',
     });
   });
 
@@ -1034,7 +1053,7 @@ describe('introducing yourself', () => {
     expect(decodeClientMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
   });
 
-  it('refuses a character or colour this build has never heard of', () => {
+  it('refuses a character, colour or skin tone this build has never heard of', () => {
     const badCharacter = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
     badCharacter[1] = 200;
     expect(decodeClientMessage(badCharacter.buffer)).toBeNull();
@@ -1042,6 +1061,10 @@ describe('introducing yourself', () => {
     const badColor = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
     badColor[2] = 200;
     expect(decodeClientMessage(badColor.buffer)).toBeNull();
+
+    const badSkin = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
+    badSkin[3] = 200;
+    expect(decodeClientMessage(badSkin.buffer)).toBeNull();
   });
 });
 
@@ -1055,10 +1078,10 @@ describe('telling everybody who is who', () => {
     expect(roundTrip([])).toEqual([]);
   });
 
-  it('carries a name, character and tint for each connected player', () => {
+  it('carries a name, character, tint and skin tone for each connected player', () => {
     const players: RosterEntry[] = [
-      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber' },
-      { netId: 2, name: 'Ash', character: 'knight', color: 'teal' },
+      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
+      { netId: 2, name: 'Ash', character: 'knight', color: 'teal', skin: 'darker' },
     ];
     expect(roundTrip(players)).toEqual(players);
   });
@@ -1069,18 +1092,25 @@ describe('telling everybody who is who', () => {
 
   it('refuses one that has been cut short', () => {
     const encoded = encodeRoster([
-      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber' },
+      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
     ]);
     expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
   });
 
-  it('refuses a character or colour this build has never heard of', () => {
+  it('refuses a character, colour or skin tone this build has never heard of', () => {
     const encoded = new Uint8Array(
-      encodeRoster([{ netId: 1, name: 'Acorn', character: 'knight', color: 'amber' }]).slice(0),
+      encodeRoster([
+        { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
+      ]).slice(0),
     );
-    // header(2) + netId(2) + character(1) puts the colour byte at index 5.
-    encoded[5] = 200;
-    expect(decodeServerMessage(encoded.buffer)).toBeNull();
+    // header(2) + netId(2) + character(1) puts the colour byte at index 5,
+    // and the skin tone right after it.
+    const badColor = encoded.slice(0);
+    badColor[5] = 200;
+    expect(decodeServerMessage(badColor.buffer)).toBeNull();
+    const badSkin = encoded.slice(0);
+    badSkin[6] = 200;
+    expect(decodeServerMessage(badSkin.buffer)).toBeNull();
   });
 
   it('never carries more than a world can hold', () => {
@@ -1089,6 +1119,7 @@ describe('telling everybody who is who', () => {
       name: `Player ${i}`,
       character: 'knight',
       color: 'amber',
+      skin: 'natural',
     }));
     expect(roundTrip(players)).toHaveLength(MAX_ROSTER_ENTRIES);
   });

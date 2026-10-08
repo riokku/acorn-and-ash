@@ -395,7 +395,9 @@ describe('introducing yourself', () => {
     client.hello('Acorn', 'knight', 'moss');
     await waitFor('the roster to include them', () => client.roster().length > 0);
 
-    expect(client.roster()).toEqual([{ netId, name: 'Acorn', character: 'knight', color: 'moss' }]);
+    expect(client.roster()).toEqual([
+      { netId, name: 'Acorn', character: 'knight', color: 'moss', skin: 'natural' },
+    ]);
     client.close();
   });
 
@@ -409,15 +411,33 @@ describe('introducing yourself', () => {
     const second = await TestClient.connect(worldId);
     await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
     expect(second.openingRoster()).toEqual([
-      { netId: first.welcome().netId, name: 'Acorn', character: 'knight', color: 'amber' },
+      {
+        netId: first.welcome().netId,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'amber',
+        skin: 'natural',
+      },
     ]);
 
     second.hello('Ash', 'knight', 'teal');
     await waitFor('the first player to hear about the second', () => first.roster().length >= 2);
     expect(first.roster()).toEqual(
       expect.arrayContaining([
-        { netId: first.welcome().netId, name: 'Acorn', character: 'knight', color: 'amber' },
-        { netId: second.welcome().netId, name: 'Ash', character: 'knight', color: 'teal' },
+        {
+          netId: first.welcome().netId,
+          name: 'Acorn',
+          character: 'knight',
+          color: 'amber',
+          skin: 'natural',
+        },
+        {
+          netId: second.welcome().netId,
+          name: 'Ash',
+          character: 'knight',
+          color: 'teal',
+          skin: 'natural',
+        },
       ]),
     );
     first.close();
@@ -453,13 +473,13 @@ describe('introducing yourself', () => {
     client.close();
   });
 
-  it('remembers a name and tint across logging out and coming back', async () => {
+  it('remembers a name, tint and skin tone across logging out and coming back', async () => {
     const worldId = nextWorldId();
     const playerKey = 'remembers-who-they-are';
 
     const first = await TestClient.connect(worldId, playerKey);
     await waitFor('a welcome', () => first.received.length > 0);
-    first.hello('Acorn', 'knight', 'clay');
+    first.hello('Acorn', 'knight', 'clay', 'darker');
     await waitFor('the roster to include them', () => first.roster().length > 0);
     first.close();
     await sleep(200);
@@ -467,7 +487,13 @@ describe('introducing yourself', () => {
     const second = await TestClient.connect(worldId, playerKey);
     await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
     expect(second.openingRoster()).toEqual([
-      { netId: second.welcome().netId, name: 'Acorn', character: 'knight', color: 'clay' },
+      {
+        netId: second.welcome().netId,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'clay',
+        skin: 'darker',
+      },
     ]);
     second.close();
   });
@@ -498,6 +524,7 @@ describe('one character per world', () => {
       name: 'Acorn',
       character: 'knight',
       color: 'moss',
+      skin: 'natural',
     });
     client.close();
   });
@@ -522,7 +549,7 @@ describe('one character per world', () => {
 
     const second = await TestClient.connect(worldId, playerKey);
     await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
-    second.hello('Somebody Else', 'mage', 'plum');
+    second.hello('Somebody Else', 'mage', 'plum', 'lightest');
     await sleep(200);
 
     expect(await characterOf(worldId, playerKey)).toEqual({
@@ -530,9 +557,16 @@ describe('one character per world', () => {
       name: 'Acorn',
       character: 'knight',
       color: 'clay',
+      skin: 'natural',
     });
     expect(second.roster()).toEqual([
-      { netId: second.welcome().netId, name: 'Acorn', character: 'knight', color: 'clay' },
+      {
+        netId: second.welcome().netId,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'clay',
+        skin: 'natural',
+      },
     ]);
     second.close();
   });

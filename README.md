@@ -272,7 +272,10 @@ just a shirt and shorts. The bodies now wear just that, and the old outfits
 are saved as separate gear in [`assets/gear/`](assets/gear/); wearing and
 finding gear in the game are still to come (see
 [decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
-Your name, tint and character travel to
+You also pick a skin tone: the body's own skin, or a little lighter or darker,
+from a row of five swatches; only the skin changes, never the hair or clothes
+(see [decision 0113](docs/decisions/0113-skin-tones.md)).
+Your name, tint, character and skin tone travel to
 the server and out to everybody else in the clearing, with a small name tag
 floating over your head the same way it does over anyone else's. Picked
 once, remembered the next time you visit. See
@@ -938,6 +941,8 @@ them, and `&demo=` and `&strip=` as above. `?gallery=bodies` shows the six
 bodies in pairs, in their old outfits and then in just a shirt and shorts;
 `&gear=mage-hat` (or any file name in `assets/gear/`) puts that one piece on
 every body instead, and `&motion=walk` or `run` sets them moving.
+`?gallery=bodies&tones` lines up every body in all five skin tones, and
+`&skin=darker` (or another tone) gives the bodies that skin.
 
 ## Commands
 

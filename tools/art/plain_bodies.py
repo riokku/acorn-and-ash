@@ -179,7 +179,8 @@ def face_colours(obj):
 
 def is_skin(c):
     r, g, b = c
-    return r > .85 and g > .6 and .45 < b < .75 and r - b > .25
+    # every body's skin is painted with red near .96; blond hair is close but nearer .88
+    return r > .93 and g > .6 and .45 < b < .75 and r - b > .25
 
 
 def is_hood_green(c):
@@ -285,11 +286,18 @@ def paint(me, colours, parts, flats):
             col.data[li].color_srgb = (min(1, c[0] * shade), min(1, c[1] * shade), min(1, c[2] * shade), 1)
 
 
-def clothes_material():
-    mat = bpy.data.materials.get('plain_clothes')
+# Skin is a material of its own, here and on each head (named '..._skin' and marked with a
+# 'skin' extra the game reads as userData.skin), so the game can
+# lighten or darken just the skin for the skin tone a player picks.
+SKIN_SUFFIX = '_skin'
+
+
+def clothes_material(name='plain_clothes'):
+    """A soft, matte material coloured by the mesh's vertex colours."""
+    mat = bpy.data.materials.get(name)
     if mat:
         return mat
-    mat = bpy.data.materials.new('plain_clothes')
+    mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
     vc = nt.nodes.new('ShaderNodeVertexColor')
@@ -448,6 +456,17 @@ def keep_faces(obj, keep):
     bm.free()
 
 
+def split_head_skin(head, cid):
+    """Moves the faces of a head painted in skin onto a copy of its material, named knight_skin and so on."""
+    original = head.data.materials[0]
+    skin_mat = original.copy()
+    skin_mat.name = snake(cid) + SKIN_SUFFIX
+    skin_mat['skin'] = True
+    head.data.materials.append(skin_mat)
+    for f, c in zip(head.data.polygons, face_colours(head)):
+        f.material_index = 1 if is_skin(c) else 0
+
+
 def split_hood(head, col):
     """Body 6's hood is part of its head: cut the green hood off into a piece of its own."""
     colours = face_colours(head)
@@ -520,6 +539,8 @@ def build_body(cid, prefix, rig, parts, ref, mage, col):
     palette['skin'] = skin
     palette['skin_trim'] = skin
     mat = clothes_material()
+    skin_mat = clothes_material('plain' + SKIN_SUFFIX)
+    skin_mat['skin'] = True
     made = {}
     for limb in LIMBS:
         p = Painter()
@@ -530,23 +551,26 @@ def build_body(cid, prefix, rig, parts, ref, mage, col):
         else:
             bare_leg(p, 1 if limb == 'LegLeft' else -1, k)
         name = prefix + '_' + limb
+        skin_part = p.names.index('skin') if 'skin' in p.names else -1
         obj = bpy.data.objects.new(name, p.to_mesh(name, palette))
         col.objects.link(obj)
         obj.data.materials.append(mat)
+        obj.data.materials.append(skin_mat)
+        for f, a in zip(obj.data.polygons, obj.data.attributes['part'].data):
+            f.material_index = 1 if a.value == skin_part else 0
         copy_weights(obj, ref[limb])
         if limb.startswith('Arm'):
             hand = bare_hands(mage[limb], 1 if limb == 'ArmLeft' else -1, col)
             hand.data.materials.clear()
-            hand.data.materials.append(mat)
+            hand.data.materials.append(skin_mat)
             n = len(hand.data.polygons)
             paint(hand.data, [skin], [0] * n, [0] * n)
             with bpy.context.temp_override(active_object=obj, object=obj,
                                            selected_objects=[obj, hand], selected_editable_objects=[obj, hand]):
                 bpy.ops.object.join()
-            obj.data.materials.clear()
-            obj.data.materials.append(mat)
-            for f in obj.data.polygons:
-                f.material_index = 0
+        # a part with no bare skin (the shirt and shorts) keeps just the one material
+        if not any(f.material_index == 1 for f in obj.data.polygons):
+            obj.data.materials.pop(index=1)
         for uv in list(obj.data.uv_layers):
             obj.data.uv_layers.remove(uv)
         bind(obj, rig)
@@ -582,7 +606,8 @@ def export_glb(objects, rig, path, animations):
             filepath=path, export_format='GLB', use_selection=True, export_yup=True,
             export_apply=False, export_skins=True, export_animations=animations,
             export_animation_mode='NLA_TRACKS', export_vertex_color='MATERIAL',
-            export_all_vertex_colors=False, export_def_bones=False, export_materials='EXPORT')
+            export_all_vertex_colors=False, export_def_bones=False, export_materials='EXPORT',
+            export_extras=True)
     finally:
         rig.data.pose_position = 'REST'
         if ad:
@@ -632,6 +657,7 @@ def build_all(src_dir, repo_dir, tmp_dir, export=True):
         body, skin = build_body(cid, prefix, rig, parts, ref, mage, body_col)
         head = copy_object(parts['Head'], prefix + '_Head', body_col)
         bind(head, rig)
+        split_head_skin(head, cid)
         body['Head'] = head
         if cid == 'rogueHooded':
             fringe = [c for c in face_colours(parts['Head']) if c[0] > .5 and c[1] < .45 and c[2] < .35]

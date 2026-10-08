@@ -167,7 +167,13 @@ describe('deleting a character', () => {
     await waitFor('their roster entry', () => second.roster().length > 0);
 
     expect(second.roster()).toEqual([
-      { netId: second.welcome().netId, name: 'Ash', character: 'mage', color: 'plum' },
+      {
+        netId: second.welcome().netId,
+        name: 'Ash',
+        character: 'mage',
+        color: 'plum',
+        skin: 'natural',
+      },
     ]);
     // Nothing of the old pack, and the axe, bag and rod are all waiting again.
     expect(second.inventory()).toEqual([]);

@@ -4,11 +4,14 @@ import {
   CHARACTER_KINDS,
   CHARACTER_ORDER,
   MAX_PLAYER_NAME_LENGTH,
+  SKIN_TONES,
+  SKIN_TONE_SWATCHES,
   TINT_COLORS,
   TINT_COLOR_ORDER,
   isValidPlayerName,
   sanitizePlayerName,
   type CharacterId,
+  type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
 
@@ -20,6 +23,7 @@ import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu'
 import type { Preferences } from '../preferences/preferences';
 import { StageView, useSlotPlacement, useWideScreen } from './StageView';
 import type { Placement } from './showcase';
+import { skinSwatch } from '../scene/skin-tone';
 
 interface HomeProps {
   readonly initial: PlayerIdentity;
@@ -85,6 +89,7 @@ export function Home({
   const [name, setName] = useState(initial.name);
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
+  const [skin, setSkin] = useState<SkinToneId>(initial.skin);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
@@ -114,7 +119,7 @@ export function Home({
   const handleSubmit = (event: React.FormEvent): void => {
     event.preventDefault();
     if (!canPlay) return;
-    onPlay({ name: trimmed, character, color });
+    onPlay({ name: trimmed, character, color, skin });
   };
 
   if (saved !== null) {
@@ -131,7 +136,11 @@ export function Home({
           <PaintingBackdrop />
           <HomeSeasonBanner />
           <StageView
-            look={{ character: saved.character, tint: TINT_COLORS[saved.color].hex }}
+            look={{
+              character: saved.character,
+              tint: TINT_COLORS[saved.color].hex,
+              skin: saved.skin,
+            }}
             placement={welcomePlacement}
             label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
           />
@@ -193,7 +202,7 @@ export function Home({
       <PaintingBackdrop />
       <HomeSeasonBanner className="home-season-banner-making" />
       <StageView
-        look={{ character, tint: TINT_COLORS[color].hex }}
+        look={{ character, tint: TINT_COLORS[color].hex, skin }}
         placement={MAKING[wide ? 'wide' : 'narrow']}
         label={`${CHARACTER_KINDS[character].displayName}, the character you are choosing. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
       />
@@ -276,6 +285,30 @@ export function Home({
                     <span className="home-character-soon">Coming soon</span>
                   ) : null}
                 </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="home-section">
+          <span className="home-label">Your skin</span>
+          <div className="home-colors" data-testid="skin-tones">
+            {SKIN_TONE_SWATCHES.map((id) => {
+              const hex = skinSwatch(character, id);
+              const selected = id === skin;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={'home-color' + (selected ? ' home-color-selected' : '')}
+                  style={{
+                    background: hex,
+                    boxShadow: selected ? `0 0 0 3px #f3e6c6, 0 0 0 5px ${hex}` : undefined,
+                  }}
+                  onClick={() => setSkin(id)}
+                  aria-label={`Skin: ${SKIN_TONES[id].displayName}`}
+                  aria-pressed={selected}
+                />
               );
             })}
           </div>

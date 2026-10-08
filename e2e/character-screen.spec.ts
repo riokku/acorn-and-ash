@@ -132,6 +132,30 @@ test.describe('showing the character off', () => {
     await expect(stage).toHaveAttribute('data-turn', '45');
   });
 
+  test('shows the skin tone you pick, and keeps it on the way in', async ({ page }) => {
+    const world = newWorld();
+    const stage = await openScreen(page, world);
+    await expect(stage).toHaveAttribute('data-skin', 'natural');
+
+    await page.getByRole('button', { name: 'Skin: Darkest' }).click();
+    await expect(stage).toHaveAttribute('data-skin', 'darkest');
+    await expect(page.getByRole('button', { name: 'Skin: Darkest' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await page.locator('#home-name').fill('Hazel');
+    await page.getByRole('button', { name: 'Enter World' }).click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
+      timeout: 120_000,
+    });
+
+    // Coming back, the world remembers it: the character it saved has that skin.
+    const again = await openScreen(page, world);
+    await expect(page.getByTestId('saved-character')).toContainText('Hazel');
+    await expect(again).toHaveAttribute('data-skin', 'darkest');
+  });
+
   test.describe('for somebody who asked for less motion', () => {
     test.use({ reducedMotion: 'reduce' });
 

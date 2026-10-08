@@ -1,6 +1,14 @@
 import * as THREE from 'three/webgpu';
 
-import { CHARACTER_KINDS, CHARACTER_ORDER, type CharacterId } from '@acorn/shared';
+import {
+  CHARACTER_KINDS,
+  CHARACTER_ORDER,
+  DEFAULT_SKIN_TONE,
+  SKIN_TONES,
+  SKIN_TONE_SWATCHES,
+  type CharacterId,
+  type SkinToneId,
+} from '@acorn/shared';
 
 import { characterModelTemplate, preloadCharacterModels } from '../scene/character-model';
 import {
@@ -10,6 +18,7 @@ import {
   type AnimatedModelInstance,
 } from '../scene/model-loading';
 import { createNameplate } from '../scene/nameplate';
+import { isSkinMaterial, skinShade } from '../scene/skin-tone';
 import type { FireLights } from '../scene/fire-light';
 import type { RendererSetup } from '../scene/renderer';
 
@@ -37,7 +46,10 @@ import rogueOutfitUrl from '@assets/gear/rogue-outfit.glb?url';
  * body as a pair, wearing its old outfit (how it looked before) and plain
  * (how it looks now). `&gear=mage-hat` (any name below) puts that one piece
  * on the left of every pair instead, to see how it fits;
- * `&motion=walk` or `run` sets them moving. Nothing in the game wears gear
+ * `&motion=walk` or `run` sets them moving; `&skin=darker` (any skin tone)
+ * gives them all that skin. `?gallery=bodies&tones` instead lines up every
+ * body in all five skin tones, lightest at the front (decision 0113).
+ * Nothing in the game wears gear
  * yet: this is only for looking at the art.
  */
 
@@ -79,6 +91,9 @@ const MODEL_SCALE = 0.6;
 /** From one body's pair to the next, and between before and after within a pair. */
 const PAIR_SPACING = 1.7;
 const PAIR_GAP = 0.68;
+/** Across and back between bodies in the line-up of skin tones. */
+const TONE_SPACING = 1.05;
+const TONE_ROW_GAP = 1.45;
 const PLAIN_PARTS = ['_Body', '_ArmLeft', '_ArmRight', '_LegLeft', '_LegRight'];
 const CLIP_NAMES = {
   idle: 'Idle_A_Rig_Medium',
@@ -96,6 +111,10 @@ export async function showBodies(
   const tried = tryOn !== null && tryOn in GEAR ? tryOn : null;
   const motion = params.get('motion');
   const clipName = CLIP_NAMES[motion === 'walk' || motion === 'run' ? motion : 'idle'];
+  const askedSkin = params.get('skin');
+  const skin: SkinToneId =
+    askedSkin !== null && askedSkin in SKIN_TONES ? (askedSkin as SkinToneId) : DEFAULT_SKIN_TONE;
+  const tones = params.has('tones');
 
   await preloadCharacterModels();
   const gear = new Map<string, AnimatedModel>();
@@ -106,17 +125,25 @@ export async function showBodies(
   );
 
   const mixers: THREE.AnimationMixer[] = [];
-  const place = (character: CharacterId, x: number, wearing: readonly string[], column: number) => {
+  const place = (
+    character: CharacterId,
+    x: number,
+    wearing: readonly string[],
+    column: number,
+    tone: SkinToneId = skin,
+    z = 0,
+  ) => {
     const template = characterModelTemplate(character);
     if (template === undefined) return;
     const body = instantiateAnimatedModel(template);
+    shadeSkin(body.root, tone);
     for (const name of wearing) {
       const piece = gear.get(name);
       const slot = GEAR[name]?.slot;
       if (piece !== undefined && slot !== undefined) wear(body.root, piece, slot);
     }
     body.root.scale.setScalar(MODEL_SCALE);
-    body.root.position.set(x, 0, 0);
+    body.root.position.set(x, 0, z);
     body.root.traverse((child) => {
       if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
     });
@@ -125,9 +152,25 @@ export async function showBodies(
     mixers.push(body.mixer);
   };
 
+  if (tones) {
+    // A row for each tone, lightest at the front, every body across it.
+    SKIN_TONE_SWATCHES.forEach((tone, row) => {
+      const z = -row * TONE_ROW_GAP;
+      CHARACTER_ORDER.forEach((character, column) => {
+        const x = (column - (CHARACTER_ORDER.length - 1) / 2) * TONE_SPACING;
+        place(character, x, [], column + row, tone, z);
+      });
+      const label = createNameplate(SKIN_TONES[tone].displayName);
+      label.sprite.position.set(-((CHARACTER_ORDER.length + 0.6) / 2) * TONE_SPACING, 0.6, z);
+      label.sprite.scale.multiplyScalar(0.6);
+      scene.add(label.sprite);
+    });
+  }
+
   // A pair for each body: before (or wearing the piece being tried) on the
   // left, just a shirt and shorts on the right.
   CHARACTER_ORDER.forEach((character, column) => {
+    if (tones) return;
     const x = (column - (CHARACTER_ORDER.length - 1) / 2) * PAIR_SPACING;
     place(character, x - PAIR_GAP / 2, tried === null ? OLD_OUTFITS[character] : [tried], column);
     place(character, x + PAIR_GAP / 2, [], column);
@@ -137,18 +180,26 @@ export async function showBodies(
     scene.add(label.sprite);
   });
   const title = createNameplate(
-    tried === null
-      ? 'Each pair: before (outfits, now gear), then after (shirt and shorts)'
-      : `Each pair: wearing ${tried}, then plain`,
+    tones
+      ? 'Every body in each skin tone'
+      : tried === null
+        ? 'Each pair: before (outfits, now gear), then after (shirt and shorts)'
+        : `Each pair: wearing ${tried}, then plain`,
   );
-  title.sprite.position.set(0, 2.05, 0);
+  title.sprite.position.set(
+    0,
+    tones ? 1.9 : 2.05,
+    tones ? -(SKIN_TONE_SWATCHES.length - 1) * TONE_ROW_GAP : 0,
+  );
   title.sprite.scale.multiplyScalar(0.75);
   scene.add(title.sprite);
 
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 300);
-  const target = new THREE.Vector3(0, 0.85, 0);
-  const distance = Number(params.get('distance') ?? 8.6);
-  const height = Number(params.get('height') ?? 0.9);
+  const target = tones
+    ? new THREE.Vector3(0, 0.6, -((SKIN_TONE_SWATCHES.length - 1) * TONE_ROW_GAP) / 2)
+    : new THREE.Vector3(0, 0.85, 0);
+  const distance = Number(params.get('distance') ?? (tones ? 9.5 : 8.6));
+  const height = Number(params.get('height') ?? (tones ? 5.5 : 0.9));
   const angle = Number(params.get('angle') ?? 0);
   camera.position.set(
     target.x + Math.sin(angle) * distance,
@@ -209,6 +260,20 @@ function wear(body: THREE.Object3D, piece: AnimatedModel, slot: GearSlot): void 
     mesh.scale.copy(child.scale);
     parent.add(mesh);
     mesh.bind(new THREE.Skeleton(bones, child.skeleton.boneInverses), child.bindMatrix);
+  });
+}
+
+/** Lightens or darkens just this body's skin, on its own copy of the skin materials. */
+function shadeSkin(body: THREE.Object3D, tone: SkinToneId): void {
+  if (tone === DEFAULT_SKIN_TONE) return;
+  const shade = skinShade(tone);
+  body.traverse((child) => {
+    if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
+    const material = child.material as THREE.Material;
+    if (!isSkinMaterial(material) || !(material instanceof THREE.MeshStandardMaterial)) return;
+    const own = material.clone();
+    own.color.multiply(shade);
+    child.material = own;
   });
 }
 

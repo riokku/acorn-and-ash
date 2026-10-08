@@ -80,6 +80,7 @@ import {
   ActionKind,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_CHARACTER,
+  DEFAULT_SKIN_TONE,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -1652,8 +1653,8 @@ export class Game {
         this.syncServerClock(message.serverTimeMs);
         // Every fresh connection is a clean slate on the server - this has to
         // be resent on every reconnect, not only the first one.
-        const { name, character, color } = this.options.identity;
-        this.connection?.sendHello(name, character, color);
+        const { name, character, color, skin } = this.options.identity;
+        this.connection?.sendHello(name, character, color, skin);
         void this.enterWorld(message.seed);
         break;
       }
@@ -2473,6 +2474,7 @@ export class Game {
       this.localCharacter = createCharacter(
         this.options.identity.character,
         TINT_COLORS[this.options.identity.color].hex,
+        this.options.identity.skin,
       );
       this.localCharacter.setName(this.options.identity.name);
       this.scene.add(this.localCharacter.group);
@@ -2710,7 +2712,11 @@ export class Game {
     if (existing !== undefined) return existing;
 
     const entry = this.roster.get(netId);
-    const character = createCharacter(this.characterKindFor(entry), this.colorFor(netId, entry));
+    const character = createCharacter(
+      this.characterKindFor(entry),
+      this.colorFor(netId, entry),
+      entry?.skin,
+    );
     character.setName(entry?.name ?? null);
     character.setEquippedItem(this.equipped.get(netId) ?? null);
     this.scene.add(character.group);
@@ -2744,6 +2750,7 @@ export class Game {
     for (const [netId, character] of this.remoteCharacters) {
       const entry = this.roster.get(netId);
       character.setColor(this.colorFor(netId, entry));
+      character.setSkinTone(entry?.skin ?? DEFAULT_SKIN_TONE);
       character.setName(entry?.name ?? null);
     }
   }
