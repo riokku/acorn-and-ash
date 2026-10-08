@@ -165,7 +165,7 @@ describe('what is water and what is not', () => {
 
 describe('the ground round the lake', () => {
   const seed = DEFAULT_WORLD_SEED;
-  const height = (x: number, z: number): number => wildernessHeightAt(seed, x, z);
+  const height = (x: number, z: number): number => wildernessHeightAt(seed, x, z, LAKE, null);
 
   it('sinks below the water in open water', () => {
     expect(height(88, -88 + 20)).toBeLessThan(LAKE.level - 1);

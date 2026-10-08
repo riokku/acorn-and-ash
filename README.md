@@ -342,7 +342,9 @@ forest thickens the further out you go, out to a wall 300 m from the centre.
 In the far south-west a mountain range rises out of the hills (see
 [decision 0114](docs/decisions/0114-mountain-stream-and-digging.md)): pine forest
 thins to bare rock, snow caps the top, and cliffs block the way while gentle
-slopes can be walked.
+slopes can be walked. A shallow stream with five small waterfalls runs down
+from a spring on the mountain, winding west of the clearing, into the lake's west
+shore; you can wade it (`packages/shared/src/world/stream.ts`).
 It's generated from the world's seed, so the server and every browser draw
 the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Every tree out there

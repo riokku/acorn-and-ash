@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   LAKE,
+  STREAM,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   choppingRuleFor,
@@ -125,6 +126,7 @@ export function buildWildernessScene(
     createGroundShader({
       water: clearing.water,
       lake: LAKE,
+      stream: STREAM,
       props: [...clearing.props, ...wilderness.props],
     }),
   );

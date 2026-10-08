@@ -30,6 +30,7 @@ import { fractalNoise2D } from './noise';
 import { buildIslandProps } from './islands';
 import { mountainWeight } from './mountains';
 import { basinDepthAt, LAKE, LAKE_PROP_CLEARANCE, type Lake } from './lake';
+import { nearStream, STREAM, STREAM_PROP_CLEARANCE, type Stream } from './stream';
 
 const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
@@ -58,6 +59,9 @@ function steepnessAt(terrain: Terrain, x: number, z: number): number {
 /** Well clear of the octave offsets `fractalNoise2D` uses internally, so the noise that decides where a glade sits never lines up with the noise that decides how tall the ground is there. */
 const DENSITY_SEED_OFFSET = 7919;
 
+/** Trunks and boulders have some width, so they keep this much further back from the water, in metres. */
+const PROP_STREAM_MARGIN = 0.9;
+
 export interface Wilderness {
   readonly props: readonly PlacedProp[];
   /** Each prop's collider, in the same order as `props`. */
@@ -85,7 +89,12 @@ export interface Wilderness {
  * a few trees and rocks of its own, numbered after all the others so no
  * existing tree changes its number.
  */
-export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAKE): Wilderness {
+export function buildWilderness(
+  seed: number,
+  terrain: Terrain,
+  lake: Lake = LAKE,
+  stream: Stream = STREAM,
+): Wilderness {
   const props: PlacedProp[] = [];
   // The scatter fills the square of the playable world, plus a margin.
   const outerExtent = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
@@ -154,6 +163,7 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
   const kept = props.filter(
     (prop) =>
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
+      !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !WOODLAND_ENCOUNTERS.some(
         (site) => Math.hypot(prop.x - site.x, prop.z - site.z) < site.radius + 2,
       ),

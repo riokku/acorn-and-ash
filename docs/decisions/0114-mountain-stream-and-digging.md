@@ -1,6 +1,6 @@
 # 0114 · A mountain range, a stream down to the lake, and digging tunnels
 
-**Status:** accepted; step 1 (the mountain terrain) built · **Date:** 2026-10-08
+**Status:** accepted; steps 1 (the mountain) and 2 (the stream) built · **Date:** 2026-10-08
 
 ## Context
 
@@ -59,4 +59,13 @@ Each step is its own small pull request that Chris can play.
 
 Resets for existing worlds: because the world is larger, trees are numbered in a different order, so any tree already chopped down in a saved world is forgotten, and everybody's explored map starts again.
 
-Still to come: the stream and waterfalls (step 2), the shovel and ore (step 3), digging (step 4) and art (step 5).
+## What step 2 built
+
+- **A stream from the mountain to the lake** (`packages/shared/src/world/stream.ts`): about 400 m long, starting at a spring high on the mountain's east side, winding north past the home clearing and into the lake's west shore. Like the lake it is hand-placed (a few waypoints smoothed into a gentle meander), so it is the same in every world.
+- **Five small waterfalls**, each a drop of about 2 m, mostly on the steep upper part. The bed only ever goes down. Between falls the water is shallow (knee deep at most, and shallower in the narrow upper part), so players can wade it. It is about 3 m wide near the spring and about 9 m wide at the lake.
+- **The ground is shaped round it** by the same seeded rules the hills use, so nothing is sent over the wire: a bowl for the water, a soft bank, and a valley that eases back into the hills. On the mountain the valley cuts a gorge into the slope. Below each fall the bank stays high for a while, making a small ravine you walk around rather than a cliff. Banks are gentle enough to walk (a test follows the whole bank from the lake to the spring).
+- **Trees, rocks, grass, buildings and spawns keep clear of the water.** Players are not blocked by it: there are no walls, you simply wade. No fishing or swimming for now.
+- **Looks:** a ribbon of water with ripples that run downstream, white foam at the falls and edges, pebbles under the water, a damp lush bank, and stones in the shallows. It is drawn as a flat colour on the map. Placeholder art; the real look comes in a Blender session.
+- **Not changed:** the hills' own height, the lake's shape, and where the woodland encounter sites stand. (Trees near the stream's path are simply left out, which does not change any tree's number.)
+
+Still to come: the shovel and ore (step 3), digging (step 4) and art (step 5).

@@ -122,6 +122,8 @@ import {
   buildWilderness,
   calendarAt,
   LAKE,
+  STREAM,
+  STREAM_KEEP_OUT,
   PLAYABLE_HALF_EXTENT,
   castLanding,
   clockShiftForSeason,
@@ -225,6 +227,7 @@ import {
 import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
+import { createStreamScene } from './scene/stream';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
@@ -890,6 +893,7 @@ export class Game {
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
   private lakeScene: ReturnType<typeof createLakeScene> | null = null;
+  private streamScene: ReturnType<typeof createStreamScene> | null = null;
   /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
   private lakeFrozen = false;
   /** Everywhere the pond or the lake reaches: the build ghost keeps clear of all of it. */
@@ -1583,6 +1587,7 @@ export class Game {
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.lakeScene?.dispose();
+    this.streamScene?.dispose();
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
@@ -2521,7 +2526,10 @@ export class Game {
       this.lakeScene = createLakeScene(LAKE);
       this.lakeScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.lakeScene.group);
-      this.keepOutWater = [...clearing.water, ...LAKE.basin];
+      this.streamScene?.dispose();
+      this.streamScene = createStreamScene(STREAM, terrain);
+      this.outdoors.add(this.streamScene.group);
+      this.keepOutWater = [...clearing.water, ...LAKE.basin, ...STREAM_KEEP_OUT];
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../src/constants';
 import { mountainWeight } from '../src/world/mountains';
+import { nearestOnStream, STREAM } from '../src/world/stream';
 import {
   createFlatTerrain,
   createWildernessTerrain,
@@ -46,6 +47,8 @@ describe('the wilderness terrain', () => {
         const z = Math.sin(angle) * radius;
         // The mountain range stands on top of the hills (see mountains.test.ts).
         if (mountainWeight(x, z) > 0) continue;
+        // So does the stream's valley, which can lower or raise the ground a little.
+        if (nearestOnStream(STREAM, x, z, 90) !== null) continue;
         const height = terrain.heightAt(x, z);
         expect(Number.isFinite(height)).toBe(true);
         expect(Math.abs(height)).toBeLessThanOrEqual(WILDERNESS.hillHeight + 1e-9);
