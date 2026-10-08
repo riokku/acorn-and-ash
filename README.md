@@ -136,14 +136,15 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `E` at your expedition board         | Read the board on your doorstep; `E` again to put it away                |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
-| `C`                | Open the Craft menu: everything you can make or place, on one list       |
+| `C`                                  | Open the Craft menu: everything you can make or place, on one list       |
 | `1`–`9` (Craft menu open)            | Pick the entry with that number on the page showing (axe, rod, torch...) |
-| Decorate button indoors                          | Decorate the room                                                        |
+| Decorate button indoors              | Decorate the room                                                        |
 | Left mouse (piece picked)            | Place it where its preview stands                                        |
 | Mouse wheel (piece picked)           | Turn it                                                                  |
 | `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence                 |
 | `Esc` or right mouse tap             | Put the piece away                                                       |
-| `B` (or `I`), or the bag button               | Open or close your pack                                                  |
+| `B` (or `I`), or the bag button      | Open or close your pack                                                  |
+| `Z`                                  | Open or close your character screen and put gear on (see below)          |
 | Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                              |
 | `M`, or click the minimap            | Open or close the map                                                    |
 | Walk into your door, or `E` there    | Go inside your home, or back out                                         |
@@ -649,6 +650,23 @@ and previews) and unset on staging and production. It is what lets `?season=` in
 the address set the season on the server, so you can see the lake frozen without
 waiting for winter.
 
+### Wearing gear
+
+Press `Z` to open your character screen beside your pack. Your character stands
+in the middle (drag to turn them) with a slot on each side: helm, upper body,
+lower body, feet, hands, main hand and off hand. Drag a piece of gear from the
+pack onto its slot, or right-click it in the pack, to put it on; it shows on
+your character, and everyone else sees it too. Drag onto a slot that already has
+something to swap the two. Right-click a worn piece, or drop it back on the pack,
+to take it off. You cannot change gear in a fight. Whatever is in your main hand
+is what you swing. To drop a piece of gear instead of wearing it, hold `Shift`
+while you right-click. For now gear only changes how you look. See
+[decision 0113](docs/decisions/0113-wearing-gear.md).
+
+`WORLD_ALLOW_TEST_GEAR` is `1` in the same places as `WORLD_ALLOW_TEST_SEASON`.
+It lets `?gear=all` in the address start your pack with one of every piece, as far
+as it fits, so you can try gear without finding any.
+
 ### Fishing
 
 The rod lies on the bank of the pond. Face the water - the pond or the lake -
@@ -907,12 +925,13 @@ site (see [decision 0086](docs/decisions/0086-sign-in-accounts.md)).
 
 Add these to the end of the URL:
 
-| Switch             | What it does                                        |
-| ------------------ | --------------------------------------------------- |
-| `?renderer=webgl2` | Force the WebGL 2 fallback, even where WebGPU works |
-| `?world=some-name` | Join a different world                              |
-| `?season=winter`   | See the world in that season, whatever the calendar |
-| `?gallery`         | Look at all of the game's own art, in daylight      |
+| Switch             | What it does                                                                 |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `?renderer=webgl2` | Force the WebGL 2 fallback, even where WebGPU works                          |
+| `?world=some-name` | Join a different world                                                       |
+| `?season=winter`   | See the world in that season, whatever the calendar                          |
+| `?gear=all`        | Start with one of every piece of gear in your pack (local runs and previews) |
+| `?gallery`         | Look at all of the game's own art, in daylight                               |
 
 `?season=` also reaches the server on your own machine and on pull request
 previews, where the first browser into an empty world sets its season, so the lake

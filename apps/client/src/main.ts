@@ -107,6 +107,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
     worldId: settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK,
     forceWebGL: settings.forceWebGL,
     season: settings.season,
+    gear: settings.gear,
     signOut: signOutToFrontPage,
     onCharacterDeleted: restartAfterDeletion,
     lookSensitivity: preferencesNow.lookSensitivity,
@@ -155,6 +156,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onCancelSignOut: () => game.cancelSignOut(),
       onDeleteCharacter: deleteCharacterAndRestart,
     },
+    { onChange: (request) => game.changeGear(request) },
   );
   window.acornDebug = game.debug();
 

@@ -16,6 +16,12 @@ export interface Settings {
    * `?season=winter`. Only this browser's view changes (decision 0089).
    */
   readonly season: SeasonId | undefined;
+  /**
+   * Ask the world for one of every piece of gear to try on, until gear can be
+   * found. Set with `?gear=all`; only previews and local runs honour it
+   * (decision 0113).
+   */
+  readonly gear: boolean;
 }
 
 /** Read settings from the build's environment, overridden by the query string. */
@@ -25,5 +31,6 @@ export function readSettings(search: string): Settings {
     worldId: params.get('world') ?? import.meta.env.VITE_WORLD_ID ?? undefined,
     forceWebGL: params.get('renderer') === 'webgl2',
     season: parseSeason(params.get('season')),
+    gear: params.has('gear'),
   };
 }

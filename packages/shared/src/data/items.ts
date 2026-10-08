@@ -5,6 +5,8 @@
  * new thing to carry means adding a row here.
  */
 
+import type { GearSlot } from './gear';
+
 export type ItemId =
   | 'refinedAxe'
   | 'refinedRod'
@@ -35,7 +37,18 @@ export type ItemId =
   | 'guardianTrophy'
   | 'sentinelTrophy'
   | 'reed'
-  | 'rope';
+  | 'rope'
+  | 'knightHelmet'
+  | 'mageHat'
+  | 'bearHat'
+  | 'rogueMask'
+  | 'travelerTunic'
+  | 'travelerTrousers'
+  | 'leatherBoots'
+  | 'leatherGloves'
+  | 'ironSword'
+  | 'huntingKnife'
+  | 'woodenShield';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -74,6 +87,12 @@ export interface ItemKind {
    * from being food alone.
    */
   readonly equippable: boolean;
+  /**
+   * If this is gear, the slots it can be worn in (see `data/gear.ts`). Gear is
+   * worn rather than held: it leaves the pack for its slot and changes how a
+   * character looks, nothing more.
+   */
+  readonly gearSlots?: readonly GearSlot[];
 }
 
 export const ITEM_KINDS = {
@@ -449,6 +468,149 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: false,
   },
+  knightHelmet: {
+    id: 'knightHelmet',
+    displayName: "Knight's helmet",
+    pluralName: "Knight's helmets",
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8f9aa5,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  mageHat: {
+    id: 'mageHat',
+    displayName: "Mage's hat",
+    pluralName: "Mage's hats",
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x6a5a9c,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  bearHat: {
+    id: 'bearHat',
+    displayName: 'Bear hat',
+    pluralName: 'Bear hats',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x7a5a3c,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  rogueMask: {
+    id: 'rogueMask',
+    displayName: "Rogue's mask",
+    pluralName: "Rogue's masks",
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x3f4048,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  travelerTunic: {
+    id: 'travelerTunic',
+    displayName: "Traveler's tunic",
+    pluralName: "Traveler's tunics",
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x5f8a55,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['upperBody'],
+  },
+  travelerTrousers: {
+    id: 'travelerTrousers',
+    displayName: "Traveler's trousers",
+    pluralName: "Traveler's trousers",
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x6b5a45,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['lowerBody'],
+  },
+  leatherBoots: {
+    id: 'leatherBoots',
+    displayName: 'Leather boots',
+    pluralName: 'Leather boots',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x5a4030,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['feet'],
+  },
+  leatherGloves: {
+    id: 'leatherGloves',
+    displayName: 'Leather gloves',
+    pluralName: 'Leather gloves',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x7b5a3a,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['hands'],
+  },
+  ironSword: {
+    id: 'ironSword',
+    displayName: 'Iron sword',
+    pluralName: 'Iron swords',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0xb8c0c8,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
+  huntingKnife: {
+    id: 'huntingKnife',
+    displayName: 'Hunting knife',
+    pluralName: 'Hunting knives',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0xa9b0b6,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand', 'offHand'],
+  },
+  woodenShield: {
+    id: 'woodenShield',
+    displayName: 'Wooden shield',
+    pluralName: 'Wooden shields',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8a6a3a,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['offHand'],
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -489,6 +651,17 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'sentinelTrophy',
   'reed',
   'rope',
+  'knightHelmet',
+  'mageHat',
+  'bearHat',
+  'rogueMask',
+  'travelerTunic',
+  'travelerTrousers',
+  'leatherBoots',
+  'leatherGloves',
+  'ironSword',
+  'huntingKnife',
+  'woodenShield',
 ];
 
 export function itemIndex(id: ItemId): number {

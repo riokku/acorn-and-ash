@@ -41,6 +41,7 @@
     "WORLD_RAID_SECONDS": "60",
     "WORLD_ABANDONED_SECONDS": "120",
     "WORLD_ALLOW_TEST_SEASON": "1",
+    "WORLD_ALLOW_TEST_GEAR": "1",
   },
 
   "env": {
@@ -62,6 +63,7 @@
         "WORLD_RAID_SECONDS": "86400",
         "WORLD_ABANDONED_SECONDS": "120",
         "WORLD_ALLOW_TEST_SEASON": "1",
+        "WORLD_ALLOW_TEST_GEAR": "1",
       },
     },
     // One of these is deployed per pull request, renamed on the command line to
@@ -90,6 +92,7 @@
         "WORLD_RAID_SECONDS": "60",
         "WORLD_ABANDONED_SECONDS": "120",
         "WORLD_ALLOW_TEST_SEASON": "1",
+        "WORLD_ALLOW_TEST_GEAR": "1",
       },
     },
     "staging": {

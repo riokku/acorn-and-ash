@@ -4,6 +4,8 @@ import type { HomeDecoration } from '@acorn/shared';
 import type { Calendar, ForestWeather } from '@acorn/shared';
 import { NO_MEAL, type MealState } from '@acorn/shared';
 import { emptyGarden, type GardenState, type DiscoverySite } from '@acorn/shared';
+import type { WornGear } from '@acorn/shared';
+import type { StageLook } from '../home/character-stage';
 import type { PickupNotice } from './pickup-notice';
 import { HEALTH_MAX, HUNGER_MAX, type ItemId, type HomeKind, type ChestSlot } from '@acorn/shared';
 
@@ -69,6 +71,14 @@ export interface HudState {
   readonly hotbarSlots: HotbarPins;
   /** Whether the inventory panel (opened with I, or its own bag button) is currently showing. */
   readonly inventoryOpen: boolean;
+  /** Whether the character screen (Z) is showing beside the pack (decision 0113). */
+  readonly characterOpen: boolean;
+  /** What this player is wearing, slot by slot. */
+  readonly worn: Readonly<WornGear>;
+  /** How this player looks, for the model on the character screen. */
+  readonly selfLook: StageLook | null;
+  /** The last change of gear the server turned down, in words; `key` changes each time. */
+  readonly gearNotice: { readonly text: string; readonly key: number } | null;
   readonly chestSlots: readonly ChestSlot[] | null;
   readonly chestPending: boolean;
   readonly chestNote: string | null;
@@ -240,6 +250,10 @@ const INITIAL: HudState = {
   equippedItem: null,
   hotbarSlots: [null, null, null, null, null, null],
   inventoryOpen: false,
+  characterOpen: false,
+  worn: {},
+  selfLook: null,
+  gearNotice: null,
   chestSlots: null,
   chestPending: false,
   chestNote: null,

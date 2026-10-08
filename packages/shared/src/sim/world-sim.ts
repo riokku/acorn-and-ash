@@ -177,6 +177,15 @@ import {
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
 import { homeFacilityInReach } from '../data/home-facilities';
 import { toolKind } from '../data/items';
+import { canWearIn, isWeapon, type GearSlot, type WornGear } from '../data/gear';
+import {
+  swapGear,
+  takeOffGear,
+  wearGear,
+  wornEntries,
+  wornFromEntries,
+  type GearChange,
+} from './gear';
 import {
   emptyGarden,
   gardenFromSaved,
@@ -459,6 +468,11 @@ export interface PersistedPlayer {
    * falls back to the same default a brand new player gets.
    */
   readonly equippedItem?: ItemId | null;
+  /**
+   * What they are wearing (see decision 0113). Optional, the same reason
+   * `health` is: saves from before gear existed have none.
+   */
+  readonly worn?: readonly { readonly slot: GearSlot; readonly item: ItemId }[];
   /**
    * Which parts of the world they have seen (see decision 0054). Optional,
    * the same reason `health` is; a save without one, or one of the wrong
@@ -975,6 +989,10 @@ interface PlayerRuntime {
    * anything here clearing the field itself.
    */
   equippedItem: ItemId | null;
+  /** What they are wearing, slot by slot (decision 0113). Read through `wornOf`. */
+  worn: WornGear;
+  /** The tick of the last blow they gave or took, for the gear rule against changing mid-fight. */
+  lastCombatTick: number;
   /** Which parts of the world this player has seen - see `exploring.ts`. */
   readonly explored: Uint8Array;
   /** The square they were last in, so the map only needs looking at when they move into a new one. */
@@ -1056,6 +1074,12 @@ const LOG_SEARCH_REACH = 8;
  * or browser APIs in it, so the same class runs inside the World Durable Object,
  * inside tests and inside the load-test benchmark.
  */
+/** How long after a blow, given or taken, a player still counts as fighting. */
+export const COMBAT_COOLDOWN_SECONDS = 8;
+const COMBAT_COOLDOWN_TICKS = COMBAT_COOLDOWN_SECONDS * TICK_HZ;
+/** A skeleton raider this close counts as a fight, even before a blow lands. */
+export const COMBAT_RAIDER_RADIUS = 14;
+
 export class WorldSimulation {
   readonly world: World;
   readonly seed: number;
@@ -1500,6 +1524,8 @@ export class WorldSimulation {
   private readonly discardEvents: DiscardedEvent[] = [];
   /** Who changed what they have equipped since this was last asked - a signal to resend the whole list, not a diff. */
   private readonly equipEvents: number[] = [];
+  /** Who changed what they are wearing since this was last asked - again a signal to resend the whole list. */
+  private readonly wornEvents: number[] = [];
   /** Everything anybody has ever built. Nothing is ever removed from it yet. */
   private readonly builtProps: BuiltProp[] = [];
   /** Same props, by id - campfires have no cap, so looking one up by id must not mean scanning all of them. */
@@ -1819,7 +1845,14 @@ export class WorldSimulation {
       knockedOutAtTick: 0,
       dodgeStartedAtTick: -Infinity,
       dodgeAttackStartedAtTick: Infinity,
-      equippedItem: initialEquippedItem(inventory, saved?.equippedItem ?? null),
+      // With a weapon already in the main hand, nothing chosen from the pack
+      // means the weapon is drawn, not that a tool should be picked up.
+      equippedItem:
+        saved?.equippedItem == null && wornFromEntries(saved?.worn).mainHand !== undefined
+          ? null
+          : initialEquippedItem(inventory, saved?.equippedItem ?? null),
+      worn: wornFromEntries(saved?.worn),
+      lastCombatTick: -Infinity,
       explored: exploredMapFrom(saved?.explored),
       exploredCell: null,
       // Always worth sending once on arrival, whether or not anything new
@@ -2404,6 +2437,7 @@ export class WorldSimulation {
   private raiderStrikesPlayer(netId: number, damage: number, impactTick: number): void {
     const runtime = this.players.get(netId);
     if (runtime === undefined || runtime.space !== OUTDOORS) return;
+    runtime.lastCombatTick = this.tick;
     const sinceRoll = impactTick - runtime.dodgeStartedAtTick;
     if (
       sinceRoll < DODGE.invulnerable &&
@@ -3664,7 +3698,10 @@ export class WorldSimulation {
 
     // A skeleton in front comes before anything else: mid-fight, the swing
     // was for it, not the tree beside it.
-    if (this.raids.blowLands(runtime.netId, position, aimYaw, impact, lookBack)) return;
+    if (this.raids.blowLands(runtime.netId, position, aimYaw, impact, lookBack)) {
+      runtime.lastCombatTick = this.tick;
+      return;
+    }
 
     if (this.isActiveItem(runtime, 'axe')) {
       const tree = this.treeInReachOf(position, aimYaw);
@@ -4258,6 +4295,7 @@ export class WorldSimulation {
    * lands. Nobody can be hit while down or getting back up either.
    */
   private damagePlayer(runtime: PlayerRuntime, amount: number): void {
+    runtime.lastCombatTick = this.tick;
     if (runtime.action.kind === ActionKind.Dodge) {
       if (this.tick - runtime.dodgeStartedAtTick < DODGE.invulnerable) {
         this.healthEvents.push({
@@ -5206,9 +5244,11 @@ export class WorldSimulation {
   equippedItemOf(netId: number): ItemId | null {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return null;
-    return runtime.equippedItem !== null && hasItem(runtime.inventory, runtime.equippedItem)
-      ? runtime.equippedItem
-      : null;
+    if (runtime.equippedItem !== null && hasItem(runtime.inventory, runtime.equippedItem))
+      return runtime.equippedItem;
+    // With nothing chosen from the pack, the weapon in the main hand is what
+    // they hold, and what a swing is made with (decision 0113).
+    return runtime.worn.mainHand ?? null;
   }
 
   /**
@@ -5227,6 +5267,135 @@ export class WorldSimulation {
    */
   drainEquipEvents(): number[] {
     return this.equipEvents.splice(0);
+  }
+
+  /**
+   * What they last chose from the pack, if they still hold it - not the
+   * weapon in their main hand, which is saved with what they wear.
+   */
+  packChoiceOf(netId: number): ItemId | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined || runtime.equippedItem === null) return null;
+    return hasItem(runtime.inventory, runtime.equippedItem) ? runtime.equippedItem : null;
+  }
+
+  /** What this player is wearing, slot by slot. */
+  wornOf(netId: number): Readonly<WornGear> {
+    return this.players.get(netId)?.worn ?? {};
+  }
+
+  /** What every connected player is wearing, for the whole-list broadcast. */
+  wornList(): Array<{ netId: number; worn: Readonly<WornGear> }> {
+    return [...this.players.values()].map((runtime) => ({
+      netId: runtime.netId,
+      worn: runtime.worn,
+    }));
+  }
+
+  /** Who changed what they are wearing since this was last asked. */
+  drainWornEvents(): number[] {
+    return this.wornEvents.splice(0);
+  }
+
+  /**
+   * Whether this player is in a fight: mid-swing, charging, rolling or
+   * flinching, or has given or taken a blow in the last few seconds, or has a
+   * skeleton raider close by. Gear cannot be changed then (decision 0113).
+   */
+  inCombat(netId: number): boolean {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return false;
+    const kind = runtime.action.kind;
+    if (
+      kind === ActionKind.Swing ||
+      kind === ActionKind.Charge ||
+      kind === ActionKind.Strike ||
+      kind === ActionKind.Dodge ||
+      kind === ActionKind.Flinch
+    )
+      return true;
+    if (this.tick - runtime.lastCombatTick < COMBAT_COOLDOWN_TICKS) return true;
+    const position = runtime.entity.get(Position);
+    if (position === undefined || runtime.space !== OUTDOORS) return false;
+    return this.raids.raidersList().some((raider) => {
+      const at = this.raids.positionOf(raider.id);
+      return at !== null && horizontalDistance(at, position) < COMBAT_RAIDER_RADIUS;
+    });
+  }
+
+  /** Why gear cannot be changed right now, or null if it can. */
+  private gearBlocker(runtime: PlayerRuntime): 'inCombat' | 'busy' | null {
+    if (this.inCombat(runtime.netId)) return 'inCombat';
+    if (runtime.health <= 0 || runtime.cast !== null || runtime.boatId !== null) return 'busy';
+    const kind = runtime.action.kind;
+    if (kind === ActionKind.KnockedOut || kind === ActionKind.Rise) return 'busy';
+    return null;
+  }
+
+  private gearChanged(runtime: PlayerRuntime): void {
+    // A weapon put on is what they now hold, ahead of whatever they chose
+    // from the pack; and a tool leaving the hand changes what is shown.
+    this.wornEvents.push(runtime.netId);
+    this.equipEvents.push(runtime.netId);
+  }
+
+  /**
+   * Put a piece from the pack into a slot. Wearing a weapon in the main hand,
+   * or choosing the one already there again, draws it: the hand holds it
+   * rather than whatever was picked from the pack.
+   */
+  wearGear(netId: number, item: ItemId, slot: GearSlot): GearChange {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return { ok: false, reason: 'busy' };
+    if (!canWearIn(item, slot)) return { ok: false, reason: 'wrongSlot' };
+    const blocker = this.gearBlocker(runtime);
+    if (blocker !== null) return { ok: false, reason: blocker };
+
+    // Choosing what is already worn there again draws it, if it is a weapon.
+    if (runtime.worn[slot] === item && slot === 'mainHand') {
+      runtime.equippedItem = null;
+      this.gearChanged(runtime);
+      return { ok: true, displaced: null };
+    }
+    const change = wearGear(runtime.worn, runtime.inventory, item, slot);
+    if (!change.ok) return change;
+    if (slot === 'mainHand' && isWeapon(item)) runtime.equippedItem = null;
+    this.gearChanged(runtime);
+    return change;
+  }
+
+  /** Take what is in a slot off, back into the pack. */
+  takeOffGear(netId: number, slot: GearSlot): GearChange {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return { ok: false, reason: 'busy' };
+    const blocker = this.gearBlocker(runtime);
+    if (blocker !== null) return { ok: false, reason: blocker };
+    const change = takeOffGear(runtime.worn, runtime.inventory, slot);
+    if (change.ok) this.gearChanged(runtime);
+    return change;
+  }
+
+  /** Trade the pieces in two slots, as when one is dragged onto the other. */
+  swapGear(netId: number, from: GearSlot, to: GearSlot): GearChange {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return { ok: false, reason: 'busy' };
+    const blocker = this.gearBlocker(runtime);
+    if (blocker !== null) return { ok: false, reason: blocker };
+    const change = swapGear(runtime.worn, from, to);
+    if (change.ok) this.gearChanged(runtime);
+    return change;
+  }
+
+  /**
+   * Put one of every piece of gear in the pack, as far as it will fit. Only
+   * ever used where the server is set up for testing (`?gear=` in the
+   * address), so a preview can try the character screen before gear can be
+   * found in the world.
+   */
+  giveTestGear(netId: number, items: readonly ItemId[]): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return;
+    for (const item of items) addItem(runtime.inventory, item, 1);
   }
 
   /** Who gathered a stick since this was last asked, so their pack can be sent. */
@@ -5665,6 +5834,7 @@ export class WorldSimulation {
         meal: { ...runtime.meal },
         health: runtime.health,
         equippedItem: runtime.equippedItem,
+        worn: wornEntries(runtime.worn),
         explored: runtime.explored,
         homeSkills: runtime.homeSkills,
         blueprintMisses: runtime.blueprintMisses,

@@ -15,6 +15,8 @@ import {
   encodeInputBundle,
   encodePing,
   encodeSetDoorLock,
+  encodeGear,
+  type GearRequest,
   encodeUseItem,
   encodeLoot,
   type LootRequest,
@@ -90,10 +92,12 @@ export class TestClient {
     worldId = 'test-world',
     playerKey?: string,
     season?: string,
+    gear = false,
   ): Promise<TestClient> {
     const params = new URLSearchParams();
     if (playerKey !== undefined) params.set('player', playerKey);
     if (season !== undefined) params.set('season', season);
+    if (gear) params.set('gear', 'all');
     const query = params.size === 0 ? '' : `?${params}`;
     const response = await SELF.fetch(`https://game.test/worlds/${worldId}/ws${query}`, {
       headers: { Upgrade: 'websocket' },
@@ -152,6 +156,10 @@ export class TestClient {
 
   build(request: BuildRequest): void {
     this.socket.send(encodeBuild(request));
+  }
+
+  gear(request: GearRequest): void {
+    this.socket.send(encodeGear(request));
   }
 
   useItem(item: ItemId): void {

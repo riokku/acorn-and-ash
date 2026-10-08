@@ -11,6 +11,7 @@ import {
   encodeBuild,
   encodeCraft,
   encodeDiscard,
+  encodeGear,
   encodeLoot,
   encodeChestRequest,
   type ChestRequest,
@@ -23,6 +24,7 @@ import {
   type BuildRequest,
   type CharacterId,
   type DiscardRequest,
+  type GearRequest,
   type ItemId,
   type PlayerInput,
   type ServerMessage,
@@ -239,6 +241,11 @@ export class WorldConnection {
     this.socket.send(encodeGardenRequest(request));
   }
 
+  sendGear(request: GearRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeGear(request));
+  }
+
   sendDiscard(request: DiscardRequest): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeDiscard(request));
@@ -321,17 +328,22 @@ export class WorldConnection {
  * A season asked for with `?season=` goes along, for looking at winter while
  * testing. Only the first browser into an empty world sets it, and only on
  * your own machine and pull request previews; everywhere else it is left out
- * on the way (decision 0095).
+ * on the way (decision 0095). `?gear=` goes along the same way, asking for
+ * one of every piece of gear to try on (decision 0113).
  */
 export function worldSocketUrl(
   worldId: string,
   currentHref = typeof window === 'undefined' ? 'http://localhost/' : window.location.href,
   season?: SeasonId,
+  gear = false,
 ): string {
   const base = new URL(currentHref);
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
   base.pathname = `/api/worlds/${worldId}/ws`;
-  base.search = season === undefined ? '' : `?season=${season}`;
+  const asked = new URLSearchParams();
+  if (season !== undefined) asked.set('season', season);
+  if (gear) asked.set('gear', 'all');
+  base.search = asked.toString();
   const weather = new URL(currentHref).searchParams.get('weather');
   if (weather === 'storm' || weather === 'blizzard') base.searchParams.set('weather', weather);
   base.hash = '';

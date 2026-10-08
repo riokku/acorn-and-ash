@@ -250,6 +250,48 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <ellipse cx="19" cy="5" rx="4" ry="2.6" transform="rotate(-6 19 5)" />
     </>
   ),
+  knightHelmet: (
+    <>
+      <path d="M4 20V11C4 5 8 2 12 2C16 2 20 5 20 11V20H15V14H9V20Z" />
+      <rect x="8" y="9" width="8" height="2" />
+    </>
+  ),
+  mageHat: <path d="M12 1L17 15H23V18H1V15H7Z" />,
+  bearHat: (
+    <>
+      <circle cx="5.5" cy="6" r="3" />
+      <circle cx="18.5" cy="6" r="3" />
+      <path d="M3 20C3 10 7 6 12 6C17 6 21 10 21 20Z" />
+    </>
+  ),
+  rogueMask: (
+    <path d="M2 8C6 6 9 8 12 8C15 8 18 6 22 8C22 15 18 19 12 19C6 19 2 15 2 8ZM6 10H10V12H6ZM14 10H18V12H14Z" />
+  ),
+  travelerTunic: <path d="M8 2H16L22 6L19 11L17 10V22H7V10L5 11L2 6Z" />,
+  travelerTrousers: <path d="M6 2H18L19 22H13L12 10L11 22H5Z" />,
+  leatherBoots: <path d="M5 2H11V12L19 15C21 16 21 20 19 20H4C3 20 3 19 4 18Z" />,
+  leatherGloves: (
+    <path d="M6 22V12L4 8L6 7L8 10V3H10V9V2H12V9V3H14V10V5H16V14L18 12L20 14L16 20V22Z" />
+  ),
+  ironSword: (
+    <g transform="rotate(35 12 12)">
+      <rect x="10.8" y="1" width="2.4" height="14" rx="0.8" />
+      <rect x="7" y="15" width="10" height="2" />
+      <rect x="11" y="17" width="2" height="5" />
+    </g>
+  ),
+  huntingKnife: (
+    <g transform="rotate(35 12 12)">
+      <path d="M12 3L14.5 12H9.5Z" />
+      <rect x="9" y="12" width="6" height="1.6" />
+      <rect x="10.8" y="13.6" width="2.4" height="7" rx="1" />
+    </g>
+  ),
+  woodenShield: (
+    <>
+      <path d="M12 2L20 5V12C20 17 16 20 12 22C8 20 4 17 4 12V5Z" />
+    </>
+  ),
   torch: (
     <g transform="rotate(15 12 12)">
       <rect x="10.5" y="10" width="3" height="12" rx="1.2" />

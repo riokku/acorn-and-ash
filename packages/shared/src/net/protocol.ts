@@ -1,3 +1,11 @@
+import {
+  GEAR_SLOTS,
+  gearSlotFromIndex,
+  gearSlotIndex,
+  type GearSlot,
+  type WornGear,
+} from '../data/gear';
+import { GEAR_REFUSALS, type GearRefusal } from '../sim/gear';
 import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
 import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
 import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
@@ -102,7 +110,9 @@ import {
   type ClientMessage,
   type LootRequest,
   type EquippedEntry,
+  type GearRequest,
   type RejectReasonCode,
+  type WornEntry,
   type RosterEntry,
   type ServerMessage,
   type TreeState,
@@ -223,6 +233,13 @@ const CRAFT_MESSAGE_BYTES = 2;
 const BUILD_MESSAGE_BYTES = 8;
 /** type(1) + which item to use(1) */
 const USE_ITEM_MESSAGE_BYTES = 2;
+/** type(1) + wear, take off or swap(1) + item(1) + slot(1) + other slot(1) */
+const GEAR_MESSAGE_BYTES = 5;
+const GEAR_ACTIONS = ['wear', 'takeOff', 'swap'] as const;
+/** netId(2) + one byte per slot, `NO_ITEM` for an empty one */
+const BYTES_PER_WORN_ENTRY = 2 + GEAR_SLOTS.length;
+/** One entry per connected player, the same ceiling `Equipped` has. */
+export const MAX_WORN_ENTRIES = MAX_PLAYERS_PER_WORLD;
 /** type(1) + netId(2) + what was made(1) */
 const CRAFTED_MESSAGE_BYTES = 4;
 /** type(1) + netId(2) + raw item(1) + cooked item(1) */
@@ -415,6 +432,88 @@ export function encodeDiscard(request: DiscardRequest): ArrayBuffer {
   return buffer;
 }
 
+/** Change what you are wearing (decision 0113). */
+export function encodeGear(request: GearRequest): ArrayBuffer {
+  const buffer = new ArrayBuffer(GEAR_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Gear);
+  view.setUint8(1, GEAR_ACTIONS.indexOf(request.action));
+  view.setUint8(2, request.action === 'wear' ? itemIndex(request.item) : NO_ITEM);
+  const slot = request.action === 'swap' ? request.from : request.slot;
+  view.setUint8(3, gearSlotIndex(slot));
+  view.setUint8(4, request.action === 'swap' ? gearSlotIndex(request.to) : NO_ITEM);
+  return buffer;
+}
+
+function decodeGear(data: ArrayBuffer, view: DataView): ClientMessage | null {
+  if (data.byteLength !== GEAR_MESSAGE_BYTES) return null;
+  const action = GEAR_ACTIONS[view.getUint8(1)];
+  const slot = gearSlotFromIndex(view.getUint8(3));
+  if (action === undefined || slot === null) return null;
+  if (action === 'takeOff') return { type: 'gear', action, slot };
+  if (action === 'wear') {
+    const item = itemFromIndex(view.getUint8(2));
+    return item === null ? null : { type: 'gear', action, item, slot };
+  }
+  const to = gearSlotFromIndex(view.getUint8(4));
+  return to === null ? null : { type: 'gear', action, from: slot, to };
+}
+
+/**
+ * What everybody currently connected is wearing, sent whole (decision 0113).
+ *
+ * type(1) + count(1), then per player netId(2) and one byte for each slot.
+ */
+export function encodeWorn(players: readonly WornEntry[]): ArrayBuffer {
+  const count = Math.min(players.length, MAX_WORN_ENTRIES);
+  const buffer = new ArrayBuffer(2 + count * BYTES_PER_WORN_ENTRY);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Worn);
+  view.setUint8(1, count);
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const entry = players[i];
+    if (entry === undefined) break;
+    view.setUint16(offset, entry.netId & 0xffff, true);
+    GEAR_SLOTS.forEach((slot, index) => {
+      const item = entry.worn[slot];
+      view.setUint8(offset + 2 + index, item === undefined ? NO_ITEM : itemIndex(item));
+    });
+    offset += BYTES_PER_WORN_ENTRY;
+  }
+  return buffer;
+}
+
+function decodeWorn(data: ArrayBuffer, view: DataView): ServerMessage | null {
+  if (data.byteLength < 2) return null;
+  const count = view.getUint8(1);
+  if (data.byteLength !== 2 + count * BYTES_PER_WORN_ENTRY) return null;
+  const players: WornEntry[] = [];
+  let offset = 2;
+  for (let i = 0; i < count; i++) {
+    const worn: WornGear = {};
+    GEAR_SLOTS.forEach((slot: GearSlot, index) => {
+      const byte = view.getUint8(offset + 2 + index);
+      // A piece this build has never heard of reads as nothing worn there,
+      // as `Equipped` does for an item it does not know.
+      const item = byte === NO_ITEM ? null : itemFromIndex(byte);
+      if (item !== null) worn[slot] = item;
+    });
+    players.push({ netId: view.getUint16(offset, true), worn });
+    offset += BYTES_PER_WORN_ENTRY;
+  }
+  return { type: 'worn', players };
+}
+
+/** A change of gear turned down: type(1) + why(1). */
+export function encodeGearRefused(reason: GearRefusal): ArrayBuffer {
+  const buffer = new ArrayBuffer(2);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.GearRefused);
+  view.setUint8(1, GEAR_REFUSALS.indexOf(reason));
+  return buffer;
+}
+
 export function encodeUseItem(item: ItemId): ArrayBuffer {
   const buffer = new ArrayBuffer(USE_ITEM_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -458,6 +557,7 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   const view = new DataView(data);
   const type = view.getUint8(0);
 
+  if (type === ClientMessageType.Gear) return decodeGear(data, view);
   if (type === ClientMessageType.Expedition) {
     if (data.byteLength < 2) return null;
     const action = view.getUint8(1);
@@ -1629,6 +1729,13 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         misses = view.getUint8(4);
       if (age > REEL_LIMIT || hits > 1 || misses > 2) return null;
       return { type: 'rareReel', age, hits, misses };
+    }
+    case ServerMessageType.Worn:
+      return decodeWorn(data, view);
+    case ServerMessageType.GearRefused: {
+      if (data.byteLength !== 2) return null;
+      const reason = GEAR_REFUSALS[view.getUint8(1)];
+      return reason === undefined ? null : { type: 'gearRefused', reason };
     }
     case ServerMessageType.Expedition: {
       if (data.byteLength !== 21) return null;

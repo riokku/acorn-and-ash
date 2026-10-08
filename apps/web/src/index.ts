@@ -222,12 +222,16 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
  * believes only the key this Worker looked up from the session. The same goes
  * for a season asked for with `?season=` (decision 0089), which only goes on
  * to the world from your own machine and pull request previews: anywhere else
- * the seasons follow the world's own clock.
+ * the seasons follow the world's own clock. And likewise for `?gear=`
+ * (decision 0113), which hands out one of every piece of gear for trying on.
  */
 function asPlayer(request: Request, playerKey: string, mayPickSeason = false): Request {
   const url = new URL(request.url);
   url.searchParams.set('player', playerKey);
-  if (!mayPickSeason) url.searchParams.delete('season');
+  if (!mayPickSeason) {
+    url.searchParams.delete('season');
+    url.searchParams.delete('gear');
+  }
   return new Request(url, request);
 }
 

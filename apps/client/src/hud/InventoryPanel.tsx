@@ -7,10 +7,13 @@ import {
   packStacks,
   slotsUsed,
   blueprintHome,
+  isGear,
+  type GearSlot,
   type Inventory,
   type ItemId,
 } from '@acorn/shared';
 
+import { GEAR_ITEM_DRAG_TYPE, GEAR_SLOT_DRAG_TYPE } from './CharacterPanel';
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
 import { itemDescription, itemUseHint } from './item-description';
@@ -142,6 +145,9 @@ export function InventoryPanel({
   onUseItem,
   onUnpinFromHotbar,
   onOpenSlotMenu,
+  beside = false,
+  onWearGear,
+  onTakeOffGear,
 }: {
   open: boolean;
   carrying: CarriedEntries;
@@ -149,6 +155,12 @@ export function InventoryPanel({
   onUseItem: (item: ItemId) => void;
   onUnpinFromHotbar: (slotIndex: number) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
+  /** Whether the character screen is open on its left, so the pack steps aside for it. */
+  beside?: boolean;
+  /** Right-click on a piece of gear: wear it in the slot it fits. */
+  onWearGear?: (item: ItemId) => void;
+  /** A worn piece dropped back on the pack: take it off. */
+  onTakeOffGear?: (slot: GearSlot) => void;
 }): React.JSX.Element | null {
   if (!open) return null;
 
@@ -158,11 +170,20 @@ export function InventoryPanel({
 
   return (
     <div
-      className="inventory-panel"
+      className={beside ? 'inventory-panel inventory-panel-beside' : 'inventory-panel'}
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes(HOTBAR_SLOT_DRAG_TYPE)) event.preventDefault();
+        const types = event.dataTransfer.types;
+        if (types.includes(HOTBAR_SLOT_DRAG_TYPE) || types.includes(GEAR_SLOT_DRAG_TYPE)) {
+          event.preventDefault();
+        }
       }}
       onDrop={(event) => {
+        const worn = event.dataTransfer.getData(GEAR_SLOT_DRAG_TYPE);
+        if (worn !== '') {
+          event.preventDefault();
+          onTakeOffGear?.(worn as GearSlot);
+          return;
+        }
         const slot = event.dataTransfer.getData(HOTBAR_SLOT_DRAG_TYPE);
         if (slot === '') return;
         onUnpinFromHotbar(Number(slot));
@@ -210,6 +231,7 @@ export function InventoryPanel({
             equipped={stack.item === equippedItem}
             onUseItem={onUseItem}
             onOpenSlotMenu={onOpenSlotMenu}
+            onWearGear={onWearGear}
           />
         ))}
         {Array.from({ length: emptySlots }, (_, index) => (
@@ -229,12 +251,14 @@ function PackSlot({
   equipped,
   onUseItem,
   onOpenSlotMenu,
+  onWearGear,
 }: {
   item: ItemId;
   count: number;
   equipped: boolean;
   onUseItem: (item: ItemId) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
+  onWearGear?: (item: ItemId) => void;
 }): React.JSX.Element {
   const kind = ITEM_KINDS[item];
   const classes = ['inventory-item'];
@@ -256,6 +280,7 @@ function PackSlot({
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', item);
+          if (isGear(item)) event.dataTransfer.setData(GEAR_ITEM_DRAG_TYPE, item);
         }}
         role="button"
         tabIndex={0}
@@ -271,7 +296,9 @@ function PackSlot({
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          onOpenSlotMenu({ item, count, x: event.clientX, y: event.clientY });
+          // Gear goes on with a right-click; Shift keeps the drop menu within reach.
+          if (isGear(item) && !event.shiftKey && onWearGear !== undefined) onWearGear(item);
+          else onOpenSlotMenu({ item, count, x: event.clientX, y: event.clientY });
         }}
         data-testid={`pack-slot-${item}`}
       >

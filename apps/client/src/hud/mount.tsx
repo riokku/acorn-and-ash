@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import type { BuildableKindId, ItemId, ChestRequest } from '@acorn/shared';
-import type { GardenRequest } from '@acorn/shared';
+import type { GardenRequest, GearRequest } from '@acorn/shared';
 
 import { Hud } from './Hud';
 import type { HudStore } from './store';
@@ -50,6 +50,9 @@ export function mountHud(
     onCancelSignOut: () => void;
     onDeleteCharacter?: () => Promise<void>;
   },
+  gearActions?: {
+    onChange: (request: GearRequest) => void;
+  },
 ): void {
   createRoot(container).render(
     <StrictMode>
@@ -73,6 +76,7 @@ export function mountHud(
         onSignOut={accountActions?.onSignOut}
         onCancelSignOut={accountActions?.onCancelSignOut}
         onDeleteCharacter={accountActions?.onDeleteCharacter}
+        onGearChange={gearActions?.onChange}
         onJournalTabChange={journalActions?.onTabChange}
         onCraftTabChange={journalActions?.onCraftTab}
         onPickCraft={journalActions?.onPickCraft}

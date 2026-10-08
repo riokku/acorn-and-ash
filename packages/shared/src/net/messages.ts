@@ -12,6 +12,8 @@ import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
 import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
+import type { GearSlot, WornGear } from '../data/gear';
+import type { GearRefusal } from '../sim/gear';
 import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
 import type { GatherPatchView } from '../sim/gathering';
@@ -49,6 +51,7 @@ export const ClientMessageType = {
   Garden: 0x0b,
   Decoration: 0x0c,
   Expedition: 0x0d,
+  Gear: 0x0e,
 } as const;
 
 /** What the server says back. */
@@ -100,6 +103,8 @@ export const ServerMessageType = {
   RareReel: 0x3c,
   LakeIce: 0x3d,
   Wildfire: 0x3e,
+  Worn: 0x3f,
+  GearRefused: 0x40,
 } as const;
 
 export const RejectReason = {
@@ -206,6 +211,18 @@ export interface LootMessage extends LootRequest {
   readonly type: 'loot';
 }
 
+/**
+ * Change what you are wearing (decision 0113): put a piece from the pack into
+ * a slot, take one off, or trade the pieces in two slots. Settled the moment
+ * the server reads it, the same as crafting; the server may refuse.
+ */
+export type GearRequest =
+  | { readonly action: 'wear'; readonly item: ItemId; readonly slot: GearSlot }
+  | { readonly action: 'takeOff'; readonly slot: GearSlot }
+  | { readonly action: 'swap'; readonly from: GearSlot; readonly to: GearSlot };
+
+export type GearMessage = GearRequest & { readonly type: 'gear' };
+
 export type ChestMessage = ChestRequest & { readonly type: 'chest' };
 export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
 
@@ -214,6 +231,7 @@ export type ClientMessage =
   | (DecorationRequest & { readonly type: 'decoration' })
   | (GardenRequest & { readonly type: 'garden' })
   | ChestMessage
+  | GearMessage
   | InputBundleMessage
   | PingMessage
   | CraftMessage
@@ -496,6 +514,28 @@ export interface EquippedMessage {
   readonly players: readonly EquippedEntry[];
 }
 
+/** What one connected player is wearing. */
+export interface WornEntry {
+  readonly netId: number;
+  readonly worn: Readonly<WornGear>;
+}
+
+/**
+ * What everybody currently connected is wearing, sent whole, the same shape
+ * as `Equipped` and for the same reasons (decision 0113): on arrival, and to
+ * everybody whenever any one player changes.
+ */
+export interface WornMessage {
+  readonly type: 'worn';
+  readonly players: readonly WornEntry[];
+}
+
+/** A change of gear the server turned down, told to the one who asked. */
+export interface GearRefusedMessage {
+  readonly type: 'gearRefused';
+  readonly reason: GearRefusal;
+}
+
 /**
  * Which parts of the world this player has seen, whole (see decision 0054):
  * one bit per `EXPLORE_CELL_SIZE` square, in `exploring.ts`'s order. Private
@@ -607,6 +647,8 @@ export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
   | (WildfireView & { readonly type: 'wildfire' })
+  | WornMessage
+  | GearRefusedMessage
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
   | { readonly type: 'lakeIce'; readonly frozen: boolean }
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }

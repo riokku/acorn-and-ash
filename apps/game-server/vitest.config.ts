@@ -27,6 +27,7 @@ export default defineConfig({
           // can watch them stand locked and then disappear.
           WORLD_ABANDONED_SECONDS: '3',
           WORLD_ALLOW_TEST_SEASON: '1',
+          WORLD_ALLOW_TEST_GEAR: '1',
         },
       },
     }),
