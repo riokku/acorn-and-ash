@@ -161,7 +161,7 @@ describe('the stream', () => {
       clearing.water,
       LAKE,
     )) {
-      expect(nearStream(STREAM, site.x, site.z, site.radius + 1)).toBe(false);
+      expect(nearStream(STREAM, site.x, site.z, 6)).toBe(false);
     }
   });
 
