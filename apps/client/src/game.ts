@@ -322,6 +322,8 @@ const DOOR_FADE_GIVE_UP_MS = 800;
  * appears on screen at all rather than merely appearing late.
  */
 const NEWS_MS = 8000;
+/** How long after a gear change the pack's reply is treated as a move, not a gain. */
+const GEAR_QUIET_MS = 1500;
 /** How close to the expedition board's spot you can stand and still use it. */
 const EXPEDITION_BOARD_REACH = 2.5;
 /**
@@ -927,6 +929,8 @@ export class Game {
    * never makes a toast.
    */
   private packHeardFrom = false;
+  /** Until when a change to the pack is the player moving gear, not gaining anything (`performance.now()` ms). */
+  private quietPackUntil = 0;
   private readonly toastShelf = new ToastShelf();
   private readonly pickupNotices = new PickupNoticeShelf();
   /**
@@ -1260,6 +1264,9 @@ export class Game {
   /** Put something on, take it off or swap two pieces. The server decides (decision 0113). */
   changeGear(request: GearRequest): void {
     if (!this.playing || this.connectionState !== 'connected') return;
+    // Taking something off puts it back in the pack, which is moving it, not
+    // finding it: the pack's reply to this must not make a toast.
+    this.quietPackUntil = performance.now() + GEAR_QUIET_MS;
     this.connection?.sendGear(request);
   }
 
@@ -1912,7 +1919,8 @@ export class Game {
       }
       case 'inventory': {
         const carrying = message.items.map((entry) => ({ ...entry }));
-        if (this.packHeardFrom) this.showGains(packGains(this.carrying, carrying));
+        const movedByGear = performance.now() < this.quietPackUntil;
+        if (this.packHeardFrom && !movedByGear) this.showGains(packGains(this.carrying, carrying));
         this.packHeardFrom = true;
         this.carrying = carrying;
         break;
