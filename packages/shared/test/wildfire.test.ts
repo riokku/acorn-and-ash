@@ -108,7 +108,7 @@ it('destroys a burning home, drops chest contents, and evacuates its occupants',
   });
   sims.push(sim);
   sim.restoreBuiltProps([
-    { id: 999, kind: 'cabin', x: 0, z: 0, yaw: 0, lit: false, ownerKey: 'owner' },
+    { id: 999, kind: 'cabin', x: 0, z: 0, yaw: 0, lit: false, litUntilMs: null, ownerKey: 'owner' },
   ]);
   sim.restoreChest(999, [
     { item: 'log', count: 7 },
