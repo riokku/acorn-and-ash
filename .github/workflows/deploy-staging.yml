@@ -143,4 +143,4 @@ jobs:
           if [ "$(echo "$status" | jq '.providers | length')" -eq 0 ]; then
             echo "::warning::No login service is set up on staging yet, so nobody can sign in. Add the Google and Discord secrets to the acorn-ash-web-staging Worker (see the README)."
           fi
-          curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e '(.tick | type) == "number" and (.seed | type) == "number"'
+          curl --fail --silent --show-error --retry 3 "$GAME_URL/api/worlds/home-clearing/status" | jq -e 'select((.tick | type) == "number" and (.seed | type) == "number")'

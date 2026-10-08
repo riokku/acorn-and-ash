@@ -1110,6 +1110,17 @@ removed, including their chests, gardens and indoor decorations. This cleans up
 old playtest leftovers. Buildings belonging to saved characters and communal
 objects remain; recently deleted characters still use their normal removal deadline.
 
+The staging main world also has a one-time reset of all player-built structures,
+including old pieces without a recorded owner. It clears chests, gardens and
+indoor decorations alongside the structures, while keeping characters, packs,
+trees and buried caches. The saved reset marker prevents future visits or
+deployments from clearing newly built homes. This reset is disabled in production,
+previews and local games, and does not apply to other staging worlds.
+
+`/api/worlds/home-clearing/status` reports `players` (currently connected),
+`savedCharacters` (characters still saved, including offline ones), and
+`builtStructures` (placed structures still in storage).
+
 ## Assets and licensing
 
 Every file under `assets/`, and anything served from R2, needs a row in

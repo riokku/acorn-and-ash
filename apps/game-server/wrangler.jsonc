@@ -104,6 +104,7 @@
       // because an environment that says nothing here makes Wrangler warn on
       // every deploy.
       "vars": {
+        "WORLD_STAGING_BUILD_RESET": "original-test-builds-2026-10-07",
         "WORLD_REGROW_SECONDS": "1800",
         "WORLD_HUNGER_EMPTY_SECONDS": "1200",
         "WORLD_PATCH_REGROW_SECONDS": "180",
