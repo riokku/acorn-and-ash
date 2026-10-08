@@ -65,7 +65,7 @@ test('opens settings during play, shows a wide guide and resumes controls on clo
     ).toBe(2);
     await page.keyboard.down('KeyW');
     await page.keyboard.press('KeyC');
-    await page.keyboard.press('KeyB');
+    await page.keyboard.press('KeyC');
     await page.waitForTimeout(350);
     await page.keyboard.up('KeyW');
     expect(walkingInputs).toBe(0);

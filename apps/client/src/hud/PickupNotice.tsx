@@ -33,7 +33,7 @@ export function PickupNotice({
         </span>
       </span>
       <button type="button" onClick={onOpenPack}>
-        <kbd>I</kbd> Open pack
+        <kbd>B</kbd> Open pack
       </button>
     </div>
   );
