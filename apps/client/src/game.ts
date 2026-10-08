@@ -1,4 +1,10 @@
-import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
+import {
+  fishRecordsFromSaved,
+  type FishRecords,
+  type GearRequest,
+  type ReelView,
+  type WornGear,
+} from '@acorn/shared';
 import { createExpeditionBoard } from './scene/expedition-board';
 import {
   emptyExpedition,
@@ -283,6 +289,7 @@ import {
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
+import { gearRefusalText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -718,6 +725,11 @@ export class Game {
   private readonly roster = new Map<number, RosterEntry>();
   /** What the server's Equipped list says everybody currently has in hand, including ourselves. */
   private readonly equipped = new Map<number, ItemId | null>();
+  /** What the server's Worn list says everybody currently wears, including ourselves (decision 0113). */
+  private readonly worn = new Map<number, Readonly<WornGear>>();
+  /** Whether the character screen (Z) is open beside the pack. */
+  private characterOpen = false;
+  private gearNotice: { text: string; key: number } | null = null;
   private readonly remoteAnimals = new InterpolatedEntities();
   private readonly critters = new Map<number, Critter | Raccoon | Fox | WoodlandCreature>();
   private readonly builtMeshes = new Map<
@@ -1065,6 +1077,10 @@ export class Game {
       backend: setup.backend,
       forcedFallback: setup.forcedFallback,
       playerName: this.options.identity.name,
+      selfLook: {
+        character: this.options.identity.character,
+        tint: TINT_COLORS[this.options.identity.color].hex,
+      },
     });
     window.addEventListener('resize', this.handleResize);
     document.addEventListener('visibilitychange', this.handleForestVisibility);
@@ -1099,8 +1115,10 @@ export class Game {
     else if (this.placing !== null) this.stopPlacing();
     else if (this.craftMenuOpen) this.craftMenuOpen = false;
     else if (this.buildMenuOpen) this.buildMenuOpen = false;
-    else if (this.inventoryOpen) this.inventoryOpen = false;
-    else if (this.targeting.id !== null) this.targeting.clear();
+    else if (this.inventoryOpen) {
+      this.inventoryOpen = false;
+      this.characterOpen = false;
+    } else if (this.targeting.id !== null) this.targeting.clear();
   }
 
   setSettingsOpen(open: boolean): void {
@@ -1203,6 +1221,36 @@ export class Game {
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
     });
+  }
+
+  /**
+   * Z, or the character button: the character screen beside the pack, so a
+   * piece can be dragged from one to the other. The pack opens with it and
+   * closes with it (decision 0113).
+   */
+  toggleCharacter(): void {
+    this.closeChest();
+    this.characterOpen = !this.characterOpen;
+    this.inventoryOpen = this.characterOpen;
+    if (this.characterOpen) {
+      this.stopPlacing();
+      this.buildMenuOpen = false;
+      this.craftMenuOpen = false;
+      this.mapOpen = false;
+    }
+    this.options.hud.publish({
+      characterOpen: this.characterOpen,
+      inventoryOpen: this.inventoryOpen,
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: this.craftMenuOpen,
+      mapOpen: this.mapOpen,
+    });
+  }
+
+  /** Put something on, take it off or swap two pieces. The server decides (decision 0113). */
+  changeGear(request: GearRequest): void {
+    if (!this.playing || this.connectionState !== 'connected') return;
+    this.connection?.sendGear(request);
   }
 
   /**
@@ -1661,6 +1709,21 @@ export class Game {
         this.equipped.clear();
         for (const entry of message.players) this.equipped.set(entry.netId, entry.item);
         this.applyEquipped();
+        break;
+      }
+      case 'worn': {
+        this.worn.clear();
+        for (const entry of message.players) this.worn.set(entry.netId, entry.worn);
+        this.applyWorn();
+        this.options.hud.publish({ worn: this.worn.get(this.selfNetId) ?? {} });
+        break;
+      }
+      case 'gearRefused': {
+        this.gearNotice = {
+          text: gearRefusalText(message.reason),
+          key: (this.gearNotice?.key ?? 0) + 1,
+        };
+        this.options.hud.publish({ gearNotice: this.gearNotice });
         break;
       }
       case 'snapshot': {
@@ -2456,6 +2519,7 @@ export class Game {
         TINT_COLORS[this.options.identity.color].hex,
       );
       this.localCharacter.setName(this.options.identity.name);
+      this.localCharacter.setGear(this.worn.get(this.selfNetId) ?? {});
       this.scene.add(this.localCharacter.group);
       // Word of where we are can beat the world to it on arrival: waking up
       // inside our own home, say.
@@ -2694,6 +2758,7 @@ export class Game {
     const character = createCharacter(this.characterKindFor(entry), this.colorFor(netId, entry));
     character.setName(entry?.name ?? null);
     character.setEquippedItem(this.equipped.get(netId) ?? null);
+    character.setGear(this.worn.get(netId) ?? {});
     this.scene.add(character.group);
     this.remoteCharacters.set(netId, character);
     return character;
@@ -2734,6 +2799,13 @@ export class Game {
    * it does. The local player's own hand is set every frame instead, from
    * the same map, alongside its own animation state - see `updateLocalPlayer`.
    */
+  private applyWorn(): void {
+    this.localCharacter?.setGear(this.worn.get(this.selfNetId) ?? {});
+    for (const [netId, character] of this.remoteCharacters) {
+      character.setGear(this.worn.get(netId) ?? {});
+    }
+  }
+
   private applyEquipped(): void {
     for (const [netId, character] of this.remoteCharacters) {
       character.setEquippedItem(this.equipped.get(netId) ?? null);
@@ -2845,6 +2917,9 @@ export class Game {
     this.handleEscapeInput(controls);
     if (controls.takeMapToggle()) this.toggleMap();
     this.handleInventoryToggleInput(controls);
+    // The character screen lives beside the pack, so it goes when the pack does.
+    if (!this.inventoryOpen) this.characterOpen = false;
+    if (controls.takeCharacterToggle()) this.toggleCharacter();
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
     this.handleExpeditionBoardInput(controls);
@@ -3678,6 +3753,7 @@ export class Game {
   private handleInventoryToggleInput(controls: Controls): void {
     if (!controls.takeInventoryToggle()) return;
     this.inventoryOpen = !this.inventoryOpen;
+    this.characterOpen = false;
     if (this.inventoryOpen) {
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
@@ -4818,6 +4894,7 @@ export class Game {
       position: player === null ? { x: 0, y: 0, z: 0 } : { ...player.motion.position },
       correctionCm: (player?.stats.lastCorrection ?? 0) * 100,
       carrying: this.carrying,
+      characterOpen: this.characterOpen && this.inventoryOpen,
       equippedItem: this.equipped.get(this.selfNetId) ?? null,
       nearbyItem: this.nearbyItem,
       hoveredLoot:

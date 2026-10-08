@@ -283,6 +283,13 @@ export class Controls {
     return pressed;
   }
 
+  /** Whether Z was pressed since this was last asked, to open or close the character screen. */
+  takeCharacterToggle(): boolean {
+    const pressed = this.tapped.has('KeyZ');
+    this.tapped.delete('KeyZ');
+    return pressed;
+  }
+
   /** Whether Escape was pressed since this was last asked - closes the current panel. */
   takeEscapeToggle(): boolean {
     const pressed = this.tapped.has('Escape');

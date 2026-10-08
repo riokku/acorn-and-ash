@@ -11,6 +11,7 @@ import {
   encodeBuild,
   encodeCraft,
   encodeDiscard,
+  encodeGear,
   encodeLoot,
   encodeChestRequest,
   type ChestRequest,
@@ -23,6 +24,7 @@ import {
   type BuildRequest,
   type CharacterId,
   type DiscardRequest,
+  type GearRequest,
   type ItemId,
   type PlayerInput,
   type ServerMessage,
@@ -236,6 +238,11 @@ export class WorldConnection {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.flush();
     this.socket.send(encodeGardenRequest(request));
+  }
+
+  sendGear(request: GearRequest): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeGear(request));
   }
 
   sendDiscard(request: DiscardRequest): void {

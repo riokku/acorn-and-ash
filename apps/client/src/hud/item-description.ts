@@ -5,6 +5,7 @@ import {
   ITEM_KINDS,
   cookedItemFor,
   isDiscardable,
+  isGear,
   type ItemId,
 } from '@acorn/shared';
 
@@ -31,6 +32,19 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   reed: 'Cut from the tall golden mature reeds at the pond and the lake, which return somewhere else along the same shore. Twist three together into a length of rope.',
   rope: 'Twisted from lake reeds. Strong enough to lash a rowboat together.',
   bone: 'Left behind by skeletons in the wilderness.',
+  knightHelmet: "A knight's steel helmet. Wear it on your head from the character screen (Z).",
+  mageHat: "A tall, pointed mage's hat. Wear it on your head from the character screen (Z).",
+  bearHat: 'A shaggy bear-ear hat. Wear it on your head from the character screen (Z).',
+  rogueMask: 'A dark mask for a quiet face. Wear it on your head from the character screen (Z).',
+  travelerTunic:
+    "A plain traveler's tunic. Wear it on your upper body from the character screen (Z).",
+  travelerTrousers:
+    "Sturdy traveler's trousers. Wear them on your lower body from the character screen (Z).",
+  leatherBoots: 'Hard-wearing leather boots. Wear them on your feet from the character screen (Z).',
+  leatherGloves: 'Soft leather gloves. Wear them on your hands from the character screen (Z).',
+  ironSword: 'An iron sword. Wear it in your main hand and you swing it. Looks only, for now.',
+  huntingKnife: 'A short hunting knife. Wear it in either hand; in your main hand you swing it.',
+  woodenShield: 'A round wooden shield. Wear it in your off hand from the character screen (Z).',
 };
 
 export function itemDescription(item: ItemId): string {
@@ -50,6 +64,7 @@ export function itemDescription(item: ItemId): string {
 }
 
 export function itemUseHint(item: ItemId): string {
+  if (isGear(item)) return 'Right-click to wear · drag onto a slot · Shift+right-click to drop';
   if (blueprintHome(item) !== null) return 'Click to learn · right-click to drop';
   const kind = ITEM_KINDS[item];
   if (!kind.equippable)

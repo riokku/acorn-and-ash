@@ -4,11 +4,13 @@ import { plainMaterial } from '../art/materials';
 import {
   Gesture,
   ITEM_KINDS,
+  isWeapon,
   ITEM_ORDER,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   type CharacterId,
   type ItemId,
+  type WornGear,
 } from '@acorn/shared';
 
 import { instantiateAnimatedModel, type AnimatedModel, type ModelPart } from './model-loading';
@@ -19,6 +21,8 @@ import { CharacterAnimator, type FishingPose, type Locomotion } from './characte
 import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
 import { createFireGlow, type FireGlow } from './fire-light';
+import { createGearVisuals, hideBakedHeadPieces } from './gear-visuals';
+import { wornWeapon } from './gear-models';
 
 export type { FishingPose, Locomotion, MoveView };
 
@@ -58,6 +62,11 @@ export interface Character {
    */
   setEquippedItem(item: ItemId | null): void;
   /**
+   * Shows what this character is wearing, replacing whatever was shown before
+   * (decision 0113). A no-op on the placeholder.
+   */
+  setGear(worn: Readonly<WornGear>): void;
+  /**
    * Something done with the hands, over whatever else is going on: picking
    * up, digging, reaching, eating. `item` is shown in hand while it plays -
    * the fish being eaten - or null to leave the hand as it is.
@@ -84,6 +93,9 @@ export interface Character {
 /** Every item that can ever be shown in a hand, in the wire's own stable order. */
 const HELD_ITEM_IDS: readonly ItemId[] = ITEM_ORDER.filter((id) => ITEM_KINDS[id].equippable);
 
+/** The pieces of gear that are swung from the main hand. */
+const GEAR_WEAPON_IDS: readonly ItemId[] = ITEM_ORDER.filter(isWeapon);
+
 /** Knight rendered noticeably too large at the pack's own native scale. */
 const MODEL_SCALE = 0.6;
 
@@ -97,6 +109,8 @@ const MODEL_SCALE = 0.6;
  * addressed by an animation clip, but broke this direct lookup by name.
  */
 const HAND_BONE_NAME = 'handslotr';
+/** The same socket on the left hand, where a shield hangs. */
+const OFF_HAND_BONE_NAME = 'handslotl';
 
 /**
  * The upright carry every long tool started from. Z is the axis that swings
@@ -652,15 +666,18 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   if (handBone !== undefined) {
     const things: readonly HeldThing[] = [
       ...HELD_ITEM_IDS,
+      ...GEAR_WEAPON_IDS,
       'shovel',
       ...(look.weapon === undefined ? [] : ['weapon' as const]),
     ];
     for (const thing of things) {
-      const parts = thing === 'weapon' ? look.weapon?.parts : heldItemParts(thing);
+      const gearWeapon = thing === 'weapon' || thing === 'shovel' ? undefined : wornWeapon(thing);
+      const parts =
+        thing === 'weapon' ? look.weapon?.parts : (gearWeapon?.parts ?? heldItemParts(thing));
       const grips =
         thing === 'shovel'
           ? SHOVEL_GRIPS
-          : thing === 'weapon'
+          : thing === 'weapon' || gearWeapon !== undefined
             ? WEAPON_GRIPS
             : HELD_ITEM_REST[
                 thing === 'refinedAxe' ? 'axe' : thing === 'refinedRod' ? 'rod' : thing
@@ -684,7 +701,10 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       handBone.add(held);
       heldItems.set(thing, {
         group: held,
-        tipHeight: thing === 'weapon' ? (look.weapon?.length ?? 0) : tipHeightOf(thing),
+        tipHeight:
+          thing === 'weapon'
+            ? (look.weapon?.length ?? 0)
+            : (gearWeapon?.length ?? tipHeightOf(thing)),
         carry: new THREE.Quaternion().setFromEuler(grips.carry.rotation),
         use: new THREE.Quaternion().setFromEuler(grips.use.rotation),
         carryOffset: grips.carry.offset,
@@ -693,6 +713,10 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       });
     }
   }
+
+  // The head pieces baked into the six models give way to whatever is worn.
+  hideBakedHeadPieces(model);
+  const gear = createGearVisuals(model, model.getObjectByName(OFF_HAND_BONE_NAME), 1 / MODEL_SCALE);
 
   let equipped: ItemId | null = null;
   /** How long the shovel has left out, digging, in seconds. */
@@ -751,6 +775,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       equipped = item;
       showHeld();
     },
+    setGear: gear.setWorn,
     playGesture: (gesture, item) => {
       const playing = animatorFor();
       if (playing === null) return;
@@ -804,6 +829,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       return pose;
     },
     dispose: () => {
+      gear.dispose();
       animator?.dispose();
       instance.mixer.stopAllAction();
       for (const material of materials) material.dispose();
@@ -986,6 +1012,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     setColor: (next) => material.color.set(next),
     setName: nameplate.setName,
     setEquippedItem: () => {},
+    setGear: () => {},
     playGesture: () => {},
     setFishing: () => {},
     setRestSpot: () => {},

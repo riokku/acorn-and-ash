@@ -26,7 +26,7 @@ const GUARD = 0x8a6a3a;
 const STAFF_WOOD = 0x5b4030;
 const ORB = 0xc59bff;
 
-interface BladeShape {
+export interface BladeShape {
   /** From the grip to the very tip, in metres. */
   readonly length: number;
   /** How long the handle is, from the pommel up to the guard. */
@@ -39,7 +39,7 @@ interface BladeShape {
 }
 
 /** A sword of any size: pommel, grip, crossguard, and a blade tapering to a point. */
-function blade(shape: BladeShape): ModelPart[] {
+export function blade(shape: BladeShape): ModelPart[] {
   const steel = plainMaterial(shape.steel, { roughness: 0.35, flatShading: true });
   const grip = plainMaterial(GRIP, { roughness: 0.9, flatShading: true });
   const guard = plainMaterial(GUARD, { roughness: 0.6, flatShading: true });
@@ -108,7 +108,7 @@ function staff(): ModelPart[] {
   return partsOf(builder);
 }
 
-function partsOf(builder: ModelBuilder): ModelPart[] {
+export function partsOf(builder: ModelBuilder): ModelPart[] {
   const { group } = builder.build();
   const parts: ModelPart[] = [];
   for (const child of group.children) {

@@ -6,7 +6,8 @@ import { DECORATION_KINDS } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { GardenJournal } from './GardenJournal';
-import type { GardenRequest } from '@acorn/shared';
+import { slotToWear, type GardenRequest, type GearRequest } from '@acorn/shared';
+import { CharacterPanel } from './CharacterPanel';
 import { isHomeKind, toolKind } from '@acorn/shared';
 import { PickupNotice } from './PickupNotice';
 import {
@@ -106,6 +107,8 @@ interface HudProps {
   readonly onCancelSignOut?: () => void;
   /** Delete this player's character (decision 0108). Rejects when it could not be done. */
   readonly onDeleteCharacter?: () => Promise<void>;
+  /** Put on, take off or swap a piece of gear - see decision 0113. */
+  readonly onGearChange?: (request: GearRequest) => void;
 }
 
 export function Hud({
@@ -129,6 +132,7 @@ export function Hud({
   onSignOut,
   onCancelSignOut,
   onDeleteCharacter,
+  onGearChange,
   onJournalTabChange,
   onPickCraft,
   onCraftTabChange,
@@ -368,8 +372,30 @@ export function Hud({
             onToggleInventory={onToggleInventory}
             onOpenSlotMenu={setSlotMenu}
           />
+          {state.characterOpen && state.inventoryOpen && onGearChange !== undefined ? (
+            <CharacterPanel
+              worn={state.worn}
+              look={state.selfLook}
+              notice={state.gearNotice}
+              onChange={onGearChange}
+            />
+          ) : null}
           <InventoryPanel
             open={state.inventoryOpen}
+            beside={state.characterOpen}
+            onWearGear={
+              onGearChange === undefined
+                ? undefined
+                : (item) => {
+                    const slot = slotToWear(item, state.worn);
+                    if (slot !== null) onGearChange({ action: 'wear', item, slot });
+                  }
+            }
+            onTakeOffGear={
+              onGearChange === undefined
+                ? undefined
+                : (slot) => onGearChange({ action: 'takeOff', slot })
+            }
             carrying={state.carrying}
             equippedItem={state.equippedItem}
             onUseItem={onUseItem}
