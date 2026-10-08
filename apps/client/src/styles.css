@@ -4095,3 +4095,24 @@ body {
 .inventory-panel-beside .hud-journal-title {
   white-space: nowrap;
 }
+
+/* Every page of the field journal (crafting, discoveries, expeditions, fishing,
+   garden) is the same size, so switching tabs never moves the tab buttons.
+   Longer pages scroll inside the page. */
+.hud-journal.craft-panel,
+.hud-journal.hud-discoveries,
+.hud-journal.expedition-panel,
+.hud-journal.fishing-journal,
+.hud-journal.hud-garden {
+  box-sizing: border-box;
+  width: min(760px, calc(100vw - 32px));
+  height: min(560px, calc(100dvh - 200px));
+  max-height: none;
+  bottom: 130px;
+}
+.hud-journal.hud-discoveries,
+.hud-journal.expedition-panel,
+.hud-journal.fishing-journal,
+.hud-journal.hud-garden {
+  overflow-y: auto;
+}

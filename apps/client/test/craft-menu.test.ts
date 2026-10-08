@@ -166,6 +166,22 @@ describe('the Craft menu list', () => {
       expect(rod?.shortfalls).toEqual([]);
     });
 
+    it('says "already owned", not "pack full", for a one-of-a-kind item the pack already holds', () => {
+      const rod = craftEntry(
+        {
+          ...OUTSIDE,
+          carrying: [
+            { item: 'rod' as const, count: 1 },
+            { item: 'stick' as const, count: 5 },
+          ],
+        },
+        'rod',
+      );
+      expect(rod?.ready).toBe(false);
+      expect(rod?.status).toBe('alreadyOwned');
+      expect(rod?.statusLabel).toBe('Already owned');
+    });
+
     it('lets the materials it uses up free the slot it needs', () => {
       const axe = craftEntry(
         {

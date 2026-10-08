@@ -81,7 +81,9 @@ export type CraftStatusId =
   | 'needFire'
   | 'needWorkbench'
   /** Everything it takes is there, but no slot is free for what it makes. */
-  | 'packFull';
+  | 'packFull'
+  /** A one-of-a-kind item (a rod, an axe) that is already in the pack. */
+  | 'alreadyOwned';
 
 /** One ingredient the pack falls short of, and how many of it there are. */
 export interface CraftShortfall {
@@ -201,7 +203,14 @@ const STATUS_LABELS: Record<CraftStatusId, string> = {
   needFire: 'Need lit campfire',
   needWorkbench: 'Need workbench',
   packFull: 'Pack full',
+  alreadyOwned: 'Already owned',
 };
+
+/** Whether the pack already holds as many of this item as it is allowed to carry. */
+function alreadyOwns(supplies: Inventory, item: ItemId): boolean {
+  const limit = ITEM_KINDS[item].maxCarry;
+  return limit !== undefined && countOf(supplies, item) >= limit;
+}
 
 function craftedEntries(state: CraftMenuState): CraftEntry[] {
   const inventory = inventoryFromEntries(state.carrying);
@@ -220,7 +229,10 @@ function craftedEntries(state: CraftMenuState): CraftEntry[] {
     // Everything is there and nothing else is in the way: the pack is what is full.
     if (blocks.length === 0 && !canCraft(inventory, item, state.discoveriesClaimed))
       blocks.push('packFull');
-    const { status, label } = statusOf(shortfalls, blocks, false);
+    const owned = alreadyOwns(inventory, item);
+    const { status, label } = owned
+      ? { status: 'alreadyOwned' as const, label: STATUS_LABELS.alreadyOwned }
+      : statusOf(shortfalls, blocks, false);
     return [
       {
         action: { kind: 'craft', item },
