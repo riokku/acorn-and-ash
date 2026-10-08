@@ -128,16 +128,17 @@ async function hudValue(page: Page, label: string): Promise<string> {
  * Home screen itself.
  */
 async function passThroughHomeIfShown(page: Page): Promise<void> {
-  const nameInput = page.locator('#home-name');
-  const welcomeBack = page.getByTestId('saved-character');
-  const shown = await Promise.race([
-    nameInput.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'new' as const),
-    welcomeBack.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'returning' as const),
-  ]).catch(() => null);
-  if (shown === null) return;
+  // A second tab can leave this page in the background while sign-in is still
+  // loading. Wait for a real screen instead of treating a three-second timeout
+  // as evidence that the player has already entered the game.
+  await page.bringToFront();
+  const play = page.locator('.home-play');
+  await expect(play.or(page.locator('.hud-panel'))).toBeVisible();
+  if (!(await play.isVisible())) return;
 
-  if (shown === 'new') await nameInput.fill('Playtester');
-  await page.locator('.home-play').click();
+  const nameInput = page.locator('#home-name');
+  if (await nameInput.isVisible()) await nameInput.fill('Playtester');
+  await play.click();
 }
 
 async function waitForConnected(page: Page): Promise<void> {
