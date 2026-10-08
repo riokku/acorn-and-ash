@@ -3001,15 +3001,10 @@ export class Game {
     }
 
     this.fireLights?.update(camera.camera.position);
-    // Menus remain responsive without repeatedly drawing an unchanged view.
-    // Keep the simulation and network alive; only paused drawing is throttled.
+    // Keep the world moving at its normal frame rate behind the field journal.
+    // Other menus still save drawing work while the simulation and network run.
     const viewingMenu =
-      !this.playing ||
-      this.chestOpen ||
-      this.inventoryOpen ||
-      this.craftMenuOpen ||
-      this.buildMenuOpen ||
-      this.mapOpen;
+      !this.playing || this.chestOpen || this.inventoryOpen || this.buildMenuOpen || this.mapOpen;
     if (!viewingMenu || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
       setup.renderer.render(this.scene, camera.camera);
       this.lastRenderedAt = now;
