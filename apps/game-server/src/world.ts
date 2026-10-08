@@ -160,6 +160,7 @@ export class World extends DurableObject<WorldEnv> {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       this.createSchema();
+      this.resetStagingBuildsOnce();
     });
   }
 
@@ -2679,6 +2680,8 @@ export class World extends DurableObject<WorldEnv> {
   /** A small summary, useful from a browser while playtesting. */
   status(): {
     players: number;
+    savedCharacters: number;
+    builtStructures: number;
     tick: number;
     seed: number;
     running: boolean;
@@ -2686,12 +2689,46 @@ export class World extends DurableObject<WorldEnv> {
   } {
     const simulation = this.simulation;
     return {
-      players: simulation?.playerCount ?? 0,
+      players:
+        simulation?.playerCount ??
+        this.ctx.getWebSockets().filter((ws) => this.attachmentFor(ws) !== null).length,
+      savedCharacters: this.ctx.storage.sql
+        .exec<{ count: number }>('SELECT COUNT(*) AS count FROM players WHERE name IS NOT NULL')
+        .one().count,
+      builtStructures: this.ctx.storage.sql
+        .exec<{ count: number }>('SELECT COUNT(*) AS count FROM built_props')
+        .one().count,
       tick: simulation?.tick ?? this.loadTick(),
       seed: simulation?.seed ?? this.seed(),
       running: this.tickHandle !== null,
       slowTicks: this.slowTickCount,
     };
+  }
+
+  /** Clear the original staging test builds once, including ownerless legacy pieces. */
+  private resetStagingBuildsOnce(): void {
+    const reset = this.env.WORLD_STAGING_BUILD_RESET;
+    if (!reset || this.ctx.id.toString() !== this.env.WORLD.idFromName('home-clearing').toString())
+      return;
+    if (this.readMeta('staging-build-reset') === reset) return;
+
+    // Runs before any simulation is restored, so no live geometry or later
+    // save can put the old buildings back. The marker and deletes are atomic.
+    this.ctx.storage.transactionSync(() => {
+      for (const table of ['built_props', 'home_chests', 'home_gardens'])
+        this.ctx.storage.sql.exec(`DELETE FROM ${table}`);
+      this.writeMeta('home-decorations', '[]');
+      this.writeMeta('staging-build-reset', reset);
+    });
+    // Hibernatable sockets can survive a deployment. Reconnect them so their
+    // browsers also discard the old buildings and any room they were inside.
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.close(1012, 'Staging structures reset; reconnecting');
+      } catch {
+        // The browser may already have left.
+      }
+    }
   }
 
   /**
