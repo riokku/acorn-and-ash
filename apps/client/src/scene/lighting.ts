@@ -49,7 +49,7 @@ export interface DaylightRig {
   /** Tint the sky and sunlight for the time of year, from the next `update` on. */
   setSeason(look: SeasonalLight): void;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
-  update(progress: number, cloud?: number): void;
+  update(progress: number, cloud?: number, blizzard?: boolean): void;
   /**
    * Inside a home (see decision 0055): no sky and no fog behind the room,
    * just a dark backdrop, while the daylight itself carries on through the
@@ -90,7 +90,9 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   const lightTint = new THREE.Color(1, 1, 1);
   let sunStrength = 1;
 
-  function update(progress: number, cloud = lastCloud): void {
+  function update(progress: number, cloud = lastCloud, blizzard = false): void {
+    fog.near += ((blizzard ? 10 : FOG_NEAR) - fog.near) * 0.025;
+    fog.far += ((blizzard ? 48 : FOG_FAR) - fog.far) * 0.025;
     lastProgress = progress;
     lastCloud = cloud;
     const brightness = dayBrightness(progress);

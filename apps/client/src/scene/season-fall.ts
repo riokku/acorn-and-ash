@@ -125,7 +125,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
         opacity: 0.9,
         depthWrite: false,
       }),
-      { max: 380, height: 12, fall: 1.1, sway: 0.7, spin: 0, drift: 0.7 },
+      { max: 1000, height: 12, fall: 1.1, sway: 0.7, spin: 0, drift: 0.7 },
       null,
       rng,
     ),
@@ -193,13 +193,14 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
     weather: ForestWeather,
     daylight: number,
   ): Record<FallKind, number> {
+    if (weather.kind === 'blizzard') return { petals: 0, pollen: 0, leaves: 0, snow: 1 };
     const windy = 0.55 + 0.45 * Math.min(1, weather.wind / 0.45);
     const sunlit = Math.max(0, Math.min(1, (daylight - 0.5) * 2));
     return {
       petals: amounts.petals,
       pollen: amounts.pollen * sunlit,
       leaves: amounts.leaves * windy,
-      snow: amounts.snow * (0.6 + 0.4 * weather.precipitation),
+      snow: amounts.snow * (0.23 + 0.15 * weather.precipitation),
     };
   }
 
@@ -228,7 +229,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
       for (const kind of kinds) {
         // Like the rain, nothing falls for anyone who has asked for less movement.
         const count = reducedMotion || indoors ? 0 : Math.round(pools[kind].max * amounts[kind]);
-        place(kind, count, point, weather.wind);
+        place(kind, count, point, weather.kind === 'blizzard' ? weather.wind * 7 : weather.wind);
       }
     },
     dispose() {

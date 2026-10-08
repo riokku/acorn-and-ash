@@ -1,3 +1,4 @@
+import type { WildfireView } from '../sim/wildfire';
 import type { FishRecords } from '../sim/fish-records';
 import type { ReelView } from '../sim/rare-reel';
 import type { ExpeditionRequest, ExpeditionView } from '../sim/expeditions';
@@ -98,6 +99,7 @@ export const ServerMessageType = {
   FishRecords: 0x3b,
   RareReel: 0x3c,
   LakeIce: 0x3d,
+  Wildfire: 0x3e,
 } as const;
 
 export const RejectReason = {
@@ -601,6 +603,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | (WildfireView & { readonly type: 'wildfire' })
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
   | { readonly type: 'lakeIce'; readonly frozen: boolean }
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }

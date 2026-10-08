@@ -331,6 +331,8 @@ export function worldSocketUrl(
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
   base.pathname = `/api/worlds/${worldId}/ws`;
   base.search = season === undefined ? '' : `?season=${season}`;
+  const weather = new URL(currentHref).searchParams.get('weather');
+  if (weather === 'storm' || weather === 'blizzard') base.searchParams.set('weather', weather);
   base.hash = '';
   return base.toString();
 }

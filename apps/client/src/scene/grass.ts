@@ -116,7 +116,7 @@ export function createGrass(
   // The wind goes on in the world's own direction whichever way a clump faces.
   const offset = positionLocal.sub(root);
   material.positionNode = root
-    .add(offset.mul(vec3(1, fade, 1)))
+    .add(offset.mul(vec3(1, fade.mul(float(1).sub(seasonUniforms.blizzard.mul(0.7))), 1)))
     .add(lean.mul(fade))
     .add(vec3(bend.mul(fade), 0, bend.mul(0.45).mul(fade)));
   const shade = sin(root.x.mul(0.16).add(root.z.mul(0.21)))

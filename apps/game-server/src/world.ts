@@ -1,3 +1,4 @@
+import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
 import { clockShiftForSeason, encodeLakeIce, SEASONS, type SeasonId } from '@acorn/shared';
 import {
@@ -253,7 +254,19 @@ export class World extends DurableObject<WorldEnv> {
     } satisfies ConnectionAttachment);
 
     // A season asked for while testing, by the first one into an empty world.
-    const season = this.testSeason(url);
+    const askedWeather = url.searchParams.get('weather');
+    const testWeather =
+      this.env.WORLD_ALLOW_TEST_SEASON === '1' &&
+      (askedWeather === 'storm' || askedWeather === 'blizzard')
+        ? askedWeather
+        : null;
+    if (earlier === null && simulation.playerCount === 0) simulation.setTestWeather(testWeather);
+    const season =
+      testWeather === 'blizzard'
+        ? 'winter'
+        : testWeather === 'storm'
+          ? 'summer'
+          : this.testSeason(url);
     if (season !== null && earlier === null && simulation.playerCount === 0)
       simulation.setCalendarShift(
         clockShiftForSeason(simulation.seed, simulation.tick * TICK_MILLISECONDS, season),
@@ -264,6 +277,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
+    server.send(encodeWildfire(simulation.wildfireView()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
@@ -549,11 +563,13 @@ export class World extends DurableObject<WorldEnv> {
     this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
     this.announceChopping(simulation);
+    this.announceTreeChanges(simulation);
     this.announceCatching(simulation);
     this.announceThreatHits(simulation);
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
     this.announceLakeIce(simulation);
+    this.announceWildfire(simulation);
     this.announceBoats(simulation);
     this.announceBrokenBoats(simulation);
     this.announceFishing(simulation);
@@ -784,6 +800,7 @@ export class World extends DurableObject<WorldEnv> {
         this.ctx.storage.transactionSync(() => {
           this.writeMeta('encounterRest', rest);
           this.writeMeta('tick', String(simulation.tick));
+          this.writeMeta('wildfire', simulation.wildfire.save());
         });
         this.savedEncounterRest = rest;
       }
@@ -839,6 +856,21 @@ export class World extends DurableObject<WorldEnv> {
       for (const result of feedback)
         if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
     }
+  }
+
+  private lastWildfireSaved = '';
+  private announceWildfire(simulation: WorldSimulation): void {
+    if (simulation.tick % TICK_HZ !== 0) return;
+    const saved = simulation.wildfire.save();
+    const changed = saved !== this.lastWildfireSaved;
+    if (changed || simulation.wildfire.fires.size > 0)
+      this.broadcast(encodeWildfire(simulation.wildfireView()));
+    if (!changed) return;
+    this.lastWildfireSaved = saved;
+    this.ctx.storage.transactionSync(() => {
+      this.writeMeta('wildfire', saved);
+      this.writeMeta('tick', String(simulation.tick));
+    });
   }
 
   /**
@@ -1602,6 +1634,8 @@ export class World extends DurableObject<WorldEnv> {
     this.nextNetId = highestNetId + 1;
 
     simulation.tick = this.loadTick();
+    const fire = this.readMeta('wildfire');
+    if (fire !== null) simulation.restoreWildfire(fire);
     // A sleeping world counts nothing, so anything due back is brought back
     // here, before the first snapshot goes out. Otherwise somebody walking in
     // an hour later would be shown the stump they left and then watch it turn
@@ -2634,6 +2668,7 @@ export class World extends DurableObject<WorldEnv> {
   private save(simulation: WorldSimulation): void {
     for (const garden of simulation.savedGardens()) this.writeGarden(garden);
     this.writeMeta('tick', String(simulation.tick));
+    this.writeMeta('wildfire', simulation.wildfire.save());
     this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
     // Trees are written the moment they change; this only catches anything left over.
     for (const tree of simulation.persistableTrees(simulation.drainTreeChanges())) {

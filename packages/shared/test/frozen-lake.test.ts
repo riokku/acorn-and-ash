@@ -282,7 +282,8 @@ describe('a world through the winter', () => {
     // And the ice holds them as they walk on.
     for (let i = 0; i < 10; i++) tick(sim, 1, water.outYaw);
     const walked = me(sim);
-    expect(Math.hypot(walked.x - standing.x, walked.z - standing.z)).toBeGreaterThan(2);
+    // Deep snow can slow this winter walk by 22 percent.
+    expect(Math.hypot(walked.x - standing.x, walked.z - standing.z)).toBeGreaterThan(1.5);
     expect(lakeDepthAt(LAKE, walked.x, walked.z)).toBeGreaterThan(3);
     expect(walked.y).toBeCloseTo(lakeIceHeight(LAKE), 1);
   });
