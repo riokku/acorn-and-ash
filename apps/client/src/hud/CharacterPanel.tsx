@@ -11,6 +11,7 @@ import {
 
 import { CharacterStage, type StageLook } from '../home/character-stage';
 import type { Placement } from '../home/showcase';
+import { fitsDraggedGear, startGearDrag, useDraggedGear } from './gear-drag';
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
 import { itemDescription } from './item-description';
@@ -92,9 +93,13 @@ function GearSlotView({
   const accepts = (types: readonly string[]): boolean =>
     types.includes(GEAR_ITEM_DRAG_TYPE) || types.includes(GEAR_SLOT_DRAG_TYPE);
 
+  const dragged = useDraggedGear();
+  const fits = fitsDraggedGear(dragged, slot);
+
   const classes = ['gear-slot'];
   if (item !== undefined) classes.push('gear-slot-filled');
-  if (over) classes.push('gear-slot-over');
+  if (fits) classes.push('gear-slot-fits');
+  if (over && (dragged === null || fits)) classes.push('gear-slot-over');
 
   const label =
     kind === null || item === undefined ? (
@@ -124,6 +129,7 @@ function GearSlotView({
           if (item === undefined) return;
           event.dataTransfer.setData('text/plain', item);
           event.dataTransfer.setData(GEAR_SLOT_DRAG_TYPE, slot);
+          startGearDrag(item);
         }}
         onDragOver={(event) => {
           if (!accepts(event.dataTransfer.types)) return;

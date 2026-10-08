@@ -81,6 +81,15 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
     timeout: 60_000,
   });
 
+  // While a helmet is held, only the helm slot glows.
+  await page.getByTestId('pack-slot-knightHelmet').dispatchEvent('dragstart', {
+    dataTransfer: await page.evaluateHandle(() => new DataTransfer()),
+  });
+  await expect(page.getByTestId('gear-slot-helm')).toHaveClass(/gear-slot-fits/);
+  await expect(page.getByTestId('gear-slot-feet')).not.toHaveClass(/gear-slot-fits/);
+  await page.getByTestId('pack-slot-knightHelmet').dispatchEvent('dragend');
+  await expect(page.getByTestId('gear-slot-helm')).not.toHaveClass(/gear-slot-fits/);
+
   // Drag onto a slot, and it is worn.
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-helm'));
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'knightHelmet');

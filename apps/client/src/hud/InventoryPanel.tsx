@@ -14,6 +14,7 @@ import {
 } from '@acorn/shared';
 
 import { GEAR_ITEM_DRAG_TYPE, GEAR_SLOT_DRAG_TYPE } from './CharacterPanel';
+import { startGearDrag } from './gear-drag';
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
 import { itemDescription, itemUseHint } from './item-description';
@@ -280,7 +281,10 @@ function PackSlot({
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', item);
-          if (isGear(item)) event.dataTransfer.setData(GEAR_ITEM_DRAG_TYPE, item);
+          if (isGear(item)) {
+            event.dataTransfer.setData(GEAR_ITEM_DRAG_TYPE, item);
+            startGearDrag(item);
+          }
         }}
         role="button"
         tabIndex={0}
