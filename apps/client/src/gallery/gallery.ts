@@ -53,7 +53,8 @@ import { createIronAxe, preloadIronAxe } from './iron-axe';
  *
  * `?gallery=cabin` looks at one piece up close; `?gallery=moves` and
  * `?gallery=raiders` play the characters' and the skeletons' moves (see
- * moves.ts and raiders.ts); `&time=0.3` picks a time of
+ * moves.ts and raiders.ts); `?gallery=bodies` shows the six bodies before
+ * and after their outfits became gear (see bodies.ts); `&time=0.3` picks a time of
  * day from 0 (midnight) through 0.5 (noon); `&spin` turns the view slowly
  * round. Only ever used to look at the art: nothing here is part of playing.
  */
@@ -236,6 +237,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     scene.add(createGalleryGround([]));
     const { showMoves } = await import('./moves');
     await showMoves(renderer, scene, fireLights, params);
+    return;
+  }
+  if (focus === 'bodies') {
+    scene.add(createGalleryGround([]));
+    const { showBodies } = await import('./bodies');
+    await showBodies(renderer, scene, fireLights, params);
     return;
   }
   if (focus === 'raiders') {

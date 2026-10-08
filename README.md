@@ -268,8 +268,9 @@ walking, running and jumping for real rather than sliding around as a
 placeholder capsule. They are called Body 1 to Body 6: a character is a body,
 and the outfits the pack drew on them (the Knight's armour, the Mage's hat and
 so on) are meant to become gear you find along the way, so everyone starts in
-plain clothes. The names are changed already; the plain-clothes art and the
-gear are still to come (see
+just a shirt and shorts. The bodies now wear just that, and the old outfits
+are saved as separate gear in [`assets/gear/`](assets/gear/); wearing and
+finding gear in the game are still to come (see
 [decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
 Your name, tint and character travel to
 the server and out to everybody else in the clearing, with a small name tag
@@ -933,7 +934,10 @@ character makes, over and over; `&demo=combo` (or `walk`, `run`, `chop`,
 moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
 `?gallery=raiders` does the same for the skeletons: every kind's moves,
 looping, with `&kind=warrior` (or `minion`, `rogue`, `mage`) for one of
-them, and `&demo=` and `&strip=` as above.
+them, and `&demo=` and `&strip=` as above. `?gallery=bodies` shows the six
+bodies in pairs, in their old outfits and then in just a shirt and shorts;
+`&gear=mage-hat` (or any file name in `assets/gear/`) puts that one piece on
+every body instead, and `&motion=walk` or `run` sets them moving.
 
 ## Commands
 
@@ -1183,7 +1187,8 @@ rebuilt. Its colours are painted on as vertex colours rather than a texture.
 See it in the gallery with `?gallery=iron-axe`, and
 [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
 for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
-deleted.)
+deleted.) The six plain bodies and the gear lifted off their outfits are built
+the same way, by `tools/art/plain_bodies.py`.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
