@@ -3992,6 +3992,31 @@ body {
   cursor: grab;
 }
 
+/* A piece is being dragged and this is a place it can be worn: a soft pulsing glow. */
+.gear-slot-fits {
+  border-style: solid;
+  border-color: var(--accent-warm);
+  background: rgba(255, 236, 200, 0.85);
+  animation: gear-slot-glow 1.1s ease-in-out infinite;
+}
+
+@keyframes gear-slot-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(193, 121, 74, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(193, 121, 74, 0.38);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gear-slot-fits {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(193, 121, 74, 0.32);
+  }
+}
+
 .gear-slot-over {
   border-color: var(--accent-warm);
   box-shadow: 0 0 0 2px rgba(193, 121, 74, 0.28);
