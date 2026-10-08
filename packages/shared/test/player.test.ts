@@ -118,7 +118,7 @@ describe('walking', () => {
     // Comfortably more than PLAYABLE_HALF_EXTENT / PLAYER_WALK_SPEED / TICK_SECONDS
     // ticks, so the walk actually reaches the wall rather than just not having
     // gone far enough yet.
-    const motion = walk(0, 1, 0, 800);
+    const motion = walk(0, 1, 0, 2000);
     expect(motion.position.z).toBeCloseTo(-PLAYABLE_HALF_EXTENT, 6);
   });
 

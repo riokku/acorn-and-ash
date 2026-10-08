@@ -87,7 +87,13 @@ export const CLEARING_TREE_LINE_OUTER = CLEARING_HALF + 8;
  * generated wilderness. Bounded rather than infinite for now — real chunk
  * streaming is a later change.
  */
-export const PLAYABLE_HALF_EXTENT = 150;
+export const PLAYABLE_HALF_EXTENT = 300;
+/**
+ * How far the world reached before the mountains (decision 0114). Things placed
+ * from the seed that must not move just because the world grew - the woodland
+ * encounter sites - still choose their spots inside this older, smaller reach.
+ */
+export const ORIGINAL_HALF_EXTENT = 150;
 
 /**
  * The wilderness: generated forest and rolling ground between the clearing's
@@ -116,6 +122,41 @@ export const WILDERNESS = {
   /** How far scenery is scattered past the wall, so the tree line does not stop exactly on it. */
   scatterMargin: 6,
 } as const;
+
+/**
+ * The mountain range in the far south-west (decision 0114).
+ *
+ * A ridge runs between two points; the ground rises from a wide foot to a spine
+ * of peaks, with cliff bands across the flanks that block the way and gentle
+ * slopes between them that can be walked. Positive Z is south and negative X
+ * is west, the same way the lake sits north-east at (+88, -88).
+ */
+export const MOUNTAINS = {
+  ridgeStart: { x: -215, z: 90 },
+  ridgeEnd: { x: -90, z: 215 },
+  /** Metres either side of the ridge line that stay at full height. */
+  coreRadius: 14,
+  /** Metres from the ridge line where the foot of the mountain meets ordinary hills. */
+  footRadius: 100,
+  /** The tallest the spine ever gets, before the peaks vary along it. */
+  peakHeight: 58,
+  /** How tall a cliff band is at the full height of the range. */
+  cliffHeight: 11,
+  /** Metres per bump of the noise that places the cliff bands. */
+  cliffNoiseScale: 1 / 42,
+  /** Above this height trees stop growing, and the ground goes to bare rock. */
+  treeLine: 30,
+  /** Above this height the ground is snow. */
+  snowLine: 46,
+} as const;
+
+/**
+ * The steepest slope a player can walk up, as rise over run (0.85 is about 40
+ * degrees). Anything steeper is a cliff: you slide along it rather than climb.
+ */
+export const MAX_WALKABLE_GRADIENT = 0.85;
+/** A small extra rise allowed per step, so settling onto the ground never reads as a wall. */
+export const WALKABLE_STEP_ALLOWANCE = 0.12;
 
 /**
  * How close you have to be to pick something up, measured from the player to the
@@ -433,9 +474,9 @@ export const INTEREST_RADIUS = 100;
  * comes within `EXPLORE_REVEAL_RADIUS` of where you walk is marked as seen,
  * for good.
  */
-export const EXPLORE_CELL_SIZE = 4;
+export const EXPLORE_CELL_SIZE = 8;
 /** How far around you counts as "been there" - roughly how far you can make things out through the trees. */
-export const EXPLORE_REVEAL_RADIUS = 36;
+export const EXPLORE_REVEAL_RADIUS = 40;
 /**
  * How often, at most, the server tells a player their map has grown. The
  * player's own browser fills its map in straight away from where it thinks

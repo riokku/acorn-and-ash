@@ -2539,6 +2539,7 @@ export class Game {
         ],
         PLAYABLE_HALF_EXTENT,
         LAKE,
+        true,
       );
       this.collision = collision;
       setLakeFrozen(collision, this.lakeFrozen);

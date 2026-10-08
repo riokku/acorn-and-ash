@@ -12,6 +12,8 @@ import {
   PLAYER_TURN_SPEED_THRESHOLD,
   PLAYER_WALK_SPEED,
   TERMINAL_FALL_SPEED,
+  MAX_WALKABLE_GRADIENT,
+  WALKABLE_STEP_ALLOWANCE,
 } from '../constants';
 import { rotateToward } from '../math/angles';
 import { clamp, type Vec3 } from '../math/vec3';
@@ -168,9 +170,12 @@ export function stepPlayer(
     motion.grounded = false;
   }
 
+  const startX = position.x;
+  const startZ = position.z;
   position.x += velocity.x * deltaSeconds;
   position.y += velocity.y * deltaSeconds;
   position.z += velocity.z * deltaSeconds;
+  holdToWalkableGround(motion, startX, startZ, world);
 
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
 
@@ -198,6 +203,58 @@ export function stepPlayer(
   const targetYaw =
     speed > PLAYER_TURN_SPEED_THRESHOLD ? Math.atan2(-velocity.x, -velocity.z) : input.aimYaw;
   motion.facingYaw = rotateToward(motion.facingYaw, targetYaw, PLAYER_TURN_RATE * deltaSeconds);
+}
+
+/**
+ * Can feet at height `feetY` step from one spot to the next without climbing a
+ * cliff? Gentle slopes and small lips pass; a face steeper than
+ * `MAX_WALKABLE_GRADIENT` does not, for a walker or for a jumper that has not
+ * got high enough to be above it.
+ */
+function canReachOnFoot(
+  world: CollisionWorld,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  feetY: number,
+): boolean {
+  const run = Math.hypot(toX - fromX, toZ - fromZ);
+  if (run === 0) return true;
+  const rise = world.terrain.heightAt(toX, toZ) - feetY;
+  return rise <= MAX_WALKABLE_GRADIENT * run + WALKABLE_STEP_ALLOWANCE;
+}
+
+/**
+ * Hold the player to ground they can walk onto. Walking into a cliff slides
+ * along it (keeping whichever of the two directions is still open) rather than
+ * climbing it or stopping dead.
+ */
+function holdToWalkableGround(
+  motion: PlayerMotion,
+  startX: number,
+  startZ: number,
+  world: CollisionWorld,
+): void {
+  const { position, velocity } = motion;
+  const feetY = position.y;
+  const targetX = position.x;
+  const targetZ = position.z;
+  if (canReachOnFoot(world, startX, startZ, targetX, targetZ, feetY)) return;
+  if (canReachOnFoot(world, startX, startZ, targetX, startZ, feetY)) {
+    position.z = startZ;
+    velocity.z = 0;
+    return;
+  }
+  if (canReachOnFoot(world, startX, startZ, startX, targetZ, feetY)) {
+    position.x = startX;
+    velocity.x = 0;
+    return;
+  }
+  position.x = startX;
+  position.z = startZ;
+  velocity.x = 0;
+  velocity.z = 0;
 }
 
 /** Is this button held down in the given input? */

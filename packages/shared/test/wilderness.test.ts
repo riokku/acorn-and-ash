@@ -24,9 +24,9 @@ describe('the generated wilderness', () => {
   it('is a real forest, not an empty one, but does not run away with itself', () => {
     const { props } = buildWilderness(4242, createWildernessTerrain(4242));
     // A rough sanity band: dense enough to explore, not so dense it threatens
-    // the collision loop's "cheap array scan" budget (see docs/decisions/0003).
+    // the collision grid's budget (see decision 0114: the world is 600 m wide).
     expect(props.length).toBeGreaterThan(200);
-    expect(props.length).toBeLessThan(4000);
+    expect(props.length).toBeLessThan(12000);
   });
 
   it('never places anything inside the hand-built clearing or its tree line', () => {
@@ -38,9 +38,9 @@ describe('the generated wilderness', () => {
 
   it('never places anything far past the wall at the edge of the world', () => {
     const { props } = buildWilderness(4242, createWildernessTerrain(4242));
-    const outerRadius = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
+    const outerExtent = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
     for (const prop of props) {
-      expect(Math.hypot(prop.x, prop.z)).toBeLessThanOrEqual(outerRadius);
+      expect(Math.max(Math.abs(prop.x), Math.abs(prop.z))).toBeLessThanOrEqual(outerExtent);
     }
   });
 

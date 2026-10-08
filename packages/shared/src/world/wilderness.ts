@@ -14,9 +14,14 @@
 
 import { WOODLAND_ENCOUNTERS } from '../data/tracking';
 import { forestTreeScale } from './tree-stature';
-import { PLAYABLE_HALF_EXTENT, WILDERNESS, WILDERNESS_PROP_FIRST_ID } from '../constants';
+import {
+  MOUNTAINS,
+  PLAYABLE_HALF_EXTENT,
+  WILDERNESS,
+  WILDERNESS_PROP_FIRST_ID,
+} from '../constants';
 import { hashSeed, createRng } from '../rng';
-import { lerp } from '../math/vec3';
+import { lerp, smoothstep } from '../math/vec3';
 import type { PropKindId } from '../data/props';
 import type { Collider } from './colliders';
 import { colliderForProp, type PlacedProp } from './clearing';
@@ -29,6 +34,11 @@ const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
 /** Roughly one rock for every seven trees. */
 const ROCK_CHANCE = 0.12;
+/** Up on the mountain rocks take over: this is the share of spots that turn to rock at the tree line. */
+const HIGH_ROCK_CHANCE = 0.6;
+/** Trees thin out from here up to the tree line, and only pines grow in the thin air. */
+const TREE_THINNING_START = 16;
+const HIGH_PINE_HEIGHT = 14;
 /** Well clear of the octave offsets `fractalNoise2D` uses internally, so the noise that decides where a glade sits never lines up with the noise that decides how tall the ground is there. */
 const DENSITY_SEED_OFFSET = 7919;
 
@@ -61,8 +71,9 @@ export interface Wilderness {
  */
 export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAKE): Wilderness {
   const props: PlacedProp[] = [];
-  const outerRadius = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
-  const steps = Math.floor(outerRadius / WILDERNESS.cellSize);
+  // The scatter fills the square of the playable world, plus a margin.
+  const outerExtent = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
+  const steps = Math.floor(outerExtent / WILDERNESS.cellSize);
   let nextId = WILDERNESS_PROP_FIRST_ID;
 
   for (let ix = -steps; ix <= steps; ix++) {
@@ -75,13 +86,14 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
       // inside it either way.
       const roughDistance = Math.hypot(gx, gz);
       if (roughDistance < WILDERNESS.flatRadius - WILDERNESS.jitter) continue;
-      if (roughDistance > outerRadius + WILDERNESS.jitter) continue;
 
       const cellRng = createRng(hashSeed(seed, 'wilderness', ix, iz));
       const x = gx + cellRng.nextRange(-WILDERNESS.jitter, WILDERNESS.jitter);
       const z = gz + cellRng.nextRange(-WILDERNESS.jitter, WILDERNESS.jitter);
       const distance = Math.hypot(x, z);
-      if (distance < WILDERNESS.flatRadius || distance > outerRadius) continue;
+      if (distance < WILDERNESS.flatRadius) continue;
+      const edgeDistance = Math.max(Math.abs(x), Math.abs(z));
+      if (edgeDistance > outerExtent) continue;
 
       const patchiness = fractalNoise2D(
         seed + DENSITY_SEED_OFFSET,
@@ -91,19 +103,26 @@ export function buildWilderness(seed: number, terrain: Terrain, lake: Lake = LAK
       // Thin near the clearing's own tree line, full strength through most of
       // the wilderness: the same taper the hills use, so the forest thickens
       // roughly where the ground starts to roll.
-      const easeIn = lerp(0.35, 1, wildernessHillWeight(distance));
+      const easeIn = lerp(0.35, 1, wildernessHillWeight(distance, edgeDistance));
       const density = lerp(WILDERNESS.densityMin, WILDERNESS.densityMax, patchiness) * easeIn;
       if (cellRng.nextFloat() > density) continue;
 
-      const isRock = cellRng.nextFloat() < ROCK_CHANCE;
-      const kind = cellRng.pick(isRock ? ROCK_KINDS : TREE_KINDS);
+      // Up the mountain the trees thin out and give way to bare rock.
+      const y = terrain.heightAt(x, z);
+      const treeShare = 1 - smoothstep(y, TREE_THINNING_START, MOUNTAINS.treeLine);
+      const rockChance = lerp(ROCK_CHANCE, HIGH_ROCK_CHANCE, 1 - treeShare);
+      const isRock = cellRng.nextFloat() < rockChance;
+      if (!isRock && treeShare < 1 && cellRng.nextFloat() > treeShare) continue;
+      const kind = cellRng.pick(
+        isRock ? ROCK_KINDS : y > HIGH_PINE_HEIGHT ? ['pine' as const] : TREE_KINDS,
+      );
 
       props.push({
         id: nextId++,
         kind,
         x,
         z,
-        y: terrain.heightAt(x, z),
+        y,
         rotationY: cellRng.nextRange(0, Math.PI * 2),
         // An independent stream changes stature without reshuffling any seeded positions.
         scale: isRock

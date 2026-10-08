@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../src/constants';
+import { mountainWeight } from '../src/world/mountains';
 import {
   createFlatTerrain,
   createWildernessTerrain,
@@ -43,6 +44,8 @@ describe('the wilderness terrain', () => {
       for (const angle of [0, 1.3, 2.7, 4.1, 5.5]) {
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
+        // The mountain range stands on top of the hills (see mountains.test.ts).
+        if (mountainWeight(x, z) > 0) continue;
         const height = terrain.heightAt(x, z);
         expect(Number.isFinite(height)).toBe(true);
         expect(Math.abs(height)).toBeLessThanOrEqual(WILDERNESS.hillHeight + 1e-9);

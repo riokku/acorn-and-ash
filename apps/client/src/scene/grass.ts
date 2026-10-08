@@ -205,7 +205,7 @@ export function createGrass(
         terrain.heightAt(x + 0.5, z) - terrain.heightAt(x - 0.5, z),
         terrain.heightAt(x, z + 0.5) - terrain.heightAt(x, z - 0.5),
       );
-      const shade = shader.shadeAt(x, z, slope);
+      const shade = shader.shadeAt(x, z, slope, y);
       const patch = Math.max(0.15, 0.6 + worldFbm(x * 0.15, z * 0.15, 2, 816) * 0.8);
       const threshold = chance / ((1 - shade.floor) * patch);
       if (threshold > 1 || !Number.isFinite(threshold)) continue;

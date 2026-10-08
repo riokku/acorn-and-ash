@@ -5,6 +5,7 @@
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { smoothstep } from '../math/vec3';
 import { LAKE, lakeGroundHeight, type Lake } from './lake';
+import { mountainHeightAt } from './mountains';
 import { fractalNoise2D } from './noise';
 
 export interface Terrain {
@@ -30,6 +31,9 @@ export function createFlatTerrain(height = 0): Terrain {
  * boundary ever sit on a slope. Same seed, same hills, on the server and in
  * every browser: nothing about the shape of the ground travels over the wire.
  *
+ * The mountain range stands in the far south-west (see mountains.ts), on top
+ * of the hills.
+ *
  * The lake sits in the north-east corner, and the ground is shaped round it:
  * a gentle bank, a sunken floor and a dome for each island (see lake.ts).
  */
@@ -40,30 +44,35 @@ export function createWildernessTerrain(seed: number, lake: Lake = LAKE): Terrai
   };
 }
 
-/** How much weight the hills get at this distance from the centre: 0 to 1. */
-export function wildernessHillWeight(distanceFromCentre: number): number {
+/**
+ * How much weight the hills get at this distance from the centre: 0 to 1.
+ *
+ * `edgeDistance` is how far the spot is from the middle measured to the square
+ * wall (the larger of |x| and |z|), which is what the ground flattens against;
+ * it defaults to the plain distance.
+ */
+export function wildernessHillWeight(
+  distanceFromCentre: number,
+  edgeDistance: number = distanceFromCentre,
+): number {
   const risingIn = smoothstep(
     distanceFromCentre,
     WILDERNESS.flatRadius,
     WILDERNESS.flatRadius + WILDERNESS.hillBlend,
   );
   const flattenOut =
-    1 -
-    smoothstep(
-      distanceFromCentre,
-      PLAYABLE_HALF_EXTENT - WILDERNESS.edgeFlat,
-      PLAYABLE_HALF_EXTENT,
-    );
+    1 - smoothstep(edgeDistance, PLAYABLE_HALF_EXTENT - WILDERNESS.edgeFlat, PLAYABLE_HALF_EXTENT);
   return Math.min(risingIn, flattenOut);
 }
 
 export function wildernessHeightAt(seed: number, x: number, z: number, lake: Lake = LAKE): number {
-  return lakeGroundHeight(lake, x, z, hillsHeightAt(seed, x, z));
+  const ground = hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z);
+  return lakeGroundHeight(lake, x, z, ground);
 }
 
 /** What the hills alone would make the ground, before the lake shapes it. */
 function hillsHeightAt(seed: number, x: number, z: number): number {
-  const weight = wildernessHillWeight(Math.hypot(x, z));
+  const weight = wildernessHillWeight(Math.hypot(x, z), Math.max(Math.abs(x), Math.abs(z)));
   if (weight <= 0) return 0;
   // Rescaled to roughly [-1, 1] so the ground rises and dips either side of
   // the clearing's own height rather than only ever rising.

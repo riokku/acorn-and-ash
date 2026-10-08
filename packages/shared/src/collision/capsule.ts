@@ -31,8 +31,53 @@ export interface LakeWall {
   up: boolean;
 }
 
+/**
+ * A coarse grid over the colliders a world starts with, so a player only
+ * checks the trunks and rocks near them instead of every one in the world
+ * (see decision 0114: the world grew and so did the forest).
+ *
+ * It covers the first `count` colliders only - the ones that never move or go
+ * away, apart from a tree being swapped for its stump. Anything added after
+ * those (a cabin, a campfire) is not in the grid and is always checked.
+ */
+interface Broadphase {
+  readonly count: number;
+  readonly cells: Map<number, number[]>;
+}
+
+/** Metres along a grid square. Bigger than a player, so a player touches at most four. */
+const BROADPHASE_CELL = 16;
+
+function broadphaseKey(cellX: number, cellZ: number): number {
+  return (cellX + 4096) * 8192 + (cellZ + 4096);
+}
+
+function addToBroadphase(broadphase: Broadphase, index: number, collider: Collider): void {
+  const reach = colliderFootprintRadius(collider);
+  const fromX = Math.floor((collider.x - reach) / BROADPHASE_CELL);
+  const toX = Math.floor((collider.x + reach) / BROADPHASE_CELL);
+  const fromZ = Math.floor((collider.z - reach) / BROADPHASE_CELL);
+  const toZ = Math.floor((collider.z + reach) / BROADPHASE_CELL);
+  for (let cellX = fromX; cellX <= toX; cellX++) {
+    for (let cellZ = fromZ; cellZ <= toZ; cellZ++) {
+      const key = broadphaseKey(cellX, cellZ);
+      const cell = broadphase.cells.get(key);
+      if (cell === undefined) broadphase.cells.set(key, [index]);
+      else if (!cell.includes(index)) cell.push(index);
+    }
+  }
+}
+
+function buildBroadphase(colliders: readonly Collider[]): Broadphase {
+  const broadphase: Broadphase = { count: colliders.length, cells: new Map() };
+  colliders.forEach((collider, index) => addToBroadphase(broadphase, index, collider));
+  return broadphase;
+}
+
 /** Everything the movement code needs to know about the world around it. */
 export interface CollisionWorld {
+  /** Set when the world was built with `indexStatic`; see `Broadphase`. */
+  broadphase?: Broadphase | null;
   /** Shared outdoor weather slowdown; rooms keep normal walking speed. */
   movementScale?: number;
   readonly terrain: Terrain;
@@ -56,9 +101,16 @@ export function createCollisionWorld(
   colliders: readonly Collider[],
   boundsHalfExtent: number = PLAYABLE_HALF_EXTENT,
   lake: Lake | null = null,
+  /**
+   * Index the colliders given here in a grid. Only for a world whose first
+   * colliders stay where they are for good (the outdoors); a room that is
+   * rewritten wholesale should leave it off.
+   */
+  indexStatic = false,
 ): CollisionWorld {
+  const broadphase = indexStatic ? buildBroadphase(colliders) : null;
   if (lake === null) {
-    return { terrain, colliders: [...colliders], boundsHalfExtent, lakeWall: null };
+    return { terrain, colliders: [...colliders], boundsHalfExtent, lakeWall: null, broadphase };
   }
   const wall: LakeWall = { lake, up: true };
   return {
@@ -66,6 +118,7 @@ export function createCollisionWorld(
     colliders: [...colliders],
     boundsHalfExtent,
     lakeWall: wall,
+    broadphase,
   };
 }
 
@@ -100,6 +153,40 @@ export function isLakeFrozen(world: CollisionWorld): boolean {
 export function replaceCollider(world: CollisionWorld, index: number, collider: Collider): void {
   if (index < 0 || index >= world.colliders.length) return;
   world.colliders[index] = collider;
+  // A stump or a regrown tree can reach a different distance than the one it
+  // replaces. Squares it no longer touches keep its number, which is harmless:
+  // the collider is read fresh and tested by distance either way.
+  if (world.broadphase != null && index < world.broadphase.count) {
+    addToBroadphase(world.broadphase, index, collider);
+  }
+}
+
+/** Reused so asking what is near a player makes no garbage. */
+const nearby: number[] = [];
+
+/** The numbers of the grid's colliders that could touch a capsule at this spot, in order. */
+function nearbyStaticColliders(
+  broadphase: Broadphase,
+  x: number,
+  z: number,
+  radius: number,
+): number[] {
+  nearby.length = 0;
+  const fromX = Math.floor((x - radius) / BROADPHASE_CELL);
+  const toX = Math.floor((x + radius) / BROADPHASE_CELL);
+  const fromZ = Math.floor((z - radius) / BROADPHASE_CELL);
+  const toZ = Math.floor((z + radius) / BROADPHASE_CELL);
+  for (let cellX = fromX; cellX <= toX; cellX++) {
+    for (let cellZ = fromZ; cellZ <= toZ; cellZ++) {
+      const cell = broadphase.cells.get(broadphaseKey(cellX, cellZ));
+      if (cell === undefined) continue;
+      for (const index of cell) {
+        if (!nearby.includes(index)) nearby.push(index);
+      }
+    }
+  }
+  // The same order an unindexed world would check them in.
+  return nearby.sort((a, b) => a - b);
 }
 
 /**
@@ -137,17 +224,20 @@ export function resolveCapsule(
 
   for (let pass = 0; pass < RESOLVE_PASSES; pass++) {
     let movedThisPass = false;
-    for (const collider of world.colliders) {
-      const span = colliderVerticalSpan(collider);
-      // A capsule only collides with something it overlaps vertically.
-      if (head <= span.min || feet >= span.max) continue;
-      if (!isWithinReach(position, radius, collider)) continue;
-
-      const pushed =
-        collider.shape === 'cylinder'
-          ? pushOutOfCylinder(position, radius, collider)
-          : pushOutOfBox(position, radius, collider);
-      if (pushed) {
+    const broadphase = world.broadphase;
+    const firstUnindexed = broadphase == null ? 0 : broadphase.count;
+    if (broadphase != null) {
+      for (const index of nearbyStaticColliders(broadphase, position.x, position.z, radius)) {
+        const collider = world.colliders[index];
+        if (collider === undefined) continue;
+        if (pushOutOfCollider(position, radius, feet, head, collider)) {
+          movedThisPass = true;
+          touched = true;
+        }
+      }
+    }
+    for (let index = firstUnindexed; index < world.colliders.length; index++) {
+      if (pushOutOfCollider(position, radius, feet, head, world.colliders[index]!)) {
         movedThisPass = true;
         touched = true;
       }
@@ -170,6 +260,23 @@ export function resolveCapsule(
   }
 
   return touched;
+}
+
+/** Push a capsule out of one collider, if it is touching it. */
+function pushOutOfCollider(
+  position: Vec3,
+  radius: number,
+  feet: number,
+  head: number,
+  collider: Collider,
+): boolean {
+  const span = colliderVerticalSpan(collider);
+  // A capsule only collides with something it overlaps vertically.
+  if (head <= span.min || feet >= span.max) return false;
+  if (!isWithinReach(position, radius, collider)) return false;
+  return collider.shape === 'cylinder'
+    ? pushOutOfCylinder(position, radius, collider)
+    : pushOutOfBox(position, radius, collider);
 }
 
 /** Reused so checking the shore makes no garbage; nothing here is kept between calls. */
