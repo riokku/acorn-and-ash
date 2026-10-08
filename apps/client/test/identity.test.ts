@@ -23,7 +23,7 @@ describe('remembering who you picked to be', () => {
 
   it('round-trips a real choice', () => {
     const storage = fakeStorage();
-    const identity = { name: 'Acorn', character: 'knight', color: 'moss' } as const;
+    const identity = { name: 'Acorn', character: 'knight', color: 'moss', skin: 'darker' } as const;
     writeIdentity(storage, identity);
     expect(readIdentity(storage)).toEqual(identity);
   });
@@ -46,6 +46,24 @@ describe('remembering who you picked to be', () => {
     expect(readIdentity(storage).color).toBe('amber');
   });
 
+  it("gives a choice saved before skin tones existed the body's own skin", () => {
+    const storage = fakeStorage();
+    storage.setItem(
+      'acorn.identity',
+      JSON.stringify({ name: 'Acorn', character: 'knight', color: 'amber' }),
+    );
+    expect(readIdentity(storage).skin).toBe('natural');
+  });
+
+  it('falls back to the natural skin tone for one this build no longer knows', () => {
+    const storage = fakeStorage();
+    storage.setItem(
+      'acorn.identity',
+      JSON.stringify({ name: 'Acorn', character: 'knight', color: 'amber', skin: 'purple' }),
+    );
+    expect(readIdentity(storage).skin).toBe('natural');
+  });
+
   it('sanitises a name that was tampered with directly in storage', () => {
     const storage = fakeStorage();
     storage.setItem(
@@ -65,7 +83,7 @@ describe('remembering who you picked to be', () => {
 describe('forgetting who you picked to be', () => {
   it('leaves the next visit with a blank card', () => {
     const storage = fakeStorage();
-    writeIdentity(storage, { name: 'Acorn', character: 'knight', color: 'moss' });
+    writeIdentity(storage, { name: 'Acorn', character: 'knight', color: 'moss', skin: 'natural' });
     clearIdentity(storage);
     expect(readIdentity(storage)).toEqual(BLANK_IDENTITY);
   });

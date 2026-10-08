@@ -9,7 +9,7 @@ import type { GardenRequest, GardenState } from '../sim/garden';
 import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
-import type { CharacterId, TintColorId } from '../data/characters';
+import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
@@ -167,7 +167,8 @@ export interface SetDoorLockMessage {
 }
 
 /**
- * Introduce yourself: the name, character and tint picked on the Home screen.
+ * Introduce yourself: the name, character, tint and skin tone picked on the
+ * Home screen.
  *
  * Sent once, right after `Welcome` - not bundled with it, so a slow Home
  * screen submit never holds up the very first snapshot. Nothing about a
@@ -179,6 +180,7 @@ export interface HelloMessage {
   readonly name: string;
   readonly character: CharacterId;
   readonly color: TintColorId;
+  readonly skin: SkinToneId;
 }
 
 /**
@@ -454,6 +456,7 @@ export interface RosterEntry {
   readonly name: string;
   readonly character: CharacterId;
   readonly color: TintColorId;
+  readonly skin: SkinToneId;
 }
 
 /**

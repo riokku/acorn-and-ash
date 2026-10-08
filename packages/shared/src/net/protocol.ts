@@ -58,9 +58,13 @@ import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import {
   characterFromIndex,
   characterIndex,
+  DEFAULT_SKIN_TONE,
+  skinToneFromIndex,
+  skinToneIndex,
   tintColorFromIndex,
   tintColorIndex,
   type CharacterId,
+  type SkinToneId,
   type TintColorId,
 } from '../data/characters';
 import { clamp } from '../math/vec3';
@@ -419,19 +423,26 @@ export function encodeUseItem(item: ItemId): ArrayBuffer {
 }
 
 /**
- * Introduce yourself: the name, character and tint picked on the Home screen.
+ * Introduce yourself: the name, character, tint and skin tone picked on the
+ * Home screen.
  *
- * type(1) + character(1) + color(1) + nameLength(1) + name bytes.
+ * type(1) + character(1) + color(1) + skin(1) + nameLength(1) + name bytes.
  */
-export function encodeHello(name: string, character: CharacterId, color: TintColorId): ArrayBuffer {
+export function encodeHello(
+  name: string,
+  character: CharacterId,
+  color: TintColorId,
+  skin: SkinToneId = DEFAULT_SKIN_TONE,
+): ArrayBuffer {
   const nameBytes = encodeName(name);
-  const buffer = new ArrayBuffer(4 + nameBytes.length);
+  const buffer = new ArrayBuffer(5 + nameBytes.length);
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Hello);
   view.setUint8(1, characterIndex(character));
   view.setUint8(2, tintColorIndex(color));
-  view.setUint8(3, nameBytes.length);
-  new Uint8Array(buffer, 4).set(nameBytes);
+  view.setUint8(3, skinToneIndex(skin));
+  view.setUint8(4, nameBytes.length);
+  new Uint8Array(buffer, 5).set(nameBytes);
   return buffer;
 }
 
@@ -595,14 +606,15 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   }
 
   if (type === ClientMessageType.Hello) {
-    if (data.byteLength < 4) return null;
+    if (data.byteLength < 5) return null;
     const character = characterFromIndex(view.getUint8(1));
     const color = tintColorFromIndex(view.getUint8(2));
-    const nameLength = view.getUint8(3);
-    if (character === null || color === null) return null;
-    if (data.byteLength !== 4 + nameLength) return null;
-    const name = textDecoder.decode(new Uint8Array(data, 4, nameLength));
-    return { type: 'hello', name, character, color };
+    const skin = skinToneFromIndex(view.getUint8(3));
+    const nameLength = view.getUint8(4);
+    if (character === null || color === null || skin === null) return null;
+    if (data.byteLength !== 5 + nameLength) return null;
+    const name = textDecoder.decode(new Uint8Array(data, 5, nameLength));
+    return { type: 'hello', name, character, color, skin };
   }
 
   return null;
@@ -1135,7 +1147,7 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
   const names = clipped.map((player) => encodeName(player.name));
 
   let total = 2;
-  for (const name of names) total += 5 + name.length;
+  for (const name of names) total += 6 + name.length;
 
   const buffer = new ArrayBuffer(total);
   const view = new DataView(buffer);
@@ -1150,9 +1162,10 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
     view.setUint16(offset, player.netId & 0xffff, true);
     view.setUint8(offset + 2, characterIndex(player.character));
     view.setUint8(offset + 3, tintColorIndex(player.color));
-    view.setUint8(offset + 4, name.length);
-    new Uint8Array(buffer, offset + 5, name.length).set(name);
-    offset += 5 + name.length;
+    view.setUint8(offset + 4, skinToneIndex(player.skin));
+    view.setUint8(offset + 5, name.length);
+    new Uint8Array(buffer, offset + 6, name.length).set(name);
+    offset += 6 + name.length;
   }
   return buffer;
 }
@@ -2011,16 +2024,17 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const players: RosterEntry[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
-        if (offset + 5 > data.byteLength) return null;
+        if (offset + 6 > data.byteLength) return null;
         const netId = view.getUint16(offset, true);
         const character = characterFromIndex(view.getUint8(offset + 2));
         const color = tintColorFromIndex(view.getUint8(offset + 3));
-        const nameLength = view.getUint8(offset + 4);
-        if (character === null || color === null) return null;
-        if (offset + 5 + nameLength > data.byteLength) return null;
-        const name = textDecoder.decode(new Uint8Array(data, offset + 5, nameLength));
-        players.push({ netId, name, character, color });
-        offset += 5 + nameLength;
+        const skin = skinToneFromIndex(view.getUint8(offset + 4));
+        const nameLength = view.getUint8(offset + 5);
+        if (character === null || color === null || skin === null) return null;
+        if (offset + 6 + nameLength > data.byteLength) return null;
+        const name = textDecoder.decode(new Uint8Array(data, offset + 6, nameLength));
+        players.push({ netId, name, character, color, skin });
+        offset += 6 + nameLength;
       }
       if (offset !== data.byteLength) return null;
       return { type: 'roster', players };

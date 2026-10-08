@@ -17,7 +17,7 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
-import type { PlayerIdentity } from '../home/identity';
+import { readSkinTone, type PlayerIdentity } from '../home/identity';
 
 /** The login services a player can use. */
 export type Provider = 'google' | 'discord';
@@ -161,14 +161,19 @@ export async function fetchSavedCharacter(
 
   const body: unknown = await response.json();
   if (typeof body !== 'object' || body === null) return null;
-  const { made, name, character, color } = body as Record<string, unknown>;
+  const { made, name, character, color, skin } = body as Record<string, unknown>;
   if (made !== true || typeof name !== 'string') return null;
 
   const cleaned = sanitizePlayerName(name);
   if (!isValidPlayerName(cleaned)) return null;
   if (typeof character !== 'string' || !(character in CHARACTER_KINDS)) return null;
   if (typeof color !== 'string' || !(color in TINT_COLORS)) return null;
-  return { name: cleaned, character: character as CharacterId, color: color as TintColorId };
+  return {
+    name: cleaned,
+    character: character as CharacterId,
+    color: color as TintColorId,
+    skin: readSkinTone(skin),
+  };
 }
 
 /**

@@ -24,6 +24,7 @@ import {
   CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   DEFAULT_CHARACTER,
+  DEFAULT_SKIN_TONE,
   DEFAULT_TINT_COLOR,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
@@ -86,6 +87,8 @@ import {
   itemIndex,
   sanitizePlayerName,
   SPAWN_POSITION,
+  skinToneFromIndex,
+  skinToneIndex,
   tintColorFromIndex,
   tintColorIndex,
   type BuiltProp,
@@ -98,6 +101,7 @@ import {
   type PersistedTree,
   type RosterEntry,
   type SnapshotEntity,
+  type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
 
@@ -112,6 +116,8 @@ interface ConnectionAttachment {
   readonly name: string | null;
   readonly characterIndex: number;
   readonly colorIndex: number;
+  /** Missing on a socket attached before skin tones existed: read as the default. */
+  readonly skinIndex?: number;
 }
 
 /** A player key is supplied by the client, so it is checked before it is trusted. */
@@ -249,6 +255,7 @@ export class World extends DurableObject<WorldEnv> {
       name: identity?.name ?? null,
       characterIndex: identity?.characterIndex ?? characterIndex(DEFAULT_CHARACTER),
       colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
+      skinIndex: identity?.skinIndex ?? skinToneIndex(DEFAULT_SKIN_TONE),
     } satisfies ConnectionAttachment);
 
     // A season asked for while testing, by the first one into an empty world.
@@ -471,7 +478,14 @@ export class World extends DurableObject<WorldEnv> {
       return;
     }
     if (decoded.type === 'hello') {
-      this.handleHello(ws, attachment, decoded.name, decoded.character, decoded.color);
+      this.handleHello(
+        ws,
+        attachment,
+        decoded.name,
+        decoded.character,
+        decoded.color,
+        decoded.skin,
+      );
       return;
     }
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
@@ -1367,6 +1381,7 @@ export class World extends DurableObject<WorldEnv> {
     rawName: string,
     requestedCharacter: CharacterId,
     color: TintColorId,
+    skin: SkinToneId,
   ): void {
     // One character per player per world (decision 0087). Whoever already has
     // a name here keeps it: what a returning browser says is ignored, and only
@@ -1389,6 +1404,7 @@ export class World extends DurableObject<WorldEnv> {
       name,
       characterIndex: characterIndex(character),
       colorIndex: tintColorIndex(color),
+      skinIndex: skinToneIndex(skin),
     };
     ws.serializeAttachment(updated);
 
@@ -1398,6 +1414,7 @@ export class World extends DurableObject<WorldEnv> {
         name,
         updated.characterIndex,
         updated.colorIndex,
+        skinToneIndex(skin),
       );
     }
     this.broadcast(encodeRoster(this.currentRoster()));
@@ -1414,6 +1431,7 @@ export class World extends DurableObject<WorldEnv> {
         name: attachment.name,
         character: characterFromIndex(attachment.characterIndex) ?? DEFAULT_CHARACTER,
         color: tintColorFromIndex(attachment.colorIndex) ?? DEFAULT_TINT_COLOR,
+        skin: skinToneFromIndex(attachment.skinIndex ?? 0) ?? DEFAULT_SKIN_TONE,
       });
     }
     return entries;
@@ -1816,6 +1834,9 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('players', 'name', 'TEXT');
     this.addColumn('players', 'character_index', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('players', 'color_index', 'INTEGER NOT NULL DEFAULT 0');
+    // 0 is the body's own skin (`SKIN_TONE_ORDER`), so a character saved before
+    // skin tones existed keeps looking exactly as it did.
+    this.addColumn('players', 'skin_index', 'INTEGER NOT NULL DEFAULT 0');
     // Null for a player saved before this existed, or one who never chose
     // anything - `initialEquippedItem` treats that exactly like a brand new
     // player, falling back to the first tool they still have, if any.
@@ -2058,7 +2079,9 @@ export class World extends DurableObject<WorldEnv> {
    */
   private savedCharacter(
     requestedKey: string | null,
-  ): { made: false } | { made: true; name: string; character: CharacterId; color: TintColorId } {
+  ):
+    | { made: false }
+    | { made: true; name: string; character: CharacterId; color: TintColorId; skin: SkinToneId } {
     if (requestedKey === null || !PLAYER_KEY_PATTERN.test(requestedKey)) return { made: false };
     const saved = this.loadPlayerIdentity(requestedKey);
     if (saved === undefined) return { made: false };
@@ -2067,23 +2090,33 @@ export class World extends DurableObject<WorldEnv> {
       name: saved.name,
       character: characterFromIndex(saved.characterIndex) ?? DEFAULT_CHARACTER,
       color: tintColorFromIndex(saved.colorIndex) ?? DEFAULT_TINT_COLOR,
+      skin: skinToneFromIndex(saved.skinIndex) ?? DEFAULT_SKIN_TONE,
     };
   }
 
-  /** A returning player's last-known name and tint, if they ever sent a Hello. */
+  /** A returning player's last-known name, tint and skin tone, if they ever sent a Hello. */
   private loadPlayerIdentity(
     playerKey: string,
-  ): { name: string; characterIndex: number; colorIndex: number } | undefined {
+  ): { name: string; characterIndex: number; colorIndex: number; skinIndex: number } | undefined {
     const rows = this.ctx.storage.sql
       .exec<{
         name: string | null;
         character_index: number;
         color_index: number;
-      }>('SELECT name, character_index, color_index FROM players WHERE player_key = ?', playerKey)
+        skin_index: number;
+      }>(
+        'SELECT name, character_index, color_index, skin_index FROM players WHERE player_key = ?',
+        playerKey,
+      )
       .toArray();
     const row = rows[0];
     if (row === undefined || row.name === null) return undefined;
-    return { name: row.name, characterIndex: row.character_index, colorIndex: row.color_index };
+    return {
+      name: row.name,
+      characterIndex: row.character_index,
+      colorIndex: row.color_index,
+      skinIndex: row.skin_index,
+    };
   }
 
   private loadPlayerItems(playerKey: string): { item: ItemId; count: number }[] {
@@ -2544,7 +2577,7 @@ export class World extends DurableObject<WorldEnv> {
    * row here seeds sensible placeholders for the columns it does not touch
    * (the same spawn point and full meters a genuinely new player starts
    * with) rather than leaving them NULL. `ON CONFLICT` then updates only the
-   * three identity columns, exactly as it does for `writePlayer`'s own
+   * four identity columns, exactly as it does for `writePlayer`'s own
    * columns, so this never clobbers a real saved position.
    */
   private writePlayerIdentity(
@@ -2552,13 +2585,15 @@ export class World extends DurableObject<WorldEnv> {
     name: string,
     characterIndex: number,
     colorIndex: number,
+    skinIndex: number,
   ): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO players ' +
-        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, skin_index, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
         'name = excluded.name, character_index = excluded.character_index, ' +
-        'color_index = excluded.color_index, updated_at = excluded.updated_at',
+        'color_index = excluded.color_index, skin_index = excluded.skin_index, ' +
+        'updated_at = excluded.updated_at',
       playerKey,
       SPAWN_POSITION.x,
       SPAWN_POSITION.y,
@@ -2569,6 +2604,7 @@ export class World extends DurableObject<WorldEnv> {
       name,
       characterIndex,
       colorIndex,
+      skinIndex,
       Date.now(),
     );
   }

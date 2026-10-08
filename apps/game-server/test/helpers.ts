@@ -42,6 +42,7 @@ import {
   type PickupsTakenMessage,
   type RosterMessage,
   type ThreatHitMessage,
+  type SkinToneId,
   type TintColorId,
   type TreeHitMessage,
   type TreeStatesMessage,
@@ -181,8 +182,13 @@ export class TestClient {
     this.socket.send(encodeDiscard({ item, amount, destroy }));
   }
 
-  hello(name: string, character: CharacterId = 'knight', color: TintColorId = 'amber'): void {
-    this.socket.send(encodeHello(name, character, color));
+  hello(
+    name: string,
+    character: CharacterId = 'knight',
+    color: TintColorId = 'amber',
+    skin: SkinToneId = 'natural',
+  ): void {
+    this.socket.send(encodeHello(name, character, color, skin));
   }
 
   sendRaw(payload: ArrayBuffer | string): void {
