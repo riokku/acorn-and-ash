@@ -3091,11 +3091,10 @@ export class Game {
     }
 
     this.fireLights?.update(camera.camera.position);
-    // Keep the world moving at its normal frame rate behind the field journal.
-    // Other menus still save drawing work while the simulation and network run.
-    const viewingMenu =
-      !this.playing || this.chestOpen || this.inventoryOpen || this.buildMenuOpen || this.mapOpen;
-    if (!viewingMenu || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
+    // The world keeps its normal frame rate behind every in-game panel (pack,
+    // character, chest, build menu, map, journal). Only the home screen, where
+    // the world is hidden behind a painting, saves drawing work.
+    if (this.playing || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
       setup.renderer.render(this.scene, camera.camera);
       this.lastRenderedAt = now;
       const rendered = this.firstWorldFrame;
