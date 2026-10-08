@@ -1,3 +1,5 @@
+import { createWildfireArt } from './scene/wildfire';
+import type { WildfireView } from '@acorn/shared';
 import {
   fishRecordsFromSaved,
   type FishRecords,
@@ -23,7 +25,8 @@ import {
   type DecorationState,
 } from '@acorn/shared';
 import { createHomeDecoration } from './scene/home-decoration';
-import { forestWeather } from '@acorn/shared';
+import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
+import { createSnowFootprints } from './scene/snow-footprints';
 import { createForestWeather } from './scene/forest-weather';
 import {
   NO_MEAL,
@@ -83,6 +86,7 @@ import {
   ActionKind,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_CHARACTER,
+  DEFAULT_SKIN_TONE,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -546,6 +550,8 @@ export interface GameDebug {
   selectedTargetId(): number | null;
   grassClumps(): number;
   combatMove(): { kind: number; age: number; grounded: boolean };
+  snowFootprints(): number;
+  wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
   /** How much of the ground and grass is under snow right now, from 0 to 1. */
   snowOnGround(): number;
@@ -599,9 +605,9 @@ export interface GameDebug {
   raidBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
-  /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
+  /** Whether the room-decorating panel (opened with the Decorate button) is currently showing. */
   buildMenuOpen(): boolean;
-  /** Whether the Craft menu (opened with C, or B outdoors) is currently showing. */
+  /** Whether the Craft menu (opened with C) is currently showing. */
   craftMenuOpen(): boolean;
   /** Everything anybody has built, wherever this browser last heard it was. */
   builtProps(): Array<{
@@ -861,6 +867,9 @@ export class Game {
   private controls: Controls | null = null;
   private connection: WorldConnection | null = null;
   private daylight: DaylightRig | null = null;
+  private footprints: ReturnType<typeof createSnowFootprints> | null = null;
+  private wildfireArt: ReturnType<typeof createWildfireArt> | null = null;
+  private wildfireState: WildfireView = { fires: [], lightning: null, now: 0 };
   private weatherSeed = 0;
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
   private weatherCloud = 0;
@@ -1080,6 +1089,7 @@ export class Game {
       selfLook: {
         character: this.options.identity.character,
         tint: TINT_COLORS[this.options.identity.color].hex,
+        skin: this.options.identity.skin,
       },
     });
     window.addEventListener('resize', this.handleResize);
@@ -1406,6 +1416,9 @@ export class Game {
         age: this.localPlayer?.actionAge() ?? 0,
         grounded: this.localPlayer?.motion.grounded ?? true,
       }),
+      snowFootprints: () => this.footprints?.visibleCount() ?? 0,
+      wildfireEffects: () =>
+        this.wildfireArt?.visibleEffects() ?? { fires: 0, smoke: 0, embers: 0, lightning: false },
       weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
       snowOnGround: () => seasonUniforms.snow.value,
       seasonFall: () =>
@@ -1569,6 +1582,8 @@ export class Game {
     this.animalTracks?.dispose();
     for (const model of this.decorModels) model.dispose();
     this.decorModels.length = 0;
+    this.wildfireArt?.dispose();
+    this.footprints?.dispose();
     this.weatherArt?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
@@ -1694,8 +1709,8 @@ export class Game {
         this.syncServerClock(message.serverTimeMs);
         // Every fresh connection is a clean slate on the server - this has to
         // be resent on every reconnect, not only the first one.
-        const { name, character, color } = this.options.identity;
-        this.connection?.sendHello(name, character, color);
+        const { name, character, color, skin } = this.options.identity;
+        this.connection?.sendHello(name, character, color, skin);
         void this.enterWorld(message.seed);
         break;
       }
@@ -1837,6 +1852,10 @@ export class Game {
         this.options.hud.publish({ fishRecords: this.fishRecords });
         break;
       }
+      case 'wildfire':
+        this.wildfireState = message;
+        this.wildfireArt?.setState(message);
+        break;
       case 'lakeIce': {
         this.applyLakeIce(message.frozen);
         break;
@@ -2423,6 +2442,15 @@ export class Game {
 
       const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
+      this.footprints?.dispose();
+      this.footprints = createSnowFootprints((x, z) =>
+        (this.collision?.terrain ?? terrain).heightAt(x, z),
+      );
+      this.outdoors.add(this.footprints.mesh);
+      this.wildfireArt?.dispose();
+      this.wildfireArt = createWildfireArt();
+      this.wildfireArt.setState(this.wildfireState);
+      this.outdoors.add(this.wildfireArt.group);
       this.weatherSeed = seed;
       this.seasonShiftMs = null;
       this.weatherArt?.dispose();
@@ -2517,6 +2545,7 @@ export class Game {
       this.localCharacter = createCharacter(
         this.options.identity.character,
         TINT_COLORS[this.options.identity.color].hex,
+        this.options.identity.skin,
       );
       this.localCharacter.setName(this.options.identity.name);
       this.localCharacter.setGear(this.worn.get(this.selfNetId) ?? {});
@@ -2755,7 +2784,11 @@ export class Game {
     if (existing !== undefined) return existing;
 
     const entry = this.roster.get(netId);
-    const character = createCharacter(this.characterKindFor(entry), this.colorFor(netId, entry));
+    const character = createCharacter(
+      this.characterKindFor(entry),
+      this.colorFor(netId, entry),
+      entry?.skin,
+    );
     character.setName(entry?.name ?? null);
     character.setEquippedItem(this.equipped.get(netId) ?? null);
     character.setGear(this.worn.get(netId) ?? {});
@@ -2790,6 +2823,7 @@ export class Game {
     for (const [netId, character] of this.remoteCharacters) {
       const entry = this.roster.get(netId);
       character.setColor(this.colorFor(netId, entry));
+      character.setSkinTone(entry?.skin ?? DEFAULT_SKIN_TONE);
       character.setName(entry?.name ?? null);
     }
   }
@@ -2938,6 +2972,8 @@ export class Game {
     }
 
     this.updateTargetSelection(controls);
+    if (this.collision !== null)
+      this.collision.movementScale = this.currentWeather().kind === 'blizzard' ? BLIZZARD_SPEED : 1;
     this.updateLocalPlayer(deltaSeconds, camera);
     const forestActive = this.playing && !document.hidden;
     this.forestAudio.update(forestActive);
@@ -2963,7 +2999,7 @@ export class Game {
         deltaSeconds,
         this.localPlayer.motion.position,
         this.reducedMotion.matches,
-        forestWeather(this.weatherSeed, this.estimatedServerTimeMs()).wind,
+        this.currentWeather().wind,
       );
     this.updateRemotePlayers(deltaSeconds);
     // After everybody, ours included, has been placed: boats of those who stopped rowing go.
@@ -2983,15 +3019,34 @@ export class Game {
       this.showTreeLanding(landing, camera);
     }
     this.treeLandingEffects.update(deltaSeconds, camera.camera);
+    this.wildfireArt?.update(
+      deltaSeconds,
+      camera.camera,
+      this.space !== OUTDOORS,
+      this.reducedMotion.matches,
+    );
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
     for (const model of this.decorModels) if ('update' in model) model.update(deltaSeconds);
     const weatherNow = this.estimatedServerTimeMs();
-    const weather = forestWeather(this.weatherSeed, weatherNow);
+    const weather = this.currentWeather();
     this.weatherCloud +=
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
     const season = seasonMix(this.currentCalendar());
-    this.seasons.apply(season, this.daylight);
-    this.daylight?.update(dayProgress(weatherNow), this.weatherCloud);
+    this.seasons.apply(season, this.daylight, weather.kind === 'blizzard');
+    this.daylight?.update(dayProgress(weatherNow), this.weatherCloud, weather.kind === 'blizzard');
+    const snow = seasonUniforms.snow.value > 0.5 && this.space === OUTDOORS;
+    if (this.localPlayer !== null) {
+      const motion = this.localPlayer.motion;
+      this.footprints?.step(
+        0,
+        motion.position.x,
+        motion.position.z,
+        motion.facingYaw,
+        motion.grounded,
+        snow,
+      );
+    }
+    this.footprints?.update(deltaSeconds, snow, weather.kind === 'blizzard');
     const watcher = this.localPlayer?.motion.position ?? { x: 0, z: 0 };
     this.weatherArt?.update(
       deltaSeconds,
@@ -3000,7 +3055,7 @@ export class Game {
       weather,
       this.space !== OUTDOORS,
       this.reducedMotion.matches,
-      rainShareFor(season),
+      weather.kind === 'blizzard' ? 0 : rainShareFor(season),
     );
     // Fill the air where the camera is looking, so it is the part that is seen that is full.
     camera.camera.getWorldDirection(this.viewDirection);
@@ -3036,15 +3091,10 @@ export class Game {
     }
 
     this.fireLights?.update(camera.camera.position);
-    // Menus remain responsive without repeatedly drawing an unchanged view.
-    // Keep the simulation and network alive; only paused drawing is throttled.
+    // Keep the world moving at its normal frame rate behind the field journal.
+    // Other menus still save drawing work while the simulation and network run.
     const viewingMenu =
-      !this.playing ||
-      this.chestOpen ||
-      this.inventoryOpen ||
-      this.craftMenuOpen ||
-      this.buildMenuOpen ||
-      this.mapOpen;
+      !this.playing || this.chestOpen || this.inventoryOpen || this.buildMenuOpen || this.mapOpen;
     if (!viewingMenu || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
       setup.renderer.render(this.scene, camera.camera);
       this.lastRenderedAt = now;
@@ -3305,23 +3355,24 @@ export class Game {
           });
   }
 
-  /**
-   * B outdoors opens the Craft menu, the same one C does, on its Craft page:
-   * what you make and what you place are listed together (see decision 0096).
-   * While it is open, a digit key picks the entry numbered beside it; picking a
-   * piece starts placing it (see decision 0052), and while a piece is being
-   * placed the same digit keys swap it for another without going back.
-   *
-   * Indoors B is the room's decorating panel, which has pieces of its own.
-   */
+  /** Open or close the room's decorating panel from the HUD button. */
+  toggleDecorations(): void {
+    if (this.space === OUTDOORS || this.homeHere()?.yours !== true) return;
+    this.closeChest();
+    this.stopPlacing();
+    this.buildMenuOpen = !this.buildMenuOpen;
+    this.craftMenuOpen = false;
+    this.inventoryOpen = false;
+    this.options.hud.publish({
+      buildMenuOpen: this.buildMenuOpen,
+      craftMenuOpen: false,
+      inventoryOpen: false,
+    });
+  }
+
+  /** Number keys select decorations indoors or swap a placed piece outdoors. */
   private handleBuildMenuInput(controls: Controls): void {
     if (this.space !== OUTDOORS) {
-      if (controls.takeBuildMenuToggle()) {
-        this.stopPlacing();
-        this.buildMenuOpen = !this.buildMenuOpen;
-        this.craftMenuOpen = false;
-        this.inventoryOpen = false;
-      }
       if (this.buildMenuOpen && this.homeHere()?.yours === true) {
         for (const index of controls.takeBuildTaps()) {
           const kind = DECORATION_KINDS[index];
@@ -3334,10 +3385,6 @@ export class Game {
       return;
     }
     this.buildMenuOpen = false;
-    if (controls.takeBuildMenuToggle()) {
-      if (this.craftMenuOpen && this.journalTab === 'craft') this.craftMenuOpen = false;
-      else this.openCraftMenu();
-    }
     if (this.placing === null || this.craftMenuOpen) return;
     // A piece in hand: a digit swaps it for another, the way it always has.
     for (const index of controls.takeCraftTaps()) {
@@ -3695,16 +3742,6 @@ export class Game {
     this.options.hud.publish({ craftTab: tab });
   }
 
-  /** Open the Craft menu on its Craft page, putting away whatever else was open. */
-  private openCraftMenu(): void {
-    this.journalTab = 'craft';
-    this.craftMenuOpen = true;
-    this.buildMenuOpen = false;
-    this.inventoryOpen = false;
-    this.stopPlacing();
-    this.options.hud.publish({ journalTab: 'craft', craftMenuOpen: true, inventoryOpen: false });
-  }
-
   /**
    * The entries on the page of the Craft menu that is showing, in the order
    * the number keys count them. Read from the HUD's own state, so a key always
@@ -3735,6 +3772,7 @@ export class Game {
     if (controls.takeCraftMenuToggle()) {
       this.craftMenuOpen = !this.craftMenuOpen;
       if (this.craftMenuOpen) {
+        this.stopPlacing();
         this.buildMenuOpen = false;
         this.inventoryOpen = false;
       }
@@ -3749,15 +3787,11 @@ export class Game {
     }
   }
 
-  /** I opens or closes the inventory panel, closing craft or build if either was open. */
+  /** B (or I) toggles the pack, closing the journal or decorating panel. */
   private handleInventoryToggleInput(controls: Controls): void {
     if (!controls.takeInventoryToggle()) return;
-    this.inventoryOpen = !this.inventoryOpen;
     this.characterOpen = false;
-    if (this.inventoryOpen) {
-      this.buildMenuOpen = false;
-      this.craftMenuOpen = false;
-    }
+    this.toggleInventory();
   }
 
   /**
@@ -3978,8 +4012,24 @@ export class Game {
    * same shared clock as the time of day, so everybody sees the same season;
    * `?season=` only moves what this one browser shows, by whole days.
    */
+  private currentWeather() {
+    const weather = forestWeather(
+      this.weatherSeed,
+      this.estimatedServerTimeMs(),
+      this.currentCalendar(),
+    );
+    const forced = this.wildfireState.testWeather;
+    return forced == null
+      ? weather
+      : { ...weather, kind: forced, precipitation: 1, wind: forced === 'blizzard' ? 1.6 : 0.85 };
+  }
+
   private currentCalendar(): Calendar {
     const now = this.estimatedServerTimeMs();
+    if (this.wildfireState.testWeather) {
+      const season = this.wildfireState.testWeather === 'blizzard' ? 'winter' : 'summer';
+      return calendarAt(this.weatherSeed, now + clockShiftForSeason(this.weatherSeed, now, season));
+    }
     if (this.options.season !== undefined && this.seasonShiftMs === null) {
       this.seasonShiftMs = clockShiftForSeason(this.weatherSeed, now, this.options.season);
     }
@@ -4827,6 +4877,14 @@ export class Game {
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
       const rowing = action.kind === ActionKind.Row;
+      this.footprints?.step(
+        netId + 1,
+        pose.x,
+        pose.z,
+        pose.yaw,
+        !pose.airborne && !rowing,
+        this.space === OUTDOORS && seasonUniforms.snow.value > 0.5,
+      );
       character.setRestSpot(
         rowing
           ? boatSeatAt(pose.x, pose.z, pose.yaw)
@@ -5007,7 +5065,7 @@ export class Game {
       pickupNotice: this.pickupNotices.current(now),
       canDrop: this.space === OUTDOORS,
       isNight: isNight(dayProgress(this.estimatedServerTimeMs())),
-      forestWeather: forestWeather(this.weatherSeed, this.estimatedServerTimeMs()),
+      forestWeather: this.currentWeather(),
       season: this.currentCalendar(),
       mapOpen: this.mapOpen,
       door: this.doorHint,

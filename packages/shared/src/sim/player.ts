@@ -135,7 +135,9 @@ export function stepPlayer(
   const moveX = clamp(input.moveX, -1, 1);
   const moveZ = clamp(input.moveZ, -1, 1);
   const direction = worldMoveDirection(moveX, moveZ, input.yaw);
-  const topSpeed = isHeld(input, PlayerButton.Sprint) ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
+  const topSpeed =
+    (isHeld(input, PlayerButton.Sprint) ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED) *
+    (world.movementScale ?? 1);
   const desiredX = direction.x * topSpeed;
   const desiredZ = direction.z * topSpeed;
 

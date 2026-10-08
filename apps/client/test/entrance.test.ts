@@ -82,7 +82,7 @@ describe('the first screen', () => {
     expect(await findEntrance(fakeStorage(), 'home-clearing', send)).toEqual({
       kind: 'home',
       accountName: 'Ada',
-      saved: { name: 'Acorn', character: 'knight', color: 'moss' },
+      saved: { name: 'Acorn', character: 'knight', color: 'moss', skin: 'natural' },
       frontPage: true,
     });
   });

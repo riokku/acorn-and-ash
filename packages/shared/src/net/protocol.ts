@@ -6,6 +6,7 @@ import {
   type WornGear,
 } from '../data/gear';
 import { GEAR_REFUSALS, type GearRefusal } from '../sim/gear';
+import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
 import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
 import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
 import {
@@ -66,9 +67,13 @@ import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import {
   characterFromIndex,
   characterIndex,
+  DEFAULT_SKIN_TONE,
+  skinToneFromIndex,
+  skinToneIndex,
   tintColorFromIndex,
   tintColorIndex,
   type CharacterId,
+  type SkinToneId,
   type TintColorId,
 } from '../data/characters';
 import { clamp } from '../math/vec3';
@@ -518,19 +523,26 @@ export function encodeUseItem(item: ItemId): ArrayBuffer {
 }
 
 /**
- * Introduce yourself: the name, character and tint picked on the Home screen.
+ * Introduce yourself: the name, character, tint and skin tone picked on the
+ * Home screen.
  *
- * type(1) + character(1) + color(1) + nameLength(1) + name bytes.
+ * type(1) + character(1) + color(1) + skin(1) + nameLength(1) + name bytes.
  */
-export function encodeHello(name: string, character: CharacterId, color: TintColorId): ArrayBuffer {
+export function encodeHello(
+  name: string,
+  character: CharacterId,
+  color: TintColorId,
+  skin: SkinToneId = DEFAULT_SKIN_TONE,
+): ArrayBuffer {
   const nameBytes = encodeName(name);
-  const buffer = new ArrayBuffer(4 + nameBytes.length);
+  const buffer = new ArrayBuffer(5 + nameBytes.length);
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Hello);
   view.setUint8(1, characterIndex(character));
   view.setUint8(2, tintColorIndex(color));
-  view.setUint8(3, nameBytes.length);
-  new Uint8Array(buffer, 4).set(nameBytes);
+  view.setUint8(3, skinToneIndex(skin));
+  view.setUint8(4, nameBytes.length);
+  new Uint8Array(buffer, 5).set(nameBytes);
   return buffer;
 }
 
@@ -695,14 +707,15 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   }
 
   if (type === ClientMessageType.Hello) {
-    if (data.byteLength < 4) return null;
+    if (data.byteLength < 5) return null;
     const character = characterFromIndex(view.getUint8(1));
     const color = tintColorFromIndex(view.getUint8(2));
-    const nameLength = view.getUint8(3);
-    if (character === null || color === null) return null;
-    if (data.byteLength !== 4 + nameLength) return null;
-    const name = textDecoder.decode(new Uint8Array(data, 4, nameLength));
-    return { type: 'hello', name, character, color };
+    const skin = skinToneFromIndex(view.getUint8(3));
+    const nameLength = view.getUint8(4);
+    if (character === null || color === null || skin === null) return null;
+    if (data.byteLength !== 5 + nameLength) return null;
+    const name = textDecoder.decode(new Uint8Array(data, 5, nameLength));
+    return { type: 'hello', name, character, color, skin };
   }
 
   return null;
@@ -1235,7 +1248,7 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
   const names = clipped.map((player) => encodeName(player.name));
 
   let total = 2;
-  for (const name of names) total += 5 + name.length;
+  for (const name of names) total += 6 + name.length;
 
   const buffer = new ArrayBuffer(total);
   const view = new DataView(buffer);
@@ -1250,9 +1263,10 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
     view.setUint16(offset, player.netId & 0xffff, true);
     view.setUint8(offset + 2, characterIndex(player.character));
     view.setUint8(offset + 3, tintColorIndex(player.color));
-    view.setUint8(offset + 4, name.length);
-    new Uint8Array(buffer, offset + 5, name.length).set(name);
-    offset += 5 + name.length;
+    view.setUint8(offset + 4, skinToneIndex(player.skin));
+    view.setUint8(offset + 5, name.length);
+    new Uint8Array(buffer, offset + 6, name.length).set(name);
+    offset += 6 + name.length;
   }
   return buffer;
 }
@@ -1636,6 +1650,72 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const state = fishRecordsFromSaved({ counts, bestCm });
       if (view.getUint8(19) !== state.displays) return null;
       return { type: 'fishRecords', ...state };
+    }
+    case ServerMessageType.Wildfire: {
+      if (data.byteLength < 30) return null;
+      const count = view.getUint8(1);
+      if (count > FIRE_LIMIT || data.byteLength !== 30 + count * 39) return null;
+      const now = view.getFloat64(2, true);
+      const serial = view.getInt32(10, true);
+      const lightning =
+        serial < 0
+          ? null
+          : {
+              serial,
+              x: view.getFloat32(14, true),
+              y: view.getFloat32(18, true),
+              z: view.getFloat32(22, true),
+            };
+      if (
+        !Number.isFinite(now) ||
+        now < 0 ||
+        (lightning && ![lightning.x, lightning.y, lightning.z].every(Number.isFinite))
+      )
+        return null;
+      const fires: Wildfire[] = [];
+      const keys = new Set<string>();
+      for (let i = 0; i < count; i++) {
+        const at = 30 + i * 39;
+        const kind = view.getUint8(at);
+        const fire: Wildfire = {
+          kind: kind === 0 ? 'tree' : 'building',
+          id: view.getUint32(at + 1, true),
+          x: view.getFloat32(at + 5, true),
+          y: view.getFloat32(at + 9, true),
+          z: view.getFloat32(at + 13, true),
+          height: view.getFloat32(at + 17, true),
+          radius: view.getFloat32(at + 21, true),
+          startedAt: view.getFloat64(at + 25, true),
+          generation: view.getUint8(at + 33),
+          spread: view.getUint8(at + 34) === 1,
+        };
+        const key = `${kind}:${fire.id}`;
+        if (
+          kind > 1 ||
+          keys.has(key) ||
+          ![fire.x, fire.y, fire.z, fire.height, fire.radius, fire.startedAt].every(
+            Number.isFinite,
+          ) ||
+          fire.height <= 0 ||
+          fire.radius < 0 ||
+          fire.startedAt < 0 ||
+          fire.startedAt > now ||
+          fire.generation > 3 ||
+          view.getUint8(at + 34) > 1
+        )
+          return null;
+        keys.add(key);
+        fires.push(fire);
+      }
+      const test = view.getUint8(26);
+      if (test > 2) return null;
+      return {
+        type: 'wildfire',
+        now,
+        lightning,
+        fires,
+        testWeather: test === 1 ? 'storm' : test === 2 ? 'blizzard' : null,
+      };
     }
     case ServerMessageType.LakeIce: {
       if (data.byteLength !== 2) return null;
@@ -2118,16 +2198,17 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const players: RosterEntry[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
-        if (offset + 5 > data.byteLength) return null;
+        if (offset + 6 > data.byteLength) return null;
         const netId = view.getUint16(offset, true);
         const character = characterFromIndex(view.getUint8(offset + 2));
         const color = tintColorFromIndex(view.getUint8(offset + 3));
-        const nameLength = view.getUint8(offset + 4);
-        if (character === null || color === null) return null;
-        if (offset + 5 + nameLength > data.byteLength) return null;
-        const name = textDecoder.decode(new Uint8Array(data, offset + 5, nameLength));
-        players.push({ netId, name, character, color });
-        offset += 5 + nameLength;
+        const skin = skinToneFromIndex(view.getUint8(offset + 4));
+        const nameLength = view.getUint8(offset + 5);
+        if (character === null || color === null || skin === null) return null;
+        if (offset + 6 + nameLength > data.byteLength) return null;
+        const name = textDecoder.decode(new Uint8Array(data, offset + 6, nameLength));
+        players.push({ netId, name, character, color, skin });
+        offset += 6 + nameLength;
       }
       if (offset !== data.byteLength) return null;
       return { type: 'roster', players };
@@ -2296,5 +2377,36 @@ export function encodeRareReel(state: ReelView): ArrayBuffer {
   view.setUint16(1, state.age, true);
   view.setUint8(3, state.hits);
   view.setUint8(4, state.misses);
+  return data;
+}
+
+/** Bounded full fire state, including the last bolt so packet loss cannot lose an ignition. */
+export function encodeWildfire(state: WildfireView): ArrayBuffer {
+  const fires = state.fires.slice(0, FIRE_LIMIT);
+  const data = new ArrayBuffer(30 + fires.length * 39);
+  const view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Wildfire);
+  view.setUint8(1, fires.length);
+  view.setFloat64(2, state.now, true);
+  view.setUint8(26, state.testWeather === 'storm' ? 1 : state.testWeather === 'blizzard' ? 2 : 0);
+  view.setInt32(10, state.lightning?.serial ?? -1, true);
+  if (state.lightning) {
+    view.setFloat32(14, state.lightning.x, true);
+    view.setFloat32(18, state.lightning.y, true);
+    view.setFloat32(22, state.lightning.z, true);
+  }
+  fires.forEach((fire, i) => {
+    const at = 30 + i * 39;
+    view.setUint8(at, fire.kind === 'tree' ? 0 : 1);
+    view.setUint32(at + 1, fire.id, true);
+    view.setFloat32(at + 5, fire.x, true);
+    view.setFloat32(at + 9, fire.y, true);
+    view.setFloat32(at + 13, fire.z, true);
+    view.setFloat32(at + 17, fire.height, true);
+    view.setFloat32(at + 21, fire.radius, true);
+    view.setFloat64(at + 25, fire.startedAt, true);
+    view.setUint8(at + 33, fire.generation);
+    view.setUint8(at + 34, fire.spread ? 1 : 0);
+  });
   return data;
 }

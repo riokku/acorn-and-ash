@@ -41,6 +41,7 @@ export function mountHud(
     onPickCraft: (action: CraftAction) => void;
     onExpedition?: (request: ExpeditionRequest) => void;
     onGarden?: (request: GardenRequest) => void;
+    onToggleDecorations?: () => void;
     onMoveDecoration?: (id: number) => void;
     onReclaimDecoration?: (id: number) => void;
   },
@@ -81,6 +82,7 @@ export function mountHud(
         onPickCraft={journalActions?.onPickCraft}
         onGardenUse={journalActions?.onGarden}
         onExpedition={journalActions?.onExpedition}
+        onToggleDecorations={journalActions?.onToggleDecorations}
         onMoveDecoration={journalActions?.onMoveDecoration}
         onReclaimDecoration={journalActions?.onReclaimDecoration}
       />

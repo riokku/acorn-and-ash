@@ -102,3 +102,63 @@ export function tintColorIndex(id: TintColorId): number {
 export function tintColorFromIndex(index: number): TintColorId | null {
   return TINT_COLOR_ORDER[index] ?? null;
 }
+
+/**
+ * A gentle lighter or darker shade of a body's own skin, picked once when a
+ * character is made (decision 0113). Only the skin changes: hair, eyes and
+ * clothes keep their own colours.
+ */
+export type SkinToneId = 'lightest' | 'lighter' | 'natural' | 'darker' | 'darkest';
+
+export interface SkinTone {
+  readonly id: SkinToneId;
+  readonly displayName: string;
+  /**
+   * How much each of red, green and blue is scaled from the body's own skin,
+   * as painted (sRGB). Darker tones lose more blue than red, so they stay
+   * warm rather than turning grey.
+   */
+  readonly shade: readonly [number, number, number];
+}
+
+export const SKIN_TONES = {
+  lightest: { id: 'lightest', displayName: 'Lightest', shade: [1.07, 1.09, 1.12] },
+  lighter: { id: 'lighter', displayName: 'Lighter', shade: [1.035, 1.045, 1.06] },
+  natural: { id: 'natural', displayName: 'Natural', shade: [1, 1, 1] },
+  darker: { id: 'darker', displayName: 'Darker', shade: [0.9, 0.83, 0.78] },
+  darkest: { id: 'darkest', displayName: 'Darkest', shade: [0.78, 0.67, 0.59] },
+} as const satisfies Record<SkinToneId, SkinTone>;
+
+/**
+ * The order sent over the wire and saved. `natural` is first so that every
+ * character made before skin tones existed (saved as 0) keeps its own skin.
+ * Only ever add to the end - same reason `CHARACTER_ORDER` does.
+ */
+export const SKIN_TONE_ORDER: readonly SkinToneId[] = [
+  'natural',
+  'lightest',
+  'lighter',
+  'darker',
+  'darkest',
+];
+
+/** The order the swatches are shown in, lightest to darkest. */
+export const SKIN_TONE_SWATCHES: readonly SkinToneId[] = [
+  'lightest',
+  'lighter',
+  'natural',
+  'darker',
+  'darkest',
+];
+
+export const DEFAULT_SKIN_TONE: SkinToneId = 'natural';
+
+export function skinToneIndex(id: SkinToneId): number {
+  const index = SKIN_TONE_ORDER.indexOf(id);
+  if (index < 0) throw new Error(`Unknown skin tone: ${id}`);
+  return index;
+}
+
+export function skinToneFromIndex(index: number): SkinToneId | null {
+  return SKIN_TONE_ORDER[index] ?? null;
+}

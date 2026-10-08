@@ -199,7 +199,7 @@ export function InventoryPanel({
           <span className="hud-journal-title">Your pack</span>
         </span>
         <span className="hud-journal-closehint">
-          Drag onto a hotbar slot · right-click to drop · I to close
+          Drag onto a hotbar slot · right-click to drop · B to close
         </span>
       </div>
 

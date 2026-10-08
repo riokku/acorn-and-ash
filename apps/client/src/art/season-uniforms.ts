@@ -15,4 +15,5 @@ export const seasonUniforms = {
   blades: uniform(new THREE.Color(1, 1, 1)),
   /** How much of the ground and grass is under snow, 0 to 1. */
   snow: uniform(0),
+  blizzard: uniform(0),
 };

@@ -22,6 +22,8 @@ declare global {
       grassClumps(): number;
       combatMove(): { kind: number; age: number; grounded: boolean };
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
+      snowFootprints(): number;
+      wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
       weatherEffects(): { rainDrops: number; fireflies: number };
       snowOnGround(): number;
       seasonFall(): { petals: number; pollen: number; leaves: number; snow: number };
@@ -126,16 +128,17 @@ async function hudValue(page: Page, label: string): Promise<string> {
  * Home screen itself.
  */
 async function passThroughHomeIfShown(page: Page): Promise<void> {
-  const nameInput = page.locator('#home-name');
-  const welcomeBack = page.getByTestId('saved-character');
-  const shown = await Promise.race([
-    nameInput.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'new' as const),
-    welcomeBack.waitFor({ state: 'visible', timeout: 3000 }).then(() => 'returning' as const),
-  ]).catch(() => null);
-  if (shown === null) return;
+  // A second tab can leave this page in the background while sign-in is still
+  // loading. Wait for a real screen instead of treating a three-second timeout
+  // as evidence that the player has already entered the game.
+  await page.bringToFront();
+  const play = page.locator('.home-play');
+  await expect(play.or(page.locator('.hud-panel'))).toBeVisible();
+  if (!(await play.isVisible())) return;
 
-  if (shown === 'new') await nameInput.fill('Playtester');
-  await page.locator('.home-play').click();
+  const nameInput = page.locator('#home-name');
+  if (await nameInput.isVisible()) await nameInput.fill('Playtester');
+  await play.click();
 }
 
 async function waitForConnected(page: Page): Promise<void> {
@@ -1836,7 +1839,7 @@ async function buildFacing(
       // Wait for the menu itself rather than a fixed moment: at a few frames a
       // second a key pressed just after another can be taken for the same press.
       const menuOpen = async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? false);
-      if (!(await menuOpen())) await page.keyboard.press('KeyB');
+      if (!(await menuOpen())) await page.keyboard.press('KeyC');
       await expect.poll(menuOpen).toBe(true);
       await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
       await page.keyboard.press(digit);
@@ -1998,7 +2001,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   // preview, red, saying what is missing (decision 0052) - and a click
   // then places nothing. The one Craft menu lists every option (decisions 0043
   // and 0096); the hint line beneath it just says how to close it.
-  await page.keyboard.press('KeyB');
+  await page.keyboard.press('KeyC');
   await expect(page.locator('.hud-hint')).toContainText('Pick one below, or C to close');
   await page
     .locator('.hud-journal-entry')
@@ -2157,12 +2160,12 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // One Craft menu lists everything. Its Yard page holds the flower bed, the
   // fence, the garden path stone (decision 0048) and the planter, and the
   // lantern sits on the Camp page that is built from below.
-  await page.keyboard.press('KeyB');
+  await page.keyboard.press('KeyC');
   await page.locator('.craft-tabs').getByRole('button', { name: 'Yard', exact: true }).click();
   await expect(page.locator('.hud-journal-entry')).toHaveCount(4);
   await expect(page.locator('.hud-journal')).toContainText('Fence');
   await expect(page.locator('.hud-journal')).toContainText('Garden path');
-  await page.keyboard.press('KeyB');
+  await page.keyboard.press('KeyC');
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true))
     .toBe(false);

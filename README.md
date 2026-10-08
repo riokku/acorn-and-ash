@@ -82,7 +82,7 @@ recipes survive reconnecting and the world sleeping. See
 > Warcraft - click on a tree, an animal, the water, the hotbar or your pack
 > instead of it being captured for your whole time in the world, with the
 > right button turning the camera on its own and a tooltip on every hotbar
-> slot. Press `I`, or click the new bag button, to see everything you're
+> slot. Press `B`, or click the new bag button, to see everything you're
 > carrying and drag any of it onto the bar. Only a right-button drag turns
 > the camera now: a left click on a tree, an animal or the water turns your
 > character to face it instead, leaving the view exactly where you put it.
@@ -95,7 +95,7 @@ recipes survive reconnecting and the world sleeping. See
 
 Your first tent establishes a private building area. Its radius grows with your
 home: **12 m** for a tent, **18 m** for a teepee, **26 m** for a small cabin and
-**36 m** for a larger cabin. Open B or select a building piece to see a ground
+**36 m** for a larger cabin. Open C or select a building piece to see a ground
 boundary, minimap outline and radius label. Upgrades preview the larger area.
 The whole object must fit inside your plot; visitors cannot build there.
 
@@ -136,14 +136,14 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | `E` at your expedition board         | Read the board on your doorstep; `E` again to put it away                |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
-| `C` (or `B` outdoors)                | Open the Craft menu: everything you can make or place, on one list       |
+| `C`                                  | Open the Craft menu: everything you can make or place, on one list       |
 | `1`–`9` (Craft menu open)            | Pick the entry with that number on the page showing (axe, rod, torch...) |
-| `B` indoors                          | Decorate the room                                                        |
+| Decorate button indoors              | Decorate the room                                                        |
 | Left mouse (piece picked)            | Place it where its preview stands                                        |
 | Mouse wheel (piece picked)           | Turn it                                                                  |
 | `Shift` (held, fence picked)         | Place it freely instead of joining it onto another fence                 |
 | `Esc` or right mouse tap             | Put the piece away                                                       |
-| `I`, or the bag button               | Open or close your pack                                                  |
+| `B` (or `I`), or the bag button      | Open or close your pack                                                  |
 | `Z`                                  | Open or close your character screen and put gear on (see below)          |
 | Right mouse on a pack or hotbar slot | Drop one, drop all, or destroy what's in it                              |
 | `M`, or click the minimap            | Open or close the map                                                    |
@@ -195,7 +195,7 @@ build menus and the Home screen all now share. See
 
 The bag button at the end of the hotbar shows how full your pack is: its
 ring has one segment per slot, filled for each one in use, with "4/6"
-underneath. It turns orange once every slot is taken. Press `I`, or click
+underneath. It turns orange once every slot is taken. Press `B`, or click
 it, to open your pack and see everything you're carrying, not just the six
 there's room for on the bar - the same parchment look, with a meter of slots
 used, one square per slot (empty ones dashed), and every stack's icon, name
@@ -269,10 +269,14 @@ walking, running and jumping for real rather than sliding around as a
 placeholder capsule. They are called Body 1 to Body 6: a character is a body,
 and the outfits the pack drew on them (the Knight's armour, the Mage's hat and
 so on) are meant to become gear you find along the way, so everyone starts in
-just a shirt and shorts. The names are changed already; the shirt-and-shorts art and the
-gear are still to come (see
+just a shirt and shorts. The bodies now wear just that, and the old outfits
+are saved as separate gear in [`assets/gear/`](assets/gear/); wearing and
+finding gear in the game are still to come (see
 [decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
-Your name, tint and character travel to
+You also pick a skin tone: the body's own skin, or a little lighter or darker,
+from a row of five swatches; only the skin changes, never the hair or clothes
+(see [decision 0113](docs/decisions/0113-skin-tones.md)).
+Your name, tint, character and skin tone travel to
 the server and out to everybody else in the clearing, with a small name tag
 floating over your head the same way it does over anyone else's. Picked
 once, remembered the next time you visit. See
@@ -503,9 +507,20 @@ almost nothing; they stay outdoors only, and nothing falls if your computer
 asks for reduced motion (`art/season-fall.ts` holds the rules,
 `scene/season-fall.ts` draws them).
 
-So far the seasons only change how the world looks; what each season changes
-in play (what you can gather, which fish bite, how creatures behave) comes
-next. See [decision 0089](docs/decisions/0089-seasons.md).
+Some winters now have a three-day blizzard: heavier, wind-driven snow, reduced
+visibility and 22% slower outdoor walking. Winter ice remains throughout the
+season. Footsteps leave impressions that gradually fill with snow.
+
+Summer storms can strike trees with lightning. Flames spread to nearby trees
+and wooden buildings, hurt nearby players, and burn out on their own. Trees
+leave stumps and regrow; destroyed homes spill their chest contents and move
+occupants outside. Leave space around homes to limit spread.
+
+On local and preview servers, join an empty test world with `?weather=blizzard`
+or `?weather=storm` to try these events immediately (combine with `&world=` for
+a separate test world). Storm lightning begins within 18 seconds; ignition is
+probabilistic. These controls are ignored in production. See
+[decision 0113](docs/decisions/0113-blizzards-and-wildfires.md).
 
 ### Wildlife
 
@@ -771,7 +786,7 @@ production use the real wait.
 
 ### Building
 
-Press `B` to open a small menu of what you can place anywhere in the
+Press `C` to open a small menu of what you can place anywhere in the
 clearing, then a number to pick one - or click it. A see-through preview of
 it then follows your mouse across the ground, up to five metres from you,
 with an outline of the room it needs: green where it fits, red where it
@@ -941,7 +956,12 @@ character makes, over and over; `&demo=combo` (or `walk`, `run`, `chop`,
 moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
 `?gallery=raiders` does the same for the skeletons: every kind's moves,
 looping, with `&kind=warrior` (or `minion`, `rogue`, `mage`) for one of
-them, and `&demo=` and `&strip=` as above.
+them, and `&demo=` and `&strip=` as above. `?gallery=bodies` shows the six
+bodies in pairs, in their old outfits and then in just a shirt and shorts;
+`&gear=mage-hat` (or any file name in `assets/gear/`) puts that one piece on
+every body instead, and `&motion=walk` or `run` sets them moving.
+`?gallery=bodies&tones` lines up every body in all five skin tones, and
+`&skin=darker` (or another tone) gives the bodies that skin.
 
 ## Commands
 
@@ -1124,6 +1144,22 @@ staging's default world, that's
 `https://acorn-ash-web-staging.chrisistinson.workers.dev/api/worlds/home-clearing/reset-players?confirm=clear-everyone`.
 See [decision 0042](docs/decisions/0042-hotbar-icons-and-a-way-to-reset-testing.md).
 
+When a world next wakes, buildings whose saved owner no longer exists are
+removed, including their chests, gardens and indoor decorations. This cleans up
+old playtest leftovers. Buildings belonging to saved characters and communal
+objects remain; recently deleted characters still use their normal removal deadline.
+
+The staging main world also has a one-time reset of all player-built structures,
+including old pieces without a recorded owner. It clears chests, gardens and
+indoor decorations alongside the structures, while keeping characters, packs,
+trees and buried caches. The saved reset marker prevents future visits or
+deployments from clearing newly built homes. This reset is disabled in production,
+previews and local games, and does not apply to other staging worlds.
+
+`/api/worlds/home-clearing/status` reports `players` (currently connected),
+`savedCharacters` (characters still saved, including offline ones), and
+`builtStructures` (placed structures still in storage).
+
 ## Assets and licensing
 
 Every file under `assets/`, and anything served from R2, needs a row in
@@ -1175,7 +1211,8 @@ rebuilt. Its colours are painted on as vertex colours rather than a texture.
 See it in the gallery with `?gallery=iron-axe`, and
 [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
 for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
-deleted.)
+deleted.) The six plain bodies and the gear lifted off their outfits are built
+the same way, by `tools/art/plain_bodies.py`.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
@@ -1248,7 +1285,7 @@ Most outings have clear skies or drizzle, with short rain and occasional brief s
 
 ### Make yourself at home
 
-Press B inside your home to place a cedar bench, timber table, woven forest rug, colored lantern, flower planter or earned trophy. Colored lanterns and planters also work outdoors inside your building area. Point at the floor, scroll to rotate, and click to place. The preview protects doors, waking spots and useful stations. Move pieces for free or pack them up to recover their materials; a full backpack keeps the piece intact. Visitors can admire decorations but only owners can rearrange them. See [private decoration](docs/decisions/0081-private-home-decoration.md).
+Click Decorate inside your home to place a cedar bench, timber table, woven forest rug, colored lantern, flower planter or earned trophy. Colored lanterns and planters also work outdoors inside your building area. Point at the floor, scroll to rotate, and click to place. The preview protects doors, waking spots and useful stations. Move pieces for free or pack them up to recover their materials; a full backpack keeps the piece intact. Visitors can admire decorations but only owners can rearrange them. See [private decoration](docs/decisions/0081-private-home-decoration.md).
 
 Returning home closes the expedition loop: store building supplies with one chest button, prepare a meal and rest. Knockout recovery markers never expire. Digging takes only what fits in your backpack; leftovers remain safely buried and marked, including in long-lived worlds with many caches. Cabin windows brighten softly at night.
 
@@ -1256,7 +1293,7 @@ During a dodge, tap left mouse for an aerial spin slash or click right mouse for
 
 Players can read a cedar expedition board beside their own home by standing at it and pressing `E` (or, from inside, by opening its page with the button on screen). Three optional outings match their housing tier; one can be active, with private saved progress and no expiry. Real gathering, fishing, timber work, skeleton contributions and landmark visits advance objectives. Claim all rewards at home when the backpack has room; completing three outings teaches a decorative trail pennant recipe.
 
-The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (`B` inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
+The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (the Decorate button inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
 
 A crowned, moss-armored ruin sentinel guards the old ruin clearings. It can be fought solo; actual helpers increase its health, with stable character identity across reconnects. Nearby contributors receive protected materials and their existing housing blueprint roll. A first victory earns a personal placeable trophy that stays available if the backpack is full; subsequent victories award materials.
 

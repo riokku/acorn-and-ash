@@ -190,13 +190,21 @@ describe('deleting the character', () => {
 });
 
 describe('the character already made in a world', () => {
-  const made = { made: true, name: 'Acorn', character: 'knight', color: 'moss' };
+  const made = { made: true, name: 'Acorn', character: 'knight', color: 'moss', skin: 'lighter' };
 
   it('is the one the server describes', async () => {
     expect(await fetchSavedCharacter('home-clearing', answer(200, made))).toEqual({
       name: 'Acorn',
       character: 'knight',
       color: 'moss',
+      skin: 'lighter',
+    });
+  });
+
+  it("has the body's own skin when the server does not say a skin tone", async () => {
+    const { skin: _skin, ...older } = made;
+    expect(await fetchSavedCharacter('home-clearing', answer(200, older))).toMatchObject({
+      skin: 'natural',
     });
   });
 

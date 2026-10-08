@@ -34,6 +34,12 @@ const characterOf = async (worldId: string, playerKey: string): Promise<{ made: 
 /** Chris's cabin, in storage and, if the world is awake, in the simulation too. */
 async function buildCabinFor(worldId: string, playerKey: string): Promise<void> {
   await runInDurableObject(stubFor(worldId), (instance, state) => {
+    state.storage.sql.exec(
+      'INSERT OR IGNORE INTO players (player_key,x,y,z,facing_yaw,updated_at,name) VALUES (?,0,0,0,0,?,?)',
+      playerKey,
+      Date.now(),
+      'Acorn',
+    );
     const sim = (instance as unknown as { simulation: WorldSimulation | null }).simulation;
     sim?.restoreBuiltProps([
       {
@@ -161,7 +167,13 @@ describe('deleting a character', () => {
     await waitFor('their roster entry', () => second.roster().length > 0);
 
     expect(second.roster()).toEqual([
-      { netId: second.welcome().netId, name: 'Ash', character: 'mage', color: 'plum' },
+      {
+        netId: second.welcome().netId,
+        name: 'Ash',
+        character: 'mage',
+        color: 'plum',
+        skin: 'natural',
+      },
     ]);
     // Nothing of the old pack, and the axe, bag and rod are all waiting again.
     expect(second.inventory()).toEqual([]);

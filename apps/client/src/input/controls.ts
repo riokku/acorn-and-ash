@@ -255,13 +255,6 @@ export class Controls {
     return this.takeCraftTaps().filter((index) => index < 6);
   }
 
-  /** Whether B was pressed since this was last asked, to toggle the build menu. */
-  takeBuildMenuToggle(): boolean {
-    const pressed = this.tapped.has('KeyB');
-    this.tapped.delete('KeyB');
-    return pressed;
-  }
-
   /** Whether C was pressed since this was last asked, to toggle the craft menu. */
   takeCraftMenuToggle(): boolean {
     const pressed = this.tapped.has('KeyC');
@@ -276,9 +269,10 @@ export class Controls {
     return pressed;
   }
 
-  /** Whether I was pressed since this was last asked, to toggle the inventory panel. */
+  /** B toggles the pack; I remains an alias for existing players. */
   takeInventoryToggle(): boolean {
-    const pressed = this.tapped.has('KeyI');
+    const pressed = this.tapped.has('KeyB') || this.tapped.has('KeyI');
+    this.tapped.delete('KeyB');
     this.tapped.delete('KeyI');
     return pressed;
   }

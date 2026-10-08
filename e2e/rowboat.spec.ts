@@ -97,7 +97,7 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
   await page.evaluate(([x, z]) => window.acornDebug?.faceTowards(x!, z!), [water.x, water.z]);
 
   // The Craft menu has a Lake section with the rowboat and its price.
-  await page.keyboard.press('KeyB');
+  await page.keyboard.press('KeyC');
   await page.locator('.craft-tabs').getByRole('button', { name: 'Lake', exact: true }).click();
   const entry = page.locator('.hud-journal-entry').filter({ hasText: 'Rowboat' });
   await expect(page.locator('.hud-journal')).toContainText('Lake');

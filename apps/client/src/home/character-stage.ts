@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-import { ActionKind, type CharacterId, type WornGear } from '@acorn/shared';
+import { ActionKind, type CharacterId, type SkinToneId, type WornGear } from '@acorn/shared';
 
 import { readSettings } from '../settings';
 import { preloadCharacterAnimations } from '../scene/character-animations';
@@ -35,6 +35,7 @@ import {
 export interface StageLook {
   readonly character: CharacterId;
   readonly tint: number;
+  readonly skin: SkinToneId;
 }
 
 /** What a character does when it is simply standing there. */
@@ -131,15 +132,16 @@ export class CharacterStage {
     if (this.disposed) return;
     const previous = this.look;
     if (previous?.character === look.character && this.character !== null) {
-      // The same character in another tint: no need to start over.
+      // The same character in another tint or skin tone: no need to start over.
       if (previous.tint !== look.tint) this.character.setColor(look.tint);
+      if (previous.skin !== look.skin) this.character.setSkinTone(look.skin);
       this.look = look;
       this.dirty = true;
       this.report('ready');
       return;
     }
     this.removeCharacter();
-    const character = createCharacter(look.character, look.tint);
+    const character = createCharacter(look.character, look.tint, look.skin);
     character.setName(null);
     character.setGear(this.worn);
     character.setEquippedItem(this.worn.mainHand ?? null);
@@ -216,6 +218,7 @@ export class CharacterStage {
     data.state = state;
     data.character = this.look?.character ?? '';
     data.tint = this.look === null ? '' : this.look.tint.toString(16).padStart(6, '0');
+    data.skin = this.look?.skin ?? '';
     data.turn = String(Math.round((this.turn * 180) / Math.PI));
     data.flourishes = String(this.showcase.count);
   }

@@ -16,7 +16,7 @@ const WORTHWHILE = 0.002;
 
 export interface SeasonRig {
   /** Dress the forest for this season, or this point on the way into the next. */
-  apply(mix: SeasonMix, daylight: DaylightRig | null): void;
+  apply(mix: SeasonMix, daylight: DaylightRig | null, blizzard?: boolean): void;
 }
 
 /**
@@ -43,9 +43,9 @@ export function createSeasonRig(): SeasonRig {
   }
 
   return {
-    apply(mix, daylight) {
+    apply(mix, daylight, blizzard = false) {
       gatherTrees();
-      const key = `${mix.from}:${mix.to}:${Math.round(mix.amount / WORTHWHILE)}:${trees.length}`;
+      const key = `${mix.from}:${mix.to}:${Math.round(mix.amount / WORTHWHILE)}:${trees.length}:${blizzard}`;
       const look = lookFor(mix);
       // The sky is cheap and the daylight rig is rebuilt each world, so it always follows.
       daylight?.setSeason(look);
@@ -54,7 +54,8 @@ export function createSeasonRig(): SeasonRig {
 
       seasonUniforms.ground.value.setRGB(look.ground[0], look.ground[1], look.ground[2]);
       seasonUniforms.blades.value.setRGB(look.blades[0], look.blades[1], look.blades[2]);
-      seasonUniforms.snow.value = look.snow;
+      seasonUniforms.snow.value = blizzard ? 1 : look.snow;
+      seasonUniforms.blizzard.value = blizzard ? 1 : 0;
 
       tint.setRGB(look.foliage[0], look.foliage[1], look.foliage[2]);
       for (const tree of trees) {

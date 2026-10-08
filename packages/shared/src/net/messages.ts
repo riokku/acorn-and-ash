@@ -1,3 +1,4 @@
+import type { WildfireView } from '../sim/wildfire';
 import type { FishRecords } from '../sim/fish-records';
 import type { ReelView } from '../sim/rare-reel';
 import type { ExpeditionRequest, ExpeditionView } from '../sim/expeditions';
@@ -9,7 +10,7 @@ import type { GardenRequest, GardenState } from '../sim/garden';
 import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
-import type { CharacterId, TintColorId } from '../data/characters';
+import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { GearSlot, WornGear } from '../data/gear';
 import type { GearRefusal } from '../sim/gear';
@@ -101,8 +102,9 @@ export const ServerMessageType = {
   FishRecords: 0x3b,
   RareReel: 0x3c,
   LakeIce: 0x3d,
-  Worn: 0x3e,
-  GearRefused: 0x3f,
+  Wildfire: 0x3e,
+  Worn: 0x3f,
+  GearRefused: 0x40,
 } as const;
 
 export const RejectReason = {
@@ -172,7 +174,8 @@ export interface SetDoorLockMessage {
 }
 
 /**
- * Introduce yourself: the name, character and tint picked on the Home screen.
+ * Introduce yourself: the name, character, tint and skin tone picked on the
+ * Home screen.
  *
  * Sent once, right after `Welcome` - not bundled with it, so a slow Home
  * screen submit never holds up the very first snapshot. Nothing about a
@@ -184,6 +187,7 @@ export interface HelloMessage {
   readonly name: string;
   readonly character: CharacterId;
   readonly color: TintColorId;
+  readonly skin: SkinToneId;
 }
 
 /**
@@ -472,6 +476,7 @@ export interface RosterEntry {
   readonly name: string;
   readonly character: CharacterId;
   readonly color: TintColorId;
+  readonly skin: SkinToneId;
 }
 
 /**
@@ -641,6 +646,7 @@ export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies'
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage
   | GearRefusedMessage
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */

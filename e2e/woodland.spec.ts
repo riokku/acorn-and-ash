@@ -140,7 +140,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     await inspect(6);
     expect(sim.inventoryOf(1).guardianTrophy).toBe(1);
     teleport(0, 0);
-    await page.keyboard.press('KeyB');
+    await page.keyboard.press('KeyC');
     // Straight to the Trophies page: a short list that does not scroll under the click.
     await page
       .locator('.craft-tabs')

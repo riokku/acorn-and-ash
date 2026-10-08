@@ -80,7 +80,9 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // soft patches of light and shade, so snow is not a flat white sheet.
   const shaded = mix(grassColour, floorColour, bare).mul(attribute('tint', 'vec3'));
   const seasonal = shaded.mul(seasonUniforms.ground);
-  const snowCover = seasonUniforms.snow.mul(float(1).sub(bare.mul(0.45))).mul(0.88);
+  const snowCover = seasonUniforms.snow
+    .mul(float(1).sub(bare.mul(float(0.45).mul(float(1).sub(seasonUniforms.blizzard)))))
+    .mul(0.88);
   const snow = vec3(0.9, 0.93, 0.98).mul(attribute('tint', 'vec3'));
 
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, metalness: 0 });

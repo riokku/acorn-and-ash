@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { plainMaterial } from '../art/materials';
 
 import {
+  DEFAULT_SKIN_TONE,
   Gesture,
   ITEM_KINDS,
   isWeapon,
@@ -10,6 +11,7 @@ import {
   PLAYER_RADIUS,
   type CharacterId,
   type ItemId,
+  type SkinToneId,
   type WornGear,
 } from '@acorn/shared';
 
@@ -20,6 +22,7 @@ import { characterClips, type CharacterClips } from './character-animations';
 import { CharacterAnimator, type FishingPose, type Locomotion } from './character-animator';
 import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
+import { isSkinMaterial, skinShade } from './skin-tone';
 import { createFireGlow, type FireGlow } from './fire-light';
 import { createGearVisuals, hideBakedHeadPieces } from './gear-visuals';
 import { wornWeapon } from './gear-models';
@@ -54,6 +57,8 @@ export interface RestSpot {
 export interface Character {
   readonly group: THREE.Group;
   setColor(color: THREE.ColorRepresentation): void;
+  /** Lightens or darkens just the skin (decision 0113). A no-op on the placeholder. */
+  setSkinTone(tone: SkinToneId): void;
   /** Shows a floating name label above the character's head, or hides it for null. */
   setName(name: string | null): void;
   /**
@@ -478,6 +483,8 @@ export interface CharacterWeapon {
 export interface CharacterLook {
   /** A colour to tint the whole model, or null to keep its own colours. */
   readonly tint: THREE.ColorRepresentation | null;
+  /** A lighter or darker shade of the body's own skin; its own skin if left out. */
+  readonly skin?: SkinToneId;
   readonly weapon?: CharacterWeapon;
 }
 
@@ -569,9 +576,10 @@ function attachNameplate(group: THREE.Group): Pick<Character, 'setName'> & { dis
 export function createCharacter(
   character: CharacterId,
   color: THREE.ColorRepresentation,
+  skin: SkinToneId = DEFAULT_SKIN_TONE,
 ): Character {
   const template = characterModelTemplate(character);
-  if (template !== undefined) return createAnimatedCharacter(template, { tint: color });
+  if (template !== undefined) return createAnimatedCharacter(template, { tint: color, skin });
   return createPlaceholderCharacter(color);
 }
 
@@ -630,6 +638,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // Materials are shared with the template by default - cloned per instance
   // so tinting one player's colour in below never bleeds into another's.
   const materials: THREE.MeshStandardMaterial[] = [];
+  const skinMaterials = new Set<THREE.Material>();
   const cloned = new Map<THREE.Material, THREE.MeshStandardMaterial>();
   model.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
@@ -645,10 +654,22 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       next = original.clone() as THREE.MeshStandardMaterial;
       cloned.set(original, next);
       materials.push(next);
+      if (isSkinMaterial(original)) skinMaterials.add(next);
     }
     child.material = next;
   });
-  if (look.tint !== null) for (const material of materials) material.color.set(look.tint);
+  // The tint colours the whole model; skin is then shaded on top of it.
+  let tint: THREE.Color | null = look.tint === null ? null : new THREE.Color(look.tint);
+  let skinTone = look.skin ?? DEFAULT_SKIN_TONE;
+  const paintMaterials = (): void => {
+    const shade = skinShade(skinTone);
+    for (const material of materials) {
+      if (tint !== null) material.color.copy(tint);
+      else if (skinMaterials.has(material)) material.color.setRGB(1, 1, 1);
+      if (skinMaterials.has(material)) material.color.multiply(shade);
+    }
+  };
+  if (look.tint !== null || skinTone !== DEFAULT_SKIN_TONE) paintMaterials();
 
   // Every item that could ever be equipped gets its own group, parented
   // straight onto the hand bone - a real Object3D in the skeleton - so
@@ -768,7 +789,13 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   return {
     group,
     setColor: (next) => {
-      for (const material of materials) material.color.set(next);
+      tint = new THREE.Color(next);
+      paintMaterials();
+    },
+    setSkinTone: (tone) => {
+      if (tone === skinTone) return;
+      skinTone = tone;
+      paintMaterials();
     },
     setName: nameplate.setName,
     setEquippedItem: (item) => {
@@ -1010,6 +1037,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
   return {
     group,
     setColor: (next) => material.color.set(next),
+    setSkinTone: () => {},
     setName: nameplate.setName,
     setEquippedItem: () => {},
     setGear: () => {},

@@ -3,14 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   GEAR_SLOT_LABELS,
   ITEM_KINDS,
-  type CharacterId,
   type GearRequest,
   type GearSlot,
   type ItemId,
   type WornGear,
 } from '@acorn/shared';
 
-import { CharacterStage } from '../home/character-stage';
+import { CharacterStage, type StageLook } from '../home/character-stage';
 import type { Placement } from '../home/showcase';
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
@@ -46,7 +45,7 @@ export function CharacterPanel({
   onChange,
 }: {
   worn: Readonly<WornGear>;
-  look: { readonly character: CharacterId; readonly tint: number } | null;
+  look: StageLook | null;
   notice: { readonly text: string; readonly key: number } | null;
   onChange: (request: GearRequest) => void;
 }): React.JSX.Element {
@@ -169,7 +168,7 @@ function GearPreview({
   look,
   worn,
 }: {
-  look: { readonly character: CharacterId; readonly tint: number } | null;
+  look: StageLook | null;
   worn: Readonly<WornGear>;
 }): React.JSX.Element {
   const holder = useRef<HTMLDivElement>(null);
@@ -216,7 +215,7 @@ function GearPreview({
     stage.place(PREVIEW_PLACEMENT);
     stage.setGear(worn);
     stage.show(look);
-  }, [stage, look?.character, look?.tint]);
+  }, [stage, look?.character, look?.tint, look?.skin]);
 
   useEffect(() => {
     stage?.setGear(worn);

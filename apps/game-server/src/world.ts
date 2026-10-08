@@ -1,3 +1,4 @@
+import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
 import {
   encodeGearRefused,
@@ -33,6 +34,7 @@ import {
   CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   DEFAULT_CHARACTER,
+  DEFAULT_SKIN_TONE,
   DEFAULT_TINT_COLOR,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
@@ -95,6 +97,8 @@ import {
   itemIndex,
   sanitizePlayerName,
   SPAWN_POSITION,
+  skinToneFromIndex,
+  skinToneIndex,
   tintColorFromIndex,
   tintColorIndex,
   type BuiltProp,
@@ -107,6 +111,7 @@ import {
   type PersistedTree,
   type RosterEntry,
   type SnapshotEntity,
+  type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
 
@@ -121,6 +126,8 @@ interface ConnectionAttachment {
   readonly name: string | null;
   readonly characterIndex: number;
   readonly colorIndex: number;
+  /** Missing on a socket attached before skin tones existed: read as the default. */
+  readonly skinIndex?: number;
 }
 
 /** A player key is supplied by the client, so it is checked before it is trusted. */
@@ -170,6 +177,7 @@ export class World extends DurableObject<WorldEnv> {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       this.createSchema();
+      this.resetStagingBuildsOnce();
     });
   }
 
@@ -259,10 +267,23 @@ export class World extends DurableObject<WorldEnv> {
       name: identity?.name ?? null,
       characterIndex: identity?.characterIndex ?? characterIndex(DEFAULT_CHARACTER),
       colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
+      skinIndex: identity?.skinIndex ?? skinToneIndex(DEFAULT_SKIN_TONE),
     } satisfies ConnectionAttachment);
 
     // A season asked for while testing, by the first one into an empty world.
-    const season = this.testSeason(url);
+    const askedWeather = url.searchParams.get('weather');
+    const testWeather =
+      this.env.WORLD_ALLOW_TEST_SEASON === '1' &&
+      (askedWeather === 'storm' || askedWeather === 'blizzard')
+        ? askedWeather
+        : null;
+    if (earlier === null && simulation.playerCount === 0) simulation.setTestWeather(testWeather);
+    const season =
+      testWeather === 'blizzard'
+        ? 'winter'
+        : testWeather === 'storm'
+          ? 'summer'
+          : this.testSeason(url);
     if (season !== null && earlier === null && simulation.playerCount === 0)
       simulation.setCalendarShift(
         clockShiftForSeason(simulation.seed, simulation.tick * TICK_MILLISECONDS, season),
@@ -274,6 +295,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
+    server.send(encodeWildfire(simulation.wildfireView()));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
@@ -504,7 +526,14 @@ export class World extends DurableObject<WorldEnv> {
       return;
     }
     if (decoded.type === 'hello') {
-      this.handleHello(ws, attachment, decoded.name, decoded.character, decoded.color);
+      this.handleHello(
+        ws,
+        attachment,
+        decoded.name,
+        decoded.character,
+        decoded.color,
+        decoded.skin,
+      );
       return;
     }
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
@@ -581,11 +610,13 @@ export class World extends DurableObject<WorldEnv> {
     this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
     this.announceChopping(simulation);
+    this.announceTreeChanges(simulation);
     this.announceCatching(simulation);
     this.announceThreatHits(simulation);
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
     this.announceLakeIce(simulation);
+    this.announceWildfire(simulation);
     this.announceBoats(simulation);
     this.announceBrokenBoats(simulation);
     this.announceFishing(simulation);
@@ -817,6 +848,7 @@ export class World extends DurableObject<WorldEnv> {
         this.ctx.storage.transactionSync(() => {
           this.writeMeta('encounterRest', rest);
           this.writeMeta('tick', String(simulation.tick));
+          this.writeMeta('wildfire', simulation.wildfire.save());
         });
         this.savedEncounterRest = rest;
       }
@@ -872,6 +904,21 @@ export class World extends DurableObject<WorldEnv> {
       for (const result of feedback)
         if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
     }
+  }
+
+  private lastWildfireSaved = '';
+  private announceWildfire(simulation: WorldSimulation): void {
+    if (simulation.tick % TICK_HZ !== 0) return;
+    const saved = simulation.wildfire.save();
+    const changed = saved !== this.lastWildfireSaved;
+    if (changed || simulation.wildfire.fires.size > 0)
+      this.broadcast(encodeWildfire(simulation.wildfireView()));
+    if (!changed) return;
+    this.lastWildfireSaved = saved;
+    this.ctx.storage.transactionSync(() => {
+      this.writeMeta('wildfire', saved);
+      this.writeMeta('tick', String(simulation.tick));
+    });
   }
 
   /**
@@ -1410,6 +1457,7 @@ export class World extends DurableObject<WorldEnv> {
     rawName: string,
     requestedCharacter: CharacterId,
     color: TintColorId,
+    skin: SkinToneId,
   ): void {
     // One character per player per world (decision 0087). Whoever already has
     // a name here keeps it: what a returning browser says is ignored, and only
@@ -1432,6 +1480,7 @@ export class World extends DurableObject<WorldEnv> {
       name,
       characterIndex: characterIndex(character),
       colorIndex: tintColorIndex(color),
+      skinIndex: skinToneIndex(skin),
     };
     ws.serializeAttachment(updated);
 
@@ -1441,6 +1490,7 @@ export class World extends DurableObject<WorldEnv> {
         name,
         updated.characterIndex,
         updated.colorIndex,
+        skinToneIndex(skin),
       );
     }
     this.broadcast(encodeRoster(this.currentRoster()));
@@ -1457,6 +1507,7 @@ export class World extends DurableObject<WorldEnv> {
         name: attachment.name,
         character: characterFromIndex(attachment.characterIndex) ?? DEFAULT_CHARACTER,
         color: tintColorFromIndex(attachment.colorIndex) ?? DEFAULT_TINT_COLOR,
+        skin: skinToneFromIndex(attachment.skinIndex ?? 0) ?? DEFAULT_SKIN_TONE,
       });
     }
     return entries;
@@ -1587,6 +1638,7 @@ export class World extends DurableObject<WorldEnv> {
     const weatherCycle = this.readMeta('weather-cycle');
     simulation.restoreWeatherCycle(weatherCycle === null ? null : Number(weatherCycle));
     simulation.restoreTrees(this.loadTrees());
+    this.expireOrphanedBuilds();
     simulation.restoreBuiltProps(this.loadBuiltProps());
     const decor = this.readMeta('home-decorations');
     if (decor !== null) {
@@ -1652,6 +1704,8 @@ export class World extends DurableObject<WorldEnv> {
     this.nextNetId = highestNetId + 1;
 
     simulation.tick = this.loadTick();
+    const fire = this.readMeta('wildfire');
+    if (fire !== null) simulation.restoreWildfire(fire);
     // A sleeping world counts nothing, so anything due back is brought back
     // here, before the first snapshot goes out. Otherwise somebody walking in
     // an hour later would be shown the stump they left and then watch it turn
@@ -1875,6 +1929,9 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('players', 'name', 'TEXT');
     this.addColumn('players', 'character_index', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('players', 'color_index', 'INTEGER NOT NULL DEFAULT 0');
+    // 0 is the body's own skin (`SKIN_TONE_ORDER`), so a character saved before
+    // skin tones existed keeps looking exactly as it did.
+    this.addColumn('players', 'skin_index', 'INTEGER NOT NULL DEFAULT 0');
     // Null for a player saved before this existed, or one who never chose
     // anything - `initialEquippedItem` treats that exactly like a brand new
     // player, falling back to the first tool they still have, if any.
@@ -2118,7 +2175,9 @@ export class World extends DurableObject<WorldEnv> {
    */
   private savedCharacter(
     requestedKey: string | null,
-  ): { made: false } | { made: true; name: string; character: CharacterId; color: TintColorId } {
+  ):
+    | { made: false }
+    | { made: true; name: string; character: CharacterId; color: TintColorId; skin: SkinToneId } {
     if (requestedKey === null || !PLAYER_KEY_PATTERN.test(requestedKey)) return { made: false };
     const saved = this.loadPlayerIdentity(requestedKey);
     if (saved === undefined) return { made: false };
@@ -2127,23 +2186,33 @@ export class World extends DurableObject<WorldEnv> {
       name: saved.name,
       character: characterFromIndex(saved.characterIndex) ?? DEFAULT_CHARACTER,
       color: tintColorFromIndex(saved.colorIndex) ?? DEFAULT_TINT_COLOR,
+      skin: skinToneFromIndex(saved.skinIndex) ?? DEFAULT_SKIN_TONE,
     };
   }
 
-  /** A returning player's last-known name and tint, if they ever sent a Hello. */
+  /** A returning player's last-known name, tint and skin tone, if they ever sent a Hello. */
   private loadPlayerIdentity(
     playerKey: string,
-  ): { name: string; characterIndex: number; colorIndex: number } | undefined {
+  ): { name: string; characterIndex: number; colorIndex: number; skinIndex: number } | undefined {
     const rows = this.ctx.storage.sql
       .exec<{
         name: string | null;
         character_index: number;
         color_index: number;
-      }>('SELECT name, character_index, color_index FROM players WHERE player_key = ?', playerKey)
+        skin_index: number;
+      }>(
+        'SELECT name, character_index, color_index, skin_index FROM players WHERE player_key = ?',
+        playerKey,
+      )
       .toArray();
     const row = rows[0];
     if (row === undefined || row.name === null) return undefined;
-    return { name: row.name, characterIndex: row.character_index, colorIndex: row.color_index };
+    return {
+      name: row.name,
+      characterIndex: row.character_index,
+      colorIndex: row.color_index,
+      skinIndex: row.skin_index,
+    };
   }
 
   private loadPlayerGear(playerKey: string): { slot: GearSlot; item: ItemId }[] {
@@ -2218,6 +2287,22 @@ export class World extends DurableObject<WorldEnv> {
       tree.generation,
       tree.fallYaw ?? null,
       Date.now(),
+    );
+  }
+
+  /**
+   * Older playtest resets removed characters without retiring their builds.
+   * Give only those orphaned builds an already-due deadline, then let the
+   * normal removal path clear their collision, chest, garden and decorations.
+   * Communal builds and the deletion grace period are left intact.
+   */
+  private expireOrphanedBuilds(): void {
+    this.ctx.storage.sql.exec(
+      'UPDATE built_props SET owner_key = ?, locked = 1, expires_at_ms = 0 ' +
+        'WHERE owner_key IS NOT NULL AND owner_key != ? AND expires_at_ms IS NULL ' +
+        'AND NOT EXISTS (SELECT 1 FROM players WHERE players.player_key = built_props.owner_key)',
+      ABANDONED_OWNER,
+      ABANDONED_OWNER,
     );
   }
 
@@ -2623,7 +2708,7 @@ export class World extends DurableObject<WorldEnv> {
    * row here seeds sensible placeholders for the columns it does not touch
    * (the same spawn point and full meters a genuinely new player starts
    * with) rather than leaving them NULL. `ON CONFLICT` then updates only the
-   * three identity columns, exactly as it does for `writePlayer`'s own
+   * four identity columns, exactly as it does for `writePlayer`'s own
    * columns, so this never clobbers a real saved position.
    */
   private writePlayerIdentity(
@@ -2631,13 +2716,15 @@ export class World extends DurableObject<WorldEnv> {
     name: string,
     characterIndex: number,
     colorIndex: number,
+    skinIndex: number,
   ): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO players ' +
-        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, skin_index, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
         'name = excluded.name, character_index = excluded.character_index, ' +
-        'color_index = excluded.color_index, updated_at = excluded.updated_at',
+        'color_index = excluded.color_index, skin_index = excluded.skin_index, ' +
+        'updated_at = excluded.updated_at',
       playerKey,
       SPAWN_POSITION.x,
       SPAWN_POSITION.y,
@@ -2648,6 +2735,7 @@ export class World extends DurableObject<WorldEnv> {
       name,
       characterIndex,
       colorIndex,
+      skinIndex,
       Date.now(),
     );
   }
@@ -2711,6 +2799,7 @@ export class World extends DurableObject<WorldEnv> {
   private save(simulation: WorldSimulation): void {
     for (const garden of simulation.savedGardens()) this.writeGarden(garden);
     this.writeMeta('tick', String(simulation.tick));
+    this.writeMeta('wildfire', simulation.wildfire.save());
     this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
     // Trees are written the moment they change; this only catches anything left over.
     for (const tree of simulation.persistableTrees(simulation.drainTreeChanges())) {
@@ -2758,6 +2847,8 @@ export class World extends DurableObject<WorldEnv> {
   /** A small summary, useful from a browser while playtesting. */
   status(): {
     players: number;
+    savedCharacters: number;
+    builtStructures: number;
     tick: number;
     seed: number;
     running: boolean;
@@ -2765,12 +2856,46 @@ export class World extends DurableObject<WorldEnv> {
   } {
     const simulation = this.simulation;
     return {
-      players: simulation?.playerCount ?? 0,
+      players:
+        simulation?.playerCount ??
+        this.ctx.getWebSockets().filter((ws) => this.attachmentFor(ws) !== null).length,
+      savedCharacters: this.ctx.storage.sql
+        .exec<{ count: number }>('SELECT COUNT(*) AS count FROM players WHERE name IS NOT NULL')
+        .one().count,
+      builtStructures: this.ctx.storage.sql
+        .exec<{ count: number }>('SELECT COUNT(*) AS count FROM built_props')
+        .one().count,
       tick: simulation?.tick ?? this.loadTick(),
       seed: simulation?.seed ?? this.seed(),
       running: this.tickHandle !== null,
       slowTicks: this.slowTickCount,
     };
+  }
+
+  /** Clear the original staging test builds once, including ownerless legacy pieces. */
+  private resetStagingBuildsOnce(): void {
+    const reset = this.env.WORLD_STAGING_BUILD_RESET;
+    if (!reset || this.ctx.id.toString() !== this.env.WORLD.idFromName('home-clearing').toString())
+      return;
+    if (this.readMeta('staging-build-reset') === reset) return;
+
+    // Runs before any simulation is restored, so no live geometry or later
+    // save can put the old buildings back. The marker and deletes are atomic.
+    this.ctx.storage.transactionSync(() => {
+      for (const table of ['built_props', 'home_chests', 'home_gardens'])
+        this.ctx.storage.sql.exec(`DELETE FROM ${table}`);
+      this.writeMeta('home-decorations', '[]');
+      this.writeMeta('staging-build-reset', reset);
+    });
+    // Hibernatable sockets can survive a deployment. Reconnect them so their
+    // browsers also discard the old buildings and any room they were inside.
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.close(1012, 'Staging structures reset; reconnecting');
+      } catch {
+        // The browser may already have left.
+      }
+    }
   }
 
   /**

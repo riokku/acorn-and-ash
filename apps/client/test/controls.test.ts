@@ -200,11 +200,12 @@ describe('right-click loot and dodge gestures', () => {
     mouse(canvas, 'mousedown');
     now = 100;
     mouse(windowEvents, 'mouseup');
-    for (const code of ['KeyW', 'KeyE', 'Space', 'KeyI'])
+    for (const code of ['KeyW', 'KeyE', 'Space', 'KeyB', 'KeyC', 'KeyI'])
       windowEvents.dispatchEvent(Object.assign(new Event('keydown'), { code }));
     expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
     expect(controls.buttons()).toBe(0);
     expect(controls.takeInventoryToggle()).toBe(false);
+    expect(controls.takeCraftMenuToggle()).toBe(false);
     expect(controls.takeRightClickPoint()).toBeNull();
     windowEvents.dispatchEvent(Object.assign(new Event('keydown'), { code: 'Escape' }));
     expect(controls.takeEscapeToggle()).toBe(true);
