@@ -399,6 +399,10 @@ export function nearestOnStream(
 
 /** How far, in metres, a spot "listens" along the path when it averages the stream's height nearby. */
 const PROFILE_REACH = 20;
+/** Squared-distance gap beyond which a stretch of path adds less than a millionth of the average. */
+const PROFILE_CUTOFF = 2 * PROFILE_REACH * PROFILE_REACH * 14;
+/** Room for one squared distance per coarse sample, reused by every lookup. */
+const scratch = new Float64Array(512);
 
 /**
  * The stream's bed and bank heights and distance travelled, averaged over the
@@ -414,20 +418,26 @@ function averageProfile(
   z: number,
 ): { bed: number; bank: number; along: number } {
   const { points, count, bed, bank } = stream;
+  const squares = scratch;
   let nearest = Infinity;
+  let slot = 0;
   for (let index = 0; index < count; index += COARSE) {
     const dx = x - points[index * 2]!;
     const dz = z - points[index * 2 + 1]!;
-    nearest = Math.min(nearest, dx * dx + dz * dz);
+    const squared = dx * dx + dz * dz;
+    squares[slot++] = squared;
+    if (squared < nearest) nearest = squared;
   }
   let total = 0;
   let sumBed = 0;
   let sumBank = 0;
   let sumAlong = 0;
+  slot = 0;
   for (let index = 0; index < count; index += COARSE) {
-    const dx = x - points[index * 2]!;
-    const dz = z - points[index * 2 + 1]!;
-    const weight = Math.exp(-(dx * dx + dz * dz - nearest) / (2 * PROFILE_REACH * PROFILE_REACH));
+    const gap = squares[slot++]! - nearest;
+    // Parts of the path much further than the nearest count for next to nothing.
+    if (gap > PROFILE_CUTOFF) continue;
+    const weight = Math.exp(-gap / (2 * PROFILE_REACH * PROFILE_REACH));
     total += weight;
     sumBed += weight * bed[index]!;
     sumBank += weight * bank[index]!;
