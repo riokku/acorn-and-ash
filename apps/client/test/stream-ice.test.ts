@@ -28,3 +28,37 @@ it('freezes and thaws the river and all sloughs, including floating plants', () 
   }
   river.dispose();
 });
+
+it('fits the river water into WebGPU minimum vertex-buffer limits and preserves its flow data', () => {
+  const river = createStreamScene(STREAM, createWildernessTerrain(1234));
+  const water = river.group.getObjectByName('stream-water') as THREE.Mesh;
+  const geometry = water.geometry;
+  const buffers = new Set(
+    Object.values(geometry.attributes).map((attribute) =>
+      attribute instanceof THREE.InterleavedBufferAttribute ? attribute.data : attribute,
+    ),
+  );
+  // A valid WebGPU device may expose only eight vertex buffers. Separate
+  // buffers for every water attribute previously made this pipeline invalid.
+  expect(buffers.size).toBeLessThanOrEqual(8);
+  const flow = geometry.getAttribute('waterFlow');
+  const pace = geometry.getAttribute('streamPace');
+  const edge = geometry.getAttribute('streamEdge');
+  const across = geometry.getAttribute('streamAcross');
+  const positions = geometry.getAttribute('position');
+  for (let vertex = 0; vertex < positions.count; vertex++) {
+    expect(Math.hypot(flow.getX(vertex), flow.getY(vertex))).toBeCloseTo(pace.getX(vertex), 5);
+    expect(geometry.getAttribute('waterFlowShare').getX(vertex)).toBe(1);
+    expect(edge.getX(vertex)).toBeGreaterThanOrEqual(0);
+    expect(edge.getX(vertex)).toBeLessThanOrEqual(1);
+    const middle = Math.floor(vertex / 7) * 7 + 3;
+    expect(Math.abs(across.getX(vertex))).toBeCloseTo(
+      Math.hypot(
+        positions.getX(vertex) - positions.getX(middle),
+        positions.getZ(vertex) - positions.getZ(middle),
+      ),
+      4,
+    );
+  }
+  river.dispose();
+});
