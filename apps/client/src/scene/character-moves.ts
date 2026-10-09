@@ -13,6 +13,7 @@ import {
   ActionKind,
   CHARGE_TICKS,
   DODGE,
+  DIG_SWING,
   DODGE_ATTACKS,
   FLINCH,
   Gesture,
@@ -50,6 +51,7 @@ export type MoveClip =
   | 'hitB'
   | 'knockedOut'
   | 'dig'
+  | 'digShovel'
   | 'cast'
   | 'fishIdle'
   | 'fishBite'
@@ -74,6 +76,8 @@ const CLIP_BLOW_SECONDS: Partial<Record<MoveClip, number>> = {
   attack3: 0.6,
   strike: 0.73,
   chop: 0.32,
+  // Levering the blade up out of the ground: frame 16 of 25 at 24 fps.
+  digShovel: 0.625,
 };
 
 /**
@@ -165,6 +169,8 @@ export interface MoveView {
   readonly age: number;
   /** Swinging at a tree, which gets the woodcutter's chop rather than a fighting swing. */
   readonly atTree: boolean;
+  /** Swinging the shovel: one slow dig (see `DIG_SWING`) rather than a fighting swing. */
+  readonly digging?: boolean;
   /** Which flinch to play, so two hits in a row do not look the same. */
   readonly flinchVariant: 0 | 1;
   /** Which way a dodge goes, as the character sees it. */
@@ -202,6 +208,14 @@ export function movePose(move: MoveView): MovePose {
       return NO_MOVE;
 
     case ActionKind.Swing: {
+      if (move.digging === true) {
+        // The dig plays at its own pace, the ground opening as the blade levers up.
+        return {
+          ...NO_MOVE,
+          clip: 'digShovel',
+          time: lineUp('digShovel', 1, DIG_SWING.impact, move.age),
+        };
+      }
       const step = Math.min(Math.max(move.step, 1), 3);
       const clip = move.atTree
         ? 'chop'

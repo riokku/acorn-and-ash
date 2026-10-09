@@ -27,6 +27,7 @@ import {
 import {
   CHARGE_TICKS,
   DODGE_ATTACKS,
+  DIG_SWING,
   DODGE,
   FLINCH,
   LIGHT_COMBO,
@@ -147,6 +148,11 @@ export interface ActionContext {
   /** The rod is out and there is water in front: a fresh click casts instead of swinging. */
   readonly castInstead: boolean;
   /**
+   * The shovel is in hand: a click is one slow dig (`DIG_SWING`) rather than
+   * a step of the fighting combo, and the feet stay planted through it.
+   */
+  readonly digging?: boolean;
+  /**
    * Free to sit down right here: on the ground, not in the air, with no line
    * in the water. Left out, it is no.
    */
@@ -213,7 +219,10 @@ export function advanceAction(
       return startFromIdle(state, input, previousButtons, context, tryDodge);
 
     case ActionKind.Swing: {
-      const swing = comboSwing(state.step);
+      const digging = context.digging === true;
+      const swing = digging ? DIG_SWING : comboSwing(state.step);
+      // A dig keeps the feet where they are; a fight swing walks on.
+      const footing: Footing = digging ? 'planted' : 'free';
       if (fresh(PlayerButton.Fish) && context.castInstead && state.age > swing.impact) {
         beginAction(state, ActionKind.Idle);
         return { footing: 'free', impact: null, cast: true };
@@ -236,21 +245,21 @@ export function advanceAction(
       }
       const impact: Impact | null =
         state.age === swing.impact ? { kind: 'swing', step: swingStep(state.step) } : null;
-      if (state.queued && state.step < 3 && state.age >= swing.chain) {
+      if (!digging && state.queued && state.step < 3 && state.age >= swing.chain) {
         beginAction(state, ActionKind.Swing, state.step + 1);
-        return { footing: 'free', impact, cast: false };
+        return { footing, impact, cast: false };
       }
       if (state.age >= swing.end) {
         // A button still held, or a click during the finishing chop, carries
         // straight on; otherwise the combo is over.
         if ((held(PlayerButton.Swing) || state.queued) && context.canAttack) {
-          beginAction(state, ActionKind.Swing, state.step < 3 ? state.step + 1 : 1);
-          return { footing: 'free', impact, cast: false };
+          beginAction(state, ActionKind.Swing, digging ? 1 : state.step < 3 ? state.step + 1 : 1);
+          return { footing, impact, cast: false };
         }
         beginAction(state, ActionKind.Idle);
-        return { footing: 'free', impact, cast: false };
+        return { footing, impact, cast: false };
       }
-      return { footing: 'free', impact, cast: false };
+      return { footing, impact, cast: false };
     }
 
     case ActionKind.Charge:
@@ -422,7 +431,7 @@ function startFromIdle(
     return freshSwing ? { footing: 'free', impact: null, cast: true } : FREE;
   }
   beginAction(state, ActionKind.Swing, 1);
-  return { footing: 'free', impact: null, cast: false };
+  return { footing: context.digging === true ? 'planted' : 'free', impact: null, cast: false };
 }
 
 /** How long a wind-up of this `step` (its `WindupPace`) lasts, in ticks. */

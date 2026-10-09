@@ -92,6 +92,7 @@ import {
   HUNGER_MAX,
   PICKUP_REACH,
   ITEM_KINDS,
+  DIG_SWING,
   LIGHT_COMBO,
   STRIKE,
   TICK_SECONDS,
@@ -4187,6 +4188,7 @@ export class Game {
       player.actionAge(),
       this.aimedTree !== null && this.isEquipped('axe'),
       rollDirection(action.heading, player.renderYaw()),
+      this.isEquipped('shovel'),
     );
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
@@ -4706,6 +4708,7 @@ export class Game {
     return {
       canAttack,
       castInstead,
+      digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot; the line in hand is the one thing
       // that rules it out (see decision 0102). Standing on something is
       // checked by the caller, which knows the footing.
@@ -4781,7 +4784,9 @@ export class Game {
   /** The swish of a swing of ours, timed to peak as its blow lands. */
   private swooshFor(action: ActionKind, step: number): void {
     if (action === ActionKind.Swing) {
-      const swing = LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
+      const swing = this.isEquipped('shovel')
+        ? DIG_SWING
+        : LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
       playSwoosh((swing?.impact ?? 4) * TICK_SECONDS);
     } else if (action === ActionKind.Strike) {
       playSwoosh(STRIKE.impact * TICK_SECONDS, CHARGED_BLOW);
@@ -4939,6 +4944,7 @@ export class Game {
         pose.actionAge,
         action.kind === ActionKind.Swing && this.wouldChopAt(netId, pose),
         rollDirection(pose.actionHeading, pose.yaw),
+        toolKind(this.equipped.get(netId) ?? null) === 'shovel',
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
       const rowing = action.kind === ActionKind.Row;

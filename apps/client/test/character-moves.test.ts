@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActionKind,
   CHARGE_TICKS,
+  DIG_SWING,
   DODGE,
   LIGHT_COMBO,
   RISE,
@@ -225,5 +226,21 @@ describe('aerial dodge follow-ups', () => {
     expect(pose.time).toBeCloseTo(clipBlowSeconds('strike')!);
     expect(pose.aerialTurn).toBe(1);
     expect(pose.somersault).toBe(true);
+  });
+});
+
+describe('drawing a swing of the shovel', () => {
+  it('plays the dig clip, with the blade levering up on the tick the ground opens', () => {
+    const pose = movePose(view(ActionKind.Swing, DIG_SWING.impact, { step: 1, digging: true }));
+    expect(pose.clip).toBe('digShovel');
+    expect(pose.time).toBeCloseTo(clipBlowSeconds('digShovel') ?? -1, 5);
+    expect(pose.legsFree).toBe(false);
+  });
+
+  it("starts at the beginning and runs at the clip's own pace", () => {
+    const start = movePose(view(ActionKind.Swing, 0, { step: 1, digging: true }));
+    const later = movePose(view(ActionKind.Swing, 4, { step: 1, digging: true }));
+    expect(start.time).toBeLessThan(0.05);
+    expect(later.time - start.time).toBeCloseTo(4 * TICK_SECONDS, 5);
   });
 });
