@@ -29,6 +29,8 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   ironOre: 'Rusty-red ore from the bare rock high on the mountain. Nothing smelts it yet.',
   shovel:
     'Made from sticks and stone. Equip it, then click to dig a tunnel ahead of you, or hold the click to dig a step down. Not in the home clearing, near water or near buildings.',
+  mineSupport:
+    'Two posts and a beam cut from logs. Equip it inside a tunnel and click a spot on the floor to prop the roof there. The tunnel must be one metre wide.',
   clay: 'Soft red clay from low, damp ground. Nothing uses it yet.',
   torch: 'Equip for firelight and protection from prowling raccoons at night.',
   log: 'Build a home, a campfire, fences, and garden paths.',

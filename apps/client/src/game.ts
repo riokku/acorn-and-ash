@@ -105,8 +105,14 @@ import {
   VOXEL,
   digRefusal,
   overlapsWater,
+  DIG_REACH_METERS,
+  checkSupportCell,
   cubeAtHit,
   digInReach,
+  supportCellAt,
+  supportInReach,
+  type Support,
+  type SupportCell,
   LIGHT_COMBO,
   STRIKE,
   TICK_SECONDS,
@@ -245,6 +251,12 @@ import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
 import { createStreamScene } from './scene/stream';
 import { createDigScene, type DigScene } from './scene/digging';
+import {
+  createMineSupports,
+  createSupportPreview,
+  type MineSupports,
+  type SupportPreview,
+} from './scene/mine-supports';
 import { preloadDugWalls } from './scene/dug-walls';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
@@ -925,6 +937,13 @@ export class Game {
   /** Ground dug out with the shovel (decision 0114), and every dig heard of so far, kept for a world still loading. */
   private digScene: DigScene | null = null;
   private digs: Dig[] = [];
+  /** Mine supports (decision 0119): every one heard of, what draws them, and the see-through one for the next. */
+  private supports: Support[] = [];
+  private mineSupports: MineSupports | null = null;
+  private supportPreview: SupportPreview | null = null;
+  /** The cell a click would stand a support in right now, or null if none can go there. */
+  private supportCell: SupportCell | null = null;
+  private supportClickHeld = false;
   /** How dark it is underground for the local player, 0 in the open to 1 deep down, eased frame by frame. */
   private undergroundDark = 0;
   /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
@@ -1623,6 +1642,8 @@ export class Game {
     this.lakeScene?.dispose();
     this.streamScene?.dispose();
     this.digScene?.dispose();
+    this.mineSupports?.dispose();
+    this.supportPreview?.dispose();
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
@@ -1920,6 +1941,11 @@ export class Game {
         this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
         this.digScene?.apply(message.digs);
         this.grass?.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
+        break;
+      }
+      case 'supports': {
+        this.supports = message.replace ? [...message.supports] : [...this.supports, ...message.supports];
+        this.mineSupports?.apply(message.supports, message.replace);
         break;
       }
       case 'rareReel': {
@@ -2578,6 +2604,13 @@ export class Game {
       this.digScene = createDigScene(terrain, this.wildernessScene.ground);
       this.outdoors.add(this.digScene.group);
       this.digScene.apply(this.digs);
+      this.mineSupports?.dispose();
+      this.mineSupports = createMineSupports();
+      this.outdoors.add(this.mineSupports.group);
+      this.mineSupports.apply(this.supports, true);
+      this.supportPreview?.dispose();
+      this.supportPreview = createSupportPreview();
+      this.outdoors.add(this.supportPreview.group);
       this.lakeScene?.dispose();
       this.lakeScene = createLakeScene(LAKE);
       this.lakeScene.setFrozen(this.lakeFrozen);
@@ -3736,6 +3769,60 @@ export class Game {
 
   /** The cube of ground behind whatever the mouse touches, or null if it touches none. */
   private cubeUnderPointer(camera: FollowCamera, dug: DigScene, terrain: Terrain): Dig | null {
+    const surface = this.surfaceUnderPointer(camera, dug, terrain);
+    return surface === null ? null : cubeAtHit(surface.point, surface.normal);
+  }
+
+  /**
+   * Mine supports (decision 0119). While one is in hand, the cell of tunnel the
+   * mouse is on lights up, green where a support would stand and red where
+   * not, and a click asks the server to stand one there.
+   */
+  private updateSupportTarget(camera: FollowCamera, feet: Readonly<Vec3>): void {
+    const dug = this.digScene;
+    const collision = this.collision;
+    const preview = this.supportPreview;
+    const wanted =
+      dug !== null &&
+      collision !== null &&
+      this.isEquipped('mineSupport') &&
+      this.space === OUTDOORS &&
+      preview !== null;
+    if (!wanted) {
+      preview?.show(null, 0, false);
+      this.supportCell = null;
+      return;
+    }
+    const surface = this.surfaceUnderPointer(camera, dug, collision.terrain);
+    const cell =
+      surface === null ? null : supportCellAt(dug.grid, surface.point, surface.normal);
+    if (cell === null) {
+      preview.show(null, 0, false);
+      this.supportCell = null;
+      return;
+    }
+    const fit = checkSupportCell(dug.grid, cell, this.supports);
+    const reachable = supportInReach(feet, cell, DIG_REACH_METERS);
+    preview.show(cell, 'axis' in fit ? fit.axis : 0, 'axis' in fit && reachable);
+    this.supportCell = 'axis' in fit && reachable ? cell : null;
+  }
+
+  /** A fresh press of the left button with a support in hand stands one where the preview is. */
+  private clickToPlaceSupport(holdingSupport: boolean): void {
+    const pressed =
+      holdingSupport && ((this.controls?.buttons(false) ?? 0) & PlayerButton.Swing) !== 0;
+    if (pressed && !this.supportClickHeld && this.supportCell !== null) {
+      this.connection?.sendPlaceSupport(this.supportCell);
+    }
+    this.supportClickHeld = pressed;
+  }
+
+  /** What the mouse touches in the world and which way it faces, or null if it touches nothing. */
+  private surfaceUnderPointer(
+    camera: FollowCamera,
+    dug: DigScene,
+    terrain: Terrain,
+  ): { point: { x: number; y: number; z: number }; normal: { x: number; y: number; z: number } } | null {
     const pointer = this.controls?.pointerPosition() ?? null;
     if (pointer === null) return null;
     this.clickNdc.set(
@@ -3769,7 +3856,7 @@ export class Game {
         normal = { x: slopeX / length, y: 1 / length, z: slopeZ / length };
       }
     }
-    return point === null ? null : cubeAtHit(point, normal);
+    return point === null ? null : { point, normal };
   }
 
   /** Tell the server which cube the mouse is on, when it changes and about once a second. */
@@ -4313,8 +4400,9 @@ export class Game {
     // does not shorten it.
     // The left button places a piece while one is out, so it is never also
     // a swing or a charge then.
+    const holdingSupport = this.isEquipped('mineSupport');
     const placingMask =
-      this.placing === null
+      this.placing === null && !holdingSupport
         ? ~0
         : ~(PlayerButton.Swing | PlayerButton.Charge | PlayerButton.Fish | PlayerButton.Sit);
     const fishingClick =
@@ -4325,6 +4413,8 @@ export class Game {
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
     this.updateDigTarget(camera, player.motion.position);
+    this.updateSupportTarget(camera, player.motion.position);
+    this.clickToPlaceSupport(holdingSupport);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&

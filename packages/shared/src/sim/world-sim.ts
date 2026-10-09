@@ -233,9 +233,17 @@ import {
   reedRegrowSpot,
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
-import { CUBE_DIG, DugGrid, type Dig } from '../world/digging';
+import { CUBE_DIG, DIG_CUBE, DugGrid, type Dig } from '../world/digging';
+import {
+  SUPPORT_MAX_COUNT,
+  checkSupportCell,
+  supportInReach,
+  type Support,
+  type SupportCell,
+} from '../world/supports';
 import {
   DIG_MAX_COUNT,
+  DIG_REACH_METERS,
   DIG_REACH_SLACK,
   digInReach,
   digRefusal,
@@ -1601,6 +1609,9 @@ export class WorldSimulation {
   readonly dug: DugGrid;
   /** Digs made since the server last told everybody and saved them. */
   private readonly digNews: Dig[] = [];
+  /** Mine supports standing in tunnels (decision 0119), and those not yet saved and sent. */
+  private readonly supports: Support[] = [];
+  private readonly supportNews: Support[] = [];
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
@@ -3886,6 +3897,75 @@ export class WorldSimulation {
         dig.dir >= 0 &&
         dig.dir <= 4;
       if (sensible) this.dug.apply(dig);
+    }
+  }
+
+  /**
+   * Stand a mine support in a tunnel (decision 0119), using up one from the
+   * pack. Everything is checked here, not trusted from the browser: the player
+   * holds one, it is within reach, and the cell really is a roofed tunnel a
+   * metre wide. A refusal is told to the player alone, the way a dig is.
+   */
+  placeSupport(netId: number, cell: SupportCell): boolean {
+    const runtime = this.players.get(netId);
+    const position = runtime?.entity.get(Position);
+    if (runtime === undefined || position === undefined || runtime.space !== OUTDOORS) return false;
+    if (isDown(runtime.action)) return false;
+    if (this.equippedItemOf(netId) !== 'mineSupport' || !hasItem(runtime.inventory, 'mineSupport'))
+      return false;
+    const sensible =
+      Number.isInteger(cell.ix) &&
+      Number.isInteger(cell.iy) &&
+      Number.isInteger(cell.iz) &&
+      cell.ix % DIG_CUBE === 0 &&
+      cell.iz % DIG_CUBE === 0 &&
+      Math.abs(cell.ix) < 2000 &&
+      Math.abs(cell.iz) < 2000;
+    if (!sensible) return false;
+    if (!supportInReach(position, cell, DIG_REACH_METERS + DIG_REACH_SLACK)) {
+      this.digRefusals.push({ netId, reason: 'far' });
+      return false;
+    }
+    const fit = checkSupportCell(this.dug, cell, this.supports);
+    if ('refusal' in fit) {
+      this.digRefusals.push({ netId, reason: fit.refusal });
+      return false;
+    }
+    if (this.supports.length >= SUPPORT_MAX_COUNT) {
+      this.digRefusals.push({ netId, reason: 'full' });
+      return false;
+    }
+    const support: Support = { ix: cell.ix, iy: cell.iy, iz: cell.iz, axis: fit.axis };
+    const wasHolding = this.equippedItemOf(netId);
+    removeItem(runtime.inventory, 'mineSupport');
+    if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+    this.supports.push(support);
+    this.supportNews.push(support);
+    return true;
+  }
+
+  /** Every mine support standing, oldest first: what a joining browser replays and the world saves. */
+  supportsList(): readonly Support[] {
+    return this.supports;
+  }
+
+  /** The supports stood since this was last asked, so they can be saved and sent. */
+  drainSupportNews(): Support[] {
+    return this.supportNews.splice(0);
+  }
+
+  /** Put saved supports back after the world wakes. Anything that no longer makes sense is ignored. */
+  restoreSupports(saved: Iterable<Support>): void {
+    for (const support of saved) {
+      if (this.supports.length >= SUPPORT_MAX_COUNT) break;
+      const sensible =
+        Number.isInteger(support.ix) &&
+        Number.isInteger(support.iy) &&
+        Number.isInteger(support.iz) &&
+        Math.abs(support.ix) < 2000 &&
+        Math.abs(support.iz) < 2000 &&
+        (support.axis === 0 || support.axis === 1);
+      if (sensible) this.supports.push(support);
     }
   }
 

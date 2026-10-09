@@ -46,6 +46,7 @@ import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
 import { preloadDugWalls } from '../scene/dug-walls';
 import { createDugEarth } from './dug-earth';
+import { createMineSupportsExhibit } from './mine-supports';
 import { createDugGround, createDugRamp } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
@@ -182,6 +183,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
+  // A tunnel propped with mine supports (see mine-supports.ts).
+  { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
   // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
   { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
   { name: 'dug-ramp', x: 0, z: 0, view: 6, alone: true, create: createDugRamp },
