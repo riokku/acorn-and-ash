@@ -1,6 +1,6 @@
 # 0114 · A mountain range, a stream down to the lake, and digging tunnels
 
-**Status:** accepted; steps 1 (the mountain) and 2 (the stream) built · **Date:** 2026-10-08
+**Status:** accepted; steps 1 (the mountain), 2 (the stream) and 3 (shovel and ore) built · **Date:** 2026-10-08
 
 ## Context
 
@@ -68,4 +68,11 @@ Resets for existing worlds: because the world is larger, trees are numbered in a
 - **Looks:** a ribbon of water with ripples that run downstream, white foam at the falls and edges, pebbles under the water, a damp lush bank, and stones in the shallows. It is drawn as a flat colour on the map. Placeholder art; the real look comes in a Blender session.
 - **Not changed:** the hills' own height, the lake's shape, and where the woodland encounter sites stand. (Trees near the stream's path are simply left out, which does not change any tree's number.)
 
-Still to come: the shovel and ore (step 3), digging (step 4) and art (step 5).
+## What step 3 built
+
+- Two new things to gather: **stone** and **iron ore**. They lie in piles on the mountain, picked up by hand like sticks and berries (Chris chose this over chopping rocks or a pickaxe). Stone is scattered over the lower slopes; ore lies higher, in the bare rock above the pines, so it takes a climb. 16 stone piles and 10 ore piles, placed from the seed (`packages/shared/src/world/mountain-rocks.ts`), on ground that can be walked, away from the stream and trees.
+- A picked-clean pile comes back a little way from where it lay, like the forest's berries.
+- The **shovel** is crafted by hand from 2 sticks and 3 stone (Chris's choice: sticks and stone). It does nothing yet beyond being carried; digging is step 4.
+- All placeholder shapes: grey lumps for stone, rust-red lumps with a bright fleck for ore. Art comes in step 5.
+
+Still to come: digging (step 4) and art (step 5).

@@ -48,7 +48,10 @@ export type ItemId =
   | 'leatherGloves'
   | 'ironSword'
   | 'huntingKnife'
-  | 'woodenShield';
+  | 'woodenShield'
+  | 'stone'
+  | 'ironOre'
+  | 'shovel';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -613,6 +616,43 @@ export const ITEM_KINDS = {
     equippable: false,
     gearSlots: ['offHand'],
   },
+  stone: {
+    id: 'stone',
+    displayName: 'Stone',
+    pluralName: 'Stones',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x8d9296,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
+  ironOre: {
+    id: 'ironOre',
+    displayName: 'Iron ore',
+    pluralName: 'Iron ore',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x8a5a44,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
+  shovel: {
+    id: 'shovel',
+    displayName: 'Shovel',
+    pluralName: 'Shovels',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x7d8a8f,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: true,
+    gearSlots: ['mainHand'],
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -664,6 +704,9 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'ironSword',
   'huntingKnife',
   'woodenShield',
+  'stone',
+  'ironOre',
+  'shovel',
 ];
 
 export function itemIndex(id: ItemId): number {

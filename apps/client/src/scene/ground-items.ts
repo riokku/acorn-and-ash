@@ -138,6 +138,7 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
 function createPatchModel(item: ItemId): GroundModel {
   if (item === 'berry' || item === 'mushroom') return createForageModel(item);
   if (item === 'reed') return createPartsModel(item, createReedPatchModel());
+  if (item === 'stone' || item === 'ironOre') return createRocksModel(item);
   return item === 'flower' ? createFlowerModel('flower') : createSticksModel(item);
 }
 
@@ -178,7 +179,60 @@ function createPileModel(item: ItemId): GroundModel {
   if (item === 'log') return createLogsModel();
   if (item === 'reed') return createPartsModel(item, createReedPileModel());
   if (item === 'rope') return createPartsModel(item, createRopeModel());
+  if (item === 'stone' || item === 'ironOre') return createRocksModel(item);
   return createBundleModel(item);
+}
+
+/**
+ * Loose rocks lying on the mountain: one chunk for every one left in the pile,
+ * grey stone or rust-red ore flecked with bright metal. Placeholder shapes
+ * until the art pass (decision 0114).
+ */
+const ROCK_OFFSETS: readonly { x: number; z: number; size: number }[] = [
+  { x: 0, z: 0, size: 1 },
+  { x: 0.34, z: 0.14, size: 0.75 },
+  { x: -0.3, z: 0.22, size: 0.85 },
+  { x: 0.12, z: -0.32, size: 0.7 },
+  { x: -0.3, z: -0.16, size: 0.6 },
+  { x: 0.32, z: -0.2, size: 0.65 },
+].slice(0, GATHER_PATCH_MAX_COUNT);
+
+function createRocksModel(item: 'stone' | 'ironOre'): GroundModel {
+  const group = new THREE.Group();
+  const geometry = new THREE.DodecahedronGeometry(0.22, 0);
+  const material = plainMaterial(ITEM_KINDS[item].placeholderColor, {
+    roughness: 0.95,
+    flatShading: true,
+  });
+  const fleckMaterial = plainMaterial(0xe0a96d, { roughness: 0.4, flatShading: true });
+  const fleckGeometry = new THREE.IcosahedronGeometry(0.05, 0);
+  const rocks: THREE.Group[] = ROCK_OFFSETS.map((offset, index) => {
+    const rock = new THREE.Group();
+    rock.position.set(offset.x, 0.1 * offset.size, offset.z);
+    rock.rotation.y = index * 1.7;
+    const body = new THREE.Mesh(geometry, material);
+    body.scale.set(offset.size, offset.size * 0.7, offset.size * 1.1);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    rock.add(body);
+    if (item === 'ironOre') {
+      const fleck = new THREE.Mesh(fleckGeometry, fleckMaterial);
+      fleck.position.set(0.08 * offset.size, 0.12 * offset.size, 0.1 * offset.size);
+      rock.add(fleck);
+    }
+    group.add(rock);
+    return rock;
+  });
+  return {
+    item,
+    group,
+    show: (count) => showFirst(group, rocks, count),
+    // Geometry and materials are shared with everything of the same colour or shape.
+    dispose: () => {
+      geometry.dispose();
+      fleckGeometry.dispose();
+    },
+  };
 }
 
 /** Short bark-covered lengths with visible growth rings, lying on the grass. */
@@ -201,7 +255,9 @@ function createLogsModel(): GroundModel {
     item: 'log',
     group,
     show: (count) => showFirst(group, logs, count),
-    dispose: () => geometry.dispose(),
+    dispose: () => {
+      geometry.dispose();
+    },
   };
 }
 

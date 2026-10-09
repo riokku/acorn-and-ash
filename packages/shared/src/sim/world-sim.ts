@@ -174,6 +174,7 @@ import {
   type PlacedPickup,
   type PlacedProp,
 } from '../world/clearing';
+import type { GatherSpot } from '../world/clearing';
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
 import { homeFacilityInReach } from '../data/home-facilities';
 import { toolKind } from '../data/items';
@@ -231,6 +232,7 @@ import {
   reedIsDue,
   reedRegrowSpot,
 } from '../world/reeds';
+import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -1573,6 +1575,8 @@ export class WorldSimulation {
   private readonly scratch: PlayerMotion = createPlayerMotion(SPAWN_POSITION);
   /** Every player, as a raid sees them - refreshed each tick, reused between them. */
   private readonly fighters: RaidFighter[] = [];
+  /** Where each mountain pile of stone or ore first lay; it comes back near here once picked clean. */
+  private readonly mountainRockHomes = new Map<number, GatherSpot>();
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
@@ -1598,6 +1602,18 @@ export class WorldSimulation {
     for (const spot of discoveryForageSpots(this.discoverySites))
       this.patches.push(freshPatch(this.seed, spot));
     for (const spot of REED_PATCHES) this.patches.push(freshPatch(this.seed, spot));
+    const rockSpots = buildMountainRockSpots(
+      this.seed,
+      terrain,
+      (x, z) =>
+        !this.wilderness.colliders.some(
+          (c) => Math.hypot(c.x - x, c.z - z) < (c.shape === 'cylinder' ? c.radius : 2) + 1.2,
+        ),
+    );
+    for (const spot of rockSpots) {
+      this.mountainRockHomes.set(spot.id, spot);
+      this.patches.push(freshPatch(this.seed, spot));
+    }
     this.collision = createCollisionWorld(
       terrain,
       [
@@ -3166,7 +3182,9 @@ export class WorldSimulation {
       this.patchChanges.add(patch.id);
       return true;
     }
-    const forage = discoveryForageSpots(this.discoverySites).find((s) => s.id === patch.id);
+    const forage =
+      discoveryForageSpots(this.discoverySites).find((s) => s.id === patch.id) ??
+      (isMountainPatch(patch.id) ? this.mountainRockHomes.get(patch.id) : undefined);
     if (forage !== undefined) {
       const footprints = this.buildFootprints();
       const rng = createRng(hashSeed(this.seed, 'forest-forage', patch.id, generation));
