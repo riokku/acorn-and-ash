@@ -13,6 +13,7 @@ import { createIceMaterial, createWaterMaterial, paintedMaterial } from '../art/
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
+import { buryGeometryBase } from './prop-grounding';
 
 /** Round discs are cut finely so the water's outline never shows corners, even on the big blobs. */
 const DISC_SEGMENTS = 72;
@@ -256,10 +257,15 @@ function createShorePlants(
     if (basinDepthAt(lake, x, z) > -0.05) continue;
     if (excludePlantsAt(x, z)) continue;
     const size = 0.18 + random() * 0.32;
+    const y = groundHeightAt(x, z);
     builder.add(
       stone,
-      stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
-      placed(x, groundHeightAt(x, z), z, { y: random() * 3 }),
+      buryGeometryBase(
+        stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
+        { x, y, z },
+        groundHeightAt,
+      ),
+      placed(x, y, z, { y: random() * 3 }),
     );
     placedStones += 1;
   }

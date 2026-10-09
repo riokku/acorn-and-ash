@@ -22,6 +22,7 @@ import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { createLakeScene } from './lake';
 import { addReedClump, waterPlantMaterials } from './water-plants';
+import { buryGeometryBase } from './prop-grounding';
 
 /** The ribbon of water is this many vertices across: more makes the edges follow the bank's curve better. */
 const ACROSS = 7;
@@ -165,10 +166,15 @@ function createSloughBoulders(
       }
       const base = Math.min(...heights);
       if (Math.max(...heights) - base > height * 0.8) continue;
+      const y = base - height * 0.12;
       builder.add(
         stone,
-        stoneGeometry(radius, height, 3909 + index * 137 + placedRocks.length, 0.8, 1),
-        placed(x, base - height * 0.12, z, { y: random() * Math.PI * 2 }),
+        buryGeometryBase(
+          stoneGeometry(radius, height, 3909 + index * 137 + placedRocks.length, 0.8, 1),
+          { x, y, z },
+          (x, z) => terrain.heightAt(x, z),
+        ),
+        placed(x, y, z, { y: random() * Math.PI * 2 }),
       );
       placedRocks.push({ x, z, radius });
     }
@@ -304,10 +310,15 @@ function createStones(stream: Stream, terrain: Terrain): { group: THREE.Group; d
     const z = here.z + normalZ * across;
     const radius = 0.14 + random() * random() * 0.55;
     const ground = Math.max(terrain.heightAt(x, z), streamBedAt(stream, along) - 0.2);
+    const y = ground + radius * 0.12;
     builder.add(
       stone,
-      stoneGeometry(radius, radius * 0.6, 1400 + index, 0.5, 0),
-      placed(x, ground + radius * 0.12, z, { y: random() * Math.PI * 2 }),
+      buryGeometryBase(
+        stoneGeometry(radius, radius * 0.6, 1400 + index, 0.5, 0),
+        { x, y, z },
+        (x, z) => terrain.heightAt(x, z),
+      ),
+      placed(x, y, z, { y: random() * Math.PI * 2 }),
     );
   }
   return builder.build();

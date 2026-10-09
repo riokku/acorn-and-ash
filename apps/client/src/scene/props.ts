@@ -1,11 +1,18 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-import { type PlacedProp, type PropKind } from '@acorn/shared';
+import { smoothstep, type PlacedProp, type PropKind, type Terrain } from '@acorn/shared';
+import { attribute, positionLocal, vec3 } from 'three/tsl';
 
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
 import { realModelPartsFor } from './prop-models';
+import {
+  groundWeights,
+  propBurialDepth,
+  propFootprint,
+  type PropFootprint,
+} from './prop-grounding';
 
 /**
  * Instanced placeholder scenery.
@@ -23,10 +30,30 @@ export interface PropPart {
   readonly mesh: THREE.InstancedMesh;
   /** Where this part sits inside its prop, before the prop is placed. */
   readonly offset: THREE.Matrix4;
+  /** Update the buried base when an instance is packed, regrown or tipped. */
+  ground?(index: number, prop: PlacedProp, tilt?: THREE.Quaternion): void;
   dispose(): void;
 }
 
-export function createPropMeshes(kind: PropKind, count: number, distant = false): PropPart[] {
+export function createPropMeshes(
+  kind: PropKind,
+  count: number,
+  distant = false,
+  terrain?: Terrain,
+): PropPart[] {
+  const parts = propMeshes(kind, count, distant);
+  // The detailed footprint grounds both versions identically at the LOD switch.
+  const detailed = realModelPartsFor(kind.id);
+  const bases =
+    detailed?.map((part) => ({ geometry: part.geometry, offsetY: 0 })) ??
+    parts.map((part) => ({ geometry: part.mesh.geometry, offsetY: part.offset.elements[13]! }));
+  const band =
+    kind.shape.family === 'tree' ? kind.shape.trunkHeight * 0.18 : kind.shape.height * 0.35;
+  const footprint = propFootprint(bases, band);
+  return parts.map((part) => groundPart(part, footprint, terrain));
+}
+
+function propMeshes(kind: PropKind, count: number, distant: boolean): PropPart[] {
   if (kind.shape.family === 'tree') {
     const realParts = realModelPartsFor(kind.id, distant);
     if (realParts !== undefined) {
@@ -39,13 +66,13 @@ export function createPropMeshes(kind: PropKind, count: number, distant = false)
 
     const trunk = instanced(
       new THREE.CylinderGeometry(trunkRadius * 0.82, trunkRadius, trunkHeight, 7),
-      new THREE.MeshStandardMaterial({ color: 0x6b4c33, roughness: 0.95, flatShading: true }),
+      new THREE.MeshStandardNodeMaterial({ color: 0x6b4c33, roughness: 0.95, flatShading: true }),
       count,
       trunkHeight / 2,
     );
     const canopy = instanced(
       new THREE.ConeGeometry(canopyRadius, canopyHeight, 8),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshStandardNodeMaterial({
         color: kind.placeholderColor,
         roughness: 0.9,
         flatShading: true,
@@ -75,7 +102,7 @@ export function createPropMeshes(kind: PropKind, count: number, distant = false)
   return [
     instanced(
       new THREE.IcosahedronGeometry(radius, 0),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshStandardNodeMaterial({
         color: kind.placeholderColor,
         roughness: 1,
         flatShading: true,
@@ -84,6 +111,93 @@ export function createPropMeshes(kind: PropKind, count: number, distant = false)
       height / 2,
     ),
   ];
+}
+
+/** Stretch the buried vertices per instance; keep the shared source models untouched. */
+function groundPart(part: PropPart, footprint: PropFootprint, terrain?: Terrain): PropPart {
+  const weights = groundWeights(part.mesh.geometry, part.offset.elements[13]!, footprint);
+  if (!weights.some((weight) => weight > 0)) return part;
+  const source = part.mesh.material;
+  if (
+    !(source instanceof THREE.MeshStandardNodeMaterial) &&
+    !(source instanceof THREE.MeshStandardMaterial)
+  )
+    return part;
+  const geometry = part.mesh.geometry.clone();
+  geometry.setAttribute('propGroundWeight', new THREE.BufferAttribute(weights, 1));
+  const depth = new THREE.InstancedBufferAttribute(new Float32Array(part.mesh.count), 1);
+  depth.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('propGroundDepth', depth);
+  const material =
+    source instanceof THREE.MeshStandardNodeMaterial
+      ? source.clone()
+      : new THREE.MeshStandardNodeMaterial({
+          name: source.name,
+          color: source.color,
+          map: source.map,
+          normalMap: source.normalMap,
+          normalScale: source.normalScale,
+          roughness: source.roughness,
+          roughnessMap: source.roughnessMap,
+          metalness: source.metalness,
+          metalnessMap: source.metalnessMap,
+          flatShading: source.flatShading,
+          side: source.side,
+          transparent: source.transparent,
+          opacity: source.opacity,
+          alphaTest: source.alphaTest,
+        });
+  material.positionNode = positionLocal.sub(
+    vec3(0, attribute('propGroundDepth', 'float').mul(attribute('propGroundWeight', 'float')), 0),
+  );
+  part.mesh.geometry = geometry;
+  part.mesh.material = material;
+  const cached = new Map<
+    number,
+    { scale: number; x: number; y: number; z: number; depth: number }
+  >();
+  return {
+    ...part,
+    ground(index, prop, tilt) {
+      let known = cached.get(prop.id);
+      if (
+        known === undefined ||
+        known.scale !== prop.scale ||
+        known.x !== prop.x ||
+        known.z !== prop.z ||
+        known.y !== (prop.y ?? 0)
+      ) {
+        known = {
+          scale: prop.scale,
+          x: prop.x,
+          y: prop.y ?? 0,
+          z: prop.z,
+          depth: propBurialDepth(prop, footprint, terrain),
+        };
+        cached.set(prop.id, known);
+      }
+      // Leave uprooted trees free of the ground as they fall; small shakes
+      // keep their roots embedded. Stumps have their own buried bases.
+      const angle = tilt === undefined ? 0 : 2 * Math.acos(Math.min(1, Math.abs(tilt.w)));
+      const burial = known.depth * (1 - smoothstep(angle, 0.08, 0.3));
+      if (depth.getX(index) !== burial) {
+        depth.setX(index, burial);
+        depth.needsUpdate = true;
+      }
+      // Culling must include the vertices moved by the shader.
+      geometry.boundingBox!.min.y = Math.min(
+        geometry.boundingBox!.min.y,
+        footprint.bottom - known.depth / prop.scale - part.offset.elements[13]!,
+      );
+      geometry.boundingSphere ??= new THREE.Sphere();
+      geometry.boundingBox!.getBoundingSphere(geometry.boundingSphere);
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+      part.dispose();
+    },
+  };
 }
 
 function instanced(
@@ -134,6 +248,7 @@ export function placeOneInstance(
     new THREE.Vector3(prop.scale, prop.scale, prop.scale),
   );
   part.mesh.setMatrixAt(index, part.offset.clone().premultiply(matrix));
+  part.ground?.(index, prop, tilt);
 }
 
 /** A cylinder standing where the prop does, matching what the server collides with. */
