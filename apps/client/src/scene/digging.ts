@@ -31,12 +31,42 @@ const FACE_DIRECTIONS = [
 
 /** The four corners of each face, counter-clockwise seen from outside, as offsets from the cube's low corner. */
 const FACE_CORNERS: ReadonlyArray<ReadonlyArray<readonly [number, number, number]>> = [
-  [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]],
-  [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
-  [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
-  [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
-  [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
-  [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+  [
+    [1, 0, 1],
+    [1, 0, 0],
+    [1, 1, 0],
+    [1, 1, 1],
+  ],
+  [
+    [0, 0, 0],
+    [0, 0, 1],
+    [0, 1, 1],
+    [0, 1, 0],
+  ],
+  [
+    [0, 1, 1],
+    [1, 1, 1],
+    [1, 1, 0],
+    [0, 1, 0],
+  ],
+  [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 0, 1],
+    [0, 0, 1],
+  ],
+  [
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+  ],
+  [
+    [1, 0, 0],
+    [0, 0, 0],
+    [0, 1, 0],
+    [1, 1, 0],
+  ],
 ];
 
 export interface DigScene {
@@ -129,8 +159,16 @@ export function createDigScene(
     const color = new THREE.Color();
     const chunkCellX = Math.floor(chunk / 8192) - 4096;
     const chunkCellZ = (chunk % 8192) - 4096;
-    for (let cellX = chunkCellX * CELLS_PER_CHUNK; cellX < (chunkCellX + 1) * CELLS_PER_CHUNK; cellX++) {
-      for (let cellZ = chunkCellZ * CELLS_PER_CHUNK; cellZ < (chunkCellZ + 1) * CELLS_PER_CHUNK; cellZ++) {
+    for (
+      let cellX = chunkCellX * CELLS_PER_CHUNK;
+      cellX < (chunkCellX + 1) * CELLS_PER_CHUNK;
+      cellX++
+    ) {
+      for (
+        let cellZ = chunkCellZ * CELLS_PER_CHUNK;
+        cellZ < (chunkCellZ + 1) * CELLS_PER_CHUNK;
+        cellZ++
+      ) {
         const key = cellKey(cellX, cellZ);
         if (!touched.has(key)) continue;
         const firstX = cellX * cubesPerCell - cubesBeforeOrigin;

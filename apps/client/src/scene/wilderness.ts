@@ -73,7 +73,11 @@ export interface WildernessScene {
    * The smooth ground, for taking squares of it away where a dug tunnel comes
    * up near the surface (see `scene/digging.ts`): `hide` takes one square.
    */
-  readonly ground: { readonly origin: number; readonly cell: number; hide(cellX: number, cellZ: number): void };
+  readonly ground: {
+    readonly origin: number;
+    readonly cell: number;
+    hide(cellX: number, cellZ: number): void;
+  };
   /**
    * A blow landing on a tree: it shivers, tipping a little away along
    * `awayX`, `awayZ` - the way the blow was going - and settling back.
