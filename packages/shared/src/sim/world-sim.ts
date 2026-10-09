@@ -3789,15 +3789,16 @@ export class WorldSimulation {
     }
     const x = (dig.ix + 0.5) * 0.5;
     const z = (dig.iz + 0.5) * 0.5;
-    const found = digYield(this.seed, dig, solid, this.collision.terrain.heightAt(x, z));
-    // A full pack stops the dig, rather than throwing the ground away.
-    const first = found[0]!;
-    if (roomFor(runtime.inventory, first.item) === 0) return this.refusePickup(runtime, first.item);
+    const found = digYield(this.seed, dig, this.collision.terrain.heightAt(x, z));
+    // Digging never waits on the pack: a find that has nowhere to go is only a pity.
     this.dug.apply(dig);
     this.digNews.push(dig);
     for (const { item, count } of found) {
       const taken = addItem(runtime.inventory, item, count);
-      if (taken === 0) continue;
+      if (taken === 0) {
+        this.digRefusals.push({ netId: runtime.netId, reason: 'packFull' });
+        continue;
+      }
       this.collectionEvents.push({
         netId: runtime.netId,
         item,

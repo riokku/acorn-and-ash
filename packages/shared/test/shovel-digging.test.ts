@@ -49,7 +49,7 @@ function findHillside(sim: WorldSimulation): { x: number; z: number } {
 }
 
 describe('digging with the shovel', () => {
-  it('carves a slab ahead, keeps the stone and tells everybody', () => {
+  it('carves a slab ahead and tells everybody', () => {
     const sim = createWorld();
     sim.addPlayer(1, withShovel(1));
     const spot = findHillside(sim);
@@ -63,7 +63,6 @@ describe('digging with the shovel', () => {
       sim.step(tickClock());
     }
     expect(sim.digsList().length).toBe(1);
-    expect(countOf(sim.inventoryOf(1), 'stone')).toBeGreaterThan(0);
     expect(sim.drainDigNews()).toHaveLength(1);
     expect(sim.drainDigNews()).toHaveLength(0);
     sim.drainCollectionEvents();
@@ -143,6 +142,31 @@ describe('digging with the shovel', () => {
     expect(sim.drainDigRefusals()).toEqual([{ netId: 1, reason: 'home' }]);
   });
 
+  it('still digs with a full pack, losing only whatever it turns up', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      ...withShovel(1),
+      items: [
+        { item: 'bag', count: 1 },
+        { item: 'shovel', count: 1 },
+        { item: 'stone', count: 500 },
+      ],
+    });
+    const spot = findHillside(sim);
+    sim.placePlayer(
+      1,
+      { x: spot.x, y: sim.collision.terrain.heightAt(spot.x, spot.z), z: spot.z },
+      0,
+    );
+    const before = countOf(sim.inventoryOf(1), 'stone');
+    for (let seq = 1; seq <= 40 && sim.digsList().length === 0; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList()).toHaveLength(1);
+    expect(countOf(sim.inventoryOf(1), 'stone')).toBe(before);
+  });
+
   it('digs nothing without the shovel in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1, { ...withShovel(1), items: [{ item: 'bag', count: 1 }] });
@@ -183,11 +207,16 @@ describe('where digging is allowed', () => {
     expect(digRefusal(deep, crowded, terrain, none, [])).toBe('full');
   });
 
-  it('turns up stone every time and the same things for the same dig', () => {
-    const dig = { ix: -300, iy: 4, iz: 300, dir: 0 as const };
-    const first = digYield(7, dig, 24, 8);
-    expect(first[0]).toEqual({ item: 'stone', count: 3 });
-    expect(digYield(7, dig, 24, 8)).toEqual(first);
-    expect(digYield(7, dig, 2, 8)[0]).toEqual({ item: 'stone', count: 1 });
+  it('turns up something on only a few digs in a hundred, the same for the same dig', () => {
+    let finds = 0;
+    const tries = 5000;
+    for (let i = 0; i < tries; i++) {
+      const dig = { ix: -300 + i, iy: 4, iz: 300, dir: 4 as const };
+      const found = digYield(7, dig, 8);
+      expect(digYield(7, dig, 8)).toEqual(found);
+      if (found.length > 0) finds++;
+    }
+    expect(finds / tries).toBeGreaterThan(0.02);
+    expect(finds / tries).toBeLessThan(0.05);
   });
 });
