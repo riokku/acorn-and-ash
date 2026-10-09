@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_WALKABLE_GRADIENT } from '../src/constants';
-import { LAKE, lakeDepthAt } from '../src/world/lake';
+import { LAKE, basinDepthAt, lakeDepthAt } from '../src/world/lake';
 import {
   isInStream,
   nearStream,
@@ -17,7 +17,7 @@ import {
   streamWaterDepthAt,
   streamWaterHalfWidthAt,
 } from '../src/world/stream';
-import { createWildernessTerrain } from '../src/world/terrain';
+import { createWildernessTerrain, wildernessHeightAt } from '../src/world/terrain';
 import { createCollisionWorld, setLakeFrozen } from '../src/collision/capsule';
 import { buildEncounterSites } from '../src/world/encounters';
 import { buildTestClearing } from '../src/world/clearing';
@@ -39,6 +39,33 @@ function pointAlong(along: number): { x: number; z: number } {
 }
 
 describe('the stream', () => {
+  it('supports every exposed slough rim above water and ice even where the hillside falls away', () => {
+    const withoutSloughs = { ...STREAM, sloughs: [] };
+    for (const seed of [1, 42, 1234, 98765]) {
+      const ground = createWildernessTerrain(seed);
+      for (const slough of STREAM.sloughs) {
+        for (const circle of slough.basin) {
+          for (let step = 0; step < 64; step++) {
+            const angle = (step / 64) * Math.PI * 2;
+            const x = circle.x + Math.cos(angle) * circle.radius;
+            const z = circle.z + Math.sin(angle) * circle.radius;
+            // Overlapping lobes and river mouths are water, not exposed banks.
+            if (STREAM.sloughs.some((pool) => basinDepthAt(pool, x, z) > 0.02)) continue;
+            if (isInStream(STREAM, x, z, -1)) continue;
+            // Placement itself must fit the valley, rather than needing a
+            // tall artificial platform to hold the pool over a hillside.
+            expect(wildernessHeightAt(seed, x, z, LAKE, withoutSloughs)).toBeGreaterThan(
+              sloughSurfaceAt(STREAM, slough, x, z) - 0.75,
+            );
+            expect(ground.heightAt(x, z)).toBeGreaterThan(
+              sloughSurfaceAt(STREAM, slough, x, z) + 0.05,
+            );
+          }
+        }
+      }
+    }
+  });
+
   it('raises the shared walking surface to river and slough ice, and restores the floor on thaw', () => {
     const collision = createCollisionWorld(terrain, [], undefined, LAKE, false, STREAM);
     setLakeFrozen(collision, true);
