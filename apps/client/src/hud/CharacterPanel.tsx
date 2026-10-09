@@ -15,6 +15,7 @@ import { fitsDraggedGear, startGearDrag, useDraggedGear } from './gear-drag';
 import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
 import { itemDescription } from './item-description';
+import { handItemFor } from './hand-item';
 
 /** Set on a gear piece dragged out of the pack: which item it is. */
 export const GEAR_ITEM_DRAG_TYPE = 'application/x-acorn-gear-item';
@@ -41,15 +42,23 @@ function colorOf(placeholderColor: number): string {
  */
 export function CharacterPanel({
   worn,
+  held = null,
   look,
   notice,
   onChange,
 }: {
   worn: Readonly<WornGear>;
+  /** What is in the hand right now, if it is a tool or weapon: shown in the main hand even if only chosen from the hotbar. */
+  held?: ItemId | null;
   look: StageLook | null;
   notice: { readonly text: string; readonly key: number } | null;
   onChange: (request: GearRequest) => void;
 }): React.JSX.Element {
+  // A tool or weapon chosen from the hotbar is what the hand holds, so it shows in the main hand
+  // slot too, unless it is already the piece worn there.
+  const hand = handItemFor(held, worn);
+  const handItem = hand.item;
+  const heldFromHotbar = hand.fromHotbar ? hand.item : null;
   return (
     <div className="character-panel" data-testid="character-panel">
       <div className="hud-journal-header">
@@ -62,10 +71,16 @@ export function CharacterPanel({
             <GearSlotView key={slot} slot={slot} worn={worn} onChange={onChange} />
           ))}
         </div>
-        <GearPreview look={look} worn={worn} />
+        <GearPreview look={look} worn={worn} held={handItem} />
         <div className="gear-column">
           {RIGHT_SLOTS.map((slot) => (
-            <GearSlotView key={slot} slot={slot} worn={worn} onChange={onChange} />
+            <GearSlotView
+              key={slot}
+              slot={slot}
+              worn={worn}
+              heldFromHotbar={slot === 'mainHand' ? heldFromHotbar : null}
+              onChange={onChange}
+            />
           ))}
         </div>
       </div>
@@ -80,13 +95,18 @@ export function CharacterPanel({
 function GearSlotView({
   slot,
   worn,
+  heldFromHotbar = null,
   onChange,
 }: {
   slot: GearSlot;
   worn: Readonly<WornGear>;
+  /** A tool chosen from the hotbar, shown here instead of the piece worn in this slot. */
+  heldFromHotbar?: ItemId | null;
   onChange: (request: GearRequest) => void;
 }): React.JSX.Element {
-  const item = worn[slot];
+  const wornItem = worn[slot];
+  const held = heldFromHotbar !== null;
+  const item = heldFromHotbar ?? wornItem;
   const kind = item === undefined ? null : ITEM_KINDS[item];
   const [over, setOver] = useState(false);
 
@@ -98,6 +118,7 @@ function GearSlotView({
 
   const classes = ['gear-slot'];
   if (item !== undefined) classes.push('gear-slot-filled');
+  if (held) classes.push('gear-slot-held');
   if (fits) classes.push('gear-slot-fits');
   if (over && (dragged === null || fits)) classes.push('gear-slot-over');
 
@@ -111,7 +132,11 @@ function GearSlotView({
       <>
         <strong>{kind.displayName}</strong>
         <span className="item-tooltip-detail">{itemDescription(item)}</span>
-        <span className="item-tooltip-action">Right-click to take off · drag to swap</span>
+        <span className="item-tooltip-action">
+          {held
+            ? 'In your hand from the hotbar. Choose something else there to put it away.'
+            : 'Right-click to take off · drag to swap'}
+        </span>
       </>
     );
 
@@ -121,12 +146,12 @@ function GearSlotView({
         className={classes.join(' ')}
         data-testid={`gear-slot-${slot}`}
         data-item={item ?? ''}
-        draggable={item !== undefined}
+        draggable={wornItem !== undefined && !held}
         role="button"
         tabIndex={0}
         aria-label={`${GEAR_SLOT_LABELS[slot]}: ${kind?.displayName ?? 'empty'}`}
         onDragStart={(event) => {
-          if (item === undefined) return;
+          if (item === undefined || held) return;
           event.dataTransfer.setData('text/plain', item);
           event.dataTransfer.setData(GEAR_SLOT_DRAG_TYPE, slot);
           startGearDrag(item);
@@ -147,10 +172,10 @@ function GearSlotView({
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          if (item !== undefined) onChange({ action: 'takeOff', slot });
+          if (item !== undefined && !held) onChange({ action: 'takeOff', slot });
         }}
         onKeyDown={(event) => {
-          if ((event.key === 'Enter' || event.key === ' ') && item !== undefined) {
+          if ((event.key === 'Enter' || event.key === ' ') && item !== undefined && !held) {
             event.preventDefault();
             onChange({ action: 'takeOff', slot });
           }
@@ -173,9 +198,11 @@ function GearSlotView({
 function GearPreview({
   look,
   worn,
+  held,
 }: {
   look: StageLook | null;
   worn: Readonly<WornGear>;
+  held: ItemId | null;
 }): React.JSX.Element {
   const holder = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<CharacterStage | null>(null);
@@ -219,13 +246,13 @@ function GearPreview({
   useEffect(() => {
     if (stage === null || look === null) return;
     stage.place(PREVIEW_PLACEMENT);
-    stage.setGear(worn);
+    stage.setGear(worn, held);
     stage.show(look);
   }, [stage, look?.character, look?.tint, look?.skin]);
 
   useEffect(() => {
-    stage?.setGear(worn);
-  }, [stage, worn]);
+    stage?.setGear(worn, held);
+  }, [stage, worn, held]);
 
   return <div ref={holder} className="gear-preview" />;
 }
