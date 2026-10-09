@@ -11,6 +11,7 @@ Chris found that sloughs stayed open during blizzards while the lake froze, and 
 - Characters moving through open water leave expanding, damped surface waves. Walking and running produce different strengths; standing still, teleporting and moving on ice produce none. Local movement and interpolated remote movement drive the same effects.
 - A shared pool holds at most twelve disturbances. Shader uniforms update existing materials; no meshes, textures or network messages are created per step. Waves die away after three seconds and are cleared on freezing or world changes.
 - Add small animated surface normals, softer painted ripple highlights, and stronger sky-colored shading at grazing angles. Preserve the existing river current and the gradual motion transition into each slough.
+- Interleave the river's custom vertex attributes in one buffer. Together with position and normal this uses three vertex buffers, within WebGPU's guaranteed limit of eight; separate attributes previously required nine and prevented the river pipeline from rendering on such devices.
 
 ## Consequences
 

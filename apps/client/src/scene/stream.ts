@@ -222,13 +222,9 @@ function createBankReeds(
 function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   const rows = stream.count;
   const positions = new Float32Array(rows * ACROSS * 3);
-  const sideways = new Float32Array(rows * ACROSS);
-  const alongs = new Float32Array(rows * ACROSS);
-  const edges = new Float32Array(rows * ACROSS);
-  const falls = new Float32Array(rows * ACROSS);
-  const paces = new Float32Array(rows * ACROSS);
-  const flow = new Float32Array(rows * ACROSS * 2);
-  const flowShare = new Float32Array(rows * ACROSS).fill(1);
+  // WebGPU guarantees only eight vertex buffers. Pack the custom water
+  // values together so the ribbon uses just three buffers with position/normal.
+  const waterValues = new Float32Array(rows * ACROSS * 8);
   const indices: number[] = [];
 
   for (let row = 0; row < rows; row++) {
@@ -251,13 +247,16 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       positions[vertex * 3] = here.x + normalX * half * across;
       positions[vertex * 3 + 1] = surface;
       positions[vertex * 3 + 2] = here.z + normalZ * half * across;
-      sideways[vertex] = half * across;
-      alongs[vertex] = along;
-      edges[vertex] = Math.abs(across);
-      falls[vertex] = steep;
-      paces[vertex] = 1 + steep * (FALL_PACE - 1);
-      flow[vertex * 2] = (tangentX / size) * paces[vertex]!;
-      flow[vertex * 2 + 1] = (tangentZ / size) * paces[vertex]!;
+      const pace = 1 + steep * (FALL_PACE - 1);
+      const water = vertex * 8;
+      waterValues[water] = half * across;
+      waterValues[water + 1] = along;
+      waterValues[water + 2] = Math.abs(across);
+      waterValues[water + 3] = steep;
+      waterValues[water + 4] = pace;
+      waterValues[water + 5] = (tangentX / size) * pace;
+      waterValues[water + 6] = (tangentZ / size) * pace;
+      waterValues[water + 7] = 1;
     }
     if (row + 1 < rows) {
       for (let column = 0; column + 1 < ACROSS; column++) {
@@ -273,13 +272,14 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('streamAcross', new THREE.BufferAttribute(sideways, 1));
-  geometry.setAttribute('streamAlong', new THREE.BufferAttribute(alongs, 1));
-  geometry.setAttribute('streamEdge', new THREE.BufferAttribute(edges, 1));
-  geometry.setAttribute('streamFall', new THREE.BufferAttribute(falls, 1));
-  geometry.setAttribute('streamPace', new THREE.BufferAttribute(paces, 1));
-  geometry.setAttribute('waterFlow', new THREE.BufferAttribute(flow, 2));
-  geometry.setAttribute('waterFlowShare', new THREE.BufferAttribute(flowShare, 1));
+  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 8);
+  geometry.setAttribute('streamAcross', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 0));
+  geometry.setAttribute('streamAlong', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 1));
+  geometry.setAttribute('streamEdge', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 2));
+  geometry.setAttribute('streamFall', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 3));
+  geometry.setAttribute('streamPace', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 4));
+  geometry.setAttribute('waterFlow', new THREE.InterleavedBufferAttribute(waterBuffer, 2, 5));
+  geometry.setAttribute('waterFlowShare', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 7));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
