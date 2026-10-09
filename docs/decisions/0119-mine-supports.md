@@ -32,3 +32,7 @@ This is built in three small pull requests:
 - Supports do nothing yet beyond looking right, until cave-ins land in the next pull request.
 - A support cannot be picked back up yet.
 - A tunnel that is later dug out around a support leaves it standing in the air. Cave-ins will need to decide what happens to such supports.
+
+## Update: made in Blender
+
+The placeholder boxes were replaced with a model made in Blender (`tools/art/mine_support.py`, `assets/buildables/mine-support.glb`, 260 triangles): two posts on sills, a cap beam that overhangs them, two corner braces and a few nails, in vertex colours. It is drawn as one instanced mesh. The hanging lantern (`tools/art/mine_lantern.py`, `assets/buildables/mine-lantern.glb`, 224 triangles) is modelled too, with its origin at the hook so it can hang from a post; it is only in the gallery (`?gallery=mine-lantern`) until the lantern step. No pack (Quaternius or otherwise) had a usable lantern or mine frame. Source: `assets/buildables/mine-timbers.blend`.

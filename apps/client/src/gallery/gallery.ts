@@ -47,6 +47,8 @@ import { createRenderer, type RendererSetup } from '../scene/renderer';
 import { preloadDugWalls } from '../scene/dug-walls';
 import { createDugEarth } from './dug-earth';
 import { createMineSupportsExhibit } from './mine-supports';
+import { createMineLantern, preloadMineLantern } from './mine-lantern';
+import { preloadMineSupport } from '../scene/mine-supports';
 import { createDugGround, createDugRamp } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
@@ -185,6 +187,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
   // A tunnel propped with mine supports (see mine-supports.ts).
   { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
+  // The hanging mine lantern, made in Blender (see mine-lantern.ts).
+  { name: 'mine-lantern', x: -17, z: 14, view: 1, create: createMineLantern },
   // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
   { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
   { name: 'dug-ramp', x: 0, z: 0, view: 6, alone: true, create: createDugRamp },
@@ -234,6 +238,8 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadFoxModel(),
     preloadIronAxe(),
     preloadDugWalls(),
+    preloadMineSupport(),
+    preloadMineLantern(),
   ]);
 
   const scene = new THREE.Scene();

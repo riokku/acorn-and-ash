@@ -254,6 +254,7 @@ import { createDigScene, type DigScene } from './scene/digging';
 import {
   createMineSupports,
   createSupportPreview,
+  preloadMineSupport,
   type MineSupports,
   type SupportPreview,
 } from './scene/mine-supports';
@@ -1103,6 +1104,7 @@ export class Game {
     // it takes to set up the renderer and reach the server to finish loading.
     void preloadPropModels();
     void preloadDugWalls();
+    void preloadMineSupport();
     void preloadFlowerModel();
     void preloadCampfireModels();
     void preloadItemModels();
@@ -2520,6 +2522,7 @@ export class Game {
         [
           preloadPropModels(),
           preloadDugWalls(),
+          preloadMineSupport(),
           preloadFlowerModel(),
           preloadCampfireModels(),
           preloadItemModels(),
