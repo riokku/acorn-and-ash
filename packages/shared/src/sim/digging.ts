@@ -71,7 +71,10 @@ export function planDig(
   return grid.solidCubes(scoop).length > 0 ? scoop : feet;
 }
 
-export type DigRefusal = 'home' | 'water' | 'built' | 'deep' | 'full';
+/** Why a swing of the shovel made no hole; `nothing` is for ground with nothing solid in the way. Order is the wire order. */
+export const DIG_REFUSALS = ['home', 'water', 'built', 'deep', 'full', 'nothing'] as const;
+export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing'>;
+export type DigRefusalReason = (typeof DIG_REFUSALS)[number];
 
 /** Why this slab may not be carved, or null if it may. */
 export function digRefusal(

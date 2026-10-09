@@ -46,6 +46,7 @@ export * from './sim/player';
 export * from './sim/actions';
 export * from './sim/inventory';
 export * from './sim/gear';
+export * from './sim/digging';
 export * from './sim/pickups';
 export * from './sim/gathering';
 export * from './sim/dropping';

@@ -234,7 +234,7 @@ import {
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
 import { DugGrid, type Dig } from '../world/digging';
-import { DIG_MAX_COUNT, digRefusal, digYield, planDig } from './digging';
+import { DIG_MAX_COUNT, digRefusal, digYield, planDig, type DigRefusalReason } from './digging';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -1510,6 +1510,8 @@ export class WorldSimulation {
   private readonly gatherEvents: number[] = [];
   private readonly collectionEvents: CollectedEvent[] = [];
   private readonly pickupRefusals: PickupRefusal[] = [];
+  /** Shovel swings that made no hole, for the digger to be told why. */
+  private readonly digRefusals: { netId: number; reason: DigRefusalReason }[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
   /** Patches gathered from, grown back or moved since this was last asked, by id. */
@@ -3148,6 +3150,10 @@ export class WorldSimulation {
     return this.collectionEvents.splice(0);
   }
 
+  drainDigRefusals(): { netId: number; reason: DigRefusalReason }[] {
+    return this.digRefusals.splice(0);
+  }
+
   drainPickupRefusals(): PickupRefusal[] {
     return this.pickupRefusals.splice(0);
   }
@@ -3771,10 +3777,16 @@ export class WorldSimulation {
     const dig = planDig(position, aimYaw, down, this.dug);
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
-    if (digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps) !== null)
+    const refusal = digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps);
+    if (refusal !== null) {
+      this.digRefusals.push({ netId: runtime.netId, reason: refusal });
       return false;
+    }
     const solid = this.dug.solidCubes(dig).length;
-    if (solid === 0) return false;
+    if (solid === 0) {
+      this.digRefusals.push({ netId: runtime.netId, reason: 'nothing' });
+      return false;
+    }
     const x = (dig.ix + 0.5) * 0.5;
     const z = (dig.iz + 0.5) * 0.5;
     const found = digYield(this.seed, dig, solid, this.collision.terrain.heightAt(x, z));

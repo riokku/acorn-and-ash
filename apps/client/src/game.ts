@@ -299,7 +299,7 @@ import {
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
-import { gearRefusalText } from './hud/gear-notices';
+import { digRefusalText, gearRefusalText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -1753,6 +1753,11 @@ export class Game {
         for (const entry of message.players) this.worn.set(entry.netId, entry.worn);
         this.applyWorn();
         this.options.hud.publish({ worn: this.worn.get(this.selfNetId) ?? {} });
+        break;
+      }
+      case 'digRefused': {
+        this.interactionNote = digRefusalText(message.reason);
+        this.interactionNoteUntil = performance.now() + 2800;
         break;
       }
       case 'gearRefused': {

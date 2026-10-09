@@ -1,6 +1,7 @@
 import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
 import {
+  encodeDigRefused,
   encodeGearRefused,
   encodeWorn,
   gearSlotFromIndex,
@@ -624,6 +625,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceDiscoveries(simulation);
     this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
+    this.announceDigRefusals(simulation);
     this.announceChopping(simulation);
     this.announceTreeChanges(simulation);
     this.announceCatching(simulation);
@@ -715,6 +717,18 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.drainCollectionEvents();
     for (let start = 0; start < events.length; start += MAX_COLLECTIONS_PER_MESSAGE) {
       this.broadcast(encodeCollected(events.slice(start, start + MAX_COLLECTIONS_PER_MESSAGE)));
+    }
+  }
+
+  /** A swing that dug nothing is only the digger's business. */
+  private announceDigRefusals(simulation: WorldSimulation): void {
+    const events = simulation.drainDigRefusals();
+    if (events.length === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      for (const event of events) {
+        if (event.netId === attachment?.netId) this.trySend(ws, encodeDigRefused(event.reason));
+      }
     }
   }
 
