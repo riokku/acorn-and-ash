@@ -46,9 +46,10 @@ export function inHomeClearing(x: number, z: number): boolean {
 /**
  * Where on the wall the mouse points, as far as the swing is concerned: nothing
  * in particular (`auto`), the roof overhead (`up`), the wall ahead at head
- * height (`head`) or at floor level (`level`).
+ * height (`head`), at floor level (`level`), or at the floor right by your
+ * feet (`under`).
  */
-export type DigAim = 'auto' | 'up' | 'head' | 'level';
+export type DigAim = 'auto' | 'up' | 'head' | 'level' | 'under';
 
 /** How many squares ahead a swing reaches for ground to dig, when the nearest is already open. */
 export const DIG_REACH = 2;
@@ -83,6 +84,16 @@ export function planDig(
       const cube = ahead(squares, aim === 'head' ? DIG_CUBE : 0);
       if (grid.solidCubes(cube).length > 0) return cube;
     }
+  }
+  if (aim === 'under') {
+    // Down under your own feet, half a metre of floor at a time: a step you can climb out of.
+    const underFeet: Dig = {
+      ix: Math.floor(position.x) * DIG_CUBE,
+      iy: voxelIndex(position.y + 0.01) - 1,
+      iz: Math.floor(position.z) * DIG_CUBE,
+      dir: CUBE_DIG,
+    };
+    if (grid.solidCubes(underFeet).length > 0) return underFeet;
   }
   if (aim === 'up') {
     // Straight overhead, in the square you stand in: the first solid cube above your head.

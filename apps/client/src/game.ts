@@ -3736,6 +3736,9 @@ export class Game {
     const hit = this.clickRaycaster.intersectObjects([...dug.cameraBlockers], false)[0];
     if (hit === undefined) return 'auto';
     const rise = hit.point.y - feet.y;
+    const beside = Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z);
+    // The floor at your feet: down under you.
+    if (rise < 0.3 && beside < 0.9) return 'under';
     if (rise > 1.2 && Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z) < 1.6) return 'up';
     return rise >= 0.9 ? 'head' : 'level';
   }
@@ -4250,7 +4253,9 @@ export class Game {
           ? PlayerButton.AimHead
           : digAim === 'level'
             ? PlayerButton.AimLevel
-            : 0);
+            : digAim === 'under'
+              ? PlayerButton.AimUnder
+              : 0);
     this.updateDigPreview(camera, player.motion.position, buttons, digAim);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
