@@ -93,6 +93,10 @@ import {
   PICKUP_REACH,
   ITEM_KINDS,
   DIG_SWING,
+  VOXEL,
+  digRefusal,
+  overlapsWater,
+  planDig,
   LIGHT_COMBO,
   STRIKE,
   TICK_SECONDS,
@@ -865,6 +869,12 @@ export class Game {
   /** Scratch objects for `aimTowardsClickPoint` and the build preview, reused rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
+  /** The cube a click with the shovel would dig, drawn as a faint box (see `updateDigPreview`). */
+  private digPreview: {
+    group: THREE.Group;
+    fill: THREE.MeshBasicMaterial;
+    edges: THREE.LineBasicMaterial;
+  } | null = null;
   /** The clearing's ground, which is flat at zero everywhere a piece can be placed. */
 
   private enteringWorld = false;
@@ -3636,6 +3646,77 @@ export class Game {
   }
 
   /**
+   * Lights up the ground a click would dig, while the shovel is out: a yellow
+   * cube where a swing would land, or a red one where digging is not allowed.
+   * It asks the same rules the server does (`planDig`, `digRefusal`), for the
+   * way the mouse points now, so what is lit is what the click takes.
+   */
+  private updateDigPreview(
+    camera: FollowCamera,
+    feet: Readonly<Vec3>,
+    buttons: number,
+    aimsUp: boolean,
+  ): void {
+    const dug = this.digScene;
+    const collision = this.collision;
+    const preview = this.digPreview;
+    const wanted =
+      dug !== null && collision !== null && this.isEquipped('shovel') && this.space === OUTDOORS;
+    if (!wanted) {
+      if (preview !== null) preview.group.visible = false;
+      return;
+    }
+    let yaw = this.aimYaw ?? this.localPlayer?.motion.facingYaw ?? 0;
+    const pointer = this.controls?.pointerPosition() ?? null;
+    if (pointer !== null) {
+      this.clickNdc.set(
+        (pointer.x / window.innerWidth) * 2 - 1,
+        -(pointer.y / window.innerHeight) * 2 + 1,
+      );
+      this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+      yaw = clickAimYaw(this.clickRaycaster.ray, feet, feet.y, []) ?? yaw;
+    }
+    const dig = planDig(feet, yaw, (buttons & PlayerButton.Charge) !== 0, dug.grid, aimsUp);
+    const refusal = digRefusal(
+      dig,
+      dug.grid,
+      collision.terrain,
+      (x, z, margin) => overlapsWater(this.keepOutWater, x, z, margin),
+      this.builtProps,
+    );
+    if (refusal === null && dug.grid.solidCubes(dig).length === 0) {
+      if (preview !== null) preview.group.visible = false;
+      return;
+    }
+    const lit = preview ?? this.makeDigPreview();
+    if (lit.group.parent === null) this.outdoors.add(lit.group);
+    lit.group.visible = true;
+    // A cube is two half-metre cells each way, starting at its corner cell.
+    lit.group.position.set((dig.ix + 1) * VOXEL, (dig.iy + 1) * VOXEL, (dig.iz + 1) * VOXEL);
+    lit.fill.color.set(refusal === null ? 0xffd27a : 0xff5a4a);
+    lit.edges.color.set(refusal === null ? 0xffe9b0 : 0xff8a7a);
+  }
+
+  private makeDigPreview(): NonNullable<Game['digPreview']> {
+    const group = new THREE.Group();
+    group.renderOrder = 10;
+    const box = new THREE.BoxGeometry(1.02, 1.02, 1.02);
+    const fill = new THREE.MeshBasicMaterial({
+      color: 0xffd27a,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    });
+    const edges = new THREE.LineBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.9 });
+    group.add(
+      new THREE.Mesh(box, fill),
+      new THREE.LineSegments(new THREE.EdgesGeometry(box), edges),
+    );
+    this.digPreview = { group, fill, edges };
+    return this.digPreview;
+  }
+
+  /**
    * Whether the mouse points at the roof of a hole right overhead, so that a
    * swing of the shovel digs up there instead of ahead.
    */
@@ -4157,10 +4238,12 @@ export class Game {
       this.fishingPhase !== null ||
       this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)
         .castInstead;
+    const aimsUp = this.pointerAimsUp(camera, player.motion.position);
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0) |
-      (this.pointerAimsUp(camera, player.motion.position) ? PlayerButton.AimUp : 0);
+      (aimsUp ? PlayerButton.AimUp : 0);
+    this.updateDigPreview(camera, player.motion.position, buttons, aimsUp);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&
