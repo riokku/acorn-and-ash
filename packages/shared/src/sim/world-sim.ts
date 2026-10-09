@@ -213,7 +213,7 @@ import {
 } from '../world/home';
 import { BOAT_ICE_STEP_OUT } from '../world/boat';
 import { LAKE, lakeDepthAt } from '../world/lake';
-import { STREAM_KEEP_OUT } from '../world/stream';
+import { STREAM, STREAM_KEEP_OUT } from '../world/stream';
 import {
   beachedBoat,
   boatSalvage,
@@ -1642,6 +1642,7 @@ export class WorldSimulation {
       PLAYABLE_HALF_EXTENT,
       LAKE,
       true,
+      STREAM,
     );
     this.dug = new DugGrid(terrain);
     this.collision.dug = this.dug;

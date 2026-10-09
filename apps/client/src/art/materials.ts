@@ -9,6 +9,12 @@ import {
   normalWorld,
   positionWorld,
   sin,
+  cos,
+  exp,
+  normalView,
+  normalWorldGeometry,
+  positionViewDirection,
+  cameraViewMatrix,
   smoothstep,
   texture,
   time,
@@ -21,6 +27,37 @@ import type { WaterCircle } from '@acorn/shared';
 
 import { seasonUniforms } from './season-uniforms';
 import { artTexture, type ArtTextureId } from './textures';
+import { waterRippleUniforms } from './water-uniforms';
+
+/** Small surface waves plus expanding, damped waves left by moving feet. */
+function reactiveWater(
+  material: THREE.MeshStandardNodeMaterial,
+  surface: THREE.Node<'vec3'>,
+): void {
+  let slopeX = cos(positionWorld.x.mul(1.7).add(time.mul(0.65))).mul(0.018);
+  let slopeZ = cos(positionWorld.z.mul(2.1).sub(time.mul(0.47))).mul(0.016);
+  let crest: THREE.Node<'float'> = float(0);
+  for (const ripple of waterRippleUniforms) {
+    const offset = positionWorld.xz.sub(ripple.xy);
+    const distance = max(offset.length(), 0.001);
+    const front = distance.sub(ripple.z.mul(1.6).add(0.18));
+    const envelope = exp(front.mul(front).mul(-5))
+      .mul(max(float(0), float(1).sub(ripple.z.div(3))))
+      .mul(ripple.w);
+    const wave = sin(front.mul(9));
+    const gradient = cos(front.mul(9)).mul(9).sub(wave.mul(front).mul(10)).mul(envelope).mul(0.035);
+    slopeX = slopeX.add(offset.x.div(distance).mul(gradient));
+    slopeZ = slopeZ.add(offset.y.div(distance).mul(gradient));
+    crest = crest.add(wave.abs().mul(envelope));
+  }
+  const grazing = float(1).sub(normalView.dot(positionViewDirection).abs()).pow(3);
+  material.colorNode = mix(surface, color(0x98bac9), grazing.mul(0.22)).add(
+    color(0xd7eef0).mul(min(crest, 1)).mul(0.12),
+  );
+  material.normalNode = normalWorldGeometry
+    .add(vec3(slopeX.negate(), 0, slopeZ.negate()))
+    .transformDirection(cameraViewMatrix);
+}
 
 /**
  * The materials that wear the painted textures (see decision 0053).
@@ -165,7 +202,7 @@ function stillWaterSurface(circles: readonly WaterCircle[], look: WaterLook = {}
   const shallows = color(0x4f9a8e);
   const deep = color(deepColour);
   let surface = mix(shallows, deep, depth);
-  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.16));
+  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.08));
   const lapping = smoothstep(0.28, 0.02, inside.add(first.mul(0.08)));
   surface = mix(surface, color(0xdfeee6), lapping.mul(0.55));
   return surface;
@@ -176,7 +213,7 @@ export function createWaterMaterial(
   look: WaterLook = {},
 ): THREE.MeshStandardNodeMaterial {
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.12, metalness: 0 });
-  material.colorNode = stillWaterSurface(circles, look);
+  reactiveWater(material, stillWaterSurface(circles, look));
   material.name = 'painted-water';
   return material;
 }
@@ -216,7 +253,7 @@ export function createStreamMaterial(
   const shallows = color(0x62ad9c);
   const middle = color(0x3b7f93);
   let surface = mix(middle, shallows, smoothstep(0.1, 0.95, edge));
-  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.2));
+  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.1));
   const lapping = smoothstep(0.72, 0.98, edge.add(first.mul(0.08)));
   surface = mix(surface, color(0xe4f1ea), lapping.mul(0.5));
   const foam = fall.mul(smoothstep(0.1, 0.7, streaks.mul(0.7).add(0.4)));
@@ -235,7 +272,7 @@ export function createStreamMaterial(
   }
 
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
-  material.colorNode = surface;
+  reactiveWater(material, surface);
   // Clear at the very edge, so the bank shows through and there is no hard line.
   material.opacityNode = smoothstep(1.02, 0.78, edge);
   material.transparent = true;

@@ -12,7 +12,7 @@ Chris asked for the lake's reeds along the riverbanks too, and for sloughs with 
 - Give each mouth a broad opening, about eight metres wide. Both water materials treat the join as continuous water, suppressing the pale shoreline across the opening while preserving it along the remaining banks.
 - Blend the river into the slough's colours and ripples over five metres near each mouth. Both surfaces use the same water colouring there so no abrupt blue seam remains. Ripples share the river's downstream direction and speed at the join, then gradually ease into the slough's slow drift over seven metres.
 - Slough surfaces and floors follow the river's local downhill grade, meeting its exact height at each mouth. Lily pads tilt with that surface; shore plants and stones use its height too.
-- Sloughs and lily pads are scenery only: no harvesting, fishing, swimming, boating or seasonal ice behavior is added. Riverbank scenery reeds do not add mature gatherable beds.
+- Sloughs and lily pads are scenery only: no harvesting, fishing, swimming or boating behavior is added. Seasonal ice was subsequently added in decision 0116. Riverbank scenery reeds do not add mature gatherable beds.
 
 ## Consequences
 
