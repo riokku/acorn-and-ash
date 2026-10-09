@@ -3764,7 +3764,10 @@ export class WorldSimulation {
     aimYaw: number,
     down: boolean,
   ): boolean {
-    const dig = planDig(position, aimYaw, down);
+    let dig = planDig(position, aimYaw, down);
+    // On level ground the slab at the feet is all air, so a plain swing would
+    // do nothing at all: start half a metre lower, a first scoop to step into.
+    if (this.dug.solidCubes(dig).length === 0) dig = { ...dig, iy: dig.iy - 1 };
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
     if (digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps) !== null)
