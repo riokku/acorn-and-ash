@@ -119,12 +119,24 @@ export function createLakeScene(
 
   const plants = createShorePlants(lake, excludePlantsAt, surfaceHeightAt);
   group.add(plants.group);
+  const plantMaterials = waterPlantMaterials();
+  const floatingPlants = new Set([
+    plantMaterials.pad,
+    plantMaterials.padUnder,
+    plantMaterials.petal,
+    plantMaterials.petalPink,
+    plantMaterials.heart,
+  ]);
 
   return {
     group,
     setFrozen: (frozen) => {
       for (const mesh of water) mesh.visible = !frozen;
       for (const mesh of ice) mesh.visible = frozen;
+      for (const child of plants.group.children) {
+        if (child instanceof THREE.Mesh && floatingPlants.has(child.material as THREE.Material))
+          child.visible = !frozen;
+      }
     },
     dispose: () => {
       for (const geometry of geometries) geometry.dispose();

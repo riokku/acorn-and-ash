@@ -18,6 +18,7 @@ import {
   streamWaterHalfWidthAt,
 } from '../src/world/stream';
 import { createWildernessTerrain } from '../src/world/terrain';
+import { createCollisionWorld, setLakeFrozen } from '../src/collision/capsule';
 import { buildEncounterSites } from '../src/world/encounters';
 import { buildTestClearing } from '../src/world/clearing';
 import { buildWilderness } from '../src/world/wilderness';
@@ -38,6 +39,29 @@ function pointAlong(along: number): { x: number; z: number } {
 }
 
 describe('the stream', () => {
+  it('raises the shared walking surface to river and slough ice, and restores the floor on thaw', () => {
+    const collision = createCollisionWorld(terrain, [], undefined, LAKE, false, STREAM);
+    setLakeFrozen(collision, true);
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      expect(collision.terrain.heightAt(pool.x, pool.z)).toBeCloseTo(
+        sloughSurfaceAt(STREAM, slough, pool.x, pool.z) + 0.05,
+        6,
+      );
+    }
+    const river = pointAlong(STREAM.length * 0.6);
+    const at = nearestOnStream(STREAM, river.x, river.z, 1)!;
+    expect(collision.terrain.heightAt(river.x, river.z)).toBeCloseTo(
+      streamSurfaceAt(STREAM, at.along) + 0.05,
+      6,
+    );
+    setLakeFrozen(collision, false);
+    expect(collision.terrain.heightAt(river.x, river.z)).toBe(terrain.heightAt(river.x, river.z));
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      expect(collision.terrain.heightAt(pool.x, pool.z)).toBe(terrain.heightAt(pool.x, pool.z));
+    }
+  });
   it('gives each visual slough a shallow floor and keeps props and building out of its water', () => {
     expect(STREAM.sloughs).toHaveLength(6);
     for (const slough of STREAM.sloughs) {

@@ -16,7 +16,7 @@ import {
   type Terrain,
 } from '@acorn/shared';
 
-import { createStreamMaterial, paintedMaterial } from '../art/materials';
+import { createIceMaterial, createStreamMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { createLakeScene } from './lake';
@@ -43,7 +43,7 @@ const FALL_PACE = 2.6;
 export function createStreamScene(
   stream: Stream,
   terrain: Terrain,
-): { group: THREE.Group; dispose(): void } {
+): { group: THREE.Group; setFrozen(frozen: boolean): void; dispose(): void } {
   const group = new THREE.Group();
   group.name = 'stream';
 
@@ -68,6 +68,13 @@ export function createStreamScene(
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
   group.add(mesh);
+  const iceMaterial = createIceMaterial();
+  const ice = new THREE.Mesh(ribbon, iceMaterial);
+  ice.name = 'stream-ice';
+  ice.position.y = 0.05;
+  ice.receiveShadow = true;
+  ice.visible = false;
+  group.add(ice);
 
   const stones = createStones(stream, terrain);
   group.add(stones.group);
@@ -103,9 +110,15 @@ export function createStreamScene(
 
   return {
     group,
+    setFrozen: (frozen) => {
+      mesh.visible = !frozen;
+      ice.visible = frozen;
+      for (const slough of sloughs) slough.setFrozen(frozen);
+    },
     dispose: () => {
       ribbon.dispose();
       material.dispose();
+      iceMaterial.dispose();
       stones.dispose();
       reeds.dispose();
       for (const slough of sloughs) slough.dispose();

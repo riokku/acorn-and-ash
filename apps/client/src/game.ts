@@ -27,6 +27,15 @@ import {
 import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
 import { createSnowFootprints } from './scene/snow-footprints';
+import { WaterWake } from './scene/water-wake';
+import { waterRippleUniforms } from './art/water-uniforms';
+import {
+  lakeDepthAt,
+  isInStream,
+  nearestOnStream,
+  sloughSurfaceAt,
+  streamSurfaceAt,
+} from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
 import {
   NO_MEAL,
@@ -907,6 +916,7 @@ export class Game {
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
   private lakeScene: ReturnType<typeof createLakeScene> | null = null;
+  private readonly waterWake = new WaterWake();
   private streamScene: ReturnType<typeof createStreamScene> | null = null;
   /** Ground dug out with the shovel (decision 0114), and every dig heard of so far, kept for a world still loading. */
   private digScene: DigScene | null = null;
@@ -1617,6 +1627,8 @@ export class Game {
     this.decorModels.length = 0;
     this.wildfireArt?.dispose();
     this.footprints?.dispose();
+    this.waterWake.clear();
+    for (const ripple of waterRippleUniforms) ripple.value.set(0, 0, 10, 0);
     this.weatherArt?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
@@ -2491,6 +2503,7 @@ export class Game {
       const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
       this.footprints?.dispose();
+      this.waterWake.clear();
       this.footprints = createSnowFootprints((x, z) =>
         (this.collision?.terrain ?? terrain).heightAt(x, z),
       );
@@ -2567,6 +2580,7 @@ export class Game {
       this.outdoors.add(this.lakeScene.group);
       this.streamScene?.dispose();
       this.streamScene = createStreamScene(STREAM, terrain);
+      this.streamScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.streamScene.group);
       this.keepOutWater = [...clearing.water, ...LAKE.basin, ...STREAM_KEEP_OUT];
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
@@ -2588,6 +2602,7 @@ export class Game {
         PLAYABLE_HALF_EXTENT,
         LAKE,
         true,
+        STREAM,
       );
       this.collision = collision;
       collision.dug = this.digScene.grid;
@@ -3032,6 +3047,7 @@ export class Game {
     this.updateTargetSelection(controls);
     if (this.collision !== null)
       this.collision.movementScale = this.currentWeather().kind === 'blizzard' ? BLIZZARD_SPEED : 1;
+    this.waterWake.update(deltaSeconds);
     this.updateLocalPlayer(deltaSeconds, camera);
     const forestActive = this.playing && !document.hidden;
     this.forestAudio.update(forestActive);
@@ -3060,6 +3076,10 @@ export class Game {
         this.currentWeather().wind,
       );
     this.updateRemotePlayers(deltaSeconds);
+    for (let index = 0; index < waterRippleUniforms.length; index++) {
+      const ripple = this.waterWake.ripples[index]!;
+      waterRippleUniforms[index]!.value.set(ripple.x, ripple.z, ripple.age, ripple.strength);
+    }
     // After everybody, ours included, has been placed: boats of those who stopped rowing go.
     this.rowingBoats.sweep();
     this.updateRemoteAnimals(deltaSeconds);
@@ -3638,7 +3658,28 @@ export class Game {
   private applyLakeIce(frozen: boolean): void {
     this.lakeFrozen = frozen;
     this.lakeScene?.setFrozen(frozen);
+    this.streamScene?.setFrozen(frozen);
+    if (frozen) this.waterWake.clear();
     if (this.collision !== null) setLakeFrozen(this.collision, frozen);
+  }
+
+  private openWaterAt(x: number, z: number): number | null {
+    if (this.space !== OUTDOORS) return null;
+    if (!this.lakeFrozen) {
+      for (const slough of STREAM.sloughs) {
+        if (lakeDepthAt(slough, x, z) > 0) return sloughSurfaceAt(STREAM, slough, x, z);
+      }
+      if (isInStream(STREAM, x, z)) {
+        const spot = nearestOnStream(STREAM, x, z, 6)!;
+        return streamSurfaceAt(STREAM, spot.along);
+      }
+      if (lakeDepthAt(LAKE, x, z) > 0) return LAKE.level;
+    }
+    return this.clearing?.water.some(
+      (circle) => Math.hypot(x - circle.x, z - circle.z) < circle.radius,
+    )
+      ? 0.03
+      : null;
   }
 
   /** Where the foot of a built piece sits: on the ground, or for a boat on the lake's surface. */
@@ -4325,6 +4366,14 @@ export class Game {
         : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
     );
     const speed = Math.hypot(velocity.x, velocity.z);
+    this.waterWake.step(
+      this.selfNetId,
+      position.x,
+      position.y,
+      position.z,
+      rowing ? 0 : speed,
+      this.openWaterAt(position.x, position.z),
+    );
     if (rowing)
       this.rowingBoats.place(
         this.selfNetId,
@@ -5074,6 +5123,14 @@ export class Game {
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
       const rowing = action.kind === ActionKind.Row;
+      this.waterWake.step(
+        netId,
+        pose.x,
+        pose.y,
+        pose.z,
+        rowing ? 0 : pose.speed,
+        this.openWaterAt(pose.x, pose.z),
+      );
       this.footprints?.step(
         netId + 1,
         pose.x,

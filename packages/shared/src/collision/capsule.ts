@@ -17,6 +17,13 @@ import {
 } from '../world/lake';
 import { voxelIndex, type DugGrid } from '../world/digging';
 import type { Terrain } from '../world/terrain';
+import {
+  isInStream,
+  nearestOnStream,
+  sloughSurfaceAt,
+  streamSurfaceAt,
+  type Stream,
+} from '../world/stream';
 
 /**
  * The invisible wall along the lake's shore: it keeps anyone on foot out of
@@ -123,6 +130,7 @@ export function createCollisionWorld(
    * rewritten wholesale should leave it off.
    */
   indexStatic = false,
+  stream: Stream | null = null,
 ): CollisionWorld {
   const broadphase = indexStatic ? buildBroadphase(colliders) : null;
   if (lake === null) {
@@ -130,7 +138,7 @@ export function createCollisionWorld(
   }
   const wall: LakeWall = { lake, up: true };
   return {
-    terrain: withLakeIce(terrain, wall),
+    terrain: withLakeIce(terrain, wall, stream),
     colliders: [...colliders],
     boundsHalfExtent,
     lakeWall: wall,
@@ -143,12 +151,23 @@ export function createCollisionWorld(
  * is, the ground is the top of the ice (or the island, where that is higher).
  * Everywhere else, and whenever the wall is up, it is the ground as it was.
  */
-function withLakeIce(ground: Terrain, wall: LakeWall): Terrain {
+function withLakeIce(ground: Terrain, wall: LakeWall, stream: Stream | null): Terrain {
   return {
     kind: ground.kind,
     heightAt: (x, z) => {
       const height = ground.heightAt(x, z);
-      if (wall.up || !isNearLake(wall.lake, x, z)) return height;
+      if (wall.up) return height;
+      if (stream !== null) {
+        for (const slough of stream.sloughs) {
+          if (basinDepthAt(slough, x, z) > 0)
+            return Math.max(height, sloughSurfaceAt(stream, slough, x, z) + 0.05);
+        }
+        if (isInStream(stream, x, z)) {
+          const spot = nearestOnStream(stream, x, z, 6)!;
+          return Math.max(height, streamSurfaceAt(stream, spot.along) + 0.05);
+        }
+      }
+      if (!isNearLake(wall.lake, x, z)) return height;
       if (basinDepthAt(wall.lake, x, z) <= 0) return height;
       return Math.max(height, lakeIceHeight(wall.lake));
     },
