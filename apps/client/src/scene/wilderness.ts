@@ -173,7 +173,7 @@ export function buildWildernessScene(
   const treeDraws: Array<{ props: PlacedProp[]; near: PropPart[]; far: PropPart[] }> = [];
   for (const [kindId, props] of byKind) {
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length);
+    const parts = createPropMeshes(kind, props.length, false, terrain);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);
@@ -181,7 +181,7 @@ export function buildWildernessScene(
     props.forEach((prop, index) => placeInstance(parts, index, prop));
     for (const part of parts) part.mesh.instanceMatrix.needsUpdate = true;
     if (kind.shape.family === 'tree') {
-      const far = createPropMeshes(kind, props.length, true);
+      const far = createPropMeshes(kind, props.length, true, terrain);
       for (const part of far) {
         part.mesh.count = 0;
         group.add(part.mesh);
@@ -197,7 +197,7 @@ export function buildWildernessScene(
 
   // Stumps wait in one set of meshes, packed down to however many trees are
   // down at the moment.
-  const stumpParts = createPropMeshes(PROP_KINDS.stump, Math.max(1, treeById.size));
+  const stumpParts = createPropMeshes(PROP_KINDS.stump, Math.max(1, treeById.size), false, terrain);
   for (const part of stumpParts) {
     part.mesh.count = 0;
     group.add(part.mesh);
