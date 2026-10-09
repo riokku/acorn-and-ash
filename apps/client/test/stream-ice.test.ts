@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { expect, it } from 'vitest';
-import { STREAM, createWildernessTerrain } from '@acorn/shared';
+import { STREAM, createWildernessTerrain, streamWaterDepthAt } from '@acorn/shared';
 import { createStreamScene } from '../src/scene/stream';
 import { waterPlantMaterials } from '../src/scene/water-plants';
 
@@ -49,6 +49,10 @@ it('fits the river water into WebGPU minimum vertex-buffer limits and preserves 
   for (let vertex = 0; vertex < positions.count; vertex++) {
     expect(Math.hypot(flow.getX(vertex), flow.getY(vertex))).toBeCloseTo(pace.getX(vertex), 5);
     expect(geometry.getAttribute('waterFlowShare').getX(vertex)).toBe(1);
+    expect(geometry.getAttribute('streamDepth').getX(vertex)).toBeCloseTo(
+      streamWaterDepthAt(STREAM, positions.getX(vertex), positions.getZ(vertex)),
+      5,
+    );
     expect(edge.getX(vertex)).toBeGreaterThanOrEqual(0);
     expect(edge.getX(vertex)).toBeLessThanOrEqual(1);
     const middle = Math.floor(vertex / 7) * 7 + 3;

@@ -213,6 +213,7 @@ import {
 } from '../world/home';
 import { BOAT_ICE_STEP_OUT } from '../world/boat';
 import { LAKE, lakeDepthAt } from '../world/lake';
+import { navigableWaterSurfaceAt } from '../world/navigable-water';
 import { STREAM, STREAM_KEEP_OUT } from '../world/stream';
 import {
   beachedBoat,
@@ -223,6 +224,7 @@ import {
   landingFrom,
   riderFacingFor,
   stepBoat,
+  driftBoat,
 } from './rowing';
 import {
   isReedPatch,
@@ -610,8 +612,7 @@ export interface BuiltProp {
   readonly kind: BuildableKindId;
   /**
    * Where it stands. Fixed for everything except a rowboat, which is carried
-   * across the lake by whoever rows it and stays wherever it was left (see
-   * decision 0093) - only `WorldSimulation.carryBoat` ever changes these.
+   * by its rider or the river current (see decisions 0093 and 0121).
    */
   x: number;
   z: number;
@@ -1565,6 +1566,7 @@ export class WorldSimulation {
   private readonly buildEvents: BuildEvent[] = [];
   /** Rowboats somebody climbed into or out of since this was last asked, by built-prop id. */
   private readonly boatChanges = new Set<number>();
+  private readonly driftingBoats = new Set<number>();
   private readonly brokenBoats: number[] = [];
   /** Whole days the calendar is pushed on, to look at a season while testing (decision 0095). */
   private calendarShiftMs = 0;
@@ -2472,6 +2474,7 @@ export class WorldSimulation {
         this.queueHungerEvent(runtime, null);
       });
 
+    this.driftUnoccupiedBoats();
     this.stepAnimals();
     this.refreshFighters();
     this.raids.step(this.tick, isNight(dayProgress(nowMs)));
@@ -4060,7 +4063,7 @@ export class WorldSimulation {
     runtime.interactSpent = true;
     this.boatChanges.add(nearest.id);
     motion.position.x = nearest.x;
-    motion.position.y = LAKE.level;
+    motion.position.y = navigableWaterSurfaceAt(nearest.x, nearest.z);
     motion.position.z = nearest.z;
     motion.velocity.x = 0;
     motion.velocity.y = 0;
@@ -4132,7 +4135,7 @@ export class WorldSimulation {
     return runtime.boatId === null ? undefined : this.builtPropsById.get(runtime.boatId);
   }
 
-  /** Nobody is rowing this boat any more: it stays where it is. */
+  /** Nobody is rowing this boat any more: the water may carry it downstream. */
   private releaseBoat(runtime: PlayerRuntime, boat: BuiltProp): void {
     delete boat.rower;
     runtime.boatId = null;
@@ -4209,6 +4212,8 @@ export class WorldSimulation {
     this.lakeUnchecked = false;
     const frozen = lakeIsFrozen(this.calendar());
     if (frozen === this.lakeFrozen) return;
+    for (const id of this.driftingBoats) this.boatChanges.add(id);
+    this.driftingBoats.clear();
     this.lakeFrozen = frozen;
     this.lakeFreezeChange = frozen;
     setLakeFrozen(this.collision, frozen);
@@ -4243,7 +4248,19 @@ export class WorldSimulation {
   private washAshore(runtime: PlayerRuntime): void {
     const position = runtime.entity.get(Position);
     if (position === undefined || runtime.space !== OUTDOORS) return;
-    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) return;
+    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) {
+      const safe = {
+        x: position.x,
+        y: this.collision.terrain.heightAt(position.x, position.z),
+        z: position.z,
+      };
+      if (resolveCapsule(safe, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision)) {
+        safe.y = this.collision.terrain.heightAt(safe.x, safe.z);
+        runtime.entity.set(Position, safe);
+        runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
+      }
+      return;
+    }
     const shore = landingBeside(position.x, position.z);
     runtime.entity.set(Position, {
       x: shore.x,
@@ -4258,6 +4275,19 @@ export class WorldSimulation {
     const change = this.lakeFreezeChange;
     this.lakeFreezeChange = null;
     return change;
+  }
+
+  /** Move free hulls every tick; publish/persist positions once a second. */
+  private driftUnoccupiedBoats(): void {
+    if (this.lakeFrozen) return;
+    for (const boat of this.builtProps) {
+      if (boat.kind !== 'rowboat' || boat.rower !== undefined || boat.locked === true) continue;
+      if (driftBoat(boat, TICK_SECONDS)) this.driftingBoats.add(boat.id);
+    }
+    if (this.tick % TICK_HZ === 0) {
+      for (const id of this.driftingBoats) this.boatChanges.add(id);
+      this.driftingBoats.clear();
+    }
   }
 
   /**

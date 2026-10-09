@@ -1054,8 +1054,8 @@ export class World extends DurableObject<WorldEnv> {
   /**
    * Somebody climbed into or out of a rowboat: tell everybody, so it is drawn
    * under its rider or moored where it was left, and write down where it is.
-   * Only these moments are sent: while a boat is being rowed, its rider's own
-   * position in every snapshot is where it is (see decision 0093).
+   * Unoccupied river boats also publish their drift once a second. While
+   * occupied, the rider's snapshots carry the boat (see decision 0093).
    */
   private announceBoats(simulation: WorldSimulation): void {
     const boats = simulation.drainBoatChanges();

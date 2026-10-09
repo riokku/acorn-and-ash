@@ -278,6 +278,13 @@ export function createStreamMaterial(
     surface = mix(surface, joined, smoothstep(-5, 0, depthInPond(sloughs)));
   }
 
+  // The same sampled depth that blocks wading darkens the actual pools.
+  surface = mix(
+    surface,
+    color(0x163e52),
+    smoothstep(0.65, 1.8, attribute('streamDepth', 'float')).mul(0.8),
+  );
+
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
   reactiveWater(material, surface);
   // Clear at the very edge, so the bank shows through and there is no hard line.

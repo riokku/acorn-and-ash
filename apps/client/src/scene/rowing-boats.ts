@@ -1,6 +1,6 @@
 import type * as THREE from 'three/webgpu';
 
-import { BOAT_ROW_SPEED, LAKE, boatYawFor } from '@acorn/shared';
+import { BOAT_ROW_SPEED, navigableWaterSurfaceAt, boatYawFor } from '@acorn/shared';
 
 import { createRowboat, type Rowboat } from './rowboat';
 
@@ -45,7 +45,7 @@ export class RowingBoats {
       this.drawn.set(netId, entry);
     }
     entry.seen = true;
-    entry.boat.group.position.set(x, LAKE.level, z);
+    entry.boat.group.position.set(x, navigableWaterSurfaceAt(x, z), z);
     entry.boat.group.rotation.y = boatYawFor(facingYaw);
     const pulling = speed >= GLIDING_BELOW;
     if (pulling) {
