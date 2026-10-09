@@ -234,7 +234,14 @@ import {
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
 import { DugGrid, type Dig } from '../world/digging';
-import { DIG_MAX_COUNT, digRefusal, digYield, planDig, type DigRefusalReason } from './digging';
+import {
+  DIG_MAX_COUNT,
+  digRefusal,
+  digYield,
+  planDig,
+  type DigAim,
+  type DigRefusalReason,
+} from './digging';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -938,8 +945,8 @@ interface PlayerRuntime {
    * click.
    */
   swingWasHeld: boolean;
-  /** Whether the mouse was pointing up at a roof in the last input: a shovel swing digs overhead. */
-  aimingUp: boolean;
+  /** Where the mouse was pointing on the wall in the last input: what a shovel swing digs. */
+  digAim: DigAim;
   /**
    * Whether interact was down in the last input - same idea as `swingWasHeld`.
    * Picking up, gathering and digging up a cache are all happy with a held
@@ -1855,7 +1862,7 @@ export class WorldSimulation {
       ),
       swingCooldownTicks: 0,
       swingWasHeld: false,
-      aimingUp: false,
+      digAim: 'auto',
       interactWasHeld: false,
       pickupRefused: false,
       pendingBuild: null,
@@ -2277,7 +2284,13 @@ export class WorldSimulation {
             const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
-            runtime.aimingUp = isHeld(input, PlayerButton.AimUp);
+            runtime.digAim = isHeld(input, PlayerButton.AimUp)
+              ? 'up'
+              : isHeld(input, PlayerButton.AimHead)
+                ? 'head'
+                : isHeld(input, PlayerButton.AimLevel)
+                  ? 'level'
+                  : 'auto';
             // Reaching for things is only for somebody free to do it: not
             // mid-swing, mid-roll, down, or sat down.
             if (isFreeToInteract(runtime.action)) {
@@ -3778,7 +3791,7 @@ export class WorldSimulation {
     aimYaw: number,
     down: boolean,
   ): boolean {
-    const dig = planDig(position, aimYaw, down, this.dug, runtime.aimingUp);
+    const dig = planDig(position, aimYaw, down, this.dug, runtime.digAim);
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
     const refusal = digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps);

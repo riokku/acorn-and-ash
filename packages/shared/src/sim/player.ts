@@ -46,6 +46,10 @@ export const PlayerButton = {
   Sit: 1 << 8,
   /** Set while the mouse points at the roof of a hole overhead, so a swing of the shovel digs up. */
   AimUp: 1 << 9,
+  /** Set while the mouse points at the wall ahead at head height, so a swing of the shovel digs the cube above the floor. */
+  AimHead: 1 << 10,
+  /** Set while the mouse points at the wall ahead at floor level, so a swing digs straight ahead, reaching one cube further if the first is open. */
+  AimLevel: 1 << 11,
 } as const;
 
 /**

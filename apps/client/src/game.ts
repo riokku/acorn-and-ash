@@ -93,6 +93,7 @@ import {
   PICKUP_REACH,
   ITEM_KINDS,
   DIG_SWING,
+  type DigAim,
   VOXEL,
   digRefusal,
   overlapsWater,
@@ -3655,7 +3656,7 @@ export class Game {
     camera: FollowCamera,
     feet: Readonly<Vec3>,
     buttons: number,
-    aimsUp: boolean,
+    aim: DigAim,
   ): void {
     const dug = this.digScene;
     const collision = this.collision;
@@ -3676,7 +3677,7 @@ export class Game {
       this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
       yaw = clickAimYaw(this.clickRaycaster.ray, feet, feet.y, []) ?? yaw;
     }
-    const dig = planDig(feet, yaw, (buttons & PlayerButton.Charge) !== 0, dug.grid, aimsUp);
+    const dig = planDig(feet, yaw, (buttons & PlayerButton.Charge) !== 0, dug.grid, aim);
     const refusal = digRefusal(
       dig,
       dug.grid,
@@ -3717,25 +3718,26 @@ export class Game {
   }
 
   /**
-   * Whether the mouse points at the roof of a hole right overhead, so that a
-   * swing of the shovel digs up there instead of ahead.
+   * Where the mouse points inside a hole, as far as a swing of the shovel
+   * cares: at the roof right overhead (dig up), at the wall ahead at head
+   * height, or at floor level. Nothing in particular is `auto`.
    */
-  private pointerAimsUp(camera: FollowCamera, feet: Readonly<Vec3>): boolean {
+  private pointerDigAim(camera: FollowCamera, feet: Readonly<Vec3>): DigAim {
     const dug = this.digScene;
-    if (dug === null || !this.isEquipped('shovel') || this.space !== OUTDOORS) return false;
-    if (dug.depthAt(feet.x, feet.z, feet.y) < 0.4) return false;
+    if (dug === null || !this.isEquipped('shovel') || this.space !== OUTDOORS) return 'auto';
+    if (dug.depthAt(feet.x, feet.z, feet.y) < 0.4) return 'auto';
     const pointer = this.controls?.pointerPosition() ?? null;
-    if (pointer === null) return false;
+    if (pointer === null) return 'auto';
     this.clickNdc.set(
       (pointer.x / window.innerWidth) * 2 - 1,
       -(pointer.y / window.innerHeight) * 2 + 1,
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
     const hit = this.clickRaycaster.intersectObjects([...dug.cameraBlockers], false)[0];
-    if (hit === undefined) return false;
-    return (
-      hit.point.y > feet.y + 1.2 && Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z) < 1.6
-    );
+    if (hit === undefined) return 'auto';
+    const rise = hit.point.y - feet.y;
+    if (rise > 1.2 && Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z) < 1.6) return 'up';
+    return rise >= 0.9 ? 'head' : 'level';
   }
 
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
@@ -4238,12 +4240,18 @@ export class Game {
       this.fishingPhase !== null ||
       this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)
         .castInstead;
-    const aimsUp = this.pointerAimsUp(camera, player.motion.position);
+    const digAim = this.pointerDigAim(camera, player.motion.position);
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0) |
-      (aimsUp ? PlayerButton.AimUp : 0);
-    this.updateDigPreview(camera, player.motion.position, buttons, aimsUp);
+      (digAim === 'up'
+        ? PlayerButton.AimUp
+        : digAim === 'head'
+          ? PlayerButton.AimHead
+          : digAim === 'level'
+            ? PlayerButton.AimLevel
+            : 0);
+    this.updateDigPreview(camera, player.motion.position, buttons, digAim);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&

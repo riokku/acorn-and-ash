@@ -43,12 +43,22 @@ export function inHomeClearing(x: number, z: number): boolean {
  * the next swing takes the cube above it for head room, so a tunnel you can
  * walk takes two swings a metre.
  */
+/**
+ * Where on the wall the mouse points, as far as the swing is concerned: nothing
+ * in particular (`auto`), the roof overhead (`up`), the wall ahead at head
+ * height (`head`) or at floor level (`level`).
+ */
+export type DigAim = 'auto' | 'up' | 'head' | 'level';
+
+/** How many squares ahead a swing reaches for ground to dig, when the nearest is already open. */
+export const DIG_REACH = 2;
+
 export function planDig(
   position: { readonly x: number; readonly y: number; readonly z: number },
   aimYaw: number,
   down: boolean,
   grid: DugGrid,
-  up = false,
+  aim: DigAim = 'auto',
 ): Dig {
   // Yaw 0 looks down -Z, matching the way movement reads it.
   const forwardX = -Math.sin(aimYaw);
@@ -60,7 +70,21 @@ export function planDig(
     iz: (Math.floor(position.z) + way.z) * DIG_CUBE,
     dir: CUBE_DIG,
   };
-  if (up) {
+  const ahead = (squares: number, rise: number): Dig => ({
+    ix: (Math.floor(position.x) + way.x * squares) * DIG_CUBE,
+    iy: feet.iy + rise,
+    iz: (Math.floor(position.z) + way.z * squares) * DIG_CUBE,
+    dir: CUBE_DIG,
+  });
+  if ((aim === 'head' || aim === 'level') && !down) {
+    // Whatever the mouse points at, in line with where you face: the nearest solid cube
+    // at that height, up to a couple of squares along.
+    for (let squares = 1; squares <= DIG_REACH; squares++) {
+      const cube = ahead(squares, aim === 'head' ? DIG_CUBE : 0);
+      if (grid.solidCubes(cube).length > 0) return cube;
+    }
+  }
+  if (aim === 'up') {
     // Straight overhead, in the square you stand in: the first solid cube above your head.
     const here = Math.floor(position.x) * DIG_CUBE;
     const there = Math.floor(position.z) * DIG_CUBE;
