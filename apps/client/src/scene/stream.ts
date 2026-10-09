@@ -7,6 +7,10 @@ import {
   streamPointAt,
   streamSurfaceAt,
   streamWaterHalfWidthAt,
+  lakeDepthAt,
+  isInStream,
+  nearestOnStream,
+  smoothstep,
   type Stream,
   type Terrain,
 } from '@acorn/shared';
@@ -14,6 +18,8 @@ import {
 import { createStreamMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
+import { createLakeScene } from './lake';
+import { addReedClump, waterPlantMaterials } from './water-plants';
 
 /** The ribbon of water is this many vertices across: more makes the edges follow the bank's curve better. */
 const ACROSS = 7;
@@ -40,7 +46,20 @@ export function createStreamScene(
   const group = new THREE.Group();
   group.name = 'stream';
 
-  const material = createStreamMaterial();
+  const connections = stream.sloughs.map((slough) => {
+    const pool = slough.basin[0]!;
+    const mouth = nearestOnStream(stream, pool.x, pool.z, 30)!;
+    const mouthRow = Math.round(mouth.along / (stream.length / (stream.count - 1)));
+    return [-2, 0, 2].map((offset) => {
+      const row = Math.max(0, Math.min(stream.count - 1, mouthRow + offset));
+      const along = row * (stream.length / (stream.count - 1));
+      return { ...streamPointAt(stream, row), radius: streamWaterHalfWidthAt(stream, along) };
+    });
+  });
+  const material = createStreamMaterial(
+    stream.sloughs.flatMap((slough) => slough.basin),
+    connections.flat(),
+  );
   const ribbon = ribbonGeometry(stream);
   const mesh = new THREE.Mesh(ribbon, material);
   mesh.name = 'stream-water';
@@ -51,6 +70,25 @@ export function createStreamScene(
 
   const stones = createStones(stream, terrain);
   group.add(stones.group);
+  const reeds = createBankReeds(stream, terrain);
+  group.add(reeds.group);
+  const sloughs = stream.sloughs.map((slough, index) => {
+    const scene = createLakeScene(
+      slough,
+      (x, z) => isInStream(stream, x, z, -0.3),
+      (x, z) => {
+        const spot = nearestOnStream(stream, x, z, 12);
+        if (spot === null) return slough.level;
+        const half = streamWaterHalfWidthAt(stream, spot.along);
+        const blend = 1 - smoothstep(spot.distance, half - 1, half + 2);
+        return slough.level + (streamSurfaceAt(stream, spot.along) - slough.level) * blend;
+      },
+      connections[index],
+    );
+    scene.group.name = `slough-${index + 1}`;
+    group.add(scene.group);
+    return scene;
+  });
 
   return {
     group,
@@ -58,9 +96,46 @@ export function createStreamScene(
       ribbon.dispose();
       material.dispose();
       stones.dispose();
+      reeds.dispose();
+      for (const slough of sloughs) slough.dispose();
       group.removeFromParent();
     },
   };
+}
+
+/** The lake's green reeds and cattails in loose clusters on both riverbanks. */
+function createBankReeds(
+  stream: Stream,
+  terrain: Terrain,
+): { group: THREE.Group; dispose(): void } {
+  const builder = new ModelBuilder();
+  const materials = waterPlantMaterials();
+  const random = seededRandom(1515);
+  const step = Math.max(1, Math.round(5.5 / (stream.length / (stream.count - 1))));
+  for (let row = step; row < stream.count - 1; row += step) {
+    const along = row * (stream.length / (stream.count - 1));
+    // Leave the rushing falls bare; reeds prefer the quiet shallows.
+    if (streamFallGradientAt(stream, along) > 0.18) continue;
+    const here = streamPointAt(stream, row);
+    const before = streamPointAt(stream, row - 1);
+    const after = streamPointAt(stream, row + 1);
+    const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+    const surface = streamSurfaceAt(stream, along);
+    for (const side of [-1, 1]) {
+      if (random() > 0.65) continue;
+      const across = side * (streamWaterHalfWidthAt(stream, along) - 0.25 - random() * 0.35);
+      const x = here.x - ((after.z - before.z) / size) * across;
+      const z = here.z + ((after.x - before.x) / size) * across;
+      const ground = terrain.heightAt(x, z);
+      if (ground > surface + 0.08 || surface - ground > 0.65) continue;
+      // A slough already supplies its own shore plants.
+      if (stream.sloughs.some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
+      addReedClump(builder, materials, random, { x, y: ground, z }, 5 + Math.floor(random() * 4));
+    }
+  }
+  const scene = builder.build();
+  scene.group.name = 'riverbank-reeds';
+  return scene;
 }
 
 function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
