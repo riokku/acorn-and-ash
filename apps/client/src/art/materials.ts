@@ -115,6 +115,8 @@ function depthInPond(circles: readonly WaterCircle[]) {
 
 /** How a body of water differs from the little pond: a lake is deeper, bluer and has broader ripples. */
 export interface WaterLook {
+  /** Surface vertices carry the river current and its gradual fade into still water. */
+  readonly riverFlow?: boolean;
   /** Adjoining water that interrupts this surface's shore, such as a river mouth. */
   readonly shoreConnections?: readonly WaterCircle[];
   /** Circles that are dry land inside the water: islands. The shore runs round them too. */
@@ -144,13 +146,17 @@ function stillWaterSurface(circles: readonly WaterCircle[], look: WaterLook = {}
   const depth = smoothstep(0, deepAt, inside);
 
   const drift = time;
+  const flow = look.riverFlow ? attribute('waterFlow', 'vec2') : vec2(0, 0);
+  const share = look.riverFlow ? attribute('waterFlowShare', 'float') : float(0);
+  const firstDrift = mix(vec2(0.021, 0.013), flow.mul(-0.088), share);
+  const secondDrift = mix(vec2(-0.015, 0.019), flow.mul(-0.137), share);
   const first = texture(
     ripples,
-    positionWorld.xz.mul(0.32 / rippleSize).add(vec2(drift.mul(0.021), drift.mul(0.013))),
+    positionWorld.xz.mul(0.32 / rippleSize).add(firstDrift.mul(drift)),
   ).r;
   const second = texture(
     ripples,
-    positionWorld.xz.mul(0.19 / rippleSize).add(vec2(drift.mul(-0.015), drift.mul(0.019))),
+    positionWorld.xz.mul(0.19 / rippleSize).add(secondDrift.mul(drift)),
   ).r;
   // Soft, broad glints rather than sharp lines: where the two layers of
   // ripples happen to line up, the surface catches a little more sky.
@@ -223,8 +229,9 @@ export function createStreamMaterial(
       deepAt: 9,
       deep: 0x1f4f73,
       rippleSize: 1.7,
+      riverFlow: true,
     });
-    surface = mix(surface, joined, smoothstep(-2, 0, depthInPond(sloughs)));
+    surface = mix(surface, joined, smoothstep(-5, 0, depthInPond(sloughs)));
   }
 
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });

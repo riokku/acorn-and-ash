@@ -93,6 +93,12 @@ const KEEP_OUT_STEP = 4;
 /** Stones sit along the banks; how many per hundred metres of stream. */
 export const STREAM_STONES_PER_100M = 22;
 
+export interface Slough extends Lake {
+  /** Local downhill grade shared by the water, its floor and its plants. */
+  readonly slopeX: number;
+  readonly slopeZ: number;
+}
+
 export interface Stream {
   /** Height of the water's surface where the stream meets the lake, in metres. */
   readonly mouthLevel: number;
@@ -104,7 +110,7 @@ export interface Stream {
   readonly length: number;
   readonly falls: readonly StreamFall[];
   /** Still-water sloughs beside the lower bends, currently scenery only. */
-  readonly sloughs: readonly Lake[];
+  readonly sloughs: readonly Slough[];
   /** The box that holds the path with room for every bit of shaped ground. */
   readonly reach: {
     readonly minX: number;
@@ -313,7 +319,8 @@ export function createStream(lake: Lake = LAKE): Stream {
         radius: 4.2,
       });
     }
-    return defineLake(
+    const slope = (streamSurfaceAt(stream, along + 3) - streamSurfaceAt(stream, along - 3)) / 6;
+    const lake = defineLake(
       streamSurfaceAt(stream, along),
       [
         { x, z, radius },
@@ -326,6 +333,11 @@ export function createStream(lake: Lake = LAKE): Stream {
       ],
       [],
     );
+    return {
+      ...lake,
+      slopeX: ((after.x - before.x) / size) * slope,
+      slopeZ: ((after.z - before.z) / size) * slope,
+    };
   });
   return { ...stream, sloughs };
 }
@@ -359,6 +371,20 @@ export function streamHalfWidthAt(stream: Stream, along: number): number {
 /** Height of the water's surface along the middle, `along` metres down. */
 export function streamSurfaceAt(stream: Stream, along: number): number {
   return streamBedAt(stream, along) + streamDepthMiddle(stream, along);
+}
+
+/** Slough water follows the local river grade, meeting its exact surface at the mouth. */
+export function sloughSurfaceAt(stream: Stream, slough: Slough, x: number, z: number): number {
+  const anchor = slough.basin[0]!;
+  const plane = slough.level + (x - anchor.x) * slough.slopeX + (z - anchor.z) * slough.slopeZ;
+  const spot = nearestOnStream(stream, x, z, 12);
+  if (spot === null) return plane;
+  const half = streamWaterHalfWidthAt(stream, spot.along);
+  return lerp(
+    streamSurfaceAt(stream, spot.along),
+    plane,
+    smoothstep(spot.distance, half - 1, half + 2),
+  );
 }
 
 /** Half the width of the water itself (the bowl's rim is a hair wider), `along` metres down. */
@@ -551,7 +577,7 @@ export function streamGroundHeight(
     const depth = basinDepthAt(slough, x, z);
     if (depth <= -4) continue;
     // A shallow floor and a soft bank; no new swimming or water interactions.
-    const floor = slough.level + 0.05 - 0.5 * smoothstep(depth, 0, 2);
+    const floor = sloughSurfaceAt(stream, slough, x, z) + 0.05 - 0.5 * smoothstep(depth, 0, 2);
     shaped = Math.min(shaped, lerp(shaped, floor, smoothstep(depth, -4, 0)));
   }
   return shaped;
