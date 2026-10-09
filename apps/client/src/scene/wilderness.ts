@@ -70,6 +70,11 @@ export interface WildernessScene {
    */
   setTreeStates(states: ReadonlyMap<number, TreeAppearance>, serverNowMs?: number): void;
   /**
+   * The smooth ground, for taking squares of it away where a dug tunnel comes
+   * up near the surface (see `scene/digging.ts`): `hide` takes one square.
+   */
+  readonly ground: { readonly origin: number; readonly cell: number; hide(cellX: number, cellZ: number): void };
+  /**
    * A blow landing on a tree: it shivers, tipping a little away along
    * `awayX`, `awayZ` - the way the blow was going - and settling back.
    */
@@ -325,6 +330,7 @@ export function buildWildernessScene(
   };
 
   return {
+    ground,
     group,
     cameraBlockers,
     setTreeStates: (states, serverNowMs = Date.now()) => {
@@ -426,7 +432,13 @@ export function buildWildernessScene(
 function createGround(
   terrain: Terrain,
   shader: GroundShader,
-): { mesh: THREE.Mesh; dispose(): void } {
+): {
+  mesh: THREE.Mesh;
+  origin: number;
+  cell: number;
+  hide(cellX: number, cellZ: number): void;
+  dispose(): void;
+} {
   const size = PLAYABLE_HALF_EXTENT * 2 + GROUND_FOG_MARGIN;
   const segments = Math.round(size / GROUND_SEGMENT_SIZE);
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -469,8 +481,20 @@ function createGround(
   const material = createGroundMaterial();
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
+  const index = geometry.getIndex();
+  if (index === null) throw new Error('Plane geometry has no index');
   return {
     mesh,
+    origin: -size / 2,
+    cell: size / segments,
+    // Every square is two triangles, six numbers in a row, left to right and
+    // top to bottom: zeroing them leaves nothing to draw there.
+    hide: (cellX, cellZ) => {
+      if (cellX < 0 || cellZ < 0 || cellX >= segments || cellZ >= segments) return;
+      const first = (cellZ * segments + cellX) * 6;
+      for (let i = 0; i < 6; i++) index.setX(first + i, 0);
+      index.needsUpdate = true;
+    },
     dispose: () => {
       geometry.dispose();
       material.dispose();

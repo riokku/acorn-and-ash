@@ -233,6 +233,8 @@ import {
   reedRegrowSpot,
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
+import { DugGrid, type Dig } from '../world/digging';
+import { DIG_MAX_COUNT, digRefusal, digYield, planDig } from './digging';
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -1577,6 +1579,10 @@ export class WorldSimulation {
   private readonly fighters: RaidFighter[] = [];
   /** Where each mountain pile of stone or ore first lay; it comes back near here once picked clean. */
   private readonly mountainRockHomes = new Map<number, GatherSpot>();
+  /** Ground dug out below the surface (decision 0114, step 4); shared with `collision`. */
+  readonly dug: DugGrid;
+  /** Digs made since the server last told everybody and saved them. */
+  private readonly digNews: Dig[] = [];
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
@@ -1626,6 +1632,8 @@ export class WorldSimulation {
       LAKE,
       true,
     );
+    this.dug = new DugGrid(terrain);
+    this.collision.dug = this.dug;
     this.standing = [...this.clearing.props];
     this.standingWilderness = [...this.wilderness.props];
     for (const [id, index] of this.clearing.indexById) {
@@ -3731,6 +3739,9 @@ export class WorldSimulation {
       }
     }
 
+    if (this.isActiveItem(runtime, 'shovel') && this.digAhead(runtime, position, aimYaw, charged))
+      return;
+
     const animalTarget = this.animalInReachOf(position, aimYaw, lookBack);
     if (animalTarget !== null)
       this.catchAnimal(
@@ -3739,6 +3750,75 @@ export class WorldSimulation {
         charged,
         impact.dodge ? (charged ? 3 : 2) : undefined,
       );
+  }
+
+  /**
+   * One swing of the shovel: carve the slab of ground ahead (a light swing,
+   * level) or a half-metre lower (a charged one, down a ramp), keep what it
+   * turns up, and tell everybody. Returns false when there was nothing to dig
+   * or it is not allowed, so the swing can still be for an animal.
+   */
+  private digAhead(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    aimYaw: number,
+    down: boolean,
+  ): boolean {
+    const dig = planDig(position, aimYaw, down);
+    const near = (x: number, z: number, margin: number): boolean =>
+      overlapsWater(this.keepOutWater, x, z, margin);
+    if (digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps) !== null)
+      return false;
+    const solid = this.dug.solidCubes(dig).length;
+    if (solid === 0) return false;
+    const x = (dig.ix + 0.5) * 0.5;
+    const z = (dig.iz + 0.5) * 0.5;
+    const found = digYield(this.seed, dig, solid, this.collision.terrain.heightAt(x, z));
+    // A full pack stops the dig, rather than throwing the ground away.
+    const first = found[0]!;
+    if (roomFor(runtime.inventory, first.item) === 0) return this.refusePickup(runtime, first.item);
+    this.dug.apply(dig);
+    this.digNews.push(dig);
+    for (const { item, count } of found) {
+      const taken = addItem(runtime.inventory, item, count);
+      if (taken === 0) continue;
+      this.collectionEvents.push({
+        netId: runtime.netId,
+        item,
+        count: taken,
+        x,
+        z,
+        depleted: false,
+      });
+    }
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: null });
+    return true;
+  }
+
+  /** Every dig made so far, oldest first: what a joining browser replays and the world saves. */
+  digsList(): readonly Dig[] {
+    return this.dug.digs;
+  }
+
+  /** The digs made since this was last asked, so they can be saved and sent. */
+  drainDigNews(): Dig[] {
+    return this.digNews.splice(0);
+  }
+
+  /** Put saved digs back after the world wakes. Anything out of range is ignored. */
+  restoreDigs(saved: Iterable<Dig>): void {
+    for (const dig of saved) {
+      if (this.dug.digs.length >= DIG_MAX_COUNT) break;
+      const sensible =
+        Number.isInteger(dig.ix) &&
+        Number.isInteger(dig.iy) &&
+        Number.isInteger(dig.iz) &&
+        Math.abs(dig.ix) < 2000 &&
+        Math.abs(dig.iz) < 2000 &&
+        dig.dir >= 0 &&
+        dig.dir <= 3;
+      if (sensible) this.dug.apply(dig);
+    }
   }
 
   /** One blow of the axe into a tree, or the one that brings it down. */

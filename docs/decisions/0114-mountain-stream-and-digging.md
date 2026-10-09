@@ -72,7 +72,17 @@ Resets for existing worlds: because the world is larger, trees are numbered in a
 
 - Two new things to gather: **stone** and **iron ore**. They lie in piles on the mountain, picked up by hand like sticks and berries (Chris chose this over chopping rocks or a pickaxe). Stone is scattered over the lower slopes; ore lies higher, in the bare rock above the pines, so it takes a climb. 16 stone piles and 10 ore piles, placed from the seed (`packages/shared/src/world/mountain-rocks.ts`), on ground that can be walked, away from the stream and trees.
 - A picked-clean pile comes back a little way from where it lay, like the forest's berries.
-- The **shovel** is crafted by hand from 2 sticks and 3 stone (Chris's choice: sticks and stone). It does nothing yet beyond being carried; digging is step 4.
+- The **shovel** is crafted by hand from 2 sticks and 3 stone (Chris's choice: sticks and stone). Digging with it came in step 4.
 - All placeholder shapes: grey lumps for stone, rust-red lumps with a bright fleck for ore. Art comes in step 5.
 
-Still to come: digging (step 4) and art (step 5).
+## What step 4 built
+
+- **Digging with the shovel.** Hold the shovel and click: you carve a slab of ground in front of you (2 m long, 3 m wide, 4 m tall), so repeated clicks make a tunnel you can walk into. Hold the click (charged swing) to dig down instead, which makes a stairway-sized pit. Each dig costs the same energy as any swing.
+- **What you get:** stone and clay from the ground, iron ore deeper in the mountain, and sometimes buried items (`packages/shared/src/sim/digging.ts`, `digYield`). If your pack is full the dig is refused.
+- **Where you can't:** not in the home clearing, not near water, not near anything built, not deeper than 12 m, and not once a world holds 20,000 dug cubes.
+- **How it is stored:** the land above stays a height map; the dug part is a sparse set of 0.5 m cubes, rebuilt by replaying each saved dig (`dug_slabs` table). Digs are permanent and sent to everybody (one message on joining, then one per new dig).
+- **Walking:** feet follow the tunnel floor, walls stop you, a roof stops a jump. The server and the browser use the same code (`DugGrid`).
+- **Dark underground:** the daylight fades out as the ground above you thickens. A torch lights the way.
+- **Looks:** blocky placeholder faces coloured like the ground; the ground surface is hidden over a tunnel mouth. Art comes in step 5.
+
+Still to come: art (step 5), needing Chris's computer for Blender.

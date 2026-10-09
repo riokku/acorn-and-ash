@@ -299,6 +299,11 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <path d="M17 3L18 5L20 6L18 7L17 9L16 7L14 6L16 5Z" />
     </>
   ),
+  clay: (
+    <>
+      <path d="M3 17Q3 12 8 11Q9 6 14 7Q19 7 20 12Q22 14 21 18Q18 21 12 20Q6 21 3 17Z" />
+    </>
+  ),
   shovel: (
     <g transform="rotate(25 12 12)">
       <rect x="11" y="1" width="2" height="13" rx="1" />

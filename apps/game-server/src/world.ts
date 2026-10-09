@@ -9,7 +9,14 @@ import {
   GEAR_ITEMS,
   type GearSlot,
 } from '@acorn/shared';
-import { clockShiftForSeason, encodeLakeIce, SEASONS, type SeasonId } from '@acorn/shared';
+import {
+  clockShiftForSeason,
+  encodeDug,
+  encodeLakeIce,
+  SEASONS,
+  type Dig,
+  type SeasonId,
+} from '@acorn/shared';
 import {
   encodeFishRecords,
   encodeRareReel,
@@ -302,6 +309,8 @@ export class World extends DurableObject<WorldEnv> {
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
     server.send(encodeWildfire(simulation.wildfireView()));
+    // The tunnels and pits dug so far, before this player first moves.
+    server.send(encodeDug(simulation.digsList(), true));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
@@ -622,6 +631,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceRaids(simulation);
     this.announceBuilding(simulation);
     this.announceLakeIce(simulation);
+    this.announceDigging(simulation);
     this.announceWildfire(simulation);
     this.announceBoats(simulation);
     this.announceBrokenBoats(simulation);
@@ -925,6 +935,37 @@ export class World extends DurableObject<WorldEnv> {
       this.writeMeta('wildfire', saved);
       this.writeMeta('tick', String(simulation.tick));
     });
+  }
+
+  /**
+   * Somebody dug (decision 0114): save each new slab and tell everybody.
+   * Sent to the whole world for now, which a cap of 20,000 digs keeps small
+   * (a join message under 150 kB); nearby-only sending comes with the chunks.
+   */
+  private announceDigging(simulation: WorldSimulation): void {
+    const digs = simulation.drainDigNews();
+    if (digs.length === 0) return;
+    for (const dig of digs) this.writeDig(dig);
+    this.broadcast(encodeDug(digs, false));
+  }
+
+  private loadDigs(): Dig[] {
+    return this.ctx.storage.sql
+      .exec<{ ix: number; iy: number; iz: number; dir: number }>(
+        'SELECT ix, iy, iz, dir FROM dug_slabs ORDER BY seq',
+      )
+      .toArray()
+      .map((row) => ({ ix: row.ix, iy: row.iy, iz: row.iz, dir: row.dir as Dig['dir'] }));
+  }
+
+  private writeDig(dig: Dig): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO dug_slabs (ix, iy, iz, dir) VALUES (?, ?, ?, ?)',
+      dig.ix,
+      dig.iy,
+      dig.iz,
+      dig.dir,
+    );
   }
 
   /**
@@ -1675,6 +1716,7 @@ export class World extends DurableObject<WorldEnv> {
     }
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
     simulation.restorePatches(this.loadPatches());
+    simulation.restoreDigs(this.loadDigs());
     const encounterRest = this.readMeta('encounterRest');
     this.savedEncounterRest = encounterRest ?? '[]';
     if (encounterRest !== null) {
@@ -1992,6 +2034,15 @@ export class World extends DurableObject<WorldEnv> {
     // Where each stick and flower patch is now and how many it has left (see
     // decision 0061). A patch with no row is still where the clearing first
     // laid it, holding its first count.
+    // Every shovel dig in the order made (decision 0114): a few bytes each, and
+    // an untouched world has no rows at all.
+    sql.exec(`CREATE TABLE IF NOT EXISTS dug_slabs (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      ix INTEGER NOT NULL,
+      iy INTEGER NOT NULL,
+      iz INTEGER NOT NULL,
+      dir INTEGER NOT NULL
+    )`);
     sql.exec(`CREATE TABLE IF NOT EXISTS gather_patches (
       patch_id INTEGER PRIMARY KEY,
       x REAL NOT NULL,
