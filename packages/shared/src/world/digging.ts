@@ -17,6 +17,9 @@
  */
 
 import { PLAYER_HEIGHT } from '../constants';
+
+/** How far below the ground, in metres, somebody in a hole counts as out of sight even with the sky open above. */
+const SHELTER_DEPTH = 2.5;
 import type { Terrain } from './terrain';
 
 /** Metres along one side of a cube. */
@@ -147,6 +150,24 @@ export class DugGrid {
   isUnderground(ix: number, iy: number, iz: number): boolean {
     const surface = this.terrain.heightAt((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
     return (iy + 0.5) * VOXEL < surface;
+  }
+
+  /**
+   * Whether a body with its feet here is shut away underground: in a dug-out
+   * space with solid ground over its head, or far enough down a hole that
+   * nothing standing at its edge can see or reach it. Standing at the mouth of
+   * a shallow hole, open to the sky, is not.
+   */
+  isSheltered(x: number, feetY: number, z: number): boolean {
+    const ix = Math.floor(x / VOXEL);
+    const iz = Math.floor(z / VOXEL);
+    if (!this.hasColumn(ix, iz)) return false;
+    const surface = this.terrain.heightAt(x, z);
+    if (surface - feetY > SHELTER_DEPTH) return true;
+    const above = voxelIndex(feetY + PLAYER_HEIGHT) + 1;
+    for (let iy = above; (iy + 0.5) * VOXEL < surface; iy++)
+      if (this.isSolid(ix, iy, iz)) return true;
+    return false;
   }
 
   /** Whether this cube is still solid ground. */

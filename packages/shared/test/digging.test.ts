@@ -201,3 +201,27 @@ describe('walking through a dug tunnel', () => {
     expect(motion.position.y).toBeLessThan(hillside.heightAt(motion.position.x, 0.25) - 1);
   });
 });
+
+describe('being shut away underground', () => {
+  const flat: Terrain = { kind: 'flat', heightAt: () => 10 };
+
+  it('is true in a tunnel with ground over the head, and false in the open', () => {
+    const grid = new DugGrid(flat);
+    // A tunnel a metre wide and two metres tall, three metres down: floor at 7 m.
+    grid.apply({ ix: 0, iy: 14, iz: 0, dir: CUBE_DIG });
+    grid.apply({ ix: 0, iy: 16, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 7, 0.5)).toBe(true);
+    // Not in a column anything was dug in.
+    expect(grid.isSheltered(30.5, 10, 0.5)).toBe(false);
+  });
+
+  it('is false at the foot of a shallow pit open to the sky, and true deep down one', () => {
+    const grid = new DugGrid(flat);
+    // A pit one metre deep, open to the sky.
+    grid.apply({ ix: 0, iy: 19, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 9, 0.5)).toBe(false);
+    // The same shaft dug down to 4 m below the ground: too deep for anything at the rim to see into.
+    for (let iy = 17; iy >= 11; iy -= 2) grid.apply({ ix: 0, iy, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 6, 0.5)).toBe(true);
+  });
+});
