@@ -43,23 +43,11 @@ export function inHomeClearing(x: number, z: number): boolean {
  * the next swing takes the cube above it for head room, so a tunnel you can
  * walk takes two swings a metre.
  */
-/**
- * Where on the wall the mouse points, as far as the swing is concerned: nothing
- * in particular (`auto`), the roof overhead (`up`), the wall ahead at head
- * height (`head`), at floor level (`level`), or at the floor right by your
- * feet (`under`).
- */
-export type DigAim = 'auto' | 'up' | 'head' | 'level' | 'under';
-
-/** How many squares ahead a swing reaches for ground to dig, when the nearest is already open. */
-export const DIG_REACH = 2;
-
 export function planDig(
   position: { readonly x: number; readonly y: number; readonly z: number },
   aimYaw: number,
   down: boolean,
   grid: DugGrid,
-  aim: DigAim = 'auto',
 ): Dig {
   // Yaw 0 looks down -Z, matching the way movement reads it.
   const forwardX = -Math.sin(aimYaw);
@@ -71,39 +59,6 @@ export function planDig(
     iz: (Math.floor(position.z) + way.z) * DIG_CUBE,
     dir: CUBE_DIG,
   };
-  const ahead = (squares: number, rise: number): Dig => ({
-    ix: (Math.floor(position.x) + way.x * squares) * DIG_CUBE,
-    iy: feet.iy + rise,
-    iz: (Math.floor(position.z) + way.z * squares) * DIG_CUBE,
-    dir: CUBE_DIG,
-  });
-  if ((aim === 'head' || aim === 'level') && !down) {
-    // Whatever the mouse points at, in line with where you face: the nearest solid cube
-    // at that height, up to a couple of squares along.
-    for (let squares = 1; squares <= DIG_REACH; squares++) {
-      const cube = ahead(squares, aim === 'head' ? DIG_CUBE : 0);
-      if (grid.solidCubes(cube).length > 0) return cube;
-    }
-  }
-  if (aim === 'under') {
-    // Down under your own feet, half a metre of floor at a time: a step you can climb out of.
-    const underFeet: Dig = {
-      ix: Math.floor(position.x) * DIG_CUBE,
-      iy: voxelIndex(position.y + 0.01) - 1,
-      iz: Math.floor(position.z) * DIG_CUBE,
-      dir: CUBE_DIG,
-    };
-    if (grid.solidCubes(underFeet).length > 0) return underFeet;
-  }
-  if (aim === 'up') {
-    // Straight overhead, in the square you stand in: the first solid cube above your head.
-    const here = Math.floor(position.x) * DIG_CUBE;
-    const there = Math.floor(position.z) * DIG_CUBE;
-    for (let rise = DIG_CUBE; rise <= DIG_CUBE * 4; rise += DIG_CUBE) {
-      const overhead: Dig = { ix: here, iy: feet.iy + rise, iz: there, dir: CUBE_DIG };
-      if (grid.solidCubes(overhead).length > 0) return overhead;
-    }
-  }
   if (down || grid.solidCubes(feet).length > 0) return feet;
   const head: Dig = { ...feet, iy: feet.iy + DIG_CUBE };
   if (grid.solidCubes(head).length > 0) return head;
@@ -122,9 +77,59 @@ export const DIG_REFUSALS = [
   'full',
   'nothing',
   'packFull',
+  'far',
 ] as const;
-export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing' | 'packFull'>;
+export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing' | 'packFull' | 'far'>;
 export type DigRefusalReason = (typeof DIG_REFUSALS)[number];
+
+/** How far from your chest to the middle of a cube you can dig it, in metres. */
+export const DIG_REACH_METERS = 3;
+/** Extra reach the server allows, for a player who has walked on since the browser chose. */
+export const DIG_REACH_SLACK = 0.9;
+/** How high the chest is above the feet, in metres, for working out reach. */
+const CHEST_HEIGHT = 0.9;
+
+/**
+ * The cube under a point of ground, wall, floor or roof the mouse is on.
+ *
+ * The point is pushed a little into the ground, against the way the surface
+ * faces, to find the solid voxel just behind it. The cube is the whole-metre
+ * square that voxel is in, and a metre tall: that voxel and whichever of its
+ * upper or lower neighbours the point is nearer, so the cube is centred on
+ * the point and a floor or roof loses half a metre, not a whole one.
+ */
+export function cubeAtHit(
+  point: { readonly x: number; readonly y: number; readonly z: number },
+  normal: { readonly x: number; readonly y: number; readonly z: number },
+): Dig {
+  const push = 0.12;
+  const x = point.x - normal.x * push;
+  const y = point.y - normal.y * push;
+  const z = point.z - normal.z * push;
+  const voxel = voxelIndex(y);
+  const inside = y / VOXEL - voxel;
+  return {
+    ix: Math.floor(x) * DIG_CUBE,
+    iy: inside < 0.5 ? voxel - 1 : voxel,
+    iz: Math.floor(z) * DIG_CUBE,
+    dir: CUBE_DIG,
+  };
+}
+
+/** Whether this cube is near enough to a body with its feet here to be dug. */
+export function digInReach(
+  feet: { readonly x: number; readonly y: number; readonly z: number },
+  dig: Dig,
+  slack = 0,
+): boolean {
+  const middleX = (dig.ix + DIG_CUBE / 2) * VOXEL;
+  const middleY = (dig.iy + DIG_CUBE / 2) * VOXEL;
+  const middleZ = (dig.iz + DIG_CUBE / 2) * VOXEL;
+  return (
+    Math.hypot(middleX - feet.x, middleY - (feet.y + CHEST_HEIGHT), middleZ - feet.z) <=
+    DIG_REACH_METERS + slack
+  );
+}
 
 /** Why this slab may not be carved, or null if it may. */
 export function digRefusal(

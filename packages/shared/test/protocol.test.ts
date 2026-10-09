@@ -34,6 +34,7 @@ import {
   encodeLakeIce,
   encodeDug,
   encodeDigRefused,
+  encodeDigTarget,
   encodeHello,
   encodeHunger,
   encodeRoster,
@@ -1429,7 +1430,7 @@ describe('the lake freezing and thawing', () => {
 });
 
 describe('a shovel swing that made no hole', () => {
-  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing', 'packFull'] as const)(
+  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing', 'packFull', 'far'] as const)(
     'round trips %s',
     (reason) => {
       expect(decodeServerMessage(encodeDigRefused(reason))).toEqual({ type: 'digRefused', reason });
@@ -1439,6 +1440,21 @@ describe('a shovel swing that made no hole', () => {
   it('rejects an unknown reason or a wrong length', () => {
     expect(decodeServerMessage(new Uint8Array([0x42, 99]).buffer)).toBeNull();
     expect(decodeServerMessage(new Uint8Array([0x42]).buffer)).toBeNull();
+  });
+});
+
+describe('the cube the mouse is on', () => {
+  it('round trips a cube and no cube', () => {
+    const target = { ix: -600, iy: 41, iz: 580 };
+    expect(decodeClientMessage(encodeDigTarget(target))).toEqual({ type: 'digTarget', target });
+    expect(decodeClientMessage(encodeDigTarget(null))).toEqual({ type: 'digTarget', target: null });
+  });
+
+  it('rejects the wrong length or a bad flag', () => {
+    expect(decodeClientMessage(new Uint8Array([0x0f, 1, 0]).buffer)).toBeNull();
+    const bad = encodeDigTarget({ ix: 1, iy: 2, iz: 3 });
+    new DataView(bad).setUint8(1, 2);
+    expect(decodeClientMessage(bad)).toBeNull();
   });
 });
 

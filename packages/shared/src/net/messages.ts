@@ -54,6 +54,7 @@ export const ClientMessageType = {
   Decoration: 0x0c,
   Expedition: 0x0d,
   Gear: 0x0e,
+  DigTarget: 0x0f,
 } as const;
 
 /** What the server says back. */
@@ -163,6 +164,12 @@ export interface BuildMessage {
  * bundle: it is not aimed at anything, so it needs neither reach nor facing,
  * and is settled the moment the server reads it.
  */
+/** Which cube the mouse is on while the shovel is out, or nothing (decision 0114). */
+export interface DigTargetMessage {
+  readonly type: 'digTarget';
+  readonly target: { readonly ix: number; readonly iy: number; readonly iz: number } | null;
+}
+
 export interface UseItemMessage {
   readonly type: 'useItem';
   readonly item: ItemId;
@@ -242,6 +249,7 @@ export type ClientMessage =
   | BuildMessage
   | HelloMessage
   | UseItemMessage
+  | DigTargetMessage
   | SetDoorLockMessage
   | DiscardMessage
   | LootMessage;

@@ -403,6 +403,11 @@ export class World extends DurableObject<WorldEnv> {
       this.announceEquipped(simulation);
       return;
     }
+    if (decoded.type === 'digTarget') {
+      // Only remembered: the swing checks it when it lands.
+      simulation.setDigTarget(attachment.netId, decoded.target);
+      return;
+    }
     if (decoded.type === 'loot') {
       simulation.requestLoot(attachment.netId, decoded);
       return;

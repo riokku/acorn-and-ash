@@ -20,6 +20,7 @@ import {
   encodeInputBundle,
   encodePing,
   encodeSetDoorLock,
+  encodeDigTarget,
   encodeUseItem,
   type BuildRequest,
   type CharacterId,
@@ -206,6 +207,12 @@ export class WorldConnection {
   sendSetDoorLock(locked: boolean): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeSetDoorLock(locked));
+  }
+
+  /** Which cube of ground the mouse is on while the shovel is out, or none (decision 0114). */
+  sendDigTarget(target: { ix: number; iy: number; iz: number } | null): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeDigTarget(target));
   }
 
   sendUseItem(item: ItemId): void {

@@ -31,6 +31,8 @@ export function digRefusalText(reason: DigRefusalReason): string {
       return "Can't dig here. This world has been dug up enough.";
     case 'nothing':
       return 'Nothing to dig there. Step forward into the hole to keep going.';
+    case 'far':
+      return 'Too far away to dig there. Step closer.';
     case 'packFull':
       return 'You found something, but your pack is full.';
   }

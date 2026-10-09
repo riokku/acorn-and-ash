@@ -235,6 +235,7 @@ const CRAFT_MESSAGE_BYTES = 2;
 const BUILD_MESSAGE_BYTES = 8;
 /** type(1) + which item to use(1) */
 const USE_ITEM_MESSAGE_BYTES = 2;
+const DIG_TARGET_MESSAGE_BYTES = 8;
 /** type(1) + wear, take off or swap(1) + item(1) + slot(1) + other slot(1) */
 const GEAR_MESSAGE_BYTES = 5;
 const GEAR_ACTIONS = ['wear', 'takeOff', 'swap'] as const;
@@ -521,6 +522,25 @@ export function encodeDigRefused(reason: DigRefusalReason): ArrayBuffer {
   return new Uint8Array([ServerMessageType.DigRefused, DIG_REFUSALS.indexOf(reason)]).buffer;
 }
 
+/**
+ * The cube the mouse is on, or nothing: type(1) + has(1) + ix(2) + iy(2) + iz(2).
+ * Sent while the shovel is out, when the cube changes and about once a second.
+ */
+export function encodeDigTarget(
+  target: { readonly ix: number; readonly iy: number; readonly iz: number } | null,
+): ArrayBuffer {
+  const buffer = new ArrayBuffer(DIG_TARGET_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.DigTarget);
+  view.setUint8(1, target === null ? 0 : 1);
+  if (target !== null) {
+    view.setInt16(2, target.ix, true);
+    view.setInt16(4, target.iy, true);
+    view.setInt16(6, target.iz, true);
+  }
+  return buffer;
+}
+
 export function encodeUseItem(item: ItemId): ArrayBuffer {
   const buffer = new ArrayBuffer(USE_ITEM_MESSAGE_BYTES);
   const view = new DataView(buffer);
@@ -684,6 +704,19 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   if (type === ClientMessageType.SetDoorLock) {
     if (data.byteLength !== 2) return null;
     return { type: 'setDoorLock', locked: view.getUint8(1) !== 0 };
+  }
+
+  if (type === ClientMessageType.DigTarget) {
+    if (data.byteLength !== DIG_TARGET_MESSAGE_BYTES) return null;
+    const has = view.getUint8(1);
+    if (has > 1) return null;
+    return {
+      type: 'digTarget',
+      target:
+        has === 0
+          ? null
+          : { ix: view.getInt16(2, true), iy: view.getInt16(4, true), iz: view.getInt16(6, true) },
+    };
   }
 
   if (type === ClientMessageType.UseItem) {

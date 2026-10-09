@@ -93,11 +93,11 @@ import {
   PICKUP_REACH,
   ITEM_KINDS,
   DIG_SWING,
-  type DigAim,
   VOXEL,
   digRefusal,
   overlapsWater,
-  planDig,
+  cubeAtHit,
+  digInReach,
   LIGHT_COMBO,
   STRIKE,
   TICK_SECONDS,
@@ -196,6 +196,7 @@ import {
   type ServerMessage,
   type SnapshotEntity,
   type ActionState,
+  type Terrain,
   type Vec3,
 } from '@acorn/shared';
 
@@ -870,7 +871,10 @@ export class Game {
   /** Scratch objects for `aimTowardsClickPoint` and the build preview, reused rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
-  /** The cube a click with the shovel would dig, drawn as a faint box (see `updateDigPreview`). */
+  /** The cube the mouse is on, as last sent to the server, and when (see `updateDigTarget`). */
+  private digTargetSent: { ix: number; iy: number; iz: number } | null = null;
+  private digTargetSentAt = 0;
+  /** The cube a click with the shovel would dig, drawn as a faint box. */
   private digPreview: {
     group: THREE.Group;
     fill: THREE.MeshBasicMaterial;
@@ -3647,45 +3651,104 @@ export class Game {
   }
 
   /**
-   * Lights up the ground a click would dig, while the shovel is out: a yellow
-   * cube where a swing would land, or a red one where digging is not allowed.
-   * It asks the same rules the server does (`planDig`, `digRefusal`), for the
-   * way the mouse points now, so what is lit is what the click takes.
+   * Digging goes where the mouse is (decision 0114). While the shovel is out,
+   * the cursor is cast into the world: the first wall, floor, roof or patch of
+   * ground it touches gives the cube behind it. That cube is lit up (yellow, or
+   * red where it cannot be dug or is out of reach) and sent to the server, which
+   * digs exactly it when the swing lands, after checking it again.
+   *
+   * It does not change while a swing is under way, so what was clicked is what
+   * lands.
    */
-  private updateDigPreview(
-    camera: FollowCamera,
-    feet: Readonly<Vec3>,
-    buttons: number,
-    aim: DigAim,
-  ): void {
+  private updateDigTarget(camera: FollowCamera, feet: Readonly<Vec3>): void {
     const dug = this.digScene;
     const collision = this.collision;
-    const preview = this.digPreview;
     const wanted =
       dug !== null && collision !== null && this.isEquipped('shovel') && this.space === OUTDOORS;
     if (!wanted) {
-      if (preview !== null) preview.group.visible = false;
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
       return;
     }
-    let yaw = this.aimYaw ?? this.localPlayer?.motion.facingYaw ?? 0;
-    const pointer = this.controls?.pointerPosition() ?? null;
-    if (pointer !== null) {
-      this.clickNdc.set(
-        (pointer.x / window.innerWidth) * 2 - 1,
-        -(pointer.y / window.innerHeight) * 2 + 1,
-      );
-      this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
-      yaw = clickAimYaw(this.clickRaycaster.ray, feet, feet.y, []) ?? yaw;
+    if (this.localPlayer?.action.kind === ActionKind.Swing) return;
+    const cube = this.cubeUnderPointer(camera, dug, collision.terrain);
+    if (cube === null) {
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
+      return;
     }
-    const dig = planDig(feet, yaw, (buttons & PlayerButton.Charge) !== 0, dug.grid, aim);
     const refusal = digRefusal(
-      dig,
+      cube,
       dug.grid,
       collision.terrain,
       (x, z, margin) => overlapsWater(this.keepOutWater, x, z, margin),
       this.builtProps,
     );
-    if (refusal === null && dug.grid.solidCubes(dig).length === 0) {
+    if (refusal === null && dug.grid.solidCubes(cube).length === 0) {
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
+      return;
+    }
+    this.showDigPreview(cube, refusal === null && digInReach(feet, cube));
+    this.sendDigTarget(cube);
+  }
+
+  /** The cube of ground behind whatever the mouse touches, or null if it touches none. */
+  private cubeUnderPointer(camera: FollowCamera, dug: DigScene, terrain: Terrain): Dig | null {
+    const pointer = this.controls?.pointerPosition() ?? null;
+    if (pointer === null) return null;
+    this.clickNdc.set(
+      (pointer.x / window.innerWidth) * 2 - 1,
+      -(pointer.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const ray = this.clickRaycaster.ray;
+    let point: { x: number; y: number; z: number } | null = null;
+    let normal = { x: 0, y: 1, z: 0 };
+    let distance = Number.POSITIVE_INFINITY;
+    // The walls of a hole, and the ground cut round it...
+    const hit = this.clickRaycaster.intersectObjects(dug.pickables(), false)[0];
+    if (hit !== undefined && hit.face !== undefined && hit.face !== null) {
+      point = hit.point;
+      normal = hit.face.normal;
+      distance = hit.distance;
+    }
+    // ...or plain ground, which a hole's own ground is cut out of.
+    const ground = groundAlongRay(ray.origin, ray.direction, terrain);
+    if (ground !== null && !dug.isOpenNear(ground.x, ground.z)) {
+      const y = terrain.heightAt(ground.x, ground.z);
+      const far = Math.hypot(ground.x - ray.origin.x, y - ray.origin.y, ground.z - ray.origin.z);
+      if (far < distance) {
+        const slopeX =
+          terrain.heightAt(ground.x - 0.5, ground.z) - terrain.heightAt(ground.x + 0.5, ground.z);
+        const slopeZ =
+          terrain.heightAt(ground.x, ground.z - 0.5) - terrain.heightAt(ground.x, ground.z + 0.5);
+        const length = Math.hypot(slopeX, 1, slopeZ);
+        point = { x: ground.x, y, z: ground.z };
+        normal = { x: slopeX / length, y: 1 / length, z: slopeZ / length };
+      }
+    }
+    return point === null ? null : cubeAtHit(point, normal);
+  }
+
+  /** Tell the server which cube the mouse is on, when it changes and about once a second. */
+  private sendDigTarget(cube: Dig | null): void {
+    const now = performance.now();
+    const last = this.digTargetSent;
+    const same =
+      cube === null
+        ? last === null
+        : last !== null && last.ix === cube.ix && last.iy === cube.iy && last.iz === cube.iz;
+    if (same && (cube === null || now - this.digTargetSentAt < 1000)) return;
+    this.digTargetSent = cube === null ? null : { ix: cube.ix, iy: cube.iy, iz: cube.iz };
+    this.digTargetSentAt = now;
+    this.connection?.sendDigTarget(this.digTargetSent);
+  }
+
+  /** The faint box over the cube a click would dig: yellow if it can be, red if not. */
+  private showDigPreview(cube: Dig | null, allowed: boolean): void {
+    const preview = this.digPreview;
+    if (cube === null) {
       if (preview !== null) preview.group.visible = false;
       return;
     }
@@ -3693,9 +3756,9 @@ export class Game {
     if (lit.group.parent === null) this.outdoors.add(lit.group);
     lit.group.visible = true;
     // A cube is two half-metre cells each way, starting at its corner cell.
-    lit.group.position.set((dig.ix + 1) * VOXEL, (dig.iy + 1) * VOXEL, (dig.iz + 1) * VOXEL);
-    lit.fill.color.set(refusal === null ? 0xffd27a : 0xff5a4a);
-    lit.edges.color.set(refusal === null ? 0xffe9b0 : 0xff8a7a);
+    lit.group.position.set((cube.ix + 1) * VOXEL, (cube.iy + 1) * VOXEL, (cube.iz + 1) * VOXEL);
+    lit.fill.color.set(allowed ? 0xffd27a : 0xff5a4a);
+    lit.edges.color.set(allowed ? 0xffe9b0 : 0xff8a7a);
   }
 
   private makeDigPreview(): NonNullable<Game['digPreview']> {
@@ -3715,32 +3778,6 @@ export class Game {
     );
     this.digPreview = { group, fill, edges };
     return this.digPreview;
-  }
-
-  /**
-   * Where the mouse points inside a hole, as far as a swing of the shovel
-   * cares: at the roof right overhead (dig up), at the wall ahead at head
-   * height, or at floor level. Nothing in particular is `auto`.
-   */
-  private pointerDigAim(camera: FollowCamera, feet: Readonly<Vec3>): DigAim {
-    const dug = this.digScene;
-    if (dug === null || !this.isEquipped('shovel') || this.space !== OUTDOORS) return 'auto';
-    if (dug.depthAt(feet.x, feet.z, feet.y) < 0.4) return 'auto';
-    const pointer = this.controls?.pointerPosition() ?? null;
-    if (pointer === null) return 'auto';
-    this.clickNdc.set(
-      (pointer.x / window.innerWidth) * 2 - 1,
-      -(pointer.y / window.innerHeight) * 2 + 1,
-    );
-    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
-    const hit = this.clickRaycaster.intersectObjects([...dug.cameraBlockers], false)[0];
-    if (hit === undefined) return 'auto';
-    const rise = hit.point.y - feet.y;
-    const beside = Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z);
-    // The floor at your feet: down under you.
-    if (rise < 0.3 && beside < 0.9) return 'under';
-    if (rise > 1.2 && Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z) < 1.6) return 'up';
-    return rise >= 0.9 ? 'head' : 'level';
   }
 
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
@@ -4243,20 +4280,10 @@ export class Game {
       this.fishingPhase !== null ||
       this.actionContext(player.motion.position, this.aimYaw ?? player.motion.facingYaw)
         .castInstead;
-    const digAim = this.pointerDigAim(camera, player.motion.position);
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
-      (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0) |
-      (digAim === 'up'
-        ? PlayerButton.AimUp
-        : digAim === 'head'
-          ? PlayerButton.AimHead
-          : digAim === 'level'
-            ? PlayerButton.AimLevel
-            : digAim === 'under'
-              ? PlayerButton.AimUnder
-              : 0);
-    this.updateDigPreview(camera, player.motion.position, buttons, digAim);
+      (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+    this.updateDigTarget(camera, player.motion.position);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&

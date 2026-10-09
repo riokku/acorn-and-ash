@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_WORLD_SEED, HUNGER_MAX, TICK_MILLISECONDS } from '../src/constants';
 import { countOf } from '../src/sim/inventory';
 import { PlayerButton, createInput } from '../src/sim/player';
-import { DIG_MAX_COUNT, digRefusal, digYield, inHomeClearing, planDig } from '../src/sim/digging';
+import {
+  DIG_MAX_COUNT,
+  DIG_REACH_SLACK,
+  cubeAtHit,
+  digInReach,
+  digRefusal,
+  digYield,
+  inHomeClearing,
+  planDig,
+} from '../src/sim/digging';
 import { WorldSimulation, type PersistedPlayer } from '../src/sim/world-sim';
 import { DugGrid } from '../src/world/digging';
 import { createWildernessTerrain } from '../src/world/terrain';
@@ -180,57 +189,90 @@ describe('digging with the shovel', () => {
     expect(countOf(sim.inventoryOf(1), 'stone')).toBe(before);
   });
 
-  it('digs overhead, in the square you stand in, when aimed up', () => {
-    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-    const grid = new DugGrid(terrain);
-    const spot = findFlatSpot(terrain);
-    const feet = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z), z: spot.z + 0.5 };
-    // A tunnel two cubes tall right under the feet: the roof is next.
-    const level = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid);
-    grid.apply(level);
-    const roof = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid, 'up');
-    expect(roof.ix).toBe(Math.floor(feet.x) * 2);
-    expect(roof.iz).toBe(Math.floor(feet.z) * 2);
-    expect(roof.iy).toBeGreaterThan(level.iy);
-    expect(grid.solidCubes(roof).length).toBeGreaterThan(0);
+  it('takes the cube behind a point of floor, wall or roof the mouse is on', () => {
+    const up = { x: 0, y: 1, z: 0 };
+    // A floor at exactly 10 m: the cube is the metre square and loses the half metre under it.
+    const floor = cubeAtHit({ x: 3.4, y: 10, z: 5.7 }, up);
+    expect([floor.ix, floor.iz]).toEqual([6, 10]);
+    expect(floor.iy).toBe(19);
+    // A roof at 10 m (facing down): the half metre above it.
+    const roof = cubeAtHit({ x: 3.4, y: 10, z: 5.7 }, { x: 0, y: -1, z: 0 });
+    expect(roof.iy).toBe(19);
+    expect(roof.iy * 0.5).toBeLessThanOrEqual(10);
+    expect((roof.iy + 2) * 0.5).toBeGreaterThan(10);
+    // A wall facing -X at x = 4: pushed into the ground, so it is the square from 4 to 5.
+    const wall = cubeAtHit({ x: 4, y: 11.1, z: 5.5 }, { x: -1, y: 0, z: 0 });
+    expect(wall.ix).toBe(8);
+    // Centred on the point: 11.1 m is in the lower half of its half metre, so the cube reaches below.
+    expect(wall.iy).toBe(21);
   });
 
-  it('reaches past a cube already dug when pointed at the wall ahead', () => {
-    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-    const grid = new DugGrid(terrain);
-    const spot = findFlatSpot(terrain);
-    const inside = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z) - 3, z: spot.z + 0.5 };
-    // Facing -Z (yaw 0): the first cube ahead, floor and head, is dug already.
-    const first = planDig(inside, 0, false, grid);
-    grid.apply(first);
-    const head = planDig(inside, 0, false, grid);
-    grid.apply(head);
-    // Pointed straight ahead it takes the next cube along, not the one above or below.
-    const level = planDig(inside, 0, false, grid, 'level');
-    expect(level.iz).toBe(first.iz - 2);
-    expect(level.iy).toBe(first.iy);
-    // Pointed at head height it takes the cube above the floor, one further along.
-    const high = planDig(inside, 0, false, grid, 'head');
-    expect(high.iz).toBe(first.iz - 2);
-    expect(high.iy).toBe(first.iy + 2);
-    expect(grid.solidCubes(level).length).toBeGreaterThan(0);
+  it('only digs what is within reach of the chest', () => {
+    const feet = { x: 0.5, y: 10, z: 0.5 };
+    const near = { ix: 2, iy: 19, iz: 0, dir: 4 as const };
+    const far = { ix: 12, iy: 19, iz: 0, dir: 4 as const };
+    expect(digInReach(feet, near)).toBe(true);
+    expect(digInReach(feet, far)).toBe(false);
+    // The server allows a little extra for somebody who has walked on.
+    const edge = { ix: 6, iy: 19, iz: 0, dir: 4 as const };
+    expect(digInReach(feet, edge)).toBe(false);
+    expect(digInReach(feet, edge, DIG_REACH_SLACK)).toBe(true);
   });
 
-  it('digs down under your feet, half a metre at a time, when aimed at the floor beside you', () => {
-    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-    const grid = new DugGrid(terrain);
+  it('digs exactly the cube the mouse was on, wherever it is within reach', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withShovel(1));
+    const terrain = sim.collision.terrain;
     const spot = findFlatSpot(terrain);
     const feet = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z), z: spot.z + 0.5 };
-    const first = planDig(feet, 0, false, grid, 'under');
-    // Your own square, not one beside it.
-    expect(first.ix).toBe(Math.floor(feet.x) * 2);
-    expect(first.iz).toBe(Math.floor(feet.z) * 2);
-    expect(grid.solidCubes(first).length).toBeGreaterThanOrEqual(4);
-    grid.apply(first);
-    // Standing in it now, half a metre lower: the next one goes down another half metre.
-    const lower = planDig({ ...feet, y: feet.y - 0.5 }, 0, false, grid, 'under');
-    expect(lower.iy).toBe(first.iy - 1);
-    expect(grid.solidCubes(lower).length).toBeGreaterThan(0);
+    sim.placePlayer(1, feet, 0);
+    // The ground 1.6 m to one side and behind: not the way the player faces (yaw 0).
+    const target = cubeAtHit(
+      { x: feet.x + 1.6, y: terrain.heightAt(feet.x + 1.6, feet.z + 0.8), z: feet.z + 0.8 },
+      { x: 0, y: 1, z: 0 },
+    );
+    sim.setDigTarget(1, target);
+    for (let seq = 1; seq <= 40 && sim.digsList().length === 0; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList()).toEqual([{ ...target, dir: 4 }]);
+  });
+
+  it('refuses a cube too far away, and says so', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withShovel(1));
+    const terrain = sim.collision.terrain;
+    const spot = findFlatSpot(terrain);
+    const feet = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z), z: spot.z + 0.5 };
+    sim.placePlayer(1, feet, 0);
+    sim.setDigTarget(1, cubeAtHit({ x: feet.x + 9, y: feet.y, z: feet.z }, { x: 0, y: 1, z: 0 }));
+    for (let seq = 1; seq <= 40; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList()).toHaveLength(0);
+    expect(sim.drainDigRefusals().map((refusal) => refusal.reason)).toContain('far');
+  });
+
+  it('ignores nonsense cubes and goes back to the way you face when told nothing', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withShovel(1));
+    const spot = findHillside(sim);
+    sim.placePlayer(
+      1,
+      { x: spot.x, y: sim.collision.terrain.heightAt(spot.x, spot.z), z: spot.z },
+      0,
+    );
+    sim.setDigTarget(1, { ix: 1.5, iy: 0, iz: 0 });
+    sim.setDigTarget(1, { ix: 99999, iy: 0, iz: 0 });
+    sim.setDigTarget(1, null);
+    for (let seq = 1; seq <= 40 && sim.digsList().length === 0; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    // The ordinary dig, ahead of the feet.
+    expect(sim.digsList()).toHaveLength(1);
   });
 
   it('digs nothing without the shovel in hand', () => {
