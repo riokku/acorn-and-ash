@@ -34,23 +34,38 @@ describe('smoothing the lining of a hole', () => {
     expect(surface.positions[middle * 3 + 1]!).toBeGreaterThan(-0.05);
   });
 
-  it('leaves the open edges of the surface where they are', () => {
+  it('only slides the open edges of the surface along themselves', () => {
     const surface = sheet(4, 0.5);
-    const before = [...surface.positions];
     smoothLining(surface, 6);
     for (let z = 0; z <= 4; z++)
       for (let x = 0; x <= 4; x++) {
         if (x > 0 && x < 4 && z > 0 && z < 4) continue;
         const at = (z * 5 + x) * 3;
-        expect(surface.positions.slice(at, at + 3)).toEqual(before.slice(at, at + 3));
+        // Still flat, and never pushed far outside the square the sheet started as.
+        expect(surface.positions[at + 1]!).toBeCloseTo(0, 6);
+        expect(surface.positions[at]!).toBeGreaterThanOrEqual(-0.15);
+        expect(surface.positions[at]!).toBeLessThanOrEqual(2.15);
+        expect(surface.positions[at + 2]!).toBeGreaterThanOrEqual(-0.15);
+        expect(surface.positions[at + 2]!).toBeLessThanOrEqual(2.15);
       }
+    // The middle of a side stays on that side.
+    expect(Math.abs(surface.positions[(0 * 5 + 2) * 3 + 2]!)).toBeLessThan(0.15);
   });
 
-  it('does nothing to a surface that is already flat, or with no passes', () => {
+  it('rounds off the square corners of the open edge', () => {
+    const surface = sheet(4, 0);
+    smoothLining(surface, 6);
+    const corner = 0;
+    expect(Math.hypot(surface.positions[corner]!, surface.positions[corner + 2]!)).toBeGreaterThan(
+      0.05,
+    );
+  });
+
+  it('keeps a flat surface flat, and does nothing with no passes', () => {
     const flat = sheet(4, 0);
-    const before = [...flat.positions];
     smoothLining(flat, 5);
-    for (let i = 0; i < before.length; i++) expect(flat.positions[i]!).toBeCloseTo(before[i]!, 6);
+    for (let i = 0; i < flat.positions.length / 3; i++)
+      expect(flat.positions[i * 3 + 1]!).toBeCloseTo(0, 6);
     const bumpy = sheet(4, 0.5);
     const kept = [...bumpy.positions];
     smoothLining(bumpy, 0);

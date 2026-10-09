@@ -37,6 +37,23 @@ export function findDugGroundSpot(terrain: Terrain): { x: number; z: number } {
   return { x: -150, z: 150 };
 }
 
+/** A spot outside the clearing where the ground is flat for a dozen metres, as most of the wilderness is. */
+export function findFlatSpot(terrain: Terrain): { x: number; z: number } {
+  for (let x = -280; x < -60; x += 3) {
+    for (let z = 280; z > 60; z -= 3) {
+      if (inHomeClearing(x, z)) continue;
+      const here = terrain.heightAt(x, z);
+      if (here < 3) continue;
+      let flat = true;
+      for (let along = 0; along <= 14 && flat; along += 2)
+        for (let across = -3; across <= 3 && flat; across += 3)
+          flat = Math.abs(terrain.heightAt(x + along, z + across) - here) < 0.25;
+      if (flat) return { x, z };
+    }
+  }
+  return findDugGroundSpot(terrain);
+}
+
 export function createDugGround(): { group: THREE.Group; spot: { x: number; z: number } } {
   return makeDugGround('pit');
 }
@@ -52,7 +69,7 @@ function makeDugGround(kind: 'pit' | 'ramp'): {
 } {
   installBvhRaycasting();
   const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
-  const spot = findDugGroundSpot(terrain);
+  const spot = kind === 'ramp' ? findFlatSpot(terrain) : findDugGroundSpot(terrain);
   const ground = createGround(
     terrain,
     createGroundShader({ water: [], lake: LAKE, stream: STREAM, props: [] }),
@@ -90,7 +107,11 @@ function makeDugGround(kind: 'pit' | 'ramp'): {
   // Placed so the hole is where the gallery looks: the exhibit's own position.
   const world = new THREE.Group();
   world.add(ground.mesh, ground.underground, scene.group);
-  world.position.set(-spot.x, -terrain.heightAt(spot.x, spot.z), -spot.z);
+  world.position.set(
+    -(Math.floor(spot.x) + 0.5),
+    -terrain.heightAt(spot.x, spot.z),
+    -(Math.floor(spot.z) + 0.5),
+  );
   const group = new THREE.Group();
   group.add(world);
   return { group, spot };
