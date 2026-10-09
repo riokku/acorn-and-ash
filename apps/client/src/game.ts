@@ -1892,6 +1892,7 @@ export class Game {
         // twice changes nothing, and it can simply be played again.
         this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
         this.digScene?.apply(message.digs);
+        this.grass?.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
         break;
       }
       case 'rareReel': {
@@ -2560,6 +2561,7 @@ export class Game {
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);
+      this.grass.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
       this.outdoors.add(this.grass.mesh);
 
       this.outdoors.add(this.floats.group);
