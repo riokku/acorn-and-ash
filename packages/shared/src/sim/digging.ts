@@ -48,6 +48,7 @@ export function planDig(
   aimYaw: number,
   down: boolean,
   grid: DugGrid,
+  up = false,
 ): Dig {
   // Yaw 0 looks down -Z, matching the way movement reads it.
   const forwardX = -Math.sin(aimYaw);
@@ -59,6 +60,15 @@ export function planDig(
     iz: (Math.floor(position.z) + way.z) * DIG_CUBE,
     dir: CUBE_DIG,
   };
+  if (up) {
+    // Straight overhead, in the square you stand in: the first solid cube above your head.
+    const here = Math.floor(position.x) * DIG_CUBE;
+    const there = Math.floor(position.z) * DIG_CUBE;
+    for (let rise = DIG_CUBE; rise <= DIG_CUBE * 4; rise += DIG_CUBE) {
+      const overhead: Dig = { ix: here, iy: feet.iy + rise, iz: there, dir: CUBE_DIG };
+      if (grid.solidCubes(overhead).length > 0) return overhead;
+    }
+  }
   if (down || grid.solidCubes(feet).length > 0) return feet;
   const head: Dig = { ...feet, iy: feet.iy + DIG_CUBE };
   if (grid.solidCubes(head).length > 0) return head;
@@ -116,7 +126,8 @@ export function digYield(
   if (rng.nextRange(0, 1) >= DIG_LOOT_CHANCE) return [];
   const x = (dig.ix + 0.5) * VOXEL;
   const z = (dig.iz + 0.5) * VOXEL;
-  if (mountainWeight(x, z) > 0.3 && rng.nextRange(0, 1) < 0.35) return [{ item: 'ironOre', count: 1 }];
+  if (mountainWeight(x, z) > 0.3 && rng.nextRange(0, 1) < 0.35)
+    return [{ item: 'ironOre', count: 1 }];
   if (surface < 4 && rng.nextRange(0, 1) < 0.3) return [{ item: 'clay', count: 1 }];
   return [{ item: 'stone', count: 1 }];
 }

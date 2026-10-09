@@ -78,11 +78,18 @@ function makeDugGround(kind: 'pit' | 'ramp'): {
       // Each step, and the cubes above it up to the open air: a trench, not a tunnel.
       for (let iy = top - step; iy <= top + 2; iy += 2)
         digs.push({ ix: ix + 2 * step, iy, iz, dir: CUBE_DIG });
+  if (kind === 'ramp') {
+    // On from the foot of the ramp under the hill: a tunnel a metre across, two tall, then a step up.
+    for (let along = 6; along < 11; along++) {
+      digs.push({ ix: ix + 2 * along, iy: top - 5, iz, dir: CUBE_DIG });
+      digs.push({ ix: ix + 2 * along, iy: top - 3, iz, dir: CUBE_DIG });
+    }
+  }
   scene.apply(digs);
 
   // Placed so the hole is where the gallery looks: the exhibit's own position.
   const world = new THREE.Group();
-  world.add(ground.mesh, scene.group);
+  world.add(ground.mesh, ground.underground, scene.group);
   world.position.set(-spot.x, -terrain.heightAt(spot.x, spot.z), -spot.z);
   const group = new THREE.Group();
   group.add(world);

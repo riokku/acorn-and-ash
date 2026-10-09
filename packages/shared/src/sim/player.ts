@@ -44,6 +44,8 @@ export const PlayerButton = {
   Fish: 1 << 7,
   /** X. Sits down on the spot, wherever you stand, and gets you up again. */
   Sit: 1 << 8,
+  /** Set while the mouse points at the roof of a hole overhead, so a swing of the shovel digs up. */
+  AimUp: 1 << 9,
 } as const;
 
 /**

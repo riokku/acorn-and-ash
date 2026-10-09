@@ -174,6 +174,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     metalness: 0,
     flatShading: true,
   });
+  const undersideMaterial = new THREE.MeshBasicMaterial({ color: 0x1c140d, side: THREE.BackSide });
   const chunks = new Map<number, THREE.Mesh>();
   /** The ground over each chunk's hidden squares, drawn again in the ground's paint with the holes left out. */
   const skins = new Map<number, THREE.Mesh>();
@@ -234,11 +235,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
 
   function isRocky(x: number, z: number): boolean {
     return mountainWeight(x, z) > 0.2 && terrain.heightAt(x, z) > 8;
-  }
-
-  /** A little variation per cube so the blocks read as blocks. */
-  function cubeShade(ix: number, iy: number, iz: number): number {
-    return 0.9 + (((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) & 15) / 80;
   }
 
   /** How far down the painted strip a point on a wall is: 1 at the ground, 0 at the bottom of the strip. */
@@ -615,7 +611,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
                   );
                   layerColor((1 - v) * TEXTURE_DEPTH, color);
                 } else color.setScalar(1);
-                color.multiplyScalar(cubeShade(ix, iy, iz));
                 const base = positions.length / 3;
                 for (const corner of FACE_CORNERS[face]!) {
                   const x = (ix + corner[0]) * VOXEL - d.dx * setBack;
@@ -688,6 +683,8 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       const mesh = new THREE.Mesh(geometry, ground.material);
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
+      // The same piece seen from below, in dark earth, so seams never show sky.
+      mesh.add(new THREE.Mesh(geometry, undersideMaterial));
       group.add(mesh);
       skins.set(chunk, mesh);
     }
@@ -767,6 +764,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       skins.clear();
       wallMaterial.dispose();
       capMaterial.dispose();
+      undersideMaterial.dispose();
       earthLayers.dispose();
     },
   };

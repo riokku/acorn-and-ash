@@ -3635,6 +3635,28 @@ export class Game {
     return kind === 'rowboat' ? LAKE.level : (this.collision?.terrain.heightAt(x, z) ?? 0);
   }
 
+  /**
+   * Whether the mouse points at the roof of a hole right overhead, so that a
+   * swing of the shovel digs up there instead of ahead.
+   */
+  private pointerAimsUp(camera: FollowCamera, feet: Readonly<Vec3>): boolean {
+    const dug = this.digScene;
+    if (dug === null || !this.isEquipped('shovel') || this.space !== OUTDOORS) return false;
+    if (dug.depthAt(feet.x, feet.z, feet.y) < 0.4) return false;
+    const pointer = this.controls?.pointerPosition() ?? null;
+    if (pointer === null) return false;
+    this.clickNdc.set(
+      (pointer.x / window.innerWidth) * 2 - 1,
+      -(pointer.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const hit = this.clickRaycaster.intersectObjects([...dug.cameraBlockers], false)[0];
+    if (hit === undefined) return false;
+    return (
+      hit.point.y > feet.y + 1.2 && Math.hypot(hit.point.x - feet.x, hit.point.z - feet.z) < 1.6
+    );
+  }
+
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
   private groundUnderPointer(camera: FollowCamera): { x: number; z: number } | null {
     const pointer = this.controls?.pointerPosition() ?? null;
@@ -4137,7 +4159,8 @@ export class Game {
         .castInstead;
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
-      (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+      (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0) |
+      (this.pointerAimsUp(camera, player.motion.position) ? PlayerButton.AimUp : 0);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&
