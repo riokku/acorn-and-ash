@@ -326,8 +326,8 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   const SKIN_MARGIN = 30;
   /** How high the heap of dirt round a mouth is piled at its lip, in metres. */
   const MOUND_HEIGHT = 0.22;
-  /** How far the ground curves down into the mouth before it is cut away, in metres. */
-  const MOUTH_SINK = 0.7;
+  /** How near the mouth a point of ground has to be to be cut away: the lip itself. */
+  const MOUTH_EDGE = 0.5;
   /** What the ground's tint is pulled towards under the heap, so it reads as turned earth. */
   const DIRT_TINT = [0.78, 0.58, 0.4] as const;
   const CLOD_COLOR = new THREE.Color(0x8a5e36);
@@ -433,10 +433,11 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
               const b = Math.min(size - 1, Math.max(0, j + SKIN_MARGIN + db));
               near += soft[b * size + a]! / 4;
             }
-          // Up into a heap at the lip, then curving away down into the hole.
+          // Up into a heap, then easing down a little to the lip itself.
           heap[j * side + i] =
-            MOUND_HEIGHT * THREE.MathUtils.smoothstep(near, 0.04, 0.4) -
-            (MOUND_HEIGHT + MOUTH_SINK) * THREE.MathUtils.smoothstep(near, 0.45, 0.78);
+            MOUND_HEIGHT *
+            THREE.MathUtils.smoothstep(near, 0.04, 0.38) *
+            (1 - 0.55 * THREE.MathUtils.smoothstep(near, 0.38, MOUTH_EDGE));
           earth[j * side + i] = THREE.MathUtils.smoothstep(near, 0.02, 0.3);
           nearMouth[j * side + i] = near;
         }
@@ -469,6 +470,43 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       }
     }
 
+    // The cut edge is drawn smooth: each point of ground inside the mouth that a
+    // triangle still uses is slid along its edges to where the lip really is, so
+    // the edge is a clean curve and not a staircase of 5 cm squares.
+    if (soft !== null) {
+      const sums = new Float64Array(side * side * 3);
+      const counts = new Uint8Array(side * side);
+      const slide = (a: number, b: number, c: number): void => {
+        const three = [a, b, c];
+        const lows = three.filter((v) => nearMouth[v]! < MOUTH_EDGE);
+        if (lows.length === 0 || lows.length === 3) return;
+        for (const high of three) {
+          if (nearMouth[high]! < MOUTH_EDGE) continue;
+          for (const low of lows) {
+            const reach = (MOUTH_EDGE - nearMouth[low]!) / (nearMouth[high]! - nearMouth[low]!);
+            for (let axis = 0; axis < 3; axis++) {
+              const from = lattice.position[low * 3 + axis]!;
+              const to = lattice.position[high * 3 + axis]!;
+              sums[high * 3 + axis] = sums[high * 3 + axis]! + from + (to - from) * reach;
+            }
+            counts[high] = counts[high]! + 1;
+          }
+        }
+      };
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const p00 = j * side + i;
+          slide(p00, p00 + side, p00 + 1);
+          slide(p00 + side, p00 + side + 1, p00 + 1);
+        }
+      }
+      for (let v = 0; v < side * side; v++) {
+        if (counts[v] === 0) continue;
+        for (let axis = 0; axis < 3; axis++)
+          lattice.position[v * 3 + axis] = sums[v * 3 + axis]! / counts[v]!;
+      }
+    }
+
     const base = skin.position.length / 3;
     for (let i = 0; i < side * side; i++) {
       skin.position.push(
@@ -496,13 +534,12 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
         const p10 = p00 + 1;
         const p01 = p00 + side;
         const p11 = p01 + 1;
-        // Cut away only where the ground has curved well down into the hole.
-        if (
-          mouth !== null &&
-          Math.min(nearMouth[p00]!, nearMouth[p10]!, nearMouth[p01]!, nearMouth[p11]!) >= 0.78
-        )
-          continue;
-        skin.index.push(base + p00, base + p01, base + p10, base + p01, base + p11, base + p10);
+        // Cut away only what lies wholly inside the mouth.
+        const inside = (v: number): boolean => mouth !== null && nearMouth[v]! >= MOUTH_EDGE;
+        if (!(inside(p00) && inside(p01) && inside(p10)))
+          skin.index.push(base + p00, base + p01, base + p10);
+        if (!(inside(p01) && inside(p11) && inside(p10)))
+          skin.index.push(base + p01, base + p11, base + p10);
       }
     }
 
