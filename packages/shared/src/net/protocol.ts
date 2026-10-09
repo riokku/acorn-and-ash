@@ -7,6 +7,7 @@ import {
 } from '../data/gear';
 import type { Dig } from '../world/digging';
 import { GEAR_REFUSALS, type GearRefusal } from '../sim/gear';
+import { DIG_REFUSALS, type DigRefusalReason } from '../sim/digging';
 import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
 import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
 import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
@@ -513,6 +514,11 @@ export function encodeGearRefused(reason: GearRefusal): ArrayBuffer {
   view.setUint8(0, ServerMessageType.GearRefused);
   view.setUint8(1, GEAR_REFUSALS.indexOf(reason));
   return buffer;
+}
+
+/** A shovel swing that made no hole, sent only to the digger: type(1) + why(1). */
+export function encodeDigRefused(reason: DigRefusalReason): ArrayBuffer {
+  return new Uint8Array([ServerMessageType.DigRefused, DIG_REFUSALS.indexOf(reason)]).buffer;
 }
 
 export function encodeUseItem(item: ItemId): ArrayBuffer {
@@ -1756,6 +1762,11 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== 2) return null;
       const reason = GEAR_REFUSALS[view.getUint8(1)];
       return reason === undefined ? null : { type: 'gearRefused', reason };
+    }
+    case ServerMessageType.DigRefused: {
+      if (data.byteLength !== 2) return null;
+      const reason = DIG_REFUSALS[view.getUint8(1)];
+      return reason === undefined ? null : { type: 'digRefused', reason };
     }
     case ServerMessageType.Expedition: {
       if (data.byteLength !== 21) return null;

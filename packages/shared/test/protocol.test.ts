@@ -33,6 +33,7 @@ import {
   encodeHealth,
   encodeLakeIce,
   encodeDug,
+  encodeDigRefused,
   encodeHello,
   encodeHunger,
   encodeRoster,
@@ -1424,6 +1425,20 @@ describe('the lake freezing and thawing', () => {
     expect(decodeServerMessage(oversized.buffer)).toBeNull();
     new DataView(valid).setUint8(1, 2);
     expect(decodeServerMessage(valid)).toBeNull();
+  });
+});
+
+describe('a shovel swing that made no hole', () => {
+  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing'] as const)(
+    'round trips %s',
+    (reason) => {
+      expect(decodeServerMessage(encodeDigRefused(reason))).toEqual({ type: 'digRefused', reason });
+    },
+  );
+
+  it('rejects an unknown reason or a wrong length', () => {
+    expect(decodeServerMessage(new Uint8Array([0x42, 99]).buffer)).toBeNull();
+    expect(decodeServerMessage(new Uint8Array([0x42]).buffer)).toBeNull();
   });
 });
 

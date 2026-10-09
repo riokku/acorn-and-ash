@@ -1,4 +1,4 @@
-import type { GearRefusal } from '@acorn/shared';
+import type { DigRefusalReason, GearRefusal } from '@acorn/shared';
 
 /** What the game says when the server turns a change of gear down (decision 0113). */
 export function gearRefusalText(reason: GearRefusal): string {
@@ -13,5 +13,23 @@ export function gearRefusalText(reason: GearRefusal): string {
       return "That doesn't go there.";
     case 'missing':
       return "You don't have that any more.";
+  }
+}
+
+/** What the game says when a swing of the shovel makes no hole (decision 0114). */
+export function digRefusalText(reason: DigRefusalReason): string {
+  switch (reason) {
+    case 'home':
+      return "Can't dig here. This is your home clearing.";
+    case 'water':
+      return "Can't dig here. Too close to water.";
+    case 'built':
+      return "Can't dig here. Too close to something built.";
+    case 'deep':
+      return "Can't dig any deeper here.";
+    case 'full':
+      return "Can't dig here. This world has been dug up enough.";
+    case 'nothing':
+      return "Can't dig here.";
   }
 }

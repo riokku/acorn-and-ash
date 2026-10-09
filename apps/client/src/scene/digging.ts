@@ -4,6 +4,8 @@ import { DugGrid, VOXEL, mountainWeight, type Dig, type Terrain } from '@acorn/s
 
 import earthLayersUrl from '@assets/textures/dug-earth-layers.png?url';
 
+import type { GroundPatches } from './wilderness';
+
 import {
   appendWallPiece,
   dugWallKit,
@@ -49,6 +51,9 @@ const STONE = new THREE.Color(0x56565a);
  * so they come out as plain ground instead of smeared streaks.
  */
 const PLAIN_COLUMN = 0.619;
+
+/** How far behind the lining the plain faces are set, in metres. */
+const BACKING_DEPTH = 0.03;
 
 /** How close to the surface a dug cube has to be to cut the smooth ground away. */
 const MOUTH_COVER = 1.5;
@@ -106,6 +111,19 @@ const FACE_CORNERS: ReadonlyArray<ReadonlyArray<readonly [number, number, number
   ],
 ];
 
+type Point = [number, number, number];
+
+/** The ground over hidden squares, gathered as flat lists until a chunk is ready to draw. */
+interface SkinBuffers {
+  position: number[];
+  normal: number[];
+  floor: number[];
+  rock: number[];
+  snow: number[];
+  tint: number[];
+  index: number[];
+}
+
 export interface DigScene {
   readonly group: THREE.Group;
   readonly grid: DugGrid;
@@ -113,6 +131,8 @@ export interface DigScene {
   readonly cameraBlockers: readonly THREE.Mesh[];
   /** Carve any digs not yet known (ones already applied change nothing), then redraw what changed. */
   apply(digs: readonly Dig[]): void;
+  /** Whether a hole opens to the sky at, or right beside, this spot: no grass should grow there. */
+  isOpenNear(x: number, z: number): boolean;
   /** How far below the ground above them a body at this spot is, in metres (0 in the open air). */
   depthAt(x: number, z: number, feetY: number): number;
   dispose(): void;
@@ -124,14 +144,7 @@ export interface DigScene {
  * @param groundOrigin where the ground mesh's first square starts, on both axes.
  * @param groundCell how wide one ground square is.
  */
-export function createDigScene(
-  terrain: Terrain,
-  ground: {
-    readonly origin: number;
-    readonly cell: number;
-    hide(cellX: number, cellZ: number): void;
-  },
-): DigScene {
+export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScene {
   const grid = new DugGrid(terrain);
   const group = new THREE.Group();
   const earthLayers = new THREE.TextureLoader().load(earthLayersUrl);
@@ -153,6 +166,8 @@ export function createDigScene(
     flatShading: true,
   });
   const chunks = new Map<number, THREE.Mesh>();
+  /** The ground over each chunk's hidden squares, drawn again in the ground's paint with the holes left out. */
+  const skins = new Map<number, THREE.Mesh>();
   const hidden = new Set<number>();
   const dirty = new Set<number>();
   /** Ground squares with dug cubes in them: the ones that need walls drawn. */
@@ -171,20 +186,36 @@ export function createDigScene(
   const blockers: THREE.Mesh[] = [];
 
   function noteCube(ix: number, iy: number, iz: number): void {
-    const cellX = cellOf(ix);
-    const cellZ = cellOf(iz);
-    const key = cellKey(cellX, cellZ);
-    touched.add(key);
-    dirty.add(chunkKeyOfCell(cellX, cellZ));
     const surface = terrain.heightAt((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
-    if (surface - (iy + 1) * VOXEL < MOUTH_COVER && !hidden.has(key)) {
-      hidden.add(key);
-      ground.hide(cellX, cellZ);
+    const nearSurface = surface - (iy + 1) * VOXEL < MOUTH_COVER;
+    // The squares touching this cube too: a hole at the edge of a square needs
+    // the next one redrawn as well, or its ground has no wall facing the hole.
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const cellX = cellOf(ix + dx);
+        const cellZ = cellOf(iz + dz);
+        const key = cellKey(cellX, cellZ);
+        touched.add(key);
+        dirty.add(chunkKeyOfCell(cellX, cellZ));
+        if (nearSurface && !hidden.has(key)) {
+          hidden.add(key);
+          ground.hide(cellX, cellZ);
+        }
+      }
     }
   }
 
   function isSolid(ix: number, iy: number, iz: number): boolean {
     return grid.isSolid(ix, iy, iz);
+  }
+
+  /** Whether a dug column reaches the open air: here the ground is a hole, not a roof. */
+  function isOpenColumn(ix: number, iz: number): boolean {
+    if (!grid.hasColumn(ix, iz)) return false;
+    for (let iy = -40; iy < 400; iy++) {
+      if (grid.isDug(ix, iy, iz) && !grid.isUnderground(ix, iy + 1, iz)) return true;
+    }
+    return false;
   }
 
   function isRocky(x: number, z: number): boolean {
@@ -239,6 +270,97 @@ export function createDigScene(
     return out;
   }
 
+  /** How many smaller squares a ground square is cut into along each side: one per half metre. */
+  const SKIN_STEPS = CUBES_PER_CELL;
+  /** How far the dark rim of a hole reaches down from the surface, in metres. */
+  const RIM_DEPTH = 0.6;
+
+  /**
+   * The ground over one hidden square, drawn again exactly where it was, in
+   * half-metre squares, leaving out the ones over an open hole. A dark rim
+   * hangs down from the cut edge so there is never a gap between the grass
+   * and the wall of the hole.
+   */
+  function addSkin(
+    cellX: number,
+    cellZ: number,
+    firstX: number,
+    firstZ: number,
+    skin: SkinBuffers,
+    rim: { positions: number[]; normals: number[]; uvs: number[]; colors: number[] },
+    rimIndices: number[],
+  ): void {
+    const lattice = ground.lattice?.(cellX, cellZ, SKIN_STEPS);
+    if (lattice === null || lattice === undefined) return;
+    const side = SKIN_STEPS + 1;
+    const base = skin.position.length / 3;
+    for (let i = 0; i < side * side; i++) {
+      skin.position.push(
+        lattice.position[i * 3]!,
+        lattice.position[i * 3 + 1]!,
+        lattice.position[i * 3 + 2]!,
+      );
+      skin.normal.push(
+        lattice.normal[i * 3]!,
+        lattice.normal[i * 3 + 1]!,
+        lattice.normal[i * 3 + 2]!,
+      );
+      skin.floor.push(lattice.floor[i]!);
+      skin.rock.push(lattice.rock[i]!);
+      skin.snow.push(lattice.snow[i]!);
+      skin.tint.push(lattice.tint[i * 3]!, lattice.tint[i * 3 + 1]!, lattice.tint[i * 3 + 2]!);
+    }
+    const point = (i: number, j: number): Point => {
+      const at = (j * side + i) * 3;
+      return [lattice.position[at]!, lattice.position[at + 1]!, lattice.position[at + 2]!];
+    };
+    const rimColor = TOPSOIL.clone().multiplyScalar(0.85);
+    /** A flat strip hanging from the skin's cut edge, facing into the hole. */
+    const hang = (top0: Point, top1: Point, facingX: number, facingZ: number): void => {
+      const corners: Point[] = [
+        top0,
+        top1,
+        [top1[0], top1[1] - RIM_DEPTH, top1[2]],
+        [top0[0], top0[1] - RIM_DEPTH, top0[2]],
+      ];
+      // Wound so the face looks the way the hole is, whichever way round the edge was given.
+      const e1 = [top1[0] - top0[0], top1[1] - top0[1], top1[2] - top0[2]] as const;
+      const e2 = [
+        corners[2]![0] - top0[0],
+        corners[2]![1] - top0[1],
+        corners[2]![2] - top0[2],
+      ] as const;
+      const nx = e1[1] * e2[2] - e1[2] * e2[1];
+      const nz = e1[0] * e2[1] - e1[1] * e2[0];
+      const order = nx * facingX + nz * facingZ >= 0 ? [0, 1, 2, 3] : [1, 0, 3, 2];
+      const first = rim.positions.length / 3;
+      for (const corner of order) {
+        const c = corners[corner]!;
+        rim.positions.push(c[0], c[1], c[2]);
+        rim.normals.push(facingX, 0, facingZ);
+        rim.colors.push(rimColor.r, rimColor.g, rimColor.b);
+        rim.uvs.push(0, 0);
+      }
+      rimIndices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+    };
+    for (let j = 0; j < SKIN_STEPS; j++) {
+      for (let i = 0; i < SKIN_STEPS; i++) {
+        const ix = firstX + i;
+        const iz = firstZ + j;
+        if (isOpenColumn(ix, iz)) continue;
+        const p00 = j * side + i;
+        const p10 = p00 + 1;
+        const p01 = p00 + side;
+        const p11 = p01 + 1;
+        skin.index.push(base + p00, base + p01, base + p10, base + p01, base + p11, base + p10);
+        if (isOpenColumn(ix + 1, iz)) hang(point(i + 1, j), point(i + 1, j + 1), 1, 0);
+        if (isOpenColumn(ix - 1, iz)) hang(point(i, j), point(i, j + 1), -1, 0);
+        if (isOpenColumn(ix, iz + 1)) hang(point(i, j + 1), point(i + 1, j + 1), 0, 1);
+        if (isOpenColumn(ix, iz - 1)) hang(point(i, j), point(i + 1, j), 0, -1);
+      }
+    }
+  }
+
   function rebuildChunk(chunk: number): void {
     const positions: number[] = [];
     const colors: number[] = [];
@@ -250,6 +372,16 @@ export function createDigScene(
     const capIndices: number[] = [];
     const liningIndices: number[] = [];
     const buffers = { positions, normals, uvs, colors, indices: liningIndices };
+    const skin: SkinBuffers = {
+      position: [],
+      normal: [],
+      floor: [],
+      rock: [],
+      snow: [],
+      tint: [],
+      index: [],
+    };
+    const withSkin = ground.lattice !== undefined && ground.material !== undefined;
     const color = new THREE.Color();
     const chunkCellX = Math.floor(chunk / 8192) - 4096;
     const chunkCellZ = (chunk % 8192) - 4096;
@@ -292,8 +424,14 @@ export function createDigScene(
                 const d = FACE_DIRECTIONS[face]!;
                 if (isSolid(ix + d.dx, iy + d.dy, iz + d.dz)) continue;
                 const intoDug = grid.isDug(ix + d.dx, iy + d.dy, iz + d.dz);
-                // The smooth lining takes over every face into dug space.
-                if (kit !== null && intoDug) continue;
+                // Faces into open sky are the old blocky ground: the smooth skin covers it.
+                if (withSkin && !intoDug && !grid.isUnderground(ix + d.dx, iy + d.dy, iz + d.dz))
+                  continue;
+                // The smooth lining takes over every face into dug space, but is rounded, so
+                // the corners behind it need something to look at: the same face, set a
+                // little back so it never fights the flat pieces of the lining.
+                const behindLining = kit !== null && intoDug;
+                const setBack = behindLining ? BACKING_DEPTH : 0;
                 // Under smooth ground that is still drawn, only faces into dug space show.
                 if (!isHidden && !intoDug) continue;
                 const rocky = isRocky((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
@@ -312,9 +450,9 @@ export function createDigScene(
                 color.multiplyScalar(cubeShade(ix, iy, iz));
                 const base = positions.length / 3;
                 for (const corner of FACE_CORNERS[face]!) {
-                  const x = (ix + corner[0]) * VOXEL;
-                  const y = (iy + corner[1]) * VOXEL;
-                  const z = (iz + corner[2]) * VOXEL;
+                  const x = (ix + corner[0]) * VOXEL - d.dx * setBack;
+                  const y = (iy + corner[1]) * VOXEL - d.dy * setBack;
+                  const z = (iz + corner[2]) * VOXEL - d.dz * setBack;
                   positions.push(x, y, z);
                   normals.push(d.dx, d.dy, d.dz);
                   colors.push(color.r, color.g, color.b);
@@ -334,6 +472,7 @@ export function createDigScene(
             }
           }
         }
+        if (withSkin && isHidden) addSkin(cellX, cellZ, firstX, firstZ, skin, buffers, capIndices);
         if (kit === null) continue;
         // The smooth lining: a piece for every open cube that touches solid ground.
         for (let ix = firstX; ix < firstX + cubesPerCell; ix++) {
@@ -361,6 +500,28 @@ export function createDigScene(
           }
         }
       }
+    }
+
+    const previousSkin = skins.get(chunk);
+    if (previousSkin !== undefined) {
+      group.remove(previousSkin);
+      previousSkin.geometry.dispose();
+      skins.delete(chunk);
+    }
+    if (skin.index.length > 0 && ground.material !== undefined) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(skin.position, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(skin.normal, 3));
+      geometry.setAttribute('floor', new THREE.Float32BufferAttribute(skin.floor, 1));
+      geometry.setAttribute('rock', new THREE.Float32BufferAttribute(skin.rock, 1));
+      geometry.setAttribute('snow', new THREE.Float32BufferAttribute(skin.snow, 1));
+      geometry.setAttribute('tint', new THREE.Float32BufferAttribute(skin.tint, 3));
+      geometry.setIndex(skin.index);
+      const mesh = new THREE.Mesh(geometry, ground.material);
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      group.add(mesh);
+      skins.set(chunk, mesh);
     }
 
     const previous = chunks.get(chunk);
@@ -415,6 +576,13 @@ export function createDigScene(
       for (const chunk of dirty) rebuildChunk(chunk);
       dirty.clear();
     },
+    isOpenNear(x, z) {
+      const ix = Math.floor(x / VOXEL);
+      const iz = Math.floor(z / VOXEL);
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dz = -1; dz <= 1; dz++) if (isOpenColumn(ix + dx, iz + dz)) return true;
+      return false;
+    },
     depthAt(x, z, feetY) {
       const surface = terrain.heightAt(x, z);
       return grid.hasColumn(Math.floor(x / VOXEL), Math.floor(z / VOXEL))
@@ -425,6 +593,8 @@ export function createDigScene(
       disposed = true;
       for (const mesh of chunks.values()) mesh.geometry.dispose();
       chunks.clear();
+      for (const mesh of skins.values()) mesh.geometry.dispose();
+      skins.clear();
       wallMaterial.dispose();
       capMaterial.dispose();
       earthLayers.dispose();

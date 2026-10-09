@@ -56,6 +56,28 @@ const tilt = new THREE.Quaternion();
 
 const UNTOUCHED: TreeAppearance = { generation: 0, felled: false };
 
+/** A piece of the ground cut into smaller squares, ready to be drawn in the ground's own paint. */
+export interface GroundLattice {
+  /** (n + 1) by (n + 1) points, row by row (along z), each x then y then z. */
+  readonly position: Float32Array;
+  readonly normal: Float32Array;
+  readonly floor: Float32Array;
+  readonly rock: Float32Array;
+  readonly snow: Float32Array;
+  readonly tint: Float32Array;
+}
+
+/** What the digging scene needs of the ground: to take a square away and, if it can, to draw it again with a hole. */
+export interface GroundPatches {
+  readonly origin: number;
+  readonly cell: number;
+  hide(cellX: number, cellZ: number): void;
+  /** The paint the ground wears, so a patch of it matches. Left out where there is no real ground. */
+  readonly material?: THREE.Material;
+  /** One ground square cut into n by n smaller ones, lying exactly on the ground it replaces. */
+  lattice?(cellX: number, cellZ: number, n: number): GroundLattice | null;
+}
+
 export interface WildernessScene {
   readonly group: THREE.Group;
   /**
@@ -73,11 +95,7 @@ export interface WildernessScene {
    * The smooth ground, for taking squares of it away where a dug tunnel comes
    * up near the surface (see `scene/digging.ts`): `hide` takes one square.
    */
-  readonly ground: {
-    readonly origin: number;
-    readonly cell: number;
-    hide(cellX: number, cellZ: number): void;
-  };
+  readonly ground: GroundPatches;
   /**
    * A blow landing on a tree: it shivers, tipping a little away along
    * `awayX`, `awayZ` - the way the blow was going - and settling back.
@@ -433,14 +451,11 @@ export function buildWildernessScene(
  * how grassy or bare it is and a soft tint, which the painted ground
  * material blends by (see decision 0053).
  */
-function createGround(
+export function createGround(
   terrain: Terrain,
   shader: GroundShader,
-): {
+): GroundPatches & {
   mesh: THREE.Mesh;
-  origin: number;
-  cell: number;
-  hide(cellX: number, cellZ: number): void;
   dispose(): void;
 } {
   const size = PLAYABLE_HALF_EXTENT * 2 + GROUND_FOG_MARGIN;
@@ -487,10 +502,74 @@ function createGround(
   mesh.receiveShadow = true;
   const index = geometry.getIndex();
   if (index === null) throw new Error('Plane geometry has no index');
+  const stride = segments + 1;
   return {
     mesh,
+    material,
     origin: -size / 2,
     cell: size / segments,
+    // The same surface as the square's two triangles, cut into n by n smaller
+    // squares: every point is worked out from the three corners of the
+    // triangle it lies in, so it sits exactly on the ground it replaces.
+    lattice: (cellX, cellZ, n) => {
+      if (cellX < 0 || cellZ < 0 || cellX >= segments || cellZ >= segments) return null;
+      const a = cellZ * stride + cellX;
+      const b = a + stride;
+      const c = b + 1;
+      const d = a + 1;
+      const points = (n + 1) * (n + 1);
+      const out = {
+        position: new Float32Array(points * 3),
+        normal: new Float32Array(points * 3),
+        floor: new Float32Array(points),
+        rock: new Float32Array(points),
+        snow: new Float32Array(points),
+        tint: new Float32Array(points * 3),
+      };
+      const corners: number[] = [0, 0, 0];
+      const weights: number[] = [0, 0, 0];
+      for (let j = 0; j <= n; j++) {
+        for (let i = 0; i <= n; i++) {
+          const u = i / n;
+          const v = j / n;
+          if (u + v <= 1) {
+            corners[0] = a;
+            corners[1] = b;
+            corners[2] = d;
+            weights[0] = 1 - u - v;
+            weights[1] = v;
+            weights[2] = u;
+          } else {
+            corners[0] = b;
+            corners[1] = c;
+            corners[2] = d;
+            weights[0] = 1 - u;
+            weights[1] = u + v - 1;
+            weights[2] = 1 - v;
+          }
+          const at = j * (n + 1) + i;
+          for (let k = 0; k < 3; k++) {
+            const corner = corners[k]!;
+            const w = weights[k]!;
+            for (let axis = 0; axis < 3; axis++) {
+              out.position[at * 3 + axis]! += w * position.array[corner * 3 + axis]!;
+              out.normal[at * 3 + axis]! += w * normal.array[corner * 3 + axis]!;
+              out.tint[at * 3 + axis]! += w * tint[corner * 3 + axis]!;
+            }
+            out.floor[at]! += w * floor[corner]!;
+            out.rock[at]! += w * rock[corner]!;
+            out.snow[at]! += w * snow[corner]!;
+          }
+          const length = Math.hypot(
+            out.normal[at * 3]!,
+            out.normal[at * 3 + 1]!,
+            out.normal[at * 3 + 2]!,
+          );
+          for (let axis = 0; axis < 3; axis++) out.normal[at * 3 + axis]! /= length || 1;
+        }
+      }
+      return out;
+    },
     // Every square is two triangles, six numbers in a row, left to right and
     // top to bottom: zeroing them leaves nothing to draw there.
     hide: (cellX, cellZ) => {

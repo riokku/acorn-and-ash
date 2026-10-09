@@ -131,6 +131,18 @@ describe('digging with the shovel', () => {
     expect(sim.digsList()).toHaveLength(1);
   });
 
+  it('tells the digger why when the home clearing refuses', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withShovel(1));
+    sim.placePlayer(1, { x: 0, y: sim.collision.terrain.heightAt(0, 0), z: 0 }, 0);
+    for (let seq = 1; seq <= 30; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, seq === 1 ? PlayerButton.Swing : 0));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList()).toHaveLength(0);
+    expect(sim.drainDigRefusals()).toEqual([{ netId: 1, reason: 'home' }]);
+  });
+
   it('digs nothing without the shovel in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1, { ...withShovel(1), items: [{ item: 'bag', count: 1 }] });

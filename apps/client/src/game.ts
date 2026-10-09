@@ -299,7 +299,7 @@ import {
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
-import { gearRefusalText } from './hud/gear-notices';
+import { digRefusalText, gearRefusalText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -1755,6 +1755,11 @@ export class Game {
         this.options.hud.publish({ worn: this.worn.get(this.selfNetId) ?? {} });
         break;
       }
+      case 'digRefused': {
+        this.interactionNote = digRefusalText(message.reason);
+        this.interactionNoteUntil = performance.now() + 2800;
+        break;
+      }
       case 'gearRefused': {
         this.gearNotice = {
           text: gearRefusalText(message.reason),
@@ -1887,6 +1892,7 @@ export class Game {
         // twice changes nothing, and it can simply be played again.
         this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
         this.digScene?.apply(message.digs);
+        this.grass?.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
         break;
       }
       case 'rareReel': {
@@ -2555,6 +2561,7 @@ export class Game {
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);
+      this.grass.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
       this.outdoors.add(this.grass.mesh);
 
       this.outdoors.add(this.floats.group);

@@ -46,6 +46,7 @@ import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
 import { preloadDugWalls } from '../scene/dug-walls';
 import { createDugEarth } from './dug-earth';
+import { createDugGround } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
 /**
@@ -68,6 +69,8 @@ interface Exhibit {
   readonly yaw?: number;
   /** How far back the camera stands to look at it on its own. */
   readonly view: number;
+  /** Brings its own ground, so it is shown only when asked for by name. */
+  readonly alone?: boolean;
   create(): {
     group: THREE.Group;
     update?(deltaSeconds: number): void;
@@ -179,6 +182,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
+  // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
+  { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
 ];
 
 /** Places to look at that are not one exhibit: the pond, the trees, the rocks. */
@@ -265,13 +270,18 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     rotationY: index * 1.3,
     scale: entry.scale,
   }));
-  scene.add(createGalleryGround(scenery));
-  scene.add(createPond(POND).group);
-  addScenery(scene, scenery);
+  const alone = EXHIBITS.some((exhibit) => exhibit.name === focus && exhibit.alone === true);
+  if (!alone) {
+    scene.add(createGalleryGround(scenery));
+    scene.add(createPond(POND).group);
+    addScenery(scene, scenery);
+  }
 
   const updaters: Array<(deltaSeconds: number) => void> = [];
   const focusedExhibits = EXHIBITS.filter((exhibit) => exhibit.name === focus);
-  for (const exhibit of focusedExhibits.length > 0 ? focusedExhibits : EXHIBITS) {
+  for (const exhibit of focusedExhibits.length > 0
+    ? focusedExhibits
+    : EXHIBITS.filter((entry) => entry.alone !== true)) {
     const made = exhibit.create();
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;

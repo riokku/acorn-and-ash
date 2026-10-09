@@ -15,6 +15,7 @@ import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { GearSlot, WornGear } from '../data/gear';
 import type { GearRefusal } from '../sim/gear';
+import type { DigRefusalReason } from '../sim/digging';
 import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
 import type { GatherPatchView } from '../sim/gathering';
@@ -107,6 +108,7 @@ export const ServerMessageType = {
   Worn: 0x3f,
   GearRefused: 0x40,
   Dug: 0x41,
+  DigRefused: 0x42,
 } as const;
 
 export const RejectReason = {
@@ -533,6 +535,12 @@ export interface WornMessage {
 }
 
 /** A change of gear the server turned down, told to the one who asked. */
+/** A swing of the shovel that made no hole, and why. */
+export interface DigRefusedMessage {
+  readonly type: 'digRefused';
+  readonly reason: DigRefusalReason;
+}
+
 export interface GearRefusedMessage {
   readonly type: 'gearRefused';
   readonly reason: GearRefusal;
@@ -651,6 +659,7 @@ export type ServerMessage =
   | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage
   | GearRefusedMessage
+  | DigRefusedMessage
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
   | { readonly type: 'lakeIce'; readonly frozen: boolean }
   /**
