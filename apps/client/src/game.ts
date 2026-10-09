@@ -106,7 +106,7 @@ import {
   digRefusal,
   overlapsWater,
   DIG_REACH_METERS,
-  checkSupportCell,
+  supportProblem,
   cubeAtHit,
   digInReach,
   supportCellAt,
@@ -326,7 +326,7 @@ import {
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
-import { digRefusalText, gearRefusalText } from './hud/gear-notices';
+import { digRefusalText, gearRefusalText, supportProblemText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -944,6 +944,8 @@ export class Game {
   /** The cell a click would stand a support in right now, or null if none can go there. */
   private supportCell: SupportCell | null = null;
   private supportClickHeld = false;
+  /** What to tell the player while a support is in hand: where it can go, or why not here. */
+  private supportHint: string | null = null;
   /** How dark it is underground for the local player, 0 in the open to 1 deep down, eased frame by frame. */
   private undergroundDark = 0;
   /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
@@ -3791,6 +3793,7 @@ export class Game {
     if (!wanted) {
       preview?.show(null, 0, false);
       this.supportCell = null;
+      this.supportHint = null;
       return;
     }
     const surface = this.surfaceUnderPointer(camera, dug, collision.terrain);
@@ -3799,12 +3802,20 @@ export class Game {
     if (cell === null) {
       preview.show(null, 0, false);
       this.supportCell = null;
+      this.supportHint = 'Point at the floor of a tunnel one metre wide, then click to prop it up.';
       return;
     }
-    const fit = checkSupportCell(dug.grid, cell, this.supports);
+    const fit = supportProblem(dug.grid, cell, this.supports);
     const reachable = supportInReach(feet, cell, DIG_REACH_METERS);
-    preview.show(cell, 'axis' in fit ? fit.axis : 0, 'axis' in fit && reachable);
-    this.supportCell = 'axis' in fit && reachable ? cell : null;
+    const fits = 'axis' in fit && reachable;
+    preview.show(cell, 'axis' in fit ? fit.axis : 0, fits);
+    this.supportCell = fits ? cell : null;
+    this.supportHint =
+      'problem' in fit
+        ? supportProblemText(fit.problem)
+        : reachable
+          ? 'Click to stand a support here.'
+          : 'Too far away. Step closer.';
   }
 
   /** A fresh press of the left button with a support in hand stands one where the preview is. */
@@ -5352,7 +5363,8 @@ export class Game {
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
               },
-      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : null,
+      interactionNote:
+        now < this.interactionNoteUntil ? this.interactionNote : this.supportHint,
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
