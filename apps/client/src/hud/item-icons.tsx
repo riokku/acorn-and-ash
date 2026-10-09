@@ -292,6 +292,20 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <path d="M12 2L20 5V12C20 17 16 20 12 22C8 20 4 17 4 12V5Z" />
     </>
   ),
+  stone: <path d="M3 18L6 9L11 5L17 6L21 12L20 18L12 21Z" />,
+  ironOre: (
+    <>
+      <path d="M3 18L6 10L11 6L16 8L19 14L17 20L8 21Z" />
+      <path d="M17 3L18 5L20 6L18 7L17 9L16 7L14 6L16 5Z" />
+    </>
+  ),
+  shovel: (
+    <g transform="rotate(25 12 12)">
+      <rect x="11" y="1" width="2" height="13" rx="1" />
+      <rect x="9" y="1" width="6" height="2" rx="1" />
+      <path d="M7 13H17L16 20Q12 24 8 20Z" />
+    </g>
+  ),
   torch: (
     <g transform="rotate(15 12 12)">
       <rect x="10.5" y="10" width="3" height="12" rx="1.2" />

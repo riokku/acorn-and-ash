@@ -72,6 +72,15 @@ export const RECIPES: Partial<Record<ItemId, Recipe>> = {
   // Cheap and gathered by hand, same as the axe - nothing about needing
   // light at night should be blocked behind a tool you don't have yet.
   torch: { result: 'torch', costs: [{ item: 'stick', amount: 2 }] },
+  // A wooden handle with a flat stone lashed on: by hand, no station. The stone
+  // lies on the mountain, so the first shovel means a walk up there (decision 0114).
+  shovel: {
+    result: 'shovel',
+    costs: [
+      { item: 'stick', amount: 2 },
+      { item: 'stone', amount: 3 },
+    ],
+  },
   // Twisted by hand from reeds cut at the lake, so rope is never behind a tool
   // or a station. It is what the rowboat is lashed together with.
   rope: { result: 'rope', costs: [{ item: 'reed', amount: 3 }] },
