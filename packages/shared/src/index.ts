@@ -98,3 +98,4 @@ export * from './sim/fish-records';
 export * from './sim/rare-reel';
 
 export * from './sim/wildfire';
+export * from './world/digging';

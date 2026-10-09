@@ -17,7 +17,7 @@ import {
 } from '../constants';
 import { rotateToward } from '../math/angles';
 import { clamp, type Vec3 } from '../math/vec3';
-import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import { groundHeightAt, resolveCapsule, type CollisionWorld } from '../collision/capsule';
 import type { Direction2D } from './animals';
 
 /** Buttons are a bit field, two bytes on the wire (see `encodeInputBundle`). */
@@ -180,7 +180,7 @@ export function stepPlayer(
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
 
   // Settle onto the ground.
-  const groundHeight = world.terrain.heightAt(position.x, position.z);
+  const groundHeight = groundHeightAt(world, position.x, position.z, position.y);
   const landed = position.y <= groundHeight;
   // Walking off a small lip should not look like falling, but that only applies
   // to someone who was already walking: a player coming down from a jump has to
@@ -194,6 +194,15 @@ export function stepPlayer(
     motion.grounded = true;
   } else {
     motion.grounded = false;
+  }
+
+  // A tunnel's roof stops a jump short.
+  if (world.dug != null && !motion.grounded) {
+    const roof = world.dug.ceilingAt(position.x, position.z, position.y);
+    if (position.y + PLAYER_HEIGHT > roof) {
+      position.y = roof - PLAYER_HEIGHT;
+      if (velocity.y > 0) velocity.y = 0;
+    }
   }
 
   // Swing the character round to face the way it is walking, or, standing
@@ -242,7 +251,7 @@ function canStandOn(
   feetY: number,
 ): boolean {
   const run = Math.hypot(atX - fromX, atZ - fromZ);
-  const rise = world.terrain.heightAt(atX, atZ) - feetY;
+  const rise = groundHeightAt(world, atX, atZ, feetY) - feetY;
   return rise <= MAX_WALKABLE_GRADIENT * run + WALKABLE_STEP_ALLOWANCE;
 }
 

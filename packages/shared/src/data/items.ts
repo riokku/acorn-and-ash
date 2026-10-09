@@ -51,7 +51,8 @@ export type ItemId =
   | 'woodenShield'
   | 'stone'
   | 'ironOre'
-  | 'shovel';
+  | 'shovel'
+  | 'clay';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -640,6 +641,18 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: false,
   },
+  clay: {
+    id: 'clay',
+    displayName: 'Clay',
+    pluralName: 'Clay',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xb5714f,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: false,
+  },
   shovel: {
     id: 'shovel',
     displayName: 'Shovel',
@@ -707,6 +720,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'stone',
   'ironOre',
   'shovel',
+  'clay',
 ];
 
 export function itemIndex(id: ItemId): number {
@@ -731,13 +745,15 @@ export const FOOD_ITEMS: readonly ItemId[] = ITEM_ORDER.filter(isFood);
  * Tools, in the order a fresh equip should default to - the axe first, since
  * chopping is the more common reason to have a hand free at all.
  */
-export const TOOL_ITEMS: readonly ItemId[] = ['refinedAxe', 'axe', 'refinedRod', 'rod'];
-export function toolKind(item: ItemId | null): 'axe' | 'rod' | null {
+export const TOOL_ITEMS: readonly ItemId[] = ['refinedAxe', 'axe', 'refinedRod', 'rod', 'shovel'];
+export function toolKind(item: ItemId | null): 'axe' | 'rod' | 'shovel' | null {
   return item === 'axe' || item === 'refinedAxe'
     ? 'axe'
     : item === 'rod' || item === 'refinedRod'
       ? 'rod'
-      : null;
+      : item === 'shovel'
+        ? 'shovel'
+        : null;
 }
 
 /** Whether this is a pack: something that adds slots rather than taking one. */

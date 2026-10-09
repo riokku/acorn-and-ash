@@ -5,6 +5,7 @@ import {
   type GearSlot,
   type WornGear,
 } from '../data/gear';
+import type { Dig } from '../world/digging';
 import { GEAR_REFUSALS, type GearRefusal } from '../sim/gear';
 import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
 import { fishRecordsFromSaved, type FishRecords } from '../sim/fish-records';
@@ -1717,6 +1718,25 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         testWeather: test === 1 ? 'storm' : test === 2 ? 'blizzard' : null,
       };
     }
+    case ServerMessageType.Dug: {
+      if (data.byteLength < 4) return null;
+      const replace = view.getUint8(1);
+      const count = view.getUint16(2, true);
+      if (replace > 1 || data.byteLength !== 4 + count * 7) return null;
+      const digs: Dig[] = [];
+      for (let i = 0; i < count; i++) {
+        const at = 4 + i * 7;
+        const dir = view.getUint8(at + 6);
+        if (dir > 3) return null;
+        digs.push({
+          ix: view.getInt16(at, true),
+          iy: view.getInt16(at + 2, true),
+          iz: view.getInt16(at + 4, true),
+          dir: dir as Dig['dir'],
+        });
+      }
+      return { type: 'dug', replace: replace === 1, digs };
+    }
     case ServerMessageType.LakeIce: {
       if (data.byteLength !== 2) return null;
       const frozen = view.getUint8(1);
@@ -2360,6 +2380,22 @@ export function encodeFishRecords(records: FishRecords): ArrayBuffer {
   state.counts.forEach((count, i) => view.setUint32(1 + i * 4, count, true));
   state.bestCm.forEach((cm, i) => view.setUint16(13 + i * 2, cm, true));
   view.setUint8(19, state.displays);
+  return data;
+}
+/** Dug-out ground: type(1) + replace(1) + count(2) + count x [ix(2) iy(2) iz(2) dir(1)]. */
+export function encodeDug(digs: readonly Dig[], replace: boolean): ArrayBuffer {
+  const data = new ArrayBuffer(4 + digs.length * 7),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Dug);
+  view.setUint8(1, replace ? 1 : 0);
+  view.setUint16(2, digs.length, true);
+  digs.forEach((dig, i) => {
+    const at = 4 + i * 7;
+    view.setInt16(at, dig.ix, true);
+    view.setInt16(at + 2, dig.iy, true);
+    view.setInt16(at + 4, dig.iz, true);
+    view.setUint8(at + 6, dig.dir);
+  });
   return data;
 }
 /** The lake froze over (true) or thawed (false): type(1) + frozen(1). */

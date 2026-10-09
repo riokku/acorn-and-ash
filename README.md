@@ -346,7 +346,8 @@ slopes can be walked. A shallow stream with five small waterfalls runs down
 from a spring on the mountain, winding west of the clearing, into the lake's west
 shore; you can wade it (`packages/shared/src/world/stream.ts`). Stone and iron ore lie
 in piles on the slopes (`packages/shared/src/world/mountain-rocks.ts`) and a shovel can be
-crafted from sticks and stone.
+crafted from sticks and stone. With it equipped, a click digs a tunnel and a held click digs down
+(`packages/shared/src/world/digging.ts`); digs are saved, shared, and dark without a torch.
 It's generated from the world's seed, so the server and every browser draw
 the same hills and the same trees without anything about them going over the
 wire - the same trick the clearing itself already uses. Every tree out there

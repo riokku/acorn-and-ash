@@ -1,3 +1,4 @@
+import type { Dig } from '../world/digging';
 import type { WildfireView } from '../sim/wildfire';
 import type { FishRecords } from '../sim/fish-records';
 import type { ReelView } from '../sim/rare-reel';
@@ -105,6 +106,7 @@ export const ServerMessageType = {
   Wildfire: 0x3e,
   Worn: 0x3f,
   GearRefused: 0x40,
+  Dug: 0x41,
 } as const;
 
 export const RejectReason = {
@@ -651,6 +653,11 @@ export type ServerMessage =
   | GearRefusedMessage
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
   | { readonly type: 'lakeIce'; readonly frozen: boolean }
+  /**
+   * Ground dug out with the shovel (decision 0114): every dig so far when
+   * `replace` is set (on joining), otherwise just the newest ones to add.
+   */
+  | { readonly type: 'dug'; readonly replace: boolean; readonly digs: readonly Dig[] }
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }
   | (ExpeditionView & { readonly type: 'expedition' })
   | (FishRecords & { readonly type: 'fishRecords' })

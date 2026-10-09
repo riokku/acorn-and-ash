@@ -32,6 +32,7 @@ import {
   encodeFishing,
   encodeHealth,
   encodeLakeIce,
+  encodeDug,
   encodeHello,
   encodeHunger,
   encodeRoster,
@@ -1423,5 +1424,39 @@ describe('the lake freezing and thawing', () => {
     expect(decodeServerMessage(oversized.buffer)).toBeNull();
     new DataView(valid).setUint8(1, 2);
     expect(decodeServerMessage(valid)).toBeNull();
+  });
+});
+
+describe('ground dug out with the shovel', () => {
+  const digs = [
+    { ix: -600, iy: -3, iz: 580, dir: 0 as const },
+    { ix: 12, iy: 40, iz: -7, dir: 3 as const },
+  ];
+
+  it.each([true, false])('round trips the digs with replace = %s', (replace) => {
+    expect(decodeServerMessage(encodeDug(digs, replace))).toEqual({ type: 'dug', replace, digs });
+  });
+
+  it('carries an empty list', () => {
+    expect(decodeServerMessage(encodeDug([], true))).toEqual({
+      type: 'dug',
+      replace: true,
+      digs: [],
+    });
+  });
+
+  it('rejects truncated, oversized and nonsense messages', () => {
+    const valid = encodeDug(digs, true);
+    expect(decodeServerMessage(valid.slice(0, 3))).toBeNull();
+    expect(decodeServerMessage(valid.slice(0, valid.byteLength - 1))).toBeNull();
+    const oversized = new Uint8Array(valid.byteLength + 1);
+    oversized.set(new Uint8Array(valid));
+    expect(decodeServerMessage(oversized.buffer)).toBeNull();
+    const badDirection = encodeDug(digs, true);
+    new DataView(badDirection).setUint8(4 + 6, 4);
+    expect(decodeServerMessage(badDirection)).toBeNull();
+    const badFlag = encodeDug(digs, true);
+    new DataView(badFlag).setUint8(1, 2);
+    expect(decodeServerMessage(badFlag)).toBeNull();
   });
 });

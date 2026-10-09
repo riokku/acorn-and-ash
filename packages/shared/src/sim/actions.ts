@@ -36,7 +36,8 @@ import {
   WINDUP_TICKS,
   type ComboSwing,
 } from '../data/moves';
-import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import { groundHeightAt, resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import { FLOOR_STEP } from '../world/digging';
 import { rotateToward } from '../math/angles';
 import type { ItemId } from '../data/items';
 import { PlayerButton, worldMoveDirection, type PlayerInput, type PlayerMotion } from './player';
@@ -475,10 +476,17 @@ export function stepDodge(
   velocity.x = direction.x * DODGE_SPEED;
   velocity.y = 0;
   velocity.z = direction.z * DODGE_SPEED;
+  const fromX = position.x;
+  const fromZ = position.z;
   position.x += velocity.x * TICK_SECONDS;
   position.z += velocity.z * TICK_SECONDS;
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
-  position.y = world.terrain.heightAt(position.x, position.z);
+  const floor = groundHeightAt(world, position.x, position.z, position.y);
+  if (floor > position.y + FLOOR_STEP) {
+    // A wall of dug-out ground: the roll stops against it rather than climbing it.
+    position.x = fromX;
+    position.z = fromZ;
+  } else position.y = floor;
   motion.grounded = true;
   if (state.age >= DODGE.travel - 1) {
     velocity.x = 0;
@@ -602,7 +610,15 @@ export function stepDodgeAttack(
   motion.velocity.z = direction.z * speed;
   motion.position.x += motion.velocity.x * TICK_SECONDS;
   motion.position.z += motion.velocity.z * TICK_SECONDS;
-  motion.position.y = world.terrain.heightAt(motion.position.x, motion.position.z) + height;
+  const fromX = motion.position.x - motion.velocity.x * TICK_SECONDS;
+  const fromZ = motion.position.z - motion.velocity.z * TICK_SECONDS;
+  const floor = groundHeightAt(world, motion.position.x, motion.position.z, oldY);
+  if (floor > oldY + FLOOR_STEP) {
+    // A wall of dug-out ground: the hop stops against it rather than climbing it.
+    motion.position.x = fromX;
+    motion.position.z = fromZ;
+  }
+  motion.position.y = groundHeightAt(world, motion.position.x, motion.position.z, oldY) + height;
   resolveCapsule(motion.position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
   motion.velocity.y = (motion.position.y - oldY) / TICK_SECONDS;
   motion.grounded = state.age >= move.land;

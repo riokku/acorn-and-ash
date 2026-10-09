@@ -15,6 +15,7 @@ import {
   type Lake,
   type LakeSlope,
 } from '../world/lake';
+import { voxelIndex, type DugGrid } from '../world/digging';
 import type { Terrain } from '../world/terrain';
 
 /**
@@ -94,6 +95,21 @@ export interface CollisionWorld {
   readonly boundsHalfExtent: number;
   /** The shore of the lake, or null where there is no lake. */
   readonly lakeWall: LakeWall | null;
+  /** Ground dug out below the surface (decision 0114), or null/undefined where nothing can be dug. */
+  dug?: DugGrid | null;
+}
+
+/**
+ * The floor under a body with its feet at `feetY`: the surface, or the floor of
+ * a dug tunnel it is standing in. Where nothing has been dug it is exactly the
+ * height map, at the cost of one map lookup.
+ */
+export function groundHeightAt(world: CollisionWorld, x: number, z: number, feetY: number): number {
+  const dug = world.dug;
+  if (dug == null || !dug.hasColumn(voxelIndex(x), voxelIndex(z))) {
+    return world.terrain.heightAt(x, z);
+  }
+  return dug.floorAt(x, z, feetY);
 }
 
 export function createCollisionWorld(

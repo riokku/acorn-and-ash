@@ -27,7 +27,9 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   rod: 'Equip beside water to fish. Click when the float goes under.',
   stone: 'Loose stone from the mountain slopes. Lash three to sticks to make a shovel.',
   ironOre: 'Rusty-red ore from the bare rock high on the mountain. Nothing smelts it yet.',
-  shovel: 'Made from sticks and stone. Digging comes soon; for now, carry it and look the part.',
+  shovel:
+    'Made from sticks and stone. Equip it, then click to dig a tunnel ahead of you, or hold the click to dig a step down. Not in the home clearing, near water or near buildings.',
+  clay: 'Soft red clay from low, damp ground. Nothing uses it yet.',
   torch: 'Equip for firelight and protection from prowling raccoons at night.',
   log: 'Build a home, a campfire, fences, and garden paths.',
   stick: 'Craft tools and torches, or build a garden lantern.',

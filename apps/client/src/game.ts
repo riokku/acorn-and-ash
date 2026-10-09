@@ -1,5 +1,5 @@
 import { createWildfireArt } from './scene/wildfire';
-import type { WildfireView } from '@acorn/shared';
+import type { Dig, WildfireView } from '@acorn/shared';
 import {
   fishRecordsFromSaved,
   type FishRecords,
@@ -228,6 +228,7 @@ import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
 import { createStreamScene } from './scene/stream';
+import { createDigScene, type DigScene } from './scene/digging';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
@@ -894,6 +895,11 @@ export class Game {
   private wildernessScene: WildernessScene | null = null;
   private lakeScene: ReturnType<typeof createLakeScene> | null = null;
   private streamScene: ReturnType<typeof createStreamScene> | null = null;
+  /** Ground dug out with the shovel (decision 0114), and every dig heard of so far, kept for a world still loading. */
+  private digScene: DigScene | null = null;
+  private digs: Dig[] = [];
+  /** How dark it is underground for the local player, 0 in the open to 1 deep down, eased frame by frame. */
+  private undergroundDark = 0;
   /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
   private lakeFrozen = false;
   /** Everywhere the pond or the lake reaches: the build ghost keeps clear of all of it. */
@@ -1588,6 +1594,7 @@ export class Game {
     this.wildernessScene?.dispose();
     this.lakeScene?.dispose();
     this.streamScene?.dispose();
+    this.digScene?.dispose();
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
@@ -1870,6 +1877,13 @@ export class Game {
         break;
       case 'lakeIce': {
         this.applyLakeIce(message.frozen);
+        break;
+      }
+      case 'dug': {
+        // Digs only ever add, so a full list is the old one plus more: carving
+        // twice changes nothing, and it can simply be played again.
+        this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
+        this.digScene?.apply(message.digs);
         break;
       }
       case 'rareReel': {
@@ -2522,6 +2536,10 @@ export class Game {
 
       this.wildernessScene = buildWildernessScene(wilderness, terrain, clearing);
       this.outdoors.add(this.wildernessScene.group);
+      this.digScene?.dispose();
+      this.digScene = createDigScene(terrain, this.wildernessScene.ground);
+      this.outdoors.add(this.digScene.group);
+      this.digScene.apply(this.digs);
       this.lakeScene?.dispose();
       this.lakeScene = createLakeScene(LAKE);
       this.lakeScene.setFrozen(this.lakeFrozen);
@@ -2550,6 +2568,7 @@ export class Game {
         true,
       );
       this.collision = collision;
+      collision.dug = this.digScene.grid;
       setLakeFrozen(collision, this.lakeFrozen);
       this.localPlayer = new LocalPlayer(SPAWN_POSITION, collision);
       this.localPlayer.setActionContext((position, aimYaw) => this.actionContext(position, aimYaw));
@@ -3050,6 +3069,7 @@ export class Game {
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
     const season = seasonMix(this.currentCalendar());
     this.seasons.apply(season, this.daylight, weather.kind === 'blizzard');
+    this.updateUnderground(deltaSeconds);
     this.daylight?.update(dayProgress(weatherNow), this.weatherCloud, weather.kind === 'blizzard');
     const snow = seasonUniforms.snow.value > 0.5 && this.space === OUTDOORS;
     if (this.localPlayer !== null) {
@@ -3574,6 +3594,25 @@ export class Game {
    * ice or water, and let the ground under our own feet match, so walking out
    * on it is predicted the same way the server will decide it.
    */
+  /**
+   * Underground is dark (decision 0114): the deeper the local player is below
+   * the ground above them, the more the daylight is shut out, eased in and out
+   * so stepping into a tunnel mouth dims the world over a moment, not a frame.
+   * A torch is what lights the way.
+   */
+  private updateUnderground(deltaSeconds: number): void {
+    const motion = this.localPlayer?.motion;
+    const depth =
+      motion === undefined || this.space !== OUTDOORS
+        ? 0
+        : (this.digScene?.depthAt(motion.position.x, motion.position.z, motion.position.y) ?? 0);
+    const target = Math.min(1, Math.max(0, (depth - 1.2) / 1.5));
+    this.undergroundDark +=
+      (target - this.undergroundDark) *
+      Math.min(1, deltaSeconds * (target > this.undergroundDark ? 3 : 5));
+    this.daylight?.setUnderground(this.undergroundDark);
+  }
+
   private applyLakeIce(frozen: boolean): void {
     this.lakeFrozen = frozen;
     this.lakeScene?.setFrozen(frozen);
@@ -3880,6 +3919,7 @@ export class Game {
     return lootUnderRay(this.clickRaycaster, candidates, [
       this.clearingScene.cameraBlockers,
       ...(this.wildernessScene?.cameraBlockers ?? []),
+      ...(this.digScene?.cameraBlockers ?? []),
       ...this.homeCameraBlockers,
     ]);
   }
@@ -3941,6 +3981,7 @@ export class Game {
       camera.update(from, 0, [
         ...wilderness.cameraBlockers,
         clearing.cameraBlockers,
+        ...(this.digScene?.cameraBlockers ?? []),
         ...this.homeCameraBlockers,
       ]);
     }
@@ -4174,7 +4215,12 @@ export class Game {
       position,
       deltaSeconds,
       this.space === OUTDOORS
-        ? [...wilderness.cameraBlockers, clearing.cameraBlockers, ...this.homeCameraBlockers]
+        ? [
+            ...wilderness.cameraBlockers,
+            clearing.cameraBlockers,
+            ...(this.digScene?.cameraBlockers ?? []),
+            ...this.homeCameraBlockers,
+          ]
         : [],
     );
     this.updatePlacement(camera, player);

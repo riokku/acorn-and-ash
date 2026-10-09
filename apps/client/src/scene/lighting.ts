@@ -34,6 +34,12 @@ function tintBy(colour: THREE.Color, tint: THREE.Color, daylight: number): void 
   colour.b *= 1 + (tint.b - 1) * daylight;
 }
 
+/** How much daylight still reaches a deep tunnel, and how far a torch's glow carries there. */
+const UNDERGROUND_LIGHT = 0.06;
+const UNDERGROUND_BLACK = new THREE.Color(0x05060a);
+const UNDERGROUND_FOG_NEAR = 2;
+const UNDERGROUND_FOG_FAR = 22;
+
 /** Behind a room seen from inside a home: a warm, dark backdrop, like the edge of a stage. */
 const INDOOR_BACKDROP = new THREE.Color(0x1d1712);
 
@@ -56,6 +62,11 @@ export interface DaylightRig {
    * windows and the open top of the dollhouse view.
    */
   setIndoors(indoors: boolean): void;
+  /**
+   * Shut the daylight out as the player goes underground (decision 0114):
+   * 0 is the open air, 1 is a deep tunnel where only a torch shows the way.
+   */
+  setUnderground(amount: number): void;
 }
 
 /** Soft daylight over the clearing, fog so the tree line fades out, and a day/night cycle over both. */
@@ -89,6 +100,7 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   const skyTint = new THREE.Color(1, 1, 1);
   const lightTint = new THREE.Color(1, 1, 1);
   let sunStrength = 1;
+  let underground = 0;
 
   function update(progress: number, cloud = lastCloud, blizzard = false): void {
     fog.near += ((blizzard ? 10 : FOG_NEAR) - fog.near) * 0.025;
@@ -103,12 +115,18 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
       tintBy(background, skyTint, brightness);
       background.lerp(overcast, cloud * brightness * 0.55);
     }
+    if (underground > 0) background.lerp(UNDERGROUND_BLACK, underground);
     fog.color.copy(background);
+    if (underground > 0) {
+      fog.near = THREE.MathUtils.lerp(fog.near, UNDERGROUND_FOG_NEAR, underground);
+      fog.far = THREE.MathUtils.lerp(fog.far, UNDERGROUND_FOG_FAR, underground);
+    }
 
     sky.color.lerpColors(NIGHT_HEMI_SKY, DAY_HEMI_SKY, brightness);
     sky.groundColor.lerpColors(NIGHT_HEMI_GROUND, DAY_HEMI_GROUND, brightness);
     sky.intensity = THREE.MathUtils.lerp(NIGHT_HEMI_INTENSITY, DAY_HEMI_INTENSITY, brightness);
     tintBy(sky.color, lightTint, brightness);
+    sky.intensity *= 1 - underground * (1 - UNDERGROUND_LIGHT);
 
     // Doubles as moonlight at night, rather than modelling a separate moon -
     // a placeholder to replace once this is fun enough to deserve real art.
@@ -117,7 +135,8 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
     sun.intensity =
       THREE.MathUtils.lerp(NIGHT_SUN_INTENSITY, DAY_SUN_INTENSITY, brightness) *
       (1 - cloud * 0.45) *
-      (1 + (sunStrength - 1) * brightness);
+      (1 + (sunStrength - 1) * brightness) *
+      (1 - underground * (1 - UNDERGROUND_LIGHT));
   }
 
   update(0.5);
@@ -128,6 +147,10 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
       skyTint.setRGB(look.sky[0], look.sky[1], look.sky[2]);
       lightTint.setRGB(look.light[0], look.light[1], look.light[2]);
       sunStrength = look.sunStrength;
+    },
+    setUnderground(amount) {
+      // Takes effect with the next `update`, which runs every frame.
+      underground = amount;
     },
     setIndoors(next) {
       indoors = next;
