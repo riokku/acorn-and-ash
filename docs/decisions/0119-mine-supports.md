@@ -14,7 +14,7 @@ This is built in three small pull requests:
 
 - **A support is an item.** "Mine support" costs 3 logs, crafted by hand with no station (`RECIPES.mineSupport`). It stacks to 10 and can be held like a tool.
 - **Placing it:** hold one inside a tunnel; the cell under the mouse lights up green where a support can stand and red where not; a click stands one there and uses one up. It is a click, not a swing, so there is no animation yet.
-- **Where it can stand** (`checkSupportCell` in `packages/shared/src/world/supports.ts`): a whole-metre cell of tunnel two metres tall, with solid ground under it, solid ground over it and solid ground along both walls. So a tunnel exactly one metre wide, running straight. It does not fit in a wide room, a junction or a tunnel open to the sky. Which way it runs is worked out from the walls, never chosen.
+- **Where it can stand** (`checkSupportCell` in `packages/shared/src/world/supports.ts`): a frame one metre along the tunnel, two metres across and two tall, with solid ground under it, solid ground over it and solid ground along both walls. So a tunnel two metres wide (two cube digs side by side), running straight. It was one metre wide at first, but a person could not walk through it, so it was doubled. It does not fit in a wide room, a junction or a tunnel open to the sky. Which way it runs is worked out from the walls, never chosen.
 - **Reach:** the same 3 m (plus the same slack for lag) as digging.
 - **Not blocking:** the posts sit against the walls, so nothing needs collision. Players walk straight past them.
 - **Stored like digs:** a short list of small numbers (cell and axis), saved in the world's own database (`mine_supports`), sent to everyone on joining (`Supports` 0x43) and when one is stood. Placing is one small message (`PlaceSupport` 0x10). The server checks everything again; the browser's preview is only a guide. Capped at 4,000 supports per world.
@@ -32,3 +32,7 @@ This is built in three small pull requests:
 - Supports do nothing yet beyond looking right, until cave-ins land in the next pull request.
 - A support cannot be picked back up yet.
 - A tunnel that is later dug out around a support leaves it standing in the air. Cave-ins will need to decide what happens to such supports.
+
+## Update: made in Blender
+
+The placeholder boxes were replaced with a model made in Blender (`tools/art/mine_support.py`, `assets/buildables/mine-support.glb`, 260 triangles): two posts on sills, a cap beam that overhangs them, two corner braces and a few nails, in vertex colours. It is drawn as one instanced mesh. The hanging lantern (`tools/art/mine_lantern.py`, `assets/buildables/mine-lantern.glb`, 224 triangles) is modelled too, with its origin at the hook so it can hang from a post; it is only in the gallery (`?gallery=mine-lantern`) until the lantern step. No pack (Quaternius or otherwise) had a usable lantern or mine frame. Source: `assets/buildables/mine-timbers.blend`.

@@ -28,7 +28,9 @@ export function supportProblemText(problem: SupportProblem): string {
     case 'noRoof':
       return 'Needs solid roof two metres above the floor. This tunnel is too tall or open to the sky.';
     case 'tooWide':
-      return 'Too wide. A support fits a tunnel one metre wide with solid walls either side.';
+      return 'Too wide. A support fits a tunnel two metres wide with solid walls either side.';
+    case 'tooNarrow':
+      return 'Too narrow. A support needs a tunnel two metres wide. Dig out the side first.';
   }
 }
 
@@ -52,7 +54,7 @@ export function digRefusalText(reason: DigRefusalReason): string {
     case 'packFull':
       return 'You found something, but your pack is full.';
     case 'notTunnel':
-      return 'A support needs a tunnel one metre wide with solid ground above, below and either side.';
+      return 'A support needs a tunnel two metres wide with solid ground above, below and either side.';
     case 'supportTaken':
       return 'There is already a support here.';
   }

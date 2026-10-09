@@ -23,61 +23,79 @@ import type { Terrain } from '../src/world/terrain';
 
 const flat: Terrain = { kind: 'flat', heightAt: () => 10 };
 
-/** A tunnel a metre wide and two metres tall, three metres down, `length` metres long, along X (or Z). */
+/** A tunnel two metres wide and two metres tall, three metres down, `length` metres long, along X (or Z). */
 function tunnel(grid: DugGrid, length: number, along: 'x' | 'z' = 'x'): void {
   for (let metre = 0; metre < length; metre++) {
     for (const iy of [14, 16]) {
-      grid.apply({
-        ix: along === 'x' ? metre * 2 : 0,
-        iy,
-        iz: along === 'z' ? metre * 2 : 0,
-        dir: CUBE_DIG,
-      });
+      for (const side of [0, 2]) {
+        grid.apply({
+          ix: along === 'x' ? metre * 2 : side,
+          iy,
+          iz: along === 'z' ? metre * 2 : side,
+          dir: CUBE_DIG,
+        });
+      }
     }
   }
 }
 
 describe('where a mine support can stand', () => {
-  it('fits in a tunnel a metre wide, running the way the tunnel runs', () => {
+  it('fits in a tunnel two metres wide, running the way the tunnel runs', () => {
     const along = new DugGrid(flat);
     tunnel(along, 4, 'x');
     expect(checkSupportCell(along, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ axis: 0 });
     const across = new DugGrid(flat);
     tunnel(across, 4, 'z');
     expect(checkSupportCell(across, { ix: 0, iy: 14, iz: 2 }, [])).toEqual({ axis: 1 });
+    // Two frames a metre apart overlap; two metres apart do not.
+    const first: Support = { ix: 0, iy: 14, iz: 2, axis: 1 };
+    expect(checkSupportCell(across, { ix: 0, iy: 14, iz: 4 }, [first])).toEqual({ axis: 1 });
   });
 
   it('does not fit in open ground, a wide room or a tunnel with no roof', () => {
     const grid = new DugGrid(flat);
     expect(checkSupportCell(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ refusal: 'notTunnel' });
-    // A room two metres wide: nothing for the posts to stand against.
+    // A room three metres wide: nothing for the posts to stand against.
     tunnel(grid, 4, 'x');
-    grid.apply({ ix: 2, iy: 14, iz: 2, dir: CUBE_DIG });
-    grid.apply({ ix: 2, iy: 16, iz: 2, dir: CUBE_DIG });
+    grid.apply({ ix: 2, iy: 14, iz: 4, dir: CUBE_DIG });
+    grid.apply({ ix: 2, iy: 16, iz: 4, dir: CUBE_DIG });
     expect(checkSupportCell(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ refusal: 'notTunnel' });
     // Dug right up to the sky: no roof to hold up.
     const open = new DugGrid(flat);
     for (const iy of [14, 16, 18])
       for (let metre = 0; metre < 3; metre++)
-        open.apply({ ix: metre * 2, iy, iz: 0, dir: CUBE_DIG });
+        for (const iz of [0, 2]) open.apply({ ix: metre * 2, iy, iz, dir: CUBE_DIG });
     expect(checkSupportCell(open, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ refusal: 'notTunnel' });
   });
 
   it('says what is wrong with a spot', () => {
     const grid = new DugGrid(flat);
     tunnel(grid, 4, 'x');
-    expect(supportProblem(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ axis: 0 });
+    expect(supportProblem(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({
+      axis: 0,
+      cell: { ix: 2, iy: 14, iz: 0 },
+    });
+    // Pointing at the far half of the span still finds the frame that covers it.
+    expect(supportProblem(grid, { ix: 2, iy: 14, iz: 2 }, [])).toEqual({
+      axis: 0,
+      cell: { ix: 2, iy: 14, iz: 0 },
+    });
     // Rock inside the frame: dig it out first.
     expect(supportProblem(grid, { ix: 2, iy: 12, iz: 0 }, [])).toEqual({ problem: 'blocked' });
     // A third cube dug above: the roof is out of reach of a two metre frame.
     grid.apply({ ix: 2, iy: 18, iz: 0, dir: CUBE_DIG });
     expect(supportProblem(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ problem: 'noRoof' });
     // A room: no wall to stand against.
-    grid.apply({ ix: 6, iy: 14, iz: 2, dir: CUBE_DIG });
-    grid.apply({ ix: 6, iy: 16, iz: 2, dir: CUBE_DIG });
+    grid.apply({ ix: 6, iy: 14, iz: 4, dir: CUBE_DIG });
+    grid.apply({ ix: 6, iy: 16, iz: 4, dir: CUBE_DIG });
     expect(supportProblem(grid, { ix: 6, iy: 14, iz: 0 }, [])).toEqual({ problem: 'tooWide' });
     const first: Support = { ix: 2, iy: 14, iz: 0, axis: 0 };
     expect(supportProblem(grid, first, [first])).toEqual({ problem: 'taken' });
+    // A tunnel only a metre wide is too narrow, not blocked.
+    const narrow = new DugGrid(flat);
+    for (let metre = 0; metre < 4; metre++)
+      for (const iy of [14, 16]) narrow.apply({ ix: metre * 2, iy, iz: 0, dir: CUBE_DIG });
+    expect(supportProblem(narrow, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ problem: 'tooNarrow' });
   });
 
   it('does not stand twice in one place', () => {
@@ -196,12 +214,14 @@ describe('standing a support in the world', () => {
     const floor = Math.floor((spot.low - 5) / VOXEL);
     for (let metre = 0; metre < 4; metre++) {
       for (const up of [0, 2]) {
-        sim.dug.apply({
-          ix: spot.x * 2 + metre * 2,
-          iy: floor + up,
-          iz: spot.z * 2,
-          dir: CUBE_DIG,
-        });
+        for (const side of [0, 2]) {
+          sim.dug.apply({
+            ix: spot.x * 2 + metre * 2,
+            iy: floor + up,
+            iz: spot.z * 2 + side,
+            dir: CUBE_DIG,
+          });
+        }
       }
     }
     sim.placePlayer(1, { x: spot.x + 2.5, y: floor * VOXEL, z: spot.z + 0.5 }, 0);

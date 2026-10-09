@@ -10,7 +10,7 @@ import { createMineSupports } from '../scene/mine-supports';
  * A tunnel shored up with mine supports, in the art gallery (`?gallery=mine-supports`,
  * decision 0119). The ground is a sheer cliff face at x = 0 (nothing to the
  * west, flat ground to the east), so the tunnel can be seen from its open end.
- * A tunnel a metre wide and two tall runs six metres in, with a support in
+ * A tunnel two metres wide and two tall runs six metres in, with a support in
  * every other metre, the way a mine is propped.
  */
 
@@ -21,7 +21,9 @@ export function createMineSupportsExhibit(): { group: THREE.Group } {
   const scene = createDigScene(cliff, { origin: -150, cell: 2.5, hide: () => undefined });
   const digs: Dig[] = [];
   for (let metre = 0; metre < 7; metre++) {
-    for (const iy of [-6, -4]) digs.push({ ix: metre * 2, iy, iz: 0, dir: CUBE_DIG });
+    for (const iy of [-6, -4]) {
+      for (const iz of [0, 2]) digs.push({ ix: metre * 2, iy, iz, dir: CUBE_DIG });
+    }
   }
   scene.apply(digs);
 
