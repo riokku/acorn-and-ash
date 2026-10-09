@@ -44,6 +44,7 @@ import { preloadPropModels } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
+import { createDugEarth } from './dug-earth';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
 /**
@@ -175,6 +176,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: createFox },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
+  // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
+  { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
 ];
 
 /** Places to look at that are not one exhibit: the pond, the trees, the rocks. */

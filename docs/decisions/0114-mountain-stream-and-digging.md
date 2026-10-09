@@ -85,4 +85,9 @@ Resets for existing worlds: because the world is larger, trees are numbered in a
 - **Dark underground:** the daylight fades out as the ground above you thickens. A torch lights the way.
 - **Looks:** blocky placeholder faces coloured like the ground; the ground surface is hidden over a tunnel mouth. Art comes in step 5.
 
-Still to come: art (step 5), needing Chris's computer for Blender.
+## What step 5 has built so far (art, in a Blender session)
+
+- **Layers under the ground.** Tunnel and pit walls wear a small texture painted in Blender (`assets/textures/dug-earth-layers.png`, made by `tools/art/dug_earth_layers.py`): dark topsoil for the top half metre, brown earth with roots and embedded stones down to about 3 m, then cracked grey stone, getting darker with depth. A painted texture was chosen over modular pieces because the walls are built from whatever shape the digs make, and one texture fits any shape without seams. It repeats every 4 m sideways; the height is depth below the ground, so layers line up between holes. On the mountain depth counts 1.6 times over, so the stone starts higher. Floors and roofs use flat colours matched to each layer (the strip is a side view and smears on a flat surface). Look at it in the gallery: `?gallery=dug-earth`.
+- Planned, not built: players reinforcing tunnels with wood or stone to stop collapses. The bands and flat floors are meant to leave room for supports.
+
+Still to come in step 5: round, smooth hole walls, and a proper shovel dig animation.
