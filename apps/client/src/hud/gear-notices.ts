@@ -35,5 +35,9 @@ export function digRefusalText(reason: DigRefusalReason): string {
       return 'Too far away to dig there. Step closer.';
     case 'packFull':
       return 'You found something, but your pack is full.';
+    case 'notTunnel':
+      return 'A support needs a tunnel one metre wide with solid ground above, below and either side.';
+    case 'supportTaken':
+      return 'There is already a support here.';
   }
 }

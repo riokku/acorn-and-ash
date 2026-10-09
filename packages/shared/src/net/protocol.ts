@@ -6,6 +6,7 @@ import {
   type WornGear,
 } from '../data/gear';
 import type { Dig } from '../world/digging';
+import type { Support, SupportCell } from '../world/supports';
 import { GEAR_REFUSALS, type GearRefusal } from '../sim/gear';
 import { DIG_REFUSALS, type DigRefusalReason } from '../sim/digging';
 import { FIRE_LIMIT, type WildfireView, type Wildfire } from '../sim/wildfire';
@@ -236,6 +237,7 @@ const BUILD_MESSAGE_BYTES = 8;
 /** type(1) + which item to use(1) */
 const USE_ITEM_MESSAGE_BYTES = 2;
 const DIG_TARGET_MESSAGE_BYTES = 8;
+const PLACE_SUPPORT_MESSAGE_BYTES = 7;
 /** type(1) + wear, take off or swap(1) + item(1) + slot(1) + other slot(1) */
 const GEAR_MESSAGE_BYTES = 5;
 const GEAR_ACTIONS = ['wear', 'takeOff', 'swap'] as const;
@@ -522,6 +524,17 @@ export function encodeDigRefused(reason: DigRefusalReason): ArrayBuffer {
   return new Uint8Array([ServerMessageType.DigRefused, DIG_REFUSALS.indexOf(reason)]).buffer;
 }
 
+/** Stand a mine support in a cell of tunnel: type(1) + ix(2) + iy(2) + iz(2). */
+export function encodePlaceSupport(cell: SupportCell): ArrayBuffer {
+  const buffer = new ArrayBuffer(PLACE_SUPPORT_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.PlaceSupport);
+  view.setInt16(1, cell.ix, true);
+  view.setInt16(3, cell.iy, true);
+  view.setInt16(5, cell.iz, true);
+  return buffer;
+}
+
 /**
  * The cube the mouse is on, or nothing: type(1) + has(1) + ix(2) + iy(2) + iz(2).
  * Sent while the shovel is out, when the cube changes and about once a second.
@@ -716,6 +729,14 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
         has === 0
           ? null
           : { ix: view.getInt16(2, true), iy: view.getInt16(4, true), iz: view.getInt16(6, true) },
+    };
+  }
+
+  if (type === ClientMessageType.PlaceSupport) {
+    if (data.byteLength !== PLACE_SUPPORT_MESSAGE_BYTES) return null;
+    return {
+      type: 'placeSupport',
+      cell: { ix: view.getInt16(1, true), iy: view.getInt16(3, true), iz: view.getInt16(5, true) },
     };
   }
 
@@ -1776,6 +1797,25 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       return { type: 'dug', replace: replace === 1, digs };
     }
+    case ServerMessageType.Supports: {
+      if (data.byteLength < 4) return null;
+      const replace = view.getUint8(1);
+      const count = view.getUint16(2, true);
+      if (replace > 1 || data.byteLength !== 4 + count * 7) return null;
+      const supports: Support[] = [];
+      for (let i = 0; i < count; i++) {
+        const at = 4 + i * 7;
+        const axis = view.getUint8(at + 6);
+        if (axis > 1) return null;
+        supports.push({
+          ix: view.getInt16(at, true),
+          iy: view.getInt16(at + 2, true),
+          iz: view.getInt16(at + 4, true),
+          axis: axis as Support['axis'],
+        });
+      }
+      return { type: 'supports', replace: replace === 1, supports };
+    }
     case ServerMessageType.LakeIce: {
       if (data.byteLength !== 2) return null;
       const frozen = view.getUint8(1);
@@ -2439,6 +2479,22 @@ export function encodeDug(digs: readonly Dig[], replace: boolean): ArrayBuffer {
     view.setInt16(at + 2, dig.iy, true);
     view.setInt16(at + 4, dig.iz, true);
     view.setUint8(at + 6, dig.dir);
+  });
+  return data;
+}
+/** Mine supports: type(1) + replace(1) + count(2) + count x [ix(2) iy(2) iz(2) axis(1)]. */
+export function encodeSupports(supports: readonly Support[], replace: boolean): ArrayBuffer {
+  const data = new ArrayBuffer(4 + supports.length * 7),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Supports);
+  view.setUint8(1, replace ? 1 : 0);
+  view.setUint16(2, supports.length, true);
+  supports.forEach((support, i) => {
+    const at = 4 + i * 7;
+    view.setInt16(at, support.ix, true);
+    view.setInt16(at + 2, support.iy, true);
+    view.setInt16(at + 4, support.iz, true);
+    view.setUint8(at + 6, support.axis);
   });
   return data;
 }

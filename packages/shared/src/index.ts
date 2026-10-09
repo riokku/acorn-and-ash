@@ -100,3 +100,4 @@ export * from './sim/rare-reel';
 
 export * from './sim/wildfire';
 export * from './world/digging';
+export * from './world/supports';

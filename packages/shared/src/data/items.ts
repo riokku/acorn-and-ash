@@ -52,7 +52,8 @@ export type ItemId =
   | 'stone'
   | 'ironOre'
   | 'shovel'
-  | 'clay';
+  | 'clay'
+  | 'mineSupport';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -666,6 +667,19 @@ export const ITEM_KINDS = {
     equippable: true,
     gearSlots: ['mainHand'],
   },
+  // Two wooden posts and a cross beam, ready to stand in a tunnel (decision 0119).
+  mineSupport: {
+    id: 'mineSupport',
+    displayName: 'Mine support',
+    pluralName: 'Mine supports',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x9a6b3c,
+    restoresHunger: undefined,
+    keepOnKnockout: false,
+    equippable: true,
+  },
 } as const satisfies Record<ItemId, ItemKind>;
 
 /**
@@ -721,6 +735,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'ironOre',
   'shovel',
   'clay',
+  'mineSupport',
 ];
 
 export function itemIndex(id: ItemId): number {

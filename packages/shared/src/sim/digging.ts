@@ -78,8 +78,14 @@ export const DIG_REFUSALS = [
   'nothing',
   'packFull',
   'far',
+  // Mine supports (decision 0119) share the wire: they are told the same way.
+  'notTunnel',
+  'supportTaken',
 ] as const;
-export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing' | 'packFull' | 'far'>;
+export type DigRefusal = Exclude<
+  (typeof DIG_REFUSALS)[number],
+  'nothing' | 'packFull' | 'far' | 'notTunnel' | 'supportTaken'
+>;
 export type DigRefusalReason = (typeof DIG_REFUSALS)[number];
 
 /** How far from your chest to the middle of a cube you can dig it, in metres. */
