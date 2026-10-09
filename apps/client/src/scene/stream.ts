@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {
   STREAM_STONES_PER_100M,
   streamBedAt,
+  streamWaterDepthAt,
   streamFallGradientAt,
   streamPointAt,
   streamSurfaceAt,
@@ -192,26 +193,41 @@ function createBankReeds(
   const builder = new ModelBuilder();
   const materials = waterPlantMaterials();
   const random = seededRandom(1515);
-  const step = Math.max(1, Math.round(5.5 / (stream.length / (stream.count - 1))));
-  for (let row = step; row < stream.count - 1; row += step) {
-    const along = row * (stream.length / (stream.count - 1));
-    // Leave the rushing falls bare; reeds prefer the quiet shallows.
+  // Uneven gaps along the banks, independent sides and occasional loose
+  // groups replace the old regular rows of matching clumps.
+  for (let along = 3 + random() * 6; along < stream.length - 4; along += 2.5 + random() * 9) {
     if (streamFallGradientAt(stream, along) > 0.18) continue;
+    const sample = along / (stream.length / (stream.count - 1));
+    const row = Math.floor(sample);
+    const before = streamPointAt(stream, Math.max(0, row - 1));
     const here = streamPointAt(stream, row);
-    const before = streamPointAt(stream, row - 1);
-    const after = streamPointAt(stream, row + 1);
+    const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+    const blend = sample - row;
+    const middleX = here.x + (after.x - here.x) * blend;
+    const middleZ = here.z + (after.z - here.z) * blend;
     const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+    const tx = (after.x - before.x) / size,
+      tz = (after.z - before.z) / size;
     const surface = streamSurfaceAt(stream, along);
     for (const side of [-1, 1]) {
-      if (random() > 0.65) continue;
-      const across = side * (streamWaterHalfWidthAt(stream, along) - 0.25 - random() * 0.35);
-      const x = here.x - ((after.z - before.z) / size) * across;
-      const z = here.z + ((after.x - before.x) / size) * across;
-      const ground = terrain.heightAt(x, z);
-      if (ground > surface + 0.08 || surface - ground > 0.65) continue;
-      // A slough already supplies its own shore plants.
-      if (stream.sloughs.some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
-      addReedClump(builder, materials, random, { x, y: ground, z }, 5 + Math.floor(random() * 4));
+      if (random() > 0.55) continue;
+      const count = 1 + Math.floor(random() * 3);
+      for (let clump = 0; clump < count; clump++) {
+        const across = side * (streamWaterHalfWidthAt(stream, along) - 0.1 - random() * 0.65);
+        const stagger = (random() - 0.5) * 2.8;
+        const x = middleX - tz * across + tx * stagger;
+        const z = middleZ + tx * across + tz * stagger;
+        const ground = terrain.heightAt(x, z);
+        if (ground > surface + 0.08 || surface - ground > 0.65) continue;
+        if (stream.sloughs.some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
+        addReedClump(
+          builder,
+          materials,
+          random,
+          { x, y: ground - 0.04, z },
+          3 + Math.floor(random() * 10),
+        );
+      }
     }
   }
   const scene = builder.build();
@@ -224,7 +240,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   const positions = new Float32Array(rows * ACROSS * 3);
   // WebGPU guarantees only eight vertex buffers. Pack the custom water
   // values together so the ribbon uses just three buffers with position/normal.
-  const waterValues = new Float32Array(rows * ACROSS * 8);
+  const waterValues = new Float32Array(rows * ACROSS * 9);
   const indices: number[] = [];
 
   for (let row = 0; row < rows; row++) {
@@ -248,7 +264,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       positions[vertex * 3 + 1] = surface;
       positions[vertex * 3 + 2] = here.z + normalZ * half * across;
       const pace = 1 + steep * (FALL_PACE - 1);
-      const water = vertex * 8;
+      const water = vertex * 9;
       waterValues[water] = half * across;
       waterValues[water + 1] = along;
       waterValues[water + 2] = Math.abs(across);
@@ -257,6 +273,11 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       waterValues[water + 5] = (tangentX / size) * pace;
       waterValues[water + 6] = (tangentZ / size) * pace;
       waterValues[water + 7] = 1;
+      waterValues[water + 8] = streamWaterDepthAt(
+        stream,
+        positions[vertex * 3]!,
+        positions[vertex * 3 + 2]!,
+      );
     }
     if (row + 1 < rows) {
       for (let column = 0; column + 1 < ACROSS; column++) {
@@ -272,7 +293,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 8);
+  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 9);
   geometry.setAttribute('streamAcross', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 0));
   geometry.setAttribute('streamAlong', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 1));
   geometry.setAttribute('streamEdge', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 2));
@@ -280,6 +301,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   geometry.setAttribute('streamPace', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 4));
   geometry.setAttribute('waterFlow', new THREE.InterleavedBufferAttribute(waterBuffer, 2, 5));
   geometry.setAttribute('waterFlowShare', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 7));
+  geometry.setAttribute('streamDepth', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 8));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;

@@ -10,6 +10,8 @@ import {
   STREAM_KEEP_OUT,
   streamBedAt,
   streamDepthMiddle,
+  streamPoolDepthAt,
+  signedStreamAcross,
   streamHalfWidthAt,
   streamPointAt,
   streamSurfaceAt,
@@ -97,7 +99,7 @@ describe('the stream', () => {
           sloughSurfaceAt(STREAM, slough, circle.x, circle.z) -
           terrain.heightAt(circle.x, circle.z);
         expect(depth).toBeGreaterThan(0.1);
-        expect(depth).toBeLessThan(0.6);
+        if (!isInStream(STREAM, circle.x, circle.z)) expect(depth).toBeLessThan(0.6);
         expect(nearStream(STREAM, circle.x, circle.z, 1.2)).toBe(true);
         expect(STREAM_KEEP_OUT).toContainEqual(circle);
       }
@@ -193,11 +195,17 @@ describe('the stream', () => {
     expect(streamPointAt(STREAM, 10)).toEqual(streamPointAt(STREAM, 10));
   });
 
-  it('is shallow enough to wade across everywhere', () => {
+  it('keeps the ordinary reaches shallow while adding deeper pools', () => {
     for (const along of samples(1.5)) {
       const at = pointAlong(along);
       const depth = streamWaterDepthAt(STREAM, at.x, at.z);
-      expect(depth).toBeLessThan(0.6);
+      const spot = nearestOnStream(STREAM, at.x, at.z, 1)!;
+      const pool = streamPoolDepthAt(
+        STREAM,
+        spot.along,
+        signedStreamAcross(STREAM, spot, at.x, at.z),
+      );
+      expect(depth - pool).toBeLessThan(0.6);
     }
   });
 
@@ -217,7 +225,9 @@ describe('the stream', () => {
       const ground = terrain.heightAt(at.x, at.z);
       const surface = streamSurfaceAt(STREAM, along);
       expect(surface - ground).toBeGreaterThan(0.1);
-      expect(surface - ground).toBeLessThan(streamDepthMiddle(STREAM, along) + 0.35);
+      expect(surface - ground).toBeLessThan(
+        streamDepthMiddle(STREAM, along) + streamPoolDepthAt(STREAM, along, 0) + 0.4,
+      );
     }
   });
 

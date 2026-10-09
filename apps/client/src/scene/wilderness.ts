@@ -65,6 +65,7 @@ export interface GroundLattice {
   readonly rock: Float32Array;
   readonly snow: Float32Array;
   readonly tint: Float32Array;
+  readonly bank?: Float32Array;
 }
 
 /** What the digging scene needs of the ground: to take a square away and, if it can, to draw it again with a hole. */
@@ -515,6 +516,7 @@ export function createGround(
   const rock = new Float32Array(position.count);
   const snow = new Float32Array(position.count);
   const tint = new Float32Array(position.count * 3);
+  const bank = new Float32Array(position.count * 2);
   for (let i = 0; i < position.count; i++) {
     const up = Math.max(0.05, normal.getY(i));
     const slope = Math.sqrt(Math.max(0, 1 - up * up)) / up;
@@ -522,6 +524,8 @@ export function createGround(
     floor[i] = shade.floor;
     rock[i] = shade.rock;
     snow[i] = shade.snow;
+    bank[i * 2] = shade.bank[0];
+    bank[i * 2 + 1] = shade.bank[1];
     tint[i * 3] = shade.tint[0];
     tint[i * 3 + 1] = shade.tint[1];
     tint[i * 3 + 2] = shade.tint[2];
@@ -530,6 +534,7 @@ export function createGround(
   geometry.setAttribute('rock', new THREE.BufferAttribute(rock, 1));
   geometry.setAttribute('snow', new THREE.BufferAttribute(snow, 1));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
+  geometry.setAttribute('bank', new THREE.BufferAttribute(bank, 2));
 
   const material = createGroundMaterial();
   const mesh = new THREE.Mesh(geometry, material);
@@ -561,6 +566,7 @@ export function createGround(
         rock: new Float32Array(points),
         snow: new Float32Array(points),
         tint: new Float32Array(points * 3),
+        bank: new Float32Array(points * 2),
       };
       const corners: number[] = [0, 0, 0];
       const weights: number[] = [0, 0, 0];
@@ -595,6 +601,8 @@ export function createGround(
             out.floor[at]! += w * floor[corner]!;
             out.rock[at]! += w * rock[corner]!;
             out.snow[at]! += w * snow[corner]!;
+            out.bank[at * 2]! += w * bank[corner * 2]!;
+            out.bank[at * 2 + 1]! += w * bank[corner * 2 + 1]!;
           }
           const length = Math.hypot(
             out.normal[at * 3]!,

@@ -457,6 +457,7 @@ function createGalleryGround(scenery: readonly PlacedProp[]): THREE.Mesh {
   geometry.setAttribute('rock', new THREE.BufferAttribute(new Float32Array(position.count), 1));
   geometry.setAttribute('snow', new THREE.BufferAttribute(new Float32Array(position.count), 1));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
+  geometry.setAttribute('bank', new THREE.BufferAttribute(new Float32Array(position.count * 2), 2));
   const mesh = new THREE.Mesh(geometry, createGroundMaterial());
   mesh.receiveShadow = true;
   return mesh;

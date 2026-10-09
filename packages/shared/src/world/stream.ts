@@ -9,7 +9,7 @@
  *
  * - the bed, which only ever goes down, in a few short steps (the falls),
  * - how wide the water is, which grows toward the lake, and
- * - how deep it is, never more than knee deep so players can wade it.
+ * - how deep it is, shallow enough to wade except for scattered deeper pools.
  *
  * The ground round the stream is shaped to suit: a shallow bowl for the water,
  * a soft bank, and a valley floor that eases back into the hills (or, on the
@@ -572,7 +572,10 @@ export function streamGroundHeight(
   // The bowl for the water: low in the middle, rising to the rim, then up the bank.
   const across = Math.min(distance / half, 1);
   const rim = bed + depth + RIM_LIP;
-  const bowl = bed + (rim - bed) * across * across;
+  const bowl =
+    bed +
+    (rim - bed) * across * across -
+    streamPoolDepthAt(stream, along, signedStreamAcross(stream, spot, x, z));
   const channel = distance <= half ? bowl : rim + (distance - half) * BANK_SLOPE;
   const fade = smoothstep(along, 0, 8);
   let shaped = softMin(valley, lerp(valley, channel, fade), BANK_SOFTNESS);
@@ -609,7 +612,7 @@ export function streamGroundHeight(
 
 /**
  * How deep the water is at a spot, in metres, or 0 where it is dry.
- * Never more than knee deep in the middle.
+ * The shallows can be waded; darker pools exceed STREAM_WADING_DEPTH.
  */
 export function streamWaterDepthAt(stream: Stream, x: number, z: number): number {
   const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + 1);
@@ -621,7 +624,31 @@ export function streamWaterDepthAt(stream: Stream, x: number, z: number): number
   const rim = streamBedAt(stream, spot.along) + streamDepthMiddle(stream, spot.along) + RIM_LIP;
   const ground =
     streamBedAt(stream, spot.along) + (rim - streamBedAt(stream, spot.along)) * across * across;
-  return Math.max(0, surface - ground);
+  return Math.max(
+    0,
+    surface -
+      ground +
+      streamPoolDepthAt(stream, spot.along, signedStreamAcross(stream, spot, x, z)),
+  );
+}
+
+/** Maximum water depth a character can wade through, in metres. */
+export const STREAM_WADING_DEPTH = 0.8;
+
+/** Irregular deep pockets below the existing surface; banks and water level stay unchanged. */
+export const STREAM_POOL_SHARES = [0.21, 0.32, 0.44, 0.59, 0.68, 0.79, 0.9] as const;
+
+export function streamPoolDepthAt(stream: Stream, along: number, across: number): number {
+  let depth = 0;
+  for (const [index, share] of STREAM_POOL_SHARES.entries()) {
+    const centre = stream.length * share;
+    const length = 8 + (index % 3) * 3;
+    const width = streamWaterHalfWidthAt(stream, centre) * 0.7;
+    const offset = (index % 2 === 0 ? -1 : 1) * width * 0.12;
+    const radius = Math.hypot((along - centre) / length, (across - offset) / width);
+    depth = Math.max(depth, (1 - smoothstep(radius, 0.1, 1)) * (1.4 + (index % 3) * 0.2));
+  }
+  return depth;
 }
 
 /** Is this spot in the water, at least `margin` metres in from its edge? */
@@ -656,4 +683,33 @@ export function nearStream(stream: Stream, x: number, z: number, footprint: numb
   const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + footprint + 1);
   if (spot === null) return false;
   return spot.distance < streamHalfWidthAt(stream, spot.along) + footprint;
+}
+
+/** Signed distance across the local channel: positive on its left bank. */
+export function signedStreamAcross(stream: Stream, spot: StreamSpot, x: number, z: number): number {
+  const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+  const before = streamPointAt(stream, Math.max(0, row - 1));
+  const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+  const dx = after.x - before.x,
+    dz = after.z - before.z;
+  const length = Math.hypot(dx, dz) || 1;
+  return ((x - spot.x) * -dz + (z - spot.z) * dx) / length;
+}
+
+/** Downstream velocity in metres/second. Slough interiors and the lake are still. */
+export function streamCurrentAt(stream: Stream, x: number, z: number): { x: number; z: number } {
+  const spot = nearestOnStream(stream, x, z, 8);
+  if (spot === null) return { x: 0, z: 0 };
+  const half = streamWaterHalfWidthAt(stream, spot.along);
+  const margin = half - spot.distance;
+  if (margin <= -0.8) return { x: 0, z: 0 };
+  const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+  const before = streamPointAt(stream, Math.max(0, row - 1));
+  const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+  const length = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+  const speed =
+    (0.65 + Math.min(streamFallGradientAt(stream, spot.along), 0.5) * 1.5) *
+    smoothstep(margin, -0.8, 1.2) *
+    (1 - smoothstep(spot.along, stream.length - 10, stream.length));
+  return { x: ((after.x - before.x) / length) * speed, z: ((after.z - before.z) / length) * speed };
 }

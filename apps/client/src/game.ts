@@ -27,6 +27,8 @@ import {
 import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
 import { createSnowFootprints } from './scene/snow-footprints';
+import { FloatingBoatMotion } from './scene/floating-boat-motion';
+import { navigableWaterSurfaceAt, navigableWaterDepthAt } from '@acorn/shared';
 import { WaterWake } from './scene/water-wake';
 import { waterRippleUniforms } from './art/water-uniforms';
 import {
@@ -785,6 +787,7 @@ export class Game {
     | ReturnType<typeof createHomeDecoration>
   >();
   private builtProps: readonly BuiltPropView[] = [];
+  private readonly floatingBoats = new Map<number, FloatingBoatMotion>();
   private decorations: readonly HomeDecoration[] = [];
   private decorMoveId = 0;
   private decorNote: string | null = null;
@@ -1669,6 +1672,7 @@ export class Game {
     this.critters.clear();
     for (const built of this.builtMeshes.values()) built.dispose();
     this.builtMeshes.clear();
+    this.floatingBoats.clear();
     this.rowingBoats.dispose();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
@@ -2121,8 +2125,22 @@ export class Game {
         break;
       }
       case 'builtProps': {
+        const onlyBoatMotion =
+          message.props.length === this.builtProps.length &&
+          message.props.every((prop) => {
+            const previous = this.builtProps.find((old) => old.id === prop.id);
+            if (previous === undefined || previous.kind !== prop.kind) return false;
+            const keys = new Set([...Object.keys(previous), ...Object.keys(prop)]);
+            for (const key of keys) {
+              if (prop.kind === 'rowboat' && (key === 'x' || key === 'z' || key === 'yaw'))
+                continue;
+              if (previous[key as keyof BuiltPropView] !== prop[key as keyof BuiltPropView])
+                return false;
+            }
+            return true;
+          });
         this.builtProps = message.props;
-        this.grass?.setBuildings(message.props);
+        if (!onlyBoatMotion) this.grass?.setBuildings(message.props);
         // Anything just placed that has now come back as built stops being
         // pending - it is in the list for real.
         this.pendingPlacements = this.pendingPlacements.filter(
@@ -2134,7 +2152,7 @@ export class Game {
                 Math.abs(prop.z - pending.request.z) < 0.05,
             ),
         );
-        this.applyBuiltProps();
+        this.applyBuiltProps(onlyBoatMotion);
         break;
       }
       case 'recoveryMarkers': {
@@ -2764,7 +2782,7 @@ export class Game {
    * ever actually removed yet, but a client that reconnects mid-session
    * should not have to care whether that stays true forever.
    */
-  private applyBuiltProps(): void {
+  private applyBuiltProps(onlyBoatMotion = false): void {
     if (this.clearingScene === null) return;
     const present = new Set(this.builtProps.map((prop) => prop.id));
 
@@ -2777,6 +2795,7 @@ export class Game {
       this.outdoors.remove(built.group);
       built.dispose();
       this.builtMeshes.delete(id);
+      this.floatingBoats.delete(id);
     }
 
     for (const prop of this.builtProps) {
@@ -2786,11 +2805,18 @@ export class Game {
         // campfire lighting up or going out, so an existing mesh needs to
         // hear about it too, not just a freshly created one.
         if ('setLit' in existing) existing.setLit(prop.lit);
-        // A boat is the one piece that moves, and only when somebody climbs
-        // in or out: it is hidden while it is being rowed, because the boat
-        // under the rider is the one drawn.
+        // Free boats follow the current between server updates. Occupied
+        // boats are hidden here because a separate boat follows the rider.
         if (prop.kind === 'rowboat') {
-          existing.group.position.set(prop.x, LAKE.level, prop.z);
+          if (prop.occupied === true) this.floatingBoats.delete(prop.id);
+          else {
+            const floating = this.floatingBoats.get(prop.id);
+            if (floating !== undefined) floating.sync(prop);
+            else {
+              this.floatingBoats.set(prop.id, new FloatingBoatMotion(prop));
+              existing.group.position.set(prop.x, navigableWaterSurfaceAt(prop.x, prop.z), prop.z);
+            }
+          }
           existing.group.rotation.y = prop.yaw;
           existing.group.visible = prop.occupied !== true;
         }
@@ -2806,8 +2832,10 @@ export class Game {
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
       this.builtMeshes.set(prop.id, built);
+      if (prop.kind === 'rowboat' && prop.occupied !== true)
+        this.floatingBoats.set(prop.id, new FloatingBoatMotion(prop));
     }
-    if (this.collision !== null) {
+    if (!onlyBoatMotion && this.collision !== null) {
       const old = new Set(this.solidHomes.values());
       this.collision.colliders.splice(
         0,
@@ -3126,6 +3154,13 @@ export class Game {
     }
     // After everybody, ours included, has been placed: boats of those who stopped rowing go.
     this.rowingBoats.sweep();
+    for (const [id, floating] of this.floatingBoats) {
+      const group = this.builtMeshes.get(id)?.group;
+      if (group === undefined || !group.visible) continue;
+      const pose = floating.update(deltaSeconds, this.lakeFrozen);
+      group.position.set(pose.x, pose.y, pose.z);
+      group.rotation.y = pose.yaw;
+    }
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(
       deltaSeconds,
@@ -3728,7 +3763,9 @@ export class Game {
 
   /** Where the foot of a built piece sits: on the ground, or for a boat on the lake's surface. */
   private builtGroundY(kind: BuildableKindId, x: number, z: number): number {
-    return kind === 'rowboat' ? LAKE.level : (this.collision?.terrain.heightAt(x, z) ?? 0);
+    return kind === 'rowboat'
+      ? navigableWaterSurfaceAt(x, z)
+      : (this.collision?.terrain.heightAt(x, z) ?? 0);
   }
 
   /**
@@ -3955,7 +3992,12 @@ export class Game {
           ray.origin,
           ray.direction,
           this.collision.terrain,
-          this.placing?.kind === 'rowboat' ? LAKE.level : undefined,
+          this.placing?.kind === 'rowboat'
+            ? (x, z) =>
+                navigableWaterDepthAt(x, z) > 0
+                  ? navigableWaterSurfaceAt(x, z)
+                  : Number.NEGATIVE_INFINITY
+            : undefined,
         );
   }
 

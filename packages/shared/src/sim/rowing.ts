@@ -27,7 +27,9 @@ import {
   BOAT_SPRINT_SPEED,
   BOAT_TURN_RATE,
 } from '../world/boat';
-import { LAKE, lakeSlopeAt, nearestShoreIsIsland, type LakeSlope } from '../world/lake';
+import { LAKE, nearestShoreIsIsland, type LakeSlope } from '../world/lake';
+import { navigableWaterSlopeAt, navigableWaterSurfaceAt } from '../world/navigable-water';
+import { STREAM, streamCurrentAt } from '../world/stream';
 import {
   isHeld,
   PlayerButton,
@@ -90,8 +92,7 @@ export function keepBoatAfloat(
         // -1 is the middle itself, 0 to 7 are the points round it.
         const angle = (Math.max(side, 0) * Math.PI) / 4;
         const reach = side < 0 ? 0 : HULL_RADIUS;
-        lakeSlopeAt(
-          LAKE,
+        navigableWaterSlopeAt(
           middleX + Math.cos(angle) * reach,
           middleZ + Math.sin(angle) * reach,
           slope,
@@ -169,8 +170,9 @@ export function stepBoat(
   }
   velocity.y = 0;
 
-  position.x += velocity.x * deltaSeconds;
-  position.z += velocity.z * deltaSeconds;
+  const current = streamCurrentAt(STREAM, position.x, position.z);
+  position.x += (velocity.x + current.x) * deltaSeconds;
+  position.z += (velocity.z + current.z) * deltaSeconds;
 
   const shoreward = keepBoatAfloat(position, boatYawFor(motion.facingYaw));
   if (shoreward !== null) {
@@ -185,7 +187,7 @@ export function stepBoat(
   const limit = world.boundsHalfExtent;
   position.x = clamp(position.x, -limit, limit);
   position.z = clamp(position.z, -limit, limit);
-  position.y = LAKE.level;
+  position.y = navigableWaterSurfaceAt(position.x, position.z);
   motion.grounded = true;
 }
 
@@ -215,14 +217,14 @@ export interface Landing {
  * inland of the nearest shore. Null when the boat is too far out for that.
  */
 export function landingFrom(x: number, z: number): Landing | null {
-  lakeSlopeAt(LAKE, x, z, slope);
+  navigableWaterSlopeAt(x, z, slope);
   if (slope.depth > BOAT_EXIT_MAX_DEPTH) return null;
   return landingBeside(x, z);
 }
 
 /** The same landing, however far out the boat is: where it would be put ashore from. */
 export function landingBeside(x: number, z: number): Landing {
-  lakeSlopeAt(LAKE, x, z, slope);
+  navigableWaterSlopeAt(x, z, slope);
   const { depth, towardX, towardZ } = slope;
   const inland = depth + BOAT_LANDING_DISTANCE;
   return {
@@ -241,7 +243,7 @@ export function landingBeside(x: number, z: number): Landing {
  * somewhere it cannot follow.
  */
 export function beachedBoat(x: number, z: number): BoatPlace {
-  lakeSlopeAt(LAKE, x, z, slope);
+  navigableWaterSlopeAt(x, z, slope);
   const { depth, towardX, towardZ } = slope;
   const shoreX = x - towardX * depth;
   const shoreZ = z - towardZ * depth;
@@ -273,4 +275,23 @@ export function boatSalvage(): BoatSalvage[] {
     if (count > 0) pile.push({ item: cost.item, count });
   }
   return pile;
+}
+
+/** Drift an unattended floating hull through the same current used by rowers. */
+export function driftBoat(
+  boat: { x: number; z: number; yaw: number },
+  deltaSeconds: number,
+): boolean {
+  const current = streamCurrentAt(STREAM, boat.x, boat.z);
+  if (current.x === 0 && current.z === 0) return false;
+  const position = {
+    x: boat.x + current.x * deltaSeconds,
+    y: 0,
+    z: boat.z + current.z * deltaSeconds,
+  };
+  keepBoatAfloat(position, boat.yaw);
+  const moved = Math.hypot(position.x - boat.x, position.z - boat.z) > 0.00001;
+  boat.x = position.x;
+  boat.z = position.z;
+  return moved;
 }

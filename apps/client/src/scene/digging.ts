@@ -108,6 +108,7 @@ interface SkinBuffers {
   rock: number[];
   snow: number[];
   tint: number[];
+  bank: number[];
   index: number[];
 }
 
@@ -462,6 +463,10 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
           const dirt = earth[at]!;
           lattice.floor[at] = THREE.MathUtils.lerp(lattice.floor[at]!, 1, dirt);
           lattice.snow[at] = lattice.snow[at]! * (1 - dirt);
+          if (lattice.bank !== undefined) {
+            lattice.bank[at * 2]! *= 1 - dirt;
+            lattice.bank[at * 2 + 1]! *= 1 - dirt;
+          }
           for (let axis = 0; axis < 3; axis++)
             lattice.tint[at * 3 + axis] = THREE.MathUtils.lerp(
               lattice.tint[at * 3 + axis]!,
@@ -524,6 +529,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       skin.floor.push(lattice.floor[i]!);
       skin.rock.push(lattice.rock[i]!);
       skin.snow.push(lattice.snow[i]!);
+      skin.bank.push(lattice.bank?.[i * 2] ?? 0, lattice.bank?.[i * 2 + 1] ?? 0);
       skin.tint.push(lattice.tint[i * 3]!, lattice.tint[i * 3 + 1]!, lattice.tint[i * 3 + 2]!);
     }
     const point = (i: number, j: number): Point => {
@@ -622,6 +628,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       rock: [],
       snow: [],
       tint: [],
+      bank: [],
       index: [],
     };
     const withSkin = ground.lattice !== undefined && ground.material !== undefined;
@@ -687,6 +694,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       geometry.setAttribute('rock', new THREE.Float32BufferAttribute(skin.rock, 1));
       geometry.setAttribute('snow', new THREE.Float32BufferAttribute(skin.snow, 1));
       geometry.setAttribute('tint', new THREE.Float32BufferAttribute(skin.tint, 3));
+      geometry.setAttribute('bank', new THREE.Float32BufferAttribute(skin.bank, 2));
       geometry.setIndex(skin.index);
       const mesh = new THREE.Mesh(geometry, ground.material);
       mesh.receiveShadow = true;

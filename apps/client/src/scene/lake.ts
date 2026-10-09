@@ -196,7 +196,8 @@ function createShorePlants(
     for (const [x, z, outX, outZ] of rimPoints(circle, REED_SPACING, random)) {
       if (random() > REED_SHARE) continue;
       // Inwards for the mainland's rim means toward the middle of the circle; for an island, away from it.
-      const at = { x: x - outX * 0.35 * inwards, y: level, z: z - outZ * 0.35 * inwards };
+      const inset = 0.15 + random() * 0.65;
+      const at = { x: x - outX * inset * inwards, y: level, z: z - outZ * inset * inwards };
       at.y = surfaceHeightAt(at.x, at.z);
       const depth = lakeDepthAt(lake, at.x, at.z);
       if (depth < 0.12 || depth > 1.1) continue;
@@ -207,7 +208,7 @@ function createShorePlants(
         REED_PATCHES.some((patch) => Math.hypot(patch.x - at.x, patch.z - at.z) < REED_PATCH_CLEAR)
       )
         continue;
-      addReedClump(builder, plants, random, at, 5 + Math.floor(random() * 3));
+      addReedClump(builder, plants, random, at, 3 + Math.floor(random() * 9));
     }
   };
   for (const circle of lake.basin) reedsAlong(circle, 1);
