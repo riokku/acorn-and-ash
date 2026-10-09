@@ -1946,7 +1946,9 @@ export class Game {
         break;
       }
       case 'supports': {
-        this.supports = message.replace ? [...message.supports] : [...this.supports, ...message.supports];
+        this.supports = message.replace
+          ? [...message.supports]
+          : [...this.supports, ...message.supports];
         this.mineSupports?.apply(message.supports, message.replace);
         break;
       }
@@ -3797,19 +3799,20 @@ export class Game {
       return;
     }
     const surface = this.surfaceUnderPointer(camera, dug, collision.terrain);
-    const cell =
-      surface === null ? null : supportCellAt(dug.grid, surface.point, surface.normal);
+    const cell = surface === null ? null : supportCellAt(dug.grid, surface.point, surface.normal);
     if (cell === null) {
       preview.show(null, 0, false);
       this.supportCell = null;
-      this.supportHint = 'Point at the floor of a tunnel one metre wide, then click to prop it up.';
+      this.supportHint =
+        'Point at the floor of a tunnel two metres wide, then click to prop it up.';
       return;
     }
     const fit = supportProblem(dug.grid, cell, this.supports);
-    const reachable = supportInReach(feet, cell, DIG_REACH_METERS);
+    const where = 'axis' in fit ? fit.cell : cell;
+    const reachable = supportInReach(feet, where, DIG_REACH_METERS);
     const fits = 'axis' in fit && reachable;
-    preview.show(cell, 'axis' in fit ? fit.axis : 0, fits);
-    this.supportCell = fits ? cell : null;
+    preview.show(where, 'axis' in fit ? fit.axis : 0, fits);
+    this.supportCell = fits ? where : null;
     this.supportHint =
       'problem' in fit
         ? supportProblemText(fit.problem)
@@ -3833,7 +3836,10 @@ export class Game {
     camera: FollowCamera,
     dug: DigScene,
     terrain: Terrain,
-  ): { point: { x: number; y: number; z: number }; normal: { x: number; y: number; z: number } } | null {
+  ): {
+    point: { x: number; y: number; z: number };
+    normal: { x: number; y: number; z: number };
+  } | null {
     const pointer = this.controls?.pointerPosition() ?? null;
     if (pointer === null) return null;
     this.clickNdc.set(
@@ -5363,8 +5369,7 @@ export class Game {
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
               },
-      interactionNote:
-        now < this.interactionNoteUntil ? this.interactionNote : this.supportHint,
+      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : this.supportHint,
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,

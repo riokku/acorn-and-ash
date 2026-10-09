@@ -1,9 +1,15 @@
 import * as THREE from 'three';
-import { SUPPORT_HEIGHT, SUPPORT_MAX_COUNT, VOXEL, type Support } from '@acorn/shared';
+import {
+  SUPPORT_HEIGHT,
+  SUPPORT_MAX_COUNT,
+  SUPPORT_SPAN,
+  VOXEL,
+  type Support,
+} from '@acorn/shared';
 
 /**
  * Mine supports (decision 0119): two wooden posts against the walls of a
- * tunnel and a beam across under the roof, with a short brace at each corner.
+ * tunnel two metres wide and a beam across under the roof, with a short brace at each corner.
  * Placeholder shapes for now; the art replaces them once supports are fun.
  *
  * Every support is drawn from three shared meshes (posts, beams, braces), so a
@@ -17,8 +23,9 @@ const BRACE = 0.12;
 const WOOD = 0xa4723f;
 const WOOD_DARK = 0x7d5630;
 
-/** The size of a support, in metres: one cell wide, as tall as a person standing in it. */
-const WIDTH = 1;
+/** The size of a support, in metres: a metre along the tunnel, two across, as tall as a person standing in it. */
+const ALONG = 1;
+const WIDTH = SUPPORT_SPAN * VOXEL;
 const HEIGHT = SUPPORT_HEIGHT * VOXEL;
 
 export interface MineSupports {
@@ -44,19 +51,19 @@ export function supportPieces(axis: 0 | 1): Piece[] {
   // Written for a tunnel along X (posts either side in Z); a turn of a quarter does the other.
   const edge = POST / 2;
   const pieces: Piece[] = [
-    { kind: 'post', x: WIDTH / 2, y: HEIGHT / 2 - BEAM_HEIGHT / 2, z: edge, yaw: 0, lean: 0 },
+    { kind: 'post', x: ALONG / 2, y: HEIGHT / 2 - BEAM_HEIGHT / 2, z: edge, yaw: 0, lean: 0 },
     {
       kind: 'post',
-      x: WIDTH / 2,
+      x: ALONG / 2,
       y: HEIGHT / 2 - BEAM_HEIGHT / 2,
       z: WIDTH - edge,
       yaw: 0,
       lean: 0,
     },
-    { kind: 'beam', x: WIDTH / 2, y: HEIGHT - BEAM_HEIGHT / 2, z: WIDTH / 2, yaw: 0, lean: 0 },
+    { kind: 'beam', x: ALONG / 2, y: HEIGHT - BEAM_HEIGHT / 2, z: WIDTH / 2, yaw: 0, lean: 0 },
     {
       kind: 'brace',
-      x: WIDTH / 2,
+      x: ALONG / 2,
       y: HEIGHT - BEAM_HEIGHT - 0.12,
       z: POST + 0.1,
       yaw: 0,
@@ -64,7 +71,7 @@ export function supportPieces(axis: 0 | 1): Piece[] {
     },
     {
       kind: 'brace',
-      x: WIDTH / 2,
+      x: ALONG / 2,
       y: HEIGHT - BEAM_HEIGHT - 0.12,
       z: WIDTH - POST - 0.1,
       yaw: 0,

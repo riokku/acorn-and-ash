@@ -20,7 +20,7 @@ export const SUPPORT_HEIGHT = 4;
 /** Which way the tunnel runs through a support: along X (posts either side in Z), or along Z. */
 export type SupportAxis = 0 | 1;
 
-/** A support: its lowest, lowest -X, lowest -Z cube, like a cube dig, and the way the tunnel runs. */
+/** A support: its lowest, lowest -X, lowest -Z cube, like a cube dig, and the way the tunnel runs. Covers one metre along the tunnel and two across. */
 export interface Support {
   readonly ix: number;
   readonly iy: number;
@@ -59,12 +59,34 @@ export function supportCellAt(
   const top = voxelIndex(point.y + normal.y * 0.25 + 0.05);
   // The floor is the first open cube with solid ground under it, going down.
   for (let iy = top; iy > top - 12; iy--) {
-    if (rowIsOpen(grid, ix, iy, iz) && solidInRow(grid, ix, iy - 1, iz) === DIG_CUBE * DIG_CUBE) return { ix, iy, iz };
+    if (rowIsOpen(grid, ix, iy, iz) && solidInRow(grid, ix, iy - 1, iz) === DIG_CUBE * DIG_CUBE)
+      return { ix, iy, iz };
   }
   return null;
 }
 
-/** Whether the cell is open air all the way up. */
+/** How far across a support reaches, in half-metre cubes: two metres between the walls, room for a body to walk through. */
+export const SUPPORT_SPAN = DIG_CUBE * 2;
+
+/** How many cubes a support covers along X and along Z, for a tunnel running this way. */
+function footprint(axis: SupportAxis): { readonly x: number; readonly z: number } {
+  return axis === 0 ? { x: DIG_CUBE, z: SUPPORT_SPAN } : { x: SUPPORT_SPAN, z: DIG_CUBE };
+}
+
+/** Whether the whole frame is open air, floor to roof. */
+function frameIsOpen(grid: DugGrid, cell: SupportCell, axis: SupportAxis): boolean {
+  const size = footprint(axis);
+  for (let y = 0; y < SUPPORT_HEIGHT; y++) {
+    for (let dx = 0; dx < size.x; dx++) {
+      for (let dz = 0; dz < size.z; dz++) {
+        if (grid.isSolid(cell.ix + dx, cell.iy + y, cell.iz + dz)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** Whether a one metre cell is open air all the way up. */
 function cellIsOpen(grid: DugGrid, cell: SupportCell): boolean {
   for (let y = 0; y < SUPPORT_HEIGHT; y++) {
     for (let dx = 0; dx < DIG_CUBE; dx++) {
@@ -85,7 +107,7 @@ function rowIsOpen(grid: DugGrid, ix: number, iy: number, iz: number): boolean {
   return true;
 }
 
-/** How many of the four cubes in a row are solid. */
+/** How many of the four cubes in a one metre square are solid. */
 function solidInRow(grid: DugGrid, ix: number, iy: number, iz: number): number {
   let solid = 0;
   for (let dx = 0; dx < DIG_CUBE; dx++) {
@@ -96,13 +118,25 @@ function solidInRow(grid: DugGrid, ix: number, iy: number, iz: number): number {
   return solid;
 }
 
-/** How much of a flat wall beside the cell, along its whole height, is solid: 0 to 1. */
+/** How much of the floor or roof of the frame, at this height, is solid: 0 to 1. */
+function layerSolidity(grid: DugGrid, cell: SupportCell, axis: SupportAxis, iy: number): number {
+  const size = footprint(axis);
+  let solid = 0;
+  for (let dx = 0; dx < size.x; dx++) {
+    for (let dz = 0; dz < size.z; dz++) {
+      if (grid.isSolid(cell.ix + dx, iy, cell.iz + dz)) solid++;
+    }
+  }
+  return solid / (size.x * size.z);
+}
+
+/** How much of a flat wall beside the frame, along its whole height, is solid: 0 to 1. */
 function wallSolidity(grid: DugGrid, cell: SupportCell, axis: SupportAxis, side: -1 | 1): number {
   let solid = 0;
   for (let y = 0; y < SUPPORT_HEIGHT; y++) {
     for (let along = 0; along < DIG_CUBE; along++) {
-      const dx = axis === 0 ? along : side < 0 ? -1 : DIG_CUBE;
-      const dz = axis === 0 ? (side < 0 ? -1 : DIG_CUBE) : along;
+      const dx = axis === 0 ? along : side < 0 ? -1 : SUPPORT_SPAN;
+      const dz = axis === 0 ? (side < 0 ? -1 : SUPPORT_SPAN) : along;
       if (grid.isSolid(cell.ix + dx, cell.iy + y, cell.iz + dz)) solid++;
     }
   }
@@ -117,46 +151,98 @@ function wallSolidity(grid: DugGrid, cell: SupportCell, axis: SupportAxis, side:
 const SOLID_ENOUGH = 0.75;
 
 /** Why a cell cannot take a support, in the order a player would want to hear it. */
-export type SupportProblem = 'taken' | 'blocked' | 'noFloor' | 'noRoof' | 'tooWide';
+export type SupportProblem = 'taken' | 'blocked' | 'tooNarrow' | 'noFloor' | 'noRoof' | 'tooWide';
 
-/** What is wrong with this cell, or which way a support would run if nothing is. */
-export function supportProblem(
-  grid: DugGrid,
-  cell: SupportCell,
-  existing: readonly Support[],
-): { readonly axis: SupportAxis } | { readonly problem: SupportProblem } {
-  if (existing.some((s) => s.ix === cell.ix && s.iy === cell.iy && s.iz === cell.iz)) {
-    return { problem: 'taken' };
-  }
-  if (!cellIsOpen(grid, cell)) return { problem: 'blocked' };
-  const row = DIG_CUBE * DIG_CUBE;
-  if (solidInRow(grid, cell.ix, cell.iy - 1, cell.iz) / row < SOLID_ENOUGH) {
-    return { problem: 'noFloor' };
-  }
-  if (solidInRow(grid, cell.ix, cell.iy + SUPPORT_HEIGHT, cell.iz) / row < SOLID_ENOUGH) {
-    return { problem: 'noRoof' };
-  }
-  let best: SupportAxis | null = null;
-  let bestScore = 0;
-  for (const axis of [0, 1] as const) {
-    const score = Math.min(wallSolidity(grid, cell, axis, -1), wallSolidity(grid, cell, axis, 1));
-    if (score >= SOLID_ENOUGH && score > bestScore) {
-      best = axis;
-      bestScore = score;
-    }
-  }
-  return best === null ? { problem: 'tooWide' } : { axis: best };
+/** How far along the checks a problem is: the higher, the closer the spot came to fitting. */
+const PROBLEM_RANK: Record<SupportProblem, number> = {
+  taken: 0,
+  blocked: 1,
+  tooNarrow: 1,
+  noFloor: 2,
+  noRoof: 3,
+  tooWide: 4,
+};
+
+function closer(a: SupportProblem, b: SupportProblem): SupportProblem {
+  return PROBLEM_RANK[b] > PROBLEM_RANK[a] ? b : a;
 }
 
-/** Which way a support in this cell would run, or why one cannot stand there. */
+/** Whether two frames would stand in each other's way. */
+function overlaps(cell: SupportCell, axis: SupportAxis, other: Support): boolean {
+  const a = footprint(axis);
+  const b = footprint(other.axis);
+  return (
+    cell.ix < other.ix + b.x &&
+    other.ix < cell.ix + a.x &&
+    cell.iz < other.iz + b.z &&
+    other.iz < cell.iz + a.z &&
+    cell.iy < other.iy + SUPPORT_HEIGHT &&
+    other.iy < cell.iy + SUPPORT_HEIGHT
+  );
+}
+
+/** What is wrong with a frame at this corner running this way, or null if it fits. */
+function frameProblem(
+  grid: DugGrid,
+  cell: SupportCell,
+  axis: SupportAxis,
+  existing: readonly Support[],
+): SupportProblem | null {
+  if (existing.some((s) => overlaps(cell, axis, s))) return 'taken';
+  if (!frameIsOpen(grid, cell, axis)) return 'blocked';
+  if (layerSolidity(grid, cell, axis, cell.iy - 1) < SOLID_ENOUGH) return 'noFloor';
+  if (layerSolidity(grid, cell, axis, cell.iy + SUPPORT_HEIGHT) < SOLID_ENOUGH) return 'noRoof';
+  const walls = Math.min(wallSolidity(grid, cell, axis, -1), wallSolidity(grid, cell, axis, 1));
+  return walls < SOLID_ENOUGH ? 'tooWide' : null;
+}
+
+/**
+ * What the pointer means: the one metre cell under it (from `supportCellAt`)
+ * sits somewhere along a support's two metre span, so each place the frame
+ * could stand that covers it is tried. Gives where the frame goes and which way
+ * it runs, or the reason the nearest try fell short.
+ */
+export function supportProblem(
+  grid: DugGrid,
+  seed: SupportCell,
+  existing: readonly Support[],
+):
+  | { readonly axis: SupportAxis; readonly cell: SupportCell }
+  | { readonly problem: SupportProblem } {
+  const tries: { cell: SupportCell; axis: SupportAxis }[] = [
+    { cell: seed, axis: 0 },
+    { cell: { ...seed, iz: seed.iz - DIG_CUBE }, axis: 0 },
+    { cell: seed, axis: 1 },
+    { cell: { ...seed, ix: seed.ix - DIG_CUBE }, axis: 1 },
+  ];
+  let worst: SupportProblem = 'taken';
+  const blocked: [number, number] = [0, 0];
+  for (const attempt of tries) {
+    const problem = frameProblem(grid, attempt.cell, attempt.axis, existing);
+    if (problem === null) return attempt;
+    if (problem === 'blocked') blocked[attempt.axis]++;
+    worst = closer(worst, problem);
+  }
+  // Open air at the pointer but rock in every frame that would run one way: too narrow for it.
+  if (blocked.some((count) => count === 2) && cellIsOpen(grid, seed)) {
+    return { problem: 'tooNarrow' };
+  }
+  return { problem: worst };
+}
+
+/** Which way a support at exactly this corner would run, or why one cannot stand there. */
 export function checkSupportCell(
   grid: DugGrid,
   cell: SupportCell,
   existing: readonly Support[],
 ): { readonly axis: SupportAxis } | { readonly refusal: SupportRefusal } {
-  const result = supportProblem(grid, cell, existing);
-  if ('axis' in result) return result;
-  return { refusal: result.problem === 'taken' ? 'supportTaken' : 'notTunnel' };
+  let worst: SupportProblem = 'taken';
+  for (const axis of [0, 1] as const) {
+    const problem = frameProblem(grid, cell, axis, existing);
+    if (problem === null) return { axis };
+    worst = closer(worst, problem);
+  }
+  return { refusal: worst === 'taken' ? 'supportTaken' : 'notTunnel' };
 }
 
 /** Where a support's middle is, in metres, for working out reach. */
