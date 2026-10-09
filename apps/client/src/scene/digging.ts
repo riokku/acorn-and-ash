@@ -5,6 +5,7 @@ import { DugGrid, VOXEL, mountainWeight, type Dig, type Terrain } from '@acorn/s
 import earthLayersUrl from '@assets/textures/dug-earth-layers.png?url';
 
 import { roundedMouth, softEdge } from './dug-mouth';
+import { smoothLining } from './dug-smoothing';
 import type { GroundPatches } from './wilderness';
 
 import {
@@ -52,6 +53,9 @@ const STONE = new THREE.Color(0x56565a);
  * so they come out as plain ground instead of smeared streaks.
  */
 const PLAIN_COLUMN = 0.619;
+
+/** How many rounds of softening the lining gets, to take the steps out of a ramp dug down in half-metre drops. */
+const LINING_SMOOTHING = 8;
 
 /** How far behind the lining the plain faces are set, in metres. */
 const BACKING_DEPTH = 0.03;
@@ -695,6 +699,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       blockers.splice(blockers.indexOf(previous), 1);
       chunks.delete(chunk);
     }
+    smoothLining({ positions, normals, indices: liningIndices }, LINING_SMOOTHING);
     wallIndices.push(...liningIndices);
     if (wallIndices.length + capIndices.length === 0) return;
     const geometry = new THREE.BufferGeometry();

@@ -1429,7 +1429,7 @@ describe('the lake freezing and thawing', () => {
 });
 
 describe('a shovel swing that made no hole', () => {
-  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing'] as const)(
+  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing', 'packFull'] as const)(
     'round trips %s',
     (reason) => {
       expect(decodeServerMessage(encodeDigRefused(reason))).toEqual({ type: 'digRefused', reason });

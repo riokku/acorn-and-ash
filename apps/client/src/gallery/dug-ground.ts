@@ -38,6 +38,18 @@ export function findDugGroundSpot(terrain: Terrain): { x: number; z: number } {
 }
 
 export function createDugGround(): { group: THREE.Group; spot: { x: number; z: number } } {
+  return makeDugGround('pit');
+}
+
+/** A ramp dug down in half-metre drops, one a metre, the way a held swing digs it. */
+export function createDugRamp(): { group: THREE.Group; spot: { x: number; z: number } } {
+  return makeDugGround('ramp');
+}
+
+function makeDugGround(kind: 'pit' | 'ramp'): {
+  group: THREE.Group;
+  spot: { x: number; z: number };
+} {
   installBvhRaycasting();
   const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
   const spot = findDugGroundSpot(terrain);
@@ -50,13 +62,22 @@ export function createDugGround(): { group: THREE.Group; spot: { x: number; z: n
   const ix = Math.floor(spot.x) * 2;
   const iz = Math.floor(spot.z) * 2;
   const top = Math.floor(terrain.heightAt(spot.x, spot.z) / 0.5) - 1;
-  const digs: Dig[] = [
-    { ix, iy: top, iz, dir: CUBE_DIG },
-    { ix: ix + 2, iy: top, iz, dir: CUBE_DIG },
-    { ix, iy: top, iz: iz + 2, dir: CUBE_DIG },
-    { ix, iy: top - 2, iz, dir: CUBE_DIG },
-    { ix: ix + 2, iy: top - 1, iz, dir: CUBE_DIG },
-  ];
+  const digs: Dig[] =
+    kind === 'ramp'
+      ? []
+      : [
+          { ix, iy: top, iz, dir: CUBE_DIG },
+          { ix: ix + 2, iy: top, iz, dir: CUBE_DIG },
+          { ix, iy: top, iz: iz + 2, dir: CUBE_DIG },
+          { ix, iy: top - 2, iz, dir: CUBE_DIG },
+          { ix: ix + 2, iy: top - 1, iz, dir: CUBE_DIG },
+        ];
+  // A ramp down, one swing a metre and half a metre lower each time, as a held swing digs it.
+  if (kind === 'ramp')
+    for (let step = 0; step < 6; step++)
+      // Each step, and the cubes above it up to the open air: a trench, not a tunnel.
+      for (let iy = top - step; iy <= top + 2; iy += 2)
+        digs.push({ ix: ix + 2 * step, iy, iz, dir: CUBE_DIG });
   scene.apply(digs);
 
   // Placed so the hole is where the gallery looks: the exhibit's own position.

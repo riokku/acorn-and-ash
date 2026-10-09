@@ -29,9 +29,6 @@ export const DIG_MAX_COUNT = 20000;
 export const DIG_BUILT_CLEARANCE = 6;
 /** How far from water nobody digs, in metres, so a tunnel never runs under a lake or the stream. */
 export const DIG_WATER_CLEARANCE = 3;
-/** How many 0.5 m cubes of ground make one stone. A full one-metre dig (8 cubes) is one. */
-export const CUBES_PER_STONE = 8;
-
 /** Whether this spot is inside the home clearing and the ring of trees round it. */
 export function inHomeClearing(x: number, z: number): boolean {
   const reach = CLEARING_HALF + (CLEARING_TREE_LINE_OUTER - CLEARING_HALF);
@@ -72,8 +69,16 @@ export function planDig(
 }
 
 /** Why a swing of the shovel made no hole; `nothing` is for ground with nothing solid in the way. Order is the wire order. */
-export const DIG_REFUSALS = ['home', 'water', 'built', 'deep', 'full', 'nothing'] as const;
-export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing'>;
+export const DIG_REFUSALS = [
+  'home',
+  'water',
+  'built',
+  'deep',
+  'full',
+  'nothing',
+  'packFull',
+] as const;
+export type DigRefusal = Exclude<(typeof DIG_REFUSALS)[number], 'nothing' | 'packFull'>;
 export type DigRefusalReason = (typeof DIG_REFUSALS)[number];
 
 /** Why this slab may not be carved, or null if it may. */
@@ -95,23 +100,23 @@ export function digRefusal(
   return null;
 }
 
-/** What a swing turns up: mostly stone, sometimes ore high on the mountain, sometimes clay on low ground. */
+/** The share of digs that turn up anything at all. Most of the ground is just ground. */
+export const DIG_LOOT_CHANCE = 0.03;
+
+/**
+ * What a swing turns up: usually nothing, about one dig in thirty a find. Mostly
+ * stone, sometimes ore high on the mountain, sometimes clay on low ground.
+ */
 export function digYield(
   worldSeed: number,
   dig: Dig,
-  cubes: number,
   surface: number,
 ): Array<{ item: ItemId; count: number }> {
-  const found: Array<{ item: ItemId; count: number }> = [];
-  const stone = Math.max(1, Math.floor(cubes / CUBES_PER_STONE));
-  found.push({ item: 'stone', count: stone });
   const rng = createRng(hashSeed(worldSeed, 'dig-yield', dig.ix, dig.iy, dig.iz, dig.dir));
+  if (rng.nextRange(0, 1) >= DIG_LOOT_CHANCE) return [];
   const x = (dig.ix + 0.5) * VOXEL;
   const z = (dig.iz + 0.5) * VOXEL;
-  if (mountainWeight(x, z) > 0.3 && rng.nextRange(0, 1) < 0.2) {
-    found.push({ item: 'ironOre', count: 1 });
-  } else if (surface < 4 && rng.nextRange(0, 1) < 0.25) {
-    found.push({ item: 'clay', count: 1 });
-  }
-  return found;
+  if (mountainWeight(x, z) > 0.3 && rng.nextRange(0, 1) < 0.35) return [{ item: 'ironOre', count: 1 }];
+  if (surface < 4 && rng.nextRange(0, 1) < 0.3) return [{ item: 'clay', count: 1 }];
+  return [{ item: 'stone', count: 1 }];
 }

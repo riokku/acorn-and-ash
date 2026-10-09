@@ -46,7 +46,7 @@ import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
 import { preloadDugWalls } from '../scene/dug-walls';
 import { createDugEarth } from './dug-earth';
-import { createDugGround } from './dug-ground';
+import { createDugGround, createDugRamp } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
 /**
@@ -184,6 +184,7 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
   // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
   { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
+  { name: 'dug-ramp', x: 0, z: 0, view: 6, alone: true, create: createDugRamp },
 ];
 
 /** Places to look at that are not one exhibit: the pond, the trees, the rocks. */
@@ -308,6 +309,14 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     height = viewpoint.height;
   }
   let angle = Number(params.get('angle') ?? viewpoint?.angle ?? 0.35);
+  // Aim somewhere beside the exhibit: metres along x, y and z from where it looks by default.
+  target.add(
+    new THREE.Vector3(
+      Number(params.get('tx') ?? 0),
+      Number(params.get('ty') ?? 0),
+      Number(params.get('tz') ?? 0),
+    ),
+  );
   if (params.has('height')) height = Number(params.get('height'));
   if (params.has('distance')) distance = Number(params.get('distance'));
 
