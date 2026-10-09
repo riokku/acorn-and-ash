@@ -37,6 +37,41 @@ function pointAlong(along: number): { x: number; z: number } {
 }
 
 describe('the stream', () => {
+  it('gives each visual slough a shallow floor and keeps props and building out of its water', () => {
+    expect(STREAM.sloughs).toHaveLength(6);
+    for (const slough of STREAM.sloughs) {
+      for (const circle of slough.basin) {
+        const depth = slough.level - terrain.heightAt(circle.x, circle.z);
+        expect(depth).toBeGreaterThan(0.1);
+        expect(depth).toBeLessThan(0.6);
+        expect(nearStream(STREAM, circle.x, circle.z, 1.2)).toBe(true);
+        expect(STREAM_KEEP_OUT).toContainEqual(circle);
+      }
+      // The pool itself remains scenery; its neck overlaps the river's water.
+      const pool = slough.basin[0]!;
+      expect(isInStream(STREAM, pool.x, pool.z)).toBe(false);
+      const river = nearestOnStream(STREAM, pool.x, pool.z, 30)!;
+      for (let step = 0; step <= 40; step++) {
+        const t = step / 40;
+        const x = river.x + (pool.x - river.x) * t;
+        const z = river.z + (pool.z - river.z) * t;
+        expect(isInStream(STREAM, x, z) || lakeDepthAt(slough, x, z) > 0).toBe(true);
+        // No strip of dry bank may block the connected water.
+        expect(terrain.heightAt(x, z)).toBeLessThan(slough.level - 0.05);
+      }
+      // The connection stays open across a six-metre span, not just its centreline.
+      const outwardX = (pool.x - river.x) / river.distance;
+      const outwardZ = (pool.z - river.z) / river.distance;
+      const mouthAcross = streamWaterHalfWidthAt(STREAM, river.along) + 0.7;
+      for (const sideways of [-3, 0, 3]) {
+        const x = river.x + outwardX * mouthAcross - outwardZ * sideways;
+        const z = river.z + outwardZ * mouthAcross + outwardX * sideways;
+        expect(lakeDepthAt(slough, x, z)).toBeGreaterThan(0.5);
+        expect(terrain.heightAt(x, z)).toBeLessThan(slough.level - 0.05);
+      }
+    }
+  });
+
   it('starts on the mountain and ends at the lake', () => {
     const spring = streamPointAt(STREAM, 0);
     const mouth = streamPointAt(STREAM, STREAM.count - 1);
@@ -118,6 +153,8 @@ describe('the stream', () => {
       const surface = streamSurfaceAt(STREAM, along);
       const side = nearestSide(at.x, at.z, along, half * 1.3 + 0.3);
       if (side === null) continue;
+      // At a slough opening this former bank is intentionally open water.
+      if (STREAM.sloughs.some((slough) => lakeDepthAt(slough, side.x, side.z) > 0)) continue;
       expect(terrain.heightAt(side.x, side.z)).toBeGreaterThanOrEqual(
         surface - 0.15 - STREAM_FALL_SLACK(along),
       );
