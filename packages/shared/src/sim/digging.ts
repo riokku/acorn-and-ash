@@ -8,7 +8,16 @@
 import { CLEARING_HALF, CLEARING_TREE_LINE_OUTER } from '../constants';
 import type { ItemId } from '../data/items';
 import { hashSeed, createRng } from '../rng';
-import { digDirectionFromYaw, VOXEL, voxelIndex, type Dig, type DugGrid } from '../world/digging';
+import {
+  CUBE_DIG,
+  DIG_CUBE,
+  DIG_DIRECTIONS,
+  digDirectionFromYaw,
+  VOXEL,
+  voxelIndex,
+  type Dig,
+  type DugGrid,
+} from '../world/digging';
 import { mountainWeight } from '../world/mountains';
 import type { Terrain } from '../world/terrain';
 
@@ -20,7 +29,7 @@ export const DIG_MAX_COUNT = 20000;
 export const DIG_BUILT_CLEARANCE = 6;
 /** How far from water nobody digs, in metres, so a tunnel never runs under a lake or the stream. */
 export const DIG_WATER_CLEARANCE = 3;
-/** How many cubes of ground make one stone. A full slab (24 cubes) is three. */
+/** How many 0.5 m cubes of ground make one stone. A full one-metre dig (8 cubes) is one. */
 export const CUBES_PER_STONE = 8;
 
 /** Whether this spot is inside the home clearing and the ring of trees round it. */
@@ -30,28 +39,32 @@ export function inHomeClearing(x: number, z: number): boolean {
 }
 
 /**
- * The slab a swing from here carves: one metre ahead of the feet, along
- * whichever of the four ways the aim is nearest. A digging-down swing starts
- * half a metre lower, so repeated swings make a ramp down.
+ * The one-metre cube a swing from here carves: the whole-metre square next to
+ * the one the feet are in, along whichever of the four ways the aim is
+ * nearest. A digging-down swing starts half a metre lower, so repeated swings
+ * make a ramp down. A level swing digs at foot level; once that cube is open,
+ * the next swing takes the cube above it for head room, so a tunnel you can
+ * walk takes two swings a metre.
  */
 export function planDig(
   position: { readonly x: number; readonly y: number; readonly z: number },
   aimYaw: number,
   down: boolean,
+  grid: DugGrid,
 ): Dig {
   // Yaw 0 looks down -Z, matching the way movement reads it.
   const forwardX = -Math.sin(aimYaw);
   const forwardZ = -Math.cos(aimYaw);
-  const dir = digDirectionFromYaw(forwardX, forwardZ);
-  const along = { x: [1, 0, -1, 0][dir]!, z: [0, 1, 0, -1][dir]! };
-  const startX = position.x + along.x * 0.5;
-  const startZ = position.z + along.z * 0.5;
-  return {
-    ix: voxelIndex(startX),
+  const way = DIG_DIRECTIONS[digDirectionFromYaw(forwardX, forwardZ)];
+  const feet: Dig = {
+    ix: (Math.floor(position.x) + way.x) * DIG_CUBE,
     iy: voxelIndex(position.y + 0.01) - (down ? 1 : 0),
-    iz: voxelIndex(startZ),
-    dir,
+    iz: (Math.floor(position.z) + way.z) * DIG_CUBE,
+    dir: CUBE_DIG,
   };
+  if (down || grid.solidCubes(feet).length > 0) return feet;
+  const head: Dig = { ...feet, iy: feet.iy + DIG_CUBE };
+  return grid.solidCubes(head).length > 0 ? head : feet;
 }
 
 export type DigRefusal = 'home' | 'water' | 'built' | 'deep' | 'full';

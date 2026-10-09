@@ -107,12 +107,12 @@ describe('where digging is allowed', () => {
   const none = () => false;
 
   it('refuses inside the home clearing', () => {
-    const dig = planDig({ x: 0, y: 0, z: 0 }, 0, true);
+    const dig = planDig({ x: 0, y: 0, z: 0 }, 0, true, grid);
     expect(digRefusal(dig, grid, terrain, none, [])).toBe('home');
   });
 
   it('refuses near water and near built pieces', () => {
-    const dig = planDig({ x: -150, y: 5, z: 150 }, 0, true);
+    const dig = planDig({ x: -150, y: 5, z: 150 }, 0, true, grid);
     expect(digRefusal(dig, grid, terrain, () => true, [])).toBe('water');
     expect(digRefusal(dig, grid, terrain, none, [{ x: -150, z: 149 }])).toBe('built');
   });

@@ -3753,8 +3753,9 @@ export class WorldSimulation {
   }
 
   /**
-   * One swing of the shovel: carve the slab of ground ahead (a light swing,
-   * level) or a half-metre lower (a charged one, down a ramp), keep what it
+   * One swing of the shovel: carve the metre cube of ground ahead (a light
+   * swing, level, or the cube above once that is open) or a half-metre lower
+   * (a charged one, down a ramp), keep what it
    * turns up, and tell everybody. Returns false when there was nothing to dig
    * or it is not allowed, so the swing can still be for an animal.
    */
@@ -3764,7 +3765,7 @@ export class WorldSimulation {
     aimYaw: number,
     down: boolean,
   ): boolean {
-    const dig = planDig(position, aimYaw, down);
+    const dig = planDig(position, aimYaw, down, this.dug);
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
     if (digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps) !== null)
@@ -3816,7 +3817,7 @@ export class WorldSimulation {
         Math.abs(dig.ix) < 2000 &&
         Math.abs(dig.iz) < 2000 &&
         dig.dir >= 0 &&
-        dig.dir <= 3;
+        dig.dir <= 4;
       if (sensible) this.dug.apply(dig);
     }
   }

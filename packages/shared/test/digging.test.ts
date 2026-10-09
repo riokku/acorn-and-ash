@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createCollisionWorld } from '../src/collision/capsule';
 import { PLAYER_HEIGHT } from '../src/constants';
+import { planDig } from '../src/sim/digging';
 import {
+  CUBE_DIG,
+  DIG_CUBE,
   DugGrid,
   digDirectionFromYaw,
   digVoxels,
@@ -100,6 +103,55 @@ describe('digging', () => {
     const x = 40 * VOXEL + 0.25;
     const spans = grid.openSpans(x, 0.25);
     expect(spans.every((s) => s.ceiling - s.floor >= PLAYER_HEIGHT)).toBe(true);
+  });
+});
+
+describe('one-metre cube digs', () => {
+  it('covers a metre cube: two half-metre cubes each way, all different', () => {
+    const cubes = digVoxels({ ix: 10, iy: 3, iz: -4, dir: CUBE_DIG });
+    expect(cubes).toHaveLength(DIG_CUBE ** 3);
+    expect(new Set(cubes.map((c) => `${c.ix},${c.iy},${c.iz}`)).size).toBe(8);
+    expect(Math.max(...cubes.map((c) => c.ix)) - Math.min(...cubes.map((c) => c.ix))).toBe(1);
+    expect(Math.max(...cubes.map((c) => c.iy)) - Math.min(...cubes.map((c) => c.iy))).toBe(1);
+    expect(Math.max(...cubes.map((c) => c.iz)) - Math.min(...cubes.map((c) => c.iz))).toBe(1);
+  });
+
+  it('keeps old slabs the shape they always were', () => {
+    expect(digVoxels({ ix: 10, iy: 2, iz: -3, dir: 1 })).toHaveLength(24);
+  });
+
+  it('sits on the whole-metre grid, next to the one the feet are in', () => {
+    const grid = new DugGrid(hillside);
+    const dig = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, false, grid);
+    // Yaw -PI/2 looks down +X: the square after x = 3 is x = 4..5, on z = 0..1.
+    expect(dig).toEqual({ ix: 8, iy: 2, iz: 0, dir: CUBE_DIG });
+    expect(dig.ix % 2).toBe(0);
+    expect(dig.iz % 2).toBe(0);
+  });
+
+  it('takes the head room above on the next swing, then stops', () => {
+    const grid = new DugGrid(hillside);
+    const standing = { x: 7.3, y: 1.3, z: 0.4 };
+    const aim = -Math.PI / 2;
+    const first = planDig(standing, aim, false, grid);
+    grid.apply(first);
+    const second = planDig(standing, aim, false, grid);
+    expect(second).toEqual({ ...first, iy: first.iy + DIG_CUBE });
+    grid.apply(second);
+    // The pocket is two metres tall: tall enough to walk in.
+    const x = (first.ix + 1) * VOXEL;
+    const z = (first.iz + 1) * VOXEL;
+    const floor = first.iy * VOXEL;
+    expect(
+      grid.openSpans(x, z).some((s) => s.floor === floor && s.ceiling - s.floor >= PLAYER_HEIGHT),
+    ).toBe(true);
+  });
+
+  it('digs a half-metre lower when digging down', () => {
+    const grid = new DugGrid(hillside);
+    const level = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, false, grid);
+    const down = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, true, grid);
+    expect(down.iy).toBe(level.iy - 1);
   });
 });
 

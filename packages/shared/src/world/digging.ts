@@ -22,23 +22,40 @@ import type { Terrain } from './terrain';
 /** Metres along one side of a cube. */
 export const VOXEL = 0.5;
 
-/** A slab is this many cubes long (the way it was dug), wide and tall. */
+/**
+ * A dig is one metre cube: this many 0.5 m cubes along each side, the same in
+ * every direction. Horizontally a dig sits on the whole-metre grid (its
+ * `ix` and `iz` are even) so neighbouring digs tile with no slivers between.
+ */
+export const DIG_CUBE = 2;
+
+/**
+ * The first digs ever made (decision 0114, step 4) were slabs, 1 m long, 1.5 m
+ * wide and 2 m tall, in the way the player faced. Worlds saved with those keep
+ * them exactly as they were: a dig whose `dir` is 0 to 3 is a slab.
+ */
 export const SLAB_LENGTH = 2;
 export const SLAB_WIDTH = 3;
 export const SLAB_HEIGHT = 4;
 
-/** The four ways a tunnel can be dug: +X, +Z, -X, -Z. */
+/** The four ways a tunnel can be aimed: +X, +Z, -X, -Z. */
 export const DIG_DIRECTIONS = [
   { x: 1, z: 0 },
   { x: 0, z: 1 },
   { x: -1, z: 0 },
   { x: 0, z: -1 },
 ] as const;
-export type DigDirection = 0 | 1 | 2 | 3;
+/** 0 to 3 are the old slabs, running that way; 4 is a one-metre cube. */
+export type AimDirection = 0 | 1 | 2 | 3;
+export type DigDirection = AimDirection | 4;
+/** The `dir` of a one-metre cube dig. */
+export const CUBE_DIG = 4 as const;
 
-/** One swing of the shovel: where the slab starts and which way it runs. */
+/**
+ * One swing of the shovel. A cube dig (`dir` 4) starts at its lowest, lowest
+ * -X, lowest -Z cube. An old slab starts from the back-centre of its floor.
+ */
 export interface Dig {
-  /** The cube the slab starts from: back-centre of its floor. */
   readonly ix: number;
   readonly iy: number;
   readonly iz: number;
@@ -61,13 +78,23 @@ export function voxelIndex(metres: number): number {
 }
 
 /** The cube nearest facing direction `yaw` turned into one of the four ways. */
-export function digDirectionFromYaw(forwardX: number, forwardZ: number): DigDirection {
+export function digDirectionFromYaw(forwardX: number, forwardZ: number): AimDirection {
   if (Math.abs(forwardX) >= Math.abs(forwardZ)) return forwardX >= 0 ? 0 : 2;
   return forwardZ >= 0 ? 1 : 3;
 }
 
 /** Every cube a dig covers, in a fixed order. */
 export function digVoxels(dig: Dig): Array<{ ix: number; iy: number; iz: number }> {
+  if (dig.dir === CUBE_DIG) {
+    const cubes: Array<{ ix: number; iy: number; iz: number }> = [];
+    for (let x = 0; x < DIG_CUBE; x++) {
+      for (let z = 0; z < DIG_CUBE; z++) {
+        for (let y = 0; y < DIG_CUBE; y++)
+          cubes.push({ ix: dig.ix + x, iy: dig.iy + y, iz: dig.iz + z });
+      }
+    }
+    return cubes;
+  }
   const forward = DIG_DIRECTIONS[dig.dir];
   const sideX = -forward.z;
   const sideZ = forward.x;
