@@ -229,6 +229,7 @@ import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
 import { createStreamScene } from './scene/stream';
 import { createDigScene, type DigScene } from './scene/digging';
+import { preloadDugWalls } from './scene/dug-walls';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
@@ -1054,6 +1055,7 @@ export class Game {
     // Kicked off now rather than in enterWorld, so they have the whole time
     // it takes to set up the renderer and reach the server to finish loading.
     void preloadPropModels();
+    void preloadDugWalls();
     void preloadFlowerModel();
     void preloadCampfireModels();
     void preloadItemModels();
@@ -2453,6 +2455,7 @@ export class Game {
       await Promise.all(
         [
           preloadPropModels(),
+          preloadDugWalls(),
           preloadFlowerModel(),
           preloadCampfireModels(),
           preloadItemModels(),
