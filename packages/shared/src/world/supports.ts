@@ -59,7 +59,8 @@ export function supportCellAt(
   const top = voxelIndex(point.y + normal.y * 0.25 + 0.05);
   // The floor is the first open cube with solid ground under it, going down.
   for (let iy = top; iy > top - 12; iy--) {
-    if (rowIsOpen(grid, ix, iy, iz) && solidInRow(grid, ix, iy - 1, iz) === DIG_CUBE * DIG_CUBE) return { ix, iy, iz };
+    if (rowIsOpen(grid, ix, iy, iz) && solidInRow(grid, ix, iy - 1, iz) === DIG_CUBE * DIG_CUBE)
+      return { ix, iy, iz };
   }
   return null;
 }
