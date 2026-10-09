@@ -4,6 +4,7 @@ import { DugGrid, VOXEL, mountainWeight, type Dig, type Terrain } from '@acorn/s
 
 import earthLayersUrl from '@assets/textures/dug-earth-layers.png?url';
 
+import { roundedMouth, softEdge } from './dug-mouth';
 import type { GroundPatches } from './wilderness';
 
 import {
@@ -154,6 +155,10 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   earthLayers.anisotropy = 4;
   const wallMaterial = new THREE.MeshStandardMaterial({
     map: earthLayers,
+    // A faint glow of its own, so the inside of a hole is dark earth at night rather than black.
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: earthLayers,
+    emissiveIntensity: 0.12,
     vertexColors: true,
     roughness: 1,
     metalness: 0,
@@ -210,12 +215,17 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   }
 
   /** Whether a dug column reaches the open air: here the ground is a hole, not a roof. */
+  const openColumns = new Map<number, boolean>();
   function isOpenColumn(ix: number, iz: number): boolean {
     if (!grid.hasColumn(ix, iz)) return false;
-    for (let iy = -40; iy < 400; iy++) {
-      if (grid.isDug(ix, iy, iz) && !grid.isUnderground(ix, iy + 1, iz)) return true;
-    }
-    return false;
+    const key = (ix + 4096) * 8192 + (iz + 4096);
+    const known = openColumns.get(key);
+    if (known !== undefined) return known;
+    let open = false;
+    for (let iy = -40; iy < 400 && !open; iy++)
+      open = grid.isDug(ix, iy, iz) && !grid.isUnderground(ix, iy + 1, iz);
+    openColumns.set(key, open);
+    return open;
   }
 
   function isRocky(x: number, z: number): boolean {
@@ -270,16 +280,71 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     return out;
   }
 
-  /** How many smaller squares a ground square is cut into along each side: one per half metre. */
-  const SKIN_STEPS = CUBES_PER_CELL;
-  /** How far the dark rim of a hole reaches down from the surface, in metres. */
-  const RIM_DEPTH = 0.6;
+  /** How many smaller squares a ground square is cut into along each side: one per 5 cm. */
+  const SKIN_STEPS = 50;
+  /** Samples of ground looked at beyond a square's own, so a mouth that crosses into the next one is seen whole. */
+  const SKIN_MARGIN = 30;
+  /** How high the heap of dirt round a mouth is piled at its lip, in metres. */
+  const MOUND_HEIGHT = 0.22;
+  /** How far the ground curves down into the mouth before it is cut away, in metres. */
+  const MOUTH_SINK = 0.7;
+  /** What the ground's tint is pulled towards under the heap, so it reads as turned earth. */
+  const DIRT_TINT = [0.78, 0.58, 0.4] as const;
+  const CLOD_COLOR = new THREE.Color(0x8a5e36);
+
+  /** A unit icosahedron: the corners, and the corners of each of its twenty faces. */
+  const GOLDEN = (1 + Math.sqrt(5)) / 2;
+  const CLOD_CORNERS = [
+    [-1, GOLDEN, 0],
+    [1, GOLDEN, 0],
+    [-1, -GOLDEN, 0],
+    [1, -GOLDEN, 0],
+    [0, -1, GOLDEN],
+    [0, 1, GOLDEN],
+    [0, -1, -GOLDEN],
+    [0, 1, -GOLDEN],
+    [GOLDEN, 0, -1],
+    [GOLDEN, 0, 1],
+    [-GOLDEN, 0, -1],
+    [-GOLDEN, 0, 1],
+  ].map(([x, y, z]) => new THREE.Vector3(x!, y!, z!).normalize());
+  const CLOD_FACES = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1],
+  ] as const;
+
+  /** A repeatable number from 0 up to 1 for these four whole numbers. */
+  function scatter(a: number, b: number, c: number, d: number): number {
+    let h = Math.imul(a, 73856093) ^ Math.imul(b, 19349663) ^ Math.imul(c, 83492791);
+    h = Math.imul(h ^ (h >>> 13), 1274126177) ^ Math.imul(d, 668265263);
+    h = Math.imul(h ^ (h >>> 16), 2246822519);
+    return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+  }
 
   /**
    * The ground over one hidden square, drawn again exactly where it was, in
-   * half-metre squares, leaving out the ones over an open hole. A dark rim
-   * hangs down from the cut edge so there is never a gap between the grass
-   * and the wall of the hole.
+   * 5 cm squares, with a round hole left in it where the dug ground opens to
+   * the sky. Dirt is heaped round the lip, a dark rim hangs down from the cut
+   * edge so there is never a gap between the grass and the wall of the hole,
+   * and a few clods of earth lie about the heap.
    */
   function addSkin(
     cellX: number,
@@ -292,7 +357,78 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   ): void {
     const lattice = ground.lattice?.(cellX, cellZ, SKIN_STEPS);
     if (lattice === null || lattice === undefined) return;
-    const side = SKIN_STEPS + 1;
+    const n = SKIN_STEPS;
+    const side = n + 1;
+    const step = ground.cell / n;
+    const size = n + SKIN_MARGIN * 2;
+
+    // Where the dug ground is open to the sky, sample by sample, seen a little past this square.
+    const open = new Uint8Array(size * size);
+    let anyOpen = false;
+    const samplesPerCube = Math.round(VOXEL / step);
+    for (let b = 0; b < size; b++) {
+      const iz = firstZ + Math.floor((b - SKIN_MARGIN) / samplesPerCube);
+      for (let a = 0; a < size; a++) {
+        const ix = firstX + Math.floor((a - SKIN_MARGIN) / samplesPerCube);
+        if (isOpenColumn(ix, iz)) {
+          open[b * size + a] = 1;
+          anyOpen = true;
+        }
+      }
+    }
+    const mouth = anyOpen ? roundedMouth(open, size) : null;
+    const soft = mouth === null ? null : softEdge(mouth, size);
+
+    // The heap of dirt: raised and browned by how near each corner is to the lip.
+    const heap = new Float32Array(side * side);
+    const earth = new Float32Array(side * side);
+    const nearMouth = new Float32Array(side * side);
+    if (soft !== null) {
+      for (let j = 0; j < side; j++) {
+        for (let i = 0; i < side; i++) {
+          let near = 0;
+          for (let db = -1; db <= 0; db++)
+            for (let da = -1; da <= 0; da++) {
+              const a = Math.min(size - 1, Math.max(0, i + SKIN_MARGIN + da));
+              const b = Math.min(size - 1, Math.max(0, j + SKIN_MARGIN + db));
+              near += soft[b * size + a]! / 4;
+            }
+          // Up into a heap at the lip, then curving away down into the hole.
+          heap[j * side + i] =
+            MOUND_HEIGHT * THREE.MathUtils.smoothstep(near, 0.04, 0.4) -
+            (MOUND_HEIGHT + MOUTH_SINK) * THREE.MathUtils.smoothstep(near, 0.45, 0.78);
+          earth[j * side + i] = THREE.MathUtils.smoothstep(near, 0.02, 0.3);
+          nearMouth[j * side + i] = near;
+        }
+      }
+      for (let j = 0; j < side; j++) {
+        for (let i = 0; i < side; i++) {
+          const at = j * side + i;
+          const lean = (u: number, v: number): number =>
+            heap[Math.min(side - 1, v) * side + Math.min(side - 1, u)]!;
+          const slopeX = (lean(i + 1, j) - lean(Math.max(0, i - 1), j)) / (2 * step);
+          const slopeZ = (lean(i, j + 1) - lean(i, Math.max(0, j - 1))) / (2 * step);
+          lattice.position[at * 3 + 1]! += heap[at]!;
+          const nx = lattice.normal[at * 3]! - slopeX;
+          const ny = lattice.normal[at * 3 + 1]!;
+          const nz = lattice.normal[at * 3 + 2]! - slopeZ;
+          const length = Math.hypot(nx, ny, nz) || 1;
+          lattice.normal[at * 3] = nx / length;
+          lattice.normal[at * 3 + 1] = ny / length;
+          lattice.normal[at * 3 + 2] = nz / length;
+          const dirt = earth[at]!;
+          lattice.floor[at] = THREE.MathUtils.lerp(lattice.floor[at]!, 1, dirt);
+          lattice.snow[at] = lattice.snow[at]! * (1 - dirt);
+          for (let axis = 0; axis < 3; axis++)
+            lattice.tint[at * 3 + axis] = THREE.MathUtils.lerp(
+              lattice.tint[at * 3 + axis]!,
+              DIRT_TINT[axis]!,
+              dirt,
+            );
+        }
+      }
+    }
+
     const base = skin.position.length / 3;
     for (let i = 0; i < side * side; i++) {
       skin.position.push(
@@ -314,49 +450,77 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       const at = (j * side + i) * 3;
       return [lattice.position[at]!, lattice.position[at + 1]!, lattice.position[at + 2]!];
     };
-    const rimColor = TOPSOIL.clone().multiplyScalar(0.85);
-    /** A flat strip hanging from the skin's cut edge, facing into the hole. */
-    const hang = (top0: Point, top1: Point, facingX: number, facingZ: number): void => {
-      const corners: Point[] = [
-        top0,
-        top1,
-        [top1[0], top1[1] - RIM_DEPTH, top1[2]],
-        [top0[0], top0[1] - RIM_DEPTH, top0[2]],
-      ];
-      // Wound so the face looks the way the hole is, whichever way round the edge was given.
-      const e1 = [top1[0] - top0[0], top1[1] - top0[1], top1[2] - top0[2]] as const;
-      const e2 = [
-        corners[2]![0] - top0[0],
-        corners[2]![1] - top0[1],
-        corners[2]![2] - top0[2],
-      ] as const;
-      const nx = e1[1] * e2[2] - e1[2] * e2[1];
-      const nz = e1[0] * e2[1] - e1[1] * e2[0];
-      const order = nx * facingX + nz * facingZ >= 0 ? [0, 1, 2, 3] : [1, 0, 3, 2];
-      const first = rim.positions.length / 3;
-      for (const corner of order) {
-        const c = corners[corner]!;
-        rim.positions.push(c[0], c[1], c[2]);
-        rim.normals.push(facingX, 0, facingZ);
-        rim.colors.push(rimColor.r, rimColor.g, rimColor.b);
-        rim.uvs.push(0, 0);
-      }
-      rimIndices.push(first, first + 1, first + 2, first, first + 2, first + 3);
-    };
-    for (let j = 0; j < SKIN_STEPS; j++) {
-      for (let i = 0; i < SKIN_STEPS; i++) {
-        const ix = firstX + i;
-        const iz = firstZ + j;
-        if (isOpenColumn(ix, iz)) continue;
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
         const p00 = j * side + i;
         const p10 = p00 + 1;
         const p01 = p00 + side;
         const p11 = p01 + 1;
+        // Cut away only where the ground has curved well down into the hole.
+        if (
+          mouth !== null &&
+          Math.min(nearMouth[p00]!, nearMouth[p10]!, nearMouth[p01]!, nearMouth[p11]!) >= 0.78
+        )
+          continue;
         skin.index.push(base + p00, base + p01, base + p10, base + p01, base + p11, base + p10);
-        if (isOpenColumn(ix + 1, iz)) hang(point(i + 1, j), point(i + 1, j + 1), 1, 0);
-        if (isOpenColumn(ix - 1, iz)) hang(point(i, j), point(i, j + 1), -1, 0);
-        if (isOpenColumn(ix, iz + 1)) hang(point(i, j + 1), point(i + 1, j + 1), 0, 1);
-        if (isOpenColumn(ix, iz - 1)) hang(point(i, j), point(i + 1, j), 0, -1);
+      }
+    }
+
+    // Clods of earth lying on the heap: small rough lumps, flat-shaded.
+    if (soft !== null) {
+      const colour = new THREE.Color();
+      for (let j = 1; j < n; j++) {
+        for (let i = 1; i < n; i++) {
+          const at = j * side + i;
+          const near = nearMouth[at]!;
+          if (near < 0.08 || near > 0.42) continue;
+          if (scatter(cellX, cellZ, i, j) > 0.022) continue;
+          const big = scatter(cellX, cellZ, i + 7919, j) < 0.25;
+          const radius =
+            (big ? 0.09 : 0.045) + scatter(cellX, cellZ, i, j + 104729) * (big ? 0.07 : 0.045);
+          const turn = scatter(cellX, cellZ, i + 31, j + 17) * Math.PI * 2;
+          const squash = 0.6 + scatter(cellX, cellZ, i + 3, j + 5) * 0.3;
+          const shade = 0.7 + scatter(cellX, cellZ, i + 11, j + 13) * 0.5;
+          colour.copy(CLOD_COLOR).multiplyScalar(shade);
+          const [x, y, z] = point(i, j);
+          const cos = Math.cos(turn);
+          const sin = Math.sin(turn);
+          const corner = (index: number): Point => {
+            const c = CLOD_CORNERS[index]!;
+            const lx = c.x * radius * (1 + 0.25 * Math.sin(index * 5.3 + turn));
+            const ly = c.y * radius * squash;
+            const lz = c.z * radius * (1 + 0.25 * Math.cos(index * 3.7 + turn));
+            return [
+              x + lx * cos - lz * sin,
+              y + radius * squash * 0.4 + ly,
+              z + lx * sin + lz * cos,
+            ];
+          };
+          for (const face of CLOD_FACES) {
+            const [p, q, r] = [corner(face[0]), corner(face[1]), corner(face[2])];
+            const ux = q[0] - p[0];
+            const uy = q[1] - p[1];
+            const uz = q[2] - p[2];
+            const vx = r[0] - p[0];
+            const vy = r[1] - p[1];
+            const vz = r[2] - p[2];
+            let fx = uy * vz - uz * vy;
+            let fy = uz * vx - ux * vz;
+            let fz = ux * vy - uy * vx;
+            const length = Math.hypot(fx, fy, fz) || 1;
+            fx /= length;
+            fy /= length;
+            fz /= length;
+            const first = rim.positions.length / 3;
+            for (const c of [p, q, r]) {
+              rim.positions.push(c[0], c[1], c[2]);
+              rim.normals.push(fx, fy, fz);
+              rim.colors.push(colour.r, colour.g, colour.b);
+              rim.uvs.push(0, 0);
+            }
+            rimIndices.push(first, first + 1, first + 2);
+          }
+        }
       }
     }
   }
@@ -570,6 +734,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     grid,
     cameraBlockers: blockers,
     apply(digs) {
+      openColumns.clear();
       for (const dig of digs) {
         for (const cube of grid.apply(dig)) noteCube(cube.ix, cube.iy, cube.iz);
       }
