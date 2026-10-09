@@ -44,6 +44,7 @@ import { preloadPropModels } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
+import { preloadDugWalls } from '../scene/dug-walls';
 import { createDugEarth } from './dug-earth';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
@@ -223,6 +224,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadCampfireModels(),
     preloadFoxModel(),
     preloadIronAxe(),
+    preloadDugWalls(),
   ]);
 
   const scene = new THREE.Scene();

@@ -1727,7 +1727,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       for (let i = 0; i < count; i++) {
         const at = 4 + i * 7;
         const dir = view.getUint8(at + 6);
-        if (dir > 3) return null;
+        if (dir > 4) return null;
         digs.push({
           ix: view.getInt16(at, true),
           iy: view.getInt16(at + 2, true),

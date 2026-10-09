@@ -1453,7 +1453,7 @@ describe('ground dug out with the shovel', () => {
     oversized.set(new Uint8Array(valid));
     expect(decodeServerMessage(oversized.buffer)).toBeNull();
     const badDirection = encodeDug(digs, true);
-    new DataView(badDirection).setUint8(4 + 6, 4);
+    new DataView(badDirection).setUint8(4 + 6, 5);
     expect(decodeServerMessage(badDirection)).toBeNull();
     const badFlag = encodeDug(digs, true);
     new DataView(badFlag).setUint8(1, 2);

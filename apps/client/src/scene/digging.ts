@@ -4,14 +4,28 @@ import { DugGrid, VOXEL, mountainWeight, type Dig, type Terrain } from '@acorn/s
 
 import earthLayersUrl from '@assets/textures/dug-earth-layers.png?url';
 
+import {
+  appendWallPiece,
+  dugWallKit,
+  planWallPieces,
+  preloadDugWalls,
+  WALL_CELL,
+  type ClosedSides,
+} from './dug-walls';
+
 /**
- * Ground dug out with the shovel, drawn as plain blocks (decision 0114).
+ * Ground dug out with the shovel (decision 0114).
  *
  * The hillside itself is a smooth mesh, which cannot have a hole in it. So
  * wherever a dig comes within a metre and a half of the surface, the smooth
  * ground over that square is taken away and the same square is built again
  * out of half-metre blocks, with the dug-out space left empty. Deeper down,
  * only the walls, floor and roof of a tunnel are drawn.
+ *
+ * The inside of a hole is lined with smooth, round pieces made in Blender
+ * (see dug-walls.ts), picked and turned by which neighbours are solid. Only
+ * until those have loaded, or if they ever fail to, the inside is drawn as
+ * plain blocks.
  *
  * The walls wear a texture painted in Blender (tools/art/dug_earth_layers.py):
  * topsoil, then earth with roots and stones, then stone, getting darker with
@@ -28,6 +42,13 @@ const ROCK_DEPTH_FACTOR = 1.6;
 const TOPSOIL = new THREE.Color(0x3d2b19);
 const EARTH = new THREE.Color(0x6b4b2c);
 const STONE = new THREE.Color(0x56565a);
+
+/**
+ * The column of the painted strip (0 to 1 across) with no roots, stones or
+ * cracks in it, found by measuring the texture. Floors and roofs read from here
+ * so they come out as plain ground instead of smeared streaks.
+ */
+const PLAIN_COLUMN = 0.619;
 
 /** How close to the surface a dug cube has to be to cut the smooth ground away. */
 const MOUTH_COVER = 1.5;
@@ -123,7 +144,6 @@ export function createDigScene(
     vertexColors: true,
     roughness: 1,
     metalness: 0,
-    flatShading: true,
   });
   /** The grass or bare rock that caps a hole's mouth, and tunnel floors and roofs, are flat colours. */
   const capMaterial = new THREE.MeshStandardMaterial({
@@ -193,13 +213,43 @@ export function createDigScene(
     out.multiplyScalar(1 - 0.4 * Math.min(1, depth / TEXTURE_DEPTH));
   }
 
+  /**
+   * Whole repeats of the strip taken off a cell's picture, so that across one
+   * cell the sideways position stays near the plain column and the slide from
+   * wall to floor is short. The strip repeats, so a whole turn changes nothing.
+   */
+  let pictureShift = 0;
+
+  /**
+   * Where a point of the lining sits on the painted strip: side walls read the
+   * strip as it is (depth down, along the wall across), while floors and roofs
+   * slide over to the plain column so they do not streak.
+   */
+  function liningPicture(
+    x: number,
+    y: number,
+    z: number,
+    normalY: number,
+    out: [number, number],
+  ): [number, number] {
+    const v = stripV(x, y, z, isRocky(x, z));
+    const flatness = THREE.MathUtils.smoothstep(Math.abs(normalY), 0.5, 0.85);
+    out[0] = THREE.MathUtils.lerp((x + z) / TEXTURE_WIDTH - pictureShift, PLAIN_COLUMN, flatness);
+    out[1] = v;
+    return out;
+  }
+
   function rebuildChunk(chunk: number): void {
     const positions: number[] = [];
     const colors: number[] = [];
     const uvs: number[] = [];
+    const normals: number[] = [];
+    const kit = dugWallKit();
     /** Side walls wearing the painted strip, and the flat-coloured caps, floors and roofs. */
     const wallIndices: number[] = [];
     const capIndices: number[] = [];
+    const liningIndices: number[] = [];
+    const buffers = { positions, normals, uvs, colors, indices: liningIndices };
     const color = new THREE.Color();
     const chunkCellX = Math.floor(chunk / 8192) - 4096;
     const chunkCellZ = (chunk % 8192) - 4096;
@@ -241,8 +291,11 @@ export function createDigScene(
               for (let face = 0; face < 6; face++) {
                 const d = FACE_DIRECTIONS[face]!;
                 if (isSolid(ix + d.dx, iy + d.dy, iz + d.dz)) continue;
+                const intoDug = grid.isDug(ix + d.dx, iy + d.dy, iz + d.dz);
+                // The smooth lining takes over every face into dug space.
+                if (kit !== null && intoDug) continue;
                 // Under smooth ground that is still drawn, only faces into dug space show.
-                if (!isHidden && !grid.isDug(ix + d.dx, iy + d.dy, iz + d.dz)) continue;
+                if (!isHidden && !intoDug) continue;
                 const rocky = isRocky((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
                 const isCap = face === 2 && !grid.isUnderground(ix, iy + 1, iz);
                 const isFlat = isCap || face === 2 || face === 3;
@@ -263,6 +316,7 @@ export function createDigScene(
                   const y = (iy + corner[1]) * VOXEL;
                   const z = (iz + corner[2]) * VOXEL;
                   positions.push(x, y, z);
+                  normals.push(d.dx, d.dy, d.dz);
                   colors.push(color.r, color.g, color.b);
                   if (face < 2) uvs.push(z / TEXTURE_WIDTH, stripV(x, y, z, rocky));
                   else if (face > 3) uvs.push(x / TEXTURE_WIDTH, stripV(x, y, z, rocky));
@@ -280,6 +334,32 @@ export function createDigScene(
             }
           }
         }
+        if (kit === null) continue;
+        // The smooth lining: a piece for every open cube that touches solid ground.
+        for (let ix = firstX; ix < firstX + cubesPerCell; ix++) {
+          for (let iz = firstZ; iz < firstZ + cubesPerCell; iz++) {
+            for (let iy = lowest; iy <= highest; iy++) {
+              if (!grid.isDug(ix, iy, iz)) continue;
+              const closed: ClosedSides = [
+                [isSolid(ix - 1, iy, iz), isSolid(ix + 1, iy, iz)],
+                [isSolid(ix, iy - 1, iz), isSolid(ix, iy + 1, iz)],
+                [isSolid(ix, iy, iz - 1), isSolid(ix, iy, iz + 1)],
+              ];
+              pictureShift = Math.round(((ix + iz + 1) * VOXEL) / TEXTURE_WIDTH - PLAIN_COLUMN);
+              for (const plan of planWallPieces(closed)) {
+                const piece = kit.pieces.get(plan.piece);
+                if (piece === undefined) continue;
+                appendWallPiece(
+                  piece,
+                  plan,
+                  [ix * WALL_CELL, iy * WALL_CELL, iz * WALL_CELL],
+                  buffers,
+                  liningPicture,
+                );
+              }
+            }
+          }
+        }
       }
     }
 
@@ -290,15 +370,16 @@ export function createDigScene(
       blockers.splice(blockers.indexOf(previous), 1);
       chunks.delete(chunk);
     }
+    wallIndices.push(...liningIndices);
     if (wallIndices.length + capIndices.length === 0) return;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geometry.setIndex([...wallIndices, ...capIndices]);
     geometry.addGroup(0, wallIndices.length, 0);
     geometry.addGroup(wallIndices.length, capIndices.length, 1);
-    geometry.computeVertexNormals();
     geometry.computeBoundsTree();
     const mesh = new THREE.Mesh(geometry, [wallMaterial, capMaterial]);
     mesh.receiveShadow = true;
@@ -306,6 +387,21 @@ export function createDigScene(
     group.add(mesh);
     chunks.set(chunk, mesh);
     blockers.push(mesh);
+  }
+
+  let disposed = false;
+  // Holes dug before the lining pieces arrive are drawn as blocks, then redrawn.
+  if (dugWallKit() === null) {
+    void preloadDugWalls().then(() => {
+      if (disposed) return;
+      for (const key of touched) {
+        const cellX = Math.floor(key / 8192) - 4096;
+        const cellZ = (key % 8192) - 4096;
+        dirty.add(chunkKeyOfCell(cellX, cellZ));
+      }
+      for (const chunk of dirty) rebuildChunk(chunk);
+      dirty.clear();
+    });
   }
 
   return {
@@ -326,6 +422,7 @@ export function createDigScene(
         : 0;
     },
     dispose() {
+      disposed = true;
       for (const mesh of chunks.values()) mesh.geometry.dispose();
       chunks.clear();
       wallMaterial.dispose();
