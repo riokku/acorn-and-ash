@@ -59,7 +59,7 @@ export function supportCellAt(
   const top = voxelIndex(point.y + normal.y * 0.25 + 0.05);
   // The floor is the first open cube with solid ground under it, going down.
   for (let iy = top; iy > top - 12; iy--) {
-    if (rowIsOpen(grid, ix, iy, iz) && rowHasFloor(grid, ix, iy, iz)) return { ix, iy, iz };
+    if (rowIsOpen(grid, ix, iy, iz) && solidInRow(grid, ix, iy - 1, iz) === DIG_CUBE * DIG_CUBE) return { ix, iy, iz };
   }
   return null;
 }
@@ -85,29 +85,67 @@ function rowIsOpen(grid: DugGrid, ix: number, iy: number, iz: number): boolean {
   return true;
 }
 
-function rowIsSolid(grid: DugGrid, ix: number, iy: number, iz: number): boolean {
+/** How many of the four cubes in a row are solid. */
+function solidInRow(grid: DugGrid, ix: number, iy: number, iz: number): number {
+  let solid = 0;
   for (let dx = 0; dx < DIG_CUBE; dx++) {
     for (let dz = 0; dz < DIG_CUBE; dz++) {
-      if (!grid.isSolid(ix + dx, iy, iz + dz)) return false;
+      if (grid.isSolid(ix + dx, iy, iz + dz)) solid++;
     }
   }
-  return true;
+  return solid;
 }
 
-function rowHasFloor(grid: DugGrid, ix: number, iy: number, iz: number): boolean {
-  return rowIsSolid(grid, ix, iy - 1, iz);
-}
-
-/** Whether every cube of a flat wall, `width` along one axis and the support's height, is solid. */
-function wallIsSolid(grid: DugGrid, cell: SupportCell, axis: SupportAxis, side: -1 | 1): boolean {
+/** How much of a flat wall beside the cell, along its whole height, is solid: 0 to 1. */
+function wallSolidity(grid: DugGrid, cell: SupportCell, axis: SupportAxis, side: -1 | 1): number {
+  let solid = 0;
   for (let y = 0; y < SUPPORT_HEIGHT; y++) {
     for (let along = 0; along < DIG_CUBE; along++) {
       const dx = axis === 0 ? along : side < 0 ? -1 : DIG_CUBE;
       const dz = axis === 0 ? (side < 0 ? -1 : DIG_CUBE) : along;
-      if (!grid.isSolid(cell.ix + dx, cell.iy + y, cell.iz + dz)) return false;
+      if (grid.isSolid(cell.ix + dx, cell.iy + y, cell.iz + dz)) solid++;
     }
   }
-  return true;
+  return solid / (SUPPORT_HEIGHT * DIG_CUBE);
+}
+
+/**
+ * A little slack is allowed in the ground around a support: three quarters of
+ * the roof, floor and each wall must be solid, so a tunnel with a ragged edge or
+ * a half-metre step in it still takes one.
+ */
+const SOLID_ENOUGH = 0.75;
+
+/** Why a cell cannot take a support, in the order a player would want to hear it. */
+export type SupportProblem = 'taken' | 'blocked' | 'noFloor' | 'noRoof' | 'tooWide';
+
+/** What is wrong with this cell, or which way a support would run if nothing is. */
+export function supportProblem(
+  grid: DugGrid,
+  cell: SupportCell,
+  existing: readonly Support[],
+): { readonly axis: SupportAxis } | { readonly problem: SupportProblem } {
+  if (existing.some((s) => s.ix === cell.ix && s.iy === cell.iy && s.iz === cell.iz)) {
+    return { problem: 'taken' };
+  }
+  if (!cellIsOpen(grid, cell)) return { problem: 'blocked' };
+  const row = DIG_CUBE * DIG_CUBE;
+  if (solidInRow(grid, cell.ix, cell.iy - 1, cell.iz) / row < SOLID_ENOUGH) {
+    return { problem: 'noFloor' };
+  }
+  if (solidInRow(grid, cell.ix, cell.iy + SUPPORT_HEIGHT, cell.iz) / row < SOLID_ENOUGH) {
+    return { problem: 'noRoof' };
+  }
+  let best: SupportAxis | null = null;
+  let bestScore = 0;
+  for (const axis of [0, 1] as const) {
+    const score = Math.min(wallSolidity(grid, cell, axis, -1), wallSolidity(grid, cell, axis, 1));
+    if (score >= SOLID_ENOUGH && score > bestScore) {
+      best = axis;
+      bestScore = score;
+    }
+  }
+  return best === null ? { problem: 'tooWide' } : { axis: best };
 }
 
 /** Which way a support in this cell would run, or why one cannot stand there. */
@@ -116,17 +154,9 @@ export function checkSupportCell(
   cell: SupportCell,
   existing: readonly Support[],
 ): { readonly axis: SupportAxis } | { readonly refusal: SupportRefusal } {
-  if (existing.some((s) => s.ix === cell.ix && s.iy === cell.iy && s.iz === cell.iz)) {
-    return { refusal: 'supportTaken' };
-  }
-  const roofed = rowIsSolid(grid, cell.ix, cell.iy + SUPPORT_HEIGHT, cell.iz);
-  if (!roofed || !rowHasFloor(grid, cell.ix, cell.iy, cell.iz) || !cellIsOpen(grid, cell)) {
-    return { refusal: 'notTunnel' };
-  }
-  for (const axis of [0, 1] as const) {
-    if (wallIsSolid(grid, cell, axis, -1) && wallIsSolid(grid, cell, axis, 1)) return { axis };
-  }
-  return { refusal: 'notTunnel' };
+  const result = supportProblem(grid, cell, existing);
+  if ('axis' in result) return result;
+  return { refusal: result.problem === 'taken' ? 'supportTaken' : 'notTunnel' };
 }
 
 /** Where a support's middle is, in metres, for working out reach. */

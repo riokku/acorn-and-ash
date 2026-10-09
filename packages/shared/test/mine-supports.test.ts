@@ -16,6 +16,7 @@ import {
   checkSupportCell,
   supportCellAt,
   supportInReach,
+  supportProblem,
   type Support,
 } from '../src/world/supports';
 import type { Terrain } from '../src/world/terrain';
@@ -60,6 +61,23 @@ describe('where a mine support can stand', () => {
       for (let metre = 0; metre < 3; metre++)
         open.apply({ ix: metre * 2, iy, iz: 0, dir: CUBE_DIG });
     expect(checkSupportCell(open, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ refusal: 'notTunnel' });
+  });
+
+  it('says what is wrong with a spot', () => {
+    const grid = new DugGrid(flat);
+    tunnel(grid, 4, 'x');
+    expect(supportProblem(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ axis: 0 });
+    // Rock inside the frame: dig it out first.
+    expect(supportProblem(grid, { ix: 2, iy: 12, iz: 0 }, [])).toEqual({ problem: 'blocked' });
+    // A third cube dug above: the roof is out of reach of a two metre frame.
+    grid.apply({ ix: 2, iy: 18, iz: 0, dir: CUBE_DIG });
+    expect(supportProblem(grid, { ix: 2, iy: 14, iz: 0 }, [])).toEqual({ problem: 'noRoof' });
+    // A room: no wall to stand against.
+    grid.apply({ ix: 6, iy: 14, iz: 2, dir: CUBE_DIG });
+    grid.apply({ ix: 6, iy: 16, iz: 2, dir: CUBE_DIG });
+    expect(supportProblem(grid, { ix: 6, iy: 14, iz: 0 }, [])).toEqual({ problem: 'tooWide' });
+    const first: Support = { ix: 2, iy: 14, iz: 0, axis: 0 };
+    expect(supportProblem(grid, first, [first])).toEqual({ problem: 'taken' });
   });
 
   it('does not stand twice in one place', () => {
