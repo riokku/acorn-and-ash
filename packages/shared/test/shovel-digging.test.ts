@@ -48,6 +48,19 @@ function findHillside(sim: WorldSimulation): { x: number; z: number } {
   throw new Error('no hillside found');
 }
 
+/** Somewhere well away from the clearing where the ground is nearly level. */
+function findFlatSpot(terrain: ReturnType<typeof createWildernessTerrain>): {
+  x: number;
+  z: number;
+} {
+  for (let x = -200; x > -460; x -= 4)
+    for (let z = 200; z < 460; z += 4) {
+      const h = terrain.heightAt(x, z);
+      if (h > 0.5 && Math.abs(terrain.heightAt(x + 2, z) - h) < 0.15) return { x, z };
+    }
+  throw new Error('no flat ground found');
+}
+
 describe('digging with the shovel', () => {
   it('carves a slab ahead and tells everybody', () => {
     const sim = createWorld();
@@ -165,6 +178,21 @@ describe('digging with the shovel', () => {
     }
     expect(sim.digsList()).toHaveLength(1);
     expect(countOf(sim.inventoryOf(1), 'stone')).toBe(before);
+  });
+
+  it('digs overhead, in the square you stand in, when aimed up', () => {
+    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
+    const grid = new DugGrid(terrain);
+    const spot = findFlatSpot(terrain);
+    const feet = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z), z: spot.z + 0.5 };
+    // A tunnel two cubes tall right under the feet: the roof is next.
+    const level = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid);
+    grid.apply(level);
+    const roof = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid, true);
+    expect(roof.ix).toBe(Math.floor(feet.x) * 2);
+    expect(roof.iz).toBe(Math.floor(feet.z) * 2);
+    expect(roof.iy).toBeGreaterThan(level.iy);
+    expect(grid.solidCubes(roof).length).toBeGreaterThan(0);
   });
 
   it('digs nothing without the shovel in hand', () => {

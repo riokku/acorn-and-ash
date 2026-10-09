@@ -157,7 +157,7 @@ export function buildWildernessScene(
       props: [...clearing.props, ...wilderness.props],
     }),
   );
-  group.add(ground.mesh);
+  group.add(ground.mesh, ground.underground);
   disposables.push(ground);
 
   const byKind = new Map<string, PlacedProp[]>();
@@ -443,6 +443,33 @@ export function buildWildernessScene(
   };
 }
 
+/** The colour of earth seen through a crack, dark enough to read as the inside of the ground. */
+const UNDERGROUND_COLOR = 0x1c140d;
+
+/**
+ * Keeps holes from showing the sky through their seams (decision 0114): the
+ * ground drawn again from below, and a floor far down, both in dark earth. The
+ * ground is one surface with nothing under it, so a ray slipping through a
+ * crack in the lining of a hole would otherwise come out through the
+ * underside and see the sky.
+ */
+function createUnderground(geometry: THREE.BufferGeometry, size: number): THREE.Group {
+  const group = new THREE.Group();
+  const under = new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({ color: UNDERGROUND_COLOR, side: THREE.BackSide }),
+  );
+  under.frustumCulled = false;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: UNDERGROUND_COLOR }),
+  );
+  floor.position.y = -40;
+  floor.frustumCulled = false;
+  group.add(under, floor);
+  return group;
+}
+
 /**
  * The ground for the whole visible world: flat through the hand-built
  * clearing, rolling into hills across the wilderness, and flat again past the
@@ -456,6 +483,8 @@ export function createGround(
   shader: GroundShader,
 ): GroundPatches & {
   mesh: THREE.Mesh;
+  /** The ground seen from below, and a floor far under it: dark earth for any crack in a hole to look into, never sky. */
+  underground: THREE.Group;
   dispose(): void;
 } {
   const size = PLAYABLE_HALF_EXTENT * 2 + GROUND_FOG_MARGIN;
@@ -500,11 +529,13 @@ export function createGround(
   const material = createGroundMaterial();
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
+  const underground = createUnderground(geometry, size);
   const index = geometry.getIndex();
   if (index === null) throw new Error('Plane geometry has no index');
   const stride = segments + 1;
   return {
     mesh,
+    underground,
     material,
     origin: -size / 2,
     cell: size / segments,
@@ -581,6 +612,11 @@ export function createGround(
     dispose: () => {
       geometry.dispose();
       material.dispose();
+      for (const part of underground.children)
+        if (part instanceof THREE.Mesh) {
+          if (part.geometry !== geometry) part.geometry.dispose();
+          (part.material as THREE.Material).dispose();
+        }
     },
   };
 }
