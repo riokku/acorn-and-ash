@@ -2489,7 +2489,9 @@ export class WorldSimulation {
         position,
         aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
         action,
-        outdoors: runtime.space === OUTDOORS,
+        // Shut away underground counts as out of reach, the same as being indoors.
+        outdoors:
+          runtime.space === OUTDOORS && !this.dug.isSheltered(position.x, position.y, position.z),
         down: isDown(action),
       });
     }
