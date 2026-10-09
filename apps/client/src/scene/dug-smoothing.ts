@@ -1,13 +1,13 @@
 /**
  * Takes the stair-steps out of the smooth lining of dug holes (decision 0114).
  *
- * The lining is built from half-metre pieces, so a ramp dug down in half-metre
- * steps comes out as a staircase. Pieces that meet share their corners, so the
- * lining is really one connected surface; here that surface is relaxed a little
- * (Taubin smoothing: a step inwards, then a smaller step back out, so the
- * tunnel does not shrink as it softens), leaving fixed everything on the
- * surface's open edges, which are where it meets the ground and the walls
- * behind it.
+ * The inside of a hole starts as the blocky faces of the ground round it, cut
+ * small, so a ramp dug down in half-metre steps comes out as a staircase and
+ * every corner is square. Faces that meet share their corners, so together they
+ * are one connected, watertight surface; here that surface is relaxed (Taubin
+ * smoothing: a step inwards, then a smaller step back out, so a tunnel does not
+ * shrink as it softens). The open edges of the surface, where a hole comes up to
+ * the ground, are only smoothed along themselves, so a square rim rounds off.
  */
 
 /** How far each point moves towards the middle of its neighbours, then back. */
@@ -20,7 +20,7 @@ export interface LiningSurface {
   /** Normals, flat, same layout. Rewritten for the smoothed vertices. */
   readonly normals: number[];
   /** Triangles of the lining, three vertex numbers each. */
-  readonly indices: readonly number[];
+  readonly indices: number[];
 }
 
 /** Millimetre keys, so corners that are the same point in two pieces are found as one. */
@@ -68,11 +68,14 @@ export function smoothLining(surface: LiningSurface, passes: number): void {
       edgeUses.set(key, (edgeUses.get(key) ?? 0) + 1);
     }
   }
-  const fixed = new Uint8Array(members.length);
+  // The open edges of the surface: a point on one has only the points along that edge as neighbours.
+  const rim: (Set<number> | undefined)[] = members.map(() => undefined);
   for (const [key, uses] of edgeUses) {
     if (uses !== 1) continue;
-    fixed[Math.floor(key / 4_000_003)] = 1;
-    fixed[key % 4_000_003] = 1;
+    const a = Math.floor(key / 4_000_003);
+    const b = key % 4_000_003;
+    (rim[a] ??= new Set<number>()).add(b);
+    (rim[b] ??= new Set<number>()).add(a);
   }
 
   const count = members.length;
@@ -86,8 +89,8 @@ export function smoothLining(surface: LiningSurface, passes: number): void {
   const next = new Float64Array(count * 3);
   const relax = (amount: number): void => {
     for (let id = 0; id < count; id++) {
-      const near = neighbours[id]!;
-      if (fixed[id] === 1 || near.size === 0) {
+      const near = rim[id] ?? neighbours[id]!;
+      if (near.size === 0) {
         for (let axis = 0; axis < 3; axis++) next[id * 3 + axis] = at[id * 3 + axis]!;
         continue;
       }

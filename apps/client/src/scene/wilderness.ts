@@ -444,7 +444,7 @@ export function buildWildernessScene(
 }
 
 /** The colour of earth seen through a crack, dark enough to read as the inside of the ground. */
-const UNDERGROUND_COLOR = 0x1c140d;
+const UNDERGROUND_COLOR = 0x4a3524;
 
 /**
  * Keeps holes from showing the sky through their seams (decision 0114): the
@@ -457,12 +457,17 @@ function createUnderground(geometry: THREE.BufferGeometry, size: number): THREE.
   const group = new THREE.Group();
   const under = new THREE.Mesh(
     geometry,
-    new THREE.MeshBasicMaterial({ color: UNDERGROUND_COLOR, side: THREE.BackSide }),
+    new THREE.MeshStandardMaterial({
+      color: UNDERGROUND_COLOR,
+      roughness: 1,
+      metalness: 0,
+      side: THREE.BackSide,
+    }),
   );
   under.frustumCulled = false;
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: UNDERGROUND_COLOR }),
+    new THREE.MeshBasicMaterial({ color: 0x1c140d }),
   );
   floor.position.y = -40;
   floor.frustumCulled = false;

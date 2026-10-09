@@ -5,31 +5,20 @@ import { DugGrid, VOXEL, mountainWeight, type Dig, type Terrain } from '@acorn/s
 import earthLayersUrl from '@assets/textures/dug-earth-layers.png?url';
 
 import { roundedMouth, softEdge } from './dug-mouth';
-import { smoothLining } from './dug-smoothing';
+import { smoothLining, type LiningSurface } from './dug-smoothing';
 import type { GroundPatches } from './wilderness';
-
-import {
-  appendWallPiece,
-  dugWallKit,
-  planWallPieces,
-  preloadDugWalls,
-  WALL_CELL,
-  type ClosedSides,
-} from './dug-walls';
 
 /**
  * Ground dug out with the shovel (decision 0114).
  *
  * The hillside itself is a smooth mesh, which cannot have a hole in it. So
  * wherever a dig comes within a metre and a half of the surface, the smooth
- * ground over that square is taken away and the same square is built again
- * out of half-metre blocks, with the dug-out space left empty. Deeper down,
- * only the walls, floor and roof of a tunnel are drawn.
+ * ground over that square is taken away and drawn again exactly where it was
+ * (the "skin"), with a round mouth cut in it and a heap of dirt round the lip.
  *
- * The inside of a hole is lined with smooth, round pieces made in Blender
- * (see dug-walls.ts), picked and turned by which neighbours are solid. Only
- * until those have loaded, or if they ever fail to, the inside is drawn as
- * plain blocks.
+ * The inside of every hole is one continuous surface: each face of solid
+ * ground that looks into dug space is cut small, then the whole lot is softened
+ * (see dug-smoothing.ts), so there are no seams, steps or gaps to see through.
  *
  * The walls wear a texture painted in Blender (tools/art/dug_earth_layers.py):
  * topsoil, then earth with roots and stones, then stone, getting darker with
@@ -42,10 +31,6 @@ const TEXTURE_WIDTH = 4;
 const TEXTURE_DEPTH = 6;
 /** On the mountain the stone starts higher up: depth counts this many times over. */
 const ROCK_DEPTH_FACTOR = 1.6;
-/** The colours of the three layers as painted on the strip, for floors and roofs. */
-const TOPSOIL = new THREE.Color(0x3d2b19);
-const EARTH = new THREE.Color(0x6b4b2c);
-const STONE = new THREE.Color(0x56565a);
 
 /**
  * The column of the painted strip (0 to 1 across) with no roots, stones or
@@ -55,10 +40,7 @@ const STONE = new THREE.Color(0x56565a);
 const PLAIN_COLUMN = 0.619;
 
 /** How many rounds of softening the lining gets, to take the steps out of a ramp dug down in half-metre drops. */
-const LINING_SMOOTHING = 8;
-
-/** How far behind the lining the plain faces are set, in metres. */
-const BACKING_DEPTH = 0.03;
+const LINING_SMOOTHING = 12;
 
 /** How close to the surface a dug cube has to be to cut the smooth ground away. */
 const MOUTH_COVER = 1.5;
@@ -174,7 +156,12 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     metalness: 0,
     flatShading: true,
   });
-  const undersideMaterial = new THREE.MeshBasicMaterial({ color: 0x1c140d, side: THREE.BackSide });
+  const undersideMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4a3524,
+    roughness: 1,
+    metalness: 0,
+    side: THREE.BackSide,
+  });
   const chunks = new Map<number, THREE.Mesh>();
   /** The ground over each chunk's hidden squares, drawn again in the ground's paint with the holes left out. */
   const skins = new Map<number, THREE.Mesh>();
@@ -244,40 +231,93 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   }
 
   /**
-   * Floors and roofs are flat colours, the layers' own colours: the strip is a
-   * side view, and laid flat it only smears into streaks.
+   * One face of solid ground looking into a hole, cut into four, with its
+   * corners turned outwards and wound so the face looks into the hole.
    */
-  function layerColor(depth: number, out: THREE.Color): void {
-    const blend = (from: number, to: number): number =>
-      Math.min(1, Math.max(0, (depth - from) / (to - from)));
-    out.copy(TOPSOIL).lerp(EARTH, blend(0.45, 0.75)).lerp(STONE, blend(2.9, 3.2));
-    out.multiplyScalar(1 - 0.4 * Math.min(1, depth / TEXTURE_DEPTH));
+  function addLiningFace(
+    lining: LiningSurface,
+    ix: number,
+    iy: number,
+    iz: number,
+    face: number,
+  ): void {
+    const d = FACE_DIRECTIONS[face]!;
+    const corners = FACE_CORNERS[face]!.map(([cx, cy, cz]): Point => [
+      (ix + cx) * VOXEL,
+      (iy + cy) * VOXEL,
+      (iz + cz) * VOXEL,
+    ]);
+    const [c0, c1, , c3] = corners as [Point, Point, Point, Point];
+    const point = (u: number, v: number): Point => [
+      c0[0] + (c1[0] - c0[0]) * u + (c3[0] - c0[0]) * v,
+      c0[1] + (c1[1] - c0[1]) * u + (c3[1] - c0[1]) * v,
+      c0[2] + (c1[2] - c0[2]) * u + (c3[2] - c0[2]) * v,
+    ];
+    const at = (u: number, v: number): number => {
+      const base = lining.positions.length / 3;
+      const [x, y, z] = point(u / 2, v / 2);
+      lining.positions.push(x, y, z);
+      lining.normals.push(d.dx, d.dy, d.dz);
+      return base;
+    };
+    for (let j = 0; j < 2; j++) {
+      for (let i = 0; i < 2; i++) {
+        const q0 = at(i, j);
+        const q1 = at(i + 1, j);
+        const q2 = at(i + 1, j + 1);
+        const q3 = at(i, j + 1);
+        lining.indices.push(q0, q1, q2, q0, q2, q3);
+      }
+    }
   }
 
   /**
-   * Whole repeats of the strip taken off a cell's picture, so that across one
-   * cell the sideways position stays near the plain column and the slide from
-   * wall to floor is short. The strip repeats, so a whole turn changes nothing.
+   * Softens the lining of every hole in a chunk into one smooth surface, then
+   * lays the painted strip on it. Each triangle reads the strip from its own
+   * whole number of repeats, so the picture runs on unbroken from one triangle
+   * to the next along a wall; floors and roofs slide over to the plain column
+   * so they do not streak.
    */
-  let pictureShift = 0;
-
-  /**
-   * Where a point of the lining sits on the painted strip: side walls read the
-   * strip as it is (depth down, along the wall across), while floors and roofs
-   * slide over to the plain column so they do not streak.
-   */
-  function liningPicture(
-    x: number,
-    y: number,
-    z: number,
-    normalY: number,
-    out: [number, number],
-  ): [number, number] {
-    const v = stripV(x, y, z, isRocky(x, z));
-    const flatness = THREE.MathUtils.smoothstep(Math.abs(normalY), 0.5, 0.85);
-    out[0] = THREE.MathUtils.lerp((x + z) / TEXTURE_WIDTH - pictureShift, PLAIN_COLUMN, flatness);
-    out[1] = v;
-    return out;
+  function softenLining(
+    lining: LiningSurface,
+    wallIndices: number[],
+    positions: number[],
+    normals: number[],
+    uvs: number[],
+    colors: number[],
+  ): void {
+    smoothLining(lining, LINING_SMOOTHING);
+    const at = lining.positions;
+    const index = lining.indices;
+    for (let t = 0; t < index.length; t += 3) {
+      const corner = [index[t]!, index[t + 1]!, index[t + 2]!];
+      const middle = (axis: number): number =>
+        (at[corner[0]! * 3 + axis]! + at[corner[1]! * 3 + axis]! + at[corner[2]! * 3 + axis]!) / 3;
+      const rocky = isRocky(middle(0), middle(2));
+      const shift = Math.round((middle(0) + middle(2)) / TEXTURE_WIDTH - PLAIN_COLUMN);
+      for (const vertex of corner) {
+        const x = at[vertex * 3]!;
+        const y = at[vertex * 3 + 1]!;
+        const z = at[vertex * 3 + 2]!;
+        const flat = THREE.MathUtils.smoothstep(
+          Math.abs(lining.normals[vertex * 3 + 1]!),
+          0.5,
+          0.85,
+        );
+        wallIndices.push(positions.length / 3);
+        positions.push(x, y, z);
+        normals.push(
+          lining.normals[vertex * 3]!,
+          lining.normals[vertex * 3 + 1]!,
+          lining.normals[vertex * 3 + 2]!,
+        );
+        uvs.push(
+          THREE.MathUtils.lerp((x + z) / TEXTURE_WIDTH - shift, PLAIN_COLUMN, flat),
+          stripV(x, y, z, rocky),
+        );
+        colors.push(1, 1, 1);
+      }
+    }
   }
 
   /** How many smaller squares a ground square is cut into along each side: one per 5 cm. */
@@ -530,12 +570,12 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     const colors: number[] = [];
     const uvs: number[] = [];
     const normals: number[] = [];
-    const kit = dugWallKit();
-    /** Side walls wearing the painted strip, and the flat-coloured caps, floors and roofs. */
+    /** The lining of the holes wears the painted strip; the clods and rim are flat-coloured. */
     const wallIndices: number[] = [];
     const capIndices: number[] = [];
-    const liningIndices: number[] = [];
-    const buffers = { positions, normals, uvs, colors, indices: liningIndices };
+    /** Every face of solid ground that looks into a hole, cut small, before it is softened into one surface. */
+    const lining: LiningSurface = { positions: [], normals: [], indices: [] };
+    const buffers = { positions, normals, uvs, colors };
     const skin: SkinBuffers = {
       position: [],
       normal: [],
@@ -546,7 +586,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       index: [],
     };
     const withSkin = ground.lattice !== undefined && ground.material !== undefined;
-    const color = new THREE.Color();
     const chunkCellX = Math.floor(chunk / 8192) - 4096;
     const chunkCellZ = (chunk % 8192) - 4096;
     for (
@@ -580,90 +619,20 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
         const isHidden = hidden.has(key);
         for (let ix = firstX; ix < firstX + cubesPerCell; ix++) {
           for (let iz = firstZ; iz < firstZ + cubesPerCell; iz++) {
-            const surface = terrain.heightAt((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
-            const top = isHidden ? Math.ceil(surface / VOXEL) : highest + 1;
-            for (let iy = lowest - 1; iy <= top; iy++) {
+            for (let iy = lowest - 1; iy <= highest + 1; iy++) {
               if (!isSolid(ix, iy, iz)) continue;
               for (let face = 0; face < 6; face++) {
                 const d = FACE_DIRECTIONS[face]!;
-                if (isSolid(ix + d.dx, iy + d.dy, iz + d.dz)) continue;
-                const intoDug = grid.isDug(ix + d.dx, iy + d.dy, iz + d.dz);
-                // Faces into open sky are the old blocky ground: the smooth skin covers it.
-                if (withSkin && !intoDug && !grid.isUnderground(ix + d.dx, iy + d.dy, iz + d.dz))
-                  continue;
-                // The smooth lining takes over every face into dug space, but is rounded, so
-                // the corners behind it need something to look at: the same face, set a
-                // little back so it never fights the flat pieces of the lining.
-                const behindLining = kit !== null && intoDug;
-                const setBack = behindLining ? BACKING_DEPTH : 0;
-                // Under smooth ground that is still drawn, only faces into dug space show.
-                if (!isHidden && !intoDug) continue;
-                const rocky = isRocky((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
-                const isCap = face === 2 && !grid.isUnderground(ix, iy + 1, iz);
-                const isFlat = isCap || face === 2 || face === 3;
-                if (isCap) color.set(rocky ? 0x80838a : 0x5f7a3a);
-                else if (isFlat) {
-                  const v = stripV(
-                    (ix + 0.5) * VOXEL,
-                    (iy + 0.5) * VOXEL,
-                    (iz + 0.5) * VOXEL,
-                    rocky,
-                  );
-                  layerColor((1 - v) * TEXTURE_DEPTH, color);
-                } else color.setScalar(1);
-                const base = positions.length / 3;
-                for (const corner of FACE_CORNERS[face]!) {
-                  const x = (ix + corner[0]) * VOXEL - d.dx * setBack;
-                  const y = (iy + corner[1]) * VOXEL - d.dy * setBack;
-                  const z = (iz + corner[2]) * VOXEL - d.dz * setBack;
-                  positions.push(x, y, z);
-                  normals.push(d.dx, d.dy, d.dz);
-                  colors.push(color.r, color.g, color.b);
-                  if (face < 2) uvs.push(z / TEXTURE_WIDTH, stripV(x, y, z, rocky));
-                  else if (face > 3) uvs.push(x / TEXTURE_WIDTH, stripV(x, y, z, rocky));
-                  else uvs.push(0, 0);
-                }
-                (isFlat ? capIndices : wallIndices).push(
-                  base,
-                  base + 1,
-                  base + 2,
-                  base,
-                  base + 2,
-                  base + 3,
-                );
+                if (!grid.isDug(ix + d.dx, iy + d.dy, iz + d.dz)) continue;
+                addLiningFace(lining, ix, iy, iz, face);
               }
             }
           }
         }
         if (withSkin && isHidden) addSkin(cellX, cellZ, firstX, firstZ, skin, buffers, capIndices);
-        if (kit === null) continue;
-        // The smooth lining: a piece for every open cube that touches solid ground.
-        for (let ix = firstX; ix < firstX + cubesPerCell; ix++) {
-          for (let iz = firstZ; iz < firstZ + cubesPerCell; iz++) {
-            for (let iy = lowest; iy <= highest; iy++) {
-              if (!grid.isDug(ix, iy, iz)) continue;
-              const closed: ClosedSides = [
-                [isSolid(ix - 1, iy, iz), isSolid(ix + 1, iy, iz)],
-                [isSolid(ix, iy - 1, iz), isSolid(ix, iy + 1, iz)],
-                [isSolid(ix, iy, iz - 1), isSolid(ix, iy, iz + 1)],
-              ];
-              pictureShift = Math.round(((ix + iz + 1) * VOXEL) / TEXTURE_WIDTH - PLAIN_COLUMN);
-              for (const plan of planWallPieces(closed)) {
-                const piece = kit.pieces.get(plan.piece);
-                if (piece === undefined) continue;
-                appendWallPiece(
-                  piece,
-                  plan,
-                  [ix * WALL_CELL, iy * WALL_CELL, iz * WALL_CELL],
-                  buffers,
-                  liningPicture,
-                );
-              }
-            }
-          }
-        }
       }
     }
+    softenLining(lining, wallIndices, positions, normals, uvs, colors);
 
     const previousSkin = skins.get(chunk);
     if (previousSkin !== undefined) {
@@ -696,8 +665,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       blockers.splice(blockers.indexOf(previous), 1);
       chunks.delete(chunk);
     }
-    smoothLining({ positions, normals, indices: liningIndices }, LINING_SMOOTHING);
-    wallIndices.push(...liningIndices);
     if (wallIndices.length + capIndices.length === 0) return;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -714,21 +681,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     group.add(mesh);
     chunks.set(chunk, mesh);
     blockers.push(mesh);
-  }
-
-  let disposed = false;
-  // Holes dug before the lining pieces arrive are drawn as blocks, then redrawn.
-  if (dugWallKit() === null) {
-    void preloadDugWalls().then(() => {
-      if (disposed) return;
-      for (const key of touched) {
-        const cellX = Math.floor(key / 8192) - 4096;
-        const cellZ = (key % 8192) - 4096;
-        dirty.add(chunkKeyOfCell(cellX, cellZ));
-      }
-      for (const chunk of dirty) rebuildChunk(chunk);
-      dirty.clear();
-    });
   }
 
   return {
@@ -757,7 +709,6 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
         : 0;
     },
     dispose() {
-      disposed = true;
       for (const mesh of chunks.values()) mesh.geometry.dispose();
       chunks.clear();
       for (const mesh of skins.values()) mesh.geometry.dispose();
