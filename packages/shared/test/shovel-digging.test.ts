@@ -69,6 +69,33 @@ describe('digging with the shovel', () => {
     sim.drainCollectionEvents();
   });
 
+  it('still digs a first scoop on level ground', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withShovel(1));
+    const terrain = sim.collision.terrain;
+    let flat: { x: number; z: number } | null = null;
+    for (let x = -200; x > -460 && flat === null; x -= 4) {
+      for (let z = 200; z < 460 && flat === null; z += 4) {
+        const h = terrain.heightAt(x, z);
+        const level = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].every(([dx, dz]) => Math.abs(terrain.heightAt(x + dx!, z + dz!) - h) < 0.15);
+        if (level && h > 0.5 && !inHomeClearing(x, z)) flat = { x, z };
+      }
+    }
+    expect(flat).not.toBeNull();
+    const spot = flat!;
+    sim.placePlayer(1, { x: spot.x, y: terrain.heightAt(spot.x, spot.z), z: spot.z }, 0);
+    for (let seq = 1; seq <= 40 && sim.digsList().length === 0; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList().length).toBe(1);
+  });
+
   it('replays saved digs into the same ground', () => {
     const a = createWorld();
     a.addPlayer(1, withShovel(1));
