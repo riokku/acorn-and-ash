@@ -2290,7 +2290,9 @@ export class WorldSimulation {
                 ? 'head'
                 : isHeld(input, PlayerButton.AimLevel)
                   ? 'level'
-                  : 'auto';
+                  : isHeld(input, PlayerButton.AimUnder)
+                    ? 'under'
+                    : 'auto';
             // Reaching for things is only for somebody free to do it: not
             // mid-swing, mid-roll, down, or sat down.
             if (isFreeToInteract(runtime.action)) {

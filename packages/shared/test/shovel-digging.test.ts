@@ -216,6 +216,23 @@ describe('digging with the shovel', () => {
     expect(grid.solidCubes(level).length).toBeGreaterThan(0);
   });
 
+  it('digs down under your feet, half a metre at a time, when aimed at the floor beside you', () => {
+    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
+    const grid = new DugGrid(terrain);
+    const spot = findFlatSpot(terrain);
+    const feet = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z), z: spot.z + 0.5 };
+    const first = planDig(feet, 0, false, grid, 'under');
+    // Your own square, not one beside it.
+    expect(first.ix).toBe(Math.floor(feet.x) * 2);
+    expect(first.iz).toBe(Math.floor(feet.z) * 2);
+    expect(grid.solidCubes(first).length).toBeGreaterThanOrEqual(4);
+    grid.apply(first);
+    // Standing in it now, half a metre lower: the next one goes down another half metre.
+    const lower = planDig({ ...feet, y: feet.y - 0.5 }, 0, false, grid, 'under');
+    expect(lower.iy).toBe(first.iy - 1);
+    expect(grid.solidCubes(lower).length).toBeGreaterThan(0);
+  });
+
   it('digs nothing without the shovel in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1, { ...withShovel(1), items: [{ item: 'bag', count: 1 }] });
