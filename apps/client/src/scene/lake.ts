@@ -48,6 +48,7 @@ export function createLakeScene(
   excludePlantsAt: (x: number, z: number) => boolean = () => false,
   surfaceHeightAt: (x: number, z: number) => number = () => lake.level,
   shoreConnections: readonly WaterCircle[] = [],
+  flowAt?: (x: number, z: number) => { x: number; z: number; share: number },
 ): {
   group: THREE.Group;
   /** Show the lake as ice (true) or as open water (false). */
@@ -61,6 +62,7 @@ export function createLakeScene(
   const lobes = lake.islands.flatMap((island) => island.lobes);
   const waterMaterial = createWaterMaterial(lake.basin, {
     shoreConnections,
+    riverFlow: flowAt !== undefined,
     islands: lobes,
     deepAt: DEEP_WATER_AT,
     deep: 0x1f4f73,
@@ -70,7 +72,11 @@ export function createLakeScene(
   const water: THREE.Mesh[] = [];
   const ice: THREE.Mesh[] = [];
   for (const circle of lake.basin) {
-    const surface = new THREE.CircleGeometry(circle.radius, DISC_SEGMENTS);
+    // Extra rings let a slough follow the grade through its whole surface,
+    // including the curved transition into the river at its mouth.
+    const surface = shoreConnections.length
+      ? new THREE.RingGeometry(0, circle.radius, DISC_SEGMENTS, Math.ceil(circle.radius))
+      : new THREE.CircleGeometry(circle.radius, DISC_SEGMENTS);
     surface.rotateX(-Math.PI / 2);
     const positions = surface.getAttribute('position');
     for (let vertex = 0; vertex < positions.count; vertex++) {
@@ -81,6 +87,21 @@ export function createLakeScene(
       );
     }
     surface.computeVertexNormals();
+    if (flowAt !== undefined) {
+      const flow = new Float32Array(positions.count * 2);
+      const share = new Float32Array(positions.count);
+      for (let vertex = 0; vertex < positions.count; vertex++) {
+        const current = flowAt(
+          circle.x + positions.getX(vertex),
+          circle.z + positions.getZ(vertex),
+        );
+        flow[vertex * 2] = current.x;
+        flow[vertex * 2 + 1] = current.z;
+        share[vertex] = current.share;
+      }
+      surface.setAttribute('waterFlow', new THREE.BufferAttribute(flow, 2));
+      surface.setAttribute('waterFlowShare', new THREE.BufferAttribute(share, 1));
+    }
     geometries.push(surface);
     const mesh = new THREE.Mesh(surface, waterMaterial);
     mesh.position.set(circle.x, lake.level, circle.z);
@@ -96,7 +117,7 @@ export function createLakeScene(
     ice.push(sheet);
   }
 
-  const plants = createShorePlants(lake, excludePlantsAt);
+  const plants = createShorePlants(lake, excludePlantsAt, surfaceHeightAt);
   group.add(plants.group);
 
   return {
@@ -139,6 +160,7 @@ function* rimPoints(
 function createShorePlants(
   lake: Lake,
   excludePlantsAt: (x: number, z: number) => boolean,
+  surfaceHeightAt: (x: number, z: number) => number,
 ): { group: THREE.Group; dispose(): void } {
   const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
@@ -153,6 +175,7 @@ function createShorePlants(
       if (random() > REED_SHARE) continue;
       // Inwards for the mainland's rim means toward the middle of the circle; for an island, away from it.
       const at = { x: x - outX * 0.35 * inwards, y: level, z: z - outZ * 0.35 * inwards };
+      at.y = surfaceHeightAt(at.x, at.z);
       const depth = lakeDepthAt(lake, at.x, at.z);
       if (depth < 0.12 || depth > 1.1) continue;
       if (excludePlantsAt(at.x, at.z)) continue;
@@ -184,10 +207,19 @@ function createShorePlants(
       z: circle.z + Math.sin(angle) * reach,
     };
     const depth = lakeDepthAt(lake, at.x, at.z);
+    at.y = surfaceHeightAt(at.x, at.z);
     if (depth < 1.4 || depth > 4.5) continue;
     if (excludePlantsAt(at.x, at.z)) continue;
     const flower = random() < 0.3 ? (random() < 0.5 ? 'white' : 'pink') : null;
-    addLilyPad(builder, plants, at, 0.28 + random() * 0.2, random() * Math.PI * 2, flower);
+    addLilyPad(
+      builder,
+      plants,
+      at,
+      0.28 + random() * 0.2,
+      random() * Math.PI * 2,
+      flower,
+      surfaceHeightAt,
+    );
     placedPads += 1;
   }
 
@@ -206,7 +238,7 @@ function createShorePlants(
     builder.add(
       stone,
       stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
-      placed(x, level, z, { y: random() * 3 }),
+      placed(x, surfaceHeightAt(x, z), z, { y: random() * 3 }),
     );
     placedStones += 1;
   }

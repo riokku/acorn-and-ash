@@ -10,7 +10,8 @@ Chris asked for the lake's reeds along the riverbanks too, and for sloughs with 
 - Place six small, irregular still-water pools along the middle and lower river bends, spread across both banks. Each has an open, water-filled neck joining the main river. Reuse the lake's water, shore plants, lily pads and flowers, keeping the river openings clear of shore stones and plants.
 - Shape shallow floors and gentle banks using shared terrain data so the water is visible and client and server agree on ground height. Keep trees, rocks, buildings and spawns out of the pools using the existing water clearance system.
 - Give each mouth a broad opening, about eight metres wide. Both water materials treat the join as continuous water, suppressing the pale shoreline across the opening while preserving it along the remaining banks.
-- Blend the river into the slough's colours and ripples over two metres near each mouth. Both surfaces use the same water colouring there so no abrupt blue seam remains.
+- Blend the river into the slough's colours and ripples over five metres near each mouth. Both surfaces use the same water colouring there so no abrupt blue seam remains. Ripples share the river's downstream direction and speed at the join, then gradually ease into the slough's slow drift over seven metres.
+- Slough surfaces and floors follow the river's local downhill grade, meeting its exact height at each mouth. Lily pads tilt with that surface; shore plants and stones use its height too.
 - Sloughs and lily pads are scenery only: no harvesting, fishing, swimming, boating or seasonal ice behavior is added. Riverbank scenery reeds do not add mature gatherable beds.
 
 ## Consequences

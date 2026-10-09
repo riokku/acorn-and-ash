@@ -13,6 +13,7 @@ import {
   streamHalfWidthAt,
   streamPointAt,
   streamSurfaceAt,
+  sloughSurfaceAt,
   streamWaterDepthAt,
   streamWaterHalfWidthAt,
 } from '../src/world/stream';
@@ -41,7 +42,9 @@ describe('the stream', () => {
     expect(STREAM.sloughs).toHaveLength(6);
     for (const slough of STREAM.sloughs) {
       for (const circle of slough.basin) {
-        const depth = slough.level - terrain.heightAt(circle.x, circle.z);
+        const depth =
+          sloughSurfaceAt(STREAM, slough, circle.x, circle.z) -
+          terrain.heightAt(circle.x, circle.z);
         expect(depth).toBeGreaterThan(0.1);
         expect(depth).toBeLessThan(0.6);
         expect(nearStream(STREAM, circle.x, circle.z, 1.2)).toBe(true);
@@ -57,7 +60,7 @@ describe('the stream', () => {
         const z = river.z + (pool.z - river.z) * t;
         expect(isInStream(STREAM, x, z) || lakeDepthAt(slough, x, z) > 0).toBe(true);
         // No strip of dry bank may block the connected water.
-        expect(terrain.heightAt(x, z)).toBeLessThan(slough.level - 0.05);
+        expect(terrain.heightAt(x, z)).toBeLessThan(sloughSurfaceAt(STREAM, slough, x, z) - 0.05);
       }
       // The connection stays open across a six-metre span, not just its centreline.
       const outwardX = (pool.x - river.x) / river.distance;
@@ -67,8 +70,34 @@ describe('the stream', () => {
         const x = river.x + outwardX * mouthAcross - outwardZ * sideways;
         const z = river.z + outwardZ * mouthAcross + outwardX * sideways;
         expect(lakeDepthAt(slough, x, z)).toBeGreaterThan(0.5);
-        expect(terrain.heightAt(x, z)).toBeLessThan(slough.level - 0.05);
+        expect(terrain.heightAt(x, z)).toBeLessThan(sloughSurfaceAt(STREAM, slough, x, z) - 0.05);
       }
+    }
+  });
+
+  it('slopes the sloughs downhill with the river and keeps their floors below the water', () => {
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      const grade = Math.hypot(slough.slopeX, slough.slopeZ);
+      expect(grade).toBeGreaterThan(0.001);
+      const dx = (slough.slopeX / grade) * 2;
+      const dz = (slough.slopeZ / grade) * 2;
+      const high = sloughSurfaceAt(STREAM, slough, pool.x + dx, pool.z + dz);
+      const low = sloughSurfaceAt(STREAM, slough, pool.x - dx, pool.z - dz);
+      expect(high - low).toBeCloseTo(grade * 4, 2);
+      for (let x = pool.x - pool.radius; x <= pool.x + pool.radius; x += 0.5) {
+        for (let z = pool.z - pool.radius; z <= pool.z + pool.radius; z += 0.5) {
+          if (lakeDepthAt(slough, x, z) < 0.8) continue;
+          expect(sloughSurfaceAt(STREAM, slough, x, z) - terrain.heightAt(x, z)).toBeGreaterThan(
+            0.1,
+          );
+        }
+      }
+      const mouth = nearestOnStream(STREAM, pool.x, pool.z, 30)!;
+      expect(sloughSurfaceAt(STREAM, slough, mouth.x, mouth.z)).toBeCloseTo(
+        streamSurfaceAt(STREAM, mouth.along),
+        6,
+      );
     }
   });
 

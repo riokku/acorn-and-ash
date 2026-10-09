@@ -10,6 +10,7 @@ import {
   lakeDepthAt,
   isInStream,
   nearestOnStream,
+  sloughSurfaceAt,
   smoothstep,
   type Stream,
   type Terrain,
@@ -50,7 +51,7 @@ export function createStreamScene(
     const pool = slough.basin[0]!;
     const mouth = nearestOnStream(stream, pool.x, pool.z, 30)!;
     const mouthRow = Math.round(mouth.along / (stream.length / (stream.count - 1)));
-    return [-2, 0, 2].map((offset) => {
+    return [-4, -2, 0, 2, 4].map((offset) => {
       const row = Math.max(0, Math.min(stream.count - 1, mouthRow + offset));
       const along = row * (stream.length / (stream.count - 1));
       return { ...streamPointAt(stream, row), radius: streamWaterHalfWidthAt(stream, along) };
@@ -76,14 +77,24 @@ export function createStreamScene(
     const scene = createLakeScene(
       slough,
       (x, z) => isInStream(stream, x, z, -0.3),
-      (x, z) => {
-        const spot = nearestOnStream(stream, x, z, 12);
-        if (spot === null) return slough.level;
-        const half = streamWaterHalfWidthAt(stream, spot.along);
-        const blend = 1 - smoothstep(spot.distance, half - 1, half + 2);
-        return slough.level + (streamSurfaceAt(stream, spot.along) - slough.level) * blend;
-      },
+      (x, z) => sloughSurfaceAt(stream, slough, x, z),
       connections[index],
+      (x, z) => {
+        const spot = nearestOnStream(stream, x, z, 24);
+        if (spot === null) return { x: 0, z: 0, share: 0 };
+        const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+        const before = streamPointAt(stream, Math.max(0, row - 1));
+        const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+        const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+        const steep = Math.min(streamFallGradientAt(stream, spot.along) / FULL_FOAM_GRADIENT, 1);
+        const pace = 1 + steep * (FALL_PACE - 1);
+        const half = streamWaterHalfWidthAt(stream, spot.along);
+        return {
+          x: ((after.x - before.x) / size) * pace,
+          z: ((after.z - before.z) / size) * pace,
+          share: 1 - smoothstep(spot.distance, half + 1, half + 8),
+        };
+      },
     );
     scene.group.name = `slough-${index + 1}`;
     group.add(scene.group);
@@ -146,6 +157,8 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   const edges = new Float32Array(rows * ACROSS);
   const falls = new Float32Array(rows * ACROSS);
   const paces = new Float32Array(rows * ACROSS);
+  const flow = new Float32Array(rows * ACROSS * 2);
+  const flowShare = new Float32Array(rows * ACROSS).fill(1);
   const indices: number[] = [];
 
   for (let row = 0; row < rows; row++) {
@@ -173,6 +186,8 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       edges[vertex] = Math.abs(across);
       falls[vertex] = steep;
       paces[vertex] = 1 + steep * (FALL_PACE - 1);
+      flow[vertex * 2] = (tangentX / size) * paces[vertex]!;
+      flow[vertex * 2 + 1] = (tangentZ / size) * paces[vertex]!;
     }
     if (row + 1 < rows) {
       for (let column = 0; column + 1 < ACROSS; column++) {
@@ -193,6 +208,8 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   geometry.setAttribute('streamEdge', new THREE.BufferAttribute(edges, 1));
   geometry.setAttribute('streamFall', new THREE.BufferAttribute(falls, 1));
   geometry.setAttribute('streamPace', new THREE.BufferAttribute(paces, 1));
+  geometry.setAttribute('waterFlow', new THREE.BufferAttribute(flow, 2));
+  geometry.setAttribute('waterFlowShare', new THREE.BufferAttribute(flowShare, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
