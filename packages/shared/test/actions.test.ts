@@ -20,6 +20,7 @@ import {
 } from '../src/sim/actions';
 import {
   CHARGE_TICKS,
+  DIG_SWING,
   DODGE,
   FLINCH,
   LIGHT_COMBO,
@@ -519,5 +520,39 @@ describe('the move on the wire', () => {
 
   it('reads anything it does not know as standing idle', () => {
     expect(unpackActionByte(0x1f, createActionState()).kind).toBe(ActionKind.Idle);
+  });
+});
+
+describe('a swing of the shovel', () => {
+  const SHOVEL: ActionContext = { canAttack: true, castInstead: false, digging: true };
+
+  it('keeps the feet planted and lands when the blade levers up', () => {
+    const { state, feed, untilImpact } = player(SHOVEL);
+    expect(feed(PlayerButton.Swing).footing).toBe('planted');
+    expect(state).toMatchObject({ kind: ActionKind.Swing, step: 1, age: 0 });
+    const landed = untilImpact();
+    expect(landed.after).toBe(DIG_SWING.impact);
+    expect(landed.tick.impact).toEqual({ kind: 'swing', step: 1 });
+  });
+
+  it('goes straight on to another dig, never to the combo, while the button is held', () => {
+    const { state, feed } = player(SHOVEL);
+    let digs = 0;
+    feed(PlayerButton.Swing);
+    for (let tick = 0; tick < DIG_SWING.end * 3; tick++) {
+      if (feed(PlayerButton.Swing).impact !== null) digs++;
+      expect(state.step).toBe(1);
+      expect(state.kind).toBe(ActionKind.Swing);
+    }
+    expect(digs).toBe(3);
+  });
+
+  it('is over when its time is up', () => {
+    const { state, feed } = player(SHOVEL);
+    feed(PlayerButton.Swing);
+    for (let tick = 1; tick < DIG_SWING.end; tick++) feed();
+    expect(state.kind).toBe(ActionKind.Swing);
+    feed();
+    expect(state.kind).toBe(ActionKind.Idle);
   });
 });

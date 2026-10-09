@@ -3688,6 +3688,7 @@ export class WorldSimulation {
     return {
       canAttack,
       castInstead,
+      digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot and no line in the water.
       canSit: grounded && runtime.cast === null,
       dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
@@ -3792,7 +3793,7 @@ export class WorldSimulation {
         depleted: false,
       });
     }
-    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: null });
+    // No gesture to send: the dig swing is itself the animation (see DIG_SWING).
     return true;
   }
 
