@@ -111,6 +111,26 @@ describe('digging with the shovel', () => {
     expect(a.digsList().length).toBeGreaterThan(0);
   });
 
+  it('digs with a shovel worn in the main hand', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, {
+      ...withShovel(1),
+      items: [{ item: 'bag', count: 1 }],
+      worn: [{ slot: 'mainHand', item: 'shovel' }],
+    });
+    const spot = findHillside(sim);
+    sim.placePlayer(
+      1,
+      { x: spot.x, y: sim.collision.terrain.heightAt(spot.x, spot.z), z: spot.z },
+      0,
+    );
+    for (let seq = 1; seq <= 40 && sim.digsList().length === 0; seq++) {
+      sim.queueInput(1, createInput(seq, 0, 0, 0, PlayerButton.Swing));
+      sim.step(tickClock());
+    }
+    expect(sim.digsList()).toHaveLength(1);
+  });
+
   it('digs nothing without the shovel in hand', () => {
     const sim = createWorld();
     sim.addPlayer(1, { ...withShovel(1), items: [{ item: 'bag', count: 1 }] });

@@ -3639,7 +3639,9 @@ export class WorldSimulation {
    * nothing here having to notice and clear the field itself.
    */
   private isActiveItem(runtime: PlayerRuntime, item: ItemId): boolean {
-    if (item === 'axe' || item === 'rod')
+    // The shovel counts however it is held, chosen from the pack or worn in
+    // the main hand, the same as the swing animation shows.
+    if (item === 'axe' || item === 'rod' || item === 'shovel')
       return toolKind(this.equippedItemOf(runtime.netId)) === item;
     return runtime.equippedItem === item && hasItem(runtime.inventory, item);
   }
