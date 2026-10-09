@@ -233,15 +233,19 @@ import {
   reedRegrowSpot,
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
-import { DugGrid, type Dig } from '../world/digging';
+import { CUBE_DIG, DugGrid, type Dig } from '../world/digging';
 import {
   DIG_MAX_COUNT,
+  DIG_REACH_SLACK,
+  digInReach,
   digRefusal,
   digYield,
   planDig,
-  type DigAim,
   type DigRefusalReason,
 } from './digging';
+
+/** How long a cube the mouse was on stays good, in ticks: the browser repeats it every second. */
+const DIG_TARGET_TICKS = 3 * TICK_HZ;
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -945,8 +949,11 @@ interface PlayerRuntime {
    * click.
    */
   swingWasHeld: boolean;
-  /** Where the mouse was pointing on the wall in the last input: what a shovel swing digs. */
-  digAim: DigAim;
+  /**
+   * The cube the player's mouse was on when last they said (see `setDigTarget`),
+   * and the tick it arrived: what a swing of the shovel digs while it is fresh.
+   */
+  digTarget: { readonly ix: number; readonly iy: number; readonly iz: number; tick: number } | null;
   /**
    * Whether interact was down in the last input - same idea as `swingWasHeld`.
    * Picking up, gathering and digging up a cache are all happy with a held
@@ -1863,7 +1870,7 @@ export class WorldSimulation {
       ),
       swingCooldownTicks: 0,
       swingWasHeld: false,
-      digAim: 'auto',
+      digTarget: null,
       interactWasHeld: false,
       pickupRefused: false,
       pendingBuild: null,
@@ -2032,6 +2039,27 @@ export class WorldSimulation {
     const plots = gardenFromSaved(saved),
       home = this.builtPropsById.get(homeId);
     if (plots !== null && home?.kind === 'largeCabin') this.homeGardens.set(homeId, plots);
+  }
+
+  /**
+   * Say which cube of ground the player's mouse is on (decision 0114), or
+   * nothing. The browser works it out from what the cursor touches; the server
+   * only keeps it for a few seconds and still checks it when a swing lands:
+   * in reach, allowed, and solid.
+   */
+  setDigTarget(netId: number, target: { ix: number; iy: number; iz: number } | null): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return;
+    const sensible =
+      target !== null &&
+      Number.isInteger(target.ix) &&
+      Number.isInteger(target.iy) &&
+      Number.isInteger(target.iz) &&
+      Math.abs(target.ix) < 2000 &&
+      Math.abs(target.iz) < 2000 &&
+      target.iy > -400 &&
+      target.iy < 1000;
+    runtime.digTarget = sensible ? { ...target, tick: this.tick } : null;
   }
 
   /** Ask for a specific loot target, validated at the next simulation tick. */
@@ -2285,15 +2313,6 @@ export class WorldSimulation {
             const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
-            runtime.digAim = isHeld(input, PlayerButton.AimUp)
-              ? 'up'
-              : isHeld(input, PlayerButton.AimHead)
-                ? 'head'
-                : isHeld(input, PlayerButton.AimLevel)
-                  ? 'level'
-                  : isHeld(input, PlayerButton.AimUnder)
-                    ? 'under'
-                    : 'auto';
             // Reaching for things is only for somebody free to do it: not
             // mid-swing, mid-roll, down, or sat down.
             if (isFreeToInteract(runtime.action)) {
@@ -3794,7 +3813,17 @@ export class WorldSimulation {
     aimYaw: number,
     down: boolean,
   ): boolean {
-    const dig = planDig(position, aimYaw, down, this.dug, runtime.digAim);
+    // Where the mouse is, if it said so lately; otherwise the way the player faces.
+    const target = runtime.digTarget;
+    const chosen =
+      target !== null && this.tick - target.tick <= DIG_TARGET_TICKS
+        ? ({ ix: target.ix, iy: target.iy, iz: target.iz, dir: CUBE_DIG } as const)
+        : null;
+    if (chosen !== null && !digInReach(position, chosen, DIG_REACH_SLACK)) {
+      this.digRefusals.push({ netId: runtime.netId, reason: 'far' });
+      return false;
+    }
+    const dig = chosen ?? planDig(position, aimYaw, down, this.dug);
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
     const refusal = digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps);

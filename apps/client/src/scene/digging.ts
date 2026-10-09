@@ -116,6 +116,8 @@ export interface DigScene {
   readonly grid: DugGrid;
   /** Meshes the follow camera must not pass through. */
   readonly cameraBlockers: readonly THREE.Mesh[];
+  /** Everything of the dug ground the mouse can touch: the walls of holes and the ground cut round them. */
+  pickables(): THREE.Mesh[];
   /** Carve any digs not yet known (ones already applied change nothing), then redraw what changed. */
   apply(digs: readonly Dig[]): void;
   /** Whether a hole opens to the sky at, or right beside, this spot: no grass should grow there. */
@@ -731,6 +733,9 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       }
       for (const chunk of dirty) rebuildChunk(chunk);
       dirty.clear();
+    },
+    pickables() {
+      return [...blockers, ...skins.values()];
     },
     isOpenNear(x, z) {
       const ix = Math.floor(x / VOXEL);
