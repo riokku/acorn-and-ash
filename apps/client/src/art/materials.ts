@@ -81,6 +81,7 @@ const FLOOR_TILE = 2.8;
 export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   const grass = artTexture('grass');
   const floor = artTexture('forestFloor');
+  const soil = artTexture('soil');
   const ground = positionWorld.xz;
 
   // Two copies of each texture, one turned and a little smaller, blended in
@@ -120,7 +121,13 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // forest-floor texture so it is not a flat colour (see decision 0114).
   const rockColour = vec3(0.5, 0.48, 0.45).mul(floorNear.r.mul(0.9).add(0.55));
   const rocky = mix(shaded, rockColour.mul(attribute('tint', 'vec3')), attribute('rock', 'float'));
-  const seasonal = rocky.mul(seasonUniforms.ground);
+  // Reuse the existing fine soil grain with a sandy palette, fading from
+  // darker wet sand at the water into a lighter dry bank and then grass.
+  const bank = attribute('bank', 'vec2');
+  const grain = texture(soil, ground.div(1.8)).r.mul(0.5).add(0.7);
+  const sand = mix(color(0xb3a17c), color(0x776f59), bank.y).mul(grain);
+  const beach = mix(rocky, sand.mul(attribute('tint', 'vec3')), bank.x);
+  const seasonal = beach.mul(seasonUniforms.ground);
   const winterSnow = seasonUniforms.snow
     .mul(float(1).sub(bare.mul(float(0.45).mul(float(1).sub(seasonUniforms.blizzard)))))
     .mul(0.88);
@@ -255,7 +262,7 @@ export function createStreamMaterial(
   let surface = mix(middle, shallows, smoothstep(0.1, 0.95, edge));
   surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.1));
   const lapping = smoothstep(0.72, 0.98, edge.add(first.mul(0.08)));
-  surface = mix(surface, color(0xe4f1ea), lapping.mul(0.5));
+  surface = mix(surface, color(0xc4d6c0), lapping.mul(0.2));
   const foam = fall.mul(smoothstep(0.1, 0.7, streaks.mul(0.7).add(0.4)));
   surface = mix(surface, color(0xf4fbff), foam.mul(0.85));
   if (sloughs.length) {
@@ -274,7 +281,7 @@ export function createStreamMaterial(
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
   reactiveWater(material, surface);
   // Clear at the very edge, so the bank shows through and there is no hard line.
-  material.opacityNode = smoothstep(1.02, 0.78, edge);
+  material.opacityNode = float(1).sub(smoothstep(0.55, 1.04, edge));
   material.transparent = true;
   material.depthWrite = false;
   material.polygonOffset = true;
