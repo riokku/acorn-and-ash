@@ -294,9 +294,9 @@ export function createStream(lake: Lake = LAKE): Stream {
     bank,
   };
   const sloughs = [
-    { share: 0.43, side: -1, radius: 5 },
-    { share: 0.56, side: -1, radius: 6 },
-    { share: 0.62, side: 1, radius: 5 },
+    { share: 0.44, side: -1, radius: 3.8 },
+    { share: 0.6, side: -1, radius: 4.2 },
+    { share: 0.66, side: 1, radius: 4.5 },
     { share: 0.7, side: 1, radius: 5 },
     { share: 0.76, side: -1, radius: 6 },
     { share: 0.88, side: 1, radius: 7 },
@@ -307,7 +307,10 @@ export function createStream(lake: Lake = LAKE): Stream {
     const before = streamPointAt(stream, row - 1);
     const after = streamPointAt(stream, row + 1);
     const size = Math.hypot(after.x - before.x, after.z - before.z);
-    const offset = streamHalfWidthAt(stream, along) + radius + 2;
+    // Hug the valley instead of pushing a whole pool out onto the hillside.
+    // Small upper pools fit narrow banks; the gentler lower bends have room
+    // for the larger pools. The pool overlaps its broad river connection.
+    const offset = streamHalfWidthAt(stream, along) + radius * 0.65 + 0.7;
     const x = here.x - ((after.z - before.z) / size) * offset * side;
     const z = here.z + ((after.x - before.x) / size) * offset * side;
     // Overlapping circles cut an open neck from the riverbank into the pool.
@@ -573,12 +576,33 @@ export function streamGroundHeight(
   const channel = distance <= half ? bowl : rim + (distance - half) * BANK_SLOPE;
   const fade = smoothstep(along, 0, 8);
   let shaped = softMin(valley, lerp(valley, channel, fade), BANK_SOFTNESS);
+  // Treat nearby bowls as one shoreline: a neighbouring slough's outer
+  // bank must never fill an existing pool or its river connection.
+  let nearestSlough: Slough | null = null;
+  let sloughDepth = -8;
   for (const slough of stream.sloughs) {
     const depth = basinDepthAt(slough, x, z);
-    if (depth <= -4) continue;
-    // A shallow floor and a soft bank; no new swimming or water interactions.
-    const floor = sloughSurfaceAt(stream, slough, x, z) + 0.05 - 0.5 * smoothstep(depth, 0, 2);
-    shaped = Math.min(shaped, lerp(shaped, floor, smoothstep(depth, -4, 0)));
+    if (depth > sloughDepth) {
+      nearestSlough = slough;
+      sloughDepth = depth;
+    }
+  }
+  if (nearestSlough !== null) {
+    const depth = sloughDepth;
+    // Build a supported bowl, including the downhill bank. Only cutting the
+    // ground lets the water project into space wherever the hill falls away.
+    // The rim also clears the ice, with enough width for the rendered ground
+    // mesh to meet the water. Blend back into the hillside beyond the rim.
+    const surface = sloughSurfaceAt(stream, nearestSlough, x, z);
+    const floor = surface + 0.4 - 0.85 * smoothstep(depth, 0, 1.3);
+    const bank = floor + Math.max(0, -depth) * 0.16;
+    const supported = lerp(shaped, bank, smoothstep(depth, -8, -0.6));
+    // Keep the river's original channel at the mouth, rather than filling it.
+    shaped = lerp(
+      Math.min(shaped, supported),
+      supported,
+      smoothstep(distance, streamWaterHalfWidthAt(stream, along), half + 1),
+    );
   }
   return shaped;
 }

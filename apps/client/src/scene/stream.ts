@@ -8,6 +8,7 @@ import {
   streamSurfaceAt,
   streamWaterHalfWidthAt,
   lakeDepthAt,
+  basinDepthAt,
   isInStream,
   nearestOnStream,
   sloughSurfaceAt,
@@ -102,11 +103,14 @@ export function createStreamScene(
           share: 1 - smoothstep(spot.distance, half + 1, half + 8),
         };
       },
+      { seed: 1909 + index * 137, groundHeightAt: (x, z) => terrain.heightAt(x, z) },
     );
     scene.group.name = `slough-${index + 1}`;
     group.add(scene.group);
     return scene;
   });
+  const boulders = createSloughBoulders(stream, terrain);
+  group.add(boulders.group);
 
   return {
     group,
@@ -121,10 +125,57 @@ export function createStreamScene(
       iceMaterial.dispose();
       stones.dispose();
       reeds.dispose();
+      boulders.dispose();
       for (const slough of sloughs) slough.dispose();
       group.removeFromParent();
     },
   };
+}
+
+/** Different loose groups of larger, embedded stones on each slough's dry banks. */
+function createSloughBoulders(
+  stream: Stream,
+  terrain: Terrain,
+): { group: THREE.Group; dispose(): void } {
+  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
+  const builder = new ModelBuilder();
+  for (const [index, slough] of stream.sloughs.entries()) {
+    const random = seededRandom(2909 + index * 137);
+    const count = 4 + Math.floor(random() * 4);
+    const placedRocks: { x: number; z: number; radius: number }[] = [];
+    for (let attempt = 0; attempt < 120 && placedRocks.length < count; attempt++) {
+      // The two outer pool lobes, leaving the broad river mouth open.
+      const circle = slough.basin[Math.floor(random() * 2)]!;
+      const angle = random() * Math.PI * 2;
+      const radius = 0.7 + random() * 1.1;
+      const reach = circle.radius + radius * 0.8 + random() * 1.8;
+      const x = circle.x + Math.cos(angle) * reach;
+      const z = circle.z + Math.sin(angle) * reach;
+      if (isInStream(stream, x, z, -radius - 0.8)) continue;
+      if (stream.sloughs.some((pool) => basinDepthAt(pool, x, z) > -radius * 0.7)) continue;
+      if (placedRocks.some((rock) => Math.hypot(x - rock.x, z - rock.z) < radius + rock.radius))
+        continue;
+      const height = radius * (0.65 + random() * 0.45);
+      // Embed the base across its footprint, rather than floating a rock off
+      // the downhill side of a slope. Reject banks too steep for this rock.
+      const heights = [terrain.heightAt(x, z)];
+      for (let edge = 0; edge < 8; edge++) {
+        const turn = (edge / 8) * Math.PI * 2;
+        heights.push(terrain.heightAt(x + Math.cos(turn) * radius, z + Math.sin(turn) * radius));
+      }
+      const base = Math.min(...heights);
+      if (Math.max(...heights) - base > height * 0.8) continue;
+      builder.add(
+        stone,
+        stoneGeometry(radius, height, 3909 + index * 137 + placedRocks.length, 0.8, 1),
+        placed(x, base - height * 0.12, z, { y: random() * Math.PI * 2 }),
+      );
+      placedRocks.push({ x, z, radius });
+    }
+  }
+  const result = builder.build();
+  result.group.name = 'slough-boulders';
+  return result;
 }
 
 /** The lake's green reeds and cattails in loose clusters on both riverbanks. */

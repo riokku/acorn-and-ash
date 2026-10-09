@@ -49,6 +49,7 @@ export function createLakeScene(
   surfaceHeightAt: (x: number, z: number) => number = () => lake.level,
   shoreConnections: readonly WaterCircle[] = [],
   flowAt?: (x: number, z: number) => { x: number; z: number; share: number },
+  scenery: { seed?: number; groundHeightAt?: (x: number, z: number) => number } = {},
 ): {
   group: THREE.Group;
   /** Show the lake as ice (true) or as open water (false). */
@@ -117,7 +118,13 @@ export function createLakeScene(
     ice.push(sheet);
   }
 
-  const plants = createShorePlants(lake, excludePlantsAt, surfaceHeightAt);
+  const plants = createShorePlants(
+    lake,
+    excludePlantsAt,
+    surfaceHeightAt,
+    scenery.seed ?? 909,
+    scenery.groundHeightAt ?? surfaceHeightAt,
+  );
   group.add(plants.group);
   const plantMaterials = waterPlantMaterials();
   const floatingPlants = new Set([
@@ -173,11 +180,13 @@ function createShorePlants(
   lake: Lake,
   excludePlantsAt: (x: number, z: number) => boolean,
   surfaceHeightAt: (x: number, z: number) => number,
+  seed: number,
+  groundHeightAt: (x: number, z: number) => number,
 ): { group: THREE.Group; dispose(): void } {
   const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const builder = new ModelBuilder();
-  const random = seededRandom(909);
+  const random = seededRandom(seed);
   const level = lake.level;
 
   // Reeds stand just inside the water's edge, wherever that edge is open to
@@ -250,7 +259,7 @@ function createShorePlants(
     builder.add(
       stone,
       stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
-      placed(x, surfaceHeightAt(x, z), z, { y: random() * 3 }),
+      placed(x, groundHeightAt(x, z), z, { y: random() * 3 }),
     );
     placedStones += 1;
   }
