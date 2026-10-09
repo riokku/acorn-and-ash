@@ -64,7 +64,11 @@ export function planDig(
   };
   if (down || grid.solidCubes(feet).length > 0) return feet;
   const head: Dig = { ...feet, iy: feet.iy + DIG_CUBE };
-  return grid.solidCubes(head).length > 0 ? head : feet;
+  if (grid.solidCubes(head).length > 0) return head;
+  // On level ground the cube at the feet is all air, so a plain swing would do
+  // nothing at all: start half a metre lower, a first scoop to step into.
+  const scoop: Dig = { ...feet, iy: feet.iy - 1 };
+  return grid.solidCubes(scoop).length > 0 ? scoop : feet;
 }
 
 export type DigRefusal = 'home' | 'water' | 'built' | 'deep' | 'full';
