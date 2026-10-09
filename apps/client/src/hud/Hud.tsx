@@ -387,6 +387,7 @@ export function Hud({
           {state.characterOpen && state.inventoryOpen && onGearChange !== undefined ? (
             <CharacterPanel
               worn={state.worn}
+              held={state.equippedItem}
               look={state.selfLook}
               notice={state.gearNotice}
               onChange={onGearChange}

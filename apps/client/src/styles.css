@@ -3992,6 +3992,12 @@ body {
   cursor: grab;
 }
 
+/* A tool chosen from the hotbar, held in the hand but not worn: not something to drag or take off. */
+.gear-slot-held {
+  cursor: default;
+  border-style: dashed;
+}
+
 /* A piece is being dragged and this is a place it can be worn: a soft pulsing glow. */
 .gear-slot-fits {
   border-style: solid;
