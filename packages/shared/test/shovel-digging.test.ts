@@ -188,11 +188,32 @@ describe('digging with the shovel', () => {
     // A tunnel two cubes tall right under the feet: the roof is next.
     const level = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid);
     grid.apply(level);
-    const roof = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid, true);
+    const roof = planDig({ ...feet, y: feet.y - 3 }, 0, false, grid, 'up');
     expect(roof.ix).toBe(Math.floor(feet.x) * 2);
     expect(roof.iz).toBe(Math.floor(feet.z) * 2);
     expect(roof.iy).toBeGreaterThan(level.iy);
     expect(grid.solidCubes(roof).length).toBeGreaterThan(0);
+  });
+
+  it('reaches past a cube already dug when pointed at the wall ahead', () => {
+    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
+    const grid = new DugGrid(terrain);
+    const spot = findFlatSpot(terrain);
+    const inside = { x: spot.x + 0.5, y: terrain.heightAt(spot.x, spot.z) - 3, z: spot.z + 0.5 };
+    // Facing -Z (yaw 0): the first cube ahead, floor and head, is dug already.
+    const first = planDig(inside, 0, false, grid);
+    grid.apply(first);
+    const head = planDig(inside, 0, false, grid);
+    grid.apply(head);
+    // Pointed straight ahead it takes the next cube along, not the one above or below.
+    const level = planDig(inside, 0, false, grid, 'level');
+    expect(level.iz).toBe(first.iz - 2);
+    expect(level.iy).toBe(first.iy);
+    // Pointed at head height it takes the cube above the floor, one further along.
+    const high = planDig(inside, 0, false, grid, 'head');
+    expect(high.iz).toBe(first.iz - 2);
+    expect(high.iy).toBe(first.iy + 2);
+    expect(grid.solidCubes(level).length).toBeGreaterThan(0);
   });
 
   it('digs nothing without the shovel in hand', () => {
