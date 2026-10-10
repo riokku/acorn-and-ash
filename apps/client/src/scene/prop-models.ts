@@ -23,6 +23,18 @@ import firCUrl from '@assets/trees/douglas-fir-c.glb?url';
 import firDistantUrl from '@assets/trees/douglas-fir-distant.glb?url';
 import firBDistantUrl from '@assets/trees/douglas-fir-b-distant.glb?url';
 import firCDistantUrl from '@assets/trees/douglas-fir-c-distant.glb?url';
+import mapleUrl from '@assets/trees/bigleaf-maple.glb?url';
+import mapleDistantUrl from '@assets/trees/bigleaf-maple-distant.glb?url';
+import mapleBUrl from '@assets/trees/bigleaf-maple-b.glb?url';
+import mapleBDistantUrl from '@assets/trees/bigleaf-maple-b-distant.glb?url';
+import mapleCUrl from '@assets/trees/bigleaf-maple-c.glb?url';
+import mapleCDistantUrl from '@assets/trees/bigleaf-maple-c-distant.glb?url';
+import alderUrl from '@assets/trees/red-alder.glb?url';
+import alderDistantUrl from '@assets/trees/red-alder-distant.glb?url';
+import alderBUrl from '@assets/trees/red-alder-b.glb?url';
+import alderBDistantUrl from '@assets/trees/red-alder-b-distant.glb?url';
+import alderCUrl from '@assets/trees/red-alder-c.glb?url';
+import alderCDistantUrl from '@assets/trees/red-alder-c-distant.glb?url';
 import boulderUrl from '@assets/rocks/boulder.glb?url';
 import mossyRockUrl from '@assets/rocks/mossyRock.glb?url';
 
@@ -39,6 +51,8 @@ const MODEL_URLS: Partial<Record<PropKindId, readonly string[]>> = {
   birch: [cedarUrl, cedarBUrl, cedarCUrl],
   oak: [spruceUrl, spruceBUrl, spruceCUrl],
   pine: [firUrl, firBUrl, firCUrl],
+  maple: [mapleUrl, mapleBUrl, mapleCUrl],
+  alder: [alderUrl, alderBUrl, alderCUrl],
   boulder: [boulderUrl],
   mossyRock: [mossyRockUrl],
 };
@@ -47,6 +61,8 @@ const DISTANT_URLS: Partial<Record<PropKindId, readonly string[]>> = {
   pine: [firDistantUrl, firBDistantUrl, firCDistantUrl],
   birch: [cedarDistantUrl, cedarBDistantUrl, cedarCDistantUrl],
   oak: [spruceDistantUrl, spruceBDistantUrl, spruceCDistantUrl],
+  maple: [mapleDistantUrl, mapleBDistantUrl, mapleCDistantUrl],
+  alder: [alderDistantUrl, alderBDistantUrl, alderCDistantUrl],
 };
 const distantParts = new Map<PropKindId, ModelPart[][]>();
 
@@ -72,6 +88,21 @@ export function treeFoliageMaterials(): THREE.MeshStandardMaterial[] {
   const found = new Set<THREE.MeshStandardMaterial>();
   for (const [id, shapes] of [...modelParts, ...distantParts]) {
     if (PROP_KINDS[id].shape.family !== 'tree') continue;
+    for (const list of shapes) {
+      for (const part of list) {
+        if (/bark/i.test(part.material.name)) continue;
+        if (part.material instanceof THREE.MeshStandardMaterial) found.add(part.material);
+      }
+    }
+  }
+  return [...found];
+}
+
+/** The leaf materials of the trees that turn in autumn and stand bare in winter. */
+export function deciduousFoliageMaterials(): THREE.MeshStandardMaterial[] {
+  const found = new Set<THREE.MeshStandardMaterial>();
+  for (const [id, shapes] of [...modelParts, ...distantParts]) {
+    if (!('deciduous' in PROP_KINDS[id])) continue;
     for (const list of shapes) {
       for (const part of list) {
         if (/bark/i.test(part.material.name)) continue;
@@ -161,7 +192,7 @@ function dressUp(id: PropKindId, parts: ModelPart[]): ModelPart[] {
         geometry: part.geometry,
         material: paintedMaterial('bark', {
           roughness: 1,
-          tint: id === 'birch' ? 0xdbb7a2 : 0xc0b5a9,
+          tint: id === 'birch' ? 0xdbb7a2 : id === 'alder' ? 0xe6e1d6 : 0xc0b5a9,
         }),
       };
     });

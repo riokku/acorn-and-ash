@@ -198,6 +198,8 @@ const SCENERY: readonly { kind: PropKindId; x: number; z: number; scale: number 
   { kind: 'pine', x: 1.5, z: -10, scale: 1.1 },
   { kind: 'pine', x: 4, z: -13, scale: 0.95 },
   { kind: 'oak', x: 15, z: -10, scale: 1.1 },
+  { kind: 'maple', x: -13, z: -8, scale: 1 },
+  { kind: 'alder', x: 9, z: -12, scale: 1 },
   { kind: 'boulder', x: 2.5, z: -4.5, scale: 1 },
   { kind: 'mossyRock', x: 5.8, z: -3.2, scale: 1 },
   { kind: 'stump', x: -6.5, z: 2.4, scale: 1 },
