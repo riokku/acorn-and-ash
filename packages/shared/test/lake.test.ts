@@ -407,7 +407,8 @@ describe('what stands on and beside the lake', () => {
       expect(same).toBeDefined();
       expect(same?.x).toBe(prop.x);
       expect(same?.z).toBe(prop.z);
-      expect(same?.kind).toBe(prop.kind);
+      // Beside the water a conifer may give way to an alder or a maple; nothing else changes kind.
+      if (same?.kind !== prop.kind) expect(['maple', 'alder']).toContain(same?.kind);
     }
   });
 

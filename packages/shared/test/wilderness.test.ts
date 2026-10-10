@@ -4,8 +4,19 @@ import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../src/constants';
 import { PROP_KINDS } from '../src/data/props';
 import { createFlatTerrain, createWildernessTerrain } from '../src/world/terrain';
 import { buildWilderness } from '../src/world/wilderness';
+import { distanceToWater } from '../src/world/broadleaf';
+import { LAKE } from '../src/world/lake';
+import { STREAM } from '../src/world/stream';
 
-const TREE_OR_ROCK_KINDS = new Set(['pine', 'birch', 'oak', 'boulder', 'mossyRock']);
+const TREE_OR_ROCK_KINDS = new Set([
+  'pine',
+  'birch',
+  'oak',
+  'maple',
+  'alder',
+  'boulder',
+  'mossyRock',
+]);
 
 describe('the generated wilderness', () => {
   it('is identical every time it is built from the same seed', () => {
@@ -70,5 +81,21 @@ describe('the generated wilderness', () => {
     const { props } = buildWilderness(4242, createFlatTerrain(0));
     expect(props.length).toBeGreaterThan(0);
     for (const prop of props) expect(prop.y).toBe(0);
+  });
+});
+
+describe('broadleaf trees', () => {
+  it('grow near the water, and alders stay closer to it than maples', () => {
+    const { props } = buildWilderness(4242, createWildernessTerrain(4242));
+    const alders = props.filter((prop) => prop.kind === 'alder');
+    const maples = props.filter((prop) => prop.kind === 'maple');
+    expect(alders.length).toBeGreaterThan(0);
+    expect(maples.length).toBeGreaterThan(0);
+    for (const prop of [...alders, ...maples]) {
+      expect(distanceToWater(LAKE, STREAM, prop.x, prop.z)).toBeLessThanOrEqual(48);
+    }
+    for (const prop of alders) {
+      expect(distanceToWater(LAKE, STREAM, prop.x, prop.z)).toBeLessThanOrEqual(14);
+    }
   });
 });
