@@ -41,6 +41,7 @@ import { FireLights } from '../scene/fire-light';
 import { createSatchel, createStickPileModel } from '../scene/pickup-models';
 import { createPond } from '../scene/pond';
 import { preloadPropModels } from '../scene/prop-models';
+import { treeVariant } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
@@ -430,10 +431,19 @@ function createGalleryGround(scenery: readonly PlacedProp[]): THREE.Mesh {
 }
 
 function addScenery(scene: THREE.Scene, scenery: readonly PlacedProp[]): void {
-  const byKind = new Map<PropKindId, PlacedProp[]>();
-  for (const prop of scenery) byKind.set(prop.kind, [...(byKind.get(prop.kind) ?? []), prop]);
-  for (const [kind, props] of byKind) {
-    const parts = createPropMeshes(PROP_KINDS[kind], props.length);
+  const byKind = new Map<string, PlacedProp[]>();
+  for (const prop of scenery) {
+    const key = `${prop.kind}:${treeVariant(prop)}`;
+    byKind.set(key, [...(byKind.get(key) ?? []), prop]);
+  }
+  for (const [key, props] of byKind) {
+    const [kind = '', variantText = '0'] = key.split(':');
+    const parts = createPropMeshes(
+      PROP_KINDS[kind as PropKindId],
+      props.length,
+      false,
+      Number(variantText),
+    );
     props.forEach((prop, index) => placeInstance(parts, index, prop));
     for (const part of parts) {
       part.mesh.instanceMatrix.needsUpdate = true;

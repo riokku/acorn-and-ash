@@ -8,11 +8,12 @@ await MeshoptDecoder.ready;
 const io = new NodeIO()
   .registerExtensions(ALL_EXTENSIONS)
   .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
+// Every species has three shapes: the plain name, then "-b" and "-c" (see tools/art/trees.py).
 for (const [species, height] of [
   ['douglas-fir', 14],
   ['western-redcedar', 12],
   ['sitka-spruce', 16],
-]) {
+].flatMap(([name, h]) => ['', '-b', '-c'].map((variant) => [`${name}${variant}`, h]))) {
   for (const suffix of ['', '-distant']) {
     const document = await io.read(
       fileURLToPath(new URL(`../assets/trees/${species}${suffix}.glb`, import.meta.url)),
