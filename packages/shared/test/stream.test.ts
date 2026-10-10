@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_WALKABLE_GRADIENT } from '../src/constants';
-import { LAKE, lakeDepthAt } from '../src/world/lake';
+import { LAKE, basinDepthAt, lakeDepthAt } from '../src/world/lake';
 import {
   isInStream,
   nearStream,
@@ -10,13 +10,17 @@ import {
   STREAM_KEEP_OUT,
   streamBedAt,
   streamDepthMiddle,
+  streamPoolDepthAt,
+  signedStreamAcross,
   streamHalfWidthAt,
   streamPointAt,
   streamSurfaceAt,
+  sloughSurfaceAt,
   streamWaterDepthAt,
   streamWaterHalfWidthAt,
 } from '../src/world/stream';
-import { createWildernessTerrain } from '../src/world/terrain';
+import { createWildernessTerrain, wildernessHeightAt } from '../src/world/terrain';
+import { createCollisionWorld, setLakeFrozen } from '../src/collision/capsule';
 import { buildEncounterSites } from '../src/world/encounters';
 import { buildTestClearing } from '../src/world/clearing';
 import { buildWilderness } from '../src/world/wilderness';
@@ -37,6 +41,119 @@ function pointAlong(along: number): { x: number; z: number } {
 }
 
 describe('the stream', () => {
+  it('supports every exposed slough rim above water and ice even where the hillside falls away', () => {
+    const withoutSloughs = { ...STREAM, sloughs: [] };
+    for (const seed of [1, 42, 1234, 98765]) {
+      const ground = createWildernessTerrain(seed);
+      for (const slough of STREAM.sloughs) {
+        for (const circle of slough.basin) {
+          for (let step = 0; step < 64; step++) {
+            const angle = (step / 64) * Math.PI * 2;
+            const x = circle.x + Math.cos(angle) * circle.radius;
+            const z = circle.z + Math.sin(angle) * circle.radius;
+            // Overlapping lobes and river mouths are water, not exposed banks.
+            if (STREAM.sloughs.some((pool) => basinDepthAt(pool, x, z) > 0.02)) continue;
+            if (isInStream(STREAM, x, z, -1)) continue;
+            // Placement itself must fit the valley, rather than needing a
+            // tall artificial platform to hold the pool over a hillside.
+            expect(wildernessHeightAt(seed, x, z, LAKE, withoutSloughs)).toBeGreaterThan(
+              sloughSurfaceAt(STREAM, slough, x, z) - 0.75,
+            );
+            expect(ground.heightAt(x, z)).toBeGreaterThan(
+              sloughSurfaceAt(STREAM, slough, x, z) + 0.05,
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('raises the shared walking surface to river and slough ice, and restores the floor on thaw', () => {
+    const collision = createCollisionWorld(terrain, [], undefined, LAKE, false, STREAM);
+    setLakeFrozen(collision, true);
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      expect(collision.terrain.heightAt(pool.x, pool.z)).toBeCloseTo(
+        sloughSurfaceAt(STREAM, slough, pool.x, pool.z) + 0.05,
+        6,
+      );
+    }
+    const river = pointAlong(STREAM.length * 0.6);
+    const at = nearestOnStream(STREAM, river.x, river.z, 1)!;
+    expect(collision.terrain.heightAt(river.x, river.z)).toBeCloseTo(
+      streamSurfaceAt(STREAM, at.along) + 0.05,
+      6,
+    );
+    setLakeFrozen(collision, false);
+    expect(collision.terrain.heightAt(river.x, river.z)).toBe(terrain.heightAt(river.x, river.z));
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      expect(collision.terrain.heightAt(pool.x, pool.z)).toBe(terrain.heightAt(pool.x, pool.z));
+    }
+  });
+  it('gives each visual slough a shallow floor and keeps props and building out of its water', () => {
+    expect(STREAM.sloughs).toHaveLength(6);
+    for (const slough of STREAM.sloughs) {
+      for (const circle of slough.basin) {
+        const depth =
+          sloughSurfaceAt(STREAM, slough, circle.x, circle.z) -
+          terrain.heightAt(circle.x, circle.z);
+        expect(depth).toBeGreaterThan(0.1);
+        if (!isInStream(STREAM, circle.x, circle.z)) expect(depth).toBeLessThan(0.6);
+        expect(nearStream(STREAM, circle.x, circle.z, 1.2)).toBe(true);
+        expect(STREAM_KEEP_OUT).toContainEqual(circle);
+      }
+      // The pool itself remains scenery; its neck overlaps the river's water.
+      const pool = slough.basin[0]!;
+      expect(isInStream(STREAM, pool.x, pool.z)).toBe(false);
+      const river = nearestOnStream(STREAM, pool.x, pool.z, 30)!;
+      for (let step = 0; step <= 40; step++) {
+        const t = step / 40;
+        const x = river.x + (pool.x - river.x) * t;
+        const z = river.z + (pool.z - river.z) * t;
+        expect(isInStream(STREAM, x, z) || lakeDepthAt(slough, x, z) > 0).toBe(true);
+        // No strip of dry bank may block the connected water.
+        expect(terrain.heightAt(x, z)).toBeLessThan(sloughSurfaceAt(STREAM, slough, x, z) - 0.05);
+      }
+      // The connection stays open across a six-metre span, not just its centreline.
+      const outwardX = (pool.x - river.x) / river.distance;
+      const outwardZ = (pool.z - river.z) / river.distance;
+      const mouthAcross = streamWaterHalfWidthAt(STREAM, river.along) + 0.7;
+      for (const sideways of [-3, 0, 3]) {
+        const x = river.x + outwardX * mouthAcross - outwardZ * sideways;
+        const z = river.z + outwardZ * mouthAcross + outwardX * sideways;
+        expect(lakeDepthAt(slough, x, z)).toBeGreaterThan(0.5);
+        expect(terrain.heightAt(x, z)).toBeLessThan(sloughSurfaceAt(STREAM, slough, x, z) - 0.05);
+      }
+    }
+  });
+
+  it('slopes the sloughs downhill with the river and keeps their floors below the water', () => {
+    for (const slough of STREAM.sloughs) {
+      const pool = slough.basin[0]!;
+      const grade = Math.hypot(slough.slopeX, slough.slopeZ);
+      expect(grade).toBeGreaterThan(0.001);
+      const dx = (slough.slopeX / grade) * 2;
+      const dz = (slough.slopeZ / grade) * 2;
+      const high = sloughSurfaceAt(STREAM, slough, pool.x + dx, pool.z + dz);
+      const low = sloughSurfaceAt(STREAM, slough, pool.x - dx, pool.z - dz);
+      expect(high - low).toBeCloseTo(grade * 4, 2);
+      for (let x = pool.x - pool.radius; x <= pool.x + pool.radius; x += 0.5) {
+        for (let z = pool.z - pool.radius; z <= pool.z + pool.radius; z += 0.5) {
+          if (lakeDepthAt(slough, x, z) < 0.8) continue;
+          expect(sloughSurfaceAt(STREAM, slough, x, z) - terrain.heightAt(x, z)).toBeGreaterThan(
+            0.1,
+          );
+        }
+      }
+      const mouth = nearestOnStream(STREAM, pool.x, pool.z, 30)!;
+      expect(sloughSurfaceAt(STREAM, slough, mouth.x, mouth.z)).toBeCloseTo(
+        streamSurfaceAt(STREAM, mouth.along),
+        6,
+      );
+    }
+  });
+
   it('starts on the mountain and ends at the lake', () => {
     const spring = streamPointAt(STREAM, 0);
     const mouth = streamPointAt(STREAM, STREAM.count - 1);
@@ -78,11 +195,17 @@ describe('the stream', () => {
     expect(streamPointAt(STREAM, 10)).toEqual(streamPointAt(STREAM, 10));
   });
 
-  it('is shallow enough to wade across everywhere', () => {
+  it('keeps the ordinary reaches shallow while adding deeper pools', () => {
     for (const along of samples(1.5)) {
       const at = pointAlong(along);
       const depth = streamWaterDepthAt(STREAM, at.x, at.z);
-      expect(depth).toBeLessThan(0.6);
+      const spot = nearestOnStream(STREAM, at.x, at.z, 1)!;
+      const pool = streamPoolDepthAt(
+        STREAM,
+        spot.along,
+        signedStreamAcross(STREAM, spot, at.x, at.z),
+      );
+      expect(depth - pool).toBeLessThan(0.6);
     }
   });
 
@@ -102,7 +225,9 @@ describe('the stream', () => {
       const ground = terrain.heightAt(at.x, at.z);
       const surface = streamSurfaceAt(STREAM, along);
       expect(surface - ground).toBeGreaterThan(0.1);
-      expect(surface - ground).toBeLessThan(streamDepthMiddle(STREAM, along) + 0.35);
+      expect(surface - ground).toBeLessThan(
+        streamDepthMiddle(STREAM, along) + streamPoolDepthAt(STREAM, along, 0) + 0.4,
+      );
     }
   });
 
@@ -118,6 +243,8 @@ describe('the stream', () => {
       const surface = streamSurfaceAt(STREAM, along);
       const side = nearestSide(at.x, at.z, along, half * 1.3 + 0.3);
       if (side === null) continue;
+      // At a slough opening this former bank is intentionally open water.
+      if (STREAM.sloughs.some((slough) => lakeDepthAt(slough, side.x, side.z) > 0)) continue;
       expect(terrain.heightAt(side.x, side.z)).toBeGreaterThanOrEqual(
         surface - 0.15 - STREAM_FALL_SLACK(along),
       );

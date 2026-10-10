@@ -47,6 +47,7 @@ export function addLilyPad(
   size: number,
   angle: number,
   flower: 'white' | 'pink' | null,
+  surfaceHeightAt: (x: number, z: number) => number = () => at.y,
 ): void {
   const notch = 0.5;
   const top = new THREE.CircleGeometry(size, 12, notch / 2, Math.PI * 2 - notch);
@@ -54,6 +55,17 @@ export function addLilyPad(
   const under = new THREE.CircleGeometry(size * 1.03, 12, notch / 2, Math.PI * 2 - notch);
   under.rotateX(-Math.PI / 2);
   const turn = { y: angle * 2.7 };
+  for (const geometry of [top, under]) {
+    const positions = geometry.getAttribute('position');
+    for (let vertex = 0; vertex < positions.count; vertex++) {
+      const x = positions.getX(vertex);
+      const z = positions.getZ(vertex);
+      const worldX = at.x + Math.cos(turn.y) * x + Math.sin(turn.y) * z;
+      const worldZ = at.z - Math.sin(turn.y) * x + Math.cos(turn.y) * z;
+      positions.setY(vertex, surfaceHeightAt(worldX, worldZ) - at.y);
+    }
+    geometry.computeVertexNormals();
+  }
   builder.add(materials.pad, top, placed(at.x, at.y + 0.012, at.z, turn));
   builder.add(materials.padUnder, under, placed(at.x, at.y + 0.006, at.z, turn));
   if (flower === null) return;

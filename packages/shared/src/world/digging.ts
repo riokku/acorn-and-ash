@@ -17,28 +17,48 @@
  */
 
 import { PLAYER_HEIGHT } from '../constants';
+
+/** How far below the ground, in metres, somebody in a hole counts as out of sight even with the sky open above. */
+const SHELTER_DEPTH = 2.5;
 import type { Terrain } from './terrain';
 
 /** Metres along one side of a cube. */
 export const VOXEL = 0.5;
 
-/** A slab is this many cubes long (the way it was dug), wide and tall. */
+/**
+ * A dig is one metre cube: this many 0.5 m cubes along each side, the same in
+ * every direction. Horizontally a dig sits on the whole-metre grid (its
+ * `ix` and `iz` are even) so neighbouring digs tile with no slivers between.
+ */
+export const DIG_CUBE = 2;
+
+/**
+ * The first digs ever made (decision 0114, step 4) were slabs, 1 m long, 1.5 m
+ * wide and 2 m tall, in the way the player faced. Worlds saved with those keep
+ * them exactly as they were: a dig whose `dir` is 0 to 3 is a slab.
+ */
 export const SLAB_LENGTH = 2;
 export const SLAB_WIDTH = 3;
 export const SLAB_HEIGHT = 4;
 
-/** The four ways a tunnel can be dug: +X, +Z, -X, -Z. */
+/** The four ways a tunnel can be aimed: +X, +Z, -X, -Z. */
 export const DIG_DIRECTIONS = [
   { x: 1, z: 0 },
   { x: 0, z: 1 },
   { x: -1, z: 0 },
   { x: 0, z: -1 },
 ] as const;
-export type DigDirection = 0 | 1 | 2 | 3;
+/** 0 to 3 are the old slabs, running that way; 4 is a one-metre cube. */
+export type AimDirection = 0 | 1 | 2 | 3;
+export type DigDirection = AimDirection | 4;
+/** The `dir` of a one-metre cube dig. */
+export const CUBE_DIG = 4 as const;
 
-/** One swing of the shovel: where the slab starts and which way it runs. */
+/**
+ * One swing of the shovel. A cube dig (`dir` 4) starts at its lowest, lowest
+ * -X, lowest -Z cube. An old slab starts from the back-centre of its floor.
+ */
 export interface Dig {
-  /** The cube the slab starts from: back-centre of its floor. */
   readonly ix: number;
   readonly iy: number;
   readonly iz: number;
@@ -61,13 +81,23 @@ export function voxelIndex(metres: number): number {
 }
 
 /** The cube nearest facing direction `yaw` turned into one of the four ways. */
-export function digDirectionFromYaw(forwardX: number, forwardZ: number): DigDirection {
+export function digDirectionFromYaw(forwardX: number, forwardZ: number): AimDirection {
   if (Math.abs(forwardX) >= Math.abs(forwardZ)) return forwardX >= 0 ? 0 : 2;
   return forwardZ >= 0 ? 1 : 3;
 }
 
 /** Every cube a dig covers, in a fixed order. */
 export function digVoxels(dig: Dig): Array<{ ix: number; iy: number; iz: number }> {
+  if (dig.dir === CUBE_DIG) {
+    const cubes: Array<{ ix: number; iy: number; iz: number }> = [];
+    for (let x = 0; x < DIG_CUBE; x++) {
+      for (let z = 0; z < DIG_CUBE; z++) {
+        for (let y = 0; y < DIG_CUBE; y++)
+          cubes.push({ ix: dig.ix + x, iy: dig.iy + y, iz: dig.iz + z });
+      }
+    }
+    return cubes;
+  }
   const forward = DIG_DIRECTIONS[dig.dir];
   const sideX = -forward.z;
   const sideZ = forward.x;
@@ -120,6 +150,24 @@ export class DugGrid {
   isUnderground(ix: number, iy: number, iz: number): boolean {
     const surface = this.terrain.heightAt((ix + 0.5) * VOXEL, (iz + 0.5) * VOXEL);
     return (iy + 0.5) * VOXEL < surface;
+  }
+
+  /**
+   * Whether a body with its feet here is shut away underground: in a dug-out
+   * space with solid ground over its head, or far enough down a hole that
+   * nothing standing at its edge can see or reach it. Standing at the mouth of
+   * a shallow hole, open to the sky, is not.
+   */
+  isSheltered(x: number, feetY: number, z: number): boolean {
+    const ix = Math.floor(x / VOXEL);
+    const iz = Math.floor(z / VOXEL);
+    if (!this.hasColumn(ix, iz)) return false;
+    const surface = this.terrain.heightAt(x, z);
+    if (surface - feetY > SHELTER_DEPTH) return true;
+    const above = voxelIndex(feetY + PLAYER_HEIGHT) + 1;
+    for (let iy = above; (iy + 0.5) * VOXEL < surface; iy++)
+      if (this.isSolid(ix, iy, iz)) return true;
+    return false;
   }
 
   /** Whether this cube is still solid ground. */

@@ -213,7 +213,8 @@ import {
 } from '../world/home';
 import { BOAT_ICE_STEP_OUT } from '../world/boat';
 import { LAKE, lakeDepthAt } from '../world/lake';
-import { STREAM_KEEP_OUT } from '../world/stream';
+import { navigableWaterSurfaceAt } from '../world/navigable-water';
+import { STREAM, STREAM_KEEP_OUT } from '../world/stream';
 import {
   beachedBoat,
   boatSalvage,
@@ -223,6 +224,7 @@ import {
   landingFrom,
   riderFacingFor,
   stepBoat,
+  driftBoat,
 } from './rowing';
 import {
   isReedPatch,
@@ -233,8 +235,27 @@ import {
   reedRegrowSpot,
 } from '../world/reeds';
 import { buildMountainRockSpots, isMountainPatch } from '../world/mountain-rocks';
-import { DugGrid, type Dig } from '../world/digging';
-import { DIG_MAX_COUNT, digRefusal, digYield, planDig } from './digging';
+import { CUBE_DIG, DIG_CUBE, DugGrid, type Dig } from '../world/digging';
+import {
+  SUPPORT_MAX_COUNT,
+  checkSupportCell,
+  supportInReach,
+  type Support,
+  type SupportCell,
+} from '../world/supports';
+import {
+  DIG_MAX_COUNT,
+  DIG_REACH_METERS,
+  DIG_REACH_SLACK,
+  digInReach,
+  digRefusal,
+  digYield,
+  planDig,
+  type DigRefusalReason,
+} from './digging';
+
+/** How long a cube the mouse was on stays good, in ticks: the browser repeats it every second. */
+const DIG_TARGET_TICKS = 3 * TICK_HZ;
 import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
@@ -591,8 +612,7 @@ export interface BuiltProp {
   readonly kind: BuildableKindId;
   /**
    * Where it stands. Fixed for everything except a rowboat, which is carried
-   * across the lake by whoever rows it and stays wherever it was left (see
-   * decision 0093) - only `WorldSimulation.carryBoat` ever changes these.
+   * by its rider or the river current (see decisions 0093 and 0121).
    */
   x: number;
   z: number;
@@ -938,6 +958,11 @@ interface PlayerRuntime {
    * click.
    */
   swingWasHeld: boolean;
+  /**
+   * The cube the player's mouse was on when last they said (see `setDigTarget`),
+   * and the tick it arrived: what a swing of the shovel digs while it is fresh.
+   */
+  digTarget: { readonly ix: number; readonly iy: number; readonly iz: number; tick: number } | null;
   /**
    * Whether interact was down in the last input - same idea as `swingWasHeld`.
    * Picking up, gathering and digging up a cache are all happy with a held
@@ -1510,6 +1535,8 @@ export class WorldSimulation {
   private readonly gatherEvents: number[] = [];
   private readonly collectionEvents: CollectedEvent[] = [];
   private readonly pickupRefusals: PickupRefusal[] = [];
+  /** Shovel swings that made no hole, for the digger to be told why. */
+  private readonly digRefusals: { netId: number; reason: DigRefusalReason }[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
   /** Patches gathered from, grown back or moved since this was last asked, by id. */
@@ -1539,6 +1566,7 @@ export class WorldSimulation {
   private readonly buildEvents: BuildEvent[] = [];
   /** Rowboats somebody climbed into or out of since this was last asked, by built-prop id. */
   private readonly boatChanges = new Set<number>();
+  private readonly driftingBoats = new Set<number>();
   private readonly brokenBoats: number[] = [];
   /** Whole days the calendar is pushed on, to look at a season while testing (decision 0095). */
   private calendarShiftMs = 0;
@@ -1583,6 +1611,9 @@ export class WorldSimulation {
   readonly dug: DugGrid;
   /** Digs made since the server last told everybody and saved them. */
   private readonly digNews: Dig[] = [];
+  /** Mine supports standing in tunnels (decision 0119), and those not yet saved and sent. */
+  private readonly supports: Support[] = [];
+  private readonly supportNews: Support[] = [];
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
@@ -1631,6 +1662,7 @@ export class WorldSimulation {
       PLAYABLE_HALF_EXTENT,
       LAKE,
       true,
+      STREAM,
     );
     this.dug = new DugGrid(terrain);
     this.collision.dug = this.dug;
@@ -1851,6 +1883,7 @@ export class WorldSimulation {
       ),
       swingCooldownTicks: 0,
       swingWasHeld: false,
+      digTarget: null,
       interactWasHeld: false,
       pickupRefused: false,
       pendingBuild: null,
@@ -2019,6 +2052,27 @@ export class WorldSimulation {
     const plots = gardenFromSaved(saved),
       home = this.builtPropsById.get(homeId);
     if (plots !== null && home?.kind === 'largeCabin') this.homeGardens.set(homeId, plots);
+  }
+
+  /**
+   * Say which cube of ground the player's mouse is on (decision 0114), or
+   * nothing. The browser works it out from what the cursor touches; the server
+   * only keeps it for a few seconds and still checks it when a swing lands:
+   * in reach, allowed, and solid.
+   */
+  setDigTarget(netId: number, target: { ix: number; iy: number; iz: number } | null): void {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return;
+    const sensible =
+      target !== null &&
+      Number.isInteger(target.ix) &&
+      Number.isInteger(target.iy) &&
+      Number.isInteger(target.iz) &&
+      Math.abs(target.ix) < 2000 &&
+      Math.abs(target.iz) < 2000 &&
+      target.iy > -400 &&
+      target.iy < 1000;
+    runtime.digTarget = sensible ? { ...target, tick: this.tick } : null;
   }
 
   /** Ask for a specific loot target, validated at the next simulation tick. */
@@ -2420,6 +2474,7 @@ export class WorldSimulation {
         this.queueHungerEvent(runtime, null);
       });
 
+    this.driftUnoccupiedBoats();
     this.stepAnimals();
     this.refreshFighters();
     this.raids.step(this.tick, isNight(dayProgress(nowMs)));
@@ -2448,7 +2503,9 @@ export class WorldSimulation {
         position,
         aimYaw: runtime.entity.get(AimYaw)?.yaw ?? 0,
         action,
-        outdoors: runtime.space === OUTDOORS,
+        // Shut away underground counts as out of reach, the same as being indoors.
+        outdoors:
+          runtime.space === OUTDOORS && !this.dug.isSheltered(position.x, position.y, position.z),
         down: isDown(action),
       });
     }
@@ -3148,6 +3205,10 @@ export class WorldSimulation {
     return this.collectionEvents.splice(0);
   }
 
+  drainDigRefusals(): { netId: number; reason: DigRefusalReason }[] {
+    return this.digRefusals.splice(0);
+  }
+
   drainPickupRefusals(): PickupRefusal[] {
     return this.pickupRefusals.splice(0);
   }
@@ -3639,7 +3700,9 @@ export class WorldSimulation {
    * nothing here having to notice and clear the field itself.
    */
   private isActiveItem(runtime: PlayerRuntime, item: ItemId): boolean {
-    if (item === 'axe' || item === 'rod')
+    // The shovel counts however it is held, chosen from the pack or worn in
+    // the main hand, the same as the swing animation shows.
+    if (item === 'axe' || item === 'rod' || item === 'shovel')
       return toolKind(this.equippedItemOf(runtime.netId)) === item;
     return runtime.equippedItem === item && hasItem(runtime.inventory, item);
   }
@@ -3688,6 +3751,7 @@ export class WorldSimulation {
     return {
       canAttack,
       castInstead,
+      digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot and no line in the water.
       canSit: grounded && runtime.cast === null,
       dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
@@ -3753,8 +3817,9 @@ export class WorldSimulation {
   }
 
   /**
-   * One swing of the shovel: carve the slab of ground ahead (a light swing,
-   * level) or a half-metre lower (a charged one, down a ramp), keep what it
+   * One swing of the shovel: carve the metre cube of ground ahead (a light
+   * swing, level, or the cube above once that is open) or a half-metre lower
+   * (a charged one, down a ramp), keep what it
    * turns up, and tell everybody. Returns false when there was nothing to dig
    * or it is not allowed, so the swing can still be for an animal.
    */
@@ -3764,24 +3829,41 @@ export class WorldSimulation {
     aimYaw: number,
     down: boolean,
   ): boolean {
-    const dig = planDig(position, aimYaw, down);
+    // Where the mouse is, if it said so lately; otherwise the way the player faces.
+    const target = runtime.digTarget;
+    const chosen =
+      target !== null && this.tick - target.tick <= DIG_TARGET_TICKS
+        ? ({ ix: target.ix, iy: target.iy, iz: target.iz, dir: CUBE_DIG } as const)
+        : null;
+    if (chosen !== null && !digInReach(position, chosen, DIG_REACH_SLACK)) {
+      this.digRefusals.push({ netId: runtime.netId, reason: 'far' });
+      return false;
+    }
+    const dig = chosen ?? planDig(position, aimYaw, down, this.dug);
     const near = (x: number, z: number, margin: number): boolean =>
       overlapsWater(this.keepOutWater, x, z, margin);
-    if (digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps) !== null)
+    const refusal = digRefusal(dig, this.dug, this.collision.terrain, near, this.builtProps);
+    if (refusal !== null) {
+      this.digRefusals.push({ netId: runtime.netId, reason: refusal });
       return false;
+    }
     const solid = this.dug.solidCubes(dig).length;
-    if (solid === 0) return false;
+    if (solid === 0) {
+      this.digRefusals.push({ netId: runtime.netId, reason: 'nothing' });
+      return false;
+    }
     const x = (dig.ix + 0.5) * 0.5;
     const z = (dig.iz + 0.5) * 0.5;
-    const found = digYield(this.seed, dig, solid, this.collision.terrain.heightAt(x, z));
-    // A full pack stops the dig, rather than throwing the ground away.
-    const first = found[0]!;
-    if (roomFor(runtime.inventory, first.item) === 0) return this.refusePickup(runtime, first.item);
+    const found = digYield(this.seed, dig, this.collision.terrain.heightAt(x, z));
+    // Digging never waits on the pack: a find that has nowhere to go is only a pity.
     this.dug.apply(dig);
     this.digNews.push(dig);
     for (const { item, count } of found) {
       const taken = addItem(runtime.inventory, item, count);
-      if (taken === 0) continue;
+      if (taken === 0) {
+        this.digRefusals.push({ netId: runtime.netId, reason: 'packFull' });
+        continue;
+      }
       this.collectionEvents.push({
         netId: runtime.netId,
         item,
@@ -3791,7 +3873,7 @@ export class WorldSimulation {
         depleted: false,
       });
     }
-    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: null });
+    // No gesture to send: the dig swing is itself the animation (see DIG_SWING).
     return true;
   }
 
@@ -3816,8 +3898,77 @@ export class WorldSimulation {
         Math.abs(dig.ix) < 2000 &&
         Math.abs(dig.iz) < 2000 &&
         dig.dir >= 0 &&
-        dig.dir <= 3;
+        dig.dir <= 4;
       if (sensible) this.dug.apply(dig);
+    }
+  }
+
+  /**
+   * Stand a mine support in a tunnel (decision 0119), using up one from the
+   * pack. Everything is checked here, not trusted from the browser: the player
+   * holds one, it is within reach, and the cell really is a roofed tunnel a
+   * metre wide. A refusal is told to the player alone, the way a dig is.
+   */
+  placeSupport(netId: number, cell: SupportCell): boolean {
+    const runtime = this.players.get(netId);
+    const position = runtime?.entity.get(Position);
+    if (runtime === undefined || position === undefined || runtime.space !== OUTDOORS) return false;
+    if (isDown(runtime.action)) return false;
+    if (this.equippedItemOf(netId) !== 'mineSupport' || !hasItem(runtime.inventory, 'mineSupport'))
+      return false;
+    const sensible =
+      Number.isInteger(cell.ix) &&
+      Number.isInteger(cell.iy) &&
+      Number.isInteger(cell.iz) &&
+      cell.ix % DIG_CUBE === 0 &&
+      cell.iz % DIG_CUBE === 0 &&
+      Math.abs(cell.ix) < 2000 &&
+      Math.abs(cell.iz) < 2000;
+    if (!sensible) return false;
+    if (!supportInReach(position, cell, DIG_REACH_METERS + DIG_REACH_SLACK)) {
+      this.digRefusals.push({ netId, reason: 'far' });
+      return false;
+    }
+    const fit = checkSupportCell(this.dug, cell, this.supports);
+    if ('refusal' in fit) {
+      this.digRefusals.push({ netId, reason: fit.refusal });
+      return false;
+    }
+    if (this.supports.length >= SUPPORT_MAX_COUNT) {
+      this.digRefusals.push({ netId, reason: 'full' });
+      return false;
+    }
+    const support: Support = { ix: cell.ix, iy: cell.iy, iz: cell.iz, axis: fit.axis };
+    const wasHolding = this.equippedItemOf(netId);
+    removeItem(runtime.inventory, 'mineSupport');
+    if (wasHolding !== this.equippedItemOf(netId)) this.equipEvents.push(netId);
+    this.supports.push(support);
+    this.supportNews.push(support);
+    return true;
+  }
+
+  /** Every mine support standing, oldest first: what a joining browser replays and the world saves. */
+  supportsList(): readonly Support[] {
+    return this.supports;
+  }
+
+  /** The supports stood since this was last asked, so they can be saved and sent. */
+  drainSupportNews(): Support[] {
+    return this.supportNews.splice(0);
+  }
+
+  /** Put saved supports back after the world wakes. Anything that no longer makes sense is ignored. */
+  restoreSupports(saved: Iterable<Support>): void {
+    for (const support of saved) {
+      if (this.supports.length >= SUPPORT_MAX_COUNT) break;
+      const sensible =
+        Number.isInteger(support.ix) &&
+        Number.isInteger(support.iy) &&
+        Number.isInteger(support.iz) &&
+        Math.abs(support.ix) < 2000 &&
+        Math.abs(support.iz) < 2000 &&
+        (support.axis === 0 || support.axis === 1);
+      if (sensible) this.supports.push(support);
     }
   }
 
@@ -3912,7 +4063,7 @@ export class WorldSimulation {
     runtime.interactSpent = true;
     this.boatChanges.add(nearest.id);
     motion.position.x = nearest.x;
-    motion.position.y = LAKE.level;
+    motion.position.y = navigableWaterSurfaceAt(nearest.x, nearest.z);
     motion.position.z = nearest.z;
     motion.velocity.x = 0;
     motion.velocity.y = 0;
@@ -3984,7 +4135,7 @@ export class WorldSimulation {
     return runtime.boatId === null ? undefined : this.builtPropsById.get(runtime.boatId);
   }
 
-  /** Nobody is rowing this boat any more: it stays where it is. */
+  /** Nobody is rowing this boat any more: the water may carry it downstream. */
   private releaseBoat(runtime: PlayerRuntime, boat: BuiltProp): void {
     delete boat.rower;
     runtime.boatId = null;
@@ -4061,6 +4212,8 @@ export class WorldSimulation {
     this.lakeUnchecked = false;
     const frozen = lakeIsFrozen(this.calendar());
     if (frozen === this.lakeFrozen) return;
+    for (const id of this.driftingBoats) this.boatChanges.add(id);
+    this.driftingBoats.clear();
     this.lakeFrozen = frozen;
     this.lakeFreezeChange = frozen;
     setLakeFrozen(this.collision, frozen);
@@ -4095,7 +4248,19 @@ export class WorldSimulation {
   private washAshore(runtime: PlayerRuntime): void {
     const position = runtime.entity.get(Position);
     if (position === undefined || runtime.space !== OUTDOORS) return;
-    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) return;
+    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) {
+      const safe = {
+        x: position.x,
+        y: this.collision.terrain.heightAt(position.x, position.z),
+        z: position.z,
+      };
+      if (resolveCapsule(safe, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision)) {
+        safe.y = this.collision.terrain.heightAt(safe.x, safe.z);
+        runtime.entity.set(Position, safe);
+        runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
+      }
+      return;
+    }
     const shore = landingBeside(position.x, position.z);
     runtime.entity.set(Position, {
       x: shore.x,
@@ -4110,6 +4275,19 @@ export class WorldSimulation {
     const change = this.lakeFreezeChange;
     this.lakeFreezeChange = null;
     return change;
+  }
+
+  /** Move free hulls every tick; publish/persist positions once a second. */
+  private driftUnoccupiedBoats(): void {
+    if (this.lakeFrozen) return;
+    for (const boat of this.builtProps) {
+      if (boat.kind !== 'rowboat' || boat.rower !== undefined || boat.locked === true) continue;
+      if (driftBoat(boat, TICK_SECONDS)) this.driftingBoats.add(boat.id);
+    }
+    if (this.tick % TICK_HZ === 0) {
+      for (const id of this.driftingBoats) this.boatChanges.add(id);
+      this.driftingBoats.clear();
+    }
   }
 
   /**

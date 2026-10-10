@@ -81,6 +81,8 @@ export const RECIPES: Partial<Record<ItemId, Recipe>> = {
       { item: 'stone', amount: 3 },
     ],
   },
+  // Posts and a beam cut from logs, by hand: shoring up a tunnel (decision 0119).
+  mineSupport: { result: 'mineSupport', costs: [{ item: 'log', amount: 3 }] },
   // Twisted by hand from reeds cut at the lake, so rope is never behind a tool
   // or a station. It is what the rowboat is lashed together with.
   rope: { result: 'rope', costs: [{ item: 'reed', amount: 3 }] },

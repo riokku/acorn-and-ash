@@ -85,3 +85,22 @@ export function instantiateAnimatedModel(template: AnimatedModel): AnimatedModel
   const actions = template.clips.map((clip) => mixer.clipAction(clip));
   return { root, mixer, actions };
 }
+
+/**
+ * Loads a glTF/glb made of loose pieces and hands back each one's geometry by
+ * the name it has in Blender, with its node placement baked in, exactly as
+ * authored (no re-scaling or re-grounding, unlike `loadScaledModel`). For
+ * kits whose pieces the game copies into larger meshes itself.
+ */
+export async function loadNamedGeometries(url: string): Promise<Map<string, THREE.BufferGeometry>> {
+  const gltf = await loader.loadAsync(url);
+  const pieces = new Map<string, THREE.BufferGeometry>();
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const geometry = child.geometry.clone();
+    geometry.applyMatrix4(child.matrixWorld);
+    pieces.set(child.name, geometry);
+  });
+  return pieces;
+}

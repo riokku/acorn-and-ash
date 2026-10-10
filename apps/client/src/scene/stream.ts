@@ -3,17 +3,27 @@ import * as THREE from 'three/webgpu';
 import {
   STREAM_STONES_PER_100M,
   streamBedAt,
+  streamWaterDepthAt,
   streamFallGradientAt,
   streamPointAt,
   streamSurfaceAt,
   streamWaterHalfWidthAt,
+  lakeDepthAt,
+  basinDepthAt,
+  isInStream,
+  nearestOnStream,
+  sloughSurfaceAt,
+  smoothstep,
   type Stream,
   type Terrain,
 } from '@acorn/shared';
 
-import { createStreamMaterial, paintedMaterial } from '../art/materials';
+import { createIceMaterial, createStreamMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
+import { createLakeScene } from './lake';
+import { addReedClump, waterPlantMaterials } from './water-plants';
+import { buryGeometryBase } from './prop-grounding';
 
 /** The ribbon of water is this many vertices across: more makes the edges follow the bank's curve better. */
 const ACROSS = 7;
@@ -36,11 +46,24 @@ const FALL_PACE = 2.6;
 export function createStreamScene(
   stream: Stream,
   terrain: Terrain,
-): { group: THREE.Group; dispose(): void } {
+): { group: THREE.Group; setFrozen(frozen: boolean): void; dispose(): void } {
   const group = new THREE.Group();
   group.name = 'stream';
 
-  const material = createStreamMaterial();
+  const connections = stream.sloughs.map((slough) => {
+    const pool = slough.basin[0]!;
+    const mouth = nearestOnStream(stream, pool.x, pool.z, 30)!;
+    const mouthRow = Math.round(mouth.along / (stream.length / (stream.count - 1)));
+    return [-4, -2, 0, 2, 4].map((offset) => {
+      const row = Math.max(0, Math.min(stream.count - 1, mouthRow + offset));
+      const along = row * (stream.length / (stream.count - 1));
+      return { ...streamPointAt(stream, row), radius: streamWaterHalfWidthAt(stream, along) };
+    });
+  });
+  const material = createStreamMaterial(
+    stream.sloughs.flatMap((slough) => slough.basin),
+    connections.flat(),
+  );
   const ribbon = ribbonGeometry(stream);
   const mesh = new THREE.Mesh(ribbon, material);
   mesh.name = 'stream-water';
@@ -48,29 +71,176 @@ export function createStreamScene(
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
   group.add(mesh);
+  const iceMaterial = createIceMaterial();
+  const ice = new THREE.Mesh(ribbon, iceMaterial);
+  ice.name = 'stream-ice';
+  ice.position.y = 0.05;
+  ice.receiveShadow = true;
+  ice.visible = false;
+  group.add(ice);
 
   const stones = createStones(stream, terrain);
   group.add(stones.group);
+  const reeds = createBankReeds(stream, terrain);
+  group.add(reeds.group);
+  const sloughs = stream.sloughs.map((slough, index) => {
+    const scene = createLakeScene(
+      slough,
+      (x, z) => isInStream(stream, x, z, -0.3),
+      (x, z) => sloughSurfaceAt(stream, slough, x, z),
+      connections[index],
+      (x, z) => {
+        const spot = nearestOnStream(stream, x, z, 24);
+        if (spot === null) return { x: 0, z: 0, share: 0 };
+        const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+        const before = streamPointAt(stream, Math.max(0, row - 1));
+        const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+        const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+        const steep = Math.min(streamFallGradientAt(stream, spot.along) / FULL_FOAM_GRADIENT, 1);
+        const pace = 1 + steep * (FALL_PACE - 1);
+        const half = streamWaterHalfWidthAt(stream, spot.along);
+        return {
+          x: ((after.x - before.x) / size) * pace,
+          z: ((after.z - before.z) / size) * pace,
+          share: 1 - smoothstep(spot.distance, half + 1, half + 8),
+        };
+      },
+      { seed: 1909 + index * 137, groundHeightAt: (x, z) => terrain.heightAt(x, z) },
+    );
+    scene.group.name = `slough-${index + 1}`;
+    group.add(scene.group);
+    return scene;
+  });
+  const boulders = createSloughBoulders(stream, terrain);
+  group.add(boulders.group);
 
   return {
     group,
+    setFrozen: (frozen) => {
+      mesh.visible = !frozen;
+      ice.visible = frozen;
+      for (const slough of sloughs) slough.setFrozen(frozen);
+    },
     dispose: () => {
       ribbon.dispose();
       material.dispose();
+      iceMaterial.dispose();
       stones.dispose();
+      reeds.dispose();
+      boulders.dispose();
+      for (const slough of sloughs) slough.dispose();
       group.removeFromParent();
     },
   };
 }
 
+/** Different loose groups of larger, embedded stones on each slough's dry banks. */
+function createSloughBoulders(
+  stream: Stream,
+  terrain: Terrain,
+): { group: THREE.Group; dispose(): void } {
+  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
+  const builder = new ModelBuilder();
+  for (const [index, slough] of stream.sloughs.entries()) {
+    const random = seededRandom(2909 + index * 137);
+    const count = 4 + Math.floor(random() * 4);
+    const placedRocks: { x: number; z: number; radius: number }[] = [];
+    for (let attempt = 0; attempt < 120 && placedRocks.length < count; attempt++) {
+      // The two outer pool lobes, leaving the broad river mouth open.
+      const circle = slough.basin[Math.floor(random() * 2)]!;
+      const angle = random() * Math.PI * 2;
+      const radius = 0.7 + random() * 1.1;
+      const reach = circle.radius + radius * 0.8 + random() * 1.8;
+      const x = circle.x + Math.cos(angle) * reach;
+      const z = circle.z + Math.sin(angle) * reach;
+      if (isInStream(stream, x, z, -radius - 0.8)) continue;
+      if (stream.sloughs.some((pool) => basinDepthAt(pool, x, z) > -radius * 0.7)) continue;
+      if (placedRocks.some((rock) => Math.hypot(x - rock.x, z - rock.z) < radius + rock.radius))
+        continue;
+      const height = radius * (0.65 + random() * 0.45);
+      // Embed the base across its footprint, rather than floating a rock off
+      // the downhill side of a slope. Reject banks too steep for this rock.
+      const heights = [terrain.heightAt(x, z)];
+      for (let edge = 0; edge < 8; edge++) {
+        const turn = (edge / 8) * Math.PI * 2;
+        heights.push(terrain.heightAt(x + Math.cos(turn) * radius, z + Math.sin(turn) * radius));
+      }
+      const base = Math.min(...heights);
+      if (Math.max(...heights) - base > height * 0.8) continue;
+      const y = base - height * 0.12;
+      builder.add(
+        stone,
+        buryGeometryBase(
+          stoneGeometry(radius, height, 3909 + index * 137 + placedRocks.length, 0.8, 1),
+          { x, y, z },
+          (x, z) => terrain.heightAt(x, z),
+        ),
+        placed(x, y, z, { y: random() * Math.PI * 2 }),
+      );
+      placedRocks.push({ x, z, radius });
+    }
+  }
+  const result = builder.build();
+  result.group.name = 'slough-boulders';
+  return result;
+}
+
+/** The lake's green reeds and cattails in loose clusters on both riverbanks. */
+function createBankReeds(
+  stream: Stream,
+  terrain: Terrain,
+): { group: THREE.Group; dispose(): void } {
+  const builder = new ModelBuilder();
+  const materials = waterPlantMaterials();
+  const random = seededRandom(1515);
+  // Uneven gaps along the banks, independent sides and occasional loose
+  // groups replace the old regular rows of matching clumps.
+  for (let along = 3 + random() * 6; along < stream.length - 4; along += 2.5 + random() * 9) {
+    if (streamFallGradientAt(stream, along) > 0.18) continue;
+    const sample = along / (stream.length / (stream.count - 1));
+    const row = Math.floor(sample);
+    const before = streamPointAt(stream, Math.max(0, row - 1));
+    const here = streamPointAt(stream, row);
+    const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+    const blend = sample - row;
+    const middleX = here.x + (after.x - here.x) * blend;
+    const middleZ = here.z + (after.z - here.z) * blend;
+    const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+    const tx = (after.x - before.x) / size,
+      tz = (after.z - before.z) / size;
+    const surface = streamSurfaceAt(stream, along);
+    for (const side of [-1, 1]) {
+      if (random() > 0.55) continue;
+      const count = 1 + Math.floor(random() * 3);
+      for (let clump = 0; clump < count; clump++) {
+        const across = side * (streamWaterHalfWidthAt(stream, along) - 0.1 - random() * 0.65);
+        const stagger = (random() - 0.5) * 2.8;
+        const x = middleX - tz * across + tx * stagger;
+        const z = middleZ + tx * across + tz * stagger;
+        const ground = terrain.heightAt(x, z);
+        if (ground > surface + 0.08 || surface - ground > 0.65) continue;
+        if (stream.sloughs.some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
+        addReedClump(
+          builder,
+          materials,
+          random,
+          { x, y: ground - 0.04, z },
+          3 + Math.floor(random() * 10),
+        );
+      }
+    }
+  }
+  const scene = builder.build();
+  scene.group.name = 'riverbank-reeds';
+  return scene;
+}
+
 function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   const rows = stream.count;
   const positions = new Float32Array(rows * ACROSS * 3);
-  const sideways = new Float32Array(rows * ACROSS);
-  const alongs = new Float32Array(rows * ACROSS);
-  const edges = new Float32Array(rows * ACROSS);
-  const falls = new Float32Array(rows * ACROSS);
-  const paces = new Float32Array(rows * ACROSS);
+  // WebGPU guarantees only eight vertex buffers. Pack the custom water
+  // values together so the ribbon uses just three buffers with position/normal.
+  const waterValues = new Float32Array(rows * ACROSS * 9);
   const indices: number[] = [];
 
   for (let row = 0; row < rows; row++) {
@@ -93,11 +263,21 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       positions[vertex * 3] = here.x + normalX * half * across;
       positions[vertex * 3 + 1] = surface;
       positions[vertex * 3 + 2] = here.z + normalZ * half * across;
-      sideways[vertex] = half * across;
-      alongs[vertex] = along;
-      edges[vertex] = Math.abs(across);
-      falls[vertex] = steep;
-      paces[vertex] = 1 + steep * (FALL_PACE - 1);
+      const pace = 1 + steep * (FALL_PACE - 1);
+      const water = vertex * 9;
+      waterValues[water] = half * across;
+      waterValues[water + 1] = along;
+      waterValues[water + 2] = Math.abs(across);
+      waterValues[water + 3] = steep;
+      waterValues[water + 4] = pace;
+      waterValues[water + 5] = (tangentX / size) * pace;
+      waterValues[water + 6] = (tangentZ / size) * pace;
+      waterValues[water + 7] = 1;
+      waterValues[water + 8] = streamWaterDepthAt(
+        stream,
+        positions[vertex * 3]!,
+        positions[vertex * 3 + 2]!,
+      );
     }
     if (row + 1 < rows) {
       for (let column = 0; column + 1 < ACROSS; column++) {
@@ -113,11 +293,15 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('streamAcross', new THREE.BufferAttribute(sideways, 1));
-  geometry.setAttribute('streamAlong', new THREE.BufferAttribute(alongs, 1));
-  geometry.setAttribute('streamEdge', new THREE.BufferAttribute(edges, 1));
-  geometry.setAttribute('streamFall', new THREE.BufferAttribute(falls, 1));
-  geometry.setAttribute('streamPace', new THREE.BufferAttribute(paces, 1));
+  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 9);
+  geometry.setAttribute('streamAcross', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 0));
+  geometry.setAttribute('streamAlong', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 1));
+  geometry.setAttribute('streamEdge', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 2));
+  geometry.setAttribute('streamFall', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 3));
+  geometry.setAttribute('streamPace', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 4));
+  geometry.setAttribute('waterFlow', new THREE.InterleavedBufferAttribute(waterBuffer, 2, 5));
+  geometry.setAttribute('waterFlowShare', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 7));
+  geometry.setAttribute('streamDepth', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 8));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
@@ -148,10 +332,15 @@ function createStones(stream: Stream, terrain: Terrain): { group: THREE.Group; d
     const z = here.z + normalZ * across;
     const radius = 0.14 + random() * random() * 0.55;
     const ground = Math.max(terrain.heightAt(x, z), streamBedAt(stream, along) - 0.2);
+    const y = ground + radius * 0.12;
     builder.add(
       stone,
-      stoneGeometry(radius, radius * 0.6, 1400 + index, 0.5, 0),
-      placed(x, ground + radius * 0.12, z, { y: random() * Math.PI * 2 }),
+      buryGeometryBase(
+        stoneGeometry(radius, radius * 0.6, 1400 + index, 0.5, 0),
+        { x, y, z },
+        (x, z) => terrain.heightAt(x, z),
+      ),
+      placed(x, y, z, { y: random() * Math.PI * 2 }),
     );
   }
   return builder.build();

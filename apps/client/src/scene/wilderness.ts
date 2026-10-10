@@ -57,6 +57,29 @@ const tilt = new THREE.Quaternion();
 
 const UNTOUCHED: TreeAppearance = { generation: 0, felled: false };
 
+/** A piece of the ground cut into smaller squares, ready to be drawn in the ground's own paint. */
+export interface GroundLattice {
+  /** (n + 1) by (n + 1) points, row by row (along z), each x then y then z. */
+  readonly position: Float32Array;
+  readonly normal: Float32Array;
+  readonly floor: Float32Array;
+  readonly rock: Float32Array;
+  readonly snow: Float32Array;
+  readonly tint: Float32Array;
+  readonly bank?: Float32Array;
+}
+
+/** What the digging scene needs of the ground: to take a square away and, if it can, to draw it again with a hole. */
+export interface GroundPatches {
+  readonly origin: number;
+  readonly cell: number;
+  hide(cellX: number, cellZ: number): void;
+  /** The paint the ground wears, so a patch of it matches. Left out where there is no real ground. */
+  readonly material?: THREE.Material;
+  /** One ground square cut into n by n smaller ones, lying exactly on the ground it replaces. */
+  lattice?(cellX: number, cellZ: number, n: number): GroundLattice | null;
+}
+
 export interface WildernessScene {
   readonly group: THREE.Group;
   /**
@@ -74,11 +97,7 @@ export interface WildernessScene {
    * The smooth ground, for taking squares of it away where a dug tunnel comes
    * up near the surface (see `scene/digging.ts`): `hide` takes one square.
    */
-  readonly ground: {
-    readonly origin: number;
-    readonly cell: number;
-    hide(cellX: number, cellZ: number): void;
-  };
+  readonly ground: GroundPatches;
   /**
    * A blow landing on a tree: it shivers, tipping a little away along
    * `awayX`, `awayZ` - the way the blow was going - and settling back.
@@ -140,7 +159,7 @@ export function buildWildernessScene(
       props: [...clearing.props, ...wilderness.props],
     }),
   );
-  group.add(ground.mesh);
+  group.add(ground.mesh, ground.underground);
   disposables.push(ground);
 
   const byKind = new Map<string, PlacedProp[]>();
@@ -159,7 +178,7 @@ export function buildWildernessScene(
     const [kindId = '', variantText = '0'] = key.split(':');
     const variant = Number(variantText);
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length, false, variant);
+    const parts = createPropMeshes(kind, props.length, false, terrain, variant);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);
@@ -167,7 +186,7 @@ export function buildWildernessScene(
     props.forEach((prop, index) => placeInstance(parts, index, prop));
     for (const part of parts) part.mesh.instanceMatrix.needsUpdate = true;
     if (kind.shape.family === 'tree') {
-      const far = createPropMeshes(kind, props.length, true, variant);
+      const far = createPropMeshes(kind, props.length, true, terrain, variant);
       for (const part of far) {
         part.mesh.count = 0;
         group.add(part.mesh);
@@ -183,7 +202,7 @@ export function buildWildernessScene(
 
   // Stumps wait in one set of meshes, packed down to however many trees are
   // down at the moment.
-  const stumpParts = createPropMeshes(PROP_KINDS.stump, Math.max(1, treeById.size));
+  const stumpParts = createPropMeshes(PROP_KINDS.stump, Math.max(1, treeById.size), false, terrain);
   for (const part of stumpParts) {
     part.mesh.count = 0;
     group.add(part.mesh);
@@ -429,6 +448,38 @@ export function buildWildernessScene(
   };
 }
 
+/** The colour of earth seen through a crack, dark enough to read as the inside of the ground. */
+const UNDERGROUND_COLOR = 0x4a3524;
+
+/**
+ * Keeps holes from showing the sky through their seams (decision 0114): the
+ * ground drawn again from below, and a floor far down, both in dark earth. The
+ * ground is one surface with nothing under it, so a ray slipping through a
+ * crack in the lining of a hole would otherwise come out through the
+ * underside and see the sky.
+ */
+function createUnderground(geometry: THREE.BufferGeometry, size: number): THREE.Group {
+  const group = new THREE.Group();
+  const under = new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      color: UNDERGROUND_COLOR,
+      roughness: 1,
+      metalness: 0,
+      side: THREE.BackSide,
+    }),
+  );
+  under.frustumCulled = false;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x1c140d }),
+  );
+  floor.position.y = -40;
+  floor.frustumCulled = false;
+  group.add(under, floor);
+  return group;
+}
+
 /**
  * The ground for the whole visible world: flat through the hand-built
  * clearing, rolling into hills across the wilderness, and flat again past the
@@ -437,14 +488,13 @@ export function buildWildernessScene(
  * how grassy or bare it is and a soft tint, which the painted ground
  * material blends by (see decision 0053).
  */
-function createGround(
+export function createGround(
   terrain: Terrain,
   shader: GroundShader,
-): {
+): GroundPatches & {
   mesh: THREE.Mesh;
-  origin: number;
-  cell: number;
-  hide(cellX: number, cellZ: number): void;
+  /** The ground seen from below, and a floor far under it: dark earth for any crack in a hole to look into, never sky. */
+  underground: THREE.Group;
   dispose(): void;
 } {
   const size = PLAYABLE_HALF_EXTENT * 2 + GROUND_FOG_MARGIN;
@@ -470,6 +520,7 @@ function createGround(
   const rock = new Float32Array(position.count);
   const snow = new Float32Array(position.count);
   const tint = new Float32Array(position.count * 3);
+  const bank = new Float32Array(position.count * 2);
   for (let i = 0; i < position.count; i++) {
     const up = Math.max(0.05, normal.getY(i));
     const slope = Math.sqrt(Math.max(0, 1 - up * up)) / up;
@@ -477,6 +528,8 @@ function createGround(
     floor[i] = shade.floor;
     rock[i] = shade.rock;
     snow[i] = shade.snow;
+    bank[i * 2] = shade.bank[0];
+    bank[i * 2 + 1] = shade.bank[1];
     tint[i * 3] = shade.tint[0];
     tint[i * 3 + 1] = shade.tint[1];
     tint[i * 3 + 2] = shade.tint[2];
@@ -485,16 +538,86 @@ function createGround(
   geometry.setAttribute('rock', new THREE.BufferAttribute(rock, 1));
   geometry.setAttribute('snow', new THREE.BufferAttribute(snow, 1));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
+  geometry.setAttribute('bank', new THREE.BufferAttribute(bank, 2));
 
   const material = createGroundMaterial();
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
+  const underground = createUnderground(geometry, size);
   const index = geometry.getIndex();
   if (index === null) throw new Error('Plane geometry has no index');
+  const stride = segments + 1;
   return {
     mesh,
+    underground,
+    material,
     origin: -size / 2,
     cell: size / segments,
+    // The same surface as the square's two triangles, cut into n by n smaller
+    // squares: every point is worked out from the three corners of the
+    // triangle it lies in, so it sits exactly on the ground it replaces.
+    lattice: (cellX, cellZ, n) => {
+      if (cellX < 0 || cellZ < 0 || cellX >= segments || cellZ >= segments) return null;
+      const a = cellZ * stride + cellX;
+      const b = a + stride;
+      const c = b + 1;
+      const d = a + 1;
+      const points = (n + 1) * (n + 1);
+      const out = {
+        position: new Float32Array(points * 3),
+        normal: new Float32Array(points * 3),
+        floor: new Float32Array(points),
+        rock: new Float32Array(points),
+        snow: new Float32Array(points),
+        tint: new Float32Array(points * 3),
+        bank: new Float32Array(points * 2),
+      };
+      const corners: number[] = [0, 0, 0];
+      const weights: number[] = [0, 0, 0];
+      for (let j = 0; j <= n; j++) {
+        for (let i = 0; i <= n; i++) {
+          const u = i / n;
+          const v = j / n;
+          if (u + v <= 1) {
+            corners[0] = a;
+            corners[1] = b;
+            corners[2] = d;
+            weights[0] = 1 - u - v;
+            weights[1] = v;
+            weights[2] = u;
+          } else {
+            corners[0] = b;
+            corners[1] = c;
+            corners[2] = d;
+            weights[0] = 1 - u;
+            weights[1] = u + v - 1;
+            weights[2] = 1 - v;
+          }
+          const at = j * (n + 1) + i;
+          for (let k = 0; k < 3; k++) {
+            const corner = corners[k]!;
+            const w = weights[k]!;
+            for (let axis = 0; axis < 3; axis++) {
+              out.position[at * 3 + axis]! += w * position.array[corner * 3 + axis]!;
+              out.normal[at * 3 + axis]! += w * normal.array[corner * 3 + axis]!;
+              out.tint[at * 3 + axis]! += w * tint[corner * 3 + axis]!;
+            }
+            out.floor[at]! += w * floor[corner]!;
+            out.rock[at]! += w * rock[corner]!;
+            out.snow[at]! += w * snow[corner]!;
+            out.bank[at * 2]! += w * bank[corner * 2]!;
+            out.bank[at * 2 + 1]! += w * bank[corner * 2 + 1]!;
+          }
+          const length = Math.hypot(
+            out.normal[at * 3]!,
+            out.normal[at * 3 + 1]!,
+            out.normal[at * 3 + 2]!,
+          );
+          for (let axis = 0; axis < 3; axis++) out.normal[at * 3 + axis]! /= length || 1;
+        }
+      }
+      return out;
+    },
     // Every square is two triangles, six numbers in a row, left to right and
     // top to bottom: zeroing them leaves nothing to draw there.
     hide: (cellX, cellZ) => {
@@ -506,6 +629,11 @@ function createGround(
     dispose: () => {
       geometry.dispose();
       material.dispose();
+      for (const part of underground.children)
+        if (part instanceof THREE.Mesh) {
+          if (part.geometry !== geometry) part.geometry.dispose();
+          (part.material as THREE.Material).dispose();
+        }
     },
   };
 }

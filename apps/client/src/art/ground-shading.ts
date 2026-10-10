@@ -38,6 +38,8 @@ export interface GroundShade {
   readonly rock: number;
   /** 0 is clear, 1 is snow: the mountain tops, which keep it all year. */
   readonly snow: number;
+  /** Sand coverage and dampness along the river/slough shore, each 0 to 1. */
+  readonly bank: readonly [number, number];
   readonly tint: readonly [number, number, number];
 }
 
@@ -138,14 +140,24 @@ export function createGroundShader(context: GroundContext): GroundShader {
 
       // The stream: a bed of grey pebbles under the water, then a damp, lush bank.
       let pebbles = 0;
+      let bankGap = Infinity;
       if (context.stream != null) {
         const spot = nearestOnStream(context.stream, x, z, STREAM_BANK_REACH);
         if (spot !== null) {
           const gap = spot.distance - streamWaterHalfWidthAt(context.stream, spot.along);
+          bankGap = gap;
           shore = Math.max(shore, 1 - smoothstep(0, 3, gap));
           pebbles = 1 - smoothstep(-0.3, 0.8, gap);
         }
+        for (const slough of context.stream.sloughs) {
+          if (isNearLake(slough, x, z, 4)) bankGap = Math.min(bankGap, -lakeDepthAt(slough, x, z));
+        }
       }
+      // A narrow, irregular beach: darker and damp at the water, easing
+      // into grass further up the bank. Steep rocky reaches keep their stone.
+      const bankWidth = 2.8 + worldFbm(x * 0.25, z * 0.25, 2, 74) * 0.6;
+      const sand = (1 - smoothstep(0.1, bankWidth, bankGap)) * (1 - smoothstep(0.65, 1.15, slope));
+      const wet = (1 - smoothstep(-0.2, 1.4, bankGap)) * sand;
 
       const wildPatches = smoothstep(0.4, 0.7, patches) * inWilderness * 0.6;
       const underTrees = smoothstep(0.1, 0.9, cover) * (0.55 + inWilderness * 0.45);
@@ -161,9 +173,12 @@ export function createGroundShader(context: GroundContext): GroundShader {
         smoothstep(MOUNTAINS.snowLine - 2 + wander, MOUNTAINS.snowLine + 5 + wander, height) *
         (1 - smoothstep(1.4, 2.4, slope));
       // Steep hillsides lose their grass too, and rock and snow have none.
-      const floor = clamp01(
-        Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock, pebbles) *
-          (1 - shore * 0.8),
+      const floor = Math.max(
+        sand,
+        clamp01(
+          Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock, pebbles) *
+            (1 - shore * 0.8),
+        ),
       );
 
       // Warmer and brighter where it catches the sun, cooler and darker in
@@ -175,7 +190,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         light * (1 + warmth * 0.4) * (1 + shore * 0.05),
         light * (1 - warmth) * (1 - shore * 0.04),
       ];
-      return { floor, rock, snow, tint };
+      return { floor, rock, snow, bank: [sand, wet], tint };
     },
   };
 }

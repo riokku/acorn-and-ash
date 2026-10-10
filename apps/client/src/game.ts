@@ -27,6 +27,17 @@ import {
 import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
 import { createSnowFootprints } from './scene/snow-footprints';
+import { FloatingBoatMotion } from './scene/floating-boat-motion';
+import { navigableWaterSurfaceAt, navigableWaterDepthAt } from '@acorn/shared';
+import { WaterWake } from './scene/water-wake';
+import { waterRippleUniforms } from './art/water-uniforms';
+import {
+  lakeDepthAt,
+  isInStream,
+  nearestOnStream,
+  sloughSurfaceAt,
+  streamSurfaceAt,
+} from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
 import {
   NO_MEAL,
@@ -92,6 +103,18 @@ import {
   HUNGER_MAX,
   PICKUP_REACH,
   ITEM_KINDS,
+  DIG_SWING,
+  VOXEL,
+  digRefusal,
+  overlapsWater,
+  DIG_REACH_METERS,
+  supportProblem,
+  cubeAtHit,
+  digInReach,
+  supportCellAt,
+  supportInReach,
+  type Support,
+  type SupportCell,
   LIGHT_COMBO,
   STRIKE,
   TICK_SECONDS,
@@ -190,6 +213,7 @@ import {
   type ServerMessage,
   type SnapshotEntity,
   type ActionState,
+  type Terrain,
   type Vec3,
 } from '@acorn/shared';
 
@@ -229,6 +253,14 @@ import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
 import { createStreamScene } from './scene/stream';
 import { createDigScene, type DigScene } from './scene/digging';
+import {
+  createMineSupports,
+  createSupportPreview,
+  preloadMineSupport,
+  type MineSupports,
+  type SupportPreview,
+} from './scene/mine-supports';
+import { preloadDugWalls } from './scene/dug-walls';
 import { preloadPropModels } from './scene/prop-models';
 import { preloadFlowerModel } from './scene/flower-models';
 import { preloadCampfireModels } from './scene/campfire-models';
@@ -297,7 +329,7 @@ import {
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
 import { ToastShelf, packGains } from './hud/toasts';
-import { gearRefusalText } from './hud/gear-notices';
+import { digRefusalText, gearRefusalText, supportProblemText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
 import { paintWorldMapImage } from './map/world-map-image';
 import type { PlayerIdentity } from './home/identity';
@@ -755,6 +787,7 @@ export class Game {
     | ReturnType<typeof createHomeDecoration>
   >();
   private builtProps: readonly BuiltPropView[] = [];
+  private readonly floatingBoats = new Map<number, FloatingBoatMotion>();
   private decorations: readonly HomeDecoration[] = [];
   private decorMoveId = 0;
   private decorNote: string | null = null;
@@ -863,6 +896,15 @@ export class Game {
   /** Scratch objects for `aimTowardsClickPoint` and the build preview, reused rather than allocated fresh. */
   private readonly clickRaycaster = new THREE.Raycaster();
   private readonly clickNdc = new THREE.Vector2();
+  /** The cube the mouse is on, as last sent to the server, and when (see `updateDigTarget`). */
+  private digTargetSent: { ix: number; iy: number; iz: number } | null = null;
+  private digTargetSentAt = 0;
+  /** The cube a click with the shovel would dig, drawn as a faint box. */
+  private digPreview: {
+    group: THREE.Group;
+    fill: THREE.MeshBasicMaterial;
+    edges: THREE.LineBasicMaterial;
+  } | null = null;
   /** The clearing's ground, which is flat at zero everywhere a piece can be placed. */
 
   private enteringWorld = false;
@@ -894,10 +936,20 @@ export class Game {
   private clearingScene: ClearingScene | null = null;
   private wildernessScene: WildernessScene | null = null;
   private lakeScene: ReturnType<typeof createLakeScene> | null = null;
+  private readonly waterWake = new WaterWake();
   private streamScene: ReturnType<typeof createStreamScene> | null = null;
   /** Ground dug out with the shovel (decision 0114), and every dig heard of so far, kept for a world still loading. */
   private digScene: DigScene | null = null;
   private digs: Dig[] = [];
+  /** Mine supports (decision 0119): every one heard of, what draws them, and the see-through one for the next. */
+  private supports: Support[] = [];
+  private mineSupports: MineSupports | null = null;
+  private supportPreview: SupportPreview | null = null;
+  /** The cell a click would stand a support in right now, or null if none can go there. */
+  private supportCell: SupportCell | null = null;
+  private supportClickHeld = false;
+  /** What to tell the player while a support is in hand: where it can go, or why not here. */
+  private supportHint: string | null = null;
   /** How dark it is underground for the local player, 0 in the open to 1 deep down, eased frame by frame. */
   private undergroundDark = 0;
   /** Whether the server says the lake is ice (decision 0095); applied to the scene and the ground once they exist. */
@@ -1054,6 +1106,8 @@ export class Game {
     // Kicked off now rather than in enterWorld, so they have the whole time
     // it takes to set up the renderer and reach the server to finish loading.
     void preloadPropModels();
+    void preloadDugWalls();
+    void preloadMineSupport();
     void preloadFlowerModel();
     void preloadCampfireModels();
     void preloadItemModels();
@@ -1595,6 +1649,8 @@ export class Game {
     this.lakeScene?.dispose();
     this.streamScene?.dispose();
     this.digScene?.dispose();
+    this.mineSupports?.dispose();
+    this.supportPreview?.dispose();
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
@@ -1603,6 +1659,8 @@ export class Game {
     this.decorModels.length = 0;
     this.wildfireArt?.dispose();
     this.footprints?.dispose();
+    this.waterWake.clear();
+    for (const ripple of waterRippleUniforms) ripple.value.set(0, 0, 10, 0);
     this.weatherArt?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
@@ -1614,6 +1672,7 @@ export class Game {
     this.critters.clear();
     for (const built of this.builtMeshes.values()) built.dispose();
     this.builtMeshes.clear();
+    this.floatingBoats.clear();
     this.rowingBoats.dispose();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
@@ -1752,6 +1811,11 @@ export class Game {
         this.options.hud.publish({ worn: this.worn.get(this.selfNetId) ?? {} });
         break;
       }
+      case 'digRefused': {
+        this.interactionNote = digRefusalText(message.reason);
+        this.interactionNoteUntil = performance.now() + 2800;
+        break;
+      }
       case 'gearRefused': {
         this.gearNotice = {
           text: gearRefusalText(message.reason),
@@ -1884,6 +1948,14 @@ export class Game {
         // twice changes nothing, and it can simply be played again.
         this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
         this.digScene?.apply(message.digs);
+        this.grass?.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
+        break;
+      }
+      case 'supports': {
+        this.supports = message.replace
+          ? [...message.supports]
+          : [...this.supports, ...message.supports];
+        this.mineSupports?.apply(message.supports, message.replace);
         break;
       }
       case 'rareReel': {
@@ -2053,8 +2125,22 @@ export class Game {
         break;
       }
       case 'builtProps': {
+        const onlyBoatMotion =
+          message.props.length === this.builtProps.length &&
+          message.props.every((prop) => {
+            const previous = this.builtProps.find((old) => old.id === prop.id);
+            if (previous === undefined || previous.kind !== prop.kind) return false;
+            const keys = new Set([...Object.keys(previous), ...Object.keys(prop)]);
+            for (const key of keys) {
+              if (prop.kind === 'rowboat' && (key === 'x' || key === 'z' || key === 'yaw'))
+                continue;
+              if (previous[key as keyof BuiltPropView] !== prop[key as keyof BuiltPropView])
+                return false;
+            }
+            return true;
+          });
         this.builtProps = message.props;
-        this.grass?.setBuildings(message.props);
+        if (!onlyBoatMotion) this.grass?.setBuildings(message.props);
         // Anything just placed that has now come back as built stops being
         // pending - it is in the list for real.
         this.pendingPlacements = this.pendingPlacements.filter(
@@ -2066,7 +2152,7 @@ export class Game {
                 Math.abs(prop.z - pending.request.z) < 0.05,
             ),
         );
-        this.applyBuiltProps();
+        this.applyBuiltProps(onlyBoatMotion);
         break;
       }
       case 'recoveryMarkers': {
@@ -2453,6 +2539,8 @@ export class Game {
       await Promise.all(
         [
           preloadPropModels(),
+          preloadDugWalls(),
+          preloadMineSupport(),
           preloadFlowerModel(),
           preloadCampfireModels(),
           preloadItemModels(),
@@ -2470,6 +2558,7 @@ export class Game {
       const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
       this.footprints?.dispose();
+      this.waterWake.clear();
       this.footprints = createSnowFootprints((x, z) =>
         (this.collision?.terrain ?? terrain).heightAt(x, z),
       );
@@ -2540,17 +2629,26 @@ export class Game {
       this.digScene = createDigScene(terrain, this.wildernessScene.ground);
       this.outdoors.add(this.digScene.group);
       this.digScene.apply(this.digs);
+      this.mineSupports?.dispose();
+      this.mineSupports = createMineSupports();
+      this.outdoors.add(this.mineSupports.group);
+      this.mineSupports.apply(this.supports, true);
+      this.supportPreview?.dispose();
+      this.supportPreview = createSupportPreview();
+      this.outdoors.add(this.supportPreview.group);
       this.lakeScene?.dispose();
       this.lakeScene = createLakeScene(LAKE);
       this.lakeScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.lakeScene.group);
       this.streamScene?.dispose();
       this.streamScene = createStreamScene(STREAM, terrain);
+      this.streamScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.streamScene.group);
       this.keepOutWater = [...clearing.water, ...LAKE.basin, ...STREAM_KEEP_OUT];
       this.grass = createGrass(terrain, clearing, wilderness, this.animalTracks?.tracks);
       this.grass.setDensity(this.grassDensity);
       this.grass.setBuildings(this.builtProps);
+      this.grass.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
       this.outdoors.add(this.grass.mesh);
 
       this.outdoors.add(this.floats.group);
@@ -2566,6 +2664,7 @@ export class Game {
         PLAYABLE_HALF_EXTENT,
         LAKE,
         true,
+        STREAM,
       );
       this.collision = collision;
       collision.dug = this.digScene.grid;
@@ -2683,7 +2782,7 @@ export class Game {
    * ever actually removed yet, but a client that reconnects mid-session
    * should not have to care whether that stays true forever.
    */
-  private applyBuiltProps(): void {
+  private applyBuiltProps(onlyBoatMotion = false): void {
     if (this.clearingScene === null) return;
     const present = new Set(this.builtProps.map((prop) => prop.id));
 
@@ -2696,6 +2795,7 @@ export class Game {
       this.outdoors.remove(built.group);
       built.dispose();
       this.builtMeshes.delete(id);
+      this.floatingBoats.delete(id);
     }
 
     for (const prop of this.builtProps) {
@@ -2705,11 +2805,18 @@ export class Game {
         // campfire lighting up or going out, so an existing mesh needs to
         // hear about it too, not just a freshly created one.
         if ('setLit' in existing) existing.setLit(prop.lit);
-        // A boat is the one piece that moves, and only when somebody climbs
-        // in or out: it is hidden while it is being rowed, because the boat
-        // under the rider is the one drawn.
+        // Free boats follow the current between server updates. Occupied
+        // boats are hidden here because a separate boat follows the rider.
         if (prop.kind === 'rowboat') {
-          existing.group.position.set(prop.x, LAKE.level, prop.z);
+          if (prop.occupied === true) this.floatingBoats.delete(prop.id);
+          else {
+            const floating = this.floatingBoats.get(prop.id);
+            if (floating !== undefined) floating.sync(prop);
+            else {
+              this.floatingBoats.set(prop.id, new FloatingBoatMotion(prop));
+              existing.group.position.set(prop.x, navigableWaterSurfaceAt(prop.x, prop.z), prop.z);
+            }
+          }
           existing.group.rotation.y = prop.yaw;
           existing.group.visible = prop.occupied !== true;
         }
@@ -2725,8 +2832,10 @@ export class Game {
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
       this.builtMeshes.set(prop.id, built);
+      if (prop.kind === 'rowboat' && prop.occupied !== true)
+        this.floatingBoats.set(prop.id, new FloatingBoatMotion(prop));
     }
-    if (this.collision !== null) {
+    if (!onlyBoatMotion && this.collision !== null) {
       const old = new Set(this.solidHomes.values());
       this.collision.colliders.splice(
         0,
@@ -3010,6 +3119,7 @@ export class Game {
     this.updateTargetSelection(controls);
     if (this.collision !== null)
       this.collision.movementScale = this.currentWeather().kind === 'blizzard' ? BLIZZARD_SPEED : 1;
+    this.waterWake.update(deltaSeconds);
     this.updateLocalPlayer(deltaSeconds, camera);
     const forestActive = this.playing && !document.hidden;
     this.forestAudio.update(forestActive);
@@ -3038,8 +3148,19 @@ export class Game {
         this.currentWeather().wind,
       );
     this.updateRemotePlayers(deltaSeconds);
+    for (let index = 0; index < waterRippleUniforms.length; index++) {
+      const ripple = this.waterWake.ripples[index]!;
+      waterRippleUniforms[index]!.value.set(ripple.x, ripple.z, ripple.age, ripple.strength);
+    }
     // After everybody, ours included, has been placed: boats of those who stopped rowing go.
     this.rowingBoats.sweep();
+    for (const [id, floating] of this.floatingBoats) {
+      const group = this.builtMeshes.get(id)?.group;
+      if (group === undefined || !group.visible) continue;
+      const pose = floating.update(deltaSeconds, this.lakeFrozen);
+      group.position.set(pose.x, pose.y, pose.z);
+      group.rotation.y = pose.yaw;
+    }
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(
       deltaSeconds,
@@ -3616,12 +3737,232 @@ export class Game {
   private applyLakeIce(frozen: boolean): void {
     this.lakeFrozen = frozen;
     this.lakeScene?.setFrozen(frozen);
+    this.streamScene?.setFrozen(frozen);
+    if (frozen) this.waterWake.clear();
     if (this.collision !== null) setLakeFrozen(this.collision, frozen);
+  }
+
+  private openWaterAt(x: number, z: number): number | null {
+    if (this.space !== OUTDOORS) return null;
+    if (!this.lakeFrozen) {
+      for (const slough of STREAM.sloughs) {
+        if (lakeDepthAt(slough, x, z) > 0) return sloughSurfaceAt(STREAM, slough, x, z);
+      }
+      if (isInStream(STREAM, x, z)) {
+        const spot = nearestOnStream(STREAM, x, z, 6)!;
+        return streamSurfaceAt(STREAM, spot.along);
+      }
+      if (lakeDepthAt(LAKE, x, z) > 0) return LAKE.level;
+    }
+    return this.clearing?.water.some(
+      (circle) => Math.hypot(x - circle.x, z - circle.z) < circle.radius,
+    )
+      ? 0.03
+      : null;
   }
 
   /** Where the foot of a built piece sits: on the ground, or for a boat on the lake's surface. */
   private builtGroundY(kind: BuildableKindId, x: number, z: number): number {
-    return kind === 'rowboat' ? LAKE.level : (this.collision?.terrain.heightAt(x, z) ?? 0);
+    return kind === 'rowboat'
+      ? navigableWaterSurfaceAt(x, z)
+      : (this.collision?.terrain.heightAt(x, z) ?? 0);
+  }
+
+  /**
+   * Digging goes where the mouse is (decision 0114). While the shovel is out,
+   * the cursor is cast into the world: the first wall, floor, roof or patch of
+   * ground it touches gives the cube behind it. That cube is lit up (yellow, or
+   * red where it cannot be dug or is out of reach) and sent to the server, which
+   * digs exactly it when the swing lands, after checking it again.
+   *
+   * It does not change while a swing is under way, so what was clicked is what
+   * lands.
+   */
+  private updateDigTarget(camera: FollowCamera, feet: Readonly<Vec3>): void {
+    const dug = this.digScene;
+    const collision = this.collision;
+    const wanted =
+      dug !== null && collision !== null && this.isEquipped('shovel') && this.space === OUTDOORS;
+    if (!wanted) {
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
+      return;
+    }
+    if (this.localPlayer?.action.kind === ActionKind.Swing) return;
+    const cube = this.cubeUnderPointer(camera, dug, collision.terrain);
+    if (cube === null) {
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
+      return;
+    }
+    const refusal = digRefusal(
+      cube,
+      dug.grid,
+      collision.terrain,
+      (x, z, margin) => overlapsWater(this.keepOutWater, x, z, margin),
+      this.builtProps,
+    );
+    if (refusal === null && dug.grid.solidCubes(cube).length === 0) {
+      this.showDigPreview(null, false);
+      this.sendDigTarget(null);
+      return;
+    }
+    this.showDigPreview(cube, refusal === null && digInReach(feet, cube));
+    this.sendDigTarget(cube);
+  }
+
+  /** The cube of ground behind whatever the mouse touches, or null if it touches none. */
+  private cubeUnderPointer(camera: FollowCamera, dug: DigScene, terrain: Terrain): Dig | null {
+    const surface = this.surfaceUnderPointer(camera, dug, terrain);
+    return surface === null ? null : cubeAtHit(surface.point, surface.normal);
+  }
+
+  /**
+   * Mine supports (decision 0119). While one is in hand, the cell of tunnel the
+   * mouse is on lights up, green where a support would stand and red where
+   * not, and a click asks the server to stand one there.
+   */
+  private updateSupportTarget(camera: FollowCamera, feet: Readonly<Vec3>): void {
+    const dug = this.digScene;
+    const collision = this.collision;
+    const preview = this.supportPreview;
+    const wanted =
+      dug !== null &&
+      collision !== null &&
+      this.isEquipped('mineSupport') &&
+      this.space === OUTDOORS &&
+      preview !== null;
+    if (!wanted) {
+      preview?.show(null, 0, false);
+      this.supportCell = null;
+      this.supportHint = null;
+      return;
+    }
+    const surface = this.surfaceUnderPointer(camera, dug, collision.terrain);
+    const cell = surface === null ? null : supportCellAt(dug.grid, surface.point, surface.normal);
+    if (cell === null) {
+      preview.show(null, 0, false);
+      this.supportCell = null;
+      this.supportHint =
+        'Point at the floor of a tunnel two metres wide, then click to prop it up.';
+      return;
+    }
+    const fit = supportProblem(dug.grid, cell, this.supports);
+    const where = 'axis' in fit ? fit.cell : cell;
+    const reachable = supportInReach(feet, where, DIG_REACH_METERS);
+    const fits = 'axis' in fit && reachable;
+    preview.show(where, 'axis' in fit ? fit.axis : 0, fits);
+    this.supportCell = fits ? where : null;
+    this.supportHint =
+      'problem' in fit
+        ? supportProblemText(fit.problem)
+        : reachable
+          ? 'Click to stand a support here.'
+          : 'Too far away. Step closer.';
+  }
+
+  /** A fresh press of the left button with a support in hand stands one where the preview is. */
+  private clickToPlaceSupport(holdingSupport: boolean): void {
+    const pressed =
+      holdingSupport && ((this.controls?.buttons(false) ?? 0) & PlayerButton.Swing) !== 0;
+    if (pressed && !this.supportClickHeld && this.supportCell !== null) {
+      this.connection?.sendPlaceSupport(this.supportCell);
+    }
+    this.supportClickHeld = pressed;
+  }
+
+  /** What the mouse touches in the world and which way it faces, or null if it touches nothing. */
+  private surfaceUnderPointer(
+    camera: FollowCamera,
+    dug: DigScene,
+    terrain: Terrain,
+  ): {
+    point: { x: number; y: number; z: number };
+    normal: { x: number; y: number; z: number };
+  } | null {
+    const pointer = this.controls?.pointerPosition() ?? null;
+    if (pointer === null) return null;
+    this.clickNdc.set(
+      (pointer.x / window.innerWidth) * 2 - 1,
+      -(pointer.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const ray = this.clickRaycaster.ray;
+    let point: { x: number; y: number; z: number } | null = null;
+    let normal = { x: 0, y: 1, z: 0 };
+    let distance = Number.POSITIVE_INFINITY;
+    // The walls of a hole, and the ground cut round it...
+    const hit = this.clickRaycaster.intersectObjects(dug.pickables(), false)[0];
+    if (hit !== undefined && hit.face !== undefined && hit.face !== null) {
+      point = hit.point;
+      normal = hit.face.normal;
+      distance = hit.distance;
+    }
+    // ...or plain ground, which a hole's own ground is cut out of.
+    const ground = groundAlongRay(ray.origin, ray.direction, terrain);
+    if (ground !== null && !dug.isOpenNear(ground.x, ground.z)) {
+      const y = terrain.heightAt(ground.x, ground.z);
+      const far = Math.hypot(ground.x - ray.origin.x, y - ray.origin.y, ground.z - ray.origin.z);
+      if (far < distance) {
+        const slopeX =
+          terrain.heightAt(ground.x - 0.5, ground.z) - terrain.heightAt(ground.x + 0.5, ground.z);
+        const slopeZ =
+          terrain.heightAt(ground.x, ground.z - 0.5) - terrain.heightAt(ground.x, ground.z + 0.5);
+        const length = Math.hypot(slopeX, 1, slopeZ);
+        point = { x: ground.x, y, z: ground.z };
+        normal = { x: slopeX / length, y: 1 / length, z: slopeZ / length };
+      }
+    }
+    return point === null ? null : { point, normal };
+  }
+
+  /** Tell the server which cube the mouse is on, when it changes and about once a second. */
+  private sendDigTarget(cube: Dig | null): void {
+    const now = performance.now();
+    const last = this.digTargetSent;
+    const same =
+      cube === null
+        ? last === null
+        : last !== null && last.ix === cube.ix && last.iy === cube.iy && last.iz === cube.iz;
+    if (same && (cube === null || now - this.digTargetSentAt < 1000)) return;
+    this.digTargetSent = cube === null ? null : { ix: cube.ix, iy: cube.iy, iz: cube.iz };
+    this.digTargetSentAt = now;
+    this.connection?.sendDigTarget(this.digTargetSent);
+  }
+
+  /** The faint box over the cube a click would dig: yellow if it can be, red if not. */
+  private showDigPreview(cube: Dig | null, allowed: boolean): void {
+    const preview = this.digPreview;
+    if (cube === null) {
+      if (preview !== null) preview.group.visible = false;
+      return;
+    }
+    const lit = preview ?? this.makeDigPreview();
+    if (lit.group.parent === null) this.outdoors.add(lit.group);
+    lit.group.visible = true;
+    // A cube is two half-metre cells each way, starting at its corner cell.
+    lit.group.position.set((cube.ix + 1) * VOXEL, (cube.iy + 1) * VOXEL, (cube.iz + 1) * VOXEL);
+    lit.fill.color.set(allowed ? 0xffd27a : 0xff5a4a);
+    lit.edges.color.set(allowed ? 0xffe9b0 : 0xff8a7a);
+  }
+
+  private makeDigPreview(): NonNullable<Game['digPreview']> {
+    const group = new THREE.Group();
+    group.renderOrder = 10;
+    const box = new THREE.BoxGeometry(1.02, 1.02, 1.02);
+    const fill = new THREE.MeshBasicMaterial({
+      color: 0xffd27a,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    });
+    const edges = new THREE.LineBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.9 });
+    group.add(
+      new THREE.Mesh(box, fill),
+      new THREE.LineSegments(new THREE.EdgesGeometry(box), edges),
+    );
+    this.digPreview = { group, fill, edges };
+    return this.digPreview;
   }
 
   /** The spot on the flat ground of the clearing under the mouse, or null if it points at the sky. */
@@ -3651,7 +3992,12 @@ export class Game {
           ray.origin,
           ray.direction,
           this.collision.terrain,
-          this.placing?.kind === 'rowboat' ? LAKE.level : undefined,
+          this.placing?.kind === 'rowboat'
+            ? (x, z) =>
+                navigableWaterDepthAt(x, z) > 0
+                  ? navigableWaterSurfaceAt(x, z)
+                  : Number.NEGATIVE_INFINITY
+            : undefined,
         );
   }
 
@@ -4116,8 +4462,9 @@ export class Game {
     // does not shorten it.
     // The left button places a piece while one is out, so it is never also
     // a swing or a charge then.
+    const holdingSupport = this.isEquipped('mineSupport');
     const placingMask =
-      this.placing === null
+      this.placing === null && !holdingSupport
         ? ~0
         : ~(PlayerButton.Swing | PlayerButton.Charge | PlayerButton.Fish | PlayerButton.Sit);
     const fishingClick =
@@ -4127,6 +4474,9 @@ export class Game {
     const buttons =
       ((this.controls?.buttons(fishingClick) ?? 0) & placingMask) |
       (this.fishingPhase === 'biting' ? PlayerButton.SawBite : 0);
+    this.updateDigTarget(camera, player.motion.position);
+    this.updateSupportTarget(camera, player.motion.position);
+    this.clickToPlaceSupport(holdingSupport);
     // Walking, jumping, swinging, rolling or casting all mean the player is still playing.
     if (
       this.signOutCountdown.counting &&
@@ -4184,6 +4534,7 @@ export class Game {
       player.actionAge(),
       this.aimedTree !== null && this.isEquipped('axe'),
       rollDirection(action.heading, player.renderYaw()),
+      this.isEquipped('shovel'),
     );
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
@@ -4194,6 +4545,14 @@ export class Game {
         : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
     );
     const speed = Math.hypot(velocity.x, velocity.z);
+    this.waterWake.step(
+      this.selfNetId,
+      position.x,
+      position.y,
+      position.z,
+      rowing ? 0 : speed,
+      this.openWaterAt(position.x, position.z),
+    );
     if (rowing)
       this.rowingBoats.place(
         this.selfNetId,
@@ -4703,6 +5062,7 @@ export class Game {
     return {
       canAttack,
       castInstead,
+      digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot; the line in hand is the one thing
       // that rules it out (see decision 0102). Standing on something is
       // checked by the caller, which knows the footing.
@@ -4778,7 +5138,9 @@ export class Game {
   /** The swish of a swing of ours, timed to peak as its blow lands. */
   private swooshFor(action: ActionKind, step: number): void {
     if (action === ActionKind.Swing) {
-      const swing = LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
+      const swing = this.isEquipped('shovel')
+        ? DIG_SWING
+        : LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
       playSwoosh((swing?.impact ?? 4) * TICK_SECONDS);
     } else if (action === ActionKind.Strike) {
       playSwoosh(STRIKE.impact * TICK_SECONDS, CHARGED_BLOW);
@@ -4936,9 +5298,18 @@ export class Game {
         pose.actionAge,
         action.kind === ActionKind.Swing && this.wouldChopAt(netId, pose),
         rollDirection(pose.actionHeading, pose.yaw),
+        toolKind(this.equipped.get(netId) ?? null) === 'shovel',
       );
       character.setFishing(this.fishingPoses.get(netId) ?? null);
       const rowing = action.kind === ActionKind.Row;
+      this.waterWake.step(
+        netId,
+        pose.x,
+        pose.y,
+        pose.z,
+        rowing ? 0 : pose.speed,
+        this.openWaterAt(pose.x, pose.z),
+      );
       this.footprints?.step(
         netId + 1,
         pose.x,
@@ -5043,7 +5414,7 @@ export class Game {
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
               },
-      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : null,
+      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : this.supportHint,
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,

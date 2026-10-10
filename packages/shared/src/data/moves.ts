@@ -38,6 +38,14 @@ export const LIGHT_COMBO: readonly [ComboSwing, ComboSwing, ComboSwing] = [
   { impact: 5, chain: 14, end: 14 },
 ];
 
+/**
+ * One swing of the shovel (decision 0114): a slow, heavy dig of about a
+ * second. The ground opens when the blade levers up, 0.6 s in; the rest is
+ * the toss and getting ready again. Holding the button, or clicking during
+ * it, goes straight on to the next dig once it is over.
+ */
+export const DIG_SWING: ComboSwing = { impact: 12, chain: 20, end: 20 };
+
 /** Minimum wind-up before a released charge can strike: see `CHARGE_SECONDS`. */
 export const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ);
 

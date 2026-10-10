@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createCollisionWorld } from '../src/collision/capsule';
 import { PLAYER_HEIGHT } from '../src/constants';
+import { planDig } from '../src/sim/digging';
 import {
+  CUBE_DIG,
+  DIG_CUBE,
   DugGrid,
   digDirectionFromYaw,
   digVoxels,
@@ -103,6 +106,55 @@ describe('digging', () => {
   });
 });
 
+describe('one-metre cube digs', () => {
+  it('covers a metre cube: two half-metre cubes each way, all different', () => {
+    const cubes = digVoxels({ ix: 10, iy: 3, iz: -4, dir: CUBE_DIG });
+    expect(cubes).toHaveLength(DIG_CUBE ** 3);
+    expect(new Set(cubes.map((c) => `${c.ix},${c.iy},${c.iz}`)).size).toBe(8);
+    expect(Math.max(...cubes.map((c) => c.ix)) - Math.min(...cubes.map((c) => c.ix))).toBe(1);
+    expect(Math.max(...cubes.map((c) => c.iy)) - Math.min(...cubes.map((c) => c.iy))).toBe(1);
+    expect(Math.max(...cubes.map((c) => c.iz)) - Math.min(...cubes.map((c) => c.iz))).toBe(1);
+  });
+
+  it('keeps old slabs the shape they always were', () => {
+    expect(digVoxels({ ix: 10, iy: 2, iz: -3, dir: 1 })).toHaveLength(24);
+  });
+
+  it('sits on the whole-metre grid, next to the one the feet are in', () => {
+    const grid = new DugGrid(hillside);
+    const dig = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, false, grid);
+    // Yaw -PI/2 looks down +X: the square after x = 3 is x = 4..5, on z = 0..1.
+    expect(dig).toEqual({ ix: 8, iy: 2, iz: 0, dir: CUBE_DIG });
+    expect(dig.ix % 2).toBe(0);
+    expect(dig.iz % 2).toBe(0);
+  });
+
+  it('takes the head room above on the next swing, then stops', () => {
+    const grid = new DugGrid(hillside);
+    const standing = { x: 7.3, y: 1.3, z: 0.4 };
+    const aim = -Math.PI / 2;
+    const first = planDig(standing, aim, false, grid);
+    grid.apply(first);
+    const second = planDig(standing, aim, false, grid);
+    expect(second).toEqual({ ...first, iy: first.iy + DIG_CUBE });
+    grid.apply(second);
+    // The pocket is two metres tall: tall enough to walk in.
+    const x = (first.ix + 1) * VOXEL;
+    const z = (first.iz + 1) * VOXEL;
+    const floor = first.iy * VOXEL;
+    expect(
+      grid.openSpans(x, z).some((s) => s.floor === floor && s.ceiling - s.floor >= PLAYER_HEIGHT),
+    ).toBe(true);
+  });
+
+  it('digs a half-metre lower when digging down', () => {
+    const grid = new DugGrid(hillside);
+    const level = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, false, grid);
+    const down = planDig({ x: 3.3, y: 1.3, z: 0.4 }, -Math.PI / 2, true, grid);
+    expect(down.iy).toBe(level.iy - 1);
+  });
+});
+
 describe('walking through a dug tunnel', () => {
   it('walks in and stays on the tunnel floor', () => {
     const grid = new DugGrid(hillside);
@@ -147,5 +199,29 @@ describe('walking through a dug tunnel', () => {
     expect(motion.position.x).toBeGreaterThan(6);
     expect(motion.position.x).toBeLessThan(8.1);
     expect(motion.position.y).toBeLessThan(hillside.heightAt(motion.position.x, 0.25) - 1);
+  });
+});
+
+describe('being shut away underground', () => {
+  const flat: Terrain = { kind: 'flat', heightAt: () => 10 };
+
+  it('is true in a tunnel with ground over the head, and false in the open', () => {
+    const grid = new DugGrid(flat);
+    // A tunnel a metre wide and two metres tall, three metres down: floor at 7 m.
+    grid.apply({ ix: 0, iy: 14, iz: 0, dir: CUBE_DIG });
+    grid.apply({ ix: 0, iy: 16, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 7, 0.5)).toBe(true);
+    // Not in a column anything was dug in.
+    expect(grid.isSheltered(30.5, 10, 0.5)).toBe(false);
+  });
+
+  it('is false at the foot of a shallow pit open to the sky, and true deep down one', () => {
+    const grid = new DugGrid(flat);
+    // A pit one metre deep, open to the sky.
+    grid.apply({ ix: 0, iy: 19, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 9, 0.5)).toBe(false);
+    // The same shaft dug down to 4 m below the ground: too deep for anything at the rim to see into.
+    for (let iy = 17; iy >= 11; iy -= 2) grid.apply({ ix: 0, iy, iz: 0, dir: CUBE_DIG });
+    expect(grid.isSheltered(0.5, 6, 0.5)).toBe(true);
   });
 });
