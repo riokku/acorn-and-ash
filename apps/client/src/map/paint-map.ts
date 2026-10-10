@@ -55,6 +55,8 @@ const TREE_COLOURS: Record<string, Rgb> = {
   pine: hex(0x4b775c),
   birch: hex(0x8db06a),
   oak: hex(0x648f50),
+  maple: hex(0x7aa843),
+  alder: hex(0x8fb05c),
 };
 const TREE_SHADOW = hex(0x55603f);
 const ROCK = hex(0x9d998e);

@@ -48,6 +48,8 @@ export interface PropKind {
   readonly shape: TreeShape | RockShape | StumpShape;
   /** Present on trees, absent on everything else. */
   readonly chopping?: ChoppingRule;
+  /** Trees only: turns colour in autumn and stands bare in winter. */
+  readonly deciduous?: true;
   /** What the player bumps into, as a radius in metres. */
   readonly colliderRadius: number;
   /** Triangle budget for the art that eventually replaces the placeholder. */
@@ -56,7 +58,8 @@ export interface PropKind {
   readonly placeholderColor: number;
 }
 
-export type PropKindId = 'pine' | 'birch' | 'oak' | 'boulder' | 'mossyRock' | 'stump';
+export type PropKindId =
+  'pine' | 'birch' | 'oak' | 'boulder' | 'mossyRock' | 'stump' | 'maple' | 'alder';
 
 export const PROP_KINDS = {
   pine: {
@@ -120,6 +123,38 @@ export const PROP_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x6f7d63,
   },
+  maple: {
+    id: 'maple',
+    displayName: 'Big-leaf maple',
+    shape: {
+      family: 'tree',
+      trunkRadius: 0.36,
+      trunkHeight: 3.2,
+      canopyRadius: 4.6,
+      canopyHeight: 8.8,
+    },
+    chopping: { swingsToFell: 4, logs: 3 },
+    deciduous: true,
+    colliderRadius: 0.55,
+    triangleBudget: 4000,
+    placeholderColor: 0x5a9a34,
+  },
+  alder: {
+    id: 'alder',
+    displayName: 'Red alder',
+    shape: {
+      family: 'tree',
+      trunkRadius: 0.24,
+      trunkHeight: 4.2,
+      canopyRadius: 2.5,
+      canopyHeight: 8.8,
+    },
+    chopping: { swingsToFell: 3, logs: 2 },
+    deciduous: true,
+    colliderRadius: 0.38,
+    triangleBudget: 4000,
+    placeholderColor: 0x6f9a4a,
+  },
   stump: {
     id: 'stump',
     displayName: 'Stump',
@@ -140,6 +175,9 @@ export const PROP_KIND_ORDER: readonly PropKindId[] = [
   'boulder',
   'mossyRock',
   'stump',
+  // Added after the others so the numbers saved worlds and the network already use do not move.
+  'maple',
+  'alder',
 ];
 
 export function propKindIndex(id: PropKindId): number {

@@ -5,7 +5,7 @@ import type { SeasonMix } from '@acorn/shared';
 import { seasonUniforms } from '../art/season-uniforms';
 import { lookFor } from '../art/season-look';
 import type { DaylightRig } from './lighting';
-import { treeFoliageMaterials } from './prop-models';
+import { deciduousFoliageMaterials, treeFoliageMaterials } from './prop-models';
 
 /** Frost on the needles: how far a tree is pulled towards this colour when snow is deep. */
 const FROST = new THREE.Color(0xe4edf2);
@@ -58,7 +58,18 @@ export function createSeasonRig(): SeasonRig {
       seasonUniforms.blizzard.value = blizzard ? 1 : 0;
 
       tint.setRGB(look.foliage[0], look.foliage[1], look.foliage[2]);
+      const leafTint = new THREE.Color(look.leaves[0], look.leaves[1], look.leaves[2]);
+      const deciduous = new Set(deciduousFoliageMaterials());
       for (const tree of trees) {
+        if (deciduous.has(tree.material)) {
+          // Maples and alders turn gold, then drop their leaves, leaving bark and branches.
+          tree.material.visible = look.leafCover > 0.5;
+          tree.material.color
+            .copy(tree.base)
+            .multiply(leafTint)
+            .lerp(FROST, look.snow * FROST_AMOUNT);
+          continue;
+        }
         tree.material.color
           .copy(tree.base)
           .multiply(tint)
