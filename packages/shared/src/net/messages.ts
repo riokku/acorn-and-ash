@@ -1,4 +1,5 @@
 import type { Dig } from '../world/digging';
+import type { Support, SupportCell } from '../world/supports';
 import type { WildfireView } from '../sim/wildfire';
 import type { FishRecords } from '../sim/fish-records';
 import type { ReelView } from '../sim/rare-reel';
@@ -15,6 +16,7 @@ import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { GearSlot, WornGear } from '../data/gear';
 import type { GearRefusal } from '../sim/gear';
+import type { DigRefusalReason } from '../sim/digging';
 import type { PlayerInput } from '../sim/player';
 import type { GestureEvent } from '../sim/actions';
 import type { GatherPatchView } from '../sim/gathering';
@@ -53,6 +55,8 @@ export const ClientMessageType = {
   Decoration: 0x0c,
   Expedition: 0x0d,
   Gear: 0x0e,
+  DigTarget: 0x0f,
+  PlaceSupport: 0x10,
 } as const;
 
 /** What the server says back. */
@@ -107,6 +111,8 @@ export const ServerMessageType = {
   Worn: 0x3f,
   GearRefused: 0x40,
   Dug: 0x41,
+  DigRefused: 0x42,
+  Supports: 0x43,
 } as const;
 
 export const RejectReason = {
@@ -161,6 +167,18 @@ export interface BuildMessage {
  * bundle: it is not aimed at anything, so it needs neither reach nor facing,
  * and is settled the moment the server reads it.
  */
+/** Which cube the mouse is on while the shovel is out, or nothing (decision 0114). */
+/** Stand a mine support in this cell of tunnel (decision 0119). */
+export interface PlaceSupportMessage {
+  readonly type: 'placeSupport';
+  readonly cell: SupportCell;
+}
+
+export interface DigTargetMessage {
+  readonly type: 'digTarget';
+  readonly target: { readonly ix: number; readonly iy: number; readonly iz: number } | null;
+}
+
 export interface UseItemMessage {
   readonly type: 'useItem';
   readonly item: ItemId;
@@ -240,6 +258,8 @@ export type ClientMessage =
   | BuildMessage
   | HelloMessage
   | UseItemMessage
+  | DigTargetMessage
+  | PlaceSupportMessage
   | SetDoorLockMessage
   | DiscardMessage
   | LootMessage;
@@ -533,6 +553,12 @@ export interface WornMessage {
 }
 
 /** A change of gear the server turned down, told to the one who asked. */
+/** A swing of the shovel that made no hole, and why. */
+export interface DigRefusedMessage {
+  readonly type: 'digRefused';
+  readonly reason: DigRefusalReason;
+}
+
 export interface GearRefusedMessage {
   readonly type: 'gearRefused';
   readonly reason: GearRefusal;
@@ -651,6 +677,7 @@ export type ServerMessage =
   | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage
   | GearRefusedMessage
+  | DigRefusedMessage
   /** Whether the lake is frozen over (decision 0095); sent on joining and whenever it changes. */
   | { readonly type: 'lakeIce'; readonly frozen: boolean }
   /**
@@ -658,6 +685,8 @@ export type ServerMessage =
    * `replace` is set (on joining), otherwise just the newest ones to add.
    */
   | { readonly type: 'dug'; readonly replace: boolean; readonly digs: readonly Dig[] }
+  /** Mine supports standing in tunnels (decision 0119): all of them when `replace`, else new ones. */
+  | { readonly type: 'supports'; readonly replace: boolean; readonly supports: readonly Support[] }
   | { readonly type: 'raiderVitals'; readonly id: number; readonly maxHits: number }
   | (ExpeditionView & { readonly type: 'expedition' })
   | (FishRecords & { readonly type: 'fishRecords' })

@@ -9,7 +9,7 @@
  *
  * - the bed, which only ever goes down, in a few short steps (the falls),
  * - how wide the water is, which grows toward the lake, and
- * - how deep it is, never more than knee deep so players can wade it.
+ * - how deep it is, shallow enough to wade except for scattered deeper pools.
  *
  * The ground round the stream is shaped to suit: a shallow bowl for the water,
  * a soft bank, and a valley floor that eases back into the hills (or, on the
@@ -18,7 +18,7 @@
  */
 
 import { lerp, smoothstep } from '../math/vec3';
-import { basinDepthAt, LAKE, type Lake } from './lake';
+import { basinDepthAt, defineLake, LAKE, type Lake } from './lake';
 import type { WaterCircle } from './water';
 
 /** A waterfall: the bed drops `drop` metres at `at` metres down the stream. */
@@ -93,6 +93,12 @@ const KEEP_OUT_STEP = 4;
 /** Stones sit along the banks; how many per hundred metres of stream. */
 export const STREAM_STONES_PER_100M = 22;
 
+export interface Slough extends Lake {
+  /** Local downhill grade shared by the water, its floor and its plants. */
+  readonly slopeX: number;
+  readonly slopeZ: number;
+}
+
 export interface Stream {
   /** Height of the water's surface where the stream meets the lake, in metres. */
   readonly mouthLevel: number;
@@ -103,6 +109,8 @@ export interface Stream {
   /** Length of the whole path in metres. */
   readonly length: number;
   readonly falls: readonly StreamFall[];
+  /** Still-water sloughs beside the lower bends, currently scenery only. */
+  readonly sloughs: readonly Slough[];
   /** The box that holds the path with room for every bit of shaped ground. */
   readonly reach: {
     readonly minX: number;
@@ -274,16 +282,67 @@ export function createStream(lake: Lake = LAKE): Stream {
     bank[index] = base + soft - depth;
   }
 
-  return {
+  const stream: Stream = {
     mouthLevel: lake.level,
     points,
     count,
     length,
     falls,
+    sloughs: [],
     reach: { minX: minX - reach, maxX: maxX + reach, minZ: minZ - reach, maxZ: maxZ + reach },
     bed,
     bank,
   };
+  const sloughs = [
+    { share: 0.44, side: -1, radius: 3.8 },
+    { share: 0.6, side: -1, radius: 4.2 },
+    { share: 0.66, side: 1, radius: 4.5 },
+    { share: 0.7, side: 1, radius: 5 },
+    { share: 0.76, side: -1, radius: 6 },
+    { share: 0.88, side: 1, radius: 7 },
+  ].map(({ share, side, radius }) => {
+    const row = Math.round(share * (count - 1));
+    const along = row * SAMPLE_SPACING;
+    const here = streamPointAt(stream, row);
+    const before = streamPointAt(stream, row - 1);
+    const after = streamPointAt(stream, row + 1);
+    const size = Math.hypot(after.x - before.x, after.z - before.z);
+    // Hug the valley instead of pushing a whole pool out onto the hillside.
+    // Small upper pools fit narrow banks; the gentler lower bends have room
+    // for the larger pools. The pool overlaps its broad river connection.
+    const offset = streamHalfWidthAt(stream, along) + radius * 0.65 + 0.7;
+    const x = here.x - ((after.z - before.z) / size) * offset * side;
+    const z = here.z + ((after.x - before.x) / size) * offset * side;
+    // Overlapping circles cut an open neck from the riverbank into the pool.
+    const neck: WaterCircle[] = [];
+    for (let across = streamWaterHalfWidthAt(stream, along) - 0.8; across < offset; across += 1.5) {
+      neck.push({
+        x: here.x - ((after.z - before.z) / size) * across * side,
+        z: here.z + ((after.x - before.x) / size) * across * side,
+        radius: 4.2,
+      });
+    }
+    const slope = (streamSurfaceAt(stream, along + 3) - streamSurfaceAt(stream, along - 3)) / 6;
+    const lake = defineLake(
+      streamSurfaceAt(stream, along),
+      [
+        { x, z, radius },
+        {
+          x: x + ((after.x - before.x) / size) * radius * 0.8,
+          z: z + ((after.z - before.z) / size) * radius * 0.8,
+          radius: radius * 0.7,
+        },
+        ...neck,
+      ],
+      [],
+    );
+    return {
+      ...lake,
+      slopeX: ((after.x - before.x) / size) * slope,
+      slopeZ: ((after.z - before.z) / size) * slope,
+    };
+  });
+  return { ...stream, sloughs };
 }
 
 /** The stream as built. */
@@ -315,6 +374,20 @@ export function streamHalfWidthAt(stream: Stream, along: number): number {
 /** Height of the water's surface along the middle, `along` metres down. */
 export function streamSurfaceAt(stream: Stream, along: number): number {
   return streamBedAt(stream, along) + streamDepthMiddle(stream, along);
+}
+
+/** Slough water follows the local river grade, meeting its exact surface at the mouth. */
+export function sloughSurfaceAt(stream: Stream, slough: Slough, x: number, z: number): number {
+  const anchor = slough.basin[0]!;
+  const plane = slough.level + (x - anchor.x) * slough.slopeX + (z - anchor.z) * slough.slopeZ;
+  const spot = nearestOnStream(stream, x, z, 12);
+  if (spot === null) return plane;
+  const half = streamWaterHalfWidthAt(stream, spot.along);
+  return lerp(
+    streamSurfaceAt(stream, spot.along),
+    plane,
+    smoothstep(spot.distance, half - 1, half + 2),
+  );
 }
 
 /** Half the width of the water itself (the bowl's rim is a hair wider), `along` metres down. */
@@ -499,15 +572,47 @@ export function streamGroundHeight(
   // The bowl for the water: low in the middle, rising to the rim, then up the bank.
   const across = Math.min(distance / half, 1);
   const rim = bed + depth + RIM_LIP;
-  const bowl = bed + (rim - bed) * across * across;
+  const bowl =
+    bed +
+    (rim - bed) * across * across -
+    streamPoolDepthAt(stream, along, signedStreamAcross(stream, spot, x, z));
   const channel = distance <= half ? bowl : rim + (distance - half) * BANK_SLOPE;
   const fade = smoothstep(along, 0, 8);
-  return softMin(valley, lerp(valley, channel, fade), BANK_SOFTNESS);
+  let shaped = softMin(valley, lerp(valley, channel, fade), BANK_SOFTNESS);
+  // Treat nearby bowls as one shoreline: a neighbouring slough's outer
+  // bank must never fill an existing pool or its river connection.
+  let nearestSlough: Slough | null = null;
+  let sloughDepth = -8;
+  for (const slough of stream.sloughs) {
+    const depth = basinDepthAt(slough, x, z);
+    if (depth > sloughDepth) {
+      nearestSlough = slough;
+      sloughDepth = depth;
+    }
+  }
+  if (nearestSlough !== null) {
+    const depth = sloughDepth;
+    // Build a supported bowl, including the downhill bank. Only cutting the
+    // ground lets the water project into space wherever the hill falls away.
+    // The rim also clears the ice, with enough width for the rendered ground
+    // mesh to meet the water. Blend back into the hillside beyond the rim.
+    const surface = sloughSurfaceAt(stream, nearestSlough, x, z);
+    const floor = surface + 0.4 - 0.85 * smoothstep(depth, 0, 1.3);
+    const bank = floor + Math.max(0, -depth) * 0.16;
+    const supported = lerp(shaped, bank, smoothstep(depth, -8, -0.6));
+    // Keep the river's original channel at the mouth, rather than filling it.
+    shaped = lerp(
+      Math.min(shaped, supported),
+      supported,
+      smoothstep(distance, streamWaterHalfWidthAt(stream, along), half + 1),
+    );
+  }
+  return shaped;
 }
 
 /**
  * How deep the water is at a spot, in metres, or 0 where it is dry.
- * Never more than knee deep in the middle.
+ * The shallows can be waded; darker pools exceed STREAM_WADING_DEPTH.
  */
 export function streamWaterDepthAt(stream: Stream, x: number, z: number): number {
   const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + 1);
@@ -519,7 +624,31 @@ export function streamWaterDepthAt(stream: Stream, x: number, z: number): number
   const rim = streamBedAt(stream, spot.along) + streamDepthMiddle(stream, spot.along) + RIM_LIP;
   const ground =
     streamBedAt(stream, spot.along) + (rim - streamBedAt(stream, spot.along)) * across * across;
-  return Math.max(0, surface - ground);
+  return Math.max(
+    0,
+    surface -
+      ground +
+      streamPoolDepthAt(stream, spot.along, signedStreamAcross(stream, spot, x, z)),
+  );
+}
+
+/** Maximum water depth a character can wade through, in metres. */
+export const STREAM_WADING_DEPTH = 0.8;
+
+/** Irregular deep pockets below the existing surface; banks and water level stay unchanged. */
+export const STREAM_POOL_SHARES = [0.21, 0.32, 0.44, 0.59, 0.68, 0.79, 0.9] as const;
+
+export function streamPoolDepthAt(stream: Stream, along: number, across: number): number {
+  let depth = 0;
+  for (const [index, share] of STREAM_POOL_SHARES.entries()) {
+    const centre = stream.length * share;
+    const length = 8 + (index % 3) * 3;
+    const width = streamWaterHalfWidthAt(stream, centre) * 0.7;
+    const offset = (index % 2 === 0 ? -1 : 1) * width * 0.12;
+    const radius = Math.hypot((along - centre) / length, (across - offset) / width);
+    depth = Math.max(depth, (1 - smoothstep(radius, 0.1, 1)) * (1.4 + (index % 3) * 0.2));
+  }
+  return depth;
 }
 
 /** Is this spot in the water, at least `margin` metres in from its edge? */
@@ -542,7 +671,7 @@ export function streamKeepOut(stream: Stream): WaterCircle[] {
     const at = streamPointAt(stream, index);
     circles.push({ x: at.x, z: at.z, radius: streamWaterHalfWidthAt(stream, along) + 0.5 });
   }
-  return circles;
+  return [...circles, ...stream.sloughs.flatMap((slough) => slough.basin)];
 }
 
 /** The keep-out circles for the stream as built. */
@@ -550,7 +679,37 @@ export const STREAM_KEEP_OUT: readonly WaterCircle[] = streamKeepOut(STREAM);
 
 /** Is the spot on a bank or in the water of the stream, with `footprint` metres to spare? */
 export function nearStream(stream: Stream, x: number, z: number, footprint: number): boolean {
+  if (stream.sloughs.some((slough) => basinDepthAt(slough, x, z) > -footprint)) return true;
   const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + footprint + 1);
   if (spot === null) return false;
   return spot.distance < streamHalfWidthAt(stream, spot.along) + footprint;
+}
+
+/** Signed distance across the local channel: positive on its left bank. */
+export function signedStreamAcross(stream: Stream, spot: StreamSpot, x: number, z: number): number {
+  const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+  const before = streamPointAt(stream, Math.max(0, row - 1));
+  const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+  const dx = after.x - before.x,
+    dz = after.z - before.z;
+  const length = Math.hypot(dx, dz) || 1;
+  return ((x - spot.x) * -dz + (z - spot.z) * dx) / length;
+}
+
+/** Downstream velocity in metres/second. Slough interiors and the lake are still. */
+export function streamCurrentAt(stream: Stream, x: number, z: number): { x: number; z: number } {
+  const spot = nearestOnStream(stream, x, z, 8);
+  if (spot === null) return { x: 0, z: 0 };
+  const half = streamWaterHalfWidthAt(stream, spot.along);
+  const margin = half - spot.distance;
+  if (margin <= -0.8) return { x: 0, z: 0 };
+  const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+  const before = streamPointAt(stream, Math.max(0, row - 1));
+  const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+  const length = Math.hypot(after.x - before.x, after.z - before.z) || 1;
+  const speed =
+    (0.65 + Math.min(streamFallGradientAt(stream, spot.along), 0.5) * 1.5) *
+    smoothstep(margin, -0.8, 1.2) *
+    (1 - smoothstep(spot.along, stream.length - 10, stream.length));
+  return { x: ((after.x - before.x) / length) * speed, z: ((after.z - before.z) / length) * speed };
 }

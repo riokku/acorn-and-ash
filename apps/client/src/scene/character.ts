@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { plainMaterial } from '../art/materials';
 
 import {
+  ActionKind,
   DEFAULT_SKIN_TONE,
   Gesture,
   ITEM_KINDS,
@@ -281,8 +282,19 @@ function longToolGrips(lean: number, turn: THREE.Quaternion): HeldGrips {
  */
 const AXE_GRIPS = longToolGrips(CARRY_LEAN.axe, ABOUT_THE_HANDLE);
 
-/** The shovel only ever comes out to dig, so is never seen carried. */
-const SHOVEL_GRIPS = longToolGrips(UPRIGHT_LEAN, NO_TURN);
+/**
+ * The shovel only ever comes out to dig, so is never seen carried: one grip,
+ * the one the dig animation was made for (assets/animations, clip digShovel).
+ * It is held by the middle of the shaft, the blade end 0.8 bone units below
+ * the hand and turned upside down, so the handle runs up past the hand. The
+ * numbers are the exact fit between the shovel model and the one posed in
+ * Blender.
+ */
+const SHOVEL_HOLD: HeldItemRest = {
+  rotation: new THREE.Euler(Math.PI, 0, 0),
+  offset: new THREE.Vector3(0, 0.8, 0),
+};
+const SHOVEL_GRIPS: HeldGrips = { carry: SHOVEL_HOLD, use: SHOVEL_HOLD };
 
 /**
  * Every food item shares one rest pose too: small enough, and round enough,
@@ -832,6 +844,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       digging = Math.max(0, digging - deltaSeconds);
       const playing = animatorFor();
       if (playing === null) return null;
+      // The dig swing brings the shovel out for as long as it plays.
+      if (frame.move.digging === true && frame.move.kind === ActionKind.Swing)
+        digging = Math.max(digging, DIG_SHOW_SECONDS);
       const pose = playing.update(deltaSeconds, frame.move, frame.locomotion);
       handsFree = pose.handsFree;
       const bites = playing.eating;
@@ -870,6 +885,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
 
 /** How quickly a held thing turns between its two grips, per second. */
 const GRIP_FOLLOW = 22;
+
+/** How long the shovel lingers in hand after the dig swing's clip stops, so it does not pop out mid-blend. */
+const DIG_SHOW_SECONDS = 0.12;
 
 /** How long a shovel stays out to dig, in seconds. */
 const GESTURE_DIG_SECONDS = 1.35;

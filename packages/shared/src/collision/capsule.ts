@@ -17,6 +17,18 @@ import {
 } from '../world/lake';
 import { voxelIndex, type DugGrid } from '../world/digging';
 import type { Terrain } from '../world/terrain';
+import {
+  isInStream,
+  nearestOnStream,
+  sloughSurfaceAt,
+  streamSurfaceAt,
+  streamWaterDepthAt,
+  streamWaterHalfWidthAt,
+  signedStreamAcross,
+  streamPointAt,
+  STREAM_WADING_DEPTH,
+  type Stream,
+} from '../world/stream';
 
 /**
  * The invisible wall along the lake's shore: it keeps anyone on foot out of
@@ -95,6 +107,8 @@ export interface CollisionWorld {
   readonly boundsHalfExtent: number;
   /** The shore of the lake, or null where there is no lake. */
   readonly lakeWall: LakeWall | null;
+  /** Shared deep-water barriers; shallow river water remains passable. */
+  readonly stream?: Stream | null;
   /** Ground dug out below the surface (decision 0114), or null/undefined where nothing can be dug. */
   dug?: DugGrid | null;
 }
@@ -123,17 +137,26 @@ export function createCollisionWorld(
    * rewritten wholesale should leave it off.
    */
   indexStatic = false,
+  stream: Stream | null = null,
 ): CollisionWorld {
   const broadphase = indexStatic ? buildBroadphase(colliders) : null;
   if (lake === null) {
-    return { terrain, colliders: [...colliders], boundsHalfExtent, lakeWall: null, broadphase };
+    return {
+      terrain,
+      colliders: [...colliders],
+      boundsHalfExtent,
+      lakeWall: null,
+      broadphase,
+      stream,
+    };
   }
   const wall: LakeWall = { lake, up: true };
   return {
-    terrain: withLakeIce(terrain, wall),
+    terrain: withLakeIce(terrain, wall, stream),
     colliders: [...colliders],
     boundsHalfExtent,
     lakeWall: wall,
+    stream,
     broadphase,
   };
 }
@@ -143,12 +166,23 @@ export function createCollisionWorld(
  * is, the ground is the top of the ice (or the island, where that is higher).
  * Everywhere else, and whenever the wall is up, it is the ground as it was.
  */
-function withLakeIce(ground: Terrain, wall: LakeWall): Terrain {
+function withLakeIce(ground: Terrain, wall: LakeWall, stream: Stream | null): Terrain {
   return {
     kind: ground.kind,
     heightAt: (x, z) => {
       const height = ground.heightAt(x, z);
-      if (wall.up || !isNearLake(wall.lake, x, z)) return height;
+      if (wall.up) return height;
+      if (stream !== null) {
+        for (const slough of stream.sloughs) {
+          if (basinDepthAt(slough, x, z) > 0)
+            return Math.max(height, sloughSurfaceAt(stream, slough, x, z) + 0.05);
+        }
+        if (isInStream(stream, x, z)) {
+          const spot = nearestOnStream(stream, x, z, 6)!;
+          return Math.max(height, streamSurfaceAt(stream, spot.along) + 0.05);
+        }
+      }
+      if (!isNearLake(wall.lake, x, z)) return height;
       if (basinDepthAt(wall.lake, x, z) <= 0) return height;
       return Math.max(height, lakeIceHeight(wall.lake));
     },
@@ -260,6 +294,14 @@ export function resolveCapsule(
     }
     const wall = world.lakeWall;
     if (wall !== null && wall.up && pushOutOfLake(position, radius, wall.lake)) {
+      movedThisPass = true;
+      touched = true;
+    }
+    if (
+      world.stream != null &&
+      !isLakeFrozen(world) &&
+      pushOutOfDeepStream(position, radius, world.stream)
+    ) {
       movedThisPass = true;
       touched = true;
     }
@@ -385,5 +427,34 @@ function pushOutOfBox(position: Vec3, radius: number, collider: BoxCollider): bo
   const backCos = Math.cos(collider.rotationY);
   position.x = collider.x + (targetX * backCos - targetZ * backSin);
   position.z = collider.z + (targetX * backSin + targetZ * backCos);
+  return true;
+}
+
+/** Slide along the wading-depth contour, leaving the banks open as a way round each pool. */
+function pushOutOfDeepStream(position: Vec3, radius: number, stream: Stream): boolean {
+  const spot = nearestOnStream(stream, position.x, position.z, 6);
+  if (spot === null) return false;
+  const across = signedStreamAcross(stream, spot, position.x, position.z);
+  const side = across < 0 ? -1 : 1;
+  const row = Math.round(spot.along / (stream.length / (stream.count - 1)));
+  const before = streamPointAt(stream, Math.max(0, row - 1));
+  const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
+  const dx = after.x - before.x,
+    dz = after.z - before.z;
+  const length = Math.hypot(dx, dz) || 1;
+  const nx = (-dz / length) * side,
+    nz = (dx / length) * side;
+  const depthAt = (reach: number) =>
+    streamWaterDepthAt(stream, position.x + nx * reach, position.z + nz * reach);
+  if (depthAt(-radius) <= STREAM_WADING_DEPTH) return false;
+  let low = -radius,
+    high = streamWaterHalfWidthAt(stream, spot.along) + radius;
+  for (let pass = 0; pass < 12; pass++) {
+    const middle = (low + high) / 2;
+    if (depthAt(middle) > STREAM_WADING_DEPTH) low = middle;
+    else high = middle;
+  }
+  position.x += nx * (high + radius + 0.005);
+  position.z += nz * (high + radius + 0.005);
   return true;
 }

@@ -20,6 +20,8 @@ import {
   encodeInputBundle,
   encodePing,
   encodeSetDoorLock,
+  encodeDigTarget,
+  encodePlaceSupport,
   encodeUseItem,
   type BuildRequest,
   type CharacterId,
@@ -28,6 +30,7 @@ import {
   type ItemId,
   type PlayerInput,
   type ServerMessage,
+  type SupportCell,
   type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
@@ -206,6 +209,18 @@ export class WorldConnection {
   sendSetDoorLock(locked: boolean): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeSetDoorLock(locked));
+  }
+
+  /** Stand a mine support in this cell of tunnel (decision 0119). */
+  sendPlaceSupport(cell: SupportCell): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodePlaceSupport(cell));
+  }
+
+  /** Which cube of ground the mouse is on while the shovel is out, or none (decision 0114). */
+  sendDigTarget(target: { ix: number; iy: number; iz: number } | null): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeDigTarget(target));
   }
 
   sendUseItem(item: ItemId): void {

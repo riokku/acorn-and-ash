@@ -1,6 +1,7 @@
 import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
 import {
+  encodeDigRefused,
   encodeGearRefused,
   encodeWorn,
   gearSlotFromIndex,
@@ -12,9 +13,11 @@ import {
 import {
   clockShiftForSeason,
   encodeDug,
+  encodeSupports,
   encodeLakeIce,
   SEASONS,
   type Dig,
+  type Support,
   type SeasonId,
 } from '@acorn/shared';
 import {
@@ -311,6 +314,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeWildfire(simulation.wildfireView()));
     // The tunnels and pits dug so far, before this player first moves.
     server.send(encodeDug(simulation.digsList(), true));
+    server.send(encodeSupports(simulation.supportsList(), true));
     // What you are carrying, and what is no longer lying about to be found.
     server.send(encodeInventory(inventoryEntries(simulation.inventoryOf(netId))));
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
@@ -400,6 +404,16 @@ export class World extends DurableObject<WorldEnv> {
       simulation.craftItem(attachment.netId, decoded.item);
       this.announceCrafting(simulation);
       this.announceEquipped(simulation);
+      return;
+    }
+    if (decoded.type === 'placeSupport') {
+      // The result reaches everybody through `announceSupports`; a refusal only the placer.
+      simulation.placeSupport(attachment.netId, decoded.cell);
+      return;
+    }
+    if (decoded.type === 'digTarget') {
+      // Only remembered: the swing checks it when it lands.
+      simulation.setDigTarget(attachment.netId, decoded.target);
       return;
     }
     if (decoded.type === 'loot') {
@@ -624,6 +638,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceDiscoveries(simulation);
     this.announceCollections(simulation);
     this.announcePickupRefusals(simulation);
+    this.announceDigRefusals(simulation);
     this.announceChopping(simulation);
     this.announceTreeChanges(simulation);
     this.announceCatching(simulation);
@@ -632,6 +647,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceBuilding(simulation);
     this.announceLakeIce(simulation);
     this.announceDigging(simulation);
+    this.announceSupports(simulation);
     this.announceWildfire(simulation);
     this.announceBoats(simulation);
     this.announceBrokenBoats(simulation);
@@ -715,6 +731,18 @@ export class World extends DurableObject<WorldEnv> {
     const events = simulation.drainCollectionEvents();
     for (let start = 0; start < events.length; start += MAX_COLLECTIONS_PER_MESSAGE) {
       this.broadcast(encodeCollected(events.slice(start, start + MAX_COLLECTIONS_PER_MESSAGE)));
+    }
+  }
+
+  /** A swing that dug nothing is only the digger's business. */
+  private announceDigRefusals(simulation: WorldSimulation): void {
+    const events = simulation.drainDigRefusals();
+    if (events.length === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      for (const event of events) {
+        if (event.netId === attachment?.netId) this.trySend(ws, encodeDigRefused(event.reason));
+      }
     }
   }
 
@@ -949,6 +977,31 @@ export class World extends DurableObject<WorldEnv> {
     this.broadcast(encodeDug(digs, false));
   }
 
+  /** Somebody stood a mine support (decision 0119): save it and tell everybody. */
+  private announceSupports(simulation: WorldSimulation): void {
+    const supports = simulation.drainSupportNews();
+    if (supports.length === 0) return;
+    for (const support of supports) {
+      this.ctx.storage.sql.exec(
+        'INSERT INTO mine_supports (ix, iy, iz, axis) VALUES (?, ?, ?, ?)',
+        support.ix,
+        support.iy,
+        support.iz,
+        support.axis,
+      );
+    }
+    this.broadcast(encodeSupports(supports, false));
+  }
+
+  private loadSupports(): Support[] {
+    return this.ctx.storage.sql
+      .exec<{ ix: number; iy: number; iz: number; axis: number }>(
+        'SELECT ix, iy, iz, axis FROM mine_supports ORDER BY seq',
+      )
+      .toArray()
+      .map((row) => ({ ix: row.ix, iy: row.iy, iz: row.iz, axis: row.axis as Support['axis'] }));
+  }
+
   private loadDigs(): Dig[] {
     return this.ctx.storage.sql
       .exec<{ ix: number; iy: number; iz: number; dir: number }>(
@@ -1001,8 +1054,8 @@ export class World extends DurableObject<WorldEnv> {
   /**
    * Somebody climbed into or out of a rowboat: tell everybody, so it is drawn
    * under its rider or moored where it was left, and write down where it is.
-   * Only these moments are sent: while a boat is being rowed, its rider's own
-   * position in every snapshot is where it is (see decision 0093).
+   * Unoccupied river boats also publish their drift once a second. While
+   * occupied, the rider's snapshots carry the boat (see decision 0093).
    */
   private announceBoats(simulation: WorldSimulation): void {
     const boats = simulation.drainBoatChanges();
@@ -1717,6 +1770,7 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restoreBuriedCaches(this.loadBuriedCaches());
     simulation.restorePatches(this.loadPatches());
     simulation.restoreDigs(this.loadDigs());
+    simulation.restoreSupports(this.loadSupports());
     const encounterRest = this.readMeta('encounterRest');
     this.savedEncounterRest = encounterRest ?? '[]';
     if (encounterRest !== null) {
@@ -2042,6 +2096,14 @@ export class World extends DurableObject<WorldEnv> {
       iy INTEGER NOT NULL,
       iz INTEGER NOT NULL,
       dir INTEGER NOT NULL
+    )`);
+    // Mine supports standing in tunnels (decision 0119), in the order stood.
+    sql.exec(`CREATE TABLE IF NOT EXISTS mine_supports (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      ix INTEGER NOT NULL,
+      iy INTEGER NOT NULL,
+      iz INTEGER NOT NULL,
+      axis INTEGER NOT NULL
     )`);
     sql.exec(`CREATE TABLE IF NOT EXISTS gather_patches (
       patch_id INTEGER PRIMARY KEY,

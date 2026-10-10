@@ -46,6 +46,12 @@ import { treeVariant } from '../scene/prop-models';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import { createRaccoon } from '../scene/raccoon';
 import { createRenderer, type RendererSetup } from '../scene/renderer';
+import { preloadDugWalls } from '../scene/dug-walls';
+import { createDugEarth } from './dug-earth';
+import { createMineSupportsExhibit } from './mine-supports';
+import { createMineLantern, preloadMineLantern } from './mine-lantern';
+import { preloadMineSupport } from '../scene/mine-supports';
+import { createDugGround, createDugRamp } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
 
 /**
@@ -68,6 +74,8 @@ interface Exhibit {
   readonly yaw?: number;
   /** How far back the camera stands to look at it on its own. */
   readonly view: number;
+  /** Brings its own ground, so it is shown only when asked for by name. */
+  readonly alone?: boolean;
   create(): {
     group: THREE.Group;
     update?(deltaSeconds: number): void;
@@ -177,6 +185,15 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: createFox },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
+  // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
+  { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
+  // A tunnel propped with mine supports (see mine-supports.ts).
+  { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
+  // The hanging mine lantern, made in Blender (see mine-lantern.ts).
+  { name: 'mine-lantern', x: -17, z: 14, view: 1, create: createMineLantern },
+  // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
+  { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
+  { name: 'dug-ramp', x: 0, z: 0, view: 6, alone: true, create: createDugRamp },
 ];
 
 /** Places to look at that are not one exhibit: the pond, the trees, the rocks. */
@@ -224,6 +241,9 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadCampfireModels(),
     preloadFoxModel(),
     preloadIronAxe(),
+    preloadDugWalls(),
+    preloadMineSupport(),
+    preloadMineLantern(),
   ]);
 
   const scene = new THREE.Scene();
@@ -268,13 +288,18 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     rotationY: index * 1.3,
     scale: entry.scale,
   }));
-  scene.add(createGalleryGround(scenery));
-  scene.add(createPond(POND).group);
-  addScenery(scene, scenery);
+  const alone = EXHIBITS.some((exhibit) => exhibit.name === focus && exhibit.alone === true);
+  if (!alone) {
+    scene.add(createGalleryGround(scenery));
+    scene.add(createPond(POND).group);
+    addScenery(scene, scenery);
+  }
 
   const updaters: Array<(deltaSeconds: number) => void> = [];
   const focusedExhibits = EXHIBITS.filter((exhibit) => exhibit.name === focus);
-  for (const exhibit of focusedExhibits.length > 0 ? focusedExhibits : EXHIBITS) {
+  for (const exhibit of focusedExhibits.length > 0
+    ? focusedExhibits
+    : EXHIBITS.filter((entry) => entry.alone !== true)) {
     const made = exhibit.create();
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;
@@ -301,6 +326,14 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     height = viewpoint.height;
   }
   let angle = Number(params.get('angle') ?? viewpoint?.angle ?? 0.35);
+  // Aim somewhere beside the exhibit: metres along x, y and z from where it looks by default.
+  target.add(
+    new THREE.Vector3(
+      Number(params.get('tx') ?? 0),
+      Number(params.get('ty') ?? 0),
+      Number(params.get('tz') ?? 0),
+    ),
+  );
   if (params.has('height')) height = Number(params.get('height'));
   if (params.has('distance')) distance = Number(params.get('distance'));
 
@@ -432,6 +465,7 @@ function createGalleryGround(scenery: readonly PlacedProp[]): THREE.Mesh {
   geometry.setAttribute('rock', new THREE.BufferAttribute(new Float32Array(position.count), 1));
   geometry.setAttribute('snow', new THREE.BufferAttribute(new Float32Array(position.count), 1));
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
+  geometry.setAttribute('bank', new THREE.BufferAttribute(new Float32Array(position.count * 2), 2));
   const mesh = new THREE.Mesh(geometry, createGroundMaterial());
   mesh.receiveShadow = true;
   return mesh;
@@ -449,6 +483,7 @@ function addScenery(scene: THREE.Scene, scenery: readonly PlacedProp[]): void {
       PROP_KINDS[kind as PropKindId],
       props.length,
       false,
+      undefined,
       Number(variantText),
     );
     props.forEach((prop, index) => placeInstance(parts, index, prop));

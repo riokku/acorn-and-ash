@@ -3,6 +3,7 @@ import { colliderFootprintRadius, cylinder, type Collider } from './colliders';
 import type { Terrain } from './terrain';
 import { overlapsWater, type WaterCircle } from './water';
 import { basinDepthAt, LAKE_SHORE_WIDTH, type Lake } from './lake';
+import { nearStream, STREAM } from './stream';
 import { createRng, hashSeed } from '../rng';
 import type { RaiderKindId } from '../data/raiders';
 
@@ -59,6 +60,7 @@ export function buildEncounterSites(
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       if (overlapsWater(water, x, z, 4)) continue;
+      if (nearStream(STREAM, x, z, 6)) continue;
       if (lake !== null && basinDepthAt(lake, x, z) > -(LAKE_SHORE_WIDTH + 4)) continue;
       if (sites.some((site) => Math.hypot(site.x - x, site.z - z) < 30)) continue;
       if (colliders.some((c) => Math.hypot(c.x - x, c.z - z) < colliderFootprintRadius(c) + 3.3))

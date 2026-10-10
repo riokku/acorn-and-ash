@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 
-import { ActionKind, type CharacterId, type SkinToneId, type WornGear } from '@acorn/shared';
+import {
+  ActionKind,
+  type CharacterId,
+  type ItemId,
+  type SkinToneId,
+  type WornGear,
+} from '@acorn/shared';
 
 import { readSettings } from '../settings';
 import { preloadCharacterAnimations } from '../scene/character-animations';
@@ -78,6 +84,8 @@ export class CharacterStage {
   private character: Character | null = null;
   private look: StageLook | null = null;
   private worn: Readonly<WornGear> = {};
+  /** What is in the hand, if more than the piece worn there (a tool chosen from the hotbar). */
+  private held: ItemId | null = null;
   private height = FALLBACK_HEIGHT;
   private placement = DEFAULT_PLACEMENT;
   private turn = 0;
@@ -144,7 +152,7 @@ export class CharacterStage {
     const character = createCharacter(look.character, look.tint, look.skin);
     character.setName(null);
     character.setGear(this.worn);
-    character.setEquippedItem(this.worn.mainHand ?? null);
+    character.setEquippedItem(this.held ?? this.worn.mainHand ?? null);
     character.group.rotation.y = Math.PI + this.turn;
     this.scene.add(character.group);
     this.character = character;
@@ -159,11 +167,12 @@ export class CharacterStage {
   }
 
   /** Dresses the character in this gear, and keeps it on if they are swapped for another. */
-  setGear(worn: Readonly<WornGear>): void {
+  setGear(worn: Readonly<WornGear>, held: ItemId | null = null): void {
     this.worn = worn;
+    this.held = held;
     this.character?.setGear(worn);
-    // Whatever is in the main hand is what they hold, as in the world.
-    this.character?.setEquippedItem(worn.mainHand ?? null);
+    // Whatever is in the hand is what they hold, as in the world.
+    this.character?.setEquippedItem(held ?? worn.mainHand ?? null);
     this.dirty = true;
   }
 

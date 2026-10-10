@@ -23,7 +23,7 @@ import {
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
 import type { Vec3 } from '../math/vec3';
 import { BOAT_BERTH_MAX_DEPTH, BOAT_HULL_MIN_DEPTH } from '../world/boat';
-import { LAKE, lakeDepthAt } from '../world/lake';
+import { navigableWaterDepthAt } from '../world/navigable-water';
 import { REED_PATCHES } from '../world/reeds';
 import { overlapsWater, type WaterCircle } from '../world/water';
 
@@ -188,15 +188,17 @@ export function checkBuildSpot(
  */
 function boatBerthRefusal(piece: Footprint, ends: readonly [Point, Point]): BuildRefusal | null {
   for (const point of pointsAlong(ends[0], ends[1])) {
-    if (lakeDepthAt(LAKE, point.x, point.z) < BOAT_HULL_MIN_DEPTH) return { reason: 'needsWater' };
+    if (navigableWaterDepthAt(point.x, point.z) < BOAT_HULL_MIN_DEPTH)
+      return { reason: 'needsWater' };
     for (let side = 0; side < 8; side++) {
       const angle = (side * Math.PI) / 4;
       const x = point.x + Math.cos(angle) * piece.radius;
       const z = point.z + Math.sin(angle) * piece.radius;
-      if (lakeDepthAt(LAKE, x, z) < BOAT_HULL_MIN_DEPTH) return { reason: 'needsWater' };
+      if (navigableWaterDepthAt(x, z) < BOAT_HULL_MIN_DEPTH) return { reason: 'needsWater' };
     }
   }
-  if (lakeDepthAt(LAKE, piece.x, piece.z) > BOAT_BERTH_MAX_DEPTH) return { reason: 'tooFarOut' };
+  if (navigableWaterDepthAt(piece.x, piece.z) > BOAT_BERTH_MAX_DEPTH)
+    return { reason: 'tooFarOut' };
   return null;
 }
 

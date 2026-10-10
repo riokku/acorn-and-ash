@@ -84,6 +84,7 @@ export class MoveMemory {
   private step = 0;
   private age = 0;
   private atTree = false;
+  private digging = false;
   private flinchVariant: 0 | 1 = 0;
   private afterWindup = false;
 
@@ -97,10 +98,14 @@ export class MoveMemory {
     age: number,
     atTreeNow: boolean,
     roll: RollDirection,
+    diggingNow = false,
   ): MoveView {
     const fresh = kind !== this.kind || step !== this.step || age < this.age;
     if (fresh) {
-      if (kind === ActionKind.Swing) this.atTree = atTreeNow;
+      if (kind === ActionKind.Swing) {
+        this.atTree = atTreeNow;
+        this.digging = diggingNow;
+      }
       if (kind === ActionKind.Flinch) this.flinchVariant = this.flinchVariant === 0 ? 1 : 0;
       this.afterWindup = kind === ActionKind.Swing && this.kind === ActionKind.Windup;
     }
@@ -112,6 +117,7 @@ export class MoveMemory {
       step,
       age,
       atTree: this.atTree,
+      digging: this.digging,
       flinchVariant: this.flinchVariant,
       roll,
       afterWindup: this.afterWindup,

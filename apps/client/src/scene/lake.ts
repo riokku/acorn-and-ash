@@ -13,6 +13,7 @@ import { createIceMaterial, createWaterMaterial, paintedMaterial } from '../art/
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
+import { buryGeometryBase } from './prop-grounding';
 
 /** Round discs are cut finely so the water's outline never shows corners, even on the big blobs. */
 const DISC_SEGMENTS = 72;
@@ -43,7 +44,14 @@ const SHORE_STONES = 46;
  * height people walk on, and the water is hidden: `setFrozen` swaps one for the
  * other.
  */
-export function createLakeScene(lake: Lake): {
+export function createLakeScene(
+  lake: Lake,
+  excludePlantsAt: (x: number, z: number) => boolean = () => false,
+  surfaceHeightAt: (x: number, z: number) => number = () => lake.level,
+  shoreConnections: readonly WaterCircle[] = [],
+  flowAt?: (x: number, z: number) => { x: number; z: number; share: number },
+  scenery: { seed?: number; groundHeightAt?: (x: number, z: number) => number } = {},
+): {
   group: THREE.Group;
   /** Show the lake as ice (true) or as open water (false). */
   setFrozen(frozen: boolean): void;
@@ -55,6 +63,8 @@ export function createLakeScene(lake: Lake): {
 
   const lobes = lake.islands.flatMap((island) => island.lobes);
   const waterMaterial = createWaterMaterial(lake.basin, {
+    shoreConnections,
+    riverFlow: flowAt !== undefined,
     islands: lobes,
     deepAt: DEEP_WATER_AT,
     deep: 0x1f4f73,
@@ -64,8 +74,36 @@ export function createLakeScene(lake: Lake): {
   const water: THREE.Mesh[] = [];
   const ice: THREE.Mesh[] = [];
   for (const circle of lake.basin) {
-    const surface = new THREE.CircleGeometry(circle.radius, DISC_SEGMENTS);
+    // Extra rings let a slough follow the grade through its whole surface,
+    // including the curved transition into the river at its mouth.
+    const surface = shoreConnections.length
+      ? new THREE.RingGeometry(0, circle.radius, DISC_SEGMENTS, Math.ceil(circle.radius))
+      : new THREE.CircleGeometry(circle.radius, DISC_SEGMENTS);
     surface.rotateX(-Math.PI / 2);
+    const positions = surface.getAttribute('position');
+    for (let vertex = 0; vertex < positions.count; vertex++) {
+      positions.setY(
+        vertex,
+        surfaceHeightAt(circle.x + positions.getX(vertex), circle.z + positions.getZ(vertex)) -
+          lake.level,
+      );
+    }
+    surface.computeVertexNormals();
+    if (flowAt !== undefined) {
+      const flow = new Float32Array(positions.count * 2);
+      const share = new Float32Array(positions.count);
+      for (let vertex = 0; vertex < positions.count; vertex++) {
+        const current = flowAt(
+          circle.x + positions.getX(vertex),
+          circle.z + positions.getZ(vertex),
+        );
+        flow[vertex * 2] = current.x;
+        flow[vertex * 2 + 1] = current.z;
+        share[vertex] = current.share;
+      }
+      surface.setAttribute('waterFlow', new THREE.BufferAttribute(flow, 2));
+      surface.setAttribute('waterFlowShare', new THREE.BufferAttribute(share, 1));
+    }
     geometries.push(surface);
     const mesh = new THREE.Mesh(surface, waterMaterial);
     mesh.position.set(circle.x, lake.level, circle.z);
@@ -81,14 +119,32 @@ export function createLakeScene(lake: Lake): {
     ice.push(sheet);
   }
 
-  const plants = createShorePlants(lake);
+  const plants = createShorePlants(
+    lake,
+    excludePlantsAt,
+    surfaceHeightAt,
+    scenery.seed ?? 909,
+    scenery.groundHeightAt ?? surfaceHeightAt,
+  );
   group.add(plants.group);
+  const plantMaterials = waterPlantMaterials();
+  const floatingPlants = new Set([
+    plantMaterials.pad,
+    plantMaterials.padUnder,
+    plantMaterials.petal,
+    plantMaterials.petalPink,
+    plantMaterials.heart,
+  ]);
 
   return {
     group,
     setFrozen: (frozen) => {
       for (const mesh of water) mesh.visible = !frozen;
       for (const mesh of ice) mesh.visible = frozen;
+      for (const child of plants.group.children) {
+        if (child instanceof THREE.Mesh && floatingPlants.has(child.material as THREE.Material))
+          child.visible = !frozen;
+      }
     },
     dispose: () => {
       for (const geometry of geometries) geometry.dispose();
@@ -121,11 +177,17 @@ function* rimPoints(
  * Seeded, and independent of the world's own seed: the lake is the same in
  * every world, so its plants are too.
  */
-function createShorePlants(lake: Lake): { group: THREE.Group; dispose(): void } {
+function createShorePlants(
+  lake: Lake,
+  excludePlantsAt: (x: number, z: number) => boolean,
+  surfaceHeightAt: (x: number, z: number) => number,
+  seed: number,
+  groundHeightAt: (x: number, z: number) => number,
+): { group: THREE.Group; dispose(): void } {
   const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const builder = new ModelBuilder();
-  const random = seededRandom(909);
+  const random = seededRandom(seed);
   const level = lake.level;
 
   // Reeds stand just inside the water's edge, wherever that edge is open to
@@ -134,16 +196,19 @@ function createShorePlants(lake: Lake): { group: THREE.Group; dispose(): void } 
     for (const [x, z, outX, outZ] of rimPoints(circle, REED_SPACING, random)) {
       if (random() > REED_SHARE) continue;
       // Inwards for the mainland's rim means toward the middle of the circle; for an island, away from it.
-      const at = { x: x - outX * 0.35 * inwards, y: level, z: z - outZ * 0.35 * inwards };
+      const inset = 0.15 + random() * 0.65;
+      const at = { x: x - outX * inset * inwards, y: level, z: z - outZ * inset * inwards };
+      at.y = surfaceHeightAt(at.x, at.z);
       const depth = lakeDepthAt(lake, at.x, at.z);
       if (depth < 0.12 || depth > 1.1) continue;
+      if (excludePlantsAt(at.x, at.z)) continue;
       // The reeds that can be cut are drawn by the ground items, so the
       // scenery leaves a gap round each one instead of burying it.
       if (
         REED_PATCHES.some((patch) => Math.hypot(patch.x - at.x, patch.z - at.z) < REED_PATCH_CLEAR)
       )
         continue;
-      addReedClump(builder, plants, random, at, 5 + Math.floor(random() * 3));
+      addReedClump(builder, plants, random, at, 3 + Math.floor(random() * 9));
     }
   };
   for (const circle of lake.basin) reedsAlong(circle, 1);
@@ -165,9 +230,19 @@ function createShorePlants(lake: Lake): { group: THREE.Group; dispose(): void } 
       z: circle.z + Math.sin(angle) * reach,
     };
     const depth = lakeDepthAt(lake, at.x, at.z);
+    at.y = surfaceHeightAt(at.x, at.z);
     if (depth < 1.4 || depth > 4.5) continue;
+    if (excludePlantsAt(at.x, at.z)) continue;
     const flower = random() < 0.3 ? (random() < 0.5 ? 'white' : 'pink') : null;
-    addLilyPad(builder, plants, at, 0.28 + random() * 0.2, random() * Math.PI * 2, flower);
+    addLilyPad(
+      builder,
+      plants,
+      at,
+      0.28 + random() * 0.2,
+      random() * Math.PI * 2,
+      flower,
+      surfaceHeightAt,
+    );
     placedPads += 1;
   }
 
@@ -181,11 +256,17 @@ function createShorePlants(lake: Lake): { group: THREE.Group; dispose(): void } 
     const z = circle.z + Math.sin(angle) * (circle.radius + 0.1);
     // Not where two circles overlap: that rim is under water.
     if (basinDepthAt(lake, x, z) > -0.05) continue;
+    if (excludePlantsAt(x, z)) continue;
     const size = 0.18 + random() * 0.32;
+    const y = groundHeightAt(x, z);
     builder.add(
       stone,
-      stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
-      placed(x, level, z, { y: random() * 3 }),
+      buryGeometryBase(
+        stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
+        { x, y, z },
+        groundHeightAt,
+      ),
+      placed(x, y, z, { y: random() * 3 }),
     );
     placedStones += 1;
   }

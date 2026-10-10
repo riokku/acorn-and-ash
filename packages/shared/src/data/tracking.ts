@@ -1,3 +1,4 @@
+import { STREAM, STREAM_WADING_DEPTH, streamWaterDepthAt } from '../world/stream';
 import { colliderFootprintRadius, type Collider } from '../world/colliders';
 import { createRng, hashSeed } from '../rng';
 /** Stable woodland encounter clearings, reserved before homes can settle there. */
@@ -33,6 +34,15 @@ export function buildWoodlandTracks(
       for (const offset of [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1, 2.8, -2.8]) {
         const atX = x - forwardZ * offset,
           atZ = z + forwardX * offset;
+        // A lead must stay reachable when the river's deep pools block wading.
+        let deepWater = streamWaterDepthAt(STREAM, atX, atZ) > STREAM_WADING_DEPTH;
+        for (let side = 0; side < 8 && !deepWater; side++) {
+          const angle = (side * Math.PI) / 4;
+          deepWater =
+            streamWaterDepthAt(STREAM, atX + Math.cos(angle) * 0.6, atZ + Math.sin(angle) * 0.6) >
+            STREAM_WADING_DEPTH;
+        }
+        if (deepWater) continue;
         if (
           colliders.some(
             (collider) =>
