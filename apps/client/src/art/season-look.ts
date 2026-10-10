@@ -28,6 +28,10 @@ export interface SeasonLook {
   readonly blades: Rgb;
   /** Multiplies the needles and leaves of the trees. */
   readonly foliage: Rgb;
+  /** Multiplies the leaves of maples and alders, which turn in autumn (the conifers use `foliage`). */
+  readonly leaves: Rgb;
+  /** How much of the broadleaf canopy is still on the branches: 1 full, 0 bare. */
+  readonly leafCover: number;
   /** How much of the ground, grass and trees is under snow: 0 none, 1 deep. */
   readonly snow: number;
 }
@@ -41,6 +45,8 @@ export const SEASON_LOOKS: Readonly<Record<SeasonId, SeasonLook>> = {
     ground: [1.04, 1.22, 1],
     blades: [0.95, 1.34, 0.9],
     foliage: [0.96, 1.1, 0.96],
+    leaves: [0.98, 1.16, 0.9],
+    leafCover: 1,
     snow: 0,
   },
   // Deep, rich and golden: darker greens in the longest, warmest light of the year.
@@ -51,6 +57,8 @@ export const SEASON_LOOKS: Readonly<Record<SeasonId, SeasonLook>> = {
     ground: [0.84, 0.97, 0.74],
     blades: [0.82, 0.94, 0.68],
     foliage: [0.9, 0.99, 0.84],
+    leaves: [0.9, 0.99, 0.84],
+    leafCover: 1,
     snow: 0,
   },
   // Hazy amber: the grass goes gold and russet, the trees turn a touch warm.
@@ -61,6 +69,8 @@ export const SEASON_LOOKS: Readonly<Record<SeasonId, SeasonLook>> = {
     ground: [1.3, 0.97, 0.58],
     blades: [1.85, 1.08, 0.55],
     foliage: [1.08, 0.97, 0.76],
+    leaves: [4.2, 0.95, 0.35],
+    leafCover: 1,
     snow: 0,
   },
   // Cold and quiet: a pale blue-grey sky, low weak sun, snow on everything.
@@ -71,6 +81,8 @@ export const SEASON_LOOKS: Readonly<Record<SeasonId, SeasonLook>> = {
     ground: [0.9, 0.96, 1.04],
     blades: [1.05, 1.1, 1.15],
     foliage: [0.84, 0.95, 0.96],
+    leaves: [3, 0.85, 0.4],
+    leafCover: 0,
     snow: 1,
   },
 };
@@ -95,6 +107,8 @@ export function lookFor(mix: SeasonMix): SeasonLook {
     ground: blend(from.ground, to.ground, amount),
     blades: blend(from.blades, to.blades, amount),
     foliage: blend(from.foliage, to.foliage, amount),
+    leaves: blend(from.leaves, to.leaves, amount),
+    leafCover: from.leafCover + (to.leafCover - from.leafCover) * amount,
     snow: from.snow + (to.snow - from.snow) * amount,
   };
 }

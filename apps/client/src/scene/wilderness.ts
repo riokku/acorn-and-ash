@@ -28,6 +28,7 @@ import {
   placeInstance,
   placeOneInstance,
 } from './props';
+import { treeVariant } from './prop-models';
 
 /** How finely the hills are meshed. Small enough that slopes read as curves, not facets. */
 const GROUND_SEGMENT_SIZE = 2.5;
@@ -163,8 +164,9 @@ export function buildWildernessScene(
 
   const byKind = new Map<string, PlacedProp[]>();
   for (const prop of wilderness.props) {
-    const existing = byKind.get(prop.kind);
-    if (existing === undefined) byKind.set(prop.kind, [prop]);
+    const key = `${prop.kind}:${treeVariant(prop)}`;
+    const existing = byKind.get(key);
+    if (existing === undefined) byKind.set(key, [prop]);
     else existing.push(prop);
   }
 
@@ -172,9 +174,11 @@ export function buildWildernessScene(
   const slotOf = new Map<number, TreeSlot>();
   const treeById = new Map<number, PlacedProp>();
   const treeDraws: Array<{ props: PlacedProp[]; near: PropPart[]; far: PropPart[] }> = [];
-  for (const [kindId, props] of byKind) {
+  for (const [key, props] of byKind) {
+    const [kindId = '', variantText = '0'] = key.split(':');
+    const variant = Number(variantText);
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length, false, terrain);
+    const parts = createPropMeshes(kind, props.length, false, terrain, variant);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);
@@ -182,7 +186,7 @@ export function buildWildernessScene(
     props.forEach((prop, index) => placeInstance(parts, index, prop));
     for (const part of parts) part.mesh.instanceMatrix.needsUpdate = true;
     if (kind.shape.family === 'tree') {
-      const far = createPropMeshes(kind, props.length, true, terrain);
+      const far = createPropMeshes(kind, props.length, true, terrain, variant);
       for (const part of far) {
         part.mesh.count = 0;
         group.add(part.mesh);

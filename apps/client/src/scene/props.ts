@@ -40,10 +40,11 @@ export function createPropMeshes(
   count: number,
   distant = false,
   terrain?: Terrain,
+  variant = 0,
 ): PropPart[] {
-  const parts = propMeshes(kind, count, distant);
+  const parts = propMeshes(kind, count, distant, variant);
   // The detailed footprint grounds both versions identically at the LOD switch.
-  const detailed = realModelPartsFor(kind.id);
+  const detailed = realModelPartsFor(kind.id, false, variant);
   const bases =
     detailed?.map((part) => ({ geometry: part.geometry, offsetY: 0 })) ??
     parts.map((part) => ({ geometry: part.mesh.geometry, offsetY: part.offset.elements[13]! }));
@@ -53,9 +54,9 @@ export function createPropMeshes(
   return parts.map((part) => groundPart(part, footprint, terrain));
 }
 
-function propMeshes(kind: PropKind, count: number, distant: boolean): PropPart[] {
+function propMeshes(kind: PropKind, count: number, distant: boolean, variant: number): PropPart[] {
   if (kind.shape.family === 'tree') {
-    const realParts = realModelPartsFor(kind.id, distant);
+    const realParts = realModelPartsFor(kind.id, distant, variant);
     if (realParts !== undefined) {
       // Already scaled and grounded to this kind's design height (see
       // prop-models.ts), so it needs no offset beyond the usual placement.
@@ -93,7 +94,7 @@ function propMeshes(kind: PropKind, count: number, distant: boolean): PropPart[]
     ];
   }
 
-  const realParts = realModelPartsFor(kind.id, distant);
+  const realParts = realModelPartsFor(kind.id, distant, variant);
   if (realParts !== undefined) {
     return realParts.map((part) => instanced(part.geometry, part.material, count, 0, false));
   }

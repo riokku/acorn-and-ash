@@ -5,12 +5,36 @@ import { PROP_KINDS, propHeight, type PropKindId } from '@acorn/shared';
 import { createRockMaterial, paintedMaterial } from '../art/materials';
 import { loadScaledModel, type ModelPart } from './model-loading';
 
-import birchUrl from '@assets/trees/western-redcedar.glb?url';
+import cedarUrl from '@assets/trees/western-redcedar.glb?url';
+import cedarBUrl from '@assets/trees/western-redcedar-b.glb?url';
+import cedarCUrl from '@assets/trees/western-redcedar-c.glb?url';
 import cedarDistantUrl from '@assets/trees/western-redcedar-distant.glb?url';
-import oakUrl from '@assets/trees/sitka-spruce.glb?url';
+import cedarBDistantUrl from '@assets/trees/western-redcedar-b-distant.glb?url';
+import cedarCDistantUrl from '@assets/trees/western-redcedar-c-distant.glb?url';
+import spruceUrl from '@assets/trees/sitka-spruce.glb?url';
+import spruceBUrl from '@assets/trees/sitka-spruce-b.glb?url';
+import spruceCUrl from '@assets/trees/sitka-spruce-c.glb?url';
 import spruceDistantUrl from '@assets/trees/sitka-spruce-distant.glb?url';
-import pineUrl from '@assets/trees/douglas-fir.glb?url';
+import spruceBDistantUrl from '@assets/trees/sitka-spruce-b-distant.glb?url';
+import spruceCDistantUrl from '@assets/trees/sitka-spruce-c-distant.glb?url';
+import firUrl from '@assets/trees/douglas-fir.glb?url';
+import firBUrl from '@assets/trees/douglas-fir-b.glb?url';
+import firCUrl from '@assets/trees/douglas-fir-c.glb?url';
 import firDistantUrl from '@assets/trees/douglas-fir-distant.glb?url';
+import firBDistantUrl from '@assets/trees/douglas-fir-b-distant.glb?url';
+import firCDistantUrl from '@assets/trees/douglas-fir-c-distant.glb?url';
+import mapleUrl from '@assets/trees/bigleaf-maple.glb?url';
+import mapleDistantUrl from '@assets/trees/bigleaf-maple-distant.glb?url';
+import mapleBUrl from '@assets/trees/bigleaf-maple-b.glb?url';
+import mapleBDistantUrl from '@assets/trees/bigleaf-maple-b-distant.glb?url';
+import mapleCUrl from '@assets/trees/bigleaf-maple-c.glb?url';
+import mapleCDistantUrl from '@assets/trees/bigleaf-maple-c-distant.glb?url';
+import alderUrl from '@assets/trees/red-alder.glb?url';
+import alderDistantUrl from '@assets/trees/red-alder-distant.glb?url';
+import alderBUrl from '@assets/trees/red-alder-b.glb?url';
+import alderBDistantUrl from '@assets/trees/red-alder-b-distant.glb?url';
+import alderCUrl from '@assets/trees/red-alder-c.glb?url';
+import alderCDistantUrl from '@assets/trees/red-alder-c-distant.glb?url';
 import boulderUrl from '@assets/rocks/boulder.glb?url';
 import mossyRockUrl from '@assets/rocks/mossyRock.glb?url';
 
@@ -18,23 +42,31 @@ import mossyRockUrl from '@assets/rocks/mossyRock.glb?url';
  * Original PNW tree meshes and licensed CC0 rocks (see
  * assets/LICENSES.csv). Any kind with no entry here keeps drawing its
  * placeholder shape; see the fallback in createPropMeshes.
+ *
+ * Every kind has a list of shapes: the trees have three each so a forest is
+ * not one tree stamped out many times, and each tree keeps the same shape for
+ * good (see `treeVariant`).
  */
-const MODEL_URLS: Partial<Record<PropKindId, string>> = {
-  birch: birchUrl,
-  oak: oakUrl,
-  pine: pineUrl,
-  boulder: boulderUrl,
-  mossyRock: mossyRockUrl,
+const MODEL_URLS: Partial<Record<PropKindId, readonly string[]>> = {
+  birch: [cedarUrl, cedarBUrl, cedarCUrl],
+  oak: [spruceUrl, spruceBUrl, spruceCUrl],
+  pine: [firUrl, firBUrl, firCUrl],
+  maple: [mapleUrl, mapleBUrl, mapleCUrl],
+  alder: [alderUrl, alderBUrl, alderCUrl],
+  boulder: [boulderUrl],
+  mossyRock: [mossyRockUrl],
 };
 
-const DISTANT_URLS: Partial<Record<PropKindId, string>> = {
-  pine: firDistantUrl,
-  birch: cedarDistantUrl,
-  oak: spruceDistantUrl,
+const DISTANT_URLS: Partial<Record<PropKindId, readonly string[]>> = {
+  pine: [firDistantUrl, firBDistantUrl, firCDistantUrl],
+  birch: [cedarDistantUrl, cedarBDistantUrl, cedarCDistantUrl],
+  oak: [spruceDistantUrl, spruceBDistantUrl, spruceCDistantUrl],
+  maple: [mapleDistantUrl, mapleBDistantUrl, mapleCDistantUrl],
+  alder: [alderDistantUrl, alderBDistantUrl, alderCDistantUrl],
 };
-const distantParts = new Map<PropKindId, ModelPart[]>();
+const distantParts = new Map<PropKindId, ModelPart[][]>();
 
-const modelParts = new Map<PropKindId, ModelPart[]>();
+const modelParts = new Map<PropKindId, ModelPart[][]>();
 let preloadPromise: Promise<void> | null = null;
 
 /**
@@ -54,45 +86,92 @@ export function preloadPropModels(): Promise<void> {
  */
 export function treeFoliageMaterials(): THREE.MeshStandardMaterial[] {
   const found = new Set<THREE.MeshStandardMaterial>();
-  for (const parts of [...modelParts, ...distantParts]) {
-    const [id, list] = parts;
+  for (const [id, shapes] of [...modelParts, ...distantParts]) {
     if (PROP_KINDS[id].shape.family !== 'tree') continue;
-    for (const part of list) {
-      if (/bark/i.test(part.material.name)) continue;
-      if (part.material instanceof THREE.MeshStandardMaterial) found.add(part.material);
+    for (const list of shapes) {
+      for (const part of list) {
+        if (/bark/i.test(part.material.name)) continue;
+        if (part.material instanceof THREE.MeshStandardMaterial) found.add(part.material);
+      }
     }
   }
   return [...found];
 }
 
-/** The real model's parts for this kind, or undefined to keep the placeholder. */
-export function realModelPartsFor(id: PropKindId, distant = false): ModelPart[] | undefined {
-  return distant ? (distantParts.get(id) ?? modelParts.get(id)) : modelParts.get(id);
+/** The leaf materials of the trees that turn in autumn and stand bare in winter. */
+export function deciduousFoliageMaterials(): THREE.MeshStandardMaterial[] {
+  const found = new Set<THREE.MeshStandardMaterial>();
+  for (const [id, shapes] of [...modelParts, ...distantParts]) {
+    if (!('deciduous' in PROP_KINDS[id])) continue;
+    for (const list of shapes) {
+      for (const part of list) {
+        if (/bark/i.test(part.material.name)) continue;
+        if (part.material instanceof THREE.MeshStandardMaterial) found.add(part.material);
+      }
+    }
+  }
+  return [...found];
+}
+
+/** How many shapes of this kind there are to choose from (at least one). */
+export function shapeCount(id: PropKindId): number {
+  return Math.max(1, modelParts.get(id)?.length ?? 1);
+}
+
+/**
+ * Which of a kind's shapes this prop wears. It depends only on the prop's id,
+ * so a tree keeps its shape whenever it is drawn: near or distant, standing,
+ * shaking, falling or grown back.
+ */
+export function treeVariant(prop: { readonly id: number; readonly kind: PropKindId }): number {
+  const count = shapeCount(prop.kind);
+  if (count === 1) return 0;
+  // Mix the id's bits first so neighbouring ids do not take turns in order.
+  return (Math.imul(prop.id, 2654435761) >>> 16) % count;
+}
+
+/** The real model's parts for this kind and shape, or undefined to keep the placeholder. */
+export function realModelPartsFor(
+  id: PropKindId,
+  distant = false,
+  variant = 0,
+): ModelPart[] | undefined {
+  const shapes = distant ? (distantParts.get(id) ?? modelParts.get(id)) : modelParts.get(id);
+  if (shapes === undefined || shapes.length === 0) return undefined;
+  return shapes[variant % shapes.length];
 }
 
 async function loadAll(): Promise<void> {
+  const loadShapes = async (
+    id: PropKindId,
+    urls: readonly string[],
+    into: Map<PropKindId, ModelPart[][]>,
+  ): Promise<void> => {
+    // Scaled and grounded to this kind's design height instead of whatever
+    // size the source happened to model it at, so every shape drops into the
+    // existing per-instance placement code with no special-casing.
+    const results = await Promise.all(
+      urls.map(async (url) => {
+        try {
+          return dressUp(id, await loadScaledModel(url, propHeight(PROP_KINDS[id])));
+        } catch (error) {
+          // The placeholder shape is a fine fallback, so a fetch failure here
+          // shouldn't stop the player from getting into the world.
+          console.error(`Could not load a model for "${id}"; skipping it.`, error);
+          return null;
+        }
+      }),
+    );
+    const loaded = results.filter((parts): parts is ModelPart[] => parts !== null);
+    if (loaded.length > 0) into.set(id, loaded);
+  };
   await Promise.all([
-    ...Object.entries(DISTANT_URLS).map(async ([name, url]) => {
-      const id = name as PropKindId;
-      try {
-        distantParts.set(id, dressUp(id, await loadScaledModel(url, propHeight(PROP_KINDS[id]))));
-      } catch (error) {
-        console.error(`Could not load distant tree ${id}.`, error);
-      }
-    }),
-    ...(Object.entries(MODEL_URLS) as Array<[PropKindId, string]>).map(async ([id, url]) => {
-      try {
-        // Scaled and grounded to this kind's design height instead of
-        // whatever size the source pack happened to model it at, so it drops
-        // into the existing per-instance placement code with no special-casing.
-        const parts = await loadScaledModel(url, propHeight(PROP_KINDS[id]));
-        modelParts.set(id, dressUp(id, parts));
-      } catch (error) {
-        // The placeholder shape is a fine fallback, so a fetch failure here
-        // shouldn't stop the player from getting into the world.
-        console.error(`Could not load the model for "${id}"; keeping its placeholder.`, error);
-      }
-    }),
+    ...(Object.entries(DISTANT_URLS) as Array<[PropKindId, readonly string[]]>).map(([id, urls]) =>
+      loadShapes(id, urls, distantParts),
+    ),
+    ...(Object.entries(MODEL_URLS) as Array<[PropKindId, readonly string[]]>).map(([id, urls]) =>
+      loadShapes(id, urls, modelParts),
+    ),
   ]);
 }
 
@@ -113,7 +192,7 @@ function dressUp(id: PropKindId, parts: ModelPart[]): ModelPart[] {
         geometry: part.geometry,
         material: paintedMaterial('bark', {
           roughness: 1,
-          tint: id === 'birch' ? 0xdbb7a2 : 0xc0b5a9,
+          tint: id === 'birch' ? 0xdbb7a2 : id === 'alder' ? 0xe6e1d6 : 0xc0b5a9,
         }),
       };
     });

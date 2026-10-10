@@ -26,6 +26,7 @@ import {
   placeOneInstance,
   type PropPart,
 } from './props';
+import { treeVariant } from './prop-models';
 
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
 export interface ClearingScene {
@@ -93,17 +94,20 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 
   const byKind = new Map<string, PlacedProp[]>();
   for (const prop of clearing.props) {
-    const existing = byKind.get(prop.kind);
-    if (existing === undefined) byKind.set(prop.kind, [prop]);
+    const key = `${prop.kind}:${treeVariant(prop)}`;
+    const existing = byKind.get(key);
+    if (existing === undefined) byKind.set(key, [prop]);
     else existing.push(prop);
   }
 
   /** Where a tree's instance sits, so it can be taken away when it is felled. */
   const standing = new Map<number, { parts: PropPart[]; index: number }>();
 
-  for (const [kindId, props] of byKind) {
+  for (const [key, props] of byKind) {
+    const [kindId = '', variantText = '0'] = key.split(':');
+    const variant = Number(variantText);
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length);
+    const parts = createPropMeshes(kind, props.length, false, undefined, variant);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);

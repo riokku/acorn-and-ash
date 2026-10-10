@@ -28,6 +28,7 @@ import { colliderForProp, type PlacedProp } from './clearing';
 import { wildernessHillWeight, type Terrain } from './terrain';
 import { fractalNoise2D } from './noise';
 import { buildIslandProps } from './islands';
+import { broadleafOrConifer } from './broadleaf';
 import { mountainWeight } from './mountains';
 import { basinDepthAt, LAKE, LAKE_PROP_CLEARANCE, type Lake } from './lake';
 import { nearStream, STREAM, STREAM_PROP_CLEARANCE, type Stream } from './stream';
@@ -141,9 +142,10 @@ export function buildWilderness(
       const rockChance = lerp(ROCK_CHANCE, HIGH_ROCK_CHANCE, 1 - treeShare);
       const isRock = cellRng.nextFloat() < rockChance;
       if (!isRock && treeShare < 1 && cellRng.nextFloat() > treeShare) continue;
-      const kind = cellRng.pick(
+      const picked = cellRng.pick(
         isRock ? ROCK_KINDS : y > HIGH_PINE_HEIGHT ? ['pine' as const] : TREE_KINDS,
       );
+      const kind = isRock ? picked : broadleafOrConifer(seed, lake, stream, picked, x, y, z);
 
       props.push({
         id: nextId++,
