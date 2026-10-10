@@ -3,7 +3,8 @@ import { createGuardianTrophy } from '../scene/guardian-trophy';
 import { createWoodlandCreature } from '../scene/woodland-creatures';
 import { createDiscoveryLandmarks } from '../scene/discovery-sites';
 import { createForageModel, createMealModel } from '../scene/forest-food';
-import { DISCOVERIES } from '@acorn/shared';
+import { DISCOVERIES, parseSeason } from '@acorn/shared';
+import { createSeasonRig } from '../scene/seasons';
 import { createFlatTerrain } from '@acorn/shared';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
@@ -228,6 +229,10 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const scene = new THREE.Scene();
   const daylight = addDaylight(scene);
   daylight.update(Number.isFinite(time) ? time : 0.42);
+  // `?season=autumn` (or spring, summer, winter) shows the trees dressed for that season.
+  const season = parseSeason(params.get('season'));
+  if (season !== undefined)
+    createSeasonRig().apply({ from: season, to: season, amount: 0 }, daylight);
   const fireLights = new FireLights(scene);
 
   // The inside of a home is its own place (see decision 0055), shown the
