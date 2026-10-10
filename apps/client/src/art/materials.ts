@@ -9,6 +9,12 @@ import {
   normalWorld,
   positionWorld,
   sin,
+  cos,
+  exp,
+  normalView,
+  normalWorldGeometry,
+  positionViewDirection,
+  cameraViewMatrix,
   smoothstep,
   texture,
   time,
@@ -21,6 +27,37 @@ import type { WaterCircle } from '@acorn/shared';
 
 import { seasonUniforms } from './season-uniforms';
 import { artTexture, type ArtTextureId } from './textures';
+import { waterRippleUniforms } from './water-uniforms';
+
+/** Small surface waves plus expanding, damped waves left by moving feet. */
+function reactiveWater(
+  material: THREE.MeshStandardNodeMaterial,
+  surface: THREE.Node<'vec3'>,
+): void {
+  let slopeX = cos(positionWorld.x.mul(1.7).add(time.mul(0.65))).mul(0.018);
+  let slopeZ = cos(positionWorld.z.mul(2.1).sub(time.mul(0.47))).mul(0.016);
+  let crest: THREE.Node<'float'> = float(0);
+  for (const ripple of waterRippleUniforms) {
+    const offset = positionWorld.xz.sub(ripple.xy);
+    const distance = max(offset.length(), 0.001);
+    const front = distance.sub(ripple.z.mul(1.6).add(0.18));
+    const envelope = exp(front.mul(front).mul(-5))
+      .mul(max(float(0), float(1).sub(ripple.z.div(3))))
+      .mul(ripple.w);
+    const wave = sin(front.mul(9));
+    const gradient = cos(front.mul(9)).mul(9).sub(wave.mul(front).mul(10)).mul(envelope).mul(0.035);
+    slopeX = slopeX.add(offset.x.div(distance).mul(gradient));
+    slopeZ = slopeZ.add(offset.y.div(distance).mul(gradient));
+    crest = crest.add(wave.abs().mul(envelope));
+  }
+  const grazing = float(1).sub(normalView.dot(positionViewDirection).abs()).pow(3);
+  material.colorNode = mix(surface, color(0x98bac9), grazing.mul(0.22)).add(
+    color(0xd7eef0).mul(min(crest, 1)).mul(0.12),
+  );
+  material.normalNode = normalWorldGeometry
+    .add(vec3(slopeX.negate(), 0, slopeZ.negate()))
+    .transformDirection(cameraViewMatrix);
+}
 
 /**
  * The materials that wear the painted textures (see decision 0053).
@@ -44,6 +81,7 @@ const FLOOR_TILE = 2.8;
 export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   const grass = artTexture('grass');
   const floor = artTexture('forestFloor');
+  const soil = artTexture('soil');
   const ground = positionWorld.xz;
 
   // Two copies of each texture, one turned and a little smaller, blended in
@@ -83,7 +121,13 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // forest-floor texture so it is not a flat colour (see decision 0114).
   const rockColour = vec3(0.5, 0.48, 0.45).mul(floorNear.r.mul(0.9).add(0.55));
   const rocky = mix(shaded, rockColour.mul(attribute('tint', 'vec3')), attribute('rock', 'float'));
-  const seasonal = rocky.mul(seasonUniforms.ground);
+  // Reuse the existing fine soil grain with a sandy palette, fading from
+  // darker wet sand at the water into a lighter dry bank and then grass.
+  const bank = attribute('bank', 'vec2');
+  const grain = texture(soil, ground.div(1.8)).r.mul(0.5).add(0.7);
+  const sand = mix(color(0xb3a17c), color(0x776f59), bank.y).mul(grain);
+  const beach = mix(rocky, sand.mul(attribute('tint', 'vec3')), bank.x);
+  const seasonal = beach.mul(seasonUniforms.ground);
   const winterSnow = seasonUniforms.snow
     .mul(float(1).sub(bare.mul(float(0.45).mul(float(1).sub(seasonUniforms.blizzard)))))
     .mul(0.88);
@@ -115,6 +159,10 @@ function depthInPond(circles: readonly WaterCircle[]) {
 
 /** How a body of water differs from the little pond: a lake is deeper, bluer and has broader ripples. */
 export interface WaterLook {
+  /** Surface vertices carry the river current and its gradual fade into still water. */
+  readonly riverFlow?: boolean;
+  /** Adjoining water that interrupts this surface's shore, such as a river mouth. */
+  readonly shoreConnections?: readonly WaterCircle[];
   /** Circles that are dry land inside the water: islands. The shore runs round them too. */
   readonly islands?: readonly WaterCircle[];
   /** How far from the shore the water reaches its deepest colour, in metres. */
@@ -131,25 +179,28 @@ export interface WaterLook {
  * catch the light, and a pale line where it laps at the bank. The lake uses
  * the same, with islands cut out of it and its own depth and colour.
  */
-export function createWaterMaterial(
-  circles: readonly WaterCircle[],
-  look: WaterLook = {},
-): THREE.MeshStandardNodeMaterial {
+function stillWaterSurface(circles: readonly WaterCircle[], look: WaterLook = {}) {
   const ripples = artTexture('ripples');
   const { islands = [], deepAt = 2.4, deep: deepColour = 0x2b5e7a, rippleSize = 1 } = look;
-  const outline = depthInPond(circles);
+  const outline = look.shoreConnections?.length
+    ? max(depthInPond(circles), depthInPond(look.shoreConnections))
+    : depthInPond(circles);
   // The shore runs round an island as well as round the bank, whichever is nearer.
   const inside = islands.length === 0 ? outline : min(outline, depthInPond(islands).negate());
   const depth = smoothstep(0, deepAt, inside);
 
   const drift = time;
+  const flow = look.riverFlow ? attribute('waterFlow', 'vec2') : vec2(0, 0);
+  const share = look.riverFlow ? attribute('waterFlowShare', 'float') : float(0);
+  const firstDrift = mix(vec2(0.021, 0.013), flow.mul(-0.088), share);
+  const secondDrift = mix(vec2(-0.015, 0.019), flow.mul(-0.137), share);
   const first = texture(
     ripples,
-    positionWorld.xz.mul(0.32 / rippleSize).add(vec2(drift.mul(0.021), drift.mul(0.013))),
+    positionWorld.xz.mul(0.32 / rippleSize).add(firstDrift.mul(drift)),
   ).r;
   const second = texture(
     ripples,
-    positionWorld.xz.mul(0.19 / rippleSize).add(vec2(drift.mul(-0.015), drift.mul(0.019))),
+    positionWorld.xz.mul(0.19 / rippleSize).add(secondDrift.mul(drift)),
   ).r;
   // Soft, broad glints rather than sharp lines: where the two layers of
   // ripples happen to line up, the surface catches a little more sky.
@@ -158,12 +209,18 @@ export function createWaterMaterial(
   const shallows = color(0x4f9a8e);
   const deep = color(deepColour);
   let surface = mix(shallows, deep, depth);
-  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.16));
+  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.08));
   const lapping = smoothstep(0.28, 0.02, inside.add(first.mul(0.08)));
   surface = mix(surface, color(0xdfeee6), lapping.mul(0.55));
+  return surface;
+}
 
+export function createWaterMaterial(
+  circles: readonly WaterCircle[],
+  look: WaterLook = {},
+): THREE.MeshStandardNodeMaterial {
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.12, metalness: 0 });
-  material.colorNode = surface;
+  reactiveWater(material, stillWaterSurface(circles, look));
   material.name = 'painted-water';
   return material;
 }
@@ -175,11 +232,16 @@ export function createWaterMaterial(
  * Each vertex of the ribbon says how far across and along the stream it is
  * (see scene/stream.ts), so the ripples follow the water round every bend.
  */
-export function createStreamMaterial(): THREE.MeshStandardNodeMaterial {
+export function createStreamMaterial(
+  sloughs: readonly WaterCircle[] = [],
+  shoreConnections: readonly WaterCircle[] = [],
+): THREE.MeshStandardNodeMaterial {
   const ripples = artTexture('ripples');
   const across = attribute('streamAcross', 'float');
   const along = attribute('streamAlong', 'float');
-  const edge = attribute('streamEdge', 'float');
+  const bank = attribute('streamEdge', 'float');
+  // A bank stops being a shore where another body of water joins it.
+  const edge = sloughs.length ? bank.mul(smoothstep(1.2, 0, depthInPond(sloughs))) : bank;
   const fall = attribute('streamFall', 'float');
   const pace = attribute('streamPace', 'float');
 
@@ -198,16 +260,35 @@ export function createStreamMaterial(): THREE.MeshStandardNodeMaterial {
   const shallows = color(0x62ad9c);
   const middle = color(0x3b7f93);
   let surface = mix(middle, shallows, smoothstep(0.1, 0.95, edge));
-  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.2));
+  surface = surface.add(color(0xd9f1ff).mul(glint).mul(0.1));
   const lapping = smoothstep(0.72, 0.98, edge.add(first.mul(0.08)));
-  surface = mix(surface, color(0xe4f1ea), lapping.mul(0.5));
+  surface = mix(surface, color(0xc4d6c0), lapping.mul(0.2));
   const foam = fall.mul(smoothstep(0.1, 0.7, streaks.mul(0.7).add(0.4)));
   surface = mix(surface, color(0xf4fbff), foam.mul(0.85));
+  if (sloughs.length) {
+    // Use the slough's exact colours and world-space ripples at the join,
+    // easing into them over two metres of river water before the mouth.
+    const joined = stillWaterSurface(sloughs, {
+      shoreConnections,
+      deepAt: 9,
+      deep: 0x1f4f73,
+      rippleSize: 1.7,
+      riverFlow: true,
+    });
+    surface = mix(surface, joined, smoothstep(-5, 0, depthInPond(sloughs)));
+  }
+
+  // The same sampled depth that blocks wading darkens the actual pools.
+  surface = mix(
+    surface,
+    color(0x163e52),
+    smoothstep(0.65, 1.8, attribute('streamDepth', 'float')).mul(0.8),
+  );
 
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
-  material.colorNode = surface;
+  reactiveWater(material, surface);
   // Clear at the very edge, so the bank shows through and there is no hard line.
-  material.opacityNode = smoothstep(1.02, 0.78, edge);
+  material.opacityNode = float(1).sub(smoothstep(0.55, 1.04, edge));
   material.transparent = true;
   material.depthWrite = false;
   material.polygonOffset = true;

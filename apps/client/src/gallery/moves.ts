@@ -12,6 +12,7 @@ import {
   HOME_CHAIR,
   ITEM_KINDS,
   KNOCKED_OUT_TICKS,
+  DIG_SWING,
   LIGHT_COMBO,
   PLAYER_SPRINT_SPEED,
   PLAYER_WALK_SPEED,
@@ -59,6 +60,8 @@ interface Demo {
   /** The move at this many ticks in. */
   move(age: number): { kind: ActionKind; step: number; age: number };
   readonly atTree?: boolean;
+  /** A swing of the shovel: the slow dig. */
+  readonly digging?: boolean;
   readonly roll?: RollDirection;
   /** Where a sitting or lying body settles, relative to where it stands. */
   readonly rest?: RestSpot;
@@ -193,6 +196,14 @@ const DEMOS: readonly Demo[] = [
   },
   { name: 'pickup', item: 'axe', length: 30, gesture: Gesture.PickUp, move: () => IDLE },
   { name: 'dig', item: 'axe', length: 34, gesture: Gesture.Dig, move: () => IDLE },
+  {
+    // The shovel's own dig: plant, foot on the blade, push, lever up, toss.
+    name: 'dig-swing',
+    item: 'shovel',
+    digging: true,
+    length: DIG_SWING.end + 10,
+    move: (age) => (age < DIG_SWING.end ? { kind: ActionKind.Swing, step: 1, age } : IDLE),
+  },
   { name: 'eat', item: 'perch', length: 36, gesture: Gesture.Eat, move: () => IDLE },
   { name: 'reach', item: 'torch', length: 26, gesture: Gesture.Reach, move: () => IDLE },
   { name: 'fishing', item: 'rod', length: 60, fishing: 'casting', move: () => IDLE },
@@ -349,7 +360,13 @@ function drawAt(showing: Showing, age: number, deltaSeconds: number): void {
         },
   );
   const pose = character.update(deltaSeconds, {
-    move: { ...move, atTree: demo.atTree ?? false, flinchVariant: 0, roll: demo.roll ?? 'forward' },
+    move: {
+      ...move,
+      atTree: demo.atTree ?? false,
+      digging: demo.digging ?? false,
+      flinchVariant: 0,
+      roll: demo.roll ?? 'forward',
+    },
     locomotion: { speed: demo.speed?.(age) ?? 0, airborne: false },
   });
   const sweeping = pose !== null && isSweeping(pose);

@@ -51,6 +51,8 @@ export interface GrassScene {
   readonly mesh: THREE.InstancedMesh;
   setDensity(value: number): void;
   setBuildings(buildings: readonly BuiltPropView[]): void;
+  /** Where a hole dug with the shovel is open to the sky, so no grass is laid there. Call again when holes change. */
+  setHoles(isHole: (x: number, z: number) => boolean): void;
   update(
     deltaSeconds: number,
     position: { x: number; z: number },
@@ -151,6 +153,7 @@ export function createGrass(
   const stretch = new THREE.Vector3();
   let density = 0.75;
   let buildings: readonly BuiltPropView[] = [];
+  let isHole: (x: number, z: number) => boolean = () => false;
   let changed = true;
   let lastX = Infinity,
     lastZ = Infinity;
@@ -321,6 +324,7 @@ export function createGrass(
             )
           )
             continue;
+          if (isHole(x, z)) continue;
           const trampled =
             spoor
               .get(`${Math.floor(x / 8)},${Math.floor(z / 8)}`)
@@ -353,6 +357,10 @@ export function createGrass(
     },
     setBuildings(next) {
       buildings = next;
+      changed = true;
+    },
+    setHoles(next) {
+      isHole = next;
       changed = true;
     },
     update(deltaSeconds, position, reducedMotion, wind = 0.15) {

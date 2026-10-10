@@ -124,7 +124,7 @@ export interface RaidFighter {
   readonly position: Readonly<Vec3>;
   readonly aimYaw: number;
   readonly action: Readonly<ActionState>;
-  /** Out in the world rather than inside a home. */
+  /** Out in the world, rather than inside a home or shut away underground in a dug hole. */
   readonly outdoors: boolean;
   /** Knocked out, or getting back up from it. */
   readonly down: boolean;

@@ -33,6 +33,8 @@ import {
   encodeHealth,
   encodeLakeIce,
   encodeDug,
+  encodeDigRefused,
+  encodeDigTarget,
   encodeHello,
   encodeHunger,
   encodeRoster,
@@ -1427,6 +1429,35 @@ describe('the lake freezing and thawing', () => {
   });
 });
 
+describe('a shovel swing that made no hole', () => {
+  it.each(['home', 'water', 'built', 'deep', 'full', 'nothing', 'packFull', 'far'] as const)(
+    'round trips %s',
+    (reason) => {
+      expect(decodeServerMessage(encodeDigRefused(reason))).toEqual({ type: 'digRefused', reason });
+    },
+  );
+
+  it('rejects an unknown reason or a wrong length', () => {
+    expect(decodeServerMessage(new Uint8Array([0x42, 99]).buffer)).toBeNull();
+    expect(decodeServerMessage(new Uint8Array([0x42]).buffer)).toBeNull();
+  });
+});
+
+describe('the cube the mouse is on', () => {
+  it('round trips a cube and no cube', () => {
+    const target = { ix: -600, iy: 41, iz: 580 };
+    expect(decodeClientMessage(encodeDigTarget(target))).toEqual({ type: 'digTarget', target });
+    expect(decodeClientMessage(encodeDigTarget(null))).toEqual({ type: 'digTarget', target: null });
+  });
+
+  it('rejects the wrong length or a bad flag', () => {
+    expect(decodeClientMessage(new Uint8Array([0x0f, 1, 0]).buffer)).toBeNull();
+    const bad = encodeDigTarget({ ix: 1, iy: 2, iz: 3 });
+    new DataView(bad).setUint8(1, 2);
+    expect(decodeClientMessage(bad)).toBeNull();
+  });
+});
+
 describe('ground dug out with the shovel', () => {
   const digs = [
     { ix: -600, iy: -3, iz: 580, dir: 0 as const },
@@ -1453,7 +1484,7 @@ describe('ground dug out with the shovel', () => {
     oversized.set(new Uint8Array(valid));
     expect(decodeServerMessage(oversized.buffer)).toBeNull();
     const badDirection = encodeDug(digs, true);
-    new DataView(badDirection).setUint8(4 + 6, 4);
+    new DataView(badDirection).setUint8(4 + 6, 5);
     expect(decodeServerMessage(badDirection)).toBeNull();
     const badFlag = encodeDug(digs, true);
     new DataView(badFlag).setUint8(1, 2);

@@ -28,3 +28,7 @@ Gear pieces are items (`packages/shared/src/data/items.ts`, with a list of slots
 - Gear is saved in its own table, and the pack saves what is carried, so a worn piece is never counted twice.
 - Previews can start with one of each piece by adding `?gear=all` to the address. It works only where `WORLD_ALLOW_TEST_GEAR` is `1` (local runs, browser tests and previews, never staging or production).
 - Finding gear in the world is still to do, one way per change, as listed in 0112.
+
+## Update: a tool chosen from the hotbar shows in the main hand
+
+Chris asked that picking a tool or weapon on the hotbar (axe, rod, shovel) also appear as the main-hand item on the character screen. It does: the main hand slot and the turning model show whatever is in the hand. The tool stays in the pack and on the hotbar, so it is shown as held (dashed outline) and cannot be dragged or taken off from that slot. Choosing another hotbar item, or none, puts it away and the slot goes back to the piece worn there. Nothing changes on the server.

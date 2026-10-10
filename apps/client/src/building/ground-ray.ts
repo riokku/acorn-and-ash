@@ -10,13 +10,15 @@ export function groundAlongRay(
   origin: Readonly<Vec3>,
   direction: Readonly<Vec3>,
   terrain: Terrain,
-  floor = Number.NEGATIVE_INFINITY,
+  floor: number | ((x: number, z: number) => number) = Number.NEGATIVE_INFINITY,
 ): { x: number; z: number } | null {
   const clearance = (distance: number): number =>
     origin.y +
     direction.y * distance -
     Math.max(
-      floor,
+      typeof floor === 'number'
+        ? floor
+        : floor(origin.x + direction.x * distance, origin.z + direction.z * distance),
       terrain.heightAt(origin.x + direction.x * distance, origin.z + direction.z * distance),
     );
   if (clearance(0) < 0) return null;

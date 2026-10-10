@@ -107,7 +107,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     const [kindId = '', variantText = '0'] = key.split(':');
     const variant = Number(variantText);
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length, false, variant);
+    const parts = createPropMeshes(kind, props.length, false, undefined, variant);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);
