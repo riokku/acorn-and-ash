@@ -111,7 +111,7 @@ export function defineLake(
 }
 
 /**
- * The lake as built: five blobs of water that run together into one wide,
+ * The lake as built: five main lobes and a river inlet run together into one wide,
  * lobed lake about a hundred metres across, and five islands. Every island
  * stands well clear of every shore, so there is open water to row across.
  */
@@ -123,6 +123,8 @@ export const LAKE: Lake = defineLake(
     { x: 110, z: -64, radius: 20 },
     { x: 108, z: -110, radius: 22 },
     { x: 68, z: -70, radius: 16 },
+    // Round the inlet where the river banks meet the western lake shore.
+    { x: 55, z: -92, radius: 9 },
   ],
   [
     {

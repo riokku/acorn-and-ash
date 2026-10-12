@@ -187,10 +187,10 @@ describe('the ground round the lake', () => {
   });
 
   it('meets the water at the shore, a hair above it, on a gentle beach', () => {
-    // The west edge of the biggest blob, where nothing else is in the way.
+    // The south edge of the biggest blob, clear of the new river inlet.
     const big = LAKE.basin[0]!;
-    const x = big.x - big.radius;
-    const z = big.z;
+    const x = big.x;
+    const z = big.z + big.radius;
     expect(Math.abs(basinDepthAt(LAKE, x, z))).toBeLessThan(0.5);
     expect(height(x, z) - LAKE.level).toBeGreaterThan(0);
     expect(height(x, z) - LAKE.level).toBeLessThan(0.3);
@@ -341,15 +341,15 @@ describe('the shore wall', () => {
 
 describe('casting from the shore', () => {
   it('lands the float on the lake, out from the bank', () => {
-    // On the west bank of the biggest blob, facing east: yaw -90 degrees looks down +X.
-    const bank = { x: 55.4, y: 0, z: -88 };
+    // On the inlet's west bank, facing east: yaw -90 degrees looks down +X.
+    const bank = { x: 45.4, y: 0, z: -92 };
     const spot = castLanding(bank, -Math.PI / 2, [], LAKE);
     expect(spot).not.toBeNull();
     expect(isOnLake(LAKE, spot!.x, spot!.z, FLOAT_SHORE_MARGIN)).toBe(true);
   });
 
   it('finds nothing facing away from the lake', () => {
-    const bank = { x: 55.4, y: 0, z: -88 };
+    const bank = { x: 45.4, y: 0, z: -92 };
     expect(castLanding(bank, Math.PI / 2, [], LAKE)).toBeNull();
   });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_WALKABLE_GRADIENT } from '../src/constants';
-import { LAKE, basinDepthAt, lakeDepthAt } from '../src/world/lake';
+import { LAKE, basinDepthAt, lakeDepthAt, lakeWaterDepthAt } from '../src/world/lake';
 import {
   isInStream,
   nearStream,
@@ -154,6 +154,17 @@ describe('the stream', () => {
     }
   });
 
+  it('rounds the former land point into a supported inlet at the river mouth', () => {
+    for (const [x, z] of [
+      [54, -86],
+      [55, -85],
+      [52, -87],
+    ] as const) {
+      expect(lakeDepthAt(LAKE, x, z)).toBeGreaterThan(1);
+      expect(terrain.heightAt(x, z)).toBeLessThan(LAKE.level - 0.1);
+    }
+  });
+
   it('starts on the mountain and ends at the lake', () => {
     const spring = streamPointAt(STREAM, 0);
     const mouth = streamPointAt(STREAM, STREAM.count - 1);
@@ -226,7 +237,10 @@ describe('the stream', () => {
       const surface = streamSurfaceAt(STREAM, along);
       expect(surface - ground).toBeGreaterThan(0.1);
       expect(surface - ground).toBeLessThan(
-        streamDepthMiddle(STREAM, along) + streamPoolDepthAt(STREAM, along, 0) + 0.4,
+        Math.max(
+          streamDepthMiddle(STREAM, along) + streamPoolDepthAt(STREAM, along, 0),
+          lakeWaterDepthAt(LAKE, at.x, at.z),
+        ) + 0.4,
       );
     }
   });

@@ -2,7 +2,7 @@
 
 The river ended inside the lake with a different colour and ripple pattern. The lake also blocked walking at its entire shore, even on its shallow beaches.
 
-Blend the ribbon into the lake's exact world-space ripple and depth-colour calculation over the last eight metres before the lake outline. Both surfaces use the same connection circles to suppress the lake's former shoreline highlight across the mouth. Keep the lake's depth colour based on its bed rather than those connection circles.
+Blend the ribbon into the lake's exact world-space ripple and depth-colour calculation over the last eight metres before the lake outline. Both surfaces use the same connection circles to suppress the lake's former shoreline highlight across the mouth. Keep the lake's depth colour based on its bed rather than those connection circles. Add a rounded nine-metre inlet at the western mouth so the lake bed, shoreline, collision and water geometry replace the pointed junction together.
 
 Allow lake wading up to 0.8 metres of vertical water depth, the same limit as the river. Derive the barrier's distance from shore by inverting the existing lake-bed slope, keeping the player's capsule clear of deeper water. Apply this on both mainland and island shores. Winter still removes the barrier. Reconnection and thaw preserve players in walkable shallows; deeper positions retain the existing safe-shore recovery.
 
