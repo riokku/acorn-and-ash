@@ -1299,6 +1299,9 @@ describe('chopping a tree down', () => {
     target: { x: number; z: number },
     treeId: number,
   ): Promise<void> {
+    // Aim from the settled position after the walk and axe pickup, rather
+    // than from a snapshot taken while those inputs are still queued.
+    await client.stoppedMoving();
     const netId = client.welcome().netId;
     for (let step = 0; step < 60; step++) {
       if (client.felledTrees().includes(treeId)) return;
@@ -1306,8 +1309,11 @@ describe('chopping a tree down', () => {
       if (here === undefined) break;
       const yaw = Math.atan2(-(target.x - here.x), -(target.z - here.z));
       client.walk(0, 0, yaw, 4, PlayerButton.Swing);
-      await sleep(120);
+      // Four inputs need four simulation ticks. Fixed sleeps can flood a
+      // busy runner and exhaust our attempts before its inputs are processed.
+      await client.caughtUp();
     }
+    if (client.felledTrees().includes(treeId)) return;
     throw new Error('the tree never came down');
   }
 
