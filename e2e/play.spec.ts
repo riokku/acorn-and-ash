@@ -2037,8 +2037,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // A lantern is the cheaper of the two decorations, at four - more than
   // one patch may hold, so this walks on to the next once one runs out.
   await gatherFromPatches(page, 'flower', 4);
-  const gathered = await countHeld(page, 'flower');
-  expect(gathered).toBeGreaterThanOrEqual(4);
+  expect(await countHeld(page, 'flower')).toBeGreaterThanOrEqual(4);
 
   await walkToward(page, spawnSpot);
   await page.evaluate(
@@ -2062,6 +2061,9 @@ test('you can gather flowers and plant something pretty for the garden', async (
 
   // The lantern needs a building area, so the first tent goes up before it.
   const tent = await buildFirstTent(page, spawnSpot);
+  // Gathering the tent's supplies can also collect a nearby flower. Compare
+  // the lantern's cost with the pack immediately before this placement.
+  const gathered = await countHeld(page, 'flower');
   await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
@@ -2070,10 +2072,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // campfire got a screenshot in the build test above.
   await page.screenshot({ path: 'test-results/lantern-lit.png' });
 
-  const spent = await page.evaluate(
-    () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
-  );
-  expect(spent).toBe(gathered - 4);
+  await expect.poll(() => countHeld(page, 'flower')).toBe(gathered - 4);
 
   // Nothing thrown while gathering, walking back, pitching the tent or planting the lantern.
   expect(errors).toEqual([]);
