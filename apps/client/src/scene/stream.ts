@@ -76,7 +76,7 @@ export function createStreamScene(
     LAKE,
     riverMouthConnections(stream),
   );
-  const ribbon = ribbonGeometry(stream);
+  const ribbon = ribbonGeometry(stream, terrain);
   const mesh = new THREE.Mesh(ribbon, material);
   mesh.name = 'stream-water';
   mesh.receiveShadow = true;
@@ -119,7 +119,12 @@ export function createStreamScene(
           share: 1 - smoothstep(spot.distance, half + 1, half + 8),
         };
       },
-      { seed: 1909 + index * 137, groundHeightAt: (x, z) => terrain.heightAt(x, z) },
+      {
+        seed: 1909 + index * 137,
+        groundHeightAt: (x, z) => terrain.heightAt(x, z),
+        waterDepthAt: (x, z) =>
+          Math.max(0, sloughSurfaceAt(stream, slough, x, z) - terrain.heightAt(x, z)),
+      },
     );
     scene.group.name = `slough-${index + 1}`;
     group.add(scene.group);
@@ -302,12 +307,12 @@ function createBankReeds(
   return scene;
 }
 
-function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
+function ribbonGeometry(stream: Stream, terrain: Terrain): THREE.BufferGeometry {
   const rows = stream.count;
   const positions = new Float32Array(rows * ACROSS * 3);
   // WebGPU guarantees only eight vertex buffers. Pack the custom water
   // values together so the ribbon uses just three buffers with position/normal.
-  const waterValues = new Float32Array(rows * ACROSS * 9);
+  const waterValues = new Float32Array(rows * ACROSS * 10);
   const indices: number[] = [];
 
   for (let row = 0; row < rows; row++) {
@@ -331,7 +336,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
       positions[vertex * 3 + 1] = surface;
       positions[vertex * 3 + 2] = here.z + normalZ * half * across;
       const pace = 1 + steep * (FALL_PACE - 1);
-      const water = vertex * 9;
+      const water = vertex * 10;
       waterValues[water] = half * across;
       waterValues[water + 1] = along;
       waterValues[water + 2] = Math.abs(across);
@@ -344,6 +349,10 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
         stream,
         positions[vertex * 3]!,
         positions[vertex * 3 + 2]!,
+      );
+      waterValues[water + 9] = Math.max(
+        0,
+        surface - terrain.heightAt(positions[vertex * 3]!, positions[vertex * 3 + 2]!),
       );
     }
     if (row + 1 < rows) {
@@ -360,7 +369,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 9);
+  const waterBuffer = new THREE.InterleavedBuffer(waterValues, 10);
   geometry.setAttribute('streamAcross', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 0));
   geometry.setAttribute('streamAlong', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 1));
   geometry.setAttribute('streamEdge', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 2));
@@ -369,6 +378,7 @@ function ribbonGeometry(stream: Stream): THREE.BufferGeometry {
   geometry.setAttribute('waterFlow', new THREE.InterleavedBufferAttribute(waterBuffer, 2, 5));
   geometry.setAttribute('waterFlowShare', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 7));
   geometry.setAttribute('streamDepth', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 8));
+  geometry.setAttribute('waterDepth', new THREE.InterleavedBufferAttribute(waterBuffer, 1, 9));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
