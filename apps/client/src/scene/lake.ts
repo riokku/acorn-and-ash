@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   basinDepthAt,
+  LAKE,
   lakeDepthAt,
   lakeIceHeight,
   REED_PATCHES,
@@ -64,6 +65,7 @@ export function createLakeScene(
   const lobes = lake.islands.flatMap((island) => island.lobes);
   const waterMaterial = createWaterMaterial(lake.basin, {
     shoreConnections,
+    lakeDepth: lake === LAKE,
     riverFlow: flowAt !== undefined,
     islands: lobes,
     deepAt: DEEP_WATER_AT,

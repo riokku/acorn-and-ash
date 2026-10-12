@@ -23,7 +23,14 @@ import { countOf } from '../src/sim/inventory';
 import { WorldSimulation } from '../src/sim/world-sim';
 import { buildWilderness } from '../src/world/wilderness';
 import { createWildernessTerrain } from '../src/world/terrain';
-import { LAKE, lakeDepthAt, basinDepthAt, nearestIslandDepthAt } from '../src/world/lake';
+import {
+  LAKE,
+  lakeDepthAt,
+  basinDepthAt,
+  nearestIslandDepthAt,
+  lakeWaterDepthAt,
+  LAKE_WADING_DEPTH,
+} from '../src/world/lake';
 import {
   AXE_STUMP,
   BAG_SPOT,
@@ -169,16 +176,16 @@ describe('where the reeds grow', () => {
     }
   });
 
-  it('can be reached from the bank without wading in', () => {
+  it('can be reached from the bank without entering deep water', () => {
     const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
     const world = createCollisionWorld(terrain, waterColliders(POND), PLAYABLE_HALF_EXTENT, LAKE);
     for (const spot of REED_PATCHES) {
-      // Stand right on the reeds: the shore pushes you back to the bank, and the
-      // bank is within a hand's reach of where they grow.
+      // Lake reeds can be reached from walkable shallows; the pond still
+      // keeps walkers on its bank within a hand's reach.
       const position = { x: spot.x, y: terrain.heightAt(spot.x, spot.z), z: spot.z };
       resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
       expect(Math.hypot(position.x - spot.x, position.z - spot.z)).toBeLessThan(PICKUP_REACH);
-      expect(lakeDepthAt(LAKE, position.x, position.z)).toBeLessThan(0);
+      expect(lakeWaterDepthAt(LAKE, position.x, position.z)).toBeLessThan(LAKE_WADING_DEPTH);
       expect(outlineDepth(POND, position.x, position.z)).toBeLessThan(0.01);
     }
   });
@@ -226,14 +233,14 @@ describe('everywhere a bed of mature reeds can come back to', () => {
     }
   });
 
-  it('can all be reached from the bank without wading in', () => {
+  it('can all be reached from the bank without entering deep water', () => {
     const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
     const world = createCollisionWorld(terrain, waterColliders(POND), PLAYABLE_HALF_EXTENT, LAKE);
     for (const spot of REED_SHORE_SPOTS) {
       const position = { x: spot.x, y: terrain.heightAt(spot.x, spot.z), z: spot.z };
       resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
       expect(Math.hypot(position.x - spot.x, position.z - spot.z)).toBeLessThan(PICKUP_REACH);
-      expect(lakeDepthAt(LAKE, position.x, position.z)).toBeLessThan(0);
+      expect(lakeWaterDepthAt(LAKE, position.x, position.z)).toBeLessThan(LAKE_WADING_DEPTH);
       expect(outlineDepth(POND, position.x, position.z)).toBeLessThan(0.01);
     }
   });

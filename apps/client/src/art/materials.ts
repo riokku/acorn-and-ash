@@ -23,7 +23,7 @@ import {
   vec3,
 } from 'three/tsl';
 
-import type { WaterCircle } from '@acorn/shared';
+import { LAKE_BED_DEPTH, LAKE_BED_RUN, type Lake, type WaterCircle } from '@acorn/shared';
 
 import { seasonUniforms } from './season-uniforms';
 import { artTexture, type ArtTextureId } from './textures';
@@ -161,6 +161,8 @@ function depthInPond(circles: readonly WaterCircle[]) {
 export interface WaterLook {
   /** Surface vertices carry the river current and its gradual fade into still water. */
   readonly riverFlow?: boolean;
+  /** Main lake colours reveal the physical wading depth. */
+  readonly lakeDepth?: boolean;
   /** Adjoining water that interrupts this surface's shore, such as a river mouth. */
   readonly shoreConnections?: readonly WaterCircle[];
   /** Circles that are dry land inside the water: islands. The shore runs round them too. */
@@ -187,7 +189,13 @@ function stillWaterSurface(circles: readonly WaterCircle[], look: WaterLook = {}
     : depthInPond(circles);
   // The shore runs round an island as well as round the bank, whichever is nearer.
   const inside = islands.length === 0 ? outline : min(outline, depthInPond(islands).negate());
-  const depth = smoothstep(0, deepAt, inside);
+  const bedInside =
+    islands.length === 0
+      ? depthInPond(circles)
+      : min(depthInPond(circles), depthInPond(islands).negate());
+  const depth = look.lakeDepth
+    ? smoothstep(0.65, 1.8, smoothstep(0, LAKE_BED_RUN, bedInside).mul(LAKE_BED_DEPTH).sub(0.05))
+    : smoothstep(0, deepAt, inside);
 
   const drift = time;
   const flow = look.riverFlow ? attribute('waterFlow', 'vec2') : vec2(0, 0);
@@ -235,13 +243,16 @@ export function createWaterMaterial(
 export function createStreamMaterial(
   sloughs: readonly WaterCircle[] = [],
   shoreConnections: readonly WaterCircle[] = [],
+  lake?: Lake,
+  lakeShoreConnections: readonly WaterCircle[] = [],
 ): THREE.MeshStandardNodeMaterial {
   const ripples = artTexture('ripples');
   const across = attribute('streamAcross', 'float');
   const along = attribute('streamAlong', 'float');
   const bank = attribute('streamEdge', 'float');
   // A bank stops being a shore where another body of water joins it.
-  const edge = sloughs.length ? bank.mul(smoothstep(1.2, 0, depthInPond(sloughs))) : bank;
+  const adjoining = [...sloughs, ...(lake?.basin ?? [])];
+  const edge = adjoining.length ? bank.mul(smoothstep(1.2, 0, depthInPond(adjoining))) : bank;
   const fall = attribute('streamFall', 'float');
   const pace = attribute('streamPace', 'float');
 
@@ -285,7 +296,19 @@ export function createStreamMaterial(
     smoothstep(0.65, 1.8, attribute('streamDepth', 'float')).mul(0.8),
   );
 
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.14, metalness: 0 });
+  if (lake) {
+    // Match every colour and world-space ripple before the ribbon ends inside
+    // the lake: its rectangular end can no longer reveal a different shader.
+    const joined = stillWaterSurface(lake.basin, {
+      islands: lake.islands.flatMap((island) => island.lobes),
+      lakeDepth: true,
+      shoreConnections: lakeShoreConnections,
+      deep: 0x1f4f73,
+      rippleSize: 1.7,
+    });
+    surface = mix(surface, joined, smoothstep(-8, 0, depthInPond(lake.basin)));
+  }
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.12, metalness: 0 });
   reactiveWater(material, surface);
   // Clear at the very edge, so the bank shows through and there is no hard line.
   material.opacityNode = float(1).sub(smoothstep(0.55, 1.04, edge));

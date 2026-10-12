@@ -17,6 +17,9 @@ import { buildIslandProps } from '../src/world/islands';
 import {
   LAKE,
   LAKE_PROP_CLEARANCE,
+  LAKE_WADING_SHORE_DEPTH,
+  LAKE_WADING_DEPTH,
+  lakeWaterDepthAt,
   LAKE_SHORE_WIDTH,
   basinDepthAt,
   defineLake,
@@ -244,14 +247,16 @@ describe('the shore wall', () => {
     return { motion, everInWater };
   }
 
-  it('stops a walker at the water instead of letting them wade in', () => {
+  it('lets a walker wade in and stops them before deep water', () => {
     const { motion, everInWater } = walkEast(worldWith(), -30, 200);
-    expect(everInWater).toBe(false);
+    expect(everInWater).toBe(true);
     // Standing on the bank, a body's width from the water's edge.
     expect(Math.hypot(motion.position.x, motion.position.z)).toBeGreaterThanOrEqual(
-      20 + PLAYER_RADIUS - 0.01,
+      20 - LAKE_WADING_SHORE_DEPTH + PLAYER_RADIUS - 0.01,
     );
-    expect(motion.position.x).toBeLessThan(-19);
+    expect(lakeWaterDepthAt(SMALL, motion.position.x, motion.position.z)).toBeLessThan(
+      LAKE_WADING_DEPTH,
+    );
   });
 
   it('stops a sprinter just the same', () => {
@@ -259,14 +264,18 @@ describe('the shore wall', () => {
     const motion = createPlayerMotion({ x: -40, y: 0, z: 0 });
     for (let tick = 1; tick <= 200; tick++) {
       stepPlayer(motion, createInput(tick, 1, 0, 0, PlayerButton.Sprint), TICK_SECONDS, world);
-      expect(isOnLake(SMALL, motion.position.x, motion.position.z)).toBe(false);
+      expect(lakeWaterDepthAt(SMALL, motion.position.x, motion.position.z)).toBeLessThanOrEqual(
+        LAKE_WADING_DEPTH,
+      );
     }
   });
 
   it('slides along the bank when walking at it on a slant, rather than sticking', () => {
     // East and north at once, into a bank that faces west.
-    const { motion, everInWater } = walkEast(worldWith(), -30, 200, 1);
-    expect(everInWater).toBe(false);
+    const { motion } = walkEast(worldWith(), -23, 200, 1);
+    expect(lakeWaterDepthAt(SMALL, motion.position.x, motion.position.z)).toBeLessThanOrEqual(
+      LAKE_WADING_DEPTH,
+    );
     expect(Math.abs(motion.position.z)).toBeGreaterThan(15);
   });
 
@@ -274,8 +283,18 @@ describe('the shore wall', () => {
     const world = worldWith(defineLake(0, [{ x: 0, z: 0, radius: 20 }], []));
     const position = { x: 15, y: 0, z: 0 };
     expect(resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(true);
-    expect(position.x).toBeCloseTo(20 + PLAYER_RADIUS);
+    expect(position.x).toBeCloseTo(20 - LAKE_WADING_SHORE_DEPTH + PLAYER_RADIUS);
     expect(position.z).toBeCloseTo(0);
+  });
+
+  it('allows island shallows and blocks deeper water outside them without jitter', () => {
+    const world = worldWith();
+    const shallow = { x: 5, y: 0, z: 0 };
+    expect(resolveCapsule(shallow, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(false);
+    const deep = { x: 8, y: 0, z: 0 };
+    expect(resolveCapsule(deep, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(true);
+    expect(lakeWaterDepthAt(SMALL, deep.x, deep.z)).toBeLessThan(LAKE_WADING_DEPTH);
+    expect(resolveCapsule(deep, PLAYER_RADIUS, PLAYER_HEIGHT, world)).toBe(false);
   });
 
   it('leaves someone alone on dry land', () => {
@@ -312,7 +331,9 @@ describe('the shore wall', () => {
       const motion = createPlayerMotion({ x: 40, y: terrain.heightAt(40, startZ), z: startZ });
       for (let tick = 1; tick <= 400; tick++) {
         stepPlayer(motion, createInput(tick, 1, 0, 0, 0), TICK_SECONDS, world);
-        expect(isOnLake(LAKE, motion.position.x, motion.position.z)).toBe(false);
+        expect(lakeWaterDepthAt(LAKE, motion.position.x, motion.position.z)).toBeLessThanOrEqual(
+          LAKE_WADING_DEPTH,
+        );
       }
     }
   });
