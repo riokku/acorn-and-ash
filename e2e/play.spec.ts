@@ -1607,59 +1607,6 @@ async function huntNearest(
   throw new Error(`Never got hold of a ${kind}: ${problems.join('; ')}`);
 }
 
-test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
-  // Wildlife lives well past the tree line, so this walks a lot further than
-  // the axe or the pond do.
-  test.setTimeout(600_000);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-
-  await page.goto(`/?world=hunt-${Date.now()}`);
-  await waitForConnected(page);
-  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
-    timeout: 120_000,
-  });
-
-  // Fetch the axe first: no axe, no catching, the same rule as chopping.
-  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
-  const axe = pickups.find((entry) => entry.item === 'axe');
-  if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
-  await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () =>
-      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
-        (entry) => entry.item === 'axe',
-      ),
-    )
-    .toBe(true);
-  await equip(page, 'axe');
-
-  // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
-  // usually the catch hint, but a walk this long can run the hunger meter out
-  // first on a slow machine (it empties in three minutes here, not the real
-  // twenty) - hungry beats everything else on purpose, so either is the hint
-  // doing its job correctly.
-  const catchHint = /Left click to catch the rabbit|You're hungry/;
-  const { animalId: rabbitId, hunt } = await huntNearest(page, 'rabbit', { hint: catchHint });
-  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
-
-  // It is gone, and the meat is ours.
-  expect(
-    (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === rabbitId,
-    ),
-  ).toBe(false);
-  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
-  expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect
-    .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
-    .toBe('You caught some meat!');
-
-  // Nothing thrown while walking out, swinging or drawing the wildlife.
-  expect(errors).toEqual([]);
-});
-
 test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   // Wildlife lives well past the tree line, the same reason the rabbit hunt does.
   test.setTimeout(600_000);

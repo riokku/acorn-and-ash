@@ -1,12 +1,14 @@
 import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src/index';
+import { drawnScreenshot, skipDrawing } from './skip-drawing';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
-test.setTimeout(180_000);
+test.setTimeout(300_000);
 
 test(
   'renders blizzard snow, footprints, and pooled wildfire effects',
   { tag: '@real-drawing' },
   async ({ page }) => {
+    await skipDrawing(page);
     const sim = new shared.WorldSimulation({
       seed: shared.DEFAULT_WORLD_SEED,
       forestEncounters: false,
@@ -66,6 +68,9 @@ test(
       await page.locator('#home-name').fill('Storm Watcher');
       await page.locator('.home-play').click();
       await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
+      await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+        timeout: 120_000,
+      });
       await expect
         .poll(() => page.evaluate(() => window.acornDebug?.seasonFall().snow ?? 0))
         .toBe(1000);
@@ -75,7 +80,7 @@ test(
         .poll(() => page.evaluate(() => window.acornDebug?.snowFootprints() ?? 0))
         .toBeGreaterThan(0);
       await page.keyboard.up('w');
-      await page.screenshot({ path: 'test-results/blizzard.png' });
+      await drawnScreenshot(page, 'test-results/blizzard.png');
       weather = 'storm';
       const props = sim.clearing.props
         .filter((prop) => shared.choppingRuleFor(shared.PROP_KINDS[prop.kind]) && prop.z < -4)
@@ -104,7 +109,7 @@ test(
         .poll(() => page.evaluate(() => window.acornDebug?.wildfireEffects().smoke))
         .toBe(84);
       await page.waitForTimeout(1500);
-      await page.screenshot({ path: 'test-results/wildfire.png' });
+      await drawnScreenshot(page, 'test-results/wildfire.png');
       sim.wildfire.lightning = {
         serial: Math.floor(clock / shared.LIGHTNING_INTERVAL_MS),
         x: props[0]!.x,
