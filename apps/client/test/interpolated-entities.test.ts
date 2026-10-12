@@ -155,3 +155,45 @@ describe('tracking where other entities are, between snapshots', () => {
     expect(players.poseOf(2)?.action).toBe(0);
   });
 });
+
+describe('resolved animation pace for remote players', () => {
+  it('keeps stationary feet still despite a snapshot velocity pushing into an obstacle', () => {
+    const players = new InterpolatedEntities();
+    const blocked = { ...entity(2, 0, 0), vx: 4.5 };
+    players.ingest(1000, [blocked]);
+    players.ingest(1100, [blocked]);
+    players.advance(0.05);
+    expect(players.poseOf(2)?.speed).toBe(4.5);
+    expect(players.poseOf(2)?.travelSpeed).toBe(0);
+  });
+
+  it('matches actual diagonal travel along a wall and stops when snapshots run out', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 4.5 }]);
+    players.ingest(1100, [{ ...entity(2, 0.3, 0.2), vx: 4.5 }]);
+    players.advance(0.05);
+    expect(players.poseOf(2)?.travelSpeed).toBeCloseTo(Math.hypot(0.3, 0.2) / 0.1);
+    players.advance(1);
+    expect(players.poseOf(2)?.x).toBe(0.3);
+    expect(players.poseOf(2)?.travelSpeed).toBe(0);
+  });
+
+  it('does not run in place when only the first snapshot is available', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 7 }]);
+    expect(players.poseOf(2)?.travelSpeed).toBe(0);
+  });
+
+  it('keeps vertical motion and large corrections from accelerating the gait', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 4.5 }]);
+    players.ingest(1100, [{ ...entity(2, 10, 0), vx: 4.5 }]);
+    players.advance(0.05);
+    expect(players.poseOf(2)?.travelSpeed).toBe(4.5);
+    const jumping = new InterpolatedEntities();
+    jumping.ingest(1000, [entity(3, 0, 0)]);
+    jumping.ingest(1100, [{ ...entity(3, 0, 0), y: 1, vy: 5 }]);
+    jumping.advance(0.05);
+    expect(jumping.poseOf(3)?.travelSpeed).toBe(0);
+  });
+});

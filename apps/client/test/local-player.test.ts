@@ -8,6 +8,8 @@ import {
   SETTLE,
   SPAWN_POSITION,
   TICK_SECONDS,
+  box,
+  cylinder,
   createCollisionWorld,
   createFlatTerrain,
   vec3,
@@ -269,5 +271,68 @@ describe('sitting on the ground on the client', () => {
     // Still settling for the first few ticks; after that, walking off gets up.
     player.advance(TICK_SECONDS * (SETTLE.earliestUp + 2), 0, 1, 0, 0, 0);
     expect(player.action.kind).toBe(ActionKind.Rise);
+  });
+});
+
+describe('animation pace after collisions', () => {
+  it.each([
+    ['wall', box(0, 1, -2, 4, 1, 0.4)],
+    ['trunk', cylinder(0, -2, 0.7, 4)],
+  ] as const)(
+    'stops the walking pace against a %s despite held movement velocity',
+    (_name, blocker) => {
+      const player = new LocalPlayer(vec3(), createCollisionWorld(createFlatTerrain(0), [blocker]));
+      for (let tick = 0; tick < 40; tick++) player.advance(TICK_SECONDS, 0, 1, 0);
+      expect(Math.hypot(player.motion.velocity.x, player.motion.velocity.z)).toBeGreaterThan(4);
+      expect(player.travelSpeed()).toBeCloseTo(0, 8);
+      player.advance(TICK_SECONDS / 3, 0, 1, 0);
+      expect(player.travelSpeed()).toBeCloseTo(0, 8);
+    },
+  );
+
+  it('matches the unobstructed walk and sprint without flickering between ticks', () => {
+    for (const buttons of [0, PlayerButton.Sprint]) {
+      const player = createPlayer();
+      for (let tick = 0; tick < 30; tick++) player.advance(TICK_SECONDS, 0, 1, 0, buttons);
+      const speed = Math.hypot(player.motion.velocity.x, player.motion.velocity.z);
+      expect(player.travelSpeed()).toBeCloseTo(speed, 8);
+      expect(speed).toBeGreaterThanOrEqual(PLAYER_WALK_SPEED);
+      player.advance(TICK_SECONDS / 3, 0, 1, 0, buttons);
+      expect(player.travelSpeed()).toBeCloseTo(speed, 8);
+    }
+  });
+
+  it('paces a slide along a wall from the resolved travel, and resumes walking when moving away', () => {
+    const player = new LocalPlayer(
+      vec3(),
+      createCollisionWorld(createFlatTerrain(0), [box(0, 1, -2, 20, 1, 0.4)]),
+    );
+    for (let tick = 0; tick < 30; tick++) player.advance(TICK_SECONDS, 1, 1, 0);
+    expect(player.travelSpeed()).toBeCloseTo(Math.abs(player.motion.velocity.x), 8);
+    expect(player.travelSpeed()).toBeLessThan(PLAYER_WALK_SPEED);
+    for (let tick = 0; tick < 20; tick++) player.advance(TICK_SECONDS, 0, -1, 0);
+    expect(player.travelSpeed()).toBeCloseTo(PLAYER_WALK_SPEED, 8);
+  });
+
+  it('does not turn server corrections or a doorway move into a running stride', () => {
+    const player = createPlayer();
+    for (let tick = 0; tick < 20; tick++) player.advance(TICK_SECONDS, 0, 1, 0);
+    const position = player.motion.position;
+    player.reconcile(serverState(1, position.x + 0.5, position.z), 20);
+    expect(player.travelSpeed()).toBe(0);
+    player.advance(TICK_SECONDS / 3, 0, 0, 0);
+    expect(player.travelSpeed()).toBe(0);
+    player.moveToSpace(collision, vec3(100, 0, 100), 0);
+    expect(player.travelSpeed()).toBe(0);
+    player.advance(TICK_SECONDS, 0, 0, 0);
+    expect(player.travelSpeed()).toBe(0);
+  });
+
+  it('keeps vertical jumps out of horizontal walking pace', () => {
+    const player = createPlayer();
+    player.advance(TICK_SECONDS, 0, 0, 0, PlayerButton.Jump);
+    expect(player.motion.grounded).toBe(false);
+    expect(player.motion.position.y).toBeGreaterThan(0);
+    expect(player.travelSpeed()).toBe(0);
   });
 });
