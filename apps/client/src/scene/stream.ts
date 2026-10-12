@@ -93,6 +93,8 @@ export function createStreamScene(
 
   const stones = createStones(stream, terrain);
   group.add(stones.group);
+  const waterfallRocks = createWaterfallRocks(stream, terrain);
+  group.add(waterfallRocks.group);
   const reeds = createBankReeds(stream, terrain);
   group.add(reeds.group);
   const sloughs = stream.sloughs.map((slough, index) => {
@@ -138,12 +140,65 @@ export function createStreamScene(
       material.dispose();
       iceMaterial.dispose();
       stones.dispose();
+      waterfallRocks.dispose();
       reeds.dispose();
       boulders.dispose();
       for (const slough of sloughs) slough.dispose();
       group.removeFromParent();
     },
   };
+}
+
+/** Loose rock shelves frame each drop without crossing the flowing channel. */
+function createWaterfallRocks(stream: Stream, terrain: Terrain) {
+  const builder = new ModelBuilder();
+  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
+  for (const [index, fall] of stream.falls.entries()) {
+    const random = seededRandom(4909 + index * 173);
+    const placements: { x: number; z: number; radius: number }[] = [];
+    for (let attempt = 0; attempt < 60 && placements.length < 8; attempt++) {
+      const along = fall.at - 5 + random() * 13;
+      const row = Math.round(along / (stream.length / (stream.count - 1)));
+      const here = streamPointAt(stream, row);
+      const before = streamPointAt(stream, row - 1),
+        after = streamPointAt(stream, row + 1);
+      const dx = after.x - before.x,
+        dz = after.z - before.z,
+        length = Math.hypot(dx, dz);
+      const radius = 0.6 + random() * 0.9;
+      const side = random() < 0.5 ? -1 : 1;
+      const reach = side * (streamWaterHalfWidthAt(stream, along) + radius + 0.25 + random() * 1.3);
+      const x = here.x - (dz / length) * reach,
+        z = here.z + (dx / length) * reach;
+      if (isInStream(stream, x, z, -radius - 0.15)) continue;
+      if (
+        placements.some(
+          (rock) => Math.hypot(x - rock.x, z - rock.z) < (radius + rock.radius) * 0.85,
+        )
+      )
+        continue;
+      const heights = [terrain.heightAt(x, z)];
+      for (let edge = 0; edge < 8; edge++) {
+        const angle = (edge / 8) * Math.PI * 2;
+        heights.push(terrain.heightAt(x + Math.cos(angle) * radius, z + Math.sin(angle) * radius));
+      }
+      const y = Math.min(...heights) - 0.1;
+      const height = Math.max(radius * (0.7 + random() * 0.5), Math.max(...heights) - y + 0.35);
+      builder.add(
+        stone,
+        buryGeometryBase(
+          stoneGeometry(radius, height, 5909 + index * 173 + placements.length, 0.8, 1),
+          { x, y, z },
+          (x, z) => terrain.heightAt(x, z),
+        ),
+        placed(x, y, z, { y: random() * Math.PI * 2 }),
+      );
+      placements.push({ x, z, radius });
+    }
+  }
+  const result = builder.build();
+  result.group.name = 'waterfall-rocks';
+  return result;
 }
 
 /** Different loose groups of larger, embedded stones on each slough's dry banks. */
