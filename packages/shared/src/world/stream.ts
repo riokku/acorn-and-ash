@@ -55,7 +55,7 @@ const FALLS: readonly { readonly share: number; readonly drop: number }[] = [
 /** Height of the water's surface at the spring, in metres. */
 const SPRING_SURFACE = 36;
 /** How far a fall's drop is spread along the stream, in metres: short, so it reads as a step. */
-const FALL_RUN = 2.4;
+const FALL_RUN = 4.5;
 /** The bank beside a fall eases down over this many metres, so it can be walked round. */
 const BANK_FALL_RUN = 60;
 /** Metres between samples along the path. */

@@ -29,6 +29,7 @@ import {
   placeOneInstance,
 } from './props';
 import { treeVariant } from './prop-models';
+import { refineWaterfallGround } from './waterfall-ground';
 
 /** How finely the hills are meshed. Small enough that slopes read as curves, not facets. */
 const GROUND_SEGMENT_SIZE = 2.5;
@@ -501,7 +502,7 @@ export function createGround(
   const segments = Math.round(size / GROUND_SEGMENT_SIZE);
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
 
-  const position = geometry.attributes.position;
+  let position = geometry.attributes.position;
   if (position === undefined) throw new Error('Plane geometry has no position attribute');
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i);
@@ -510,6 +511,8 @@ export function createGround(
     // once `rotateX` below lays this flat.
     position.setZ(i, terrain.heightAt(x, -y));
   }
+  const refined = refineWaterfallGround(geometry, terrain, STREAM, size, segments);
+  position = geometry.getAttribute('position');
   position.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.rotateX(-Math.PI / 2);
@@ -572,23 +575,39 @@ export function createGround(
         tint: new Float32Array(points * 3),
         bank: new Float32Array(points * 2),
       };
+      const detail = refined.get(cellZ * segments + cellX);
       const corners: number[] = [0, 0, 0];
       const weights: number[] = [0, 0, 0];
       for (let j = 0; j <= n; j++) {
         for (let i = 0; i <= n; i++) {
-          const u = i / n;
-          const v = j / n;
+          let u = i / n,
+            v = j / n;
+          let ca = a,
+            cb = b,
+            cc = c,
+            cd = d;
+          if (detail) {
+            const x = Math.min(detail.divisions - 1, Math.floor(u * detail.divisions));
+            const z = Math.min(detail.divisions - 1, Math.floor(v * detail.divisions));
+            u = u * detail.divisions - x;
+            v = v * detail.divisions - z;
+            const row = z;
+            ca = detail.vertices[row * (detail.divisions + 1) + x]!;
+            cb = detail.vertices[(row + 1) * (detail.divisions + 1) + x]!;
+            cc = detail.vertices[(row + 1) * (detail.divisions + 1) + x + 1]!;
+            cd = detail.vertices[row * (detail.divisions + 1) + x + 1]!;
+          }
           if (u + v <= 1) {
-            corners[0] = a;
-            corners[1] = b;
-            corners[2] = d;
+            corners[0] = ca;
+            corners[1] = cb;
+            corners[2] = cd;
             weights[0] = 1 - u - v;
             weights[1] = v;
             weights[2] = u;
           } else {
-            corners[0] = b;
-            corners[1] = c;
-            corners[2] = d;
+            corners[0] = cb;
+            corners[1] = cc;
+            corners[2] = cd;
             weights[0] = 1 - u;
             weights[1] = u + v - 1;
             weights[2] = 1 - v;
@@ -624,6 +643,8 @@ export function createGround(
       if (cellX < 0 || cellZ < 0 || cellX >= segments || cellZ >= segments) return;
       const first = (cellZ * segments + cellX) * 6;
       for (let i = 0; i < 6; i++) index.setX(first + i, 0);
+      const detail = refined.get(cellZ * segments + cellX);
+      if (detail) for (let i = 0; i < detail.indexCount; i++) index.setX(detail.firstIndex + i, 0);
       index.needsUpdate = true;
     },
     dispose: () => {
