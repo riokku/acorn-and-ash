@@ -4517,12 +4517,13 @@ export class Game {
         : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
     );
     const speed = Math.hypot(velocity.x, velocity.z);
+    const travelSpeed = player.travelSpeed();
     this.waterWake.step(
       this.selfNetId,
       position.x,
       position.y,
       position.z,
-      rowing ? 0 : speed,
+      rowing ? 0 : travelSpeed,
       this.openWaterAt(position.x, position.z),
     );
     if (rowing)
@@ -4537,7 +4538,7 @@ export class Game {
     const pose = character.update(deltaSeconds, {
       move,
       // Seated, so the legs never walk while the boat carries them along.
-      locomotion: { speed: rowing ? 0 : speed, airborne: !player.motion.grounded && !rowing },
+      locomotion: { speed: rowing ? 0 : travelSpeed, airborne: !player.motion.grounded && !rowing },
     });
     this.sweepTrail(this.selfNetId, character, pose, deltaSeconds);
     this.showKnockout(action.kind, action.age);
@@ -5288,7 +5289,7 @@ export class Game {
         pose.x,
         pose.y,
         pose.z,
-        rowing ? 0 : pose.speed,
+        rowing ? 0 : pose.travelSpeed,
         this.openWaterAt(pose.x, pose.z),
       );
       this.footprints?.step(
@@ -5307,7 +5308,7 @@ export class Game {
       if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw, pose.speed, deltaSeconds);
       const drawn = character.update(deltaSeconds, {
         move,
-        locomotion: { speed: rowing ? 0 : pose.speed, airborne: pose.airborne && !rowing },
+        locomotion: { speed: rowing ? 0 : pose.travelSpeed, airborne: pose.airborne && !rowing },
       });
       this.sweepTrail(netId, character, drawn, deltaSeconds);
     }

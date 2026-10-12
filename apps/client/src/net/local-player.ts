@@ -290,6 +290,19 @@ export class LocalPlayer {
     return into;
   }
 
+  /** Pace of the predicted tick being drawn, after collision and terrain limits.
+   * Server corrections and doorway moves reset `previous`, so they never count
+   * as a walking stride. Frames between simulation ticks retain the same pace.
+   */
+  travelSpeed(): number {
+    return (
+      Math.hypot(
+        this.motion.position.x - this.previous.x,
+        this.motion.position.z - this.previous.z,
+      ) / TICK_SECONDS
+    );
+  }
+
   renderYaw(): number {
     const alpha = Math.min(1, this.accumulator / TICK_SECONDS);
     const delta = shortestTurn(this.previousYaw, this.motion.facingYaw);

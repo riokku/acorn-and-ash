@@ -35,6 +35,8 @@ export interface RemotePose {
   readonly airborne: boolean;
   /** Horizontal speed, in metres a second. */
   readonly speed: number;
+  /** Horizontal travel between the snapshots being drawn; zero while holding a sample. */
+  readonly travelSpeed: number;
   /** The move being drawn, packed as the snapshot carries it. */
   readonly action: number;
   /** How far into it, in fractional ticks, at the moment being drawn. */
@@ -160,6 +162,11 @@ export class InterpolatedEntities {
           sprinting: after.sprinting,
           airborne: after.airborne,
           speed: before.speed + (after.speed - before.speed) * alpha,
+          // Corrections must not make the gait faster than either reported pace.
+          travelSpeed: Math.min(
+            Math.hypot(after.x - before.x, after.z - before.z) / (span / 1000),
+            Math.max(before.speed, after.speed),
+          ),
           action: move.action,
           actionAge: (renderTime - beganAt(move)) / TICK_MILLISECONDS,
           actionHeading: move.actionHeading,
@@ -185,6 +192,7 @@ function toPose(sample: Sample, renderTime: number): RemotePose {
     sprinting: sample.sprinting,
     airborne: sample.airborne,
     speed: sample.speed,
+    travelSpeed: 0,
     action: sample.action,
     actionAge: Math.max(0, (renderTime - beganAt(sample)) / TICK_MILLISECONDS),
     actionHeading: sample.actionHeading,
