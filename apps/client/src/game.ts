@@ -1,4 +1,5 @@
 import { createWildfireArt } from './scene/wildfire';
+import { groundHeightAt } from '@acorn/shared';
 import type { Dig, WildfireView } from '@acorn/shared';
 import {
   fishRecordsFromSaved,
@@ -983,7 +984,10 @@ export class Game {
   private wildernessProps: readonly PlacedProp[] = [];
   /** Where each forest tree sits in `wildernessProps` (and so in the walkable world). */
   private wildernessIndexById: ReadonlyMap<number, number> = new Map();
-  private readonly gatheringFocus = new GatheringFocus();
+  private readonly gatheringGroundRay = new THREE.Raycaster();
+  private readonly gatheringFocus = new GatheringFocus((x, z, referenceY) =>
+    this.gatheringGroundAt(x, z, referenceY),
+  );
   private nearbyPile: { item: ItemId; count: number } | null = null;
   /**
    * Whether `carrying` is this connection's first word on the pack yet. The
@@ -4263,11 +4267,31 @@ export class Game {
     );
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
     return lootUnderRay(this.clickRaycaster, candidates, [
+      ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraGround]),
       this.clearingScene.cameraBlockers,
       ...(this.wildernessScene?.cameraBlockers ?? []),
       ...(this.digScene?.cameraBlockers ?? []),
       ...this.homeCameraBlockers,
     ]);
+  }
+
+  /** Fit the E marker to rendered terrain; excavated floors use their shared floor height. */
+  private gatheringGroundAt(x: number, z: number, referenceY: number): number {
+    if (this.space !== OUTDOORS) return 0;
+    const ground = this.wildernessScene?.cameraGround;
+    if (ground !== undefined) {
+      this.gatheringGroundRay.ray.origin.set(x, referenceY + 1, z);
+      this.gatheringGroundRay.ray.direction.set(0, -1, 0);
+      this.gatheringGroundRay.far = 2;
+      this.gatheringGroundRay.firstHitOnly = true;
+      ground.updateWorldMatrix(true, false);
+      const hit = this.gatheringGroundRay.intersectObject(ground, false)[0];
+      if (hit !== undefined)
+        return this.lakeFrozen && this.collision !== null
+          ? Math.max(hit.point.y, groundHeightAt(this.collision, x, z, referenceY))
+          : hit.point.y;
+    }
+    return this.collision === null ? referenceY : groundHeightAt(this.collision, x, z, referenceY);
   }
 
   private lootDetail(target: LootTarget): string {
@@ -4732,11 +4756,19 @@ export class Game {
     const blocked =
       targetItem !== undefined && roomFor(inventoryFromEntries(this.carrying), targetItem) === 0;
     this.gatheringFocus.setTarget(
-      isFreeToInteract(action) && this.playing && !this.inventoryOpen && !this.mapOpen
-        ? (this.hoveredLoot?.object ?? gatherObject)
+      isFreeToInteract(action) &&
+        this.playing &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.settingsOpen &&
+        !this.chestOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen &&
+        this.placing === null
+        ? gatherObject
         : null,
       pile !== null && reachable === null ? 0.6 : 0.28,
-      this.hoveredLoot !== null ? this.lootProblem(this.hoveredLoot) !== null : blocked,
+      blocked,
     );
     this.gatheringFocus.update(deltaSeconds);
 

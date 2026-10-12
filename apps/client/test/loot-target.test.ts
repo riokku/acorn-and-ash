@@ -60,3 +60,15 @@ describe('loot under the cursor', () => {
     expect(lootUnderRay(ray(), [nested], [])).toBe(nested);
   });
 });
+
+it('blocks loot behind the visible ground but allows it through an excavated opening', () => {
+  const target = loot(4, 0);
+  const geometry = new THREE.PlaneGeometry(5, 5);
+  const ground = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  ground.position.z = 2;
+  meshes.push(ground);
+  expect(lootUnderRay(ray(), [target], [ground])).toBeNull();
+  const indices = geometry.getIndex()!;
+  for (let i = 0; i < indices.count; i++) indices.setX(i, 0);
+  expect(lootUnderRay(ray(), [target], [ground])).toBe(target);
+});
