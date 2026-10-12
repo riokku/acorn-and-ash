@@ -131,6 +131,8 @@ export class CharacterAnimator {
   private lag = 0;
   private use = 0;
   private swing = 0;
+  /** Share of the idle leg pose, available for small terrain corrections. */
+  private standing = 1;
   /** Seconds into eating, or null when not eating. */
   private eatingFor: number | null = null;
   private eatingNow: EatingPose | null = null;
@@ -283,6 +285,7 @@ export class CharacterAnimator {
     const freeLegs = 1 - moveLegs;
     const gaitUpper = free * (1 - gestureUpper - fishingUpper);
     const gaitLower = freeLegs * (1 - gestureLower - fishingLower);
+    this.standing = gaitLower * this.gaitWeight.idle;
     this.swing = gaitUpper * (this.gaitWeight.walk + this.gaitWeight.run);
     for (const gait of GAITS) {
       const share = this.gaitWeight[gait];
@@ -304,6 +307,10 @@ export class CharacterAnimator {
     // A whole-body move takes the arm back for itself.
     if (this.eatingNow !== null) this.bringToMouth(this.eatingNow, free);
     return pose;
+  }
+
+  get standingWeight(): number {
+    return this.standing;
   }
 
   dispose(): void {

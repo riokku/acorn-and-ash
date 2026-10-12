@@ -1011,6 +1011,8 @@ export class Game {
   /** The props as they stand: a regrown tree is a different size from the seeded one. */
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
+  private readonly characterGroundHeight = (x: number, z: number, referenceY: number): number =>
+    this.collision === null ? referenceY : groundHeightAt(this.collision, x, z, referenceY);
   private aimedTree: { name: string; swingsLeft: number } | null = null;
   private aimedAnimal: { name: string; hitsLeft?: number } | null = null;
   /** Every float in the pond, ours and everybody else's. */
@@ -4539,6 +4541,7 @@ export class Game {
       move,
       // Seated, so the legs never walk while the boat carries them along.
       locomotion: { speed: rowing ? 0 : travelSpeed, airborne: !player.motion.grounded && !rowing },
+      groundHeight: this.characterGroundHeight,
     });
     this.sweepTrail(this.selfNetId, character, pose, deltaSeconds);
     this.showKnockout(action.kind, action.age);
@@ -5309,6 +5312,7 @@ export class Game {
       const drawn = character.update(deltaSeconds, {
         move,
         locomotion: { speed: rowing ? 0 : pose.travelSpeed, airborne: pose.airborne && !rowing },
+        groundHeight: this.characterGroundHeight,
       });
       this.sweepTrail(netId, character, drawn, deltaSeconds);
     }
