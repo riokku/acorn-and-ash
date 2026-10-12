@@ -404,3 +404,120 @@ describe('Tab target input', () => {
     expect(controls.takeTargetCycles()).toEqual([]);
   });
 });
+
+describe('menu hotkeys and focused controls', () => {
+  let controls: Controls;
+  let events: EventTarget;
+  beforeEach(() => {
+    events = new EventTarget();
+    vi.stubGlobal('window', events);
+    vi.stubGlobal('document', new EventTarget());
+    controls = new Controls(new EventTarget() as HTMLCanvasElement);
+  });
+  afterEach(() => {
+    controls.dispose();
+    vi.unstubAllGlobals();
+  });
+  function press(code: string, props = {}, focused?: string): Event {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { code, ...props });
+    if (focused)
+      Object.defineProperty(event, 'target', {
+        value: {
+          closest: (selector: string) =>
+            selector
+              .split(',')
+              .some(
+                (part) =>
+                  part.trim() === focused ||
+                  part.includes(`[${focused}`) ||
+                  part.includes(`="${focused}"`),
+              )
+              ? {}
+              : null,
+        },
+      });
+    events.dispatchEvent(event);
+    return event;
+  }
+  it.each(['KeyB', 'KeyI', 'KeyZ', 'KeyC', 'KeyM', 'Escape'])(
+    'takes %s once while held and again on the next fresh press',
+    (code) => {
+      const take = () =>
+        code === 'KeyB' || code === 'KeyI'
+          ? controls.takeInventoryToggle()
+          : code === 'KeyZ'
+            ? controls.takeCharacterToggle()
+            : code === 'KeyC'
+              ? controls.takeCraftMenuToggle()
+              : code === 'KeyM'
+                ? controls.takeMapToggle()
+                : controls.takeEscapeToggle();
+      press(code);
+      expect(take()).toBe(true);
+      press(code, { repeat: true });
+      expect(take()).toBe(false);
+      events.dispatchEvent(Object.assign(new Event('keyup'), { code }));
+      press(code);
+      expect(take()).toBe(true);
+    },
+  );
+  it.each(['input', 'textarea', 'select', 'contenteditable', 'textbox'])(
+    'lets %s consume typing, movement and item keys, while Escape can close the panel',
+    (focused) => {
+      for (const code of [
+        'KeyB',
+        'KeyI',
+        'KeyZ',
+        'KeyC',
+        'KeyM',
+        'KeyW',
+        'Space',
+        'KeyE',
+        'Digit1',
+      ]) {
+        expect(press(code, {}, focused).defaultPrevented).toBe(false);
+      }
+      expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
+      expect(controls.buttons()).toBe(0);
+      expect(controls.takeInventoryToggle()).toBe(false);
+      expect(controls.takeCharacterToggle()).toBe(false);
+      expect(controls.takeCraftMenuToggle()).toBe(false);
+      expect(controls.takeMapToggle()).toBe(false);
+      expect(controls.takeHotbarTaps()).toEqual([]);
+      press('Escape', {}, focused);
+      expect(controls.takeEscapeToggle()).toBe(true);
+    },
+  );
+  it.each(['button', 'a', 'slider'])(
+    'preserves native activation/navigation for a focused %s',
+    (focused) => {
+      for (const code of ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+        expect(press(code, {}, focused).defaultPrevented).toBe(false);
+      }
+      expect(controls.buttons()).toBe(0);
+      expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
+      // The map still allows WASD walking and panel switching with a button focused.
+      press('KeyW', {}, focused);
+      press('KeyB', {}, focused);
+      expect(controls.moveIntent()).toEqual({ x: 0, z: 1 });
+      expect(controls.takeInventoryToggle()).toBe(true);
+    },
+  );
+  it.each([{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }])(
+    'leaves browser shortcuts and composition alone (%j)',
+    (props) => {
+      expect(press('KeyB', props).defaultPrevented).toBe(false);
+      press('KeyW', props);
+      expect(controls.takeInventoryToggle()).toBe(false);
+      expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
+    },
+  );
+  it('stops held movement when typing gains focus', () => {
+    press('KeyW');
+    const event = new Event('focusin');
+    Object.defineProperty(event, 'target', { value: { closest: () => ({}) } });
+    events.dispatchEvent(event);
+    expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
+    expect(controls.buttons()).toBe(0);
+  });
+});
