@@ -108,3 +108,30 @@ describe('moving swift attacks', () => {
     animator.dispose();
   });
 });
+
+describe('standing terrain correction share', () => {
+  it('follows the idle leg blend and yields to walking, airborne poses and fishing', () => {
+    const { animator } = fishingAnimator();
+    animator.update(1 / 60, idle, { speed: 0, airborne: false });
+    expect(animator.standingWeight).toBe(1);
+    for (let i = 0; i < 60; i++) animator.update(1 / 60, idle, { speed: 4.5, airborne: false });
+    expect(animator.standingWeight).toBeLessThan(0.001);
+    for (let i = 0; i < 60; i++) animator.update(1 / 60, idle, { speed: 0, airborne: true });
+    expect(animator.standingWeight).toBeLessThan(0.001);
+    for (let i = 0; i < 60; i++) animator.update(1 / 60, idle, { speed: 0, airborne: false });
+    expect(animator.standingWeight).toBeGreaterThan(0.999);
+    animator.dispose();
+    const fishing = new CharacterAnimator(new THREE.Object3D(), {
+      whole: new Map(),
+      upper: new Map([['fishIdle', new THREE.AnimationClip('fish-upper', 2, [])]]),
+      lower: new Map([['fishIdle', new THREE.AnimationClip('fish-lower', 2, [])]]),
+    });
+    fishing.setFishing('waiting');
+    for (let i = 0; i < 30; i++) fishing.update(1 / 60, idle, { speed: 0, airborne: false });
+    expect(fishing.standingWeight).toBe(0);
+    fishing.setFishing(null);
+    for (let i = 0; i < 30; i++) fishing.update(1 / 60, idle, { speed: 0, airborne: false });
+    expect(fishing.standingWeight).toBe(1);
+    fishing.dispose();
+  });
+});

@@ -1,3 +1,4 @@
+import { StandingFootContact, type FootGroundHeight } from './standing-foot-contact';
 import * as THREE from 'three/webgpu';
 import { plainMaterial } from '../art/materials';
 
@@ -38,6 +39,8 @@ export interface CharacterFrame {
   /** What they are in the middle of, with its age in fractional ticks. */
   readonly move: MoveView;
   readonly locomotion: Locomotion;
+  /** Current collision ground, including rooms and dug openings. */
+  readonly groundHeight?: FootGroundHeight;
 }
 
 /** Where a sitting or lying body rests, in the same space the character stands in. */
@@ -646,6 +649,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   pivot.add(model);
   rest.add(pivot);
   group.add(rest);
+  const footContact = StandingFootContact.forRig(model, group);
 
   // Materials are shared with the template by default - cloned per instance
   // so tinting one player's colour in below never bleeds into another's.
@@ -847,6 +851,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       // The dig swing brings the shovel out for as long as it plays.
       if (frame.move.digging === true && frame.move.kind === ActionKind.Swing)
         digging = Math.max(digging, DIG_SHOW_SECONDS);
+      footContact?.restore();
       const pose = playing.update(deltaSeconds, frame.move, frame.locomotion);
       handsFree = pose.handsFree;
       const bites = playing.eating;
@@ -868,6 +873,11 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
         if (thing === eating && bites !== null) holdToMouth(held.group, model, bites.reach);
       }
       placeBody(pose, frame, group, rest, pivot, restSpot, clock);
+      const standing =
+        frame.move.kind === ActionKind.Idle && !frame.locomotion.airborne && restSpot === null;
+      // Follow the idle leg blend through starts/stops rather than snapping
+      // the correction off on the first moving frame.
+      footContact?.apply(deltaSeconds, frame.groundHeight, standing ? playing.standingWeight : 0);
       return pose;
     },
     dispose: () => {
