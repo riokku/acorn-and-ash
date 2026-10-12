@@ -117,6 +117,7 @@ test('reads three outings, claims a completed reward and learns a placeable cosm
     await page.keyboard.down('KeyC');
     await expect(page.locator('.hud-journal')).toBeVisible();
     await page.keyboard.up('KeyC');
+    await page.getByRole('button', { name: 'Crafting', exact: true }).click();
     await expect(
       page.locator('.hud-journal-entry').filter({ hasText: 'Trail pennant' }),
     ).not.toHaveAttribute('aria-disabled', 'true');
