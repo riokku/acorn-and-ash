@@ -1,4 +1,4 @@
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 
 import { GatheringFocus } from '../src/scene/gathering-focus';
@@ -38,4 +38,27 @@ describe('the next item to gather', () => {
     expect(items.target('pile', 2)).toBeNull();
     items.dispose();
   });
+});
+
+it('fits the complete ring to sloping ground and keeps its footprint stable while pulsing', () => {
+  const target = new THREE.Group();
+  target.position.set(3, 4, 5);
+  const surface = (x: number, z: number) => x * 0.4 + z * 0.2;
+  const focus = new GatheringFocus(surface);
+  focus.setTarget(target, 0.6);
+  focus.update(0);
+  const ring = focus.group.children[0] as THREE.Mesh;
+  const positions = ring.geometry.getAttribute('position');
+  const fitted = Array.from(positions.array);
+  for (let i = 0; i < positions.count; i++) {
+    const x = target.position.x + positions.getX(i),
+      z = target.position.z + positions.getZ(i);
+    expect(target.position.y + positions.getY(i)).toBeCloseTo(surface(x, z) + 0.025, 5);
+  }
+  focus.update(0.7);
+  expect(Array.from(positions.array)).toEqual(fitted);
+  target.position.x += 1;
+  focus.update(0);
+  expect(Array.from(positions.array)).not.toEqual(fitted);
+  focus.dispose();
 });
