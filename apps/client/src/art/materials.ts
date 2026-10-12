@@ -23,8 +23,16 @@ import {
   vec3,
 } from 'three/tsl';
 
-import { LAKE_BED_DEPTH, LAKE_BED_RUN, type Lake, type WaterCircle } from '@acorn/shared';
+import {
+  LAKE_BED_DEPTH,
+  LAKE_BED_RUN,
+  LAKE_WADING_DEPTH,
+  STREAM_WADING_DEPTH,
+  type Lake,
+  type WaterCircle,
+} from '@acorn/shared';
 
+import { depthColourRange } from './water-depth';
 import { seasonUniforms } from './season-uniforms';
 import { artTexture, type ArtTextureId } from './textures';
 import { waterRippleUniforms } from './water-uniforms';
@@ -163,6 +171,8 @@ export interface WaterLook {
   readonly riverFlow?: boolean;
   /** Main lake colours reveal the physical wading depth. */
   readonly lakeDepth?: boolean;
+  /** Physical depth sampled from the terrain under a graded surface. */
+  readonly depthAttribute?: string;
   /** Adjoining water that interrupts this surface's shore, such as a river mouth. */
   readonly shoreConnections?: readonly WaterCircle[];
   /** Circles that are dry land inside the water: islands. The shore runs round them too. */
@@ -193,9 +203,16 @@ function stillWaterSurface(circles: readonly WaterCircle[], look: WaterLook = {}
     islands.length === 0
       ? depthInPond(circles)
       : min(depthInPond(circles), depthInPond(islands).negate());
-  const depth = look.lakeDepth
-    ? smoothstep(0.65, 1.8, smoothstep(0, LAKE_BED_RUN, bedInside).mul(LAKE_BED_DEPTH).sub(0.05))
-    : smoothstep(0, deepAt, inside);
+  const [shallowAt, deepColourAt] = depthColourRange(LAKE_WADING_DEPTH);
+  const depth = look.depthAttribute
+    ? smoothstep(shallowAt, deepColourAt, attribute(look.depthAttribute, 'float'))
+    : look.lakeDepth
+      ? smoothstep(
+          shallowAt,
+          deepColourAt,
+          smoothstep(0, LAKE_BED_RUN, bedInside).mul(LAKE_BED_DEPTH).sub(0.05),
+        )
+      : smoothstep(0, deepAt, inside);
 
   const drift = time;
   const flow = look.riverFlow ? attribute('waterFlow', 'vec2') : vec2(0, 0);
@@ -285,6 +302,7 @@ export function createStreamMaterial(
       deep: 0x1f4f73,
       rippleSize: 1.7,
       riverFlow: true,
+      depthAttribute: 'waterDepth',
     });
     surface = mix(surface, joined, smoothstep(-5, 0, depthInPond(sloughs)));
   }
@@ -293,7 +311,9 @@ export function createStreamMaterial(
   surface = mix(
     surface,
     color(0x163e52),
-    smoothstep(0.65, 1.8, attribute('streamDepth', 'float')).mul(0.8),
+    smoothstep(...depthColourRange(STREAM_WADING_DEPTH), attribute('streamDepth', 'float')).mul(
+      0.8,
+    ),
   );
 
   if (lake) {

@@ -51,7 +51,11 @@ export function createLakeScene(
   surfaceHeightAt: (x: number, z: number) => number = () => lake.level,
   shoreConnections: readonly WaterCircle[] = [],
   flowAt?: (x: number, z: number) => { x: number; z: number; share: number },
-  scenery: { seed?: number; groundHeightAt?: (x: number, z: number) => number } = {},
+  scenery: {
+    seed?: number;
+    groundHeightAt?: (x: number, z: number) => number;
+    waterDepthAt?: (x: number, z: number) => number;
+  } = {},
 ): {
   group: THREE.Group;
   /** Show the lake as ice (true) or as open water (false). */
@@ -66,6 +70,7 @@ export function createLakeScene(
   const waterMaterial = createWaterMaterial(lake.basin, {
     shoreConnections,
     lakeDepth: lake === LAKE,
+    depthAttribute: scenery.waterDepthAt ? 'waterDepth' : undefined,
     riverFlow: flowAt !== undefined,
     islands: lobes,
     deepAt: DEEP_WATER_AT,
@@ -105,6 +110,15 @@ export function createLakeScene(
       }
       surface.setAttribute('waterFlow', new THREE.BufferAttribute(flow, 2));
       surface.setAttribute('waterFlowShare', new THREE.BufferAttribute(share, 1));
+    }
+    if (scenery.waterDepthAt) {
+      const depths = new Float32Array(positions.count);
+      for (let vertex = 0; vertex < positions.count; vertex++)
+        depths[vertex] = scenery.waterDepthAt(
+          circle.x + positions.getX(vertex),
+          circle.z + positions.getZ(vertex),
+        );
+      surface.setAttribute('waterDepth', new THREE.BufferAttribute(depths, 1));
     }
     geometries.push(surface);
     const mesh = new THREE.Mesh(surface, waterMaterial);
