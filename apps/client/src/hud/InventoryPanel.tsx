@@ -77,7 +77,7 @@ export function PackButton({
     <Tooltip
       label={
         <>
-          <strong>Your pack</strong> · {used} of {slots} slots · I
+          <strong>Your pack</strong> · {used} of {slots} slots · B (or I)
         </>
       }
     >

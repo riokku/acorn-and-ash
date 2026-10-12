@@ -1,3 +1,4 @@
+import { menuPanelState, type MenuPanel } from './input/menu-panels';
 import { createWildfireArt } from './scene/wildfire';
 import { groundHeightAt } from '@acorn/shared';
 import type { Dig, WildfireView } from '@acorn/shared';
@@ -1193,14 +1194,11 @@ export class Game {
   private handleEscapeInput(controls: Controls): void {
     if (!controls.takeEscapeToggle()) return;
     if (this.chestOpen || this.chestPending) this.closeChest();
-    else if (this.mapOpen) this.mapOpen = false;
+    else if (this.mapOpen) this.showMenuPanel(null);
     else if (this.placing !== null) this.stopPlacing();
-    else if (this.craftMenuOpen) this.craftMenuOpen = false;
-    else if (this.buildMenuOpen) this.buildMenuOpen = false;
-    else if (this.inventoryOpen) {
-      this.inventoryOpen = false;
-      this.characterOpen = false;
-    } else if (this.targeting.id !== null) this.targeting.clear();
+    else if (this.craftMenuOpen || this.buildMenuOpen || this.inventoryOpen)
+      this.showMenuPanel(null);
+    else if (this.targeting.id !== null) this.targeting.clear();
   }
 
   setSettingsOpen(open: boolean): void {
@@ -1219,6 +1217,7 @@ export class Game {
       this.buildMenuOpen = false;
       this.craftMenuOpen = false;
       this.inventoryOpen = false;
+      this.characterOpen = false;
       this.mapOpen = false;
     }
     this.options.hud.publish({
@@ -1227,6 +1226,7 @@ export class Game {
       buildMenuOpen: this.buildMenuOpen,
       craftMenuOpen: this.craftMenuOpen,
       inventoryOpen: this.inventoryOpen,
+      characterOpen: this.characterOpen,
     });
   }
 
@@ -1289,20 +1289,20 @@ export class Game {
     return 'Left-click to open · 10 storage slots';
   }
 
-  /** Called from the HUD's own bag button - the mouse-first way to open the inventory panel. */
-  toggleInventory(): void {
-    this.closeChest();
-    this.inventoryOpen = !this.inventoryOpen;
-    if (this.inventoryOpen) {
+  /** Apply the same panel transition for mouse buttons, hotkeys and world interactions. */
+  private showMenuPanel(panel: MenuPanel | null): void {
+    if (panel !== null) {
+      this.closeChest();
       this.stopPlacing();
-      this.buildMenuOpen = false;
-      this.craftMenuOpen = false;
     }
-    this.options.hud.publish({
-      inventoryOpen: this.inventoryOpen,
-      buildMenuOpen: this.buildMenuOpen,
-      craftMenuOpen: this.craftMenuOpen,
-    });
+    const state = menuPanelState(panel);
+    Object.assign(this, state);
+    this.options.hud.publish(state);
+  }
+
+  /** Called from the HUD's own bag button or B/I. */
+  toggleInventory(): void {
+    this.showMenuPanel(this.inventoryOpen ? null : 'pack');
   }
 
   /**
@@ -1311,22 +1311,7 @@ export class Game {
    * closes with it (decision 0113).
    */
   toggleCharacter(): void {
-    this.closeChest();
-    this.characterOpen = !this.characterOpen;
-    this.inventoryOpen = this.characterOpen;
-    if (this.characterOpen) {
-      this.stopPlacing();
-      this.buildMenuOpen = false;
-      this.craftMenuOpen = false;
-      this.mapOpen = false;
-    }
-    this.options.hud.publish({
-      characterOpen: this.characterOpen,
-      inventoryOpen: this.inventoryOpen,
-      buildMenuOpen: this.buildMenuOpen,
-      craftMenuOpen: this.craftMenuOpen,
-      mapOpen: this.mapOpen,
-    });
+    this.showMenuPanel(this.characterOpen ? null : 'character');
   }
 
   /** Put something on, take it off or swap two pieces. The server decides (decision 0113). */
@@ -1344,20 +1329,7 @@ export class Game {
    * steps aside for it; walking carries on underneath (see decision 0054).
    */
   toggleMap(): void {
-    this.closeChest();
-    this.mapOpen = !this.mapOpen;
-    if (this.mapOpen) {
-      this.stopPlacing();
-      this.buildMenuOpen = false;
-      this.craftMenuOpen = false;
-      this.inventoryOpen = false;
-    }
-    this.options.hud.publish({
-      mapOpen: this.mapOpen,
-      inventoryOpen: this.inventoryOpen,
-      buildMenuOpen: this.buildMenuOpen,
-      craftMenuOpen: this.craftMenuOpen,
-    });
+    this.showMenuPanel(this.mapOpen ? null : 'map');
   }
 
   /**
@@ -1756,20 +1728,14 @@ export class Game {
           message.reason === 'invalid'
         ) {
           this.chestOpen = true;
-          this.inventoryOpen = false;
-          this.buildMenuOpen = false;
-          this.craftMenuOpen = false;
-          this.mapOpen = false;
+          Object.assign(this, menuPanelState(null));
           this.controls?.setGameplayEnabled(false);
           this.homeInterior?.setChestOpen(true);
           this.options.hud.publish({
             chestSlots: message.slots,
             chestPending: false,
             chestNote: text,
-            inventoryOpen: false,
-            buildMenuOpen: false,
-            craftMenuOpen: false,
-            mapOpen: false,
+            ...menuPanelState(null),
           });
         } else {
           this.closeChest();
@@ -3071,7 +3037,6 @@ export class Game {
           this.interiorTargetAt(clickPoint, camera, this.homeInterior?.garden)
         ) {
           controls.swallowLeftPress();
-          this.craftMenuOpen = true;
           this.setJournalTab('garden');
         } else this.aimTowardsClickPoint(clickPoint, camera);
       }
@@ -3519,16 +3484,7 @@ export class Game {
   /** Open or close the room's decorating panel from the HUD button. */
   toggleDecorations(): void {
     if (this.space === OUTDOORS || this.homeHere()?.yours !== true) return;
-    this.closeChest();
-    this.stopPlacing();
-    this.buildMenuOpen = !this.buildMenuOpen;
-    this.craftMenuOpen = false;
-    this.inventoryOpen = false;
-    this.options.hud.publish({
-      buildMenuOpen: this.buildMenuOpen,
-      craftMenuOpen: false,
-      inventoryOpen: false,
-    });
+    this.showMenuPanel(this.buildMenuOpen ? null : 'decorations');
   }
 
   /** Number keys select decorations indoors or swap a placed piece outdoors. */
@@ -4126,15 +4082,8 @@ export class Game {
 
   setJournalTab(tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing'): void {
     this.journalTab = tab;
-    this.craftMenuOpen = true;
-    this.buildMenuOpen = false;
-    this.inventoryOpen = false;
-    this.options.hud.publish({
-      journalTab: tab,
-      craftMenuOpen: true,
-      buildMenuOpen: false,
-      inventoryOpen: false,
-    });
+    this.showMenuPanel('journal');
+    this.options.hud.publish({ journalTab: tab });
     if (tab === 'garden') this.connection?.sendGarden({ action: 'inspect' });
   }
   useGarden(request: GardenRequest): void {
@@ -4175,12 +4124,7 @@ export class Game {
 
   private handleCraftMenuInput(controls: Controls): void {
     if (controls.takeCraftMenuToggle()) {
-      this.craftMenuOpen = !this.craftMenuOpen;
-      if (this.craftMenuOpen) {
-        this.stopPlacing();
-        this.buildMenuOpen = false;
-        this.inventoryOpen = false;
-      }
+      this.showMenuPanel(this.craftMenuOpen ? null : 'journal');
     }
     if (!this.craftMenuOpen) return;
     const taps = controls.takeCraftTaps();
@@ -4195,7 +4139,6 @@ export class Game {
   /** B (or I) toggles the pack, closing the journal or decorating panel. */
   private handleInventoryToggleInput(controls: Controls): void {
     if (!controls.takeInventoryToggle()) return;
-    this.characterOpen = false;
     this.toggleInventory();
   }
 

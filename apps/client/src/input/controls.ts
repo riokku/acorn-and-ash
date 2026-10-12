@@ -61,6 +61,10 @@ const RIGHT_TAP_MAX_TRAVEL_PX = 6;
  */
 const WHEEL_STEP_PX = 50;
 
+/** Text entry must never also control the character. */
+const TEXT_INPUT =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]';
+
 /** Keys the browser must not act on itself: Space would otherwise scroll the page. */
 const GAME_KEYS = new Set([
   'KeyW',
@@ -125,6 +129,7 @@ export class Controls {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('blur', this.handleBlur);
+    window.addEventListener('focusin', this.handleFocusIn);
     document.addEventListener('pointerlockchange', this.handlePointerLockChange);
     canvas.addEventListener('mousemove', this.handleMouseMove);
     canvas.addEventListener('mousedown', this.handleMouseDown);
@@ -420,6 +425,7 @@ export class Controls {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleBlur);
+    window.removeEventListener('focusin', this.handleFocusIn);
     document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
@@ -430,13 +436,19 @@ export class Controls {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || (!this.gameplayEnabled && event.code !== 'Escape')) return;
+    const target = event.target as Element | null;
+    // Typing, IME composition and browser shortcuts belong to the UI/browser.
+    // Escape still dismisses the current panel when a text field has focus.
+    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.code !== 'Escape' && target?.closest?.(TEXT_INPUT)) return;
+    if (
+      ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) &&
+      target?.closest?.('button, a, [role="button"], [role="slider"]')
+    )
+      return;
     if (event.code === 'Tab') {
-      const target = event.target as Element | null;
       if (
         !this.canTarget() ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.metaKey ||
         target?.closest?.(
           'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="dialog"]',
         )
@@ -446,9 +458,12 @@ export class Controls {
       if (!event.repeat) this.targetCycles.push(event.shiftKey ? -1 : 1);
       return;
     }
+    if (event.repeat && !this.held.has(event.code)) return;
     if (GAME_KEYS.has(event.code)) event.preventDefault();
     this.held.add(event.code);
-    this.tapped.add(event.code);
+    // A held key keeps movement active, but must not reopen menus, use another
+    // hotbar item just because the browser sent an auto-repeat.
+    if (!event.repeat) this.tapped.add(event.code);
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
@@ -458,6 +473,10 @@ export class Controls {
       // A key repeat that landed just before the release must not outlive the claim.
       this.tapped.delete('KeyE');
     }
+  };
+
+  private readonly handleFocusIn = (event: FocusEvent): void => {
+    if ((event.target as Element | null)?.closest?.(TEXT_INPUT)) this.releaseAll();
   };
 
   /** Clicking away must not leave the player walking into a tree forever. */
