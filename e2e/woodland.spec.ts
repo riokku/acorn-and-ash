@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(240_000);
@@ -141,6 +141,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     expect(sim.inventoryOf(1).guardianTrophy).toBe(1);
     teleport(0, 0);
     await page.keyboard.press('KeyC');
+    await page.getByRole('button', { name: 'Crafting', exact: true }).click();
     // Straight to the Trophies page: a short list that does not scroll under the click.
     await page
       .locator('.craft-tabs')

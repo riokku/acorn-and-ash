@@ -47,9 +47,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-  smoke:
-    name: Browser smoke tests
+  browser:
+    name: Browser tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v5
 
@@ -69,7 +74,8 @@ jobs:
       # Runs the real stack: the built client served by apps/web, talking to the
       # World Durable Object in apps/game-server, all locally.
       - name: Play the game
-        run: pnpm test:e2e
+        timeout-minutes: 30
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
 
       # Screenshots and traces from a failure live in test-results, and the
       # HTML report is not written in CI at all. Keeping only the report meant
@@ -77,12 +83,25 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-failure
+          name: playwright-failure-${{ matrix.shard }}
           path: |
             test-results/
             playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+
+  # Keep the existing check name for branch protection. All shards must pass;
+  # a failed shard must not cancel the others and hide their diagnostics.
+  smoke:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    needs: browser
+    if: always()
+    steps:
+      - name: Check every browser shard
+        env:
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: test "$BROWSER_RESULT" = success
 
   preview:
     name: Preview build

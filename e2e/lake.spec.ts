@@ -1,9 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import * as shared from '../packages/shared/src/index';
 
 /**
  * The lake (decision 0090): it is in the world, it shows on the map, and the
- * shore holds a walker back instead of letting them wade in.
+ * shallow shore allows wading while deeper water holds a walker back.
  *
  * Test sign-in is automatic here, so each test starts as a fresh test player
  * and only has to name a character and press play.
@@ -27,7 +27,7 @@ test('has a big lake with five islands, and paints it on the map', async ({ page
   await expect.poll(() => page.evaluate(() => window.acornDebug?.mapState().painted)).toBe(true);
 });
 
-test('holds a walker back at the shore instead of letting them wade in', async ({ page }) => {
+test('allows shallow wading and holds a walker back from deeper water', async ({ page }) => {
   const terrain = shared.createWildernessTerrain(shared.DEFAULT_WORLD_SEED);
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
@@ -75,12 +75,17 @@ test('holds a walker back at the shore instead of letting them wade in', async (
 
   const here = await page.evaluate(() => window.acornDebug?.localPosition());
   expect(here).toBeDefined();
-  // Still on the bank: the water's edge is at x = 56, and a body is a third of a metre wide.
-  expect(shared.isOnLake(shared.LAKE, here!.x, here!.z)).toBe(false);
+  expect(shared.isOnLake(shared.LAKE, here!.x, here!.z)).toBe(true);
   expect(here!.x).toBeGreaterThan(start.x + 0.5);
-  expect(here!.x).toBeLessThan(56);
+  const depth = shared.lakeWaterDepthAt(shared.LAKE, here!.x, here!.z);
+  expect(depth).toBeGreaterThan(0.4);
+  expect(depth).toBeLessThanOrEqual(shared.LAKE_WADING_DEPTH);
   // The server agrees about where they are, so nothing was fighting the wall.
   const server = sim.outdoorPositionOf(1);
-  expect(shared.isOnLake(shared.LAKE, server!.x, server!.z)).toBe(false);
+  expect(shared.isOnLake(shared.LAKE, server!.x, server!.z)).toBe(true);
+  expect(shared.lakeWaterDepthAt(shared.LAKE, server!.x, server!.z)).toBeLessThanOrEqual(
+    shared.LAKE_WADING_DEPTH,
+  );
+  expect(Math.hypot(server!.x - here!.x, server!.z - here!.z)).toBeLessThan(0.5);
   expect(errors).toEqual([]);
 });

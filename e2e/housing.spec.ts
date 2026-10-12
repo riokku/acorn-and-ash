@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   DEFAULT_WORLD_SEED,
   WorldSimulation,

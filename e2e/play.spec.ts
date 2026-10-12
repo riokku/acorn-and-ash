@@ -1,10 +1,4 @@
-import {
-  expect,
-  test as base,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from './fixtures';
 
 import {
   CLEARING_TREE_LINE_INNER,
@@ -88,14 +82,6 @@ declare global {
     };
   }
 }
-
-/** Every test's own page, with the drawing skipped unless it is about the drawing. */
-const test = base.extend({
-  page: async ({ page }, use, testInfo) => {
-    if (!testInfo.tags.includes('@real-drawing')) await skipDrawing(page);
-    await use(page);
-  },
-});
 
 /** A second tab in its own window, the way the tests that open several want them. */
 async function openTab(browser: Browser): Promise<Page> {

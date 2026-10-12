@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { skipDrawing } from './skip-drawing';
 
 test('Tab selects, cycles, draws, and clears hostile targets through the game input loop', async ({

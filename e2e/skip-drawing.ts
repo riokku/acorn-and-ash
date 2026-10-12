@@ -20,6 +20,8 @@ import type { BrowserContext, Page } from '@playwright/test';
 export async function skipDrawing(target: Page | BrowserContext): Promise<void> {
   if (process.env.ACORN_E2E_DRAW === '1') return;
   await target.addInitScript(() => {
+    // Galleries are small scenes and provide actual asset-rendering coverage.
+    if (new URLSearchParams(location.search).has('gallery')) return;
     const drawCalls = [
       'drawArrays',
       'drawElements',

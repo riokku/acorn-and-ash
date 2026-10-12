@@ -512,6 +512,14 @@ describe('menu hotkeys and focused controls', () => {
       expect(controls.moveIntent()).toEqual({ x: 0, z: 0 });
     },
   );
+  it('accepts the dodge key with ctrlKey set and releases it after the input tick', () => {
+    const code = 'ControlLeft';
+    press(code, { ctrlKey: true });
+    expect(controls.buttons() & PlayerButton.Dodge).toBe(PlayerButton.Dodge);
+    events.dispatchEvent(Object.assign(new Event('keyup'), { code }));
+    controls.forgetTaps();
+    expect(controls.buttons() & PlayerButton.Dodge).toBe(0);
+  });
   it('stops held movement when typing gains focus', () => {
     press('KeyW');
     const event = new Event('focusin');
