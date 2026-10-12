@@ -1,3 +1,4 @@
+import { cpuUsage } from 'node:process';
 import { describe, expect, it } from 'vitest';
 
 import { seededRandom, tileableCells, tileableFbm, tileableNoise } from '../src/art/noise';
@@ -158,8 +159,8 @@ describe('the painted textures', () => {
     expect(fr).toBeGreaterThanOrEqual(fg);
   });
 
-  it('paints the full set at game size in well under a second', () => {
-    const started = performance.now();
+  it('paints the full set at game size within its CPU budget', () => {
+    const started = cpuUsage();
     paintGrass(512);
     paintForestFloor(512);
     paintBark(256);
@@ -172,8 +173,10 @@ describe('the painted textures', () => {
     paintBurlap(256);
     paintFur(256);
     paintRipples(256);
-    const seconds = (performance.now() - started) / 1000;
-    // Generous for a slow test machine; a real browser is a good deal faster.
+    const used = cpuUsage(started);
+    const seconds = (used.user + used.system) / 1_000_000;
+    // Keep the four-second performance budget, excluding time this process
+    // waits for CPU while other packages run their tests on a shared runner.
     expect(seconds).toBeLessThan(4);
-  });
+  }, 15_000);
 });
