@@ -64,6 +64,9 @@ export class FollowCamera {
   private readonly desired = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
+  private readonly groundRayOrigin = new THREE.Vector3();
+  private readonly groundRight = new THREE.Vector3();
+  private readonly groundUp = new THREE.Vector3();
   /** Inside a home, the look from outside to go back to on leaving; null outdoors. */
   private outdoorLook: CameraLook | null = null;
 
@@ -142,6 +145,7 @@ export class FollowCamera {
     playerPosition: Readonly<Vec3>,
     deltaSeconds: number,
     blockers: readonly THREE.Object3D[],
+    ground: THREE.Object3D | null = null,
   ): void {
     this.target.set(playerPosition.x, playerPosition.y + TARGET_HEIGHT, playerPosition.z);
     if (this.outdoorLook !== null) {
@@ -163,7 +167,13 @@ export class FollowCamera {
       Math.cos(this.look.yaw) * cosPitch,
     );
 
-    const blocked = this.outdoorLook !== null ? ROOM_DISTANCE : this.distanceToBlocker(blockers);
+    const blocked =
+      this.outdoorLook !== null
+        ? ROOM_DISTANCE
+        : Math.min(
+            this.distanceToBlocker(blockers),
+            this.distanceAboveGround(ground, RESTING_DISTANCE),
+          );
     if (this.outdoorLook !== null) {
       this.currentDistance = ROOM_DISTANCE;
     } else if (blocked < this.currentDistance) {
@@ -180,12 +190,47 @@ export class FollowCamera {
     this.camera.position.copy(this.desired);
     this.camera.lookAt(this.target);
 
-    if (this.shakeStrength > 0) {
+    const shaken = this.shakeStrength > 0;
+    if (shaken) {
       const offset = this.shakeStrength * SHAKE_MAX_OFFSET;
       this.camera.position.x += (Math.random() * 2 - 1) * offset;
       this.camera.position.y += (Math.random() * 2 - 1) * offset;
       this.shakeStrength = Math.max(0, this.shakeStrength - SHAKE_DECAY_RATE * deltaSeconds);
     }
+    if (shaken && this.outdoorLook === null && ground !== null) {
+      // Shake moves the final position after the orbit collision check.
+      this.direction.subVectors(this.camera.position, this.target);
+      const distance = this.direction.length();
+      this.direction.normalize();
+      const safe = this.distanceAboveGround(ground, distance);
+      if (safe < distance) {
+        this.camera.position.copy(this.direction).multiplyScalar(safe).add(this.target);
+        this.currentDistance = Math.min(this.currentDistance, safe);
+      }
+      this.camera.lookAt(this.target);
+    }
+  }
+
+  /** Sweep the centre and near-plane corners so the view cannot peek below a slope. */
+  private distanceAboveGround(ground: THREE.Object3D | null, distance: number): number {
+    if (ground === null) return distance;
+    this.groundRight.set(this.direction.z, 0, -this.direction.x).normalize();
+    this.groundUp.crossVectors(this.direction, this.groundRight).normalize();
+    const halfHeight =
+      this.camera.near * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) + 0.05;
+    const halfWidth = halfHeight * this.camera.aspect;
+    let safe = distance;
+    for (const [x, y] of GROUND_PROBES) {
+      this.groundRayOrigin
+        .copy(this.target)
+        .addScaledVector(this.groundRight, x * halfWidth)
+        .addScaledVector(this.groundUp, y * halfHeight);
+      this.raycaster.set(this.groundRayOrigin, this.direction);
+      this.raycaster.far = distance + this.camera.near;
+      const hit = this.raycaster.intersectObject(ground, false)[0];
+      if (hit !== undefined) safe = Math.min(safe, Math.max(0.1, hit.distance - BLOCKER_PADDING));
+    }
+    return safe;
   }
 
   /** How far the camera can go before it hits something, across every blocker mesh. */
@@ -206,3 +251,11 @@ export class FollowCamera {
 }
 
 const ROOM_CENTRE_VECTOR = new THREE.Vector3(ROOM_CENTRE.x, ROOM_CENTRE.y, ROOM_CENTRE.z);
+
+const GROUND_PROBES = [
+  [0, 0],
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+] as const;
