@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   STREAM_STONES_PER_100M,
+  LAKE,
   streamBedAt,
   streamWaterDepthAt,
   streamFallGradientAt,
@@ -34,6 +35,15 @@ const FULL_FOAM_GRADIENT = 0.5;
 /** Water is quick down the falls and slow on the flat. */
 const FALL_PACE = 2.6;
 
+/** Water joining the lake erases its old shoreline across the river mouth. */
+export function riverMouthConnections(stream: Stream) {
+  return [0, 2, 4, 6, 8].map((back) => {
+    const row = Math.max(0, stream.count - 1 - back);
+    const along = row * (stream.length / (stream.count - 1));
+    return { ...streamPointAt(stream, row), radius: streamWaterHalfWidthAt(stream, along) };
+  });
+}
+
 /**
  * The stream (see decision 0114): a ribbon of water that follows the winding
  * path from the spring to the lake, stepping down over each fall, with stones
@@ -63,6 +73,8 @@ export function createStreamScene(
   const material = createStreamMaterial(
     stream.sloughs.flatMap((slough) => slough.basin),
     connections.flat(),
+    LAKE,
+    riverMouthConnections(stream),
   );
   const ribbon = ribbonGeometry(stream);
   const mesh = new THREE.Mesh(ribbon, material);

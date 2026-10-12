@@ -22,7 +22,7 @@ import {
 } from '../src/sim/seasons';
 import { WorldSimulation } from '../src/sim/world-sim';
 import { BOAT_ICE_STEP_OUT } from '../src/world/boat';
-import { LAKE, lakeDepthAt, lakeIceHeight } from '../src/world/lake';
+import { LAKE, lakeDepthAt, lakeIceHeight, LAKE_WADING_SHORE_DEPTH } from '../src/world/lake';
 import { REED_PATCHES } from '../src/world/reeds';
 import { createWildernessTerrain } from '../src/world/terrain';
 
@@ -136,7 +136,8 @@ describe('the ground on a frozen lake', () => {
       return deepest;
     };
 
-    expect(farthestOut(false)).toBeLessThan(0.5);
+    expect(farthestOut(false)).toBeGreaterThan(1);
+    expect(farthestOut(false)).toBeLessThan(LAKE_WADING_SHORE_DEPTH);
     expect(farthestOut(true)).toBeGreaterThan(8);
   });
 });
@@ -364,6 +365,33 @@ describe('a world through the winter', () => {
     expect(lakeDepthAt(LAKE, ashore.x, ashore.z)).toBeLessThanOrEqual(0);
     // On the ground, not hanging over the water.
     expect(ashore.y).toBeCloseTo(createWildernessTerrain(SEED).heightAt(ashore.x, ashore.z), 1);
+  });
+
+  it('leaves a player in walkable lake shallows when the ice thaws or they reconnect', () => {
+    const spot = REED_PATCHES[0]!;
+    const { sim } = worldIn('winter');
+    tick(sim);
+    sim.placePlayer(1, { x: spot.x, y: lakeIceHeight(LAKE), z: spot.z }, 0);
+    turnTo(sim, 'spring');
+    tick(sim);
+    expect(me(sim).x).toBeCloseTo(spot.x);
+    expect(me(sim).z).toBeCloseTo(spot.z);
+    sim.addPlayer(
+      2,
+      {
+        netId: 2,
+        x: spot.x,
+        y: createWildernessTerrain(SEED).heightAt(spot.x, spot.z),
+        z: spot.z,
+        facingYaw: 0,
+        items: [],
+        hunger: HUNGER_MAX,
+      },
+      'shallow-walker',
+    );
+    const back = sim.snapshotFor(2).find((entity) => entity.netId === 2)!;
+    expect(back.x).toBeCloseTo(spot.x);
+    expect(back.z).toBeCloseTo(spot.z);
   });
 
   it('brings somebody who logged out on the ice back on the shore if it has thawed since', () => {

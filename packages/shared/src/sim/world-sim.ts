@@ -212,7 +212,7 @@ import {
   type RestingPlace,
 } from '../world/home';
 import { BOAT_ICE_STEP_OUT } from '../world/boat';
-import { LAKE, lakeDepthAt } from '../world/lake';
+import { LAKE, lakeDepthAt, LAKE_WADING_SHORE_DEPTH } from '../world/lake';
 import { navigableWaterSurfaceAt } from '../world/navigable-water';
 import { STREAM, STREAM_KEEP_OUT } from '../world/stream';
 import {
@@ -4192,7 +4192,8 @@ export class WorldSimulation {
    * the water (decision 0095).
    */
   private savedSpot(saved: PersistedPlayer): Vec3 {
-    const overTheLake = lakeDepthAt(LAKE, saved.x, saved.z) > -PLAYER_RADIUS;
+    const overTheLake =
+      lakeDepthAt(LAKE, saved.x, saved.z) > LAKE_WADING_SHORE_DEPTH - PLAYER_RADIUS;
     if (!overTheLake || this.lakeFrozenByCalendar()) return { x: saved.x, y: saved.y, z: saved.z };
     const shore = landingBeside(saved.x, saved.z);
     return { x: shore.x, y: this.collision.terrain.heightAt(shore.x, shore.z), z: shore.z };
@@ -4248,7 +4249,7 @@ export class WorldSimulation {
   private washAshore(runtime: PlayerRuntime): void {
     const position = runtime.entity.get(Position);
     if (position === undefined || runtime.space !== OUTDOORS) return;
-    if (lakeDepthAt(LAKE, position.x, position.z) <= -PLAYER_RADIUS) {
+    if (lakeDepthAt(LAKE, position.x, position.z) <= LAKE_WADING_SHORE_DEPTH - PLAYER_RADIUS) {
       const safe = {
         x: position.x,
         y: this.collision.terrain.heightAt(position.x, position.z),

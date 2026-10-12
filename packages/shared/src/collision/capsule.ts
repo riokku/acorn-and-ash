@@ -11,6 +11,7 @@ import {
   basinDepthAt,
   isNearLake,
   lakeIceHeight,
+  LAKE_WADING_SHORE_DEPTH,
   lakeSlopeAt,
   type Lake,
   type LakeSlope,
@@ -31,8 +32,8 @@ import {
 } from '../world/stream';
 
 /**
- * The invisible wall along the lake's shore: it keeps anyone on foot out of
- * the water, and off the islands, while it is up.
+ * The invisible barrier along the lake's deep-water contour: shallow beaches
+ * can be waded, while deeper water needs a boat.
  *
  * It is a switch rather than a set of cylinders because the lake is not one
  * round shape, and because the wall is not always there: a boat can cross the
@@ -105,7 +106,7 @@ export interface CollisionWorld {
   readonly colliders: Collider[];
   /** Players are held inside this square, measured from the origin. */
   readonly boundsHalfExtent: number;
-  /** The shore of the lake, or null where there is no lake. */
+  /** The lake deep-water barrier, or null where there is no lake. */
   readonly lakeWall: LakeWall | null;
   /** Shared deep-water barriers; shallow river water remains passable. */
   readonly stream?: Stream | null;
@@ -349,8 +350,8 @@ function pushOutOfLake(position: Vec3, radius: number, lake: Lake): boolean {
   if (!isNearLake(lake, position.x, position.z, radius + 1)) return false;
   const shore = lakeSlopeAt(lake, position.x, position.z, shoreScratch);
   // `depth` is how far in from the water's edge the centre is, so the body
-  // reaches the water until the centre is a full radius out on dry land.
-  const overlap = shore.depth + radius;
+  // reaches deep water until the centre stays a radius back from its contour.
+  const overlap = shore.depth + radius - LAKE_WADING_SHORE_DEPTH;
   if (overlap <= COLLISION_SKIN_WIDTH) return false;
   position.x -= shore.towardX * overlap;
   position.z -= shore.towardZ * overlap;

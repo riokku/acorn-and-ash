@@ -53,9 +53,32 @@ export const LAKE_SHORE_WIDTH = 16;
 /** How far below the surface the lake floor sinks, in metres. */
 export const LAKE_BED_DEPTH = 2.4;
 /** How far from the shore the floor takes to reach its full depth, in metres. */
-const LAKE_BED_RUN = 6;
+export const LAKE_BED_RUN = 6;
 /** The shore sits a hair above the surface, so the water never washes over the land. */
 const LAKE_SHORE_LIP = 0.05;
+/** Wading and water colour use the same vertical depth as the river. */
+export const LAKE_WADING_DEPTH = 0.8;
+/** Distance from shore at which the sloping lake bed reaches the wading limit. */
+export const LAKE_WADING_SHORE_DEPTH = (() => {
+  let low = 0,
+    high = LAKE_BED_RUN;
+  for (let pass = 0; pass < 24; pass++) {
+    const middle = (low + high) / 2;
+    if (LAKE_BED_DEPTH * smoothstep(middle, 0, LAKE_BED_RUN) - LAKE_SHORE_LIP < LAKE_WADING_DEPTH)
+      low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+})();
+
+/** Actual vertical depth, unlike lakeDepthAt's distance from the shoreline. */
+export function lakeWaterDepthAt(lake: Lake, x: number, z: number): number {
+  return Math.max(
+    0,
+    LAKE_BED_DEPTH * smoothstep(lakeDepthAt(lake, x, z), 0, LAKE_BED_RUN) - LAKE_SHORE_LIP,
+  );
+}
+
 /** Trees and rocks stay this far back from the water's edge, in metres. */
 export const LAKE_PROP_CLEARANCE = 1.2;
 
@@ -88,7 +111,7 @@ export function defineLake(
 }
 
 /**
- * The lake as built: five blobs of water that run together into one wide,
+ * The lake as built: five main lobes and a river inlet run together into one wide,
  * lobed lake about a hundred metres across, and five islands. Every island
  * stands well clear of every shore, so there is open water to row across.
  */
@@ -100,6 +123,8 @@ export const LAKE: Lake = defineLake(
     { x: 110, z: -64, radius: 20 },
     { x: 108, z: -110, radius: 22 },
     { x: 68, z: -70, radius: 16 },
+    // Round the inlet where the river banks meet the western lake shore.
+    { x: 55, z: -92, radius: 9 },
   ],
   [
     {

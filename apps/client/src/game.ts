@@ -251,7 +251,7 @@ import {
 import { createGroundItems, type GroundItems } from './scene/ground-items';
 import { buildWildernessScene, type WildernessScene } from './scene/wilderness';
 import { createLakeScene } from './scene/lake';
-import { createStreamScene } from './scene/stream';
+import { createStreamScene, riverMouthConnections } from './scene/stream';
 import { createDigScene, type DigScene } from './scene/digging';
 import {
   createMineSupports,
@@ -2637,7 +2637,7 @@ export class Game {
       this.supportPreview = createSupportPreview();
       this.outdoors.add(this.supportPreview.group);
       this.lakeScene?.dispose();
-      this.lakeScene = createLakeScene(LAKE);
+      this.lakeScene = createLakeScene(LAKE, undefined, undefined, riverMouthConnections(STREAM));
       this.lakeScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.lakeScene.group);
       this.streamScene?.dispose();
