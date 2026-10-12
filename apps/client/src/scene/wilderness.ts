@@ -89,6 +89,8 @@ export interface WildernessScene {
    * trunk that is gone stops being felt and one that grew back is felt again.
    */
   readonly cameraBlockers: readonly THREE.Mesh[];
+  /** The visible ground, including openings removed by digging. */
+  readonly cameraGround: THREE.Mesh;
   /**
    * Put the forest's trees where the server says they are: felled ones as
    * stumps, grown ones back at whatever size this generation of them is.
@@ -361,6 +363,7 @@ export function buildWildernessScene(
     ground,
     group,
     cameraBlockers,
+    cameraGround: ground.mesh,
     setTreeStates: (states, serverNowMs = Date.now()) => {
       const touchedCells = new Set<string>();
       let stumpsChanged = false;
@@ -550,6 +553,9 @@ export function createGround(
   const index = geometry.getIndex();
   if (index === null) throw new Error('Plane geometry has no index');
   const stride = segments + 1;
+  // Indirect traversal preserves the cell index ranges used to hide dug
+  // ground. Removing triangles needs no refit: the old bounds stay conservative.
+  geometry.computeBoundsTree?.({ indirect: true });
   return {
     mesh,
     underground,
@@ -648,6 +654,7 @@ export function createGround(
       index.needsUpdate = true;
     },
     dispose: () => {
+      geometry.disposeBoundsTree?.();
       geometry.dispose();
       material.dispose();
       for (const part of underground.children)

@@ -4324,12 +4324,17 @@ export class Game {
     const wilderness = this.wildernessScene;
     const clearing = this.clearingScene;
     if (wilderness !== null && clearing !== null) {
-      camera.update(from, 0, [
-        ...wilderness.cameraBlockers,
-        clearing.cameraBlockers,
-        ...(this.digScene?.cameraBlockers ?? []),
-        ...this.homeCameraBlockers,
-      ]);
+      camera.update(
+        from,
+        0,
+        [
+          ...wilderness.cameraBlockers,
+          clearing.cameraBlockers,
+          ...(this.digScene?.cameraBlockers ?? []),
+          ...this.homeCameraBlockers,
+        ],
+        this.space === OUTDOORS ? wilderness.cameraGround : null,
+      );
     }
 
     this.clickNdc.set(
@@ -4581,6 +4586,7 @@ export class Game {
             ...this.homeCameraBlockers,
           ]
         : [],
+      this.space === OUTDOORS ? wilderness.cameraGround : null,
     );
     this.updatePlacement(camera, player);
     const ownHome = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));

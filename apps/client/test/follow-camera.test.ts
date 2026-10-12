@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
+import { PLAYER_HEIGHT } from '@acorn/shared';
+import { installBvhRaycasting } from '../src/scene/bvh';
 
 import { FollowCamera } from '../src/camera/follow-camera';
 
@@ -32,5 +35,87 @@ describe('camera shake', () => {
     followCamera.update(PLAYER_POSITION, 0, []); // One more frame with nothing left to apply.
 
     expect(followCamera.camera.position.equals(rest)).toBe(true);
+  });
+});
+
+// Real triangles are important here: camera collision must respect the
+// rendered slope and openings, rather than an unrelated height-map clamp.
+
+function slopeGround(slope: number) {
+  installBvhRaycasting();
+  const geometry = new THREE.PlaneGeometry(30, 30, 12, 12);
+  geometry.rotateX(-Math.PI / 2);
+  const positions = geometry.getAttribute('position');
+  for (let i = 0; i < positions.count; i++) positions.setY(i, slope * positions.getZ(i));
+  geometry.computeVertexNormals();
+  geometry.computeBoundsTree({ indirect: true });
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.updateMatrixWorld();
+  return mesh;
+}
+
+describe('terrain camera clearance', () => {
+  it('keeps the camera and every near-plane corner above steep ground through fast turns and shake', () => {
+    const ground = slopeGround(2.2);
+    const follow = new FollowCamera(21 / 9);
+    for (let turn = 0; turn < 24; turn++) {
+      follow.look.yaw = (turn * Math.PI) / 12;
+      follow.look.pitch = turn % 2 === 0 ? -0.55 : 0.32;
+      follow.shake(1);
+      follow.update(PLAYER_POSITION, 1 / 60, [], ground);
+      const camera = follow.camera;
+      camera.updateMatrixWorld();
+      expect(camera.position.y - 2.2 * camera.position.z).toBeGreaterThan(0.05);
+      const halfHeight = camera.near * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      for (const x of [-1, 1])
+        for (const y of [-1, 1]) {
+          const corner = new THREE.Vector3(
+            x * halfHeight * camera.aspect,
+            y * halfHeight,
+            -camera.near,
+          ).applyMatrix4(camera.matrixWorld);
+          expect(corner.y - 2.2 * corner.z).toBeGreaterThan(0);
+        }
+    }
+    ground.geometry.disposeBoundsTree();
+    ground.geometry.dispose();
+  });
+
+  it('pulls in immediately for the ground and eases out when the view clears', () => {
+    const follow = new FollowCamera(16 / 9),
+      ground = slopeGround(0);
+    follow.look.pitch = -0.55;
+    follow.update(PLAYER_POSITION, 0, [], ground);
+    const pulledIn = follow.camera.position.distanceTo(
+      new THREE.Vector3(0, PLAYER_HEIGHT * 0.78, 0),
+    );
+    expect(follow.camera.position.y).toBeGreaterThan(0.1);
+    follow.look.pitch = 0.32;
+    follow.update(PLAYER_POSITION, 1 / 60, [], ground);
+    const target = new THREE.Vector3(0, PLAYER_HEIGHT * 0.78, 0);
+    const easing = follow.camera.position.distanceTo(target);
+    expect(easing).toBeGreaterThan(pulledIn);
+    expect(easing).toBeLessThan(6);
+    follow.update(PLAYER_POSITION, 1, [], ground);
+    expect(follow.camera.position.distanceTo(target)).toBeCloseTo(6);
+    ground.geometry.disposeBoundsTree();
+    ground.geometry.dispose();
+  });
+
+  it('ignores removed ground triangles and leaves indoor framing unchanged', () => {
+    const ground = slopeGround(0),
+      follow = new FollowCamera(16 / 9);
+    const indices = ground.geometry.getIndex()!;
+    for (let i = 0; i < indices.count; i++) indices.setX(i, 0);
+    follow.look.pitch = -0.55;
+    follow.update(PLAYER_POSITION, 0, [], ground);
+    expect(follow.camera.position.y).toBeLessThan(0);
+    follow.setIndoors(true);
+    follow.update(PLAYER_POSITION, 0, [], ground);
+    const indoors = follow.camera.position.clone();
+    follow.update(PLAYER_POSITION, 0, []);
+    expect(follow.camera.position.equals(indoors)).toBe(true);
+    ground.geometry.disposeBoundsTree();
+    ground.geometry.dispose();
   });
 });
