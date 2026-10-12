@@ -433,9 +433,11 @@ describe('what stands on and beside the lake', () => {
     }
   });
 
-  it('keeps encounter sites out of the lake and off its bank', () => {
-    const clearing = buildTestClearing(seed);
-    for (let world = 1; world <= 40; world++) {
+  // Each generated world gets its own timeout and identifies its seed on failure.
+  it.each(Array.from({ length: 40 }, (_, index) => index + 1))(
+    'keeps encounter sites out of the lake and off its bank in world %i',
+    (world) => {
+      const clearing = buildTestClearing(seed);
       const ground = createWildernessTerrain(world);
       const built = buildWilderness(world, ground);
       const sites = buildEncounterSites(
@@ -448,8 +450,8 @@ describe('what stands on and beside the lake', () => {
       for (const site of sites) {
         expect(basinDepthAt(LAKE, site.x, site.z)).toBeLessThanOrEqual(-(LAKE_SHORE_WIDTH + 4));
       }
-    }
-  });
+    },
+  );
 
   it('leaves encounter sites exactly where they were when none was near the lake', () => {
     const clearing = buildTestClearing(seed);
@@ -471,5 +473,6 @@ describe('what stands on and beside the lake', () => {
     }
     // Plenty of worlds have no glade near the lake, so this is not an empty check.
     expect(unaffected).toBeGreaterThan(10);
-  });
+    // This aggregate coverage assertion needs the entire 40-world sweep.
+  }, 15_000);
 });
