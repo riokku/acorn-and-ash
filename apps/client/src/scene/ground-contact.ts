@@ -14,18 +14,19 @@ export interface RefinedGroundCell {
   readonly indexCount: number;
 }
 
-/** Refine only the channel around falls; keep the rest of the world and digging grid coarse. */
-export function refineWaterfallGround(
+/** Refine local contact patches and falls; preserve the original digging grid. */
+export function refineGroundContacts(
   geometry: THREE.BufferGeometry,
   terrain: Terrain,
   stream: Stream,
   size: number,
   segments: number,
+  shoreCells: ReadonlyMap<number, number> = new Map(),
 ): Map<number, RefinedGroundCell> {
   const cell = size / segments,
     origin = -size / 2,
     stride = segments + 1;
-  const selected = new Set<number>();
+  const selected = new Map<number, number>(shoreCells);
   for (const fall of stream.falls) {
     const center = streamPointAt(
       stream,
@@ -52,7 +53,7 @@ export function refineWaterfallGround(
           Math.abs(spot.along - fall.at) < 12 &&
           spot.distance < streamWaterHalfWidthAt(stream, spot.along) + 6
         )
-          selected.add(j * segments + i);
+          selected.set(j * segments + i, Math.max(8, selected.get(j * segments + i) ?? 0));
       }
     }
   }
@@ -60,8 +61,9 @@ export function refineWaterfallGround(
   const positions = Array.from(source.array);
   const indices = Array.from(geometry.getIndex()!.array);
   const refined = new Map<number, RefinedGroundCell>();
-  const divisions = 8;
-  for (const key of selected) {
+  const edgeVertices = new Map<number, number>();
+  const edgeStride = segments * 16 + 1;
+  for (const [key, divisions] of selected) {
     const i = key % segments,
       j = Math.floor(key / segments);
     // PlaneGeometry's local Y points north before it is laid onto the ground.
@@ -71,6 +73,28 @@ export function refineWaterfallGround(
       c = b + 1,
       d = a + 1;
     const vertices: number[] = [];
+    // On a boundary, use the coarser neighbour's edge samples. Extra
+    // vertices then lie on that same line, preventing cracks at T-junctions.
+    const edgeHeight = (
+      first: number,
+      last: number,
+      t: number,
+      neighbor: number,
+      current: number,
+    ): number => {
+      const steps = Math.min(divisions, selected.get(neighbor) ?? 1);
+      if (steps === divisions) return current;
+      const slot = Math.min(steps - 1, Math.floor(t * steps));
+      const alpha = t * steps - slot;
+      const at = (u: number): number =>
+        steps === 1
+          ? source.getZ(first) * (1 - u) + source.getZ(last) * u
+          : terrain.heightAt(
+              source.getX(first) * (1 - u) + source.getX(last) * u,
+              -source.getY(first) * (1 - u) - source.getY(last) * u,
+            );
+      return at(slot / steps) * (1 - alpha) + at((slot + 1) / steps) * alpha;
+    };
     for (let z = 0; z <= divisions; z++) {
       for (let x = 0; x <= divisions; x++) {
         const u = x / divisions,
@@ -78,17 +102,25 @@ export function refineWaterfallGround(
         const worldX = origin + (i + u) * cell,
           worldZ = origin + (j + v) * cell;
         let height = terrain.heightAt(worldX, worldZ);
-        // Meet unrefined neighbours exactly along the outer patch boundary.
-        if (x === 0 && !selected.has(key - 1))
-          height = source.getZ(a) * (1 - v) + source.getZ(b) * v;
-        if (x === divisions && !selected.has(key + 1))
-          height = source.getZ(d) * (1 - v) + source.getZ(c) * v;
-        if (z === 0 && !selected.has(key - segments))
-          height = source.getZ(a) * (1 - u) + source.getZ(d) * u;
-        if (z === divisions && !selected.has(key + segments))
-          height = source.getZ(b) * (1 - u) + source.getZ(c) * u;
-        vertices.push(positions.length / 3);
-        positions.push(worldX, -worldZ, height);
+        if (x === 0) height = edgeHeight(a, b, v, key - 1, height);
+        if (x === divisions) height = edgeHeight(d, c, v, key + 1, height);
+        if (z === 0) height = edgeHeight(a, d, u, key - segments, height);
+        if (z === divisions) height = edgeHeight(b, c, u, key + segments, height);
+        const gx = i * 16 + (x * 16) / divisions,
+          gz = j * 16 + (z * 16) / divisions;
+        const edge = x === 0 || z === 0 || x === divisions || z === divisions;
+        let vertex =
+          gx % 16 === 0 && gz % 16 === 0
+            ? (gz / 16) * stride + gx / 16
+            : edge
+              ? edgeVertices.get(gz * edgeStride + gx)
+              : undefined;
+        if (vertex === undefined) {
+          vertex = positions.length / 3;
+          positions.push(worldX, -worldZ, height);
+          if (edge) edgeVertices.set(gz * edgeStride + gx, vertex);
+        }
+        vertices.push(vertex);
       }
     }
     const firstIndex = indices.length;

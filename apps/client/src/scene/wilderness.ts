@@ -29,7 +29,8 @@ import {
   placeOneInstance,
 } from './props';
 import { treeVariant } from './prop-models';
-import { refineWaterfallGround } from './waterfall-ground';
+import { refineGroundContacts } from './ground-contact';
+import { shoreGroundCells } from './shore-ground';
 
 /** How finely the hills are meshed. Small enough that slopes read as curves, not facets. */
 const GROUND_SEGMENT_SIZE = 2.5;
@@ -514,7 +515,8 @@ export function createGround(
     // once `rotateX` below lays this flat.
     position.setZ(i, terrain.heightAt(x, -y));
   }
-  const refined = refineWaterfallGround(geometry, terrain, STREAM, size, segments);
+  const contacts = shoreGroundCells(geometry, terrain, LAKE, STREAM, size, segments);
+  const refined = refineGroundContacts(geometry, terrain, STREAM, size, segments, contacts);
   position = geometry.getAttribute('position');
   position.needsUpdate = true;
   geometry.computeVertexNormals();
