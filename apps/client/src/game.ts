@@ -294,6 +294,7 @@ import { createBuriedCacheMound, type BuriedCacheMound } from './scene/buried-ca
 import { createShelter } from './scene/shelter';
 import { createLargeCabin } from './scene/large-cabin';
 import { createCabin, type Cabin } from './scene/cabin';
+import { groundBuildingSupport } from './scene/building-ground';
 import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
 import { createFence, type Fence } from './scene/fence';
@@ -508,6 +509,18 @@ function createBuiltMesh(
       spot = expeditionBoardSpot({ kind, x: 0, z: 0, yaw: 0 });
     board.group.position.set(spot.x, 0, spot.z);
     home.group.add(board.group);
+    const boardFeet: ReturnType<typeof groundBuildingSupport>[] = [];
+    board.group.traverse((part) => {
+      if (!(part instanceof THREE.Mesh)) return;
+      part.geometry.computeBoundingBox();
+      if (part.geometry.boundingBox!.min.y < 0.05)
+        boardFeet.push(groundBuildingSupport(part, 0.15));
+    });
+    const groundHome = home.groundOn;
+    home.groundOn = (heightAt) => {
+      groundHome?.(heightAt);
+      for (const fit of boardFeet) fit(heightAt);
+    };
     const dispose = home.dispose;
     home.dispose = () => {
       dispose();
@@ -566,16 +579,16 @@ function animalKindOf(animalId: number): AnimalKindId | undefined {
 }
 
 /** The cabin's block as a box the camera can bump into - see `homeCameraBlockers`. */
-function homeCameraBlocker(home: BuiltPropView, groundY = 0): THREE.Mesh {
+function homeCameraBlocker(home: BuiltPropView, groundY = 0, bottomY = groundY): THREE.Mesh {
   const collider = cabinCollider(home, groundY);
   const box = new THREE.Mesh(
     new THREE.BoxGeometry(
       collider.shape === 'box' ? collider.halfX * 2 : 5,
-      HOME_CAMERA_BLOCKER_HEIGHT,
+      groundY + HOME_CAMERA_BLOCKER_HEIGHT - bottomY,
       collider.shape === 'box' ? collider.halfZ * 2 : 4,
     ),
   );
-  box.position.set(collider.x, groundY + HOME_CAMERA_BLOCKER_HEIGHT / 2, collider.z);
+  box.position.set(collider.x, (bottomY + groundY + HOME_CAMERA_BLOCKER_HEIGHT) / 2, collider.z);
   box.rotation.y = home.yaw;
   box.updateMatrixWorld(true);
   return box;
@@ -2800,6 +2813,7 @@ export class Game {
       if ('setLit' in built) built.setLit(prop.lit);
       built.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
       built.group.rotation.y = prop.yaw;
+      if ('groundOn' in built) built.groundOn?.((x, z) => this.collision!.terrain.heightAt(x, z));
       built.group.visible = prop.occupied !== true;
       this.outdoors.add(built.group);
       built.group.userData.builtKind = prop.kind;
@@ -2826,7 +2840,12 @@ export class Game {
           const collider = cabinCollider(prop, groundY);
           this.collision.colliders.push(collider);
           this.solidHomes.set(prop.id, collider);
-          this.homeCameraBlockers.push(homeCameraBlocker(prop, groundY));
+          const mesh = this.builtMeshes.get(prop.id);
+          const bottomY =
+            mesh === undefined
+              ? groundY
+              : Math.min(groundY, new THREE.Box3().setFromObject(mesh.group).min.y);
+          this.homeCameraBlockers.push(homeCameraBlocker(prop, groundY, bottomY));
         }
     }
     this.updateMapBuilds();
@@ -3528,7 +3547,11 @@ export class Game {
     this.craftMenuOpen = false;
     this.inventoryOpen = false;
 
-    const ghost = createBuildGhost(createBuiltMesh(kind), buildableFootprint(kind, 0, 0, 0));
+    const ghost = createBuildGhost(
+      createBuiltMesh(kind),
+      buildableFootprint(kind, 0, 0, 0),
+      (x, z) => this.collision!.terrain.heightAt(x, z),
+    );
     this.scene.add(ghost.group);
     this.placing = {
       kind,

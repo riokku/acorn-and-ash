@@ -1,6 +1,11 @@
 import * as THREE from 'three/webgpu';
 
 import { createFireGlow } from './fire-light';
+import {
+  groundBuildingSupport,
+  groundLooseBuildingPart,
+  type GroundHeight,
+} from './building-ground';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 
@@ -19,6 +24,7 @@ export interface Cabin {
   readonly group: THREE.Group;
   setDaylight?(brightness: number): void;
   update?(deltaSeconds: number): void;
+  groundOn?(heightAt: GroundHeight): void;
   dispose(): void;
 }
 
@@ -66,6 +72,8 @@ export function createCabin(): Cabin {
   const iron = plainMaterial(0x2b2622, { roughness: 0.6 });
 
   const builder = new ModelBuilder();
+  const supports = new ModelBuilder();
+  const firewood = new ModelBuilder();
   let seed = 1;
   const addLog = (
     material: THREE.Material,
@@ -87,7 +95,7 @@ export function createCabin(): Cabin {
   };
 
   // The stone footing under the whole cabin.
-  builder.add(
+  supports.add(
     cobbles,
     plankGeometry(WIDTH + 0.1, FOOTING, DEPTH + 0.1, 'x', 0.9, 3),
     placed(0, FOOTING / 2, 0),
@@ -110,14 +118,21 @@ export function createCabin(): Cabin {
     }
   }
 
-  addDoor(builder, { boards: doorWood, frame: boards, iron, stone });
+  addDoor(builder, supports, { boards: doorWood, frame: boards, iron, stone });
   addWindow(builder, { frame: trim, glass, box: boards, soil });
   addGables(builder, boards);
   addRoof(builder, { shingles, boards, logs, logEnds });
-  addChimney(builder, cobbles, stone);
-  addWoodpile(builder, bark, logEnds, () => seed++);
+  addChimney(builder, supports, cobbles, stone);
+  addWoodpile(firewood, bark, logEnds, () => seed++);
 
   const model = builder.build();
+  const base = supports.build();
+  const woodpile = firewood.build();
+  woodpile.group.position.x = -WIDTH / 2 - 0.5;
+  model.group.add(base.group, woodpile.group);
+  const groundSupports = base.group.children.map((part) =>
+    groundBuildingSupport(part as THREE.Mesh, 0.09, (part as THREE.Mesh).material === stone),
+  );
   const glow = createFireGlow(0xffbb72, 2.5, 5, 0.04);
   glow.anchor.position.set(
     (WINDOW.left + WINDOW.right) / 2,
@@ -127,6 +142,10 @@ export function createCabin(): Cabin {
   model.group.add(glow.anchor);
   return {
     group: model.group,
+    groundOn(heightAt) {
+      for (const fit of groundSupports) fit(heightAt);
+      groundLooseBuildingPart(woodpile.group, heightAt);
+    },
     setDaylight(brightness) {
       const night = 1 - Math.max(0, Math.min(1, brightness));
       glass.emissiveIntensity = 0.35 + night * 1.2;
@@ -139,6 +158,8 @@ export function createCabin(): Cabin {
       glow.dispose();
       glass.dispose();
       model.dispose();
+      base.dispose();
+      woodpile.dispose();
     },
   };
 }
@@ -166,6 +187,7 @@ function cutAround(
 
 function addDoor(
   builder: ModelBuilder,
+  supports: ModelBuilder,
   materials: {
     boards: THREE.Material;
     frame: THREE.Material;
@@ -213,7 +235,7 @@ function addDoor(
     placed(DOOR.right - 0.16, DOOR.bottom + height * 0.5, face + 0.06),
   );
   // A flat doorstep.
-  builder.add(
+  supports.add(
     materials.stone,
     stoneGeometry(0.42, 0.1, 71, 0.6),
     placed(middle, 0, DEPTH / 2 + 0.45, {}, { x: 1.4, y: 1, z: 0.9 }),
@@ -388,17 +410,22 @@ function addRoof(
 }
 
 /** A fieldstone chimney up the outside of one gable end, a little way back from the front. */
-function addChimney(builder: ModelBuilder, cobbles: THREE.Material, stone: THREE.Material): void {
+function addChimney(
+  builder: ModelBuilder,
+  supports: ModelBuilder,
+  cobbles: THREE.Material,
+  stone: THREE.Material,
+): void {
   const x = WIDTH / 2 + 0.36;
   const z = -0.55;
   const lowHeight = WALL_TOP + 0.3;
-  builder.add(
+  supports.add(
     cobbles,
     plankGeometry(0.62, lowHeight, 0.72, 'y', 0.6, 120),
     placed(x, lowHeight / 2, z),
   );
   const stackHeight = RIDGE + 0.7 - lowHeight;
-  builder.add(
+  supports.add(
     cobbles,
     plankGeometry(0.46, stackHeight, 0.5, 'y', 0.6, 121),
     placed(x - 0.04, lowHeight + stackHeight / 2, z),
@@ -418,7 +445,7 @@ function addWoodpile(
   logEnds: THREE.Material,
   nextSeed: () => number,
 ): void {
-  const x = -WIDTH / 2 - 0.5;
+  const x = 0;
   const radius = 0.09;
   const rows = [
     { count: 5, y: radius },
