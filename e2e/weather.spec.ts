@@ -74,7 +74,7 @@ test(
       pushClock();
       await expect
         .poll(() => page.evaluate(() => window.acornDebug?.weatherEffects().fireflies))
-        .toBe(32);
+        .toBe(112);
       await drawnScreenshot(
         page,
         process.env.CI ? 'test-results/forest-dusk.png' : '/workspace/acorn-forest-dusk.png',
