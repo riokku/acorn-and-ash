@@ -170,6 +170,11 @@ you are walking. See
 [decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
 [decision 0051](docs/decisions/0051-a-click-turns-the-character-not-the-camera.md).
 
+The outdoor camera checks the center and corners of its view against trunks,
+rocks and terrain, including after impact shake. It pulls in immediately and
+eases back out when the view clears. See
+[camera scenery clearance](docs/decisions/0146-camera-view-edge-clearance.md).
+
 If the connection drops, crafting, item use, gear changes and placement explain
 that they need a connection. Unsent placements keep their preview. Reconnecting
 never replays old clicks; click again deliberately once connected. Items and
