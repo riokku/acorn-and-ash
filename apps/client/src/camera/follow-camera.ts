@@ -154,7 +154,7 @@ export class FollowCamera {
 
     if (this.pitchNudge !== null) {
       const remaining = this.pitchNudge - this.look.pitch;
-      this.look.pitch += remaining * Math.min(1, NUDGE_RATE * deltaSeconds);
+      this.look.pitch += remaining * (1 - Math.exp(-NUDGE_RATE * deltaSeconds));
       if (Math.abs(remaining) < 0.01) this.pitchNudge = null;
     }
 
@@ -182,7 +182,7 @@ export class FollowCamera {
       // Ease back out once the way is clear again.
       const room = Math.min(blocked, RESTING_DISTANCE);
       this.currentDistance +=
-        (room - this.currentDistance) * Math.min(1, PULL_OUT_RATE * deltaSeconds);
+        (room - this.currentDistance) * (1 - Math.exp(-PULL_OUT_RATE * deltaSeconds));
     }
 
     this.desired.copy(this.direction).multiplyScalar(this.currentDistance).add(this.target);

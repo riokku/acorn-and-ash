@@ -179,6 +179,9 @@ The outdoor camera checks the center and corners of its view against trunks,
 rocks and terrain, including after impact shake. It pulls in immediately and
 eases back out when the view clears. See
 [camera scenery clearance](docs/decisions/0146-camera-view-edge-clearance.md).
+Camera release and fishing tilt use elapsed-time easing, giving the same motion
+at different frame rates while preserving immediate collision pull-in. See
+[camera easing](docs/decisions/0149-camera-easing-by-elapsed-time.md).
 
 If the connection drops, crafting, item use, gear changes and placement explain
 that they need a connection. Unsent placements keep their preview. Reconnecting
