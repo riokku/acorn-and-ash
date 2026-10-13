@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { smoothstep, lerp } from '@acorn/shared';
 import { ModelBuilder, placed } from '../art/shapes';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ellipsoid } from './critter';
@@ -339,27 +340,30 @@ export function createWoodlandCreature(kind: WoodlandCreatureKind): WoodlandCrea
       const dt = Math.max(0, Math.min(deltaSeconds, 0.1));
       time += dt;
       const blend = 1 - Math.exp(-dt * 9);
-      speed += (Math.max(0, pose.speed) - speed) * blend;
+      const targetSpeed = Math.max(0, pose.speed);
+      // Integrate the eased speed exactly so cadence is independent of render FPS.
+      const distance = targetSpeed * dt + ((speed - targetSpeed) * blend) / 9;
+      speed += (targetSpeed - speed) * blend;
       alert += ((pose.alert || pose.windup ? 1 : 0) - alert) * blend;
       wound += ((pose.hurt ? 1 : 0) - wound) * blend;
       windup += ((pose.windup ? 1 : 0) - windup) * blend;
       strike += ((pose.attacking ? 1 : 0) - strike) * blend;
       defeat = pose.defeated ? Math.min(1, defeat + dt * 1.4) : Math.max(0, defeat - dt * 3);
       const stride = kind === 'elk' ? 2.2 : kind === 'curiousRaccoon' ? 7 : 3;
-      gait += speed * dt * stride;
-      const moving = Math.min(1, speed / (kind === 'elk' ? 1.1 : 0.7));
-      const amplitude = moving * (speed > 3 ? 0.78 : 0.4) * (1 - defeat);
+      gait += distance * stride;
+      const moving = smoothstep(speed, 0, kind === 'elk' ? 1.1 : 0.7);
+      const amplitude = moving * lerp(0.4, 0.78, smoothstep(speed, 2.2, 4)) * (1 - defeat);
       torso.position.y =
         restingHeight +
         Math.sin(time * 2.1) * 0.008 +
-        Math.abs(Math.sin(gait)) * 0.025 * moving -
+        Math.sin(gait) ** 2 * 0.025 * moving -
         defeat * restingHeight * 0.32;
       torso.rotation.x = wound * -0.17 - windup * 0.14 + strike * 0.24 + defeat * 0.45;
       torso.rotation.z = Math.sin(gait) * 0.018 * moving + defeat * 1.1;
       for (const leg of legs) {
         const step = Math.sin(gait + leg.phase);
         leg.upper.rotation.x = step * amplitude + defeat * 0.9;
-        leg.lower.rotation.x = Math.max(0, -step) * amplitude * 1.25 - defeat * 0.6;
+        leg.lower.rotation.x = Math.max(0, -step) ** 2 * amplitude * 1.25 - defeat * 0.6;
       }
       const grazing =
         Math.max(0, (Math.sin(time * 0.45 - 2) - 0.3) / 0.7) * (1 - moving) * (1 - alert);
