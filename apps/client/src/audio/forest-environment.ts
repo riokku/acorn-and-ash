@@ -1,5 +1,6 @@
 import {
   LAKE,
+  navigableWaterDepthAt,
   PROP_KINDS,
   SPAWN_POSITION,
   type PlacedProp,
@@ -8,7 +9,7 @@ import {
 } from '@acorn/shared';
 import { createGroundShader } from '../art/ground-shading';
 
-export type FootstepSurface = 'grass' | 'forestFloor' | 'soil' | 'wood';
+export type FootstepSurface = 'grass' | 'forestFloor' | 'soil' | 'wood' | 'water' | 'snow' | 'ice';
 export interface ForestPoint {
   readonly x: number;
   readonly z: number;
@@ -47,6 +48,11 @@ export function createForestEnvironment(
   return {
     setStandingProps: sortTrees,
     surfaceAt(x, z) {
+      if (
+        navigableWaterDepthAt(x, z) > 0.02 ||
+        water.some((pond) => Math.hypot(x - pond.x, z - pond.z) < pond.radius)
+      )
+        return 'water';
       if (Math.hypot(x - SPAWN_POSITION.x, z - SPAWN_POSITION.z) < 3) return 'soil';
       const dx = terrain.heightAt(x + 0.5, z) - terrain.heightAt(x - 0.5, z);
       const dz = terrain.heightAt(x, z + 0.5) - terrain.heightAt(x, z - 0.5);

@@ -17,6 +17,7 @@ declare global {
       combatMove(): { kind: number; age: number; grounded: boolean };
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
       snowFootprints(): number;
+      footstepCount(): number;
       wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
       weatherEffects(): { rainDrops: number; fireflies: number };
       snowOnGround(): number;
