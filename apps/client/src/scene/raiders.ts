@@ -17,6 +17,7 @@ import {
 
 import { InterpolatedEntities } from '../net/interpolated-entities';
 import type { Character } from './character';
+import type { FootGroundHeight } from './standing-foot-contact';
 import { MoveMemory, rollDirection } from './character-driver';
 import type { ImpactBursts } from './impact-bursts';
 import { RaiderFigure } from './raider-figure';
@@ -100,6 +101,7 @@ export class RaiderCrowd {
   constructor(
     private readonly parent: THREE.Object3D,
     private readonly bursts: ImpactBursts,
+    private readonly groundHeight?: FootGroundHeight,
   ) {}
 
   /**
@@ -274,7 +276,11 @@ export class RaiderCrowd {
       figure.draw(
         deltaSeconds,
         pose,
-        { move, locomotion: { speed: pose.speed, airborne: pose.airborne } },
+        {
+          move,
+          locomotion: { speed: pose.travelSpeed, airborne: pose.airborne },
+          groundHeight: this.groundHeight,
+        },
         volumeAt(distance),
       );
       const kind = RAIDER_KINDS[figure.kind];

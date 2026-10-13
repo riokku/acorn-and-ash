@@ -1071,7 +1071,11 @@ export class Game {
   private readonly bursts = new ImpactBursts();
   private readonly treeLandingEffects = new TreeLandingEffects();
   /** Every skeleton raider in sight (see decision 0063). */
-  private readonly raiders = new RaiderCrowd(this.outdoors, this.bursts);
+  private readonly raiders = new RaiderCrowd(
+    this.outdoors,
+    this.bursts,
+    this.characterGroundHeight,
+  );
   /** The skeleton a swing of ours would land on, as last worked out. */
   private aimedRaiderId: number | null = null;
   private aimedRaider: { name: string; hitsLeft: number } | null = null;

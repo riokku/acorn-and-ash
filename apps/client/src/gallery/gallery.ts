@@ -349,7 +349,8 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     return;
   }
   if (focus === 'raiders') {
-    scene.add(createGalleryGround([]));
+    const slope = Math.max(-0.3, Math.min(0.3, Number(params.get('slope') ?? 0))) || 0;
+    scene.add(createGalleryGround([], (x) => x * slope));
     const { showRaiders } = await import('./raiders');
     await showRaiders(renderer, scene, fireLights, params);
     return;
@@ -540,7 +541,10 @@ function showHomeInside(
 }
 
 /** A patch of the same painted ground the world uses, bare under the trees and lush by the pond. */
-function createGalleryGround(scenery: readonly PlacedProp[]): THREE.Mesh {
+function createGalleryGround(
+  scenery: readonly PlacedProp[],
+  heightAt = (_x: number, _z: number) => 0,
+): THREE.Mesh {
   const size = 80;
   const geometry = new THREE.PlaneGeometry(size, size, 160, 160);
   geometry.rotateX(-Math.PI / 2);
@@ -550,10 +554,12 @@ function createGalleryGround(scenery: readonly PlacedProp[]): THREE.Mesh {
   const floor = new Float32Array(position.count);
   const tint = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
+    position.setY(i, heightAt(position.getX(i), position.getZ(i)));
     const shade = shader.shadeAt(position.getX(i), position.getZ(i), 0);
     floor[i] = shade.floor;
     tint.set(shade.tint, i * 3);
   }
+  geometry.computeVertexNormals();
   geometry.setAttribute('floor', new THREE.BufferAttribute(floor, 1));
   // No mountain in the gallery: no rock and no snow.
   geometry.setAttribute('rock', new THREE.BufferAttribute(new Float32Array(position.count), 1));

@@ -143,6 +143,8 @@ export async function showRaiders(
   params: URLSearchParams,
 ): Promise<void> {
   await Promise.all([preloadRaiderModels(), preloadCharacterAnimations()]);
+  const slope = Math.max(-0.3, Math.min(0.3, Number(params.get('slope') ?? 0))) || 0;
+  const groundHeight = (x: number) => x * slope;
   const picked = params.get('demo');
   const demos = picked === null ? DEMOS : DEMOS.filter((demo) => demo.name === picked);
   const askedKind = params.get('kind');
@@ -224,8 +226,8 @@ export async function showRaiders(
     const move = showing.memory.view(step.kind, step.step, step.age, false, 'backward');
     showing.figure.draw(
       deltaSeconds,
-      { x: showing.x, y: 0, z: showing.z, yaw: turn },
-      { move, locomotion: { speed: showing.demo.speed ?? 0, airborne: false } },
+      { x: showing.x, y: groundHeight(showing.x), z: showing.z, yaw: turn },
+      { move, locomotion: { speed: showing.demo.speed ?? 0, airborne: false }, groundHeight },
       0,
     );
     for (const at of showing.demo.struckAt ?? []) {
