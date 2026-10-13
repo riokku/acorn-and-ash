@@ -100,3 +100,31 @@ describe('remembering a move from frame to frame', () => {
     expect(memory.view(ActionKind.Flinch, 0, 0, false, 'forward').flinchVariant).not.toBe(first);
   });
 });
+
+describe('move context through small clock corrections', () => {
+  it('keeps a chopping swing after its tree disappears during reconciliation', () => {
+    const memory = new MoveMemory();
+    memory.view(ActionKind.Swing, 1, 6, true, 'forward');
+    const corrected = memory.view(ActionKind.Swing, 1, 5.8, false, 'forward');
+    expect(corrected.atTree).toBe(true);
+    expect(corrected.age).toBe(5.8);
+    expect(memory.view(ActionKind.Swing, 1, 0, false, 'forward').atTree).toBe(false);
+  });
+
+  it('keeps digging context as the cursor moves away from the cache', () => {
+    const memory = new MoveMemory();
+    memory.view(ActionKind.Swing, 1, 6, false, 'forward', true);
+    expect(memory.view(ActionKind.Swing, 1, 5.8, false, 'forward', false).digging).toBe(true);
+    expect(memory.view(ActionKind.Swing, 2, 0, false, 'forward', false).digging).toBe(false);
+  });
+
+  it('keeps the charged wind-up follow-through and flinch variation', () => {
+    const memory = new MoveMemory();
+    memory.view(ActionKind.Windup, 0, 9, false, 'forward');
+    memory.view(ActionKind.Swing, 1, 3, false, 'forward');
+    expect(memory.view(ActionKind.Swing, 1, 2.8, false, 'forward').afterWindup).toBe(true);
+    const first = memory.view(ActionKind.Flinch, 0, 3, false, 'forward').flinchVariant;
+    expect(memory.view(ActionKind.Flinch, 0, 2.8, false, 'forward').flinchVariant).toBe(first);
+    expect(memory.view(ActionKind.Flinch, 0, 0, false, 'forward').flinchVariant).not.toBe(first);
+  });
+});
