@@ -191,7 +191,10 @@ export function stepPlayer(
       position.x,
       position.z,
       startY,
-      motion.grounded ? WALKABLE_STEP_ALLOWANCE : 0,
+      motion.grounded
+        ? WALKABLE_STEP_ALLOWANCE +
+            MAX_WALKABLE_GRADIENT * Math.hypot(position.x - startX, position.z - startZ)
+        : 0,
     );
     if (position.y <= floor) position.y = floor;
   }

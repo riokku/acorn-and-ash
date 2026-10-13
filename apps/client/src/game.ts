@@ -1,3 +1,4 @@
+import { footGroundHeightAt } from './scene/standing-foot-contact';
 import { placedPropColliders, type Collider } from '@acorn/shared';
 import { streamRockColliders } from '@acorn/shared';
 import { BuildFeedback, buildReplyText } from './hud/build-feedback';
@@ -1032,7 +1033,7 @@ export class Game {
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
   private readonly characterGroundHeight = (x: number, z: number, referenceY: number): number =>
-    this.collision === null ? referenceY : groundHeightAt(this.collision, x, z, referenceY);
+    footGroundHeightAt(this.collision, x, z, referenceY);
   private aimedTree: { name: string; swingsLeft: number } | null = null;
   private aimedAnimal: { name: string; hitsLeft?: number } | null = null;
   /** Every float in the pond, ours and everybody else's. */
@@ -2864,31 +2865,6 @@ export class Game {
    * ever actually removed yet, but a client that reconnects mid-session
    * should not have to care whether that stays true forever.
    */
-  private refreshPlacedSolids(): void {
-    if (this.collision === null) return;
-    const old = new Set([...this.solidPlacedProps.values()].flat());
-    this.collision.colliders.splice(
-      0,
-      this.collision.colliders.length,
-      ...this.collision.colliders.filter((c) => !old.has(c)),
-    );
-    this.solidPlacedProps.clear();
-    for (const prop of this.builtProps) {
-      const mesh = this.builtMeshes.get(prop.id)?.group;
-      const solidProp =
-        prop.kind === 'rowboat' && prop.occupied !== true && mesh !== undefined
-          ? { ...prop, x: mesh.position.x, z: mesh.position.z, yaw: mesh.rotation.y }
-          : prop;
-      const solids = placedPropColliders(
-        solidProp,
-        this.builtGroundY(prop.kind, solidProp.x, solidProp.z),
-      );
-      if (solids.length > 0) {
-        this.solidPlacedProps.set(prop.id, solids);
-        this.collision.colliders.push(...solids);
-      }
-    }
-  }
   private applyBuiltProps(onlyBoatMotion = false): void {
     if (this.clearingScene === null) return;
     const present = new Set(this.builtProps.map((prop) => prop.id));
@@ -2974,6 +2950,32 @@ export class Game {
     this.refreshPlacedSolids();
   }
 
+  /** Solid pieces are appended after the indexed forest and refreshed with their visible pose. */
+  private refreshPlacedSolids(): void {
+    if (this.collision === null) return;
+    const old = new Set([...this.solidPlacedProps.values()].flat());
+    this.collision.colliders.splice(
+      0,
+      this.collision.colliders.length,
+      ...this.collision.colliders.filter((c) => !old.has(c)),
+    );
+    this.solidPlacedProps.clear();
+    for (const prop of this.builtProps) {
+      const mesh = this.builtMeshes.get(prop.id)?.group;
+      const solidProp =
+        prop.kind === 'rowboat' && prop.occupied !== true && mesh !== undefined
+          ? { ...prop, x: mesh.position.x, z: mesh.position.z, yaw: mesh.rotation.y }
+          : prop;
+      const solids = placedPropColliders(
+        solidProp,
+        this.builtGroundY(prop.kind, solidProp.x, solidProp.z),
+      );
+      if (solids.length > 0) {
+        this.solidPlacedProps.set(prop.id, solids);
+        this.collision.colliders.push(...solids);
+      }
+    }
+  }
   /** Your own home and builds, for the maps - only when the built list changes, not every frame. */
   private updateMapBuilds(): void {
     const builds: MapBuild[] = [];

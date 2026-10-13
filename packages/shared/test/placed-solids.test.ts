@@ -1,3 +1,14 @@
+import {
+  ActionKind,
+  type ActionState,
+  createActionState,
+  dodgeHeading,
+  stepDodge,
+  stepDodgeAttack,
+  DODGE_SPEED,
+} from '../src/sim/actions';
+import { surfaceCollider, colliderTopAt } from '../src/collision/solid-surface';
+import { createPlayerMotion, stepPlayer } from '../src/sim/player';
 import { createInput } from '../src/sim/player';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BUILDABLE_KIND_ORDER } from '../src/data/buildables';
@@ -36,6 +47,79 @@ describe('solid placed props', () => {
       expect(Math.hypot(position.x, position.z)).toBeGreaterThan(0.3);
     });
   }
+  it('walks uphill over a gentle solid facet instead of being shoved down its side', () => {
+    const top = (x: number) => 0.9 + 0.7 * x;
+    const roof = [
+      -1,
+      top(-1),
+      -1,
+      1,
+      top(1),
+      1,
+      1,
+      top(1),
+      -1,
+      -1,
+      top(-1),
+      -1,
+      -1,
+      top(-1),
+      1,
+      1,
+      top(1),
+      1,
+    ];
+    const solid = surfaceCollider(0, 0, 0, roof);
+    const world = createCollisionWorld(flat, [solid], 100);
+    const motion = createPlayerMotion({ x: -0.2, y: top(-0.2), z: 0 });
+    for (let i = 0; i < 4; i++) {
+      const previous = motion.position.x;
+      stepPlayer(motion, createInput(i + 1, 1, 0, 0), 0.05, world);
+      expect(motion.position.x).toBeGreaterThan(previous);
+      expect(motion.position.y).toBeCloseTo(colliderTopAt(solid, motion.position.x, 0)!, 5);
+      expect(motion.grounded).toBe(true);
+    }
+  });
+  it('keeps a dodge and its attack hop over the same rising solid surface', () => {
+    const top = (x: number) => 0.9 + 0.7 * x;
+    const solid = surfaceCollider(0, 0, 0, [
+      -1,
+      top(-1),
+      -1,
+      1,
+      top(1),
+      1,
+      1,
+      top(1),
+      -1,
+      -1,
+      top(-1),
+      -1,
+      -1,
+      top(-1),
+      1,
+      1,
+      top(1),
+      1,
+    ]);
+    const world = createCollisionWorld(flat, [solid], 100);
+    const motion = createPlayerMotion({ x: -0.2, y: top(-0.2), z: 0 });
+    const state: ActionState = {
+      ...createActionState(),
+      kind: ActionKind.Dodge,
+      heading: dodgeHeading(createInput(1, 1, 0, 0)),
+    };
+    stepDodge(motion, state, world);
+    expect(motion.position.x).toBeGreaterThan(-0.2);
+    expect(motion.position.y).toBeCloseTo(top(motion.position.x), 5);
+    const hop = createPlayerMotion({ x: -0.2, y: top(-0.2), z: 0 });
+    hop.velocity.x = DODGE_SPEED;
+    state.kind = ActionKind.DodgeLight;
+    state.age = 1;
+    stepDodgeAttack(hop, state, world);
+    expect(hop.position.x).toBeGreaterThan(-0.2);
+    expect(hop.position.y).toBeGreaterThan(top(hop.position.x));
+  });
   it('keeps rugs and inset path surfaces walkable', () => {
     expect(placedPropColliders({ kind: 'gardenPath', x: 0, z: 0, yaw: 0 }, 0)).toEqual([]);
     expect(placedPropColliders({ kind: 'wovenRug', x: 0, z: 0, yaw: 0 }, 0)).toEqual([]);

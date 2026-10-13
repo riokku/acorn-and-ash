@@ -7,3 +7,5 @@ Register deterministic primitive bodies matching the solid parts of each placed 
 Register bodies on placement and restore, remove them with abandoned/stranded pieces, and leave the initial forest/stump indices intact. Free hull bodies track actual shared drift on the server and the displayed predicted pose on the client. Remove the placed hull while occupied: rowing owns its rider and hull, then restore it on release. No speed, recipe, reach, controls or jump changes.
 
 Trail cairns use the existing shared stone triangles and support landing. Ruin blocks and the discovery log get matching bodies while retaining the same landmark positions and open centers. These simple colliders conservatively cover small decorative details; this remains kinematic movement, without a new physics engine.
+
+Solid roofs also use the existing terrain slope allowance when walking. Dodge/attack footing samples nearby roofs before resolving their sides; only a body already over a solid roof gets the roof-rise allowance. Foot posing queries the same roof within its existing 18 cm correction bound.

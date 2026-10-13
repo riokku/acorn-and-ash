@@ -37,7 +37,13 @@ import {
   WINDUP_TICKS,
   type ComboSwing,
 } from '../data/moves';
-import { groundHeightAt, resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import {
+  COLLISION_SKIN_WIDTH,
+  groundHeightAt,
+  landingHeightAt,
+  resolveCapsule,
+  type CollisionWorld,
+} from '../collision/capsule';
 import { FLOOR_STEP } from '../world/digging';
 import { rotateToward } from '../math/angles';
 import type { ItemId } from '../data/items';
@@ -489,13 +495,17 @@ export function stepDodge(
   const fromZ = position.z;
   position.x += velocity.x * TICK_SECONDS;
   position.z += velocity.z * TICK_SECONDS;
-  resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
-  const floor = groundHeightAt(world, position.x, position.z, position.y);
-  if (floor > position.y + FLOOR_STEP) {
-    // A wall of dug-out ground: the roll stops against it rather than climbing it.
+  const fromY = position.y;
+  const onSolid =
+    groundHeightAt(world, fromX, fromZ, fromY) >
+    world.terrain.heightAt(fromX, fromZ) + COLLISION_SKIN_WIDTH;
+  const floor = landingHeightAt(world, position.x, position.z, fromY, onSolid ? FLOOR_STEP : 0);
+  if (floor > fromY + FLOOR_STEP) {
     position.x = fromX;
     position.z = fromZ;
   } else position.y = floor;
+  resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
+  position.y = groundHeightAt(world, position.x, position.z, position.y);
   motion.grounded = true;
   if (state.age >= DODGE.travel - 1) {
     velocity.x = 0;
@@ -621,13 +631,22 @@ export function stepDodgeAttack(
   motion.position.z += motion.velocity.z * TICK_SECONDS;
   const fromX = motion.position.x - motion.velocity.x * TICK_SECONDS;
   const fromZ = motion.position.z - motion.velocity.z * TICK_SECONDS;
-  const floor = groundHeightAt(world, motion.position.x, motion.position.z, oldY);
+  const onSolid =
+    groundHeightAt(world, fromX, fromZ, oldY) >
+    world.terrain.heightAt(fromX, fromZ) + COLLISION_SKIN_WIDTH;
+  let floor = landingHeightAt(
+    world,
+    motion.position.x,
+    motion.position.z,
+    oldY,
+    onSolid ? FLOOR_STEP : 0,
+  );
   if (floor > oldY + FLOOR_STEP) {
-    // A wall of dug-out ground: the hop stops against it rather than climbing it.
     motion.position.x = fromX;
     motion.position.z = fromZ;
+    floor = groundHeightAt(world, fromX, fromZ, oldY);
   }
-  motion.position.y = groundHeightAt(world, motion.position.x, motion.position.z, oldY) + height;
+  motion.position.y = floor + height;
   resolveCapsule(motion.position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
   motion.velocity.y = (motion.position.y - oldY) / TICK_SECONDS;
   motion.grounded = state.age >= move.land;
