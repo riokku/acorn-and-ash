@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180000);
@@ -67,6 +67,12 @@ test('lands a rare fish with real clicks and illustrates the saved collection', 
             input.buttons & shared.PlayerButton.SawBite &&
             !rareStarted
           ) {
+            // Earlier inputs in this packet must be consumed before choosing
+            // the rare hook tick, or the timer can hook it on a different tick.
+            for (let flush = 0; flush < 20 && sim.lastProcessedSeq(1) < input.seq - 1; flush++)
+              sim.step(Date.now());
+            if (sim.lastProcessedSeq(1) < input.seq - 1)
+              throw new Error('rare fishing fixture could not drain the preceding inputs');
             while (shared.fishOnTheLine(sim.seed, cast.castNumber, sim.tick + 1) !== 'goldenCarp')
               sim.step(Date.now());
             rareStarted = true;
@@ -101,17 +107,29 @@ test('lands a rare fish with real clicks and illustrates the saved collection', 
       [pool.x, pool.z],
     );
     await expect(page.locator('.hud-hint')).toContainText('Left click to cast');
+    // faceTowards changes the camera's requested heading; screen projection
+    // must wait until that heading has been applied by the frame loop.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const click = async () => {
       await page.mouse.move(480, 320);
       await page.mouse.down();
       await page.waitForTimeout(90);
       await page.mouse.up();
     };
-    // Set up a cast at the water; the hook and both rare pulls are real browser clicks.
-    sim.queueInput(
-      1,
-      shared.createInput(sim.lastProcessedSeq(1) + 1, 0, 0, yaw, shared.PlayerButton.Fish),
+    // Cast through the browser too: injecting the next sequence number into
+    // the server races with the real client's queued input of that number.
+    const waterPoint = await page.evaluate(
+      ({ x, z }) => window.acornDebug?.screenPoint(x, 0.02, z),
+      pool,
     );
+    if (waterPoint == null) throw new Error('fishing water is off screen');
+    await page.mouse.click(waterPoint.x, waterPoint.y);
+    await expect.poll(() => sim.castOf(1)).not.toBeNull();
     await expect
       .poll(
         () =>

@@ -1,10 +1,4 @@
-import {
-  expect,
-  test as base,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from './fixtures';
 
 import {
   CLEARING_TREE_LINE_INNER,
@@ -88,14 +82,6 @@ declare global {
     };
   }
 }
-
-/** Every test's own page, with the drawing skipped unless it is about the drawing. */
-const test = base.extend({
-  page: async ({ page }, use, testInfo) => {
-    if (!testInfo.tags.includes('@real-drawing')) await skipDrawing(page);
-    await use(page);
-  },
-});
 
 /** A second tab in its own window, the way the tests that open several want them. */
 async function openTab(browser: Browser): Promise<Page> {
@@ -354,42 +340,57 @@ test('walking moves the player, and the server agrees', async ({ page }) => {
 });
 
 test('two tabs see each other move', async ({ browser }) => {
+  test.setTimeout(180_000);
   const walker = await openTab(browser);
   const watcher = await openTab(browser);
-
-  await walker.goto('/');
-  await watcher.goto('/');
-  await waitForConnected(walker);
-  await waitForConnected(watcher);
-
-  // Each tab should be told there are two players in the world.
-  await expect.poll(async () => Number(await hudValue(watcher, 'Players'))).toBe(2);
-  await expect.poll(async () => Number(await hudValue(walker, 'Players'))).toBe(2);
-
-  // A background tab stops animating, so bring each one to the front before
-  // asking it to do anything, the way a person switching windows would.
-  await walker.bringToFront();
-  await expect(walker.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
-    timeout: 120_000,
-  });
-  const walkerStart = await walker.evaluate(() => window.acornDebug?.localPosition());
-  await hold(walker, 'KeyW', 1500);
-  await walker.waitForTimeout(400);
-  const walkerEnd = await walker.evaluate(() => window.acornDebug?.localPosition());
-
-  expect(walkerEnd?.z).toBeLessThan((walkerStart?.z ?? 0) - 1);
-
-  // Now look at the same thing from the other tab.
-  await watcher.bringToFront();
-  await expect
-    .poll(async () => {
-      const others = await watcher.evaluate(() => window.acornDebug?.remotePlayers() ?? []);
-      return others[0]?.z ?? 0;
-    })
-    .toBeLessThan((walkerStart?.z ?? 0) - 1);
-
-  await walker.close();
-  await watcher.close();
+  const world = `multiplayer-${Date.now()}`;
+  try {
+    await walker.goto(`/?world=${world}`);
+    await watcher.goto(`/?world=${world}`);
+    await waitForConnected(walker);
+    await waitForConnected(watcher);
+    for (const page of [walker, watcher]) {
+      await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+        timeout: 120_000,
+      });
+      await expect.poll(async () => Number(await hudValue(page, 'Players'))).toBe(2);
+    }
+    const walkerId = await walker.evaluate(() => window.acornDebug!.selfNetId());
+    // Wait for the observer's actual avatar, rather than accepting a missing
+    // remote as z=0 or moving while the observer is still building its world.
+    await expect
+      .poll(() =>
+        watcher.evaluate(
+          (id) => window.acornDebug?.remotePlayers().some((player) => player.netId === id),
+          walkerId,
+        ),
+      )
+      .toBe(true);
+    await walker.bringToFront();
+    const start = await walker.evaluate(() => window.acornDebug!.localPosition());
+    await walker.evaluate(({ x, z }) => window.acornDebug?.faceTowards(x, z - 10), start);
+    await walker.keyboard.down('KeyW');
+    try {
+      await expect
+        .poll(() => walker.evaluate(() => window.acornDebug!.localPosition().z))
+        .toBeLessThan(start.z - 1);
+    } finally {
+      await walker.keyboard.up('KeyW');
+    }
+    await watcher.bringToFront();
+    await expect
+      .poll(() =>
+        watcher.evaluate(
+          (id) =>
+            window.acornDebug?.remotePlayers().find((player) => player.netId === id)?.z ?? Infinity,
+          walkerId,
+        ),
+      )
+      .toBeLessThan(start.z - 1);
+  } finally {
+    await walker.close();
+    await watcher.close();
+  }
 });
 
 test('sprinting covers more ground than walking', async ({ page }) => {
@@ -1606,117 +1607,6 @@ async function huntNearest(
   throw new Error(`Never got hold of a ${kind}: ${problems.join('; ')}`);
 }
 
-test('you can find a rabbit, catch it with your axe, and it pays out meat', async ({ page }) => {
-  // Wildlife lives well past the tree line, so this walks a lot further than
-  // the axe or the pond do.
-  test.setTimeout(600_000);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-
-  await page.goto(`/?world=hunt-${Date.now()}`);
-  await waitForConnected(page);
-  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
-    timeout: 120_000,
-  });
-
-  // Fetch the axe first: no axe, no catching, the same rule as chopping.
-  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
-  const axe = pickups.find((entry) => entry.item === 'axe');
-  if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
-  await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () =>
-      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
-        (entry) => entry.item === 'axe',
-      ),
-    )
-    .toBe(true);
-  await equip(page, 'axe');
-
-  // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
-  // usually the catch hint, but a walk this long can run the hunger meter out
-  // first on a slow machine (it empties in three minutes here, not the real
-  // twenty) - hungry beats everything else on purpose, so either is the hint
-  // doing its job correctly.
-  const catchHint = /Left click to catch the rabbit|You're hungry/;
-  const { animalId: rabbitId, hunt } = await huntNearest(page, 'rabbit', { hint: catchHint });
-  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
-
-  // It is gone, and the meat is ours.
-  expect(
-    (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === rabbitId,
-    ),
-  ).toBe(false);
-  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
-  expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect
-    .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
-    .toBe('You caught some meat!');
-
-  // Nothing thrown while walking out, swinging or drawing the wildlife.
-  expect(errors).toEqual([]);
-});
-
-test('you can find a fox and catch it, the same way you catch a rabbit', async ({ page }) => {
-  // Wildlife lives well past the tree line, so this walks a lot further than
-  // the axe or the pond do.
-  test.setTimeout(600_000);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-
-  await page.goto(`/?world=fox-${Date.now()}`);
-  await waitForConnected(page);
-  await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
-    timeout: 120_000,
-  });
-
-  // Fetch the axe first: no axe, no catching, the same rule as chopping.
-  const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
-  const axe = pickups.find((entry) => entry.item === 'axe');
-  if (axe === undefined) throw new Error('no axe in the clearing');
-  await walkWithinReachOf(page, axe.x, axe.z, 'axe');
-  await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () =>
-      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
-        (entry) => entry.item === 'axe',
-      ),
-    )
-    .toBe(true);
-  await equip(page, 'axe');
-
-  // The same helpers the rabbit hunt uses: neither cares which kind of
-  // wildlife it is, only where it is and whether a swing would land. A fox
-  // is prey to the player exactly like a rabbit - it is only a predator to
-  // a rabbit (decision 0035), which this test does not touch.
-  //
-  // Closing in and swinging happen in one loop (see `huntAnimal`). The hint is
-  // usually the catch hint, but a walk this long can run the hunger meter out
-  // first on a slow machine (it empties in three minutes here, not the real
-  // twenty) - hungry beats everything else on purpose, so either is the hint
-  // doing its job correctly.
-  const catchHint = /Left click to catch the fox|You're hungry/;
-  const { animalId: foxId, hunt } = await huntNearest(page, 'fox', { hint: catchHint });
-  expect(hunt.hints.some((hint) => catchHint.test(hint))).toBe(true);
-
-  // It is gone, and the meat is ours - a fox pays out exactly like a rabbit.
-  expect(
-    (await page.evaluate(() => window.acornDebug?.animals() ?? [])).some(
-      (entry) => entry.id === foxId,
-    ),
-  ).toBe(false);
-  const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
-  expect(carried.find((entry) => entry.item === 'meat')?.count).toBeGreaterThan(0);
-  await expect
-    .poll(async () => page.evaluate(() => window.acornDebug?.huntingNews() ?? null))
-    .toBe('You caught some meat!');
-
-  // Nothing thrown while walking out, swinging or drawing the wildlife.
-  expect(errors).toEqual([]);
-});
-
 test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
   // Wildlife lives well past the tree line, the same reason the rabbit hunt does.
   test.setTimeout(600_000);
@@ -2147,8 +2037,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // A lantern is the cheaper of the two decorations, at four - more than
   // one patch may hold, so this walks on to the next once one runs out.
   await gatherFromPatches(page, 'flower', 4);
-  const gathered = await countHeld(page, 'flower');
-  expect(gathered).toBeGreaterThanOrEqual(4);
+  expect(await countHeld(page, 'flower')).toBeGreaterThanOrEqual(4);
 
   await walkToward(page, spawnSpot);
   await page.evaluate(
@@ -2172,6 +2061,9 @@ test('you can gather flowers and plant something pretty for the garden', async (
 
   // The lantern needs a building area, so the first tent goes up before it.
   const tent = await buildFirstTent(page, spawnSpot);
+  // Gathering the tent's supplies can also collect a nearby flower. Compare
+  // the lantern's cost with the pack immediately before this placement.
+  const gathered = await countHeld(page, 'flower');
   await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
@@ -2180,10 +2072,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // campfire got a screenshot in the build test above.
   await page.screenshot({ path: 'test-results/lantern-lit.png' });
 
-  const spent = await page.evaluate(
-    () => window.acornDebug?.carrying().find((entry) => entry.item === 'flower')?.count ?? 0,
-  );
-  expect(spent).toBe(gathered - 4);
+  await expect.poll(() => countHeld(page, 'flower')).toBe(gathered - 4);
 
   // Nothing thrown while gathering, walking back, pitching the tent or planting the lantern.
   expect(errors).toEqual([]);

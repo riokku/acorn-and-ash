@@ -1001,13 +1001,19 @@ then waits for it to grow back, and another waits at the pond for a bite. It
 runs the world in the `e2e` environment, where skeleton raids are put off for
 a day so one cannot knock the test player out halfway through.
 
-The older tests in `e2e/play.spec.ts`, and the reeds and rowing tests, skip the
+Gameplay tests skip the
 actual drawing (they stop the browser sending triangles to the graphics card), because the browsers in
 automated runs have no real graphics card and draw one frame every few seconds,
-which makes a walking player crawl. The game logic is untouched. Two tests
+which makes a walking player crawl. The game logic is untouched. Tests
 tagged `@real-drawing` still draw for real, so a broken renderer is still
 caught. To see real pictures, for screenshots say, run with
 `ACORN_E2E_DRAW=1 pnpm test:e2e` (see [decision 0100](docs/decisions/0100-browser-tests-skip-the-gpu.md)).
+
+Gameplay specs share `e2e/fixtures.ts`; checks tagged `@real-drawing` and asset
+galleries still paint their scenes. `SHOT_DIR` also preserves drawing for requested
+screenshots. CI runs every case across four independent shards, with one browser
+per machine. All four must pass the `Browser smoke tests` check, and failed shards
+save separate traces and screenshots (see [decision 0131](docs/decisions/0131-reliable-browser-regression-checks.md)).
 
 ## Repository layout
 

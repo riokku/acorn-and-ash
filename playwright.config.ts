@@ -11,8 +11,12 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 export default defineConfig({
   testDir: './e2e',
   timeout: 90_000,
+  // End cleanly before the job limit so traces can still be uploaded.
+  globalTimeout: process.env.CI ? 28 * 60_000 : undefined,
   expect: { timeout: 30_000 },
-  fullyParallel: false,
+  // Each case owns its browser context/world fixture. This lets CI balance
+  // individual cases across shards, including the large play.spec.ts file.
+  fullyParallel: true,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],

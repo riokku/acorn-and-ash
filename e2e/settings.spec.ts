@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src/index';
 
 test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 0.65 });

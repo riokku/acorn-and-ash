@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test.use({ viewport: { width: 1000, height: 700 }, deviceScaleFactor: 0.75 });
 for (const kind of ['ruins', 'patrolTrail']) {

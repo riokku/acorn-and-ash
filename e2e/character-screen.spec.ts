@@ -1,6 +1,4 @@
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
-
-import { skipDrawing } from './skip-drawing';
+import { expect, test, type Locator, type Page } from './fixtures';
 
 /**
  * The character screen (decision 0107): the player's own character standing in
@@ -13,13 +11,6 @@ import { skipDrawing } from './skip-drawing';
  * told to do, which the stage reports on its canvas. The one tagged
  * `@real-drawing` checks that the character really is drawn.
  */
-const test = base.extend({
-  page: async ({ page }, use, testInfo) => {
-    if (!testInfo.tags.includes('@real-drawing')) await skipDrawing(page);
-    await use(page);
-  },
-});
-
 const newWorld = (): string => `stage-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
 async function openScreen(page: Page, world = newWorld(), search = ''): Promise<Locator> {

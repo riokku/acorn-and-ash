@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(240_000);
@@ -42,6 +42,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     0,
   );
   let sendWorld: ((data: ArrayBuffer) => void) | undefined;
+  let releasedInteractSeq = 0;
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://fonts.googleapis.com/**', (route) =>
@@ -65,6 +66,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
         for (const input of request.inputs) {
           sim.queueInput(1, input);
           sim.step(Date.now());
+          if ((input.buttons & shared.PlayerButton.Interact) === 0) releasedInteractSeq = input.seq;
         }
         for (const event of sim.drainDiscoveryChanges())
           send(shared.encodeDiscoveries(event.state));
@@ -87,9 +89,11 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
   const inspect = async (id: number) => {
     await page.keyboard.down('KeyE');
     await expect.poll(() => shared.discoveryKnown(sim.discoveryStateOf(1).claimed, id)).toBe(true);
-    const releasedAt = sim.tick;
+    const releasedAfter = sim.lastProcessedSeq(1);
     await page.keyboard.up('KeyE');
-    await expect.poll(() => sim.tick).toBeGreaterThan(releasedAt);
+    // A later tick may still contain a held E from an older packet. Wait for
+    // the actual release before pressing again at the next discovery.
+    await expect.poll(() => releasedInteractSeq).toBeGreaterThan(releasedAfter);
   };
   try {
     await page.goto('/?renderer=webgl2&world=woodland-ui');
@@ -141,6 +145,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     expect(sim.inventoryOf(1).guardianTrophy).toBe(1);
     teleport(0, 0);
     await page.keyboard.press('KeyC');
+    await page.getByRole('button', { name: 'Crafting', exact: true }).click();
     // Straight to the Trophies page: a short list that does not scroll under the click.
     await page
       .locator('.craft-tabs')

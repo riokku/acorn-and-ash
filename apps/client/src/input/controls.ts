@@ -439,7 +439,8 @@ export class Controls {
     const target = event.target as Element | null;
     // Typing, IME composition and browser shortcuts belong to the UI/browser.
     // Escape still dismisses the current panel when a text field has focus.
-    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    const dodgeKey = event.code === 'ControlLeft';
+    if (event.isComposing || (event.ctrlKey && !dodgeKey) || event.altKey || event.metaKey) return;
     if (event.code !== 'Escape' && target?.closest?.(TEXT_INPUT)) return;
     if (
       ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) &&

@@ -1,4 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 /**
  * Make a page skip the real drawing: every WebGL draw call does nothing.
@@ -15,11 +17,17 @@ import type { BrowserContext, Page } from '@playwright/test';
  *
  * Set `ACORN_E2E_DRAW=1` to draw for real, for example to look at the pictures
  * some tests save. Tests tagged `@real-drawing` are about the drawing itself
- * and always draw.
+ * and draw for their visual assertions; drawnScreenshot restores a real
+ * frame for tests that need fast logic between visual checks.
  */
 export async function skipDrawing(target: Page | BrowserContext): Promise<void> {
-  if (process.env.ACORN_E2E_DRAW === '1') return;
+  if (process.env.ACORN_E2E_DRAW === '1' || process.env.SHOT_DIR) return;
   await target.addInitScript(() => {
+    // Galleries are small scenes and provide actual asset-rendering coverage.
+    if (new URLSearchParams(location.search).has('gallery')) return;
+    const host = window as Window & { acornE2eDrawing?: (enabled: boolean) => void };
+    if (host.acornE2eDrawing !== undefined) return;
+    const originals: { prototype: Record<string, unknown>; name: string; method: unknown }[] = [];
     const drawCalls = [
       'drawArrays',
       'drawElements',
@@ -29,8 +37,47 @@ export async function skipDrawing(target: Page | BrowserContext): Promise<void> 
     ];
     for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
       for (const name of drawCalls) {
-        if (name in prototype) (prototype as unknown as Record<string, unknown>)[name] = () => {};
+        if (name in prototype) {
+          const methods = prototype as unknown as Record<string, unknown>;
+          originals.push({ prototype: methods, name, method: methods[name] });
+        }
       }
     }
+    host.acornE2eDrawing = (enabled) => {
+      for (const { prototype, name, method } of originals)
+        prototype[name] = enabled ? method : () => {};
+    };
+    host.acornE2eDrawing(false);
   });
+}
+
+/** Render a real screenshot without rasterizing the forest throughout a logic check. */
+export async function drawnScreenshot(page: Page, path: string): Promise<void> {
+  const drawing = (enabled: boolean) =>
+    page.evaluate((on) => {
+      (window as Window & { acornE2eDrawing?: (enabled: boolean) => void }).acornE2eDrawing?.(on);
+    }, enabled);
+  await drawing(true);
+  try {
+    // Read the real canvas in the same animation frame as the game draw,
+    // before its back buffer is discarded. Avoid queuing continuous forest
+    // rasterization while Playwright waits for the screenshot compositor.
+    const png = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) =>
+          requestAnimationFrame(() => {
+            const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
+            const pixels = canvas.toDataURL('image/png');
+            (window as Window & { acornE2eDrawing?: (enabled: boolean) => void }).acornE2eDrawing?.(
+              false,
+            );
+            resolve(pixels);
+          }),
+        ),
+    );
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, Buffer.from(png.slice(png.indexOf(',') + 1), 'base64'));
+  } finally {
+    await drawing(false);
+  }
 }
