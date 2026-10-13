@@ -151,6 +151,7 @@ import {
   calendarAt,
   LAKE,
   STREAM,
+  streamPools,
   STREAM_KEEP_OUT,
   PLAYABLE_HALF_EXTENT,
   castLanding,
@@ -3823,7 +3824,7 @@ export class Game {
   private openWaterAt(x: number, z: number): number | null {
     if (this.space !== OUTDOORS) return null;
     if (!this.lakeFrozen) {
-      for (const slough of STREAM.sloughs) {
+      for (const slough of streamPools(STREAM)) {
         if (lakeDepthAt(slough, x, z) > 0) return sloughSurfaceAt(STREAM, slough, x, z);
       }
       if (isInStream(STREAM, x, z)) {

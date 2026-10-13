@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 
 import {
   STREAM_STONES_PER_100M,
+  signedStreamAcross,
+  streamPools,
   LAKE,
   streamBedAt,
   streamWaterDepthAt,
@@ -60,7 +62,7 @@ export function createStreamScene(
   const group = new THREE.Group();
   group.name = 'stream';
 
-  const connections = stream.sloughs.map((slough) => {
+  const connections = streamPools(stream).map((slough) => {
     const pool = slough.basin[0]!;
     const mouth = nearestOnStream(stream, pool.x, pool.z, 30)!;
     const mouthRow = Math.round(mouth.along / (stream.length / (stream.count - 1)));
@@ -71,7 +73,7 @@ export function createStreamScene(
     });
   });
   const material = createStreamMaterial(
-    stream.sloughs.flatMap((slough) => slough.basin),
+    streamPools(stream).flatMap((slough) => slough.basin),
     connections.flat(),
     LAKE,
     riverMouthConnections(stream),
@@ -97,7 +99,7 @@ export function createStreamScene(
   group.add(waterfallRocks.group);
   const reeds = createBankReeds(stream, terrain);
   group.add(reeds.group);
-  const sloughs = stream.sloughs.map((slough, index) => {
+  const sloughs = streamPools(stream).map((slough, index) => {
     const scene = createLakeScene(
       slough,
       (x, z) => isInStream(stream, x, z, -0.3),
@@ -112,7 +114,11 @@ export function createStreamScene(
         const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
         const steep = Math.min(streamFallGradientAt(stream, spot.along) / FULL_FOAM_GRADIENT, 1);
         const pace = 1 + steep * (FALL_PACE - 1);
-        const half = streamWaterHalfWidthAt(stream, spot.along);
+        const half = streamWaterHalfWidthAt(
+          stream,
+          spot.along,
+          signedStreamAcross(stream, spot, x, z),
+        );
         return {
           x: ((after.x - before.x) / size) * pace,
           z: ((after.z - before.z) / size) * pace,
@@ -121,17 +127,20 @@ export function createStreamScene(
       },
       {
         seed: 1909 + index * 137,
+        lilyPads: slough !== stream.spring,
         groundHeightAt: (x, z) => terrain.heightAt(x, z),
         waterDepthAt: (x, z) =>
           Math.max(0, sloughSurfaceAt(stream, slough, x, z) - terrain.heightAt(x, z)),
       },
     );
-    scene.group.name = `slough-${index + 1}`;
+    scene.group.name = slough === stream.spring ? 'mountain-spring' : `slough-${index + 1}`;
     group.add(scene.group);
     return scene;
   });
   const boulders = createSloughBoulders(stream, terrain);
   group.add(boulders.group);
+  const springRocks = createSpringRocks(stream, terrain);
+  group.add(springRocks.group);
 
   return {
     group,
@@ -148,10 +157,43 @@ export function createStreamScene(
       waterfallRocks.dispose();
       reeds.dispose();
       boulders.dispose();
+      springRocks.dispose();
       for (const slough of sloughs) slough.dispose();
       group.removeFromParent();
     },
   };
+}
+
+/** A broken upstream crescent suggests water emerging from a mountain rock shelf. */
+function createSpringRocks(stream: Stream, terrain: Terrain) {
+  const builder = new ModelBuilder();
+  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
+  const spring = stream.spring;
+  if (spring !== undefined) {
+    const source = spring.basin[0]!;
+    const next = streamPointAt(stream, 4);
+    const upstream = Math.atan2(source.z - next.z, source.x - next.x);
+    const random = seededRandom(7219);
+    for (let index = 0; index < 7; index++) {
+      const angle = upstream - 1.05 + index * 0.35 + (random() - 0.5) * 0.16;
+      const radius = 1.2 + random() * 1.3;
+      const height = radius * (0.9 + random() * 0.5);
+      const reach = source.radius + radius * 0.45;
+      const x = source.x + Math.cos(angle) * reach;
+      const z = source.z + Math.sin(angle) * reach;
+      const y = terrain.heightAt(x, z) - height * 0.18;
+      builder.add(
+        stone,
+        buryGeometryBase(stoneGeometry(radius, height, 7219 + index, 0.8, 1), { x, y, z }, (x, z) =>
+          terrain.heightAt(x, z),
+        ),
+        placed(x, y, z, { y: random() * Math.PI * 2 }),
+      );
+    }
+  }
+  const result = builder.build();
+  result.group.name = 'mountain-spring-rocks';
+  return result;
 }
 
 /** Loose rock shelves frame each drop without crossing the flowing channel. */
@@ -172,7 +214,8 @@ function createWaterfallRocks(stream: Stream, terrain: Terrain) {
         length = Math.hypot(dx, dz);
       const radius = 0.6 + random() * 0.9;
       const side = random() < 0.5 ? -1 : 1;
-      const reach = side * (streamWaterHalfWidthAt(stream, along) + radius + 0.25 + random() * 1.3);
+      const reach =
+        side * (streamWaterHalfWidthAt(stream, along, side) + radius + 0.25 + random() * 1.3);
       const x = here.x - (dz / length) * reach,
         z = here.z + (dx / length) * reach;
       if (isInStream(stream, x, z, -radius - 0.15)) continue;
@@ -213,20 +256,20 @@ function createSloughBoulders(
 ): { group: THREE.Group; dispose(): void } {
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const builder = new ModelBuilder();
-  for (const [index, slough] of stream.sloughs.entries()) {
+  for (const [index, slough] of streamPools(stream).entries()) {
     const random = seededRandom(2909 + index * 137);
-    const count = 4 + Math.floor(random() * 4);
+    const count = slough === stream.spring ? 12 : 4 + Math.floor(random() * 4);
     const placedRocks: { x: number; z: number; radius: number }[] = [];
     for (let attempt = 0; attempt < 120 && placedRocks.length < count; attempt++) {
       // The two outer pool lobes, leaving the broad river mouth open.
       const circle = slough.basin[Math.floor(random() * 2)]!;
       const angle = random() * Math.PI * 2;
-      const radius = 0.7 + random() * 1.1;
+      const radius = slough === stream.spring ? 1 + random() * 1.4 : 0.7 + random() * 1.1;
       const reach = circle.radius + radius * 0.8 + random() * 1.8;
       const x = circle.x + Math.cos(angle) * reach;
       const z = circle.z + Math.sin(angle) * reach;
       if (isInStream(stream, x, z, -radius - 0.8)) continue;
-      if (stream.sloughs.some((pool) => basinDepthAt(pool, x, z) > -radius * 0.7)) continue;
+      if (streamPools(stream).some((pool) => basinDepthAt(pool, x, z) > -radius * 0.7)) continue;
       if (placedRocks.some((rock) => Math.hypot(x - rock.x, z - rock.z) < radius + rock.radius))
         continue;
       const height = radius * (0.65 + random() * 0.45);
@@ -285,13 +328,13 @@ function createBankReeds(
       if (random() > 0.55) continue;
       const count = 1 + Math.floor(random() * 3);
       for (let clump = 0; clump < count; clump++) {
-        const across = side * (streamWaterHalfWidthAt(stream, along) - 0.1 - random() * 0.65);
+        const across = side * (streamWaterHalfWidthAt(stream, along, side) - 0.1 - random() * 0.65);
         const stagger = (random() - 0.5) * 2.8;
         const x = middleX - tz * across + tx * stagger;
         const z = middleZ + tx * across + tz * stagger;
         const ground = terrain.heightAt(x, z);
         if (ground > surface + 0.08 || surface - ground > 0.65) continue;
-        if (stream.sloughs.some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
+        if (streamPools(stream).some((slough) => lakeDepthAt(slough, x, z) > 0)) continue;
         addReedClump(
           builder,
           materials,
@@ -326,11 +369,12 @@ function ribbonGeometry(stream: Stream, terrain: Terrain): THREE.BufferGeometry 
     // Left of the way the water runs.
     const normalX = -tangentZ / size;
     const normalZ = tangentX / size;
-    const half = streamWaterHalfWidthAt(stream, along) * EDGE_OVERLAP;
+
     const surface = streamSurfaceAt(stream, along);
     const steep = Math.min(streamFallGradientAt(stream, along) / FULL_FOAM_GRADIENT, 1);
     for (let column = 0; column < ACROSS; column++) {
       const across = (column / (ACROSS - 1)) * 2 - 1;
+      const half = streamWaterHalfWidthAt(stream, along, across) * EDGE_OVERLAP;
       const vertex = row * ACROSS + column;
       positions[vertex * 3] = here.x + normalX * half * across;
       positions[vertex * 3 + 1] = surface;

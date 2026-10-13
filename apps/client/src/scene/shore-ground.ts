@@ -2,6 +2,7 @@ import type * as THREE from 'three/webgpu';
 import {
   streamPointAt,
   streamWaterHalfWidthAt,
+  streamPools,
   type Lake,
   type Stream,
   type Terrain,
@@ -39,7 +40,7 @@ export function shoreGroundCells(
   for (const circle of [
     ...lake.basin,
     ...lake.islands.flatMap((island) => island.lobes),
-    ...stream.sloughs.flatMap((slough) => slough.basin),
+    ...streamPools(stream).flatMap((slough) => slough.basin),
   ])
     addBox(circle.x, circle.z, circle.radius + band, true);
   for (let row = 0; row < stream.count; row++) {

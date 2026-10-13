@@ -53,6 +53,7 @@ export function createLakeScene(
   flowAt?: (x: number, z: number) => { x: number; z: number; share: number },
   scenery: {
     seed?: number;
+    lilyPads?: boolean;
     groundHeightAt?: (x: number, z: number) => number;
     waterDepthAt?: (x: number, z: number) => number;
   } = {},
@@ -141,6 +142,7 @@ export function createLakeScene(
     surfaceHeightAt,
     scenery.seed ?? 909,
     scenery.groundHeightAt ?? surfaceHeightAt,
+    scenery.lilyPads === false ? 0 : LILY_PADS,
   );
   group.add(plants.group);
   const plantMaterials = waterPlantMaterials();
@@ -199,6 +201,7 @@ function createShorePlants(
   surfaceHeightAt: (x: number, z: number) => number,
   seed: number,
   groundHeightAt: (x: number, z: number) => number,
+  lilyPads: number,
 ): { group: THREE.Group; dispose(): void } {
   const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
@@ -235,7 +238,7 @@ function createShorePlants(
 
   // Lily pads where the water is shallow but not at the very edge.
   let placedPads = 0;
-  for (let attempt = 0; attempt < LILY_PADS * 40 && placedPads < LILY_PADS; attempt++) {
+  for (let attempt = 0; attempt < lilyPads * 40 && placedPads < lilyPads; attempt++) {
     const circle = lake.basin[Math.floor(random() * lake.basin.length)];
     if (circle === undefined) break;
     const angle = random() * Math.PI * 2;

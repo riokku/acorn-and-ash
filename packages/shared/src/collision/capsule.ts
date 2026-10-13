@@ -25,6 +25,7 @@ import {
   streamSurfaceAt,
   streamWaterDepthAt,
   streamWaterHalfWidthAt,
+  streamPools,
   signedStreamAcross,
   streamPointAt,
   STREAM_WADING_DEPTH,
@@ -174,7 +175,7 @@ function withLakeIce(ground: Terrain, wall: LakeWall, stream: Stream | null): Te
       const height = ground.heightAt(x, z);
       if (wall.up) return height;
       if (stream !== null) {
-        for (const slough of stream.sloughs) {
+        for (const slough of streamPools(stream)) {
           if (basinDepthAt(slough, x, z) > 0)
             return Math.max(height, sloughSurfaceAt(stream, slough, x, z) + 0.05);
         }

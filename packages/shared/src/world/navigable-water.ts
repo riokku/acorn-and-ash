@@ -2,6 +2,7 @@
 import { LAKE, lakeSlopeAt, lakeDepthAt, type LakeSlope } from './lake';
 import {
   STREAM,
+  streamPools,
   nearestOnStream,
   signedStreamAcross,
   sloughSurfaceAt,
@@ -13,7 +14,9 @@ export function navigableWaterSlopeAt(x: number, z: number, out: LakeSlope): Lak
   lakeSlopeAt(LAKE, x, z, out);
   const spot = nearestOnStream(STREAM, x, z, 12);
   if (spot !== null) {
-    const depth = streamWaterHalfWidthAt(STREAM, spot.along) - spot.distance;
+    const depth =
+      streamWaterHalfWidthAt(STREAM, spot.along, signedStreamAcross(STREAM, spot, x, z)) -
+      spot.distance;
     if (depth > out.depth) {
       const side = signedStreamAcross(STREAM, spot, x, z) >= 0 ? 1 : -1;
       // At the centre use the local perpendicular, rather than a zero gradient.
@@ -28,7 +31,7 @@ export function navigableWaterSlopeAt(x: number, z: number, out: LakeSlope): Lak
       out.towardZ = (-dx / size) * side;
     }
   }
-  for (const slough of STREAM.sloughs) {
+  for (const slough of streamPools(STREAM)) {
     const slope = lakeSlopeAt(slough, x, z, { depth: 0, towardX: 0, towardZ: 0 });
     if (slope.depth > out.depth) Object.assign(out, slope);
   }
@@ -42,9 +45,13 @@ export function navigableWaterDepthAt(x: number, z: number): number {
 /** Surface height at a floating object, including the grade through each slough. */
 export function navigableWaterSurfaceAt(x: number, z: number): number {
   const spot = nearestOnStream(STREAM, x, z, 8);
-  if (spot !== null && spot.distance <= streamWaterHalfWidthAt(STREAM, spot.along))
+  if (
+    spot !== null &&
+    spot.distance <=
+      streamWaterHalfWidthAt(STREAM, spot.along, signedStreamAcross(STREAM, spot, x, z))
+  )
     return streamSurfaceAt(STREAM, spot.along);
-  for (const slough of STREAM.sloughs) {
+  for (const slough of streamPools(STREAM)) {
     if (lakeDepthAt(slough, x, z) > 0) return sloughSurfaceAt(STREAM, slough, x, z);
   }
   return LAKE.level;

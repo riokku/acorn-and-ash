@@ -16,6 +16,8 @@ import {
   LAKE,
   STREAM,
   nearestOnStream,
+  signedStreamAcross,
+  streamPools,
   streamWaterHalfWidthAt,
   type Stream,
   PLAYABLE_HALF_EXTENT,
@@ -219,8 +221,18 @@ function sampleGround(world: MapWorld): { at(x: number, z: number): GroundSample
         if (spot !== null) {
           waterGap = Math.min(
             waterGap,
-            spot.distance - streamWaterHalfWidthAt(world.stream, spot.along),
+            spot.distance -
+              streamWaterHalfWidthAt(
+                world.stream,
+                spot.along,
+                signedStreamAcross(world.stream, spot, x, z),
+              ),
           );
+        }
+      }
+      if (world.stream != null) {
+        for (const pool of streamPools(world.stream)) {
+          waterGap = Math.min(waterGap, -lakeDepthAt(pool, x, z));
         }
       }
       const index = (row * count + column) * fields;

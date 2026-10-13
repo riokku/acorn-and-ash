@@ -22,6 +22,8 @@ import {
   isNearLake,
   lakeDepthAt,
   nearestOnStream,
+  signedStreamAcross,
+  streamPools,
   streamWaterHalfWidthAt,
   type Lake,
   type PlacedProp,
@@ -144,12 +146,18 @@ export function createGroundShader(context: GroundContext): GroundShader {
       if (context.stream != null) {
         const spot = nearestOnStream(context.stream, x, z, STREAM_BANK_REACH);
         if (spot !== null) {
-          const gap = spot.distance - streamWaterHalfWidthAt(context.stream, spot.along);
+          const gap =
+            spot.distance -
+            streamWaterHalfWidthAt(
+              context.stream,
+              spot.along,
+              signedStreamAcross(context.stream, spot, x, z),
+            );
           bankGap = gap;
           shore = Math.max(shore, 1 - smoothstep(0, 3, gap));
           pebbles = 1 - smoothstep(-0.3, 0.8, gap);
         }
-        for (const slough of context.stream.sloughs) {
+        for (const slough of streamPools(context.stream)) {
           if (isNearLake(slough, x, z, 4)) bankGap = Math.min(bankGap, -lakeDepthAt(slough, x, z));
         }
       }
