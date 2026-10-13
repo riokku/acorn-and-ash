@@ -681,7 +681,19 @@ async function walkWithinReach(
     const here = client.positionOf(netId);
     if (here === undefined) break;
     const gap = Math.hypot(here.x - spot.x, here.z - spot.z);
-    if (gap < PICKUP_REACH - 0.4) return;
+    if (gap < PICKUP_REACH - 0.4) {
+      // A snapshot can report "in reach" while queued walking or braking is
+      // still carrying us past it. Verify the settled authoritative position.
+      await client.stoppedMoving();
+      const settled = client.positionOf(netId);
+      if (
+        settled !== undefined &&
+        Math.hypot(settled.x - spot.x, settled.z - spot.z) < PICKUP_REACH - 0.2
+      )
+        return;
+      previous = undefined;
+      continue;
+    }
     // Walking forward is walking down -Z, so this is the heading that lines up.
     const yaw = Math.atan2(-(spot.x - here.x), -(spot.z - here.z));
     // Pressed flat against something - the pond, say, now that a patch can
@@ -690,7 +702,9 @@ async function walkWithinReach(
       previous !== undefined && Math.hypot(here.x - previous.x, here.z - previous.z) < 0.15;
     client.walk(stuck ? 1 : 0, stuck ? 0 : 1, yaw, stuck ? 8 : 4);
     previous = here;
-    await sleep(stuck ? 220 : 110);
+    // Advance from an acknowledged position, rather than outrunning a busy
+    // Worker with wall-clock sleeps and accumulating stale walking inputs.
+    await client.caughtUp();
   }
   const ended = client.positionOf(netId);
   throw new Error(`Never reached ${spot.x}, ${spot.z}; stopped at ${ended?.x}, ${ended?.z}`);
