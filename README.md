@@ -1348,3 +1348,8 @@ The Craft menu is one page of the field journal that lists everything you can ma
 A crowned, moss-armored ruin sentinel guards the old ruin clearings. It can be fought solo; actual helpers increase its health, with stable character identity across reconnects. Nearby contributors receive protected materials and their existing housing blueprint roll. A first victory earns a personal placeable trophy that stays available if the backpack is full; subsequent victories award materials.
 
 Fishing records belong to each character in its current world: illustrated species pages track catches and best lengths, including catches released from a full backpack. Ordinary fish stay relaxed; a hooked golden carp asks for two gentle clicks in broad steady windows, with input timing that waits for the browser to show the challenge. Fresh responses keep its quiet-browser fallback alive; an equipped rod aims at the water beneath the cursor rather than intercepting tree canopies. Five catches unlock a carved fish display; all three species unlock its golden collection variant. Both are original stat-free decorations with server-validated recipes, material costs and placement checks.
+
+Remote respawn-sized relocations start fresh interpolation history instead of
+drawing a character through intervening hills. Ordinary movement, falls and
+modest corrections continue to blend. See
+[remote relocation](docs/decisions/0141-discontinuous-remote-positions.md).
