@@ -232,7 +232,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const setup = await createRenderer(canvas, params.get('renderer') === 'webgl2');
   const renderer = setup.renderer;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   await Promise.all([
     preloadArtTextures(),

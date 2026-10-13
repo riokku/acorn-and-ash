@@ -486,6 +486,10 @@ readable beneath trees, including during blizzards. Daylight, torch light and
 underground darkness keep their existing behavior. See
 [readable moonlight](docs/decisions/0138-readable-moonlight-shadows.md).
 
+The following daylight shadow map moves on whole texture pixels in light space,
+reducing shimmering edges during small steps while retaining its coverage and
+light direction. See [stable following shadows](docs/decisions/0142-stable-following-shadows.md).
+
 A 20-minute day runs the whole time a world is awake, the sky and light
 brightening and dimming smoothly between noon and midnight. It's the
 server's own clock, so it never skips and it's the same moment for everyone
