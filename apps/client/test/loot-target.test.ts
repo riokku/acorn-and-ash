@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { afterEach, describe, expect, it } from 'vitest';
-import { lootUnderRay, type LootTarget } from '../src/input/loot-target';
+import { lootUnderCursor, lootUnderRay, type LootTarget } from '../src/input/loot-target';
 
 const meshes: THREE.Mesh[] = [];
 function box(z: number): THREE.Mesh {
@@ -71,4 +71,50 @@ it('blocks loot behind the visible ground but allows it through an excavated ope
   const indices = geometry.getIndex()!;
   for (let i = 0; i < indices.count; i++) indices.setX(i, 0);
   expect(lootUnderRay(ray(), [target], [ground])).toBe(target);
+});
+
+describe('cursor tolerance for thin loot', () => {
+  function view() {
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const item = loot(40, 0);
+    (item.object as THREE.Mesh).scale.x = 0.025;
+    return { camera, item, viewport: { width: 800, height: 800 }, caster: new THREE.Raycaster() };
+  }
+  it('keeps a thin visible item selectable a few CSS pixels from its center', () => {
+    const { camera, item, viewport, caster } = view();
+    expect(lootUnderCursor(caster, { x: 403, y: 400 }, viewport, camera, [item], [])).toBe(item);
+    expect(lootUnderRay(caster, [item], [])).toBeNull(); // The actual pointer ray was restored.
+    expect(lootUnderCursor(caster, { x: 410, y: 400 }, viewport, camera, [item], [])).toBeNull();
+  });
+  it('always prefers the object directly under the cursor over an offset candidate', () => {
+    const { camera, item, viewport, caster } = view();
+    const direct = loot(41, 0);
+    direct.object.position.x = 0.05;
+    (direct.object as THREE.Mesh).scale.x = 0.025;
+    const projected = new THREE.Vector3(0.05, 0, 0).project(camera);
+    expect(
+      lootUnderCursor(
+        caster,
+        { x: (projected.x + 1) * 400, y: 400 },
+        viewport,
+        camera,
+        [item, direct],
+        [],
+      ),
+    ).toBe(direct);
+  });
+  it('never enlarges through scenery or invisible parents', () => {
+    const { camera, item, viewport, caster } = view();
+    const blocker = box(2);
+    expect(
+      lootUnderCursor(caster, { x: 403, y: 400 }, viewport, camera, [item], [blocker]),
+    ).toBeNull();
+    const parent = new THREE.Group();
+    parent.visible = false;
+    parent.add(item.object);
+    expect(lootUnderCursor(caster, { x: 403, y: 400 }, viewport, camera, [item], [])).toBeNull();
+  });
 });

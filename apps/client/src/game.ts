@@ -227,7 +227,7 @@ import { FollowCamera } from './camera/follow-camera';
 import { Controls } from './input/controls';
 import { TabTargeting, type HostileTarget } from './input/tab-target';
 import { clickAimYaw, yawTowards, type ClickCandidate } from './input/click-target';
-import { lootUnderRay, type LootTarget } from './input/loot-target';
+import { lootUnderCursor, type LootTarget } from './input/loot-target';
 import { SignInError, resumeAccount } from './net/account';
 import { WorldConnection, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
@@ -4365,18 +4365,20 @@ export class Game {
           z: patch.z,
         });
     }
-    this.clickNdc.set(
-      (point.x / window.innerWidth) * 2 - 1,
-      -(point.y / window.innerHeight) * 2 + 1,
+    return lootUnderCursor(
+      this.clickRaycaster,
+      point,
+      { width: window.innerWidth, height: window.innerHeight },
+      camera.camera,
+      candidates,
+      [
+        ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraGround]),
+        this.clearingScene.cameraBlockers,
+        ...(this.wildernessScene?.cameraBlockers ?? []),
+        ...(this.digScene?.cameraBlockers ?? []),
+        ...this.homeCameraBlockers,
+      ],
     );
-    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
-    return lootUnderRay(this.clickRaycaster, candidates, [
-      ...(this.wildernessScene === null ? [] : [this.wildernessScene.cameraGround]),
-      this.clearingScene.cameraBlockers,
-      ...(this.wildernessScene?.cameraBlockers ?? []),
-      ...(this.digScene?.cameraBlockers ?? []),
-      ...this.homeCameraBlockers,
-    ]);
   }
 
   /** Fit the E marker to rendered terrain; excavated floors use their shared floor height. */
