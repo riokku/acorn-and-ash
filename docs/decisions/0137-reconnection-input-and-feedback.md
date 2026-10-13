@@ -8,7 +8,7 @@ An open socket previously counted as connected before the server supplied the re
 
 Keep gameplay paused until a welcome and a snapshot containing the local player arrive. Apply that snapshot before announcing connected. Clear held buttons, predicted input, transient movement events and smoothing when connection state changes; only newly pressed input resumes play. Discard input sent while disconnected or still joining. Keep a persistent HUD notice while actions are paused.
 
-Allow identity and ping messages during the handshake. Give an incomplete handshake 30 seconds before the normal delayed retry. A server rejection stops automatic retries and stays visible with a manual reload option. Development-only offline walking remains available for art work; deployed clients wait for the real world.
+Allow identity and ping messages during the handshake. Give an incomplete handshake, including a socket that never opens, 30 seconds before the normal delayed retry. Once ready, ten seconds without a valid server message closes a silent socket and starts recovery; the existing two-second ping checks this without a new timer. A server rejection stops automatic retries and stays visible with a manual reload option. Development-only offline walking remains available for art work; deployed clients wait for the real world.
 
 ## Consequences
 

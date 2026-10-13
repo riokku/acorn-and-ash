@@ -200,16 +200,43 @@ describe('staying connected to the world', () => {
     });
     expect(inputs.map((input) => input.seq)).toEqual([3]);
   });
-  it('closes and retries a socket that opens but never receives the world welcome', () => {
-    FakeSocket.made[0]!.hangUp(1006);
-    vi.advanceTimersByTime(2500);
-    const next = FakeSocket.made[1]!;
-    next.open(false);
-    vi.advanceTimersByTime(30_000);
-    expect(next.readyState).toBe(3);
+  it.each([true, false])(
+    'closes and retries an incomplete handshake (socket opens: %s)',
+    (opens) => {
+      FakeSocket.made[0]!.hangUp(1006);
+      vi.advanceTimersByTime(2500);
+      const next = FakeSocket.made[1]!;
+      if (opens) next.open(false);
+      vi.advanceTimersByTime(30_000);
+      expect(next.readyState).toBe(3);
+      expect(states.at(-1)).toBe('offline');
+      vi.advanceTimersByTime(2500);
+      expect(FakeSocket.made).toHaveLength(3);
+    },
+  );
+
+  it('abandons a silent open socket, discards queued input, and retries', () => {
+    const first = FakeSocket.made[0]!;
+    vi.advanceTimersByTime(9900);
+    connection.send(createInput(1, 1));
+    vi.advanceTimersByTime(100);
+    expect(first.readyState).toBe(3);
     expect(states.at(-1)).toBe('offline');
-    vi.advanceTimersByTime(2500);
-    expect(FakeSocket.made).toHaveLength(3);
+    expect(connection.sendCraft('rope')).toBe(false);
+    vi.advanceTimersByTime(2000);
+    const next = FakeSocket.made[1]!;
+    next.open();
+    vi.advanceTimersByTime(300);
+    expect(next.send.mock.calls.map(([data]) => decodeClientMessage(data)?.type)).toEqual(['ping']);
+  });
+
+  it('keeps a quiet world connected while fresh server messages arrive', () => {
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(8000);
+      FakeSocket.made[0]!.snapshot();
+    }
+    expect(states.at(-1)).toBe('connected');
+    expect(FakeSocket.made).toHaveLength(1);
   });
 
   it('keeps a rejection visible and retries only after an explicit request', () => {
@@ -273,7 +300,7 @@ describe('staying connected to the world', () => {
 
     // The old one finally reporting itself closed must not tear down the new one.
     first?.hangUp(1006);
-    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(8000);
     expect(FakeSocket.made).toHaveLength(2);
     expect(states.at(-1)).toBe('connected');
   });

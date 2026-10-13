@@ -65,6 +65,7 @@ export interface ConnectionOptions {
 const RECONNECT_DELAY_MS = 2000;
 const PING_INTERVAL_MS = 2000;
 const WELCOME_TIMEOUT_MS = 30_000;
+const SERVER_SILENCE_TIMEOUT_MS = 10_000;
 
 /**
  * The link to the world server.
@@ -93,6 +94,7 @@ export class WorldConnection {
   /** Round trip time, measured by the client alone. */
   pingMs = 0;
   private lastPingSentAt = 0;
+  private lastHeardAt = 0;
 
   constructor(url: string, handlers: ConnectionHandlers, options: ConnectionOptions = {}) {
     this.url = url;
@@ -127,16 +129,17 @@ export class WorldConnection {
     const socket = new WebSocket(this.url);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
+    this.welcomeTimer = setTimeout(
+      () => this.handleDrop('The world did not finish connecting'),
+      WELCOME_TIMEOUT_MS,
+    );
 
     // Every handler checks it is still listening to the current socket: a
     // socket that was already given up on must not stop the timers, or start
     // a second reconnect, for the one that replaced it.
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return;
-      this.welcomeTimer = setTimeout(
-        () => this.handleDrop('The world did not finish connecting'),
-        WELCOME_TIMEOUT_MS,
-      );
+      this.lastHeardAt = performance.now();
       this.flushTimer = setInterval(() => this.flush(), INPUT_SEND_INTERVAL_MS);
       this.pingTimer = setInterval(() => this.sendPing(), PING_INTERVAL_MS);
       this.sendPing();
@@ -146,6 +149,7 @@ export class WorldConnection {
       if (this.socket !== socket || typeof event.data === 'string') return;
       const message = decodeServerMessage(event.data as ArrayBuffer);
       if (message === null) return;
+      this.lastHeardAt = performance.now();
       if (message.type === 'pong') {
         this.pingMs = Math.max(0, Math.round(performance.now() - this.lastPingSentAt));
         return;
@@ -346,6 +350,10 @@ export class WorldConnection {
 
   private sendPing(): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (this.ready && performance.now() - this.lastHeardAt >= SERVER_SILENCE_TIMEOUT_MS) {
+      this.handleDrop('The world stopped responding');
+      return;
+    }
     this.lastPingSentAt = performance.now();
     this.socket.send(encodePing(Math.round(this.lastPingSentAt) >>> 0));
   }
