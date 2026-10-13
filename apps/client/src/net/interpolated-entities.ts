@@ -19,6 +19,7 @@ interface Sample {
   readonly airborne: boolean;
   /** Horizontal speed, in metres a second. */
   readonly speed: number;
+  readonly verticalSpeed: number;
   /** The move under way, packed as the snapshot carries it (see `packActionByte`). */
   readonly action: number;
   readonly actionAge: number;
@@ -79,6 +80,19 @@ export class InterpolatedEntities {
       // Snapshots can arrive out of order; an old one has nothing to add.
       if (newest !== undefined && serverTimeMs <= newest.timeMs) continue;
 
+      if (newest !== undefined) {
+        const seconds = (serverTimeMs - newest.timeMs) / 1000;
+        const distance = Math.hypot(entity.x - newest.x, entity.y - newest.y, entity.z - newest.z);
+        const pace = Math.max(
+          Math.hypot(newest.speed, newest.verticalSpeed),
+          Math.hypot(entity.vx, entity.vy, entity.vz),
+        );
+        // Keep normal travel and modest corrections smooth, but never draw a
+        // respawn-sized change through the intervening terrain. Old history
+        // after a long absence also cannot describe the route taken.
+        if (seconds * 1000 > HISTORY_MS || distance > 3 + pace * seconds * 2) samples.length = 0;
+      }
+
       samples.push({
         timeMs: serverTimeMs,
         x: entity.x,
@@ -89,6 +103,7 @@ export class InterpolatedEntities {
         sprinting: (entity.flags & SnapshotFlag.Sprinting) !== 0,
         airborne: (entity.flags & SnapshotFlag.Airborne) !== 0,
         speed: Math.hypot(entity.vx, entity.vz),
+        verticalSpeed: Math.abs(entity.vy),
         action: entity.action,
         actionAge: entity.actionAge,
         actionHeading: entity.actionHeading,

@@ -187,7 +187,7 @@ describe('resolved animation pace for remote players', () => {
   it('keeps vertical motion and large corrections from accelerating the gait', () => {
     const players = new InterpolatedEntities();
     players.ingest(1000, [{ ...entity(2, 0, 0), vx: 4.5 }]);
-    players.ingest(1100, [{ ...entity(2, 10, 0), vx: 4.5 }]);
+    players.ingest(1100, [{ ...entity(2, 2, 0), vx: 4.5 }]);
     players.advance(0.05);
     expect(players.poseOf(2)?.travelSpeed).toBe(4.5);
     const jumping = new InterpolatedEntities();
@@ -195,5 +195,43 @@ describe('resolved animation pace for remote players', () => {
     jumping.ingest(1100, [{ ...entity(3, 0, 0), y: 1, vy: 5 }]);
     jumping.advance(0.05);
     expect(jumping.poseOf(3)?.travelSpeed).toBe(0);
+  });
+});
+
+describe('discontinuous remote movement', () => {
+  it('places a respawn directly at its new position without a fast slide or gait', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 4.5 }]);
+    players.ingest(1100, [{ ...entity(2, 40, 20), y: 8, yaw: 1.2 }]);
+    for (let i = 0; i < 10; i++) {
+      const pose = players.poseOf(2)!;
+      expect([pose.x, pose.y, pose.z, pose.yaw]).toEqual([40, 8, 20, 1.2]);
+      expect(pose.travelSpeed).toBe(0);
+      players.advance(0.02);
+    }
+  });
+  it('smooths normal movement again after a discontinuity', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [entity(2, 0, 0)]);
+    players.ingest(1100, [{ ...entity(2, 40, 0), vx: 4.5 }]);
+    players.ingest(1200, [{ ...entity(2, 40.4, 0), vx: 4.5 }]);
+    players.advance(0.05);
+    expect(players.poseOf(2)?.x).toBeCloseTo(40.2);
+    expect(players.poseOf(2)?.travelSpeed).toBeCloseTo(4);
+  });
+  it('preserves legitimate fast horizontal and vertical travel', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 15, vy: -30 }]);
+    players.ingest(1100, [{ ...entity(2, 1.5, 0), y: -3, vx: 15, vy: -30 }]);
+    players.advance(0.05);
+    expect(players.poseOf(2)?.x).toBeCloseTo(0.75);
+    expect(players.poseOf(2)?.y).toBeCloseTo(-1.5);
+  });
+  it('drops stale movement history after a long snapshot gap', () => {
+    const players = new InterpolatedEntities();
+    players.ingest(1000, [{ ...entity(2, 0, 0), vx: 7 }]);
+    players.ingest(4000, [{ ...entity(2, 10, 0), vx: 7 }]);
+    expect(players.poseOf(2)?.x).toBe(10);
+    expect(players.poseOf(2)?.travelSpeed).toBe(0);
   });
 });
