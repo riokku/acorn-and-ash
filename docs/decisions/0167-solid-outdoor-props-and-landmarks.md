@@ -9,3 +9,5 @@ Register bodies on placement and restore, remove them with abandoned/stranded pi
 Trail cairns use the existing shared stone triangles and support landing. Ruin blocks and the discovery log get matching bodies while retaining the same landmark positions and open centers. These simple colliders conservatively cover small decorative details; this remains kinematic movement, without a new physics engine.
 
 Solid roofs also use the existing terrain slope allowance when walking. Dodge/attack footing samples nearby roofs before resolving their sides; only a body already over a solid roof gets the roof-rise allowance. Foot posing queries the same roof within its existing 18 cm correction bound.
+
+Ankle-height standable stones use the existing 12 cm step allowance, preventing shore pebbles from snagging walking or dodging. Larger solids still block the body and require a reachable jump or approach.

@@ -21,6 +21,7 @@ import {
   DODGE_DISTANCE,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
+  WALKABLE_STEP_ALLOWANCE,
   PLAYER_TURN_RATE,
   TICK_SECONDS,
 } from '../constants';
@@ -499,12 +500,18 @@ export function stepDodge(
   const onSolid =
     groundHeightAt(world, fromX, fromZ, fromY) >
     world.terrain.heightAt(fromX, fromZ) + COLLISION_SKIN_WIDTH;
-  const floor = landingHeightAt(world, position.x, position.z, fromY, onSolid ? FLOOR_STEP : 0);
+  const floor = landingHeightAt(
+    world,
+    position.x,
+    position.z,
+    fromY,
+    onSolid ? FLOOR_STEP : WALKABLE_STEP_ALLOWANCE,
+  );
   if (floor > fromY + FLOOR_STEP) {
     position.x = fromX;
     position.z = fromZ;
   } else position.y = floor;
-  resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
+  resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world, WALKABLE_STEP_ALLOWANCE);
   position.y = groundHeightAt(world, position.x, position.z, position.y);
   motion.grounded = true;
   if (state.age >= DODGE.travel - 1) {

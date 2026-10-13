@@ -198,7 +198,13 @@ export function stepPlayer(
     );
     if (position.y <= floor) position.y = floor;
   }
-  resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
+  resolveCapsule(
+    position,
+    PLAYER_RADIUS,
+    PLAYER_HEIGHT,
+    world,
+    motion.grounded ? WALKABLE_STEP_ALLOWANCE : 0,
+  );
 
   // Settle onto the ground.
   const groundHeight = groundHeightAt(world, position.x, position.z, position.y);

@@ -1,3 +1,4 @@
+import { stonePositions } from '../src/world/stone-shape';
 import {
   ActionKind,
   type ActionState,
@@ -119,6 +120,19 @@ describe('solid placed props', () => {
     stepDodgeAttack(hop, state, world);
     expect(hop.position.x).toBeGreaterThan(-0.2);
     expect(hop.position.y).toBeGreaterThan(top(hop.position.x));
+  });
+  it('steps onto and over a low pebble instead of making the banks snag at ankle height', () => {
+    const pebble = surfaceCollider(0, 0, 0, stonePositions(0.15, 0.06, 4909, 0));
+    const world = createCollisionWorld(flat, [pebble], 100);
+    const motion = createPlayerMotion({ x: -0.8, y: 0, z: 0 });
+    let highest = 0;
+    for (let i = 0; i < 20; i++) {
+      stepPlayer(motion, createInput(i + 1, 1, 0, 0), 0.05, world);
+      highest = Math.max(highest, motion.position.y);
+    }
+    expect(motion.position.x).toBeGreaterThan(2);
+    expect(highest).toBeGreaterThan(0.02);
+    expect(motion.position.y).toBe(0);
   });
   it('keeps rugs and inset path surfaces walkable', () => {
     expect(placedPropColliders({ kind: 'gardenPath', x: 0, z: 0, yaw: 0 }, 0)).toEqual([]);
