@@ -983,6 +983,9 @@ the real world instead. During an outage, movement and actions pause with a
 visible notice. Reconnection resumes after the server supplies your position;
 release and press movement keys again to continue. Rejected joins stay visible
 and offer a manual retry. See [reconnection](docs/decisions/0137-reconnection-input-and-feedback.md).
+Repeated offline connection attempts keep journal navigation and fresh refusal
+feedback responsive; stale gameplay is cleared when connection is lost or restored.
+See [retry input](docs/decisions/0145-offline-retries-preserve-navigation.md).
 
 To play against the deployed staging world, open its link. A local client can no
 longer be pointed at another site's server: your login cookie belongs to one
