@@ -151,6 +151,7 @@ export function patchView(patch: Readonly<GatherPatch>): GatherPatchView {
 export function gatherSpotInReach<T extends { x: number; z: number; remaining: number }>(
   position: Readonly<Vec3>,
   patches: readonly T[],
+  canReach?: (patch: T) => boolean,
 ): T | null {
   let best: T | null = null;
   let bestDistanceSquared = PICKUP_REACH * PICKUP_REACH;
@@ -160,7 +161,7 @@ export function gatherSpotInReach<T extends { x: number; z: number; remaining: n
     const dx = patch.x - position.x;
     const dz = patch.z - position.z;
     const distanceSquared = dx * dx + dz * dz;
-    if (distanceSquared <= bestDistanceSquared) {
+    if (distanceSquared <= bestDistanceSquared && (canReach === undefined || canReach(patch))) {
       best = patch;
       bestDistanceSquared = distanceSquared;
     }

@@ -285,6 +285,7 @@ import {
   type Inventory,
 } from './inventory';
 import { pickupInReach } from './pickups';
+import { groundItemReachable } from './ground-item-reach';
 import {
   freshPatch,
   gatherSpotInReach,
@@ -3102,6 +3103,7 @@ export class WorldSimulation {
         ? this.clearing.pickups
         : this.clearing.pickups.filter((pickup) => pickup.id === targetId),
       (id) => runtime.takenPickups.has(id),
+      (pickup) => groundItemReachable(this.collision, position, pickup, pickup.y),
     );
     if (pickup === null) return false;
     if (addItem(runtime.inventory, pickup.item) === 0)
@@ -3143,6 +3145,7 @@ export class WorldSimulation {
           (p.ownerKey === undefined || p.ownerKey === this.rewardOwnerKey(runtime)) &&
           (targetId === undefined || p.id === targetId),
       ),
+      (pile) => groundItemReachable(this.collision, position, pile),
     );
     if (pile === null) return false;
     const taken = addItem(runtime.inventory, pile.item, pile.count);
@@ -3177,6 +3180,7 @@ export class WorldSimulation {
     const patch = gatherSpotInReach(
       position,
       targetId === undefined ? this.patches : this.patches.filter((patch) => patch.id === targetId),
+      (patch) => groundItemReachable(this.collision, position, patch),
     );
     if (patch === null) return false;
     if (roomFor(runtime.inventory, patch.item) === 0) return this.refusePickup(runtime, patch.item);
@@ -5421,7 +5425,12 @@ export class WorldSimulation {
     const runtime = this.players.get(netId);
     const position = runtime?.entity.get(Position);
     if (runtime === undefined || position === undefined) return null;
-    return pickupInReach(position, this.clearing.pickups, (id) => runtime.takenPickups.has(id));
+    return pickupInReach(
+      position,
+      this.clearing.pickups,
+      (id) => runtime.takenPickups.has(id),
+      (pickup) => groundItemReachable(this.collision, position, pickup, pickup.y),
+    );
   }
 
   /** What a player is carrying. The client is told this; it never decides it. */
