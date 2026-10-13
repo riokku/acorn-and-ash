@@ -941,7 +941,11 @@ player, so the newer one takes over from the older.
 
 `pnpm dev` starts just the client, on http://localhost:5173, with hot reloading.
 If it cannot reach a server it builds the clearing anyway and lets you walk about
-offline, which is fine for working on how things look.
+offline, which is fine for working on how things look. Deployed clients wait for
+the real world instead. During an outage, movement and actions pause with a
+visible notice. Reconnection resumes after the server supplies your position;
+release and press movement keys again to continue. Rejected joins stay visible
+and offer a manual retry. See [reconnection](docs/decisions/0137-reconnection-input-and-feedback.md).
 
 To play against the deployed staging world, open its link. A local client can no
 longer be pointed at another site's server: your login cookie belongs to one
