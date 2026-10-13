@@ -1,3 +1,4 @@
+import { streamRockColliders } from '../world/scenery-rocks';
 import type { BuildReply, BuildReplyReason } from './building';
 import {
   WildfireSimulation,
@@ -1670,6 +1671,7 @@ export class WorldSimulation {
         ...this.wilderness.colliders,
         ...encounterColliders(this.encounterSites, terrain),
         ...discoveryColliders(this.discoverySites, terrain),
+        ...streamRockColliders(STREAM, terrain),
       ],
       PLAYABLE_HALF_EXTENT,
       LAKE,
@@ -5027,7 +5029,11 @@ export class WorldSimulation {
     const slot = this.treeSlots.get(treeId);
     const tree = slot === undefined ? undefined : this.standingAt(slot);
     if (slot === undefined || tree === undefined) return;
-    replaceCollider(this.collision, slot.colliderIndex, stumpColliderFor(tree));
+    replaceCollider(
+      this.collision,
+      slot.colliderIndex,
+      stumpColliderFor(tree, this.collision.terrain),
+    );
   }
 
   /** The prop standing in this slot now, which is not the one the seed laid out once a tree has grown back. */
@@ -5063,7 +5069,11 @@ export class WorldSimulation {
 
     const grown = treeAtGeneration(this.seed, original, state.generation);
     this.standIn(slot, grown);
-    replaceCollider(this.collision, slot.colliderIndex, colliderForProp(grown));
+    replaceCollider(
+      this.collision,
+      slot.colliderIndex,
+      colliderForProp(grown, this.collision.terrain),
+    );
     this.regrowthEvents.push({ treeId, generation: state.generation });
   }
 
@@ -5113,7 +5123,7 @@ export class WorldSimulation {
       // The same tree `growTree` is about to put here, so the room it asks for
       // is the room it will take.
       const grown = treeAtGeneration(this.seed, original, nextGeneration(state.generation));
-      const footprint = colliderFootprintRadius(colliderForProp(grown));
+      const footprint = colliderFootprintRadius(colliderForProp(grown, this.collision.terrain));
       // Somebody is standing here: it waits rather than growing through them.
       if (!spotIsClear(grown.x, grown.z, footprint, players)) continue;
 
@@ -5271,7 +5281,11 @@ export class WorldSimulation {
       if (slot !== undefined && original !== undefined && tree.generation > 0) {
         const grown = treeAtGeneration(this.seed, original, tree.generation);
         this.standIn(slot, grown);
-        replaceCollider(this.collision, slot.colliderIndex, colliderForProp(grown));
+        replaceCollider(
+          this.collision,
+          slot.colliderIndex,
+          colliderForProp(grown, this.collision.terrain),
+        );
       }
 
       if (tree.felled) this.fellTree(tree.treeId, tree.felledAtMs);

@@ -1,7 +1,7 @@
+import { buildShoreStones } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 
 import {
-  basinDepthAt,
   LAKE,
   lakeDepthAt,
   lakeIceHeight,
@@ -28,7 +28,6 @@ const REED_SHARE = 0.55;
 /** Scenery reeds keep this far from a reed that can be cut, in metres. */
 const REED_PATCH_CLEAR = 2.5;
 const LILY_PADS = 26;
-const SHORE_STONES = 46;
 
 /**
  * The lake (see decision 0090): one wide sheet of water over the whole basin,
@@ -265,29 +264,17 @@ function createShorePlants(
     placedPads += 1;
   }
 
-  // Stones half buried at the water's edge, on the mainland's rim only.
-  let placedStones = 0;
-  for (let attempt = 0; attempt < SHORE_STONES * 30 && placedStones < SHORE_STONES; attempt++) {
-    const circle = lake.basin[Math.floor(random() * lake.basin.length)];
-    if (circle === undefined) break;
-    const angle = random() * Math.PI * 2;
-    const x = circle.x + Math.cos(angle) * (circle.radius + 0.1);
-    const z = circle.z + Math.sin(angle) * (circle.radius + 0.1);
-    // Not where two circles overlap: that rim is under water.
-    if (basinDepthAt(lake, x, z) > -0.05) continue;
-    if (excludePlantsAt(x, z)) continue;
-    const size = 0.18 + random() * 0.32;
-    const y = groundHeightAt(x, z);
+  // Shared placements give the server the same solid shore pebbles as the client.
+  for (const rock of buildShoreStones(lake, groundHeightAt, seed, excludePlantsAt)) {
     builder.add(
       stone,
       buryGeometryBase(
-        stoneGeometry(size, size * 0.55, 800 + placedStones, 0.5, 0),
-        { x, y, z },
+        stoneGeometry(rock.radius, rock.height, rock.seed, rock.tile, rock.detail),
+        rock,
         groundHeightAt,
       ),
-      placed(x, y, z, { y: random() * 3 }),
+      placed(rock.x, rock.y, rock.z, { y: rock.yaw }),
     );
-    placedStones += 1;
   }
 
   return builder.build();

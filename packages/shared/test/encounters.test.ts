@@ -172,8 +172,9 @@ describe('blueprint progress and cooperative rewards', () => {
     expect(sim.blueprintMissesOf(1)).toBe(4);
     expect(sim.drainBlueprintProgressChanges()).toHaveLength(0);
   });
-  it('actually pays a blueprint within six kills for every tested seed', () => {
-    for (let seed = 1; seed <= 24; seed++) {
+  it.each(Array.from({ length: 24 }, (_, index) => index + 1))(
+    'actually pays a blueprint within six kills for seed %i',
+    (seed) => {
       const sim = new WorldSimulation({ seed });
       sims.push(sim);
       addPlayer(sim, 1, 0, 0);
@@ -188,8 +189,8 @@ describe('blueprint progress and cooperative rewards', () => {
       expect(sim.droppedPilesList(1).some((p) => p.item === 'teepeeBlueprint')).toBe(true);
       sim.dispose();
       sims.pop();
-    }
-  });
+    },
+  );
 });
 describe('exploration skeleton encounters', () => {
   it('uses deterministic glades clear of existing scenery', () => {

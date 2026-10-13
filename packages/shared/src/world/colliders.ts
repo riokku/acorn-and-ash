@@ -1,3 +1,5 @@
+import type { SolidSurface } from '../collision/solid-surface';
+
 /**
  * The simple shapes the world is built from.
  *
@@ -8,6 +10,8 @@
 
 export interface CylinderCollider {
   readonly shape: 'cylinder';
+  readonly standable?: boolean;
+  readonly surface?: SolidSurface;
   readonly x: number;
   readonly z: number;
   /** Bottom of the cylinder in world space. */
@@ -18,6 +22,7 @@ export interface CylinderCollider {
 
 export interface BoxCollider {
   readonly shape: 'box';
+  readonly standable?: boolean;
   /** Centre of the box. */
   readonly x: number;
   readonly y: number;

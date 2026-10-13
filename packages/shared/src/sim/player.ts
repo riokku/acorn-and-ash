@@ -17,7 +17,12 @@ import {
 } from '../constants';
 import { rotateToward } from '../math/angles';
 import { clamp, type Vec3 } from '../math/vec3';
-import { groundHeightAt, resolveCapsule, type CollisionWorld } from '../collision/capsule';
+import {
+  groundHeightAt,
+  landingHeightAt,
+  resolveCapsule,
+  type CollisionWorld,
+} from '../collision/capsule';
 import type { Direction2D } from './animals';
 
 /** Buttons are a bit field, two bytes on the wire (see `encodeInputBundle`). */
@@ -170,6 +175,7 @@ export function stepPlayer(
     motion.grounded = false;
   }
 
+  const startY = position.y;
   const startX = position.x;
   const startZ = position.z;
   position.x += velocity.x * deltaSeconds;
@@ -177,6 +183,18 @@ export function stepPlayer(
   position.z += velocity.z * deltaSeconds;
   holdToWalkableGround(motion, startX, startZ, world);
 
+  // A descending foot can cross a rock roof between ticks. Settle there before
+  // horizontal collision mistakes that crossing for entering the rock's side.
+  if (velocity.y <= 0) {
+    const floor = landingHeightAt(
+      world,
+      position.x,
+      position.z,
+      startY,
+      motion.grounded ? WALKABLE_STEP_ALLOWANCE : 0,
+    );
+    if (position.y <= floor) position.y = floor;
+  }
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
 
   // Settle onto the ground.

@@ -1,3 +1,8 @@
+import { embedSurface } from './scenery-rocks';
+import type { Terrain } from './terrain';
+import { stumpPositions } from './stone-shape';
+import { boulderSurface, mossyRockSurface } from '../data/rock-surfaces';
+import { surfaceCollider } from '../collision/solid-surface';
 import { CLEARING_TREE_LINE_INNER, CLEARING_TREE_LINE_OUTER, SPAWN_POSITION } from '../constants';
 import { createRng } from '../rng';
 import { PROP_KINDS, propHeight, stumpScaleFor, type PropKindId } from '../data/props';
@@ -230,7 +235,7 @@ export function buildTestClearing(seed: number): Clearing {
     pickups,
     gatherSpots,
     water,
-    colliders: [...kept.map(colliderForProp), ...waterColliders(water)],
+    colliders: [...kept.map((prop) => colliderForProp(prop)), ...waterColliders(water)],
     indexById,
   };
 }
@@ -253,15 +258,31 @@ function isNearSpawn(x: number, z: number): boolean {
   return dx * dx + dz * dz < SPAWN_CLEAR_RADIUS * SPAWN_CLEAR_RADIUS;
 }
 
-/** Everything in the clearing is a cylinder you cannot walk through. */
-export function colliderForProp(prop: PlacedProp): Collider {
+/** Solid prop bodies; rock and stump roofs follow their visible surfaces. */
+export function colliderForProp(prop: PlacedProp, terrain?: Terrain): Collider {
   const kind = PROP_KINDS[prop.kind];
+  if (kind.shape.family === 'rock' || kind.shape.family === 'stump') {
+    const source =
+      kind.shape.family === 'stump'
+        ? stumpPositions(kind.shape.radius, kind.shape.height)
+        : prop.kind === 'boulder'
+          ? boulderSurface
+          : mossyRockSurface;
+    const positions = Float32Array.from(source, (value) => value * prop.scale);
+    if (terrain !== undefined)
+      embedSurface(positions, { x: prop.x, y: prop.y ?? 0, z: prop.z }, terrain);
+    return surfaceCollider(prop.x, prop.y ?? 0, prop.z, positions, prop.rotationY);
+  }
+  // Extend trunks below their planted origin across a walkable slope. This
+  // bound avoids terrain sampling for every one of the world's thousands of
+  // trunks, and leaves the top at its authored height.
+  const baseY = (prop.y ?? 0) - kind.colliderRadius * prop.scale - 0.12;
   return cylinder(
     prop.x,
     prop.z,
     kind.colliderRadius * prop.scale,
-    propHeight(kind) * prop.scale,
-    prop.y ?? 0,
+    propHeight(kind) * prop.scale + (prop.y ?? 0) - baseY,
+    baseY,
   );
 }
 
@@ -275,6 +296,6 @@ export function stumpFor(tree: PlacedProp): PlacedProp {
 }
 
 /** What the player bumps into once a tree is down: the stump, not the trunk. */
-export function stumpColliderFor(tree: PlacedProp): Collider {
-  return colliderForProp(stumpFor(tree));
+export function stumpColliderFor(tree: PlacedProp, terrain?: Terrain): Collider {
+  return colliderForProp(stumpFor(tree), terrain);
 }
