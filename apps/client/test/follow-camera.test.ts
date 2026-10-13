@@ -119,3 +119,63 @@ describe('terrain camera clearance', () => {
     ground.geometry.dispose();
   });
 });
+
+function boxBlocker(x: number, z: number, width = 0.1) {
+  installBvhRaycasting();
+  const geometry = new THREE.BoxGeometry(width, 5, 0.2);
+  geometry.computeBoundsTree();
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.position.set(x, 1, z);
+  mesh.updateMatrixWorld();
+  return mesh;
+}
+
+function disposeBlocker(mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>) {
+  mesh.geometry.disposeBoundsTree();
+  mesh.geometry.dispose();
+  mesh.material.dispose();
+}
+
+describe('scenery camera clearance', () => {
+  it.each([16 / 9, 21 / 9])('protects a grazing view edge at aspect %s', (aspect) => {
+    const follow = new FollowCamera(aspect);
+    follow.look.pitch = 0;
+    const blocker = boxBlocker(0.13, 3);
+    const target = new THREE.Vector3(0, PLAYER_HEIGHT * 0.78, 0);
+    // The centre ray misses this obstacle: the edge of the view must catch it.
+    expect(
+      new THREE.Raycaster(target, new THREE.Vector3(0, 0, 1)).intersectObject(blocker),
+    ).toEqual([]);
+    follow.update(PLAYER_POSITION, 1 / 60, [blocker]);
+    expect(follow.camera.position.z).toBeLessThan(2.7);
+    expect(follow.camera.position.z).toBeGreaterThan(0);
+    disposeBlocker(blocker);
+  });
+
+  it('keeps clearance from a nearby obstacle instead of enforcing a distance beyond it', () => {
+    const follow = new FollowCamera(16 / 9),
+      blocker = boxBlocker(0, 0.75, 2);
+    follow.look.pitch = 0;
+    follow.update(PLAYER_POSITION, 0, [blocker]);
+    expect(follow.camera.position.z).toBeCloseTo(0.35);
+    follow.update(PLAYER_POSITION, 1 / 60, []);
+    expect(follow.camera.position.z).toBeGreaterThan(0.35);
+    expect(follow.camera.position.z).toBeLessThan(6);
+    disposeBlocker(blocker);
+  });
+
+  it('holds clearance through repeated turns and impact shake without ground', () => {
+    const follow = new FollowCamera(21 / 9),
+      blocker = boxBlocker(0, 3, 8);
+    for (const yaw of [-0.3, 0, 0.3]) {
+      follow.look.yaw = yaw;
+      follow.look.pitch = 0;
+      for (let frame = 0; frame < 10; frame++) {
+        follow.shake(1);
+        follow.update(PLAYER_POSITION, 1 / 60, [blocker]);
+        expect(follow.camera.position.z).toBeLessThan(2.9);
+      }
+    }
+    disposeBlocker(blocker);
+  });
+});

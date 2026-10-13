@@ -4,7 +4,6 @@ import { PLAYER_HEIGHT, clamp, type Vec3 } from '@acorn/shared';
 
 /** How far behind the player the camera sits when nothing is in the way. */
 const RESTING_DISTANCE = 6;
-const MIN_DISTANCE = 1.1;
 /** Where the camera looks: roughly the player's shoulders. */
 const TARGET_HEIGHT = PLAYER_HEIGHT * 0.78;
 const MIN_PITCH = -0.55;
@@ -197,12 +196,15 @@ export class FollowCamera {
       this.camera.position.y += (Math.random() * 2 - 1) * offset;
       this.shakeStrength = Math.max(0, this.shakeStrength - SHAKE_DECAY_RATE * deltaSeconds);
     }
-    if (shaken && this.outdoorLook === null && ground !== null) {
+    if (shaken && this.outdoorLook === null) {
       // Shake moves the final position after the orbit collision check.
       this.direction.subVectors(this.camera.position, this.target);
       const distance = this.direction.length();
       this.direction.normalize();
-      const safe = this.distanceAboveGround(ground, distance);
+      const safe = Math.min(
+        this.distanceToBlocker(blockers, distance),
+        this.distanceAboveGround(ground, distance),
+      );
       if (safe < distance) {
         this.camera.position.copy(this.direction).multiplyScalar(safe).add(this.target);
         this.currentDistance = Math.min(this.currentDistance, safe);
@@ -211,13 +213,25 @@ export class FollowCamera {
     }
   }
 
-  /** Sweep the centre and near-plane corners so the view cannot peek below a slope. */
+  /** Sweep the centre and near-plane corners against the rendered ground. */
   private distanceAboveGround(ground: THREE.Object3D | null, distance: number): number {
-    if (ground === null) return distance;
+    return ground === null ? distance : this.clearance([ground], distance, 0.05);
+  }
+
+  /** Include the view's edges, even when its centre ray misses a trunk or rock. */
+  private distanceToBlocker(
+    blockers: readonly THREE.Object3D[],
+    distance = RESTING_DISTANCE,
+  ): number {
+    return this.clearance(blockers, distance);
+  }
+
+  private clearance(objects: readonly THREE.Object3D[], distance: number, edgePadding = 0): number {
+    if (objects.length === 0) return distance;
     this.groundRight.set(this.direction.z, 0, -this.direction.x).normalize();
     this.groundUp.crossVectors(this.direction, this.groundRight).normalize();
     const halfHeight =
-      this.camera.near * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) + 0.05;
+      this.camera.near * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) + edgePadding;
     const halfWidth = halfHeight * this.camera.aspect;
     let safe = distance;
     for (const [x, y] of GROUND_PROBES) {
@@ -226,27 +240,13 @@ export class FollowCamera {
         .addScaledVector(this.groundRight, x * halfWidth)
         .addScaledVector(this.groundUp, y * halfHeight);
       this.raycaster.set(this.groundRayOrigin, this.direction);
-      this.raycaster.far = distance + this.camera.near;
-      const hit = this.raycaster.intersectObject(ground, false)[0];
-      if (hit !== undefined) safe = Math.min(safe, Math.max(0.1, hit.distance - BLOCKER_PADDING));
-    }
-    return safe;
-  }
-
-  /** How far the camera can go before it hits something, across every blocker mesh. */
-  private distanceToBlocker(blockers: readonly THREE.Object3D[]): number {
-    this.raycaster.set(this.target, this.direction);
-    this.raycaster.far = RESTING_DISTANCE;
-
-    let nearestDistance: number | undefined;
-    for (const blocker of blockers) {
-      const hit = this.raycaster.intersectObject(blocker, false)[0];
-      if (hit !== undefined && (nearestDistance === undefined || hit.distance < nearestDistance)) {
-        nearestDistance = hit.distance;
+      this.raycaster.far = safe + this.camera.near;
+      for (const object of objects) {
+        const hit = this.raycaster.intersectObject(object, false)[0];
+        if (hit !== undefined) safe = Math.min(safe, Math.max(0.1, hit.distance - BLOCKER_PADDING));
       }
     }
-    if (nearestDistance === undefined) return RESTING_DISTANCE;
-    return clamp(nearestDistance - BLOCKER_PADDING, MIN_DISTANCE, RESTING_DISTANCE);
+    return safe;
   }
 }
 
