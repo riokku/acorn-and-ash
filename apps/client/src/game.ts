@@ -1331,11 +1331,10 @@ export class Game {
 
   /** Put something on, take it off or swap two pieces. The server decides (decision 0113). */
   changeGear(request: GearRequest): void {
-    if (!this.playing || this.connectionState !== 'connected') return;
+    if (!this.submitAction('change gear', () => this.connection?.sendGear(request))) return;
     // Taking something off puts it back in the pack, which is moving it, not
     // finding it: the pack's reply to this must not make a toast.
     this.quietPackUntil = performance.now() + GEAR_QUIET_MS;
-    this.connection?.sendGear(request);
   }
 
   /**
@@ -1366,7 +1365,7 @@ export class Game {
     }
     if (!ITEM_KINDS[item].equippable && blueprintHome(item) === null) return;
     if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
-    this.connection?.sendUseItem(item);
+    this.submitAction('use this item', () => this.connection?.sendUseItem(item));
   }
 
   /**
@@ -1377,7 +1376,9 @@ export class Game {
   discard(item: ItemId, amount: number, destroy: boolean): void {
     if (!isDiscardable(item) || amount < 1) return;
     if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
-    this.connection?.sendDiscard({ item, amount: Math.floor(amount), destroy });
+    this.submitAction(destroy ? 'destroy items' : 'drop items', () =>
+      this.connection?.sendDiscard({ item, amount: Math.floor(amount), destroy }),
+    );
   }
 
   /**
@@ -1394,7 +1395,10 @@ export class Game {
   }
   reclaimDecoration(id: number): void {
     const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
-    if (piece !== undefined) this.connection?.sendDecoration({ ...piece, action: 'reclaim' });
+    if (piece !== undefined)
+      this.submitAction('decorate', () =>
+        this.connection?.sendDecoration({ ...piece, action: 'reclaim' }),
+      );
   }
   private decorationRefusal(reason: DecorationState['reason']): string | null {
     if (reason === null) return null;
@@ -3592,16 +3596,22 @@ export class Game {
 
     const request: BuildRequest = { kind: placing.kind, x: spot.x, z: spot.z, yaw: spot.yaw };
     if (this.space !== OUTDOORS && isDecorationKind(request.kind)) {
-      this.connection?.sendDecoration({
-        ...request,
-        kind: request.kind,
-        id: this.decorMoveId,
-        action: this.decorMoveId === 0 ? 'place' : 'move',
-      });
+      const kind = request.kind;
+      if (
+        !this.submitAction('decorate', () =>
+          this.connection?.sendDecoration({
+            ...request,
+            kind,
+            id: this.decorMoveId,
+            action: this.decorMoveId === 0 ? 'place' : 'move',
+          }),
+        )
+      )
+        return;
       this.stopPlacing();
       return;
     }
-    this.connection?.sendBuild(request);
+    if (!this.submitAction('build', () => this.connection?.sendBuild(request))) return;
     this.pendingPlacements.push({ request, sentAt: performance.now() });
     placing.placedAny = true;
     if (BUILDABLE_KINDS[placing.kind].capPerPlayer) this.stopPlacing();
@@ -4005,14 +4015,24 @@ export class Game {
     ];
   }
 
-  /**
-   * C opens or closes the Craft menu (see decision 0096), closing the room
-   * decorating panel if that was open instead. While it is open, a digit key
-   * picks the entry numbered beside it. Crafting something leaves the menu
-   * open, since making several things in a row is common and nothing about
-   * a craft needs a fresh aim the way a placement does; picking a piece to
-   * place closes it.
-   */
+  /** Submission is not confirmation: only server replies change items or buildings. */
+  private submitAction(purpose: string, send: () => boolean | undefined): boolean {
+    if (!this.playing) return false;
+    if (this.connectionState !== 'connected' || send() !== true) {
+      this.interactionNote = `Reconnect to ${purpose}.`;
+      this.interactionNoteUntil = performance.now() + 3200;
+      this.options.hud.publish({ interactionNote: this.interactionNote });
+      return false;
+    }
+    if (this.interactionNote?.startsWith('Reconnect to ')) {
+      this.interactionNote = null;
+      this.interactionNoteUntil = 0;
+      this.options.hud.publish({ interactionNote: null });
+    }
+    return true;
+  }
+
+  /** Publish journal feedback immediately so a stalled frame cannot swallow it. */
   private showJournalNotice(text: string, now: number): void {
     this.craftingNews = { text, until: now + NEWS_MS };
     this.options.hud.publish({ craftingNews: text });
@@ -4137,7 +4157,8 @@ export class Game {
    * the menu open for the next one, or pick up a piece to place, which closes it.
    */
   pickCraftEntry(action: CraftAction): void {
-    if (action.kind === 'craft') this.connection?.sendCraft(action.item);
+    if (action.kind === 'craft')
+      this.submitAction('craft', () => this.connection?.sendCraft(action.item));
     else this.pickBuildable(action.buildable);
   }
 
