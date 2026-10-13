@@ -1,3 +1,4 @@
+import { BuildFeedback, buildReplyText } from './hud/build-feedback';
 import { DecorationFeedback } from './hud/decoration-feedback';
 import { CraftFeedback, craftRefusalText } from './hud/craft-feedback';
 import { menuPanelState, type MenuPanel } from './input/menu-panels';
@@ -459,13 +460,6 @@ const CLICK_RAIDER_HEIGHT = 1.5;
 /** How big an animal is to click on - rounded up, so a darting rabbit is not a pixel hunt. */
 const CLICK_ANIMAL_RADIUS = 0.55;
 const CLICK_ANIMAL_HEIGHT = 0.9;
-/**
- * How long a piece just placed counts as standing, for the preview's sake,
- * before the server has said so itself - long enough for any sensible round
- * trip, short enough that a piece the server refused stops getting in the way.
- */
-const PENDING_PLACEMENT_MS = 3000;
-
 /** A piece being placed: what it is, how it is turned, and its preview. */
 interface Placing {
   kind: BuildableKindId;
@@ -818,10 +812,8 @@ export class Game {
   /** The piece being placed, if any - see decision 0052. */
   private placing: Placing | null = null;
   /**
-   * Pieces this player has just placed, until the server says they are built
-   * (or `PENDING_PLACEMENT_MS` passes): counted as standing already, so a
-   * second click on the same spot shows red at once, and the next fence
-   * piece can snap onto the one just laid without waiting for the round trip.
+   * Submitted pieces retained until their private result. Other previews can
+   * snap to them, but another placement waits for confirmation or refusal.
    */
   private pendingPlacements: { readonly request: BuildRequest; readonly sentAt: number }[] = [];
   private readonly buriedCacheMeshes = new Map<number, BuriedCacheMound>();
@@ -1043,6 +1035,8 @@ export class Game {
   /** How much health we have left, as far as the server has told us. */
   private health = HEALTH_MAX;
   private healthNews: { text: string; until: number } | null = null;
+  private readonly buildFeedback = new BuildFeedback();
+  private pendingBuildPreview: Placing | null = null;
   private readonly decorationFeedback = new DecorationFeedback();
   private pendingDecorationPreview: Placing | null = null;
   private readonly craftFeedback = new CraftFeedback();
@@ -1705,13 +1699,16 @@ export class Game {
           this.mealHeardAt = performance.now();
           this.connectionState = state;
           if (state !== 'connected') {
+            const interruptedBuild = this.buildFeedback.clear();
+            this.pendingBuildPreview = null;
+            this.pendingPlacements = [];
             const interruptedCraft = this.craftFeedback.clear();
             const interruptedDecoration = this.decorationFeedback.clear();
             this.pendingDecorationPreview = null;
-            if (interruptedCraft || interruptedDecoration) {
+            if (interruptedCraft || interruptedDecoration || interruptedBuild) {
               this.showActionNote(
-                interruptedDecoration
-                  ? 'Connection interrupted. Check your room and pack after reconnecting before trying again.'
+                interruptedDecoration || interruptedBuild
+                  ? 'Connection interrupted. Check your surroundings and pack after reconnecting before trying again.'
                   : 'Connection interrupted. Check your pack after reconnecting before crafting again.',
               );
               this.options.hud.publish({ craftPending: null, decorationPending: false });
@@ -1866,6 +1863,7 @@ export class Game {
         break;
       }
       case 'homeBuildFeedback': {
+        if (this.buildFeedback.request !== null) break;
         const descriptions = {
           materials: 'You need more building materials.',
           identity: 'Reconnect to build a home.',
@@ -2151,6 +2149,23 @@ export class Game {
         this.hearAboutCatching(message.event);
         break;
       }
+      case 'buildReply': {
+        const result = this.buildFeedback.settle(message);
+        if (result === null) break;
+        const preview = this.pendingBuildPreview;
+        if (result.reason === null && preview !== null && preview === this.placing) {
+          preview.placedAny = true;
+          if (BUILDABLE_KINDS[result.request.kind].capPerPlayer) this.stopPlacing();
+        }
+        this.pendingBuildPreview = null;
+        this.pendingPlacements = [];
+        this.showActionNote(
+          result.reason === null
+            ? `${BUILDABLE_KINDS[result.request.kind].displayName} placed.`
+            : buildReplyText(result.reason),
+        );
+        break;
+      }
       case 'builtProps': {
         const onlyBoatMotion =
           message.props.length === this.builtProps.length &&
@@ -2168,17 +2183,6 @@ export class Game {
           });
         this.builtProps = message.props;
         if (!onlyBoatMotion) this.grass?.setBuildings(message.props);
-        // Anything just placed that has now come back as built stops being
-        // pending - it is in the list for real.
-        this.pendingPlacements = this.pendingPlacements.filter(
-          (pending) =>
-            !message.props.some(
-              (prop) =>
-                prop.kind === pending.request.kind &&
-                Math.abs(prop.x - pending.request.x) < 0.05 &&
-                Math.abs(prop.z - pending.request.z) < 0.05,
-            ),
-        );
         this.applyBuiltProps(onlyBoatMotion);
         break;
       }
@@ -3619,7 +3623,12 @@ export class Game {
 
   /** The mouse wheel turns the piece being placed, a step at a time. */
   private turnPiece(steps: number): void {
-    if (this.placing === null || steps === 0 || this.placing === this.pendingDecorationPreview)
+    if (
+      this.placing === null ||
+      steps === 0 ||
+      this.placing === this.pendingDecorationPreview ||
+      this.placing === this.pendingBuildPreview
+    )
       return;
     this.placing.yaw += steps * BUILD_ROTATION_STEP;
   }
@@ -3650,10 +3659,14 @@ export class Game {
       this.beginDecorationFeedback(placing);
       return;
     }
+    if (this.buildFeedback.request !== null) return;
     if (!this.submitAction('build', () => this.connection?.sendBuild(request))) return;
-    this.pendingPlacements.push({ request, sentAt: performance.now() });
-    placing.placedAny = true;
-    if (BUILDABLE_KINDS[placing.kind].capPerPlayer) this.stopPlacing();
+    this.buildFeedback.begin(request, performance.now());
+    this.pendingBuildPreview = placing;
+    this.pendingPlacements = [{ request, sentAt: performance.now() }];
+    this.interactionNote = null;
+    this.interactionNoteUntil = 0;
+    this.options.hud.publish({ interactionNote: this.pendingActionText(performance.now()) });
   }
 
   /**
@@ -3666,10 +3679,8 @@ export class Game {
     const clearing = this.clearing;
     if (placing === null || clearing === null) return;
 
-    const now = performance.now();
-    this.pendingPlacements = this.pendingPlacements.filter(
-      (pending) => now - pending.sentAt < PENDING_PLACEMENT_MS,
-    );
+    const submitted = this.buildFeedback.request;
+    if (submitted !== null && placing === this.pendingBuildPreview) return;
 
     if (this.space !== OUTDOORS && isDecorationKind(placing.kind)) {
       const pending = this.decorationFeedback.request;
@@ -4061,7 +4072,11 @@ export class Game {
 
   private pendingActionText(now: number): string | null {
     return (
-      [this.craftFeedback.text(now), this.decorationFeedback.text(now)]
+      [
+        this.craftFeedback.text(now),
+        this.decorationFeedback.text(now),
+        this.buildFeedback.text(now),
+      ]
         .filter((text) => text !== null)
         .join(' ') || null
     );
@@ -5585,8 +5600,9 @@ export class Game {
           ? null
           : {
               pending:
-                this.placing === this.pendingDecorationPreview &&
-                this.decorationFeedback.request !== null,
+                (this.placing === this.pendingDecorationPreview &&
+                  this.decorationFeedback.request !== null) ||
+                (this.placing === this.pendingBuildPreview && this.buildFeedback.request !== null),
               name: BUILDABLE_KINDS[this.placing.kind].displayName,
               refusal: this.placing.plan.refusal,
               canSnap: this.placing.kind === 'fence',

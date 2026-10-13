@@ -1,3 +1,4 @@
+import type { BuildReply } from '../sim/building';
 import type { CraftRefusal } from '../sim/crafting';
 import type { Dig } from '../world/digging';
 import type { Support, SupportCell } from '../world/supports';
@@ -116,6 +117,7 @@ export const ServerMessageType = {
   Supports: 0x43,
   CraftRefused: 0x44,
   DecorationReply: 0x45,
+  BuildReply: 0x46,
 } as const;
 
 export const RejectReason = {
@@ -402,6 +404,10 @@ export interface CraftedMessage {
 }
 
 /** Private result matching a submitted room decoration request. */
+export interface BuildReplyMessage extends BuildReply {
+  readonly type: 'buildReply';
+}
+
 export interface DecorationReplyMessage {
   readonly type: 'decorationReply';
   readonly action: DecorationRequest['action'];
@@ -735,6 +741,7 @@ export type ServerMessage =
   | CraftedMessage
   | CraftRefusedMessage
   | DecorationReplyMessage
+  | BuildReplyMessage
   | CookedMessage
   | CaughtMessage
   | BuiltPropsMessage

@@ -4,6 +4,7 @@ import {
   WorldSimulation,
   decodeClientMessage,
   encodeBuiltProps,
+  encodeBuildReply,
   encodeHomeSkills,
   encodeHomeSupplies,
   encodeHomeBuildFeedback,
@@ -72,6 +73,7 @@ test('learns a blueprint, previews the larger home boundary and upgrades in plac
           send(encodeBuiltProps(sim.builtPropsList(), () => true));
           send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
         }
+        for (const reply of sim.drainBuildReplies()) send(encodeBuildReply(reply));
         for (const feedback of sim.drainHomeBuildFeedback())
           send(encodeHomeBuildFeedback(feedback));
         send(encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)));
