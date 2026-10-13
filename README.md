@@ -343,6 +343,11 @@ falling down when you're knocked out and getting back up, chopping at a tree
 like a woodcutter, casting, waiting and reeling at the pond, bending down to
 pick things up, digging with a shovel, lifting food to your mouth a bite at
 a time, and sitting and lying down at home. Swift attacks keep your feet free to walk or run through the whole swing.
+
+Grounded walking and running retain restrained terrain fitting, including free
+legs under a moving attack. The fit preserves each animated foot lift and fades
+before the ankle reach limit; jumps, rolls and seated poses retain their usual
+footing. See [grounded stride contact](docs/decisions/0144-grounded-strides-fit-terrain.md).
 Charged strikes still plant your feet. Everybody else sees the same moves on you.
 
 Blows land on the very moment the animation does, and feel like it: a brief

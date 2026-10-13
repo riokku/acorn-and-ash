@@ -135,3 +135,41 @@ describe('standing foot contact', () => {
     }
   });
 });
+
+describe('grounded animated feet', () => {
+  it('preserves the authored lift of each foot while fitting its local slope', () => {
+    const model = rig();
+    const ground = (x: number, z: number) => x * 0.2 + z * 0.08;
+    let clearance: number[] = [];
+    for (let frame = 0; frame < 120; frame++) {
+      model.contact.restore();
+      model.feet[0]!.parent!.rotation.x = 0.5;
+      model.feet[1]!.parent!.rotation.x = -0.3;
+      clearance = model.pose().map((foot) => foot.y);
+      model.contact.apply(1 / 60, ground, 1);
+    }
+    model.pose().forEach((foot, index) => {
+      expect(foot.y - ground(foot.x, foot.z)).toBeCloseTo(clearance[index]!, 3);
+    });
+    expect(clearance[0]!).toBeGreaterThan(0.04);
+  });
+  it('leaves a lifted flat-floor stride unchanged', () => {
+    const model = rig();
+    model.feet[0]!.parent!.rotation.x = 0.5;
+    const original = model.pose();
+    model.contact.apply(1 / 60, () => 0, 1);
+    model
+      .pose()
+      .forEach((foot, index) => expect(foot.distanceTo(original[index]!)).toBeLessThan(1e-8));
+  });
+  it('fades near the reach limit before a stride crosses a ledge', () => {
+    const model = rig();
+    model.settle((x) => x * 0.995);
+    const nearLimit = model.hips.position.y;
+    expect(Math.abs(nearLimit - 0.8)).toBeLessThan(0.001);
+    model.contact.restore();
+    model.contact.apply(1 / 60, (x) => x * 1.01, 1);
+    expect(model.hips.position.y).toBe(0.8);
+    expect(Math.abs(model.hips.position.y - nearLimit)).toBeLessThan(0.001);
+  });
+});

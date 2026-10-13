@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { smoothstep } from '@acorn/shared';
 
 import { ArmReach, turnInWorld } from './arm-reach';
 
@@ -23,7 +24,7 @@ interface Leg {
   height: number;
 }
 
-/** Small, reversible pose corrections for idle feet on gentle terrain. */
+/** Small, reversible pose corrections for grounded feet on gentle terrain. */
 export class StandingFootContact {
   private readonly saved = new Map<
     THREE.Object3D,
@@ -112,6 +113,10 @@ export class StandingFootContact {
       Math.abs(this.pelvisDrop) < 1e-6
     )
       return;
+    // A moving foot can approach the reach limit during a stride. Fade its
+    // terrain correction before the limit instead of dropping it suddenly.
+    const heightChange = Math.max(...heights.map(Math.abs));
+    weight *= 1 - smoothstep(heightChange, MAX_HEIGHT_CHANGE * 0.75, MAX_HEIGHT_CHANGE);
     const follow = 1 - Math.exp(-FOLLOW * Math.max(0, deltaSeconds));
     const drop = Math.max(-MAX_PELVIS_DROP, Math.min(0, ...heights));
     this.pelvisDrop += (drop - this.pelvisDrop) * follow;

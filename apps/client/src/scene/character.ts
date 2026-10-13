@@ -873,11 +873,13 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
         if (thing === eating && bites !== null) holdToMouth(held.group, model, bites.reach);
       }
       placeBody(pose, frame, group, rest, pivot, restSpot, clock);
-      const standing =
-        frame.move.kind === ActionKind.Idle && !frame.locomotion.airborne && restSpot === null;
-      // Follow the idle leg blend through starts/stops rather than snapping
-      // the correction off on the first moving frame.
-      footContact?.apply(deltaSeconds, frame.groundHeight, standing ? playing.standingWeight : 0);
+      const grounded =
+        !frame.locomotion.airborne &&
+        restSpot === null &&
+        (frame.move.kind === ActionKind.Idle || pose.legsFree);
+      // Fit the grounded gait while preserving its animated step height.
+      // Whole-body moves, airborne poses and seats retain their own footing.
+      footContact?.apply(deltaSeconds, frame.groundHeight, grounded ? playing.groundedWeight : 0);
       return pose;
     },
     dispose: () => {
