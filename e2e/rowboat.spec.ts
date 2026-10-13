@@ -83,6 +83,7 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
           send(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
           sendPack();
         }
+        for (const reply of sim.drainBuildReplies()) send(shared.encodeBuildReply(reply));
         send(
           shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
         );

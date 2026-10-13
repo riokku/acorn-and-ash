@@ -73,6 +73,7 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
         if (sim.drainBuildEvents().length > 0)
           send(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
         send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+        for (const reply of sim.drainBuildReplies()) send(shared.encodeBuildReply(reply));
         send(
           shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
         );

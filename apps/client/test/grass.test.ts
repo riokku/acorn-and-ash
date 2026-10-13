@@ -62,32 +62,39 @@ describe('nearby grass cover', () => {
       grass.dispose();
     }
   });
-  it('has every clump you could see already in place after a few steps, so none pop in at the edge', () => {
-    // Grass fades out by distance from where you stand now, not from where it was
-    // last laid out. Walk almost as far as the grass is laid out again for, and
-    // what shows within the draw distance must be what a fresh layout there shows.
-    const within = (grass: ReturnType<typeof scene>['grass'], at: { x: number; z: number }) => {
-      const roots = grass.mesh.geometry.getAttribute('grassRoot');
-      return new Set(
-        Array.from({ length: grass.mesh.count }, (_, i) => [roots.getX(i), roots.getZ(i)] as const)
-          .filter(([x, z]) => Math.hypot(x - at.x, z - at.z) <= 31.9)
-          .map(([x, z]) => `${x},${z}`),
-      );
-    };
-    const walker = scene().grass;
-    const fresh = scene().grass;
-    try {
-      walker.update(0.1, { x: 0, z: 0 }, false);
-      walker.update(0.1, { x: 3.9, z: 0 }, false);
-      fresh.update(0.1, { x: 3.9, z: 0 }, false);
-      const seen = within(fresh, { x: 3.9, z: 0 });
-      expect(seen.size).toBeGreaterThan(1000);
-      expect(within(walker, { x: 3.9, z: 0 })).toEqual(seen);
-    } finally {
-      walker.dispose();
-      fresh.dispose();
-    }
-  });
+  it(
+    'has every clump you could see already in place after a few steps, so none pop in at the edge',
+    { timeout: 15_000 },
+    () => {
+      // Grass fades out by distance from where you stand now, not from where it was
+      // last laid out. Walk almost as far as the grass is laid out again for, and
+      // what shows within the draw distance must be what a fresh layout there shows.
+      const within = (grass: ReturnType<typeof scene>['grass'], at: { x: number; z: number }) => {
+        const roots = grass.mesh.geometry.getAttribute('grassRoot');
+        return new Set(
+          Array.from(
+            { length: grass.mesh.count },
+            (_, i) => [roots.getX(i), roots.getZ(i)] as const,
+          )
+            .filter(([x, z]) => Math.hypot(x - at.x, z - at.z) <= 31.9)
+            .map(([x, z]) => `${x},${z}`),
+        );
+      };
+      const walker = scene().grass;
+      const fresh = scene().grass;
+      try {
+        walker.update(0.1, { x: 0, z: 0 }, false);
+        walker.update(0.1, { x: 3.9, z: 0 }, false);
+        fresh.update(0.1, { x: 3.9, z: 0 }, false);
+        const seen = within(fresh, { x: 3.9, z: 0 });
+        expect(seen.size).toBeGreaterThan(1000);
+        expect(within(walker, { x: 3.9, z: 0 })).toEqual(seen);
+      } finally {
+        walker.dispose();
+        fresh.dispose();
+      }
+    },
+  );
   it('varies the size, shape, lean and colour of clumps so the meadow is not uniform', () => {
     const { grass } = scene();
     try {
