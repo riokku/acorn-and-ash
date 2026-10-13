@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { createCollisionWorld, resolveCapsule } from '../src/collision/capsule';
 import {
@@ -453,26 +453,31 @@ describe('what stands on and beside the lake', () => {
     },
   );
 
-  it('leaves encounter sites exactly where they were when none was near the lake', () => {
-    const clearing = buildTestClearing(seed);
+  describe('encounter locations beyond the lake', () => {
+    let checked = 0;
     let unaffected = 0;
-    for (let world = 1; world <= 40; world++) {
-      const ground = createWildernessTerrain(world, NO_LAKE);
-      const built = buildWilderness(world, ground, NO_LAKE);
-      const colliders = [...clearing.colliders, ...built.siteColliders];
-      const before = buildEncounterSites(world, ground, colliders, clearing.water);
-      const nearTheLake = before.some(
-        (site) => basinDepthAt(LAKE, site.x, site.z) > -(LAKE_SHORE_WIDTH + 4),
-      );
-      if (nearTheLake) continue;
-      unaffected += 1;
-      const lakeGround = createWildernessTerrain(world, LAKE);
-      expect(buildEncounterSites(world, lakeGround, colliders, clearing.water, LAKE)).toEqual(
-        before,
-      );
-    }
-    // Plenty of worlds have no glade near the lake, so this is not an empty check.
-    expect(unaffected).toBeGreaterThan(10);
-    // This aggregate coverage assertion needs the entire 40-world sweep.
-  }, 15_000);
+    afterAll(() => {
+      // A filtered seed run is useful for diagnosis; the full sweep must
+      // still prove it exercises plenty of genuinely unaffected worlds.
+      if (checked === 40) expect(unaffected).toBeGreaterThan(10);
+    });
+    it.each(Array.from({ length: 40 }, (_, index) => index + 1))(
+      'leaves unaffected encounter sites unchanged in world %i',
+      (world) => {
+        const clearing = buildTestClearing(seed);
+        const ground = createWildernessTerrain(world, NO_LAKE);
+        const built = buildWilderness(world, ground, NO_LAKE);
+        const colliders = [...clearing.colliders, ...built.siteColliders];
+        const before = buildEncounterSites(world, ground, colliders, clearing.water);
+        checked++;
+        if (before.some((site) => basinDepthAt(LAKE, site.x, site.z) > -(LAKE_SHORE_WIDTH + 4)))
+          return;
+        unaffected++;
+        const lakeGround = createWildernessTerrain(world, LAKE);
+        expect(buildEncounterSites(world, lakeGround, colliders, clearing.water, LAKE)).toEqual(
+          before,
+        );
+      },
+    );
+  });
 });
