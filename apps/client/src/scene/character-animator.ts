@@ -118,6 +118,15 @@ export class CharacterAnimator {
     Map<MoveClip, THREE.AnimationAction>,
   ];
   private nextSlot = 0;
+  /** Split move clips need independent clocks too, while the legs walk on. */
+  private readonly slotUpper: [
+    Map<MoveClip, THREE.AnimationAction>,
+    Map<MoveClip, THREE.AnimationAction>,
+  ];
+  private previousKind: ActionKind = ActionKind.Idle;
+  private previousStep = 0;
+  private previousAge = 0;
+  private moveCycle = 0;
   private readonly moves: MoveLayer[] = [];
   private readonly upper = new Map<MoveClip, THREE.AnimationAction>();
   private readonly lower = new Map<MoveClip, THREE.AnimationAction>();
@@ -164,11 +173,19 @@ export class CharacterAnimator {
     }
     const slotA = new Map<MoveClip, THREE.AnimationAction>();
     const slotB = new Map<MoveClip, THREE.AnimationAction>();
+    const upperA = new Map<MoveClip, THREE.AnimationAction>();
+    const upperB = new Map<MoveClip, THREE.AnimationAction>();
     for (const [name, clip] of clips.whole) {
       slotA.set(name, this.start(clip, false));
       slotB.set(name, this.start(clip.clone(), false));
+      const split = clips.upper.get(name);
+      if (split !== undefined && !GAITS.includes(name as Gait)) {
+        upperA.set(name, this.start(split.clone(), false));
+        upperB.set(name, this.start(split.clone(), false));
+      }
     }
     this.slots = [slotA, slotB];
+    this.slotUpper = [upperA, upperB];
     for (const [name, clip] of clips.upper) {
       if (!GAITS.includes(name as Gait)) this.upper.set(name, this.start(clip, false));
     }
@@ -249,6 +266,7 @@ export class CharacterAnimator {
     }
     this.eatingNow = this.eatingFor === null ? null : eatingPose(this.eatingFor);
 
+    this.rememberMove(move);
     const pose = movePose({ ...move, age: move.age - this.lag / TICK_SECONDS });
     const stillness = 1 - Math.min(1, locomotion.speed / 1.5);
     this.updateMoves(deltaSeconds, move.kind, pose);
@@ -378,7 +396,8 @@ export class CharacterAnimator {
   }
 
   private updateMoves(deltaSeconds: number, kind: ActionKind, pose: MovePose): void {
-    const key = pose.clip === null ? null : `${kind}:${pose.clip}:${pose.loop ? 'loop' : 'once'}`;
+    const key =
+      pose.clip === null ? null : `${kind}:${pose.clip}:${pose.loop ? 'loop' : this.moveCycle}`;
     const current = this.moves.find((layer) => !layer.fading);
     const fade = blendSeconds(kind);
 
@@ -387,14 +406,15 @@ export class CharacterAnimator {
       current.fade = key === null ? Math.max(fade, 0.14) : fade;
     }
     if (key !== null && pose.clip !== null && (current === undefined || current.key !== key)) {
-      const slot = this.slots[this.nextSlot];
+      const slotIndex = this.nextSlot;
+      const slot = this.slots[slotIndex];
       this.nextSlot = 1 - this.nextSlot;
       const action = slot?.get(pose.clip);
       if (action !== undefined) {
         // The same action may still be on its way out from before: take it over.
         const reused = this.moves.findIndex((layer) => layer.action === action);
-        if (reused >= 0) this.moves.splice(reused, 1);
-        const upper = pose.legsFree ? (this.upper.get(pose.clip) ?? null) : null;
+        if (reused >= 0) this.moves.splice(reused, 1)[0]?.upper?.setEffectiveWeight(0);
+        const upper = pose.legsFree ? (this.slotUpper[slotIndex]?.get(pose.clip) ?? null) : null;
         this.moves.push({ key, clip: pose.clip, action, upper, weight: 0, fade, fading: false });
       }
     }
@@ -406,6 +426,7 @@ export class CharacterAnimator {
       layer.weight = layer.fading ? layer.weight - step : Math.min(1, layer.weight + step);
       if (layer.fading && layer.weight <= 0) {
         layer.action.setEffectiveWeight(0);
+        layer.upper?.setEffectiveWeight(0);
         this.moves.splice(i, 1);
         continue;
       }
@@ -431,8 +452,21 @@ export class CharacterAnimator {
       const weight = layer.weight * scale;
       const walking = layer.upper === null ? 0 : 1 - stillness;
       layer.action.setEffectiveWeight(weight * (1 - walking));
-      layer.upper?.setEffectiveWeight(layer.upper.getEffectiveWeight() + weight * walking);
+      layer.upper?.setEffectiveWeight(weight * walking);
     }
+  }
+
+  private rememberMove(move: MoveView): void {
+    if (
+      move.kind !== this.previousKind ||
+      move.step !== this.previousStep ||
+      move.age + 1 < this.previousAge
+    ) {
+      this.moveCycle++;
+    }
+    this.previousKind = move.kind;
+    this.previousStep = move.step;
+    this.previousAge = move.age;
   }
 
   private overlay(
