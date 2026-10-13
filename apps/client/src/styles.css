@@ -4141,3 +4141,31 @@ body {
   text-align: center;
   pointer-events: none;
 }
+
+/* A short arrival fade never delays focus or input; closing stays immediate. */
+.hud-journal,
+.inventory-panel,
+.character-panel,
+.decor-panel,
+.world-map-backdrop,
+.slot-menu {
+  animation: panel-arrive 85ms ease-out;
+}
+@keyframes panel-arrive {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-journal,
+  .inventory-panel,
+  .character-panel,
+  .decor-panel,
+  .world-map-backdrop,
+  .slot-menu {
+    animation: none;
+  }
+}

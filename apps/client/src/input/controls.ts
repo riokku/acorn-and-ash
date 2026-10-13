@@ -14,6 +14,16 @@ export interface MoveIntent {
   readonly z: number;
 }
 
+type MenuToggle = 'journal' | 'map' | 'pack' | 'character' | 'escape';
+const MENU_TOGGLES: Partial<Record<string, MenuToggle>> = {
+  KeyC: 'journal',
+  KeyM: 'map',
+  KeyB: 'pack',
+  KeyI: 'pack',
+  KeyZ: 'character',
+  Escape: 'escape',
+};
+
 const mouseCode = (button: number): string => `Mouse${button}`;
 const LEFT_MOUSE = mouseCode(0);
 const LIGHT_ATTACK = 'LightAttack';
@@ -93,6 +103,7 @@ export class Controls {
    * carries it means a jump is never quietly swallowed.
    */
   private readonly tapped = new Set<string>();
+  private menuToggles: MenuToggle[] = [];
   /** E was taken for something done on this side, and stays taken until it is let go. */
   private interactClaimed = false;
   private pointerLocked = false;
@@ -260,10 +271,19 @@ export class Controls {
     return this.takeCraftTaps().filter((index) => index < 6);
   }
 
+  /** Preserve every fresh menu press, including several arriving between frames. */
+  takeMenuToggles(): MenuToggle[] {
+    const toggles = this.menuToggles;
+    this.menuToggles = [];
+    for (const code of Object.keys(MENU_TOGGLES)) this.tapped.delete(code);
+    return toggles;
+  }
+
   /** Whether C was pressed since this was last asked, to toggle the craft menu. */
   takeCraftMenuToggle(): boolean {
     const pressed = this.tapped.has('KeyC');
     this.tapped.delete('KeyC');
+    this.menuToggles = this.menuToggles.filter((toggle) => toggle !== 'journal');
     return pressed;
   }
 
@@ -271,6 +291,7 @@ export class Controls {
   takeMapToggle(): boolean {
     const pressed = this.tapped.has('KeyM');
     this.tapped.delete('KeyM');
+    this.menuToggles = this.menuToggles.filter((toggle) => toggle !== 'map');
     return pressed;
   }
 
@@ -279,6 +300,7 @@ export class Controls {
     const pressed = this.tapped.has('KeyB') || this.tapped.has('KeyI');
     this.tapped.delete('KeyB');
     this.tapped.delete('KeyI');
+    this.menuToggles = this.menuToggles.filter((toggle) => toggle !== 'pack');
     return pressed;
   }
 
@@ -286,6 +308,7 @@ export class Controls {
   takeCharacterToggle(): boolean {
     const pressed = this.tapped.has('KeyZ');
     this.tapped.delete('KeyZ');
+    this.menuToggles = this.menuToggles.filter((toggle) => toggle !== 'character');
     return pressed;
   }
 
@@ -293,6 +316,7 @@ export class Controls {
   takeEscapeToggle(): boolean {
     const pressed = this.tapped.has('Escape');
     this.tapped.delete('Escape');
+    this.menuToggles = this.menuToggles.filter((toggle) => toggle !== 'escape');
     return pressed;
   }
 
@@ -401,6 +425,7 @@ export class Controls {
    * does not silently keep going underneath the curtain.
    */
   releaseAll(): void {
+    this.menuToggles = [];
     this.targetCycles = [];
     this.held.clear();
     this.tapped.clear();
@@ -464,7 +489,11 @@ export class Controls {
     this.held.add(event.code);
     // A held key keeps movement active, but must not reopen menus, use another
     // hotbar item just because the browser sent an auto-repeat.
-    if (!event.repeat) this.tapped.add(event.code);
+    if (!event.repeat) {
+      this.tapped.add(event.code);
+      const menu = MENU_TOGGLES[event.code];
+      if (menu !== undefined) this.menuToggles.push(menu);
+    }
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {

@@ -439,6 +439,27 @@ describe('menu hotkeys and focused controls', () => {
     events.dispatchEvent(event);
     return event;
   }
+  it('preserves rapid menu changes, repeated fresh presses and Escape order', () => {
+    for (const code of ['KeyC', 'KeyZ', 'Escape', 'KeyC', 'KeyC']) {
+      press(code);
+      events.dispatchEvent(Object.assign(new Event('keyup'), { code }));
+    }
+    expect(controls.takeMenuToggles()).toEqual([
+      'journal',
+      'character',
+      'escape',
+      'journal',
+      'journal',
+    ]);
+    expect(controls.takeMenuToggles()).toEqual([]);
+    press('KeyI');
+    press('KeyI', { repeat: true });
+    expect(controls.takeMenuToggles()).toEqual(['pack']);
+    press('KeyC');
+    controls.releaseAll();
+    expect(controls.takeMenuToggles()).toEqual([]);
+  });
+
   it.each(['KeyB', 'KeyI', 'KeyZ', 'KeyC', 'KeyM', 'Escape'])(
     'takes %s once while held and again on the next fresh press',
     (code) => {
