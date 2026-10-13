@@ -120,6 +120,9 @@ errors offer a retry button.
 
 Hover world loot to see its name, quantity, and whether you can reach or carry it.
 A short right-click picks that specific item up; a drag still turns the camera.
+Thin or bobbing loot has a three-pixel cursor tolerance for both hover and clicks.
+Direct hits win, and nearby samples still respect scenery occlusion. See
+[cursor loot targeting](docs/decisions/0152-thin-loot-cursor-tolerance.md).
 Patches give one item per click, and piles give as much as fits. E remains the
 nearby interaction shortcut. Inventory and hotbar tooltips explain what items do.
 

@@ -1,4 +1,5 @@
 import type * as THREE from 'three/webgpu';
+import { Vector2 } from 'three/webgpu';
 import type { ItemId, LootRequest } from '@acorn/shared';
 
 export interface LootTarget {
@@ -48,4 +49,45 @@ export function lootUnderRay(
       return false;
     }) ?? null
   );
+}
+
+const cursor = new Vector2();
+const CURSOR_SAMPLES = [
+  [0, 0],
+  [-3, 0],
+  [3, 0],
+  [0, -3],
+  [0, 3],
+] as const;
+
+/** A small CSS-pixel tolerance keeps thin/bobbing loot from flickering under a cursor.
+ * A direct hit always wins; every nearby sample still respects real scenery occlusion.
+ */
+export function lootUnderCursor(
+  raycaster: THREE.Raycaster,
+  point: { x: number; y: number },
+  viewport: { width: number; height: number },
+  camera: THREE.Camera,
+  candidates: readonly LootTarget[],
+  blockers: readonly THREE.Object3D[],
+): LootTarget | null {
+  const setRay = (x: number, y: number) => {
+    cursor.set((x / viewport.width) * 2 - 1, -(y / viewport.height) * 2 + 1);
+    raycaster.setFromCamera(cursor, camera);
+  };
+  try {
+    for (const [x, y] of CURSOR_SAMPLES) {
+      const sampleX = point.x + x,
+        sampleY = point.y + y;
+      if (sampleX < 0 || sampleY < 0 || sampleX > viewport.width || sampleY > viewport.height)
+        continue;
+      setRay(sampleX, sampleY);
+      const target = lootUnderRay(raycaster, candidates, blockers);
+      if (target !== null) return target;
+    }
+    return null;
+  } finally {
+    // Other cursor operations retain the actual pointer ray, not an offset sample.
+    setRay(point.x, point.y);
+  }
 }
