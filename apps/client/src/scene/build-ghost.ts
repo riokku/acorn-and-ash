@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 
 import { isFireGlow } from './fire-light';
+import type { GroundHeight } from './building-ground';
 
 /**
  * The see-through preview of a piece being placed (see decision 0052): the
@@ -22,6 +23,7 @@ export interface BuildGhost {
 /** Only the shape of the model it is made from matters: its own materials and lights are set aside. */
 export interface GhostSource {
   readonly group: THREE.Group;
+  groundOn?(heightAt: GroundHeight): void;
   dispose(): void;
 }
 
@@ -39,7 +41,11 @@ const OUTLINE_WIDTH = 0.05;
 /** Just clear of the ground and anything flat laid on it, like a path stone. */
 const OUTLINE_HEIGHT = 0.04;
 
-export function createBuildGhost(source: GhostSource, footprint: GhostFootprint): BuildGhost {
+export function createBuildGhost(
+  source: GhostSource,
+  footprint: GhostFootprint,
+  heightAt?: GroundHeight,
+): BuildGhost {
   const group = new THREE.Group();
   group.visible = false;
 
@@ -103,6 +109,7 @@ export function createBuildGhost(source: GhostSource, footprint: GhostFootprint)
   group.add(fill);
 
   let showingFits: boolean | null = null;
+  let placement: string | null = null;
 
   return {
     group,
@@ -110,6 +117,11 @@ export function createBuildGhost(source: GhostSource, footprint: GhostFootprint)
       group.position.set(x, groundY, z);
       group.rotation.y = yaw;
       group.visible = true;
+      const nextPlacement = `${x},${groundY},${z},${yaw}`;
+      if (nextPlacement !== placement && heightAt !== undefined) {
+        source.groundOn?.(heightAt);
+        placement = nextPlacement;
+      }
       if (fits === showingFits) return;
       showingFits = fits;
       const color = fits ? FITS_COLOR : BLOCKED_COLOR;

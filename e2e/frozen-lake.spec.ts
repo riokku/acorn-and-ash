@@ -135,6 +135,12 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
     const spot = await here();
     return shared.lakeDepthAt(shared.LAKE, spot.x, spot.z);
   };
+  const iceHeightError = async () => {
+    const spot = await here();
+    // The route can overlap the river mouth. Its frozen surface follows the
+    // river elevation, so the flat lake level is not the floor everywhere.
+    return Math.abs(spot.y - sim.collision.terrain.heightAt(spot.x, spot.z));
+  };
 
   // Autumn: open water, and the boat can be climbed into and rowed out.
   expect(await frozen()).toBe(false);
@@ -154,7 +160,7 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
   await expect.poll(async () => (await boats()).moored).toBe(1);
   await expect.poll(async () => (await boats()).rowed).toEqual([]);
   const stood = await here();
-  expect(stood.y).toBeCloseTo(shared.lakeIceHeight(shared.LAKE), 1);
+  await expect.poll(iceHeightError).toBeLessThan(0.02);
   expect(await depthHere()).toBeGreaterThan(3);
   const boat = sim.builtPropsList().find((prop) => prop.id === BOAT_ID)!;
   expect(Math.hypot(boat.x - stood.x, boat.z - stood.z)).toBeLessThan(2.5);
@@ -177,13 +183,12 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
     })
     .toBeGreaterThan(3);
   await page.keyboard.up('KeyW');
-  const walked = await here();
-  expect(walked.y).toBeCloseTo(shared.lakeIceHeight(shared.LAKE), 1);
+  await expect.poll(iceHeightError).toBeLessThan(0.02);
   await expect
     .poll(async () => {
       const server = sim.snapshotFor(1).find((entity) => entity.netId === 1)!;
       const spot = await here();
-      return Math.hypot(server.x - spot.x, server.z - spot.z);
+      return Math.hypot(server.x - spot.x, server.y - spot.y, server.z - spot.z);
     })
     .toBeLessThan(1);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/frozen-lake-walking.png` });
