@@ -41,6 +41,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Preview lifecycle tests
+        run: node --test tools/preview-pr-state.test.mjs
+
       - name: Asset licences
         run: pnpm check:assets
 
@@ -118,6 +121,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
+        id: checkout
 
       - uses: pnpm/action-setup@v4
 
@@ -169,12 +173,23 @@ jobs:
               ;;
           esac
 
+      # A merge can finish while this job waits for Checks. Never create a
+      # new throwaway world for a PR that has already closed.
+      - name: Check the pull request is still open
+        id: lifecycle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.number }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/preview-pr-state.mjs >> "$GITHUB_OUTPUT"
+
       # A preview used to be this branch's client wired to the staging world
       # server, which runs whatever is on main. Anything touching the shared
       # rules or the server could not be played before merging. So each pull
       # request now gets a world server of its own, built from its own code.
       - name: Give this pull request its own world server
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -186,7 +201,7 @@ jobs:
       # staging Worker is untouched: only this uploaded version carries the
       # different binding.
       - name: Aim the preview at it
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         run: |
           # Fail loudly if the binding is ever renamed, rather than uploading a
           # preview that quietly talks to staging again.
@@ -201,7 +216,7 @@ jobs:
       # own, worked out from the Cloudflare token rather than stored anywhere, so
       # it is the same on every push and a tester stays signed in between them.
       - name: Give the preview an accounts database
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -218,7 +233,7 @@ jobs:
           printf '{"BETTER_AUTH_SECRET":"%s"}' "$secret" > apps/web/preview-secrets.json
 
       - name: Update the preview accounts database
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -237,7 +252,7 @@ jobs:
       # only honours on preview and local addresses; decision 0086).
       - name: Upload the preview
         id: upload
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -251,7 +266,7 @@ jobs:
 
       - name: Find the preview link
         id: link
-        if: steps.staging.outputs.exists == 'true'
+        if: steps.staging.outputs.exists == 'true' && steps.lifecycle.outputs.open == 'true'
         env:
           WRANGLER_OUTPUT: ${{ steps.upload.outputs.command-output }}
           ALIAS: pr-${{ github.event.number }}
@@ -266,7 +281,30 @@ jobs:
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Closing during deployment can beat the separate close-event cleanup.
+      # Verify live PR state after uploading, then apply the same throwaway-world
+      # removal policy to a preview that appeared too late.
+      - name: Check for a preview deployed after its PR closed
+        if: always() && steps.checkout.outcome == 'success'
+        id: late-preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.number }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/preview-pr-state.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Remove a late closed-PR preview
+        if: always() && steps.late-preview.outputs.remove == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/game-server
+          command: delete ${{ env.PR_GAME_SERVER }} --force
+
       - name: Comment the link on the pull request
+        if: steps.late-preview.outputs.open == 'true'
         uses: actions/github-script@v7
         env:
           PREVIEW_URL: ${{ steps.link.outputs.url }}
