@@ -105,18 +105,30 @@ const EXHIBITS: readonly Exhibit[] = [
     yaw: Math.PI,
     create: () => {
       const model = createWoodlandCreature(kind);
-      const motion = new URLSearchParams(window.location.search).get('motion') ?? 'idle';
+      const params = new URLSearchParams(window.location.search);
+      const motion = params.get('motion') ?? 'idle';
+      const pose = {
+        speed: motion === 'walk' ? 1.2 : motion === 'run' ? 5 : 0,
+        alert: motion === 'alert',
+        windup: motion === 'windup',
+        attacking: motion === 'attack',
+        hurt: motion === 'hurt',
+        defeated: motion === 'defeat',
+      };
+      const frozen = params.has('at');
+      if (frozen) {
+        let remaining = Math.max(0, Math.min(5, Number(params.get('at')) || 0));
+        while (remaining > 0.000001) {
+          const step = Math.min(1 / 60, remaining);
+          model.update(step, pose);
+          remaining -= step;
+        }
+      }
       return {
         group: model.group,
-        update: (delta: number) =>
-          model.update(delta, {
-            speed: motion === 'walk' ? 1.2 : motion === 'run' ? 5 : 0,
-            alert: motion === 'alert',
-            windup: motion === 'windup',
-            attacking: motion === 'attack',
-            hurt: motion === 'hurt',
-            defeated: motion === 'defeat',
-          }),
+        update: (delta: number) => {
+          if (!frozen) model.update(delta, pose);
+        },
       };
     },
   })),
