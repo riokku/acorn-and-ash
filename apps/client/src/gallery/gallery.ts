@@ -1,4 +1,5 @@
 import { createRiverExhibit } from './river';
+import { animateSmallAnimal } from '../scene/animal-motion';
 import { STREAM, streamPointAt, streamSurfaceAt } from '@acorn/shared';
 import { createFishDisplay } from '../scene/fish-display';
 import { createGuardianTrophy } from '../scene/guardian-trophy';
@@ -90,6 +91,37 @@ const POND: WaterCircle[] = [
   { x: 9, z: -7, radius: 3 },
   { x: 11.5, z: -5.5, radius: 2 },
 ];
+
+function smallAnimalExhibit(
+  kind: 'rabbit' | 'maskedRaccoon' | 'fox',
+  model: { group: THREE.Group; dispose(): void },
+) {
+  const art = animateSmallAnimal(model, kind);
+  const params = new URLSearchParams(window.location.search);
+  const motion = params.get('motion') ?? 'idle';
+  const pose = {
+    speed: motion === 'walk' ? 1.3 : motion === 'run' ? 6 : 0,
+    alert: motion === 'alert',
+    windup: motion === 'windup',
+    attacking: motion === 'attack',
+    defeated: motion === 'defeat',
+  };
+  const frozen = params.has('at');
+  if (frozen) {
+    let remaining = Math.max(0, Math.min(5, Number(params.get('at')) || 0));
+    while (remaining > 0.000001) {
+      const step = Math.min(1 / 60, remaining);
+      art.update(step, pose);
+      remaining -= step;
+    }
+  }
+  return {
+    group: art.group,
+    update: (delta: number) => {
+      if (!frozen) art.update(delta, pose);
+    },
+  };
+}
 
 const EXHIBITS: readonly Exhibit[] = [
   { name: 'mountain-spring', x: 0, z: 0, view: 15, alone: true, create: createRiverExhibit },
@@ -185,9 +217,21 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'sticks', x: -4.6, z: 3.6, view: 1.4, create: createStickPileModel },
   // Yaw 0 for all three, so it is plain which way each one faces: yaw 0
   // walks towards -Z, away from the camera's usual spot.
-  { name: 'rabbit', x: 6.4, z: 1.4, view: 1.6, create: createCritter },
-  { name: 'raccoon', x: 7.4, z: 1.1, view: 2, create: createRaccoon },
-  { name: 'fox', x: 8.6, z: 1.3, view: 2, create: createFox },
+  {
+    name: 'rabbit',
+    x: 6.4,
+    z: 1.4,
+    view: 1.6,
+    create: () => smallAnimalExhibit('rabbit', createCritter()),
+  },
+  {
+    name: 'raccoon',
+    x: 7.4,
+    z: 1.1,
+    view: 2,
+    create: () => smallAnimalExhibit('maskedRaccoon', createRaccoon()),
+  },
+  { name: 'fox', x: 8.6, z: 1.3, view: 2, create: () => smallAnimalExhibit('fox', createFox()) },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).

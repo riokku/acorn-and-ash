@@ -307,6 +307,7 @@ import { createLantern, type Lantern } from './scene/lantern';
 import { createFence, type Fence } from './scene/fence';
 import { createGardenPath, type GardenPath } from './scene/garden-path';
 import { createCritter, type Critter } from './scene/critter';
+import { animateSmallAnimal } from './scene/animal-motion';
 import { createRaccoon, type Raccoon } from './scene/raccoon';
 import { createFox, type Fox } from './scene/fox';
 import { preloadFoxModel } from './scene/fox-model';
@@ -558,15 +559,18 @@ function createBuiltMesh(
   }
 }
 
-/** The placeholder model for whichever kind of wildlife this happens to be. */
-function createCritterFor(kind: AnimalKindId): Critter | Raccoon | Fox | WoodlandCreature {
+/** The existing wildlife figure and its movement controller. */
+function createCritterFor(
+  kind: AnimalKindId,
+  phaseSeed = 0,
+): Critter | Raccoon | Fox | WoodlandCreature {
   switch (kind) {
     case 'rabbit':
-      return createCritter();
+      return animateSmallAnimal(createCritter(), 'rabbit', phaseSeed);
     case 'maskedRaccoon':
-      return createRaccoon();
+      return animateSmallAnimal(createRaccoon(), 'maskedRaccoon', phaseSeed);
     case 'fox':
-      return createFox();
+      return animateSmallAnimal(createFox(), 'fox', phaseSeed);
     case 'elk':
     case 'curiousRaccoon':
     case 'woodlandGuardian':
@@ -3069,7 +3073,7 @@ export class Game {
     const existing = this.critters.get(animalId);
     if (existing !== undefined) return existing;
 
-    const critter = createCritterFor(animalKindOf(animalId) ?? 'rabbit');
+    const critter = createCritterFor(animalKindOf(animalId) ?? 'rabbit', animalId);
     this.scene.add(critter.group);
     this.critters.set(animalId, critter);
     return critter;
@@ -5516,7 +5520,7 @@ export class Game {
       critter.group.rotation.set(0, pose.yaw, 0, 'YXZ');
       if ('update' in critter)
         critter.update(deltaSeconds, {
-          speed: pose.action & 8 ? 0 : pose.speed,
+          speed: pose.action & 8 ? 0 : pose.travelSpeed,
           alert: (pose.action & 4) !== 0,
           windup: (pose.action & 3) === 1,
           attacking: (pose.action & 3) === 2 && pose.actionAge < 5,
