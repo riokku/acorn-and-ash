@@ -1694,6 +1694,10 @@ export class Game {
       {
         onMessage: (message) => this.handleMessage(message),
         onStateChange: (state, detail) => {
+          if (this.connectionState !== state) {
+            this.controls?.releaseAll();
+            this.localPlayer?.pause();
+          }
           if (this.connectionState === 'connected' && state !== 'connected')
             this.meal = this.currentMeal();
           this.mealHeardAt = performance.now();
@@ -1778,6 +1782,12 @@ export class Game {
         break;
       }
       case 'welcome': {
+        if (this.selfNetId !== 0 && this.selfNetId !== message.netId) {
+          this.floats.reelIn(this.selfNetId);
+          this.fishingPhase = null;
+          this.reel = null;
+          this.options.hud.publish({ fishing: null, reel: null });
+        }
         this.recoveryHeard = false;
         this.recoveryMarkers = [];
         this.buriedCaches = [];
@@ -3148,6 +3158,7 @@ export class Game {
     // If the server never answers, let the player walk about on their own rather
     // than staring at a loading screen.
     if (
+      import.meta.env.DEV &&
       this.clearingScene === null &&
       this.connectionState !== 'connected' &&
       now > this.offlineFallbackAt
@@ -4569,7 +4580,8 @@ export class Game {
     const wilderness = this.wildernessScene;
     if (player === null || character === null || clearing === null || wilderness === null) return;
 
-    const intent = this.controls?.moveIntent() ?? { x: 0, z: 0 };
+    const connected = this.selfNetId === 0 || this.connectionState === 'connected';
+    const intent = connected ? (this.controls?.moveIntent() ?? { x: 0, z: 0 }) : { x: 0, z: 0 };
     // While the float is under on this screen, every input says so: the server
     // counts the time to click from the first of them, so a slow connection
     // does not shorten it.
@@ -4617,14 +4629,9 @@ export class Game {
       if (locked !== null) this.aimYaw = locked;
     }
 
-    const produced = player.advance(
-      deltaSeconds,
-      intent.x,
-      intent.z,
-      camera.look.yaw,
-      buttons,
-      this.aimYaw,
-    );
+    const produced = connected
+      ? player.advance(deltaSeconds, intent.x, intent.z, camera.look.yaw, buttons, this.aimYaw)
+      : [];
     const aimYaw = this.aimYaw ?? player.motion.facingYaw;
     // A tap is only forgotten once a tick has carried it, so a quick press of
     // Space between two frames still turns into a jump.

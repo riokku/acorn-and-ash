@@ -4,6 +4,11 @@ import {
   CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   decodeClientMessage,
+  encodeWelcome,
+  encodeSnapshot,
+  createInput,
+  encodeRejected,
+  RejectReason,
 } from '@acorn/shared';
 
 import { WorldConnection, worldSocketUrl, type ConnectionState } from '../src/net/connection';
@@ -69,9 +74,37 @@ class FakeSocket extends EventTarget {
     this.readyState = 3;
   }
 
-  open(): void {
+  open(welcome = true): void {
     this.readyState = FakeSocket.OPEN;
     this.dispatchEvent(new Event('open'));
+    if (welcome) this.welcome();
+  }
+
+  welcome(snapshot = true): void {
+    this.dispatchEvent(new MessageEvent('message', { data: encodeWelcome(1, 42, 0, 0) }));
+    if (snapshot) this.snapshot();
+  }
+  snapshot(): void {
+    this.dispatchEvent(
+      new MessageEvent('message', {
+        data: encodeSnapshot(0, 0, 0, [
+          {
+            netId: 1,
+            x: 0,
+            y: 0,
+            z: 0,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            yaw: 0,
+            flags: 0,
+            action: 0,
+            actionAge: 0,
+            actionHeading: 0,
+          },
+        ]),
+      }),
+    );
   }
 
   hangUp(code: number): void {
@@ -143,6 +176,97 @@ describe('staying connected to the world', () => {
     },
   );
 
+  it('waits for welcome and its own authoritative snapshot and never sends movement made during the outage or handshake', () => {
+    FakeSocket.made[0]!.hangUp(1006);
+    connection.send(createInput(1, 1, 0, 0, 0));
+    vi.advanceTimersByTime(2500);
+    const next = FakeSocket.made[1]!;
+    next.open(false);
+    expect(states.at(-1)).toBe('connecting');
+    connection.send(createInput(2, 1, 0, 0, 0));
+    expect(connection.sendCraft('rope')).toBe(false);
+    vi.advanceTimersByTime(300);
+    expect(next.send.mock.calls.map(([data]) => decodeClientMessage(data)?.type)).toEqual(['ping']);
+    next.welcome(false);
+    expect(states.at(-1)).toBe('connecting');
+    expect(connection.sendCraft('rope')).toBe(false);
+    next.snapshot();
+    expect(states.at(-1)).toBe('connected');
+    connection.send(createInput(3, 0, 0, 0, 0));
+    vi.advanceTimersByTime(300);
+    const inputs = next.send.mock.calls.flatMap(([data]) => {
+      const msg = decodeClientMessage(data);
+      return msg?.type === 'input' ? msg.inputs : [];
+    });
+    expect(inputs.map((input) => input.seq)).toEqual([3]);
+  });
+  it.each([true, false])(
+    'closes and retries an incomplete handshake (socket opens: %s)',
+    (opens) => {
+      FakeSocket.made[0]!.hangUp(1006);
+      vi.advanceTimersByTime(2500);
+      const next = FakeSocket.made[1]!;
+      if (opens) next.open(false);
+      vi.advanceTimersByTime(30_000);
+      expect(next.readyState).toBe(3);
+      expect(states.at(-1)).toBe('offline');
+      vi.advanceTimersByTime(2500);
+      expect(FakeSocket.made).toHaveLength(3);
+    },
+  );
+
+  it('abandons a silent open socket, discards queued input, and retries', () => {
+    const first = FakeSocket.made[0]!;
+    vi.advanceTimersByTime(9900);
+    connection.send(createInput(1, 1));
+    vi.advanceTimersByTime(100);
+    expect(first.readyState).toBe(3);
+    expect(states.at(-1)).toBe('offline');
+    expect(connection.sendCraft('rope')).toBe(false);
+    vi.advanceTimersByTime(2000);
+    const next = FakeSocket.made[1]!;
+    next.open();
+    vi.advanceTimersByTime(300);
+    expect(next.send.mock.calls.map(([data]) => decodeClientMessage(data)?.type)).toEqual(['ping']);
+  });
+
+  it('keeps a quiet world connected while fresh server messages arrive', () => {
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(8000);
+      FakeSocket.made[0]!.snapshot();
+    }
+    expect(states.at(-1)).toBe('connected');
+    expect(FakeSocket.made).toHaveLength(1);
+  });
+
+  it('allows incoming messages to catch up after the browser event loop was suspended', () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 20_000);
+    try {
+      vi.advanceTimersByTime(2000);
+      expect(states.at(-1)).toBe('connected');
+      FakeSocket.made[0]!.snapshot();
+      expect(FakeSocket.made).toHaveLength(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('keeps a rejection visible and retries only after an explicit request', () => {
+    FakeSocket.made[0]!.hangUp(1006);
+    vi.advanceTimersByTime(2500);
+    const next = FakeSocket.made[1]!;
+    next.open(false);
+    next.dispatchEvent(
+      new MessageEvent('message', { data: encodeRejected(RejectReason.WorldFull) }),
+    );
+    expect(states.at(-1)).toBe('rejected');
+    vi.advanceTimersByTime(60_000);
+    expect(FakeSocket.made).toHaveLength(2);
+    expect(connection.sendCraft('rope')).toBe(false);
+    connection.playHere();
+    expect(FakeSocket.made).toHaveLength(3);
+  });
+
   it('tries again by itself after the connection drops', () => {
     FakeSocket.made[0]?.hangUp(1006);
     expect(states.at(-1)).toBe('offline');
@@ -188,7 +312,7 @@ describe('staying connected to the world', () => {
 
     // The old one finally reporting itself closed must not tear down the new one.
     first?.hangUp(1006);
-    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(8000);
     expect(FakeSocket.made).toHaveLength(2);
     expect(states.at(-1)).toBe('connected');
   });
