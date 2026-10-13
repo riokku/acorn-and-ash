@@ -350,11 +350,15 @@ export class WorldConnection {
 
   private sendPing(): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    if (this.ready && performance.now() - this.lastHeardAt >= SERVER_SILENCE_TIMEOUT_MS) {
+    const now = performance.now();
+    // Shader compilation or a suspended tab can delay the whole event loop,
+    // including incoming messages. Give it time to receive them on resuming.
+    if (now - this.lastPingSentAt >= SERVER_SILENCE_TIMEOUT_MS) this.lastHeardAt = now;
+    if (this.ready && now - this.lastHeardAt >= SERVER_SILENCE_TIMEOUT_MS) {
       this.handleDrop('The world stopped responding');
       return;
     }
-    this.lastPingSentAt = performance.now();
+    this.lastPingSentAt = now;
     this.socket.send(encodePing(Math.round(this.lastPingSentAt) >>> 0));
   }
 

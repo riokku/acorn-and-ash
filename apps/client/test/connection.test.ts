@@ -239,6 +239,18 @@ describe('staying connected to the world', () => {
     expect(FakeSocket.made).toHaveLength(1);
   });
 
+  it('allows incoming messages to catch up after the browser event loop was suspended', () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 20_000);
+    try {
+      vi.advanceTimersByTime(2000);
+      expect(states.at(-1)).toBe('connected');
+      FakeSocket.made[0]!.snapshot();
+      expect(FakeSocket.made).toHaveLength(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('keeps a rejection visible and retries only after an explicit request', () => {
     FakeSocket.made[0]!.hangUp(1006);
     vi.advanceTimersByTime(2500);

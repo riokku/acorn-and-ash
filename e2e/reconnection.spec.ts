@@ -86,7 +86,10 @@ for (const outage of ['closed', 'silent'] as const)
       await page.locator('#home-name').fill('Returning Walker');
       await page.locator('.home-play').click();
       await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
+      await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+      await expect(page.locator('.connection-notice')).toBeHidden();
       const start = await position();
+      await page.keyboard.up('KeyW');
       await page.keyboard.down('KeyW');
       await expect
         .poll(async () => {
