@@ -174,6 +174,7 @@ import {
   isWithinBoardingReach,
   landingFrom,
   pickupInReach,
+  groundItemReachable,
   isReedPatch,
   reedFootprints,
   replaceCollider,
@@ -4324,6 +4325,7 @@ export class Game {
       if (object !== null)
         candidates.push({
           request: { kind: 'pickup', id: pickup.id },
+          heightOffset: pickup.y,
           item: pickup.item,
           count: 1,
           object,
@@ -4400,6 +4402,8 @@ export class Game {
     const position = this.motionOrOrigin();
     if (Math.hypot(position.x - target.x, position.z - target.z) > PICKUP_REACH)
       return 'Too far away · move closer';
+    if (!this.canReachGroundLoot(position, target, target.heightOffset))
+      return 'Blocked by terrain · move around it';
     if (
       this.localPlayer !== null &&
       (!isFreeToInteract(this.localPlayer.action) || this.fishingPhase !== null)
@@ -4413,6 +4417,16 @@ export class Game {
         ? `You can only carry one ${kind.displayName.toLowerCase()}`
         : 'Pack full · make room in your pack';
     return null;
+  }
+
+  private canReachGroundLoot(
+    position: Readonly<Vec3>,
+    target: { x: number; z: number },
+    heightOffset = 0,
+  ): boolean {
+    return (
+      this.collision !== null && groundItemReachable(this.collision, position, target, heightOffset)
+    );
   }
 
   private lootAt(point: { x: number; y: number }, camera: FollowCamera): void {
@@ -4827,15 +4841,22 @@ export class Game {
     const reachable =
       this.clearing === null
         ? null
-        : pickupInReach(player.motion.position, this.clearing.pickups, (id) =>
-            this.takenPickups.has(id),
+        : pickupInReach(
+            player.motion.position,
+            this.clearing.pickups,
+            (id) => this.takenPickups.has(id),
+            (pickup) => this.canReachGroundLoot(player.motion.position, pickup, pickup.y),
           );
     this.nearbyItem = reachable?.item ?? null;
 
-    const pile = droppedPileInReach(player.motion.position, this.droppedPiles);
+    const pile = droppedPileInReach(player.motion.position, this.droppedPiles, (pile) =>
+      this.canReachGroundLoot(player.motion.position, pile),
+    );
     this.nearbyPile = pile === null ? null : { item: pile.item, count: pile.count };
 
-    const patch = gatherSpotInReach(player.motion.position, this.gatherPatches);
+    const patch = gatherSpotInReach(player.motion.position, this.gatherPatches, (patch) =>
+      this.canReachGroundLoot(player.motion.position, patch),
+    );
     this.nearGatherSpot = patch?.item ?? null;
     const gatherObject =
       reachable !== null

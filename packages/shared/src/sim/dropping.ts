@@ -88,6 +88,7 @@ export function pileToMergeInto<T extends DroppedPile>(
 export function droppedPileInReach<T extends { x: number; z: number; count: number }>(
   position: Readonly<Vec3>,
   piles: readonly T[],
+  canReach?: (pile: T) => boolean,
 ): T | null {
   let best: T | null = null;
   let bestDistanceSquared = PICKUP_REACH * PICKUP_REACH;
@@ -96,7 +97,7 @@ export function droppedPileInReach<T extends { x: number; z: number; count: numb
     const dx = pile.x - position.x;
     const dz = pile.z - position.z;
     const distanceSquared = dx * dx + dz * dz;
-    if (distanceSquared <= bestDistanceSquared) {
+    if (distanceSquared <= bestDistanceSquared && (canReach === undefined || canReach(pile))) {
       best = pile;
       bestDistanceSquared = distanceSquared;
     }

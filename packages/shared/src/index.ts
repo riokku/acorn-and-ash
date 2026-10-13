@@ -49,6 +49,7 @@ export * from './sim/inventory';
 export * from './sim/gear';
 export * from './sim/digging';
 export * from './sim/pickups';
+export * from './sim/ground-item-reach';
 export * from './sim/gathering';
 export * from './sim/dropping';
 export * from './sim/chopping';

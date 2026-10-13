@@ -801,6 +801,11 @@ production use the real wait.
 
 ### Patches growing back
 
+Nearby items must also be reachable through clear ground: steep banks and a
+solid floor between you and surface loot block collection. Keyboard hints,
+mouse explanations and server validation share this check; ordinary hops keep
+the full horizontal reach. See [terrain-aware reach](docs/decisions/0143-terrain-aware-ground-item-reach.md).
+
 A stick or flower patch picked clean is gone for three to six minutes, then
 grows back with a fresh two to six, somewhere new in the clearing: never in
 the pond, on a rock, on anything built, right where people arrive, or on top

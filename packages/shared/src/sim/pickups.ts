@@ -20,6 +20,7 @@ export function pickupInReach(
   position: Readonly<Vec3>,
   pickups: readonly PlacedPickup[],
   isTaken: (pickupId: number) => boolean,
+  canReach?: (pickup: PlacedPickup) => boolean,
 ): PlacedPickup | null {
   let best: PlacedPickup | null = null;
   let bestDistanceSquared = PICKUP_REACH * PICKUP_REACH;
@@ -29,7 +30,7 @@ export function pickupInReach(
     const dx = pickup.x - position.x;
     const dz = pickup.z - position.z;
     const distanceSquared = dx * dx + dz * dz;
-    if (distanceSquared <= bestDistanceSquared) {
+    if (distanceSquared <= bestDistanceSquared && (canReach === undefined || canReach(pickup))) {
       best = pickup;
       bestDistanceSquared = distanceSquared;
     }

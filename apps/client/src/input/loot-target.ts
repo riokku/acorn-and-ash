@@ -8,6 +8,7 @@ export interface LootTarget {
   readonly object: THREE.Object3D;
   readonly x: number;
   readonly z: number;
+  readonly heightOffset?: number;
 }
 
 /** Pick visible loot, with invisible collision meshes enforcing scenery occlusion. */
