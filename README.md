@@ -366,6 +366,9 @@ Grounded walking and running retain restrained terrain fitting, including free
 legs under a moving attack. The fit preserves each animated foot lift and fades
 before the ankle reach limit; jumps, rolls and seated poses retain their usual
 footing. See [grounded stride contact](docs/decisions/0144-grounded-strides-fit-terrain.md).
+Walking and running share a contact-aligned stride phase, including during speed
+changes. Blocked movement, full-body moves and airborne poses yield their footing.
+See [aligned gait phases](docs/decisions/0150-contact-aligned-gait-phases.md).
 Charged strikes still plant your feet. Everybody else sees the same moves on you.
 
 Chopping and combat impact pauses consume their exact duration, including when

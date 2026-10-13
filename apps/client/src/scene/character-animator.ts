@@ -33,12 +33,8 @@ const GAITS: readonly Gait[] = ['idle', 'walk', 'run', 'jumpAir'];
 const GAIT_FOLLOW = 10;
 /** The pace each walking clip was made for, as near as looks right. */
 const WALK_PACE = 4.5;
-/**
- * The slowest the walk plays, as a share of its own pace: slow enough for
- * creeping through a charge's wind-up at a third of walking pace without
- * the feet sliding.
- */
-const WALK_SLOWEST = 0.3;
+/** The run clip plants its left foot one eighth of a cycle after its start. */
+const RUN_CONTACT_OFFSET = 0.125;
 const RUN_PACE = 7;
 /** How quickly a hit-stop's lost time is caught back up afterwards, as a share of real time. */
 const CATCH_UP = 0.6;
@@ -143,6 +139,8 @@ export class CharacterAnimator {
   /** Share of the idle leg pose, available for small terrain corrections. */
   private standing = 1;
   private grounded = 1;
+  private stride = 0;
+  private strideActive = false;
   /** Seconds into eating, or null when not eating. */
   private eatingFor: number | null = null;
   private eatingNow: EatingPose | null = null;
@@ -315,14 +313,48 @@ export class CharacterAnimator {
     applyChannel(this.fishing, free * fishingUpper, freeLegs * fishingLower, stillness);
 
     const gaitRate = deltaSeconds > 0 ? delta / deltaSeconds : 0;
-    this.gaitRate('walk', gaitRate * clamp(locomotion.speed / WALK_PACE, WALK_SLOWEST, 1.6));
-    this.gaitRate('run', gaitRate * clamp(locomotion.speed / RUN_PACE, 0.75, 1.35));
+    this.advanceStride(delta, locomotion, gaitLower);
+    this.gaitRate('walk', 0);
+    this.gaitRate('run', 0);
     this.gaitRate('idle', gaitRate);
     this.gaitRate('jumpAir', gaitRate);
     this.mixer.update(deltaSeconds);
     // A whole-body move takes the arm back for itself.
     if (this.eatingNow !== null) this.bringToMouth(this.eatingNow, free);
     return pose;
+  }
+
+  /** Shared stride phase: left contact at zero, right contact halfway through. */
+  get stridePhase(): number | null {
+    return this.strideActive ? this.stride : null;
+  }
+
+  private advanceStride(delta: number, locomotion: Locomotion, legShare: number): void {
+    this.strideActive = !locomotion.airborne && locomotion.speed > 0.15 && legShare > 0.2;
+    if (this.strideActive) {
+      const walk = this.gaitLower.get('walk') ?? this.gaitUpper.get('walk');
+      const run = this.gaitLower.get('run') ?? this.gaitUpper.get('run');
+      const walking =
+        walk === undefined
+          ? 0
+          : clamp(locomotion.speed / WALK_PACE, 0, 1.6) / Math.max(0.001, walk.getClip().duration);
+      const running =
+        run === undefined
+          ? walking
+          : clamp(locomotion.speed / RUN_PACE, 0.75, 1.35) /
+            Math.max(0.001, run.getClip().duration);
+      const share =
+        walk === undefined ? 1 : run === undefined ? 0 : smoothstep(4.9, 6.4, locomotion.speed);
+      this.stride = (this.stride + (walking * (1 - share) + running * share) * delta) % 1;
+    }
+    for (const [gait, offset] of [
+      ['walk', 0],
+      ['run', RUN_CONTACT_OFFSET],
+    ] as const) {
+      for (const action of [this.gaitUpper.get(gait), this.gaitLower.get(gait)])
+        if (action !== undefined)
+          action.time = ((this.stride + offset) % 1) * action.getClip().duration;
+    }
   }
 
   get standingWeight(): number {
