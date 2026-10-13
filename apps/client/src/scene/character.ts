@@ -26,6 +26,7 @@ import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
 import { isSkinMaterial, skinShade } from './skin-tone';
 import { createFireGlow, type FireGlow } from './fire-light';
+import { createTorchFlame } from './torch-flame';
 import { createGearVisuals, hideBakedHeadPieces } from './gear-visuals';
 import { wornWeapon } from './gear-models';
 
@@ -701,6 +702,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // already puts its glow out along with the rest of the group whenever
   // some other item is equipped instead.
   let torchGlow: FireGlow | undefined;
+  let torchFlame: ReturnType<typeof createTorchFlame> = null;
   const handBone = model.getObjectByName(HAND_BONE_NAME);
   if (handBone !== undefined) {
     // A tool that is also main-hand gear (the axe, the rod) is in both lists.
@@ -736,6 +738,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
         torchGlow = createFireGlow(TORCH_LIGHT_COLOR, TORCH_LIGHT_INTENSITY, TORCH_LIGHT_DISTANCE);
         torchGlow.anchor.position.set(0, TORCH_FLAME_HEIGHT, 0);
         held.add(torchGlow.anchor);
+        torchFlame = createTorchFlame();
+        if (torchFlame !== null) torchGlow.anchor.add(torchFlame.group);
       }
       handBone.add(held);
       heldItems.set(thing, {
@@ -883,6 +887,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       // Fit the grounded gait while preserving its animated step height.
       // Whole-body moves, airborne poses and seats retain their own footing.
       footContact?.apply(deltaSeconds, frame.groundHeight, grounded ? playing.groundedWeight : 0);
+      torchFlame?.update(deltaSeconds, heldItems.get('torch')?.group.visible === true);
       return pose;
     },
     dispose: () => {
@@ -893,6 +898,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       // Geometry (and the template root it was cloned from) is shared across
       // every character instance, so only the per-instance materials are ours.
       nameplate.dispose();
+      torchFlame?.dispose();
       torchGlow?.dispose();
     },
   };
