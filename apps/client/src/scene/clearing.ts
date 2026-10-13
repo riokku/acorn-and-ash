@@ -221,6 +221,9 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
             if (want.felled) part.mesh.setMatrixAt(slot.index, HIDDEN_INSTANCE);
             else placeOneInstance(part, slot.index, grown);
             part.mesh.instanceMatrix.needsUpdate = true;
+            // Instance uploads do not invalidate Three's cached culling bounds.
+            part.mesh.boundingSphere = null;
+            part.mesh.boundingBox = null;
           }
         }
 
@@ -244,6 +247,9 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
             if (want.felled) placeOneInstance(part, stumpSlot, stumpFor(grown));
             else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
             part.mesh.instanceMatrix.needsUpdate = true;
+            // Instance uploads do not invalidate Three's cached culling bounds.
+            part.mesh.boundingSphere = null;
+            part.mesh.boundingBox = null;
           }
         }
 
