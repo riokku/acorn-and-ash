@@ -4124,3 +4124,20 @@ body {
 .hud-journal.hud-garden {
   overflow-y: auto;
 }
+
+/* Persistent connection feedback stays readable above open menus. */
+.connection-notice {
+  position: fixed;
+  z-index: 40;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(620px, calc(100vw - 32px));
+  padding: 8px 14px;
+  border: 1px solid #d4a86299;
+  border-radius: 8px;
+  background: #28332bef;
+  color: #f5ddb2;
+  text-align: center;
+  pointer-events: none;
+}

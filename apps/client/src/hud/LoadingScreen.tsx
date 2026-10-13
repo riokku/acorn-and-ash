@@ -7,7 +7,7 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
   const detail =
     state.loadingError ??
     (state.connection === 'rejected'
-      ? 'This world is full. Try again in a moment.'
+      ? state.connectionDetail || 'This world is full. Try again in a moment.'
       : state.connection === 'elsewhere'
         ? 'You are playing in another tab or window.'
         : state.connection === 'deleted'
@@ -37,7 +37,7 @@ export function LoadingScreen({ state }: { state: HudState }): React.JSX.Element
           <span role={state.loadingError !== null ? 'alert' : 'status'}>{detail}</span>
           <span>{progress}%</span>
         </div>
-        {state.loadingError !== null ? (
+        {state.loadingError !== null || state.connection === 'rejected' ? (
           <button className="loading-retry" type="button" onClick={() => window.location.reload()}>
             Try again
           </button>

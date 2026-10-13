@@ -120,6 +120,20 @@ export class LocalPlayer {
     return this.action.kind === ActionKind.Idle ? 0 : this.action.age + alpha;
   }
 
+  /** Stop disconnected prediction and discard inputs/events that must never replay. */
+  pause(): void {
+    this.pending.length = 0;
+    this.events.length = 0;
+    this.previousButtons = 0;
+    this.ackedButtons = 0;
+    this.accumulator = 0;
+    this.previous = cloneVec3(this.motion.position);
+    this.previousYaw = this.motion.facingYaw;
+    this.motion.velocity.x = 0;
+    this.motion.velocity.z = 0;
+    this.smoothing.x = this.smoothing.y = this.smoothing.z = 0;
+  }
+
   /**
    * Somewhere else entirely, straight away: through a door into a home's own
    * room, or back out (see decision 0055). Walks on against `collision` from

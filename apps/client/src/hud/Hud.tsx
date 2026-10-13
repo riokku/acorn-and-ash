@@ -443,6 +443,11 @@ export function Hud({
           <span>{state.hoveredLoot.detail}</span>
         </div>
       ) : null}
+      {showingWorld && connectionNotice(state.connection, state.connectionDetail) !== null ? (
+        <p className="connection-notice" role="status">
+          {connectionNotice(state.connection, state.connectionDetail)}
+        </p>
+      ) : null}
       {showingWorld && state.interactionNote !== null ? (
         <p className="interaction-note" role="status">
           {state.interactionNote}
@@ -565,12 +570,19 @@ function Row({ label, value }: { label: string; value: React.ReactNode }): React
   );
 }
 
+export function connectionNotice(state: HudState['connection'], detail = ''): string | null {
+  if (state === 'rejected') return `${detail || 'Cannot join this world.'} Reload to try again.`;
+  if (state === 'offline') return 'Offline. Reconnecting… Actions are paused.';
+  if (state === 'connecting') return 'Connecting to the world… Actions are paused.';
+  return null;
+}
+
 function Connection({ state }: { state: HudState }): React.JSX.Element {
   const labels: Record<HudState['connection'], [string, string]> = {
     connecting: ['Connecting', 'hud-status-warn'],
     connected: ['Connected', 'hud-status-good'],
     offline: ['Offline', 'hud-status-bad'],
-    rejected: ['World full', 'hud-status-bad'],
+    rejected: ['Cannot join', 'hud-status-bad'],
     elsewhere: ['Playing elsewhere', 'hud-status-warn'],
     deleted: ['Character deleted', 'hud-status-bad'],
   };

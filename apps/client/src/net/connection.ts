@@ -4,6 +4,7 @@ import {
   encodeGardenRequest,
   type GardenRequest,
   CLOSE_CHARACTER_DELETED,
+  RejectReason,
   CLOSE_PLAYING_ELSEWHERE,
   INPUT_SEND_INTERVAL_MS,
   MAX_INPUTS_PER_BUNDLE,
@@ -63,6 +64,7 @@ export interface ConnectionOptions {
 /** How long to wait before trying again after the connection drops. */
 const RECONNECT_DELAY_MS = 2000;
 const PING_INTERVAL_MS = 2000;
+const WELCOME_TIMEOUT_MS = 30_000;
 
 /**
  * The link to the world server.
@@ -81,6 +83,10 @@ export class WorldConnection {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  private welcomed = false;
+  private ready = false;
+  private selfNetId: number | null = null;
+  private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   /** Told the player is playing in another tab now: see `standDown`. */
   private standingDown = false;
 
@@ -96,6 +102,10 @@ export class WorldConnection {
 
   connect(): void {
     if (this.closed) return;
+    this.welcomed = false;
+    this.ready = false;
+    this.selfNetId = null;
+    this.outgoing = [];
     this.handlers.onStateChange('connecting');
 
     const { signIn } = this.options;
@@ -123,7 +133,10 @@ export class WorldConnection {
     // a second reconnect, for the one that replaced it.
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return;
-      this.handlers.onStateChange('connected');
+      this.welcomeTimer = setTimeout(
+        () => this.handleDrop('The world did not finish connecting'),
+        WELCOME_TIMEOUT_MS,
+      );
       this.flushTimer = setInterval(() => this.flush(), INPUT_SEND_INTERVAL_MS);
       this.pingTimer = setInterval(() => this.sendPing(), PING_INTERVAL_MS);
       this.sendPing();
@@ -135,6 +148,35 @@ export class WorldConnection {
       if (message === null) return;
       if (message.type === 'pong') {
         this.pingMs = Math.max(0, Math.round(performance.now() - this.lastPingSentAt));
+        return;
+      }
+      if (message.type === 'rejected') {
+        this.handlers.onMessage(message);
+        this.standingDown = true;
+        this.giveUp(
+          'rejected',
+          message.reason === RejectReason.WorldFull
+            ? 'This world is full. Try again later.'
+            : 'The server could not read the request. Reload to reconnect.',
+        );
+        return;
+      }
+      if (message.type === 'welcome') {
+        this.welcomed = true;
+        this.selfNetId = message.netId;
+      }
+      if (
+        message.type === 'snapshot' &&
+        this.welcomed &&
+        !this.ready &&
+        message.entities.some((entity) => entity.netId === this.selfNetId)
+      ) {
+        this.ready = true;
+        if (this.welcomeTimer !== null) clearTimeout(this.welcomeTimer);
+        this.welcomeTimer = null;
+        // Align the avatar to authoritative state before enabling fresh input.
+        this.handlers.onMessage(message);
+        this.handlers.onStateChange('connected');
         return;
       }
       this.handlers.onMessage(message);
@@ -164,6 +206,7 @@ export class WorldConnection {
 
   /** Queue one tick of input. It goes out with the next bundle. */
   send(input: PlayerInput): void {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.outgoing.push(input);
     // If the socket stalls, keep the newest inputs rather than the oldest.
     if (this.outgoing.length > MAX_INPUTS_PER_BUNDLE) {
@@ -179,7 +222,7 @@ export class WorldConnection {
    * stream of movement the bundle exists to batch up.
    */
   sendCraft(item: ItemId): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeCraft(item));
     return true;
   }
@@ -190,13 +233,13 @@ export class WorldConnection {
    * is in reach and clear on the tick that follows.
    */
   sendDecoration(request: DecorationRequest): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeDecorationRequest(request));
     return true;
   }
 
   sendBuild(request: BuildRequest): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeBuild(request));
     return true;
   }
@@ -210,24 +253,24 @@ export class WorldConnection {
    */
   /** Lock or unlock our own front door (see decision 0055). */
   sendSetDoorLock(locked: boolean): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeSetDoorLock(locked));
   }
 
   /** Stand a mine support in this cell of tunnel (decision 0119). */
   sendPlaceSupport(cell: SupportCell): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodePlaceSupport(cell));
   }
 
   /** Which cube of ground the mouse is on while the shovel is out, or none (decision 0114). */
   sendDigTarget(target: { ix: number; iy: number; iz: number } | null): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeDigTarget(target));
   }
 
   sendUseItem(item: ItemId): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeUseItem(item));
     return true;
   }
@@ -238,36 +281,36 @@ export class WorldConnection {
    * deliberate, nothing the input bundle needs to batch up.
    */
   sendLoot(request: LootRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     // Flush preceding movement so reach is judged after the walk that led here.
     this.flush();
     this.socket.send(encodeLoot(request));
   }
 
   sendChest(request: ChestRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.flush();
     this.socket.send(encodeChestRequest(request));
   }
   sendExpedition(request: ExpeditionRequest): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeExpeditionRequest(request));
     return true;
   }
   sendGarden(request: GardenRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.flush();
     this.socket.send(encodeGardenRequest(request));
   }
 
   sendGear(request: GearRequest): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeGear(request));
     return true;
   }
 
   sendDiscard(request: DiscardRequest): boolean {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeDiscard(request));
     return true;
   }
@@ -285,13 +328,17 @@ export class WorldConnection {
 
   close(): void {
     this.closed = true;
+    this.welcomed = false;
+    this.ready = false;
+    this.selfNetId = null;
+    this.outgoing = [];
     this.stopTimers();
     this.socket?.close(1000, 'leaving');
     this.socket = null;
   }
 
   private flush(): void {
-    if (this.outgoing.length === 0) return;
+    if (!this.ready || this.outgoing.length === 0) return;
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(encodeInputBundle(this.outgoing));
     this.outgoing = [];
@@ -305,7 +352,12 @@ export class WorldConnection {
 
   private handleDrop(detail: string): void {
     this.stopTimers();
+    this.welcomed = false;
+    this.ready = false;
+    this.selfNetId = null;
+    const previous = this.socket;
     this.socket = null;
+    previous?.close(1000, 'reconnecting');
     this.outgoing = [];
     if (this.closed) return;
 
@@ -320,15 +372,22 @@ export class WorldConnection {
   }
 
   /** Stop for good, without trying again: the server has said there is nothing to come back to. */
-  private giveUp(state: 'elsewhere' | 'deleted'): void {
+  private giveUp(state: 'elsewhere' | 'deleted' | 'rejected', detail?: string): void {
     this.stopTimers();
+    this.welcomed = false;
+    this.ready = false;
+    this.selfNetId = null;
+    const previous = this.socket;
     this.socket = null;
+    previous?.close(1000, 'not playing');
     this.outgoing = [];
     if (state === 'deleted') this.closed = true;
-    this.handlers.onStateChange(state);
+    this.handlers.onStateChange(state, detail);
   }
 
   private stopTimers(): void {
+    if (this.welcomeTimer !== null) clearTimeout(this.welcomeTimer);
+    this.welcomeTimer = null;
     if (this.flushTimer !== null) clearInterval(this.flushTimer);
     if (this.pingTimer !== null) clearInterval(this.pingTimer);
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
