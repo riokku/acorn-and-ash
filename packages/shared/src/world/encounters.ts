@@ -1,5 +1,7 @@
+import { surfaceCollider } from '../collision/solid-surface';
+import { stonePositions } from './stone-shape';
 import { ORIGINAL_HALF_EXTENT } from '../constants';
-import { colliderFootprintRadius, cylinder, type Collider } from './colliders';
+import { colliderFootprintRadius, box, cylinder, type Collider } from './colliders';
 import type { Terrain } from './terrain';
 import { overlapsWater, type WaterCircle } from './water';
 import { basinDepthAt, LAKE_SHORE_WIDTH, type Lake } from './lake';
@@ -82,13 +84,38 @@ export function buildEncounterSites(
 
 /** Broken corner pillars leave the entire center and entrances walkable. */
 export function encounterColliders(sites: readonly EncounterSite[], terrain: Terrain): Collider[] {
-  return sites
-    .filter((s) => s.kind === 'ruins')
-    .flatMap((site) =>
-      [-2.1, 2.1].flatMap((dx) =>
-        [-2.1, 2.1].map((dz) =>
-          cylinder(site.x + dx, site.z + dz, 0.33, 1.15, terrain.heightAt(site.x, site.z)),
+  return sites.flatMap<Collider>((site) => {
+    const y = terrain.heightAt(site.x, site.z);
+    if (site.kind !== 'ruins') {
+      const dx = site.kind === 'patrol' ? 2.8 : -2.8;
+      const rocks = Array.from({ length: 3 }, (_, i) =>
+        surfaceCollider(
+          site.x + dx,
+          y + 0.105 + i * 0.19,
+          site.z + 2.7,
+          stonePositions(0.34 - i * 0.075, 0.21, site.id * 10 + i),
         ),
+      );
+      return site.kind === 'patrol'
+        ? [...rocks, cylinder(site.x + dx, site.z + 2.7, 0.07, 1.3, y + 0.2)]
+        : rocks;
+    }
+    return [
+      ...[-2.1, 2.1].flatMap((dx) =>
+        [-2.1, 2.1].map((dz) => ({
+          ...box(site.x + dx, y + 0.6, site.z + dz, 0.31, 0.6, 0.29),
+          standable: true,
+        })),
       ),
-    );
+      ...[-1.77, 1.77].map((dx) => box(site.x + dx, y + 1.29, site.z - 2.1, 0.31, 0.15, 0.22)),
+      ...[-1.5, -0.9, 0.9, 1.5].map((dx) => ({
+        ...box(site.x + dx, y + 0.14, site.z + 2.1, 0.275, 0.14, 0.24),
+        standable: true,
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        ...box(site.x - 2.8 + i * 0.8, y + 0.11, site.z - 2.7, 0.26, 0.11, 0.2, i * 0.7),
+        standable: true,
+      })),
+    ];
+  });
 }

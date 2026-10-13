@@ -107,3 +107,5 @@ export * from './world/supports';
 export * from './world/stone-shape';
 export * from './world/scenery-rocks';
 export * from './collision/solid-surface';
+
+export * from './world/placed-solids';

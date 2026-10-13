@@ -1,3 +1,5 @@
+import { placedPropColliders } from '../world/placed-solids';
+import type { Collider } from '../world/colliders';
 import { streamRockColliders } from '../world/scenery-rocks';
 import type { BuildReply, BuildReplyReason } from './building';
 import {
@@ -1340,6 +1342,7 @@ export class WorldSimulation {
   drainHomeBuildFeedback(): (HomeBuildFeedback & { netId: number })[] {
     return this.homeBuildFeedback.splice(0);
   }
+  private readonly placedSolids = new Map<number, Collider[]>();
   private readonly homeSolids = new Map<number, ReturnType<typeof cabinCollider>>();
   private readonly roomWorlds = new Map<HomeKind, CollisionWorld>();
   private readonly decoratedRooms = new Map<number, CollisionWorld>();
@@ -1479,6 +1482,22 @@ export class WorldSimulation {
     const solid = cabinCollider(prop, this.collision.terrain.heightAt(prop.x, prop.z));
     this.homeSolids.set(prop.id, solid);
     this.collision.colliders.push(solid);
+  }
+  private removePlacedSolid(id: number): void {
+    const previous = this.placedSolids.get(id);
+    if (previous === undefined) return;
+    for (const solid of previous) {
+      const index = this.collision.colliders.indexOf(solid);
+      if (index >= 0) this.collision.colliders.splice(index, 1);
+    }
+    this.placedSolids.delete(id);
+  }
+  private updatePlacedSolid(prop: BuiltProp): void {
+    this.removePlacedSolid(prop.id);
+    const solids = placedPropColliders(prop, this.collision.terrain.heightAt(prop.x, prop.z));
+    if (solids.length === 0) return;
+    this.placedSolids.set(prop.id, solids);
+    this.collision.colliders.push(...solids);
   }
   private kindOfHome(space: number): HomeKind {
     const kind = this.builtPropsById.get(space)?.kind;
@@ -4078,6 +4097,7 @@ export class WorldSimulation {
     if (nearest === null) return false;
 
     nearest.rower = runtime.netId;
+    this.updatePlacedSolid(nearest);
     runtime.boatId = nearest.id;
     runtime.interactSpent = true;
     this.boatChanges.add(nearest.id);
@@ -4157,6 +4177,7 @@ export class WorldSimulation {
   /** Nobody is rowing this boat any more: the water may carry it downstream. */
   private releaseBoat(runtime: PlayerRuntime, boat: BuiltProp): void {
     delete boat.rower;
+    this.updatePlacedSolid(boat);
     runtime.boatId = null;
     this.boatChanges.add(boat.id);
     beginAction(runtime.action, ActionKind.Idle);
@@ -4302,7 +4323,10 @@ export class WorldSimulation {
     if (this.lakeFrozen) return;
     for (const boat of this.builtProps) {
       if (boat.kind !== 'rowboat' || boat.rower !== undefined || boat.locked === true) continue;
-      if (driftBoat(boat, TICK_SECONDS)) this.driftingBoats.add(boat.id);
+      if (driftBoat(boat, TICK_SECONDS)) {
+        this.updatePlacedSolid(boat);
+        this.driftingBoats.add(boat.id);
+      }
     }
     if (this.tick % TICK_HZ === 0) {
       for (const id of this.driftingBoats) this.boatChanges.add(id);
@@ -4360,6 +4384,7 @@ export class WorldSimulation {
 
   /** Forget a built prop everywhere the simulation keeps track of one. */
   private detachBuiltProp(prop: BuiltProp): void {
+    this.removePlacedSolid(prop.id);
     const index = this.builtProps.indexOf(prop);
     if (index >= 0) this.builtProps.splice(index, 1);
     this.builtPropsById.delete(prop.id);
@@ -4868,6 +4893,7 @@ export class WorldSimulation {
       this.addHomeSolid(prop);
       this.expeditionChanges.set(runtime.netId, 'none');
     }
+    this.updatePlacedSolid(prop);
     this.movePatchesFrom(piece);
     const ownerKey = runtime.playerKey;
     if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
@@ -5324,6 +5350,7 @@ export class WorldSimulation {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
       if (BUILDABLE_KINDS[prop.kind].isHome) this.addHomeSolid(prop);
+      else this.updatePlacedSolid(prop);
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
       if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);

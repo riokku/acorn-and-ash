@@ -1,3 +1,4 @@
+import { placedPropColliders, type Collider } from '@acorn/shared';
 import { streamRockColliders } from '@acorn/shared';
 import { BuildFeedback, buildReplyText } from './hud/build-feedback';
 import { DecorationFeedback } from './hud/decoration-feedback';
@@ -889,6 +890,7 @@ export class Game {
     HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
   );
   /** Homes already made solid in `collision`, so a resent list never adds one twice. */
+  private readonly solidPlacedProps = new Map<number, Collider[]>();
   private readonly solidHomes = new Map<number, ReturnType<typeof cabinCollider>>();
   /**
    * A plain box the size of each home, never drawn: only there so the
@@ -2743,6 +2745,7 @@ export class Game {
         true,
         STREAM,
       );
+      this.solidPlacedProps.clear();
       this.collision = collision;
       collision.dug = this.digScene.grid;
       setLakeFrozen(collision, this.lakeFrozen);
@@ -2861,6 +2864,31 @@ export class Game {
    * ever actually removed yet, but a client that reconnects mid-session
    * should not have to care whether that stays true forever.
    */
+  private refreshPlacedSolids(): void {
+    if (this.collision === null) return;
+    const old = new Set([...this.solidPlacedProps.values()].flat());
+    this.collision.colliders.splice(
+      0,
+      this.collision.colliders.length,
+      ...this.collision.colliders.filter((c) => !old.has(c)),
+    );
+    this.solidPlacedProps.clear();
+    for (const prop of this.builtProps) {
+      const mesh = this.builtMeshes.get(prop.id)?.group;
+      const solidProp =
+        prop.kind === 'rowboat' && prop.occupied !== true && mesh !== undefined
+          ? { ...prop, x: mesh.position.x, z: mesh.position.z, yaw: mesh.rotation.y }
+          : prop;
+      const solids = placedPropColliders(
+        solidProp,
+        this.builtGroundY(prop.kind, solidProp.x, solidProp.z),
+      );
+      if (solids.length > 0) {
+        this.solidPlacedProps.set(prop.id, solids);
+        this.collision.colliders.push(...solids);
+      }
+    }
+  }
   private applyBuiltProps(onlyBoatMotion = false): void {
     if (this.clearingScene === null) return;
     const present = new Set(this.builtProps.map((prop) => prop.id));
@@ -2943,6 +2971,7 @@ export class Game {
         }
     }
     this.updateMapBuilds();
+    this.refreshPlacedSolids();
   }
 
   /** Your own home and builds, for the maps - only when the built list changes, not every frame. */
@@ -3247,6 +3276,16 @@ export class Game {
       const pose = floating.update(deltaSeconds, this.lakeFrozen);
       group.position.set(pose.x, pose.y, pose.z);
       group.rotation.y = pose.yaw;
+      const previous = this.solidPlacedProps.get(id);
+      if (previous !== undefined && this.collision !== null) {
+        const solids = placedPropColliders({ kind: 'rowboat', ...pose }, pose.y);
+        for (let index = 0; index < previous.length; index++) {
+          const slot = this.collision.colliders.indexOf(previous[index]!);
+          if (slot >= 0 && solids[index] !== undefined)
+            replaceCollider(this.collision, slot, solids[index]!);
+        }
+        this.solidPlacedProps.set(id, solids);
+      }
     }
     this.updateRemoteAnimals(deltaSeconds);
     this.raiders.update(

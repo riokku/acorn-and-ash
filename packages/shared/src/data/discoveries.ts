@@ -144,6 +144,7 @@ export function discoveryColliders(sites: readonly DiscoverySite[], terrain: Ter
         box(site.x - 0.8, terrain.heightAt(site.x - 0.8, site.z) + 0.12, site.z, 0.19, 0.12, 0.15),
       ];
     if (site.kind === 'logging') return [box(x, y + 0.23, z + 0.25, 0.9, 0.23, 0.47)];
+    if (site.kind === 'grove') return [box(x, y + 0.14, z, 0.875, 0.16, 0.16, 0.4)];
     if (site.kind === 'shrine') return [cylinder(x, z, 0.63, 0.65, y)];
     return [];
   });
