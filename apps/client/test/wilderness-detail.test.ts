@@ -124,3 +124,26 @@ it('ignores a shake for a tree that is not in the forest', () => {
   expect(() => scene.shakeTree(5, 1, 0)).not.toThrow();
   scene.dispose();
 });
+
+it('does not rewrite or upload unchanged tree slots while walking within the same detail levels', () => {
+  const { scene, meshes } = forestOfTwoPines();
+  try {
+    scene.update(1, { x: 0, z: 0 });
+    const treeMeshes = meshes.slice(0, 4);
+    const versions = treeMeshes.map((mesh) => mesh.instanceMatrix.version);
+    const bounds = treeMeshes.map((mesh) => vi.spyOn(mesh, 'computeBoundingSphere'));
+    const before = treeMeshes.map((mesh) => Array.from(mesh.instanceMatrix.array));
+    scene.update(1, { x: 4.1, z: 0 });
+    expect(treeMeshes.map((mesh) => mesh.instanceMatrix.version)).toEqual(versions);
+    expect(treeMeshes.map((mesh) => Array.from(mesh.instanceMatrix.array))).toEqual(before);
+    for (const check of bounds) expect(check).not.toHaveBeenCalled();
+    // Crossing a real detail boundary must still change the packed geometry.
+    scene.update(1, { x: 100, z: 0 });
+    expect(treeMeshes.map((mesh) => mesh.count)).toEqual([0, 0, 2, 2]);
+    expect(treeMeshes.some((mesh, index) => mesh.instanceMatrix.version > versions[index]!)).toBe(
+      true,
+    );
+  } finally {
+    scene.dispose();
+  }
+});
