@@ -8,11 +8,13 @@ const DAY_SKY = new THREE.Color(0x9fc4d8);
 const NIGHT_SKY = new THREE.Color(0x0d1830);
 
 const DAY_HEMI_SKY = new THREE.Color(0xcfe3f0);
-const NIGHT_HEMI_SKY = new THREE.Color(0x1c2c4d);
+// Soft reflected moonlight keeps shaded silhouettes readable beneath trees.
+// This is still a small fraction of daylight, independent of cloud cover.
+const NIGHT_HEMI_SKY = new THREE.Color(0x546780);
 const DAY_HEMI_GROUND = new THREE.Color(0x51603f);
-const NIGHT_HEMI_GROUND = new THREE.Color(0x11141c);
+const NIGHT_HEMI_GROUND = new THREE.Color(0x343c4b);
 const DAY_HEMI_INTENSITY = 1.6;
-const NIGHT_HEMI_INTENSITY = 0.5;
+const NIGHT_HEMI_INTENSITY = 0.75;
 
 const DAY_SUN_COLOR = new THREE.Color(0xfff0d4);
 const NIGHT_SUN_COLOR = new THREE.Color(0x9fb4e0);
