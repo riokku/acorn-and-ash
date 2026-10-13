@@ -67,8 +67,8 @@ it('varies shorelines independently and smoothly inside the conservative placeme
     for (const side of [-1, 1]) {
       const half = streamHalfWidthAt(STREAM, along, side);
       expect(half).toBeLessThanOrEqual(extent);
-      expect(half).toBeGreaterThan(extent * 0.79);
-      expect(Math.abs(half - streamHalfWidthAt(STREAM, along + 0.01, side))).toBeLessThan(0.003);
+      expect(half).toBeGreaterThan(extent * 0.6);
+      expect(Math.abs(half - streamHalfWidthAt(STREAM, along + 0.01, side))).toBeLessThan(0.004);
       expect(streamWaterHalfWidthAt(STREAM, along, side)).toBeLessThan(half);
     }
   }
@@ -100,4 +100,13 @@ it('agrees on visible shore and water depth along both uneven banks', () => {
       expect(streamWaterDepthAt(STREAM, outside.x, outside.z)).toBe(0);
     }
   }
+});
+
+it('alternates broad and narrow reaches instead of only offsetting opposite banks', () => {
+  const ratios = [];
+  for (let along = 40; along < STREAM.length - 30; along += 3) {
+    const width = streamHalfWidthAt(STREAM, along, -1) + streamHalfWidthAt(STREAM, along, 1);
+    ratios.push(width / (2 * streamHalfWidthAt(STREAM, along)));
+  }
+  expect(Math.max(...ratios) - Math.min(...ratios)).toBeGreaterThan(0.16);
 });

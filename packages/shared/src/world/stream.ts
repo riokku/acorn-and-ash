@@ -410,7 +410,9 @@ export function streamHalfWidthAt(stream: Stream, along: number, side = 0): numb
     0.1 + 0.07 * Math.sin(along / 17 + phase) + 0.03 * Math.sin(along / 7 + phase * 2);
   const calm =
     smoothstep(along, 12, 35) * (1 - smoothstep(along, stream.length - 25, stream.length));
-  return base * (1 - variation * calm);
+  // Broad alternating reaches change the whole channel width as well as its sides.
+  const reach = 0.12 + 0.08 * Math.sin(along / 26 + 0.4) + 0.04 * Math.sin(along / 11 + 1.7);
+  return base * (1 - reach * calm) * (1 - variation * calm);
 }
 
 /** Height of the water's surface along the middle, `along` metres down. */
