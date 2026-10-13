@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CLOSE_CHARACTER_DELETED, CLOSE_PLAYING_ELSEWHERE } from '@acorn/shared';
+import {
+  CLOSE_CHARACTER_DELETED,
+  CLOSE_PLAYING_ELSEWHERE,
+  decodeClientMessage,
+} from '@acorn/shared';
 
 import { WorldConnection, worldSocketUrl, type ConnectionState } from '../src/net/connection';
 import { readSettings } from '../src/settings';
@@ -59,7 +63,7 @@ class FakeSocket extends EventTarget {
     FakeSocket.made.push(this);
   }
 
-  send(): void {}
+  send = vi.fn<(data: ArrayBuffer) => void>();
 
   close(): void {
     this.readyState = 3;
@@ -102,6 +106,42 @@ describe('staying connected to the world', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
+
+  it.each([
+    ['craft', (c: WorldConnection) => c.sendCraft('rope')],
+    ['useItem', (c: WorldConnection) => c.sendUseItem('axe')],
+    ['build', (c: WorldConnection) => c.sendBuild({ kind: 'tent', x: 0, z: -4, yaw: 0 })],
+    [
+      'decoration',
+      (c: WorldConnection) =>
+        c.sendDecoration({ action: 'place', kind: 'wovenRug', id: 0, x: 0, z: 0, yaw: 0 }),
+    ],
+    ['gear', (c: WorldConnection) => c.sendGear({ action: 'takeOff', slot: 'helm' })],
+    [
+      'discard',
+      (c: WorldConnection) => c.sendDiscard({ item: 'stick', amount: 1, destroy: false }),
+    ],
+  ] as const)(
+    'reports whether %s was actually submitted, without replaying offline clicks',
+    (kind, submit) => {
+      const first = FakeSocket.made[0]!;
+      expect(submit(connection)).toBe(true);
+      const message = first.send.mock.calls.at(-1)![0];
+      expect(decodeClientMessage(message)?.type).toBe(kind);
+      first.send.mockClear();
+      first.hangUp(1006);
+      expect(submit(connection)).toBe(false);
+      expect(first.send).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(2500);
+      const second = FakeSocket.made[1]!;
+      second.open();
+      expect(second.send.mock.calls.map(([message]) => decodeClientMessage(message)?.type)).toEqual(
+        ['ping'],
+      );
+      expect(submit(connection)).toBe(true);
+      expect(decodeClientMessage(second.send.mock.calls.at(-1)![0])?.type).toBe(kind);
+    },
+  );
 
   it('tries again by itself after the connection drops', () => {
     FakeSocket.made[0]?.hangUp(1006);

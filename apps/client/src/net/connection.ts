@@ -178,9 +178,10 @@ export class WorldConnection {
    * bundle: crafting is a rare, deliberate action, not part of the steady
    * stream of movement the bundle exists to batch up.
    */
-  sendCraft(item: ItemId): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  sendCraft(item: ItemId): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeCraft(item));
+    return true;
   }
 
   /**
@@ -188,14 +189,16 @@ export class WorldConnection {
    * moment the player clicks to place it. The server still checks the spot
    * is in reach and clear on the tick that follows.
    */
-  sendDecoration(request: DecorationRequest): void {
-    if (this.socket?.readyState === WebSocket.OPEN)
-      this.socket.send(encodeDecorationRequest(request));
+  sendDecoration(request: DecorationRequest): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(encodeDecorationRequest(request));
+    return true;
   }
 
-  sendBuild(request: BuildRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  sendBuild(request: BuildRequest): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeBuild(request));
+    return true;
   }
 
   /**
@@ -223,9 +226,10 @@ export class WorldConnection {
     this.socket.send(encodeDigTarget(target));
   }
 
-  sendUseItem(item: ItemId): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  sendUseItem(item: ItemId): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeUseItem(item));
+    return true;
   }
 
   /**
@@ -256,14 +260,16 @@ export class WorldConnection {
     this.socket.send(encodeGardenRequest(request));
   }
 
-  sendGear(request: GearRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  sendGear(request: GearRequest): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeGear(request));
+    return true;
   }
 
-  sendDiscard(request: DiscardRequest): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  sendDiscard(request: DiscardRequest): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeDiscard(request));
+    return true;
   }
 
   /**

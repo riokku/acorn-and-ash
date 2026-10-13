@@ -170,6 +170,12 @@ you are walking. See
 [decision 0050](docs/decisions/0050-wow-style-mouse-and-inventory.md) and
 [decision 0051](docs/decisions/0051-a-click-turns-the-character-not-the-camera.md).
 
+If the connection drops, crafting, item use, gear changes and placement explain
+that they need a connection. Unsent placements keep their preview. Reconnecting
+never replays old clicks; click again deliberately once connected. Items and
+buildings still change only when the server confirms them. See
+[decision 0133](docs/decisions/0133-action-submission-feedback.md).
+
 Your pack has six slots to start with. The bag, a few steps from where you
 start, adds four more, for ten. A slot holds up to ten of one thing - logs,
 sticks, flowers, meat or one kind of fish - so fourteen logs take two slots.
