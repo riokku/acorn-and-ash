@@ -355,6 +355,11 @@ before the ankle reach limit; jumps, rolls and seated poses retain their usual
 footing. See [grounded stride contact](docs/decisions/0144-grounded-strides-fit-terrain.md).
 Charged strikes still plant your feet. Everybody else sees the same moves on you.
 
+Chopping and combat impact pauses consume their exact duration, including when
+a render frame runs slowly. Animation blends pause with the character and use
+the remainder of a frame after a hit pause ends. See
+[impact pause timing](docs/decisions/0139-impact-pauses-use-exact-frame-time.md).
+
 Blows land on the very moment the animation does, and feel like it: a brief
 pause on the hit, a little camera kick, chips of wood flying out of a tree
 as it shivers, tufts of fur off an animal as it's knocked back, a pale streak
