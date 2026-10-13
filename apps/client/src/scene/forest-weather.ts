@@ -1,6 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { createRng, hashSeed, dayProgress, type ForestWeather } from '@acorn/shared';
 
+const FIREFLY_SPAN = 64;
+const FIREFLY_COUNT = 112;
+const wrap = (value: number) => ((value % FIREFLY_SPAN) + FIREFLY_SPAN) % FIREFLY_SPAN;
+
 /** Bounded, pooled rain and fireflies: no per-frame geometry or material allocation. */
 export function createForestWeather(seed: number, heightAt: (x: number, z: number) => number) {
   const group = new THREE.Group();
@@ -32,7 +36,18 @@ export function createForestWeather(seed: number, heightAt: (x: number, z: numbe
     transparent: true,
     opacity: 0.8,
   });
-  const fireflies = new THREE.InstancedMesh(glowGeometry, glowMaterial, 32);
+  const fireflies = new THREE.InstancedMesh(glowGeometry, glowMaterial, FIREFLY_COUNT);
+  fireflies.name = 'weather-fireflies';
+  // A wider world-space pool keeps the same density as the old 34 m square.
+  // Rain has its own offsets: none of the firefly layout follows the player.
+  const fireflyOffsets = Array.from({ length: FIREFLY_COUNT }, () => ({
+    x: rng.nextRange(-FIREFLY_SPAN / 2, FIREFLY_SPAN / 2),
+    z: rng.nextRange(-FIREFLY_SPAN / 2, FIREFLY_SPAN / 2),
+    phase: rng.nextRange(0, Math.PI * 2),
+    groundY: undefined as number | undefined,
+    lastX: undefined as number | undefined,
+    lastZ: undefined as number | undefined,
+  }));
   fireflies.frustumCulled = false;
   group.add(fireflies);
   const dummy = new THREE.Object3D();
@@ -78,13 +93,31 @@ export function createForestWeather(seed: number, heightAt: (x: number, z: numbe
       const dusk = day >= 0.67 && day <= 0.9;
       fireflies.visible = dusk && weather.kind !== 'storm' && weather.kind !== 'blizzard';
       if (fireflies.visible) {
-        for (let i = 0; i < 32; i++) {
-          const o = offsets[i]!,
+        for (let i = 0; i < FIREFLY_COUNT; i++) {
+          const o = fireflyOffsets[i]!,
             t = reducedMotion ? 0 : seconds;
-          const x = point.x + o.x + Math.sin(t * 0.4 + i) * 0.5,
-            z = point.z + o.z + Math.cos(t * 0.3 + i) * 0.5;
-          dummy.position.set(x, heightAt(x, z) + 0.7 + 0.3 * Math.sin(t * 0.6 + i));
-          dummy.scale.setScalar(0.7 + 0.3 * Math.sin(t * 1.6 + i));
+          const half = FIREFLY_SPAN / 2;
+          const along = o.x + Math.sin(t * 0.4 + o.phase) * 0.5;
+          const across = o.z + Math.cos(t * 0.3 + o.phase) * 0.5;
+          const x = point.x + wrap(along - point.x + half) - half;
+          const z = point.z + wrap(across - point.z + half) - half;
+          // Each flight stays at its original airborne height over a slope;
+          // only a grain recycled beyond the visible border gets a new base.
+          if (
+            o.groundY === undefined ||
+            Math.abs(x - o.lastX!) > half ||
+            Math.abs(z - o.lastZ!) > half
+          )
+            o.groundY = heightAt(x, z);
+          o.lastX = x;
+          o.lastZ = z;
+          dummy.position.set(x, o.groundY + 0.7 + 0.3 * Math.sin(t * 0.6 + o.phase), z);
+          const border = Math.max(
+            0,
+            Math.min(1, (half - Math.max(Math.abs(x - point.x), Math.abs(z - point.z))) / 10),
+          );
+          const fade = border * border * (3 - 2 * border);
+          dummy.scale.setScalar((0.7 + 0.3 * Math.sin(t * 1.6 + o.phase)) * fade);
           dummy.updateMatrix();
           fireflies.setMatrixAt(i, dummy.matrix);
         }

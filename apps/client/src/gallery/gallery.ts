@@ -1,3 +1,5 @@
+import { createForestWeather } from '../scene/forest-weather';
+import { DAY_LENGTH_MS } from '@acorn/shared';
 import { createRiverExhibit } from './river';
 import { animateSmallAnimal } from '../scene/animal-motion';
 import { STREAM, streamPointAt, streamSurfaceAt } from '@acorn/shared';
@@ -416,6 +418,9 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const seasonFall =
     focus === 'trees' && season !== undefined ? createSeasonFall(123, () => 0) : null;
   if (seasonFall !== null) scene.add(seasonFall.group);
+  const forestWeather =
+    focus === 'trees' && Number.isFinite(time) ? createForestWeather(123, () => 0) : null;
+  if (forestWeather !== null) scene.add(forestWeather.group);
   const fallDirection = new THREE.Vector3();
   const fallCentre = new THREE.Vector3();
 
@@ -440,9 +445,17 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
       target.z + Math.cos(angle) * distance,
     );
     camera.lookAt(target);
+    camera.getWorldDirection(fallDirection);
+    fallCentre.copy(camera.position).addScaledVector(fallDirection, 10);
+    forestWeather?.update(
+      delta,
+      fallCentre,
+      time * DAY_LENGTH_MS,
+      { kind: 'clear', cycle: 0, precipitation: 0, wind: 0.2, mushroomsAbundant: false },
+      false,
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    );
     if (seasonFall !== null && season !== undefined) {
-      camera.getWorldDirection(fallDirection);
-      fallCentre.copy(camera.position).addScaledVector(fallDirection, 10);
       seasonFall.update(
         delta,
         fallCentre,
