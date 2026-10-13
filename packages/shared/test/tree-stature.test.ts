@@ -7,6 +7,7 @@ import {
   treeFallTimes,
   treeFallAngle,
   treeLogSpots,
+  treeStickSpots,
   TREE_FALL_SECONDS,
   TREE_BREAK_SECONDS,
 } from '../src/sim/tree-fall';
@@ -33,6 +34,25 @@ describe('Pacific Northwest tree stature', () => {
     }
     expect(buildTestClearing(4242).props).toEqual(clearing.props);
     expect(buildWilderness(4242, createFlatTerrain()).props).toEqual(wilderness.props);
+  });
+  it('scatters two or three collectible sticks alongside every tree species', () => {
+    for (const kind of ['pine', 'birch', 'oak', 'maple', 'alder'] as const) {
+      const tree = { id: 1, kind, x: 8, z: -4, scale: 1, rotationY: 0 };
+      const spots = treeStickSpots(tree, 0);
+      expect(spots).toHaveLength(PROP_KINDS[kind].chopping.sticks);
+      expect(spots.length).toBeGreaterThanOrEqual(2);
+      expect(spots.length).toBeLessThanOrEqual(3);
+      for (const spot of spots) {
+        expect(spot.z).toBeGreaterThan(tree.z);
+        expect(Math.abs(spot.x - tree.x)).toBeGreaterThan(0.5);
+        expect(Math.hypot(spot.x - tree.x, spot.z - tree.z)).toBeLessThan(8);
+      }
+      expect(treeStickSpots(tree, 0)).toEqual(spots);
+      expect(treeStickSpots(tree, Math.PI)[0]!.z).toBeLessThan(tree.z);
+    }
+    expect(
+      treeStickSpots({ id: 2, kind: 'boulder', x: 0, z: 0, scale: 1, rotationY: 0 }, 0),
+    ).toEqual([]);
   });
   it('shares slower mature falls while keeping collectible wood close to the trunk', () => {
     const tree = { id: 1, kind: 'oak' as const, x: 0, z: 0, scale: 2, rotationY: 0 };

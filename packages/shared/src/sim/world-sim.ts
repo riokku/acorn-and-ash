@@ -312,7 +312,13 @@ import {
 import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft, inventoryCraftRefusal, type CraftRefusal } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
-import { treeFallTimes, treeFallYaw, treeLogSpots, type TreeFall } from './tree-fall';
+import {
+  treeFallTimes,
+  treeFallYaw,
+  treeLogSpots,
+  treeStickSpots,
+  type TreeFall,
+} from './tree-fall';
 import { animalInReach, type CatchCandidate } from './hunting';
 import {
   buildableFootprint,
@@ -4041,6 +4047,10 @@ export class WorldSimulation {
     for (const spot of treeLogSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('log', 1, clear.x, clear.z, landsAt, true);
+    }
+    for (const spot of treeStickSpots(target.prop, state.fallYaw)) {
+      const clear = this.reachableLogSpot(spot, position);
+      this.addPile('stick', 1, clear.x, clear.z, landsAt, true);
     }
     this.chopEvents.push({
       netId: runtime.netId,
