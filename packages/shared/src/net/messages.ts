@@ -1,3 +1,4 @@
+import type { CraftRefusal } from '../sim/crafting';
 import type { Dig } from '../world/digging';
 import type { Support, SupportCell } from '../world/supports';
 import type { WildfireView } from '../sim/wildfire';
@@ -113,6 +114,7 @@ export const ServerMessageType = {
   Dug: 0x41,
   DigRefused: 0x42,
   Supports: 0x43,
+  CraftRefused: 0x44,
 } as const;
 
 export const RejectReason = {
@@ -396,6 +398,13 @@ export interface HungerMessage {
 export interface CraftedMessage {
   readonly type: 'crafted';
   readonly event: CraftedEvent;
+}
+
+/** Private explanation for an unsuccessful craft request. */
+export interface CraftRefusedMessage {
+  readonly type: 'craftRefused';
+  readonly item: ItemId;
+  readonly reason: CraftRefusal;
 }
 
 /** Word that this player cooked one piece of food at a campfire. */
@@ -714,6 +723,7 @@ export type ServerMessage =
   | FishingMessage
   | HungerMessage
   | CraftedMessage
+  | CraftRefusedMessage
   | CookedMessage
   | CaughtMessage
   | BuiltPropsMessage
