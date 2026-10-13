@@ -339,6 +339,9 @@ Consecutive uses of the same action animation crossfade instead of resetting
 at full weight. Walking moves keep separate upper-body clocks for that blend,
 while small network clock corrections retain the current swing. See
 [repeated move crossfades](docs/decisions/0140-repeated-move-crossfades.md).
+A small correction also retains chopping, digging and wind-up context, so a
+move does not switch animation midway through. See
+[stable move context](docs/decisions/0147-move-context-through-clock-corrections.md).
 
 Every move your character makes is a real animation now, from KayKit's free
 Character Animations pack: three different swings in a row if you keep

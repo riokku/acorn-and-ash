@@ -100,7 +100,9 @@ export class MoveMemory {
     roll: RollDirection,
     diggingNow = false,
   ): MoveView {
-    const fresh = kind !== this.kind || step !== this.step || age < this.age;
+    // Match the animator: a sub-tick reconciliation is still the same move,
+    // so nearby scenery and wind-up context cannot change its clip mid-swing.
+    const fresh = kind !== this.kind || step !== this.step || age + 1 < this.age;
     if (fresh) {
       if (kind === ActionKind.Swing) {
         this.atTree = atTreeNow;
