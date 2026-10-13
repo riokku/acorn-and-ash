@@ -91,6 +91,7 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   sun.shadow.camera.right = 55;
   sun.shadow.camera.top = 55;
   sun.shadow.camera.bottom = -55;
+  sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias = -0.0008;
   scene.add(sun);
   scene.add(sun.target);

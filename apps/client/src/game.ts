@@ -312,6 +312,7 @@ import { rainShareFor } from './art/season-fall';
 import { seasonUniforms } from './art/season-uniforms';
 import { Floats, type Angler } from './scene/floats';
 import { addDaylight, type DaylightRig } from './scene/lighting';
+import { centreDaylightShadow } from './scene/stable-daylight-shadow';
 import { createSeasonFall } from './scene/season-fall';
 import { createSeasonRig } from './scene/seasons';
 import { FireLights } from './scene/fire-light';
@@ -1139,7 +1140,7 @@ export class Game {
     const setup = await createRenderer(this.options.canvas, this.options.forceWebGL);
     this.setup = setup;
     setup.renderer.shadowMap.enabled = true;
-    setup.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    setup.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.daylight = addDaylight(this.scene);
     this.fireLights = new FireLights(this.scene);
@@ -5003,9 +5004,7 @@ export class Game {
   private centreSunOn(position: Readonly<Vec3>): void {
     const sun = this.daylight?.sun;
     if (sun === undefined) return;
-    sun.position.set(position.x + 28, position.y + 40, position.z + 18);
-    sun.target.position.set(position.x, position.y, position.z);
-    sun.target.updateMatrixWorld();
+    centreDaylightShadow(sun, position);
   }
 
   /* ---------------------------------------------------------------------- */
