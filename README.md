@@ -335,6 +335,11 @@ first - see [decision 0058](docs/decisions/0058-the-axe-blade-first.md).
 
 ### Moves
 
+Consecutive uses of the same action animation crossfade instead of resetting
+at full weight. Walking moves keep separate upper-body clocks for that blend,
+while small network clock corrections retain the current swing. See
+[repeated move crossfades](docs/decisions/0140-repeated-move-crossfades.md).
+
 Every move your character makes is a real animation now, from KayKit's free
 Character Animations pack: three different swings in a row if you keep
 clicking as each one lands, a crouch and a leaping two-handed slam for a
