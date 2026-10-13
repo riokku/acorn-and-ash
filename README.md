@@ -1390,6 +1390,12 @@ Players can read a cedar expedition board beside their own home by standing at i
 
 The Craft menu is one page of the field journal that lists everything you can make by hand or place in the world, sorted into Tools, Food, Home, Camp & lighting, Garden & boundaries, Lake and Trophies. Tabs along the top show all of it or one kind at a time; the title and tabs stay put while the list scrolls, so a short screen never hides a recipe. Number keys 1–9 pick from the page you are looking at, and every entry can be clicked. Indoor decorations keep their own panel (the Decorate button inside your home), grouped into Furniture, Lighting and Finishing touches. See [one Craft menu](docs/decisions/0096-one-craft-menu.md).
 
+Menu hotkeys retain press order even between frames. Panels return keyboard
+focus and remember journal scroll position; Escape dismisses a slot menu or
+active gear drag before its underlying panel. A short arrival fade never delays
+input and yields to reduced motion. See
+[menu lifecycle](docs/decisions/0153-menu-focus-scroll-and-press-order.md).
+
 A crowned, moss-armored ruin sentinel guards the old ruin clearings. It can be fought solo; actual helpers increase its health, with stable character identity across reconnects. Nearby contributors receive protected materials and their existing housing blueprint roll. A first victory earns a personal placeable trophy that stays available if the backpack is full; subsequent victories award materials.
 
 Fishing records belong to each character in its current world: illustrated species pages track catches and best lengths, including catches released from a full backpack. Ordinary fish stay relaxed; a hooked golden carp asks for two gentle clicks in broad steady windows, with input timing that waits for the browser to show the challenge. Fresh responses keep its quiet-browser fallback alive; an equipped rod aims at the water beneath the cursor rather than intercepting tree canopies. Five catches unlock a carved fish display; all three species unlock its golden collection variant. Both are original stat-free decorations with server-validated recipes, material costs and placement checks.

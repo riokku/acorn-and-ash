@@ -25,7 +25,8 @@ import {
 import { LoadingScreen } from './LoadingScreen';
 import { ChestPanel } from './ChestPanel';
 import type { ChestRequest } from '@acorn/shared';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { usePanelLifecycle } from './panel-lifecycle';
 
 import {
   BUILDABLE_KINDS,
@@ -143,6 +144,19 @@ export function Hud({
   onReclaimDecoration,
 }: HudProps): React.JSX.Element {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  usePanelLifecycle(
+    '.hud-journal',
+    state.craftMenuOpen,
+    state.journalTab,
+    `${state.journalTab}:${state.craftTab}`,
+  );
+  usePanelLifecycle(
+    state.characterOpen ? '.character-panel' : '.inventory-panel',
+    state.inventoryOpen,
+    state.characterOpen ? 'character' : 'pack',
+  );
+  usePanelLifecycle('.world-map-backdrop', state.mapOpen, 'map');
+  usePanelLifecycle('.decor-panel', state.buildMenuOpen && state.home !== null, 'decorations');
   // One parchment layer for both maps, so it is only ever worked out once.
   const [fog] = useState(() => new FogCache());
   const [slotMenu, setSlotMenu] = useState<SlotMenuTarget | null>(null);
@@ -1321,15 +1335,32 @@ function SlotMenu({
   onClose: () => void;
 }): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = menu.current;
+    (panel?.querySelector<HTMLElement>('button') ?? panel)?.focus({ preventScroll: true });
+    return () => {
+      if (
+        previous?.isConnected &&
+        (panel?.contains(document.activeElement) || document.activeElement === document.body)
+      )
+        previous.focus({ preventScroll: true });
+    };
+  }, []);
   const { item, count } = target;
   const kind = ITEM_KINDS[item];
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
+    window.addEventListener('keydown', closeOnEscape, true);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
   }, [onClose]);
 
   const act = (amount: number, destroy: boolean): void => {
@@ -1416,6 +1447,8 @@ function SlotMenu({
       />
       <div
         className="slot-menu"
+        ref={menu}
+        tabIndex={-1}
         role="menu"
         style={style}
         onContextMenu={(event) => event.preventDefault()}

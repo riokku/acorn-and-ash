@@ -1207,8 +1207,7 @@ export class Game {
   }
 
   /** Escape closes the current panel or placement; the world stays playable. */
-  private handleEscapeInput(controls: Controls): void {
-    if (!controls.takeEscapeToggle()) return;
+  private handleEscapeInput(): void {
     if (this.chestOpen || this.chestPending) this.closeChest();
     else if (this.mapOpen) this.showMenuPanel(null);
     else if (this.placing !== null) this.stopPlacing();
@@ -3150,12 +3149,9 @@ export class Game {
     // the hotbar only gets a turn once both are closed, so every digit key
     // means one thing at a time. The inventory panel has no digit keys of
     // its own to fight over, so it does not need to join that guard.
-    this.handleEscapeInput(controls);
-    if (controls.takeMapToggle()) this.toggleMap();
-    this.handleInventoryToggleInput(controls);
+    this.handleMenuToggleInput(controls);
     // The character screen lives beside the pack, so it goes when the pack does.
     if (!this.inventoryOpen) this.characterOpen = false;
-    if (controls.takeCharacterToggle()) this.toggleCharacter();
     this.handleBuildMenuInput(controls);
     this.handleCraftMenuInput(controls);
     this.handleExpeditionBoardInput(controls);
@@ -4283,9 +4279,6 @@ export class Game {
   }
 
   private handleCraftMenuInput(controls: Controls): void {
-    if (controls.takeCraftMenuToggle()) {
-      this.showMenuPanel(this.craftMenuOpen ? null : 'journal');
-    }
     if (!this.craftMenuOpen) return;
     const taps = controls.takeCraftTaps();
     if (this.journalTab !== 'craft') return;
@@ -4296,10 +4289,15 @@ export class Game {
     }
   }
 
-  /** B (or I) toggles the pack, closing the journal or decorating panel. */
-  private handleInventoryToggleInput(controls: Controls): void {
-    if (!controls.takeInventoryToggle()) return;
-    this.toggleInventory();
+  /** Process menu presses in the order they happened, rather than frame-order priority. */
+  private handleMenuToggleInput(controls: Controls): void {
+    for (const toggle of controls.takeMenuToggles()) {
+      if (toggle === 'escape') this.handleEscapeInput();
+      else if (toggle === 'map') this.toggleMap();
+      else if (toggle === 'pack') this.toggleInventory();
+      else if (toggle === 'character') this.toggleCharacter();
+      else this.showMenuPanel(this.craftMenuOpen ? null : 'journal');
+    }
   }
 
   /**
