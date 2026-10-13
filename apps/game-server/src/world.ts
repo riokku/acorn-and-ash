@@ -1,3 +1,4 @@
+import { encodeBuildReply } from '@acorn/shared';
 import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
 import {
@@ -922,6 +923,13 @@ export class World extends DurableObject<WorldEnv> {
    */
   private announceBuilding(simulation: WorldSimulation): void {
     const events = simulation.drainBuildEvents();
+    const replies = simulation.drainBuildReplies();
+    const sendReplies = () => {
+      for (const reply of replies)
+        for (const ws of this.ctx.getWebSockets())
+          if (this.attachmentFor(ws)?.netId === reply.netId)
+            this.trySend(ws, encodeBuildReply(reply));
+    };
     const feedback = simulation.drainHomeBuildFeedback();
     if (events.length === 0) {
       for (const ws of this.ctx.getWebSockets()) {
@@ -929,6 +937,7 @@ export class World extends DurableObject<WorldEnv> {
         for (const result of feedback)
           if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
       }
+      sendReplies();
       return;
     }
 
@@ -955,6 +964,7 @@ export class World extends DurableObject<WorldEnv> {
       for (const result of feedback)
         if (result.netId === netId) this.trySend(ws, encodeHomeBuildFeedback(result));
     }
+    sendReplies();
   }
 
   private lastWildfireSaved = '';

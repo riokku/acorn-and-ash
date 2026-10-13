@@ -183,6 +183,9 @@ Indoor decoration previews remain visible while waiting for confirmation. A
 refused placement keeps its preview for retry, and moving or packing up furniture
 waits for its own private reply. Escape hides a preview without cancelling a
 request already sent. See [decision 0135](docs/decisions/0135-indoor-decoration-confirmation.md).
+Outdoor placement follows the same confirmation/refusal pattern. Capped previews
+close after confirmed placement; repeatable pieces stay available. See
+[decision 0136](docs/decisions/0136-outdoor-placement-results.md).
 
 Your pack has six slots to start with. The bag, a few steps from where you
 start, adds four more, for ten. A slot holds up to ten of one thing - logs,

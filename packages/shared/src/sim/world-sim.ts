@@ -1,3 +1,4 @@
+import type { BuildReply, BuildReplyReason } from './building';
 import {
   WildfireSimulation,
   LIGHTNING_INTERVAL_MS,
@@ -1323,6 +1324,16 @@ export class WorldSimulation {
     this.weatherCycleChanged = true;
   }
 
+  private readonly buildReplies: (BuildReply & { netId: number })[] = [];
+  drainBuildReplies(): (BuildReply & { netId: number })[] {
+    return this.buildReplies.splice(0);
+  }
+  private discardBuild(runtime: PlayerRuntime, reason: BuildReplyReason): void {
+    if (runtime.pendingBuild !== null)
+      this.buildReplies.push({ netId: runtime.netId, request: runtime.pendingBuild, reason });
+    runtime.pendingBuild = null;
+  }
+
   private readonly homeBuildFeedback: (HomeBuildFeedback & { netId: number })[] = [];
   drainHomeBuildFeedback(): (HomeBuildFeedback & { netId: number })[] {
     return this.homeBuildFeedback.splice(0);
@@ -2092,6 +2103,7 @@ export class WorldSimulation {
   requestBuild(netId: number, request: BuildRequest): void {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return;
+    this.discardBuild(runtime, 'busy');
     runtime.pendingBuild = request;
   }
 
@@ -2356,7 +2368,7 @@ export class WorldSimulation {
           wantsToInteract = false;
           wantsToCast = false;
           impacts.length = 0;
-          runtime.pendingBuild = null;
+          this.discardBuild(runtime, 'busy');
           aim.yaw = scratch.facingYaw;
           aimedYaw = scratch.facingYaw;
         }
@@ -2443,7 +2455,7 @@ export class WorldSimulation {
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
         if (runtime.space !== OUTDOORS) {
           // Nothing to chop, catch, cast at or build on in here.
-          runtime.pendingBuild = null;
+          this.discardBuild(runtime, 'indoors');
         } else {
           for (const impact of impacts) this.landBlow(runtime, scratch.position, aimedYaw, impact);
           if (wantsToCast && runtime.cast === null) {
@@ -2454,6 +2466,7 @@ export class WorldSimulation {
             runtime.pendingBuild = null;
             // Nothing is built from the middle of the lake.
             if (runtime.boatId === null) this.tryBuild(runtime, scratch.position, request);
+            else this.buildReplies.push({ netId: runtime.netId, request, reason: 'busy' });
           }
         }
         position.x = scratch.position.x;
@@ -4615,7 +4628,7 @@ export class WorldSimulation {
         }
       }
       if (runtime.cast !== null) this.endCast(runtime, { outcome: 'walkedAway' });
-      runtime.pendingBuild = null;
+      this.discardBuild(runtime, 'busy');
       beginAction(runtime.action, ActionKind.KnockedOut);
       runtime.knockedOutAtTick = this.tick;
     } else if (runtime.boatId === null) {
@@ -4689,13 +4702,25 @@ export class WorldSimulation {
    * that kind.
    */
   private tryBuild(runtime: PlayerRuntime, position: Readonly<Vec3>, request: BuildRequest): void {
+    const reason = this.performBuild(runtime, position, request);
+    this.buildReplies.push({ netId: runtime.netId, request, reason });
+  }
+
+  private performBuild(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    request: BuildRequest,
+  ): BuildReplyReason | null {
     const { kind } = request;
-    if (isIndoorOnlyKind(kind) || !fishDisplayLearned(kind, runtime.fishRecords)) return;
-    if (kind === 'trailPennant' && !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL)) return;
+    if (isIndoorOnlyKind(kind)) return 'indoors';
+    if (!fishDisplayLearned(kind, runtime.fishRecords)) return 'recipe';
+    if (kind === 'trailPennant' && !(runtime.expedition.cosmetics & TRAIL_PENNANT_SKILL))
+      return 'recipe';
     const buildable = BUILDABLE_KINDS[kind];
-    const refuse = (reason: HomeBuildReason): void => {
+    const refuse = (reason: HomeBuildReason): BuildReplyReason => {
       if (isHomeKind(kind))
         this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: 0, reason });
+      return reason;
     };
     if (runtime.swingCooldownTicks > 0) return refuse('busy');
     const ownedHome = runtime.playerKey === null ? null : this.homeOf(runtime.playerKey);
@@ -4724,7 +4749,7 @@ export class WorldSimulation {
       !isBoat &&
       checkPieceBuildArea(proposedPiece, ownedHome, otherHomes, this.protectedBuildSites()) !== null
     )
-      return;
+      return 'area';
 
     if (buildable.isHome) {
       if (runtime.playerKey === null || !isHomeKind(kind)) return refuse('identity');
@@ -4791,7 +4816,7 @@ export class WorldSimulation {
         });
         this.expeditionChanges.set(runtime.netId, 'none');
         this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: home.id, reason: null });
-        return;
+        return null;
       }
       if (kind !== 'tent') return refuse('tier');
     }
@@ -4803,7 +4828,7 @@ export class WorldSimulation {
       runtime.playerKey !== null &&
       this.ownsBuildable(runtime.playerKey, kind)
     )
-      return;
+      return 'alreadyOwned';
 
     const piece = buildableFootprint(kind, request.x, request.z, request.yaw);
     const refusal = checkBuildSpot(
@@ -4815,7 +4840,10 @@ export class WorldSimulation {
       true,
       this.lakeFrozen,
     );
-    if (refusal !== null) return refuse('blocked');
+    if (refusal !== null) {
+      if (isHomeKind(kind)) refuse('blocked');
+      return refusal.reason;
+    }
 
     runtime.swingCooldownTicks = SWING_COOLDOWN_TICKS;
     for (const cost of buildable.costs) removeItem(runtime.inventory, cost.item, cost.amount);
@@ -4841,6 +4869,7 @@ export class WorldSimulation {
     if (isHomeKind(kind))
       this.homeBuildFeedback.push({ netId: runtime.netId, kind, homeId: prop.id, reason: null });
     this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: null });
+    return null;
   }
 
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */

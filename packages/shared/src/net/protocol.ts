@@ -1,3 +1,4 @@
+import { BUILD_REPLY_REASONS, type BuildReply } from '../sim/building';
 import { CRAFT_REFUSALS, type CraftRefusal } from '../sim/crafting';
 import {
   GEAR_SLOTS,
@@ -345,6 +346,15 @@ export function encodeCraft(item: ItemId): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Craft);
   view.setUint8(1, itemIndex(item));
+  return buffer;
+}
+
+export function encodeBuildReply(reply: BuildReply): ArrayBuffer {
+  const buffer = new ArrayBuffer(9);
+  new Uint8Array(buffer).set(new Uint8Array(encodeBuild(reply.request)));
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.BuildReply);
+  view.setUint8(8, reply.reason === null ? 0 : BUILD_REPLY_REASONS.indexOf(reply.reason) + 1);
   return buffer;
 }
 
@@ -1889,6 +1899,19 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         found,
         claimed,
         notice: (['none', 'guarded', 'full', 'quiet', 'guardian'] as const)[reason]!,
+      };
+    }
+    case ServerMessageType.BuildReply: {
+      if (data.byteLength !== 9) return null;
+      const bytes = data.slice(0, 8);
+      new DataView(bytes).setUint8(0, ClientMessageType.Build);
+      const request = decodeClientMessage(bytes),
+        index = view.getUint8(8);
+      if (request?.type !== 'build' || index > BUILD_REPLY_REASONS.length) return null;
+      return {
+        type: 'buildReply',
+        request: { kind: request.kind, x: request.x, z: request.z, yaw: request.yaw },
+        reason: index === 0 ? null : BUILD_REPLY_REASONS[index - 1]!,
       };
     }
     case ServerMessageType.DecorationReply: {

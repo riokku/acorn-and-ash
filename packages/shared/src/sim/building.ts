@@ -27,6 +27,43 @@ import { navigableWaterDepthAt } from '../world/navigable-water';
 import { REED_PATCHES } from '../world/reeds';
 import { overlapsWater, type WaterCircle } from '../world/water';
 
+/** Append-only wire order for authoritative placement results. */
+export const BUILD_REPLY_REASONS = [
+  'materials',
+  'identity',
+  'blueprint',
+  'tier',
+  'moved',
+  'occupied',
+  'blocked',
+  'player',
+  'busy',
+  'area',
+  'ground',
+  'indoors',
+  'recipe',
+  'alreadyOwned',
+  'tooFar',
+  'onPlayer',
+  'pastTreeLine',
+  'worldEdge',
+  'water',
+  'needsWater',
+  'tooFarOut',
+  'frozen',
+  'tooClose',
+] as const;
+export type BuildReplyReason = (typeof BUILD_REPLY_REASONS)[number];
+export interface BuildReply {
+  readonly request: {
+    readonly kind: BuildableKindId;
+    readonly x: number;
+    readonly z: number;
+    readonly yaw: number;
+  };
+  readonly reason: BuildReplyReason | null;
+}
+
 /** Something on the ground, or about to be, as far as fitting pieces together goes. */
 export interface Footprint {
   readonly x: number;

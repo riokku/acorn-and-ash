@@ -1,3 +1,4 @@
+import { encodeBuild } from '@acorn/shared';
 import { finishRareCatch } from './helpers';
 import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
@@ -2078,6 +2079,22 @@ describe('building', () => {
     client.close();
   }, 30_000);
 
+  it('privately explains a refused outdoor build without spending materials', async () => {
+    const client = await TestClient.connect(nextWorldId(), 'short-on-building-materials');
+    const before = client.inventory();
+    client.sendRaw(encodeBuild({ kind: 'campfire', x: 1.5, z: -3, yaw: 0 }));
+    await waitFor('build refusal', () => client.received.some((m) => m.type === 'buildReply'));
+    expect(client.received.filter((m) => m.type === 'buildReply')).toEqual([
+      {
+        type: 'buildReply',
+        request: { kind: 'campfire', x: 1.5, z: -3, yaw: 0 },
+        reason: 'materials',
+      },
+    ]);
+    expect(client.inventory()).toEqual(before);
+    client.close();
+  });
+
   it('shows a second player the campfire appear', async () => {
     const worldId = nextWorldId();
     const builder = await TestClient.connect(worldId, 'the-other-builder');
@@ -2106,6 +2123,10 @@ describe('building', () => {
         .filter((prop) => prop.id !== 60000)
         .map((prop) => ({ ...prop, yours: false })),
     );
+    await waitFor('private build confirmation', () =>
+      builder.received.some((m) => m.type === 'buildReply' && m.reason === null),
+    );
+    expect(watcher.received.some((m) => m.type === 'buildReply')).toBe(false);
     builder.close();
     watcher.close();
   }, 30_000);

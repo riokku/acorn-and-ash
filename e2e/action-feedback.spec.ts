@@ -76,6 +76,7 @@ test('explains disconnected actions, keeps a tent preview, and submits only fres
           send(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
           inventory();
         }
+        for (const reply of sim.drainBuildReplies()) send(shared.encodeBuildReply(reply));
         for (const feedback of sim.drainHomeBuildFeedback())
           send(shared.encodeHomeBuildFeedback(feedback));
         snapshot();
