@@ -302,10 +302,18 @@ export function Hud({
               {(state.decorations ?? []).map((piece) => (
                 <div className="decor-owned" key={piece.id}>
                   <span>{BUILDABLE_KINDS[piece.kind].displayName}</span>
-                  <button type="button" onClick={() => onMoveDecoration?.(piece.id)}>
+                  <button
+                    type="button"
+                    disabled={state.decorationPending}
+                    onClick={() => onMoveDecoration?.(piece.id)}
+                  >
                     Move
                   </button>
-                  <button type="button" onClick={() => onReclaimDecoration?.(piece.id)}>
+                  <button
+                    type="button"
+                    disabled={state.decorationPending}
+                    onClick={() => onReclaimDecoration?.(piece.id)}
+                  >
                     Pack up
                   </button>
                 </div>
@@ -1120,6 +1128,7 @@ function buildMenuHint(): string {
  * how to place it, turn it, and put it away.
  */
 function placingHint(placing: NonNullable<HudState['placing']>): string {
+  if (placing.pending) return 'Waiting for confirmation · Esc to hide preview';
   if (placing.refusal !== null) return `${placing.refusal} · Esc to stop`;
   const name = placing.name.toLowerCase();
   const free = placing.canSnap ? ' · hold Shift to place freely' : '';

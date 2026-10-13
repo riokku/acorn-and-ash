@@ -1891,6 +1891,21 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         notice: (['none', 'guarded', 'full', 'quiet', 'guardian'] as const)[reason]!,
       };
     }
+    case ServerMessageType.DecorationReply: {
+      if (data.byteLength !== 8) return null;
+      const action = (['place', 'move', 'reclaim'] as const)[view.getUint8(1)];
+      const kind = DECORATION_KINDS[view.getUint8(2)];
+      const reasonIndex = view.getUint8(3);
+      if (action === undefined || kind === undefined || reasonIndex > DECORATION_REASONS.length)
+        return null;
+      return {
+        type: 'decorationReply',
+        action,
+        kind,
+        id: view.getUint32(4, true),
+        reason: reasonIndex === 0 ? null : DECORATION_REASONS[reasonIndex - 1]!,
+      };
+    }
     case ServerMessageType.Decoration: {
       if (data.byteLength < 4) return null;
       const count = view.getUint16(1, true),
@@ -2392,6 +2407,21 @@ export function snapshotBytes(entityCount: number): number {
 /** How big an input bundle carrying this many inputs will be, in bytes. */
 export function inputBundleBytes(inputCount: number): number {
   return INPUT_HEADER_BYTES + inputCount * BYTES_PER_INPUT;
+}
+
+/** Private result, separate from room broadcasts so another player's update is never an acknowledgement. */
+export function encodeDecorationReply(
+  request: DecorationRequest,
+  reason: DecorationState['reason'],
+): ArrayBuffer {
+  const buffer = new ArrayBuffer(8),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.DecorationReply);
+  view.setUint8(1, ['place', 'move', 'reclaim'].indexOf(request.action));
+  view.setUint8(2, DECORATION_KINDS.indexOf(request.kind));
+  view.setUint8(3, reason === null ? 0 : DECORATION_REASONS.indexOf(reason) + 1);
+  view.setUint32(4, request.id, true);
+  return buffer;
 }
 
 export function encodeDecorationRequest(request: DecorationRequest): ArrayBuffer {

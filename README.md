@@ -179,6 +179,10 @@ Crafting waits for one server result at a time, with visible confirmation or a
 specific refusal. Rapid clicks and number keys cannot submit duplicate crafts
 while a reply is pending. Slow replies stay marked as waiting; they never retry
 automatically. See [decision 0134](docs/decisions/0134-crafting-confirmation-and-refusal.md).
+Indoor decoration previews remain visible while waiting for confirmation. A
+refused placement keeps its preview for retry, and moving or packing up furniture
+waits for its own private reply. Escape hides a preview without cancelling a
+request already sent. See [decision 0135](docs/decisions/0135-indoor-decoration-confirmation.md).
 
 Your pack has six slots to start with. The bag, a few steps from where you
 start, adds four more, for ten. A slot holds up to ten of one thing - logs,

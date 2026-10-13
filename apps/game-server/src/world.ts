@@ -28,7 +28,7 @@ import {
 } from '@acorn/shared';
 import { encodeExpeditionState, expeditionFromSaved, type ExpeditionState } from '@acorn/shared';
 import { encodeRecoveryMarkers } from '@acorn/shared';
-import { encodeDecorationState, type HomeDecoration } from '@acorn/shared';
+import { encodeDecorationState, encodeDecorationReply, type HomeDecoration } from '@acorn/shared';
 import { encodeMeal, mealFromSaved, type MealState } from '@acorn/shared';
 import { isHomeKind } from '@acorn/shared';
 import { encodeDiscoveries } from '@acorn/shared';
@@ -512,6 +512,7 @@ export class World extends DurableObject<WorldEnv> {
         this.sendPacks(simulation, new Set([attachment.netId]));
         this.broadcast(encodeDecorationState(result));
       } else this.trySend(ws, encodeDecorationState(result));
+      this.trySend(ws, encodeDecorationReply(decoded, result.reason));
       return;
     }
     if (decoded.type === 'garden') {
