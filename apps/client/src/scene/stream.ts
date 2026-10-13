@@ -46,6 +46,37 @@ export function riverMouthConnections(stream: Stream) {
   });
 }
 
+/** The spring's actual outlet must erase its shore rim across the flowing channel. */
+export function riverPoolConnections(stream: Stream, pool: Stream['sloughs'][number]) {
+  const spacing = stream.length / (stream.count - 1);
+  const anchor = pool.basin[0]!;
+  const mouth = nearestOnStream(stream, anchor.x, anchor.z, 30)!;
+  const start = Math.round(mouth.along / spacing);
+  if (pool !== stream.spring) {
+    return [-4, -2, 0, 2, 4].map((offset) => {
+      const row = Math.max(0, Math.min(stream.count - 1, start + offset));
+      return {
+        ...streamPointAt(stream, row),
+        radius: streamWaterHalfWidthAt(stream, row * spacing),
+      };
+    });
+  }
+  const end = Math.max(
+    ...pool.basin.map((circle) =>
+      Math.round(nearestOnStream(stream, circle.x, circle.z, 30)!.along / spacing),
+    ),
+  );
+  const circles = [];
+  for (let row = Math.max(0, start - 4); row <= Math.min(stream.count - 1, end + 6); row += 2) {
+    const along = row * spacing;
+    circles.push({
+      ...streamPointAt(stream, row),
+      radius: streamWaterHalfWidthAt(stream, along) + 0.4,
+    });
+  }
+  return circles;
+}
+
 /**
  * The stream (see decision 0114): a ribbon of water that follows the winding
  * path from the spring to the lake, stepping down over each fall, with stones
@@ -62,16 +93,7 @@ export function createStreamScene(
   const group = new THREE.Group();
   group.name = 'stream';
 
-  const connections = streamPools(stream).map((slough) => {
-    const pool = slough.basin[0]!;
-    const mouth = nearestOnStream(stream, pool.x, pool.z, 30)!;
-    const mouthRow = Math.round(mouth.along / (stream.length / (stream.count - 1)));
-    return [-4, -2, 0, 2, 4].map((offset) => {
-      const row = Math.max(0, Math.min(stream.count - 1, mouthRow + offset));
-      const along = row * (stream.length / (stream.count - 1));
-      return { ...streamPointAt(stream, row), radius: streamWaterHalfWidthAt(stream, along) };
-    });
-  });
+  const connections = streamPools(stream).map((pool) => riverPoolConnections(stream, pool));
   const material = createStreamMaterial(
     streamPools(stream).flatMap((slough) => slough.basin),
     connections.flat(),
