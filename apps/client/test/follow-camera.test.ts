@@ -96,7 +96,7 @@ describe('terrain camera clearance', () => {
     const easing = follow.camera.position.distanceTo(target);
     expect(easing).toBeGreaterThan(pulledIn);
     expect(easing).toBeLessThan(6);
-    follow.update(PLAYER_POSITION, 1, [], ground);
+    follow.update(PLAYER_POSITION, 2, [], ground);
     expect(follow.camera.position.distanceTo(target)).toBeCloseTo(6);
     ground.geometry.disposeBoundsTree();
     ground.geometry.dispose();
@@ -177,5 +177,45 @@ describe('scenery camera clearance', () => {
       }
     }
     disposeBlocker(blocker);
+  });
+});
+
+describe('camera easing across frame rates', () => {
+  it('returns from an obstruction consistently at 30, 60 and 144 FPS and through a slow frame', () => {
+    const released = (steps: number[]) => {
+      const follow = new FollowCamera(16 / 9),
+        blocker = boxBlocker(0, 3, 8);
+      follow.look.pitch = 0;
+      follow.update(PLAYER_POSITION, 0, [blocker]);
+      for (const delta of steps) follow.update(PLAYER_POSITION, delta, []);
+      disposeBlocker(blocker);
+      return follow.camera.position.z;
+    };
+    const baseline = released(Array(30).fill(1 / 60));
+    for (const fps of [30, 60, 144])
+      expect(released(Array(fps / 2).fill(1 / fps))).toBeCloseTo(baseline, 10);
+    expect(released([0.2, 0.1, 0.2])).toBeCloseTo(baseline, 10);
+    expect(baseline).toBeGreaterThan(5.8);
+    expect(baseline).toBeLessThan(6);
+  });
+
+  it('nudges fishing pitch consistently without snapping on a long frame', () => {
+    const nudged = (steps: number[]) => {
+      const follow = new FollowCamera(16 / 9);
+      follow.lookDownTo(0.9);
+      for (const delta of steps) follow.update(PLAYER_POSITION, delta, []);
+      return follow.look.pitch;
+    };
+    const baseline = nudged(Array(30).fill(1 / 60));
+    for (const fps of [30, 60, 144])
+      expect(nudged(Array(fps / 2).fill(1 / fps))).toBeCloseTo(baseline, 10);
+    expect(nudged([0.25, 0.25])).toBeCloseTo(baseline, 10);
+    expect(baseline).toBeLessThan(0.9);
+    const follow = new FollowCamera(16 / 9);
+    follow.lookDownTo(0.9);
+    follow.turn(0, -10, 0.01);
+    const requested = follow.look.pitch;
+    follow.update(PLAYER_POSITION, 1, []);
+    expect(follow.look.pitch).toBe(requested);
   });
 });
