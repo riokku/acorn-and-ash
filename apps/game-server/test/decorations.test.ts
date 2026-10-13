@@ -48,6 +48,15 @@ it('saves private placement, movement and material reclamation with the backpack
   await waitFor('placement', () =>
     owner.received.some((message) => message.type === 'decoration' && message.pieces.length === 1),
   );
+  await waitFor('private placement confirmation', () =>
+    owner.received.some((m) => m.type === 'decorationReply' && m.action === 'place'),
+  );
+  expect(owner.received.filter((m) => m.type === 'decorationReply')).toEqual([
+    { type: 'decorationReply', action: 'place', kind: 'cedarBench', id: 0, reason: null },
+  ]);
+  expect(visitor.received.filter((m) => m.type === 'decorationReply')).toEqual([
+    { type: 'decorationReply', action: 'place', kind: 'cedarBench', id: 0, reason: 'private' },
+  ]);
   let piece: HomeDecoration | undefined;
   await runInDurableObject(stub, (_instance, state) => {
     const rows = state.storage.sql

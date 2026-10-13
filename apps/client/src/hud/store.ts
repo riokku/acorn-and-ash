@@ -33,6 +33,7 @@ export interface RaidBanner {
 
 /** Everything the HUD shows. */
 export interface HudState {
+  readonly decorationPending?: boolean;
   readonly craftPending?: ItemId | null;
   readonly expedition?: ExpeditionView;
   readonly fishRecords?: FishRecords;
@@ -151,6 +152,7 @@ export interface HudState {
    * of its kind.
    */
   readonly placing: {
+    readonly pending?: boolean;
     readonly name: string;
     readonly refusal: string | null;
     readonly canSnap: boolean;

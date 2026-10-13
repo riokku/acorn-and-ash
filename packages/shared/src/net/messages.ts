@@ -115,6 +115,7 @@ export const ServerMessageType = {
   DigRefused: 0x42,
   Supports: 0x43,
   CraftRefused: 0x44,
+  DecorationReply: 0x45,
 } as const;
 
 export const RejectReason = {
@@ -398,6 +399,15 @@ export interface HungerMessage {
 export interface CraftedMessage {
   readonly type: 'crafted';
   readonly event: CraftedEvent;
+}
+
+/** Private result matching a submitted room decoration request. */
+export interface DecorationReplyMessage {
+  readonly type: 'decorationReply';
+  readonly action: DecorationRequest['action'];
+  readonly kind: DecorationRequest['kind'];
+  readonly id: number;
+  readonly reason: DecorationState['reason'];
 }
 
 /** Private explanation for an unsuccessful craft request. */
@@ -724,6 +734,7 @@ export type ServerMessage =
   | HungerMessage
   | CraftedMessage
   | CraftRefusedMessage
+  | DecorationReplyMessage
   | CookedMessage
   | CaughtMessage
   | BuiltPropsMessage

@@ -1,3 +1,4 @@
+import { DecorationFeedback } from './hud/decoration-feedback';
 import { CraftFeedback, craftRefusalText } from './hud/craft-feedback';
 import { menuPanelState, type MenuPanel } from './input/menu-panels';
 import { createWildfireArt } from './scene/wildfire';
@@ -1042,6 +1043,8 @@ export class Game {
   /** How much health we have left, as far as the server has told us. */
   private health = HEALTH_MAX;
   private healthNews: { text: string; until: number } | null = null;
+  private readonly decorationFeedback = new DecorationFeedback();
+  private pendingDecorationPreview: Placing | null = null;
   private readonly craftFeedback = new CraftFeedback();
   private craftingNews: { text: string; until: number } | null = null;
   private cookingNews: { text: string; until: number } | null = null;
@@ -1397,10 +1400,11 @@ export class Game {
   }
   reclaimDecoration(id: number): void {
     const piece = this.decorations.find((piece) => piece.id === id && piece.homeId === this.space);
-    if (piece !== undefined)
-      this.submitAction('decorate', () =>
-        this.connection?.sendDecoration({ ...piece, action: 'reclaim' }),
-      );
+    if (piece === undefined || this.decorationFeedback.request !== null) return;
+    const request = { ...piece, action: 'reclaim' as const };
+    if (!this.submitAction('decorate', () => this.connection?.sendDecoration(request))) return;
+    this.decorationFeedback.begin(request, performance.now());
+    this.beginDecorationFeedback(null);
   }
   private decorationRefusal(reason: DecorationState['reason']): string | null {
     if (reason === null) return null;
@@ -1414,7 +1418,7 @@ export class Game {
       limit: 'Your home can hold 16 decorations',
       missing: 'That decoration is no longer here',
       packFull: 'Make room in your backpack before packing this up',
-      recipe: 'Complete three outings to learn the trail pennant recipe',
+      recipe: 'Learn this decoration recipe first',
     }[reason];
   }
   private refreshDecorations(): void {
@@ -1701,11 +1705,16 @@ export class Game {
           this.mealHeardAt = performance.now();
           this.connectionState = state;
           if (state !== 'connected') {
-            if (this.craftFeedback.clear()) {
+            const interruptedCraft = this.craftFeedback.clear();
+            const interruptedDecoration = this.decorationFeedback.clear();
+            this.pendingDecorationPreview = null;
+            if (interruptedCraft || interruptedDecoration) {
               this.showActionNote(
-                'Connection interrupted. Check your pack after reconnecting before crafting again.',
+                interruptedDecoration
+                  ? 'Connection interrupted. Check your room and pack after reconnecting before trying again.'
+                  : 'Connection interrupted. Check your pack after reconnecting before crafting again.',
               );
-              this.options.hud.publish({ craftPending: null });
+              this.options.hud.publish({ craftPending: null, decorationPending: false });
             }
             this.closeChest();
             this.targeting.clear();
@@ -1920,11 +1929,26 @@ export class Game {
       }
       case 'decoration': {
         this.decorations = message.pieces;
-        this.decorNote = message.reason === null ? null : this.decorationRefusal(message.reason);
-        if (this.decorNote !== null)
-          this.craftingNews = { text: this.decorNote, until: performance.now() + NEWS_MS };
-        this.pendingPlacements = [];
         this.refreshDecorations();
+        break;
+      }
+      case 'decorationReply': {
+        const result = this.decorationFeedback.settle(message);
+        if (result !== null) {
+          this.decorNote = this.decorationRefusal(result.reason);
+          if (result.reason === null) {
+            if (this.placing === this.pendingDecorationPreview) this.stopPlacing();
+            const action =
+              result.request.action === 'place'
+                ? 'placed'
+                : result.request.action === 'move'
+                  ? 'moved'
+                  : 'packed up';
+            this.showActionNote(`${BUILDABLE_KINDS[result.request.kind].displayName} ${action}.`);
+          } else this.showActionNote(this.decorNote!);
+          this.pendingDecorationPreview = null;
+          this.options.hud.publish({ decorationPending: false, decorNote: this.decorNote });
+        }
         break;
       }
       case 'fishRecords': {
@@ -3595,7 +3619,8 @@ export class Game {
 
   /** The mouse wheel turns the piece being placed, a step at a time. */
   private turnPiece(steps: number): void {
-    if (this.placing === null || steps === 0) return;
+    if (this.placing === null || steps === 0 || this.placing === this.pendingDecorationPreview)
+      return;
     this.placing.yaw += steps * BUILD_ROTATION_STEP;
   }
 
@@ -3613,19 +3638,16 @@ export class Game {
 
     const request: BuildRequest = { kind: placing.kind, x: spot.x, z: spot.z, yaw: spot.yaw };
     if (this.space !== OUTDOORS && isDecorationKind(request.kind)) {
-      const kind = request.kind;
-      if (
-        !this.submitAction('decorate', () =>
-          this.connection?.sendDecoration({
-            ...request,
-            kind,
-            id: this.decorMoveId,
-            action: this.decorMoveId === 0 ? 'place' : 'move',
-          }),
-        )
-      )
-        return;
-      this.stopPlacing();
+      if (this.decorationFeedback.request !== null) return;
+      const decoration = {
+        ...request,
+        kind: request.kind,
+        id: this.decorMoveId,
+        action: this.decorMoveId === 0 ? ('place' as const) : ('move' as const),
+      };
+      if (!this.submitAction('decorate', () => this.connection?.sendDecoration(decoration))) return;
+      this.decorationFeedback.begin(decoration, performance.now());
+      this.beginDecorationFeedback(placing);
       return;
     }
     if (!this.submitAction('build', () => this.connection?.sendBuild(request))) return;
@@ -3650,6 +3672,11 @@ export class Game {
     );
 
     if (this.space !== OUTDOORS && isDecorationKind(placing.kind)) {
+      const pending = this.decorationFeedback.request;
+      if (pending !== null && placing === this.pendingDecorationPreview) {
+        placing.ghost.show(pending.x, pending.z, pending.yaw, true, 0);
+        return;
+      }
       const mouse = this.groundUnderPointer(camera);
       const affordable =
         this.decorMoveId !== 0 ||
@@ -4032,6 +4059,26 @@ export class Game {
     ];
   }
 
+  private pendingActionText(now: number): string | null {
+    return (
+      [this.craftFeedback.text(now), this.decorationFeedback.text(now)]
+        .filter((text) => text !== null)
+        .join(' ') || null
+    );
+  }
+
+  private beginDecorationFeedback(preview: Placing | null): void {
+    this.pendingDecorationPreview = preview;
+    this.decorNote = null;
+    this.interactionNote = null;
+    this.interactionNoteUntil = 0;
+    this.options.hud.publish({
+      decorationPending: true,
+      decorNote: null,
+      interactionNote: this.pendingActionText(performance.now()),
+    });
+  }
+
   private showActionNote(text: string): void {
     this.interactionNote = text;
     this.interactionNoteUntil = performance.now() + 3200;
@@ -4191,7 +4238,7 @@ export class Game {
     this.interactionNoteUntil = 0;
     this.options.hud.publish({
       craftPending: action.item,
-      interactionNote: this.craftFeedback.text(performance.now()),
+      interactionNote: this.pendingActionText(performance.now()),
     });
   }
 
@@ -5481,7 +5528,7 @@ export class Game {
       interactionNote:
         now < this.interactionNoteUntil
           ? this.interactionNote
-          : (this.craftFeedback.text(now) ?? this.supportHint),
+          : (this.pendingActionText(now) ?? this.supportHint),
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
@@ -5537,6 +5584,9 @@ export class Game {
         this.placing === null
           ? null
           : {
+              pending:
+                this.placing === this.pendingDecorationPreview &&
+                this.decorationFeedback.request !== null,
               name: BUILDABLE_KINDS[this.placing.kind].displayName,
               refusal: this.placing.plan.refusal,
               canSnap: this.placing.kind === 'fence',
@@ -5570,6 +5620,7 @@ export class Game {
       mapOpen: this.mapOpen,
       door: this.doorHint,
       home: this.homeHere(),
+      decorationPending: this.decorationFeedback.request !== null,
       decorations: this.decorations.filter((piece) => piece.homeId === this.space),
       decorNote: this.decorNote,
       resting: this.restingNow(),

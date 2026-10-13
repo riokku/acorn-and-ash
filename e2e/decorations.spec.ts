@@ -47,8 +47,11 @@ test('places, rotates, moves and packs up decorations in a private home', async 
       if (typeof message === 'string') return;
       const request = shared.decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(shared.encodePong(request.clientTimeMs, Date.now()));
-      if (request?.type === 'decoration')
-        send(shared.encodeDecorationState(sim.requestDecoration(1, request)));
+      if (request?.type === 'decoration') {
+        const result = sim.requestDecoration(1, request);
+        send(shared.encodeDecorationState(result));
+        send(shared.encodeDecorationReply(request, result.reason));
+      }
       if (request?.type === 'input')
         for (const input of request.inputs) {
           sim.queueInput(1, input);
@@ -154,6 +157,7 @@ test('places, rotates, moves and packs up decorations in a private home', async 
       .getByRole('button', { name: 'Pack up', exact: true })
       .click();
     await expect.poll(() => sim.decorationsList().length).toBe(5);
+    await expect(page.locator('.interaction-note')).toHaveText('Cedar bench packed up.');
     expect(sim.inventoryOf(1).log).toBe(11);
     expect(errors).toEqual([]);
   } finally {
