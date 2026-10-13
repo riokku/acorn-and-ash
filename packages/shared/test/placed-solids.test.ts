@@ -1,3 +1,6 @@
+import { DODGE_ATTACKS } from '../src/data/moves';
+import { cylinder } from '../src/world/colliders';
+import { TICK_SECONDS } from '../src/constants';
 import { stonePositions } from '../src/world/stone-shape';
 import {
   ActionKind,
@@ -133,6 +136,46 @@ describe('solid placed props', () => {
     expect(motion.position.x).toBeGreaterThan(2);
     expect(highest).toBeGreaterThan(0.02);
     expect(motion.position.y).toBe(0);
+  });
+  it('does not let a scenery push lift a dodge onto a cliff', () => {
+    const world = createCollisionWorld(
+      { kind: 'cliff', heightAt: (x) => (x > 0.01 ? 2 : 0) },
+      [cylinder(-0.1, 0, 0.5, 4)],
+      100,
+    );
+    const fromZ = DODGE_SPEED * TICK_SECONDS + 0.7;
+    const motion = createPlayerMotion({ x: 0, y: 0, z: fromZ });
+    const state: ActionState = {
+      ...createActionState(),
+      kind: ActionKind.Dodge,
+      heading: dodgeHeading(createInput(1, 0, 1, 0)),
+    };
+    stepDodge(motion, state, world);
+    expect(motion.position.y).toBe(0);
+    expect(motion.position.x).toBe(0);
+    expect(motion.position.z).toBeCloseTo(fromZ, 5);
+  });
+  it('does not let a scenery push put an attack hop inside a cliff', () => {
+    const world = createCollisionWorld(
+      { kind: 'cliff', heightAt: (x) => (x > 0.01 ? 2 : 0) },
+      [cylinder(-0.1, 0, 0.5, 4)],
+      100,
+    );
+    const remaining = DODGE_ATTACKS.light.land - 1;
+    const fromZ = ((DODGE_SPEED * remaining) / (remaining + 1)) * TICK_SECONDS + 0.7;
+    const motion = createPlayerMotion({ x: 0, y: 0, z: fromZ });
+    motion.velocity.z = -DODGE_SPEED;
+    const state: ActionState = {
+      ...createActionState(),
+      kind: ActionKind.DodgeLight,
+      age: 1,
+      heading: dodgeHeading(createInput(1, 0, 1, 0)),
+    };
+    stepDodgeAttack(motion, state, world);
+    expect(motion.position.x).toBe(0);
+    expect(motion.position.z).toBeCloseTo(fromZ, 5);
+    expect(motion.position.y).toBeGreaterThan(0);
+    expect(motion.position.y).toBeLessThan(0.5);
   });
   it('keeps rugs and inset path surfaces walkable', () => {
     expect(placedPropColliders({ kind: 'gardenPath', x: 0, z: 0, yaw: 0 }, 0)).toEqual([]);

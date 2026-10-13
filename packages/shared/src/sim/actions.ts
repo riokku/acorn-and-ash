@@ -512,7 +512,12 @@ export function stepDodge(
     position.z = fromZ;
   } else position.y = floor;
   resolveCapsule(position, PLAYER_RADIUS, PLAYER_HEIGHT, world, WALKABLE_STEP_ALLOWANCE);
-  position.y = groundHeightAt(world, position.x, position.z, position.y);
+  const resolvedFloor = groundHeightAt(world, position.x, position.z, position.y);
+  if (resolvedFloor > fromY + FLOOR_STEP) {
+    position.x = fromX;
+    position.z = fromZ;
+    position.y = groundHeightAt(world, fromX, fromZ, fromY);
+  } else position.y = resolvedFloor;
   motion.grounded = true;
   if (state.age >= DODGE.travel - 1) {
     velocity.x = 0;
@@ -655,6 +660,18 @@ export function stepDodgeAttack(
   }
   motion.position.y = floor + height;
   resolveCapsule(motion.position, PLAYER_RADIUS, PLAYER_HEIGHT, world);
+  // A side push must not move an airborne hop into a higher terrain face.
+  const pushedFloor = groundHeightAt(
+    world,
+    motion.position.x,
+    motion.position.z,
+    motion.position.y,
+  );
+  if (pushedFloor > oldY + FLOOR_STEP && motion.position.y < pushedFloor) {
+    motion.position.x = fromX;
+    motion.position.z = fromZ;
+    motion.position.y = groundHeightAt(world, fromX, fromZ, oldY) + height;
+  }
   motion.velocity.y = (motion.position.y - oldY) / TICK_SECONDS;
   motion.grounded = state.age >= move.land;
   if (motion.grounded) motion.velocity.x = motion.velocity.y = motion.velocity.z = 0;
