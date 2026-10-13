@@ -478,6 +478,10 @@ sheet drawn over the water. The rules are in `packages/shared/src/sim/seasons.ts
 
 ### Wind in the grass
 
+Walking through the forest updates only tree instances whose detail slots change,
+keeping unchanged trees and their bounds in place. See
+[forest frame pacing](docs/decisions/0148-forest-detail-packing-work.md).
+
 Nearby clearings and sunny forest patches now have moving grass blades, with
 rolling gusts and a little flutter. Water, bare ground, spawn traffic, paths and
 building footprints stay clear. The distant painted ground remains in place.
