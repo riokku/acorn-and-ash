@@ -234,14 +234,10 @@ export class CharacterAnimator {
    * fractional ticks), `locomotion` how they are getting about.
    */
   update(deltaSeconds: number, move: MoveView, locomotion: Locomotion): MovePose {
-    let delta = deltaSeconds;
-    if (this.stopLeft > 0) {
-      this.stopLeft = Math.max(0, this.stopLeft - deltaSeconds);
-      this.lag += deltaSeconds;
-      delta = 0;
-    } else if (this.lag > 0) {
-      this.lag = Math.max(0, this.lag - deltaSeconds * CATCH_UP);
-    }
+    const frozen = Math.min(this.stopLeft, deltaSeconds);
+    this.stopLeft -= frozen;
+    const delta = deltaSeconds - frozen;
+    this.lag = Math.max(0, this.lag + frozen - delta * CATCH_UP);
 
     if (this.eatingFor !== null) {
       this.eatingFor += delta;
@@ -251,7 +247,7 @@ export class CharacterAnimator {
 
     const pose = movePose({ ...move, age: move.age - this.lag / TICK_SECONDS });
     const stillness = 1 - Math.min(1, locomotion.speed / 1.5);
-    this.updateMoves(deltaSeconds, move.kind, pose);
+    this.updateMoves(delta, move.kind, pose);
     const moveWeight = Math.min(
       1,
       this.moves.reduce((sum, layer) => sum + layer.weight, 0),
@@ -265,7 +261,7 @@ export class CharacterAnimator {
         0,
       ),
     );
-    this.updateGaits(deltaSeconds, locomotion);
+    this.updateGaits(delta, locomotion);
 
     // A whole-body move puts a stop to anything the arms were doing.
     if (moveWeight > 0.5) for (const layer of this.gestures) layer.ending = true;
@@ -300,7 +296,7 @@ export class CharacterAnimator {
     applyChannel(this.gestures, free * gestureUpper, freeLegs * gestureLower, stillness);
     applyChannel(this.fishing, free * fishingUpper, freeLegs * fishingLower, stillness);
 
-    const gaitRate = delta === 0 ? 0 : 1;
+    const gaitRate = deltaSeconds > 0 ? delta / deltaSeconds : 0;
     this.gaitRate('walk', gaitRate * clamp(locomotion.speed / WALK_PACE, WALK_SLOWEST, 1.6));
     this.gaitRate('run', gaitRate * clamp(locomotion.speed / RUN_PACE, 0.75, 1.35));
     this.gaitRate('idle', gaitRate);

@@ -135,3 +135,72 @@ describe('standing terrain correction share', () => {
     fishing.dispose();
   });
 });
+
+/** A steadily advancing foot exposes the gait's actual animation clock. */
+function walkingAnimator() {
+  const root = new THREE.Object3D();
+  const foot = new THREE.Object3D();
+  foot.name = 'foot';
+  root.add(foot);
+  const animator = new CharacterAnimator(root, {
+    whole: new Map(),
+    upper: new Map(),
+    lower: new Map([
+      [
+        'idle',
+        new THREE.AnimationClip('idle', 2, [
+          new THREE.NumberKeyframeTrack('foot.position[x]', [0, 2], [0, 0]),
+        ]),
+      ],
+      [
+        'walk',
+        new THREE.AnimationClip('walk', 2, [
+          new THREE.NumberKeyframeTrack('foot.position[x]', [0, 2], [0, 2]),
+        ]),
+      ],
+    ]),
+  });
+  animator.update(0.5, idle, { speed: 4.5, airborne: false });
+  return { animator, foot };
+}
+
+describe('impact pause timing', () => {
+  it('uses the remaining part of a slow frame instead of freezing the whole frame', () => {
+    const stopped = walkingAnimator();
+    const reference = walkingAnimator();
+    stopped.animator.hitStop(0.025);
+    stopped.animator.update(0.1, idle, { speed: 4.5, airborne: false });
+    reference.animator.update(0.075, idle, { speed: 4.5, airborne: false });
+    expect(stopped.foot.position.x).toBeCloseTo(reference.foot.position.x, 6);
+    expect(stopped.animator.stopped).toBe(false);
+    stopped.animator.dispose();
+    reference.animator.dispose();
+  });
+
+  it.each([30, 60, 120])('matches the same rendered gait at %s frames per second', (fps) => {
+    const fine = walkingAnimator();
+    const coarse = walkingAnimator();
+    fine.animator.hitStop(0.025);
+    coarse.animator.hitStop(0.025);
+    for (let i = 0; i < fps / 10; i++)
+      fine.animator.update(1 / fps, idle, { speed: 4.5, airborne: false });
+    coarse.animator.update(0.1, idle, { speed: 4.5, airborne: false });
+    expect(fine.foot.position.x).toBeCloseTo(coarse.foot.position.x, 6);
+    fine.animator.dispose();
+    coarse.animator.dispose();
+  });
+
+  it('holds the pose through a full pause, including a zero-duration update', () => {
+    const { animator, foot } = walkingAnimator();
+    const before = foot.position.x;
+    animator.hitStop(0.04);
+    animator.update(0, idle, { speed: 0, airborne: false });
+    animator.update(0.02, idle, { speed: 0, airborne: false });
+    expect(foot.position.x).toBeCloseTo(before, 6);
+    expect(animator.stopped).toBe(true);
+    animator.update(0.02, idle, { speed: 0, airborne: false });
+    expect(animator.stopped).toBe(false);
+    expect(foot.position.x).toBeCloseTo(before, 6);
+    animator.dispose();
+  });
+});
