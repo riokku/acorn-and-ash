@@ -481,6 +481,11 @@ the background, a second or so after you arrive. See
 
 ### Day and night
 
+Moonlight shadows use a dim blue-grey fill so characters and ground details stay
+readable beneath trees, including during blizzards. Daylight, torch light and
+underground darkness keep their existing behavior. See
+[readable moonlight](docs/decisions/0138-readable-moonlight-shadows.md).
+
 A 20-minute day runs the whole time a world is awake, the sky and light
 brightening and dimming smoothly between noon and midnight. It's the
 server's own clock, so it never skips and it's the same moment for everyone
