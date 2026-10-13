@@ -26,15 +26,29 @@ describe('nearby grass cover', () => {
       expect(grass.mesh.count).toBeGreaterThan(1000);
       expect(grass.mesh.count).toBeLessThanOrEqual(24000);
       const roots = grass.mesh.geometry.getAttribute('grassRoot');
+      let farthest = 0;
+      let highestRootError = 0;
+      let smallestWaterGap = Infinity;
+      // Check every clump, but report extrema once: tens of thousands of
+      // matcher allocations are unnecessary work on the shared CI runner.
       for (let i = 0; i < grass.mesh.count; i++) {
         const x = roots.getX(i),
           z = roots.getZ(i);
-        // The 32 m it is drawn to, plus the 4 m walked before it is laid out again, plus a metre.
-        expect(Math.hypot(x, z - 6)).toBeLessThanOrEqual(37.001);
-        expect(roots.getY(i)).toBeCloseTo(terrain.heightAt(x, z), 3);
+        farthest = Math.max(farthest, Math.hypot(x, z - 6));
+        highestRootError = Math.max(
+          highestRootError,
+          Math.abs(roots.getY(i) - terrain.heightAt(x, z)),
+        );
         for (const water of clearing.water)
-          expect(Math.hypot(x - water.x, z - water.z)).toBeGreaterThanOrEqual(water.radius + 0.349);
+          smallestWaterGap = Math.min(
+            smallestWaterGap,
+            Math.hypot(x - water.x, z - water.z) - water.radius,
+          );
       }
+      // The original bounds and complete clump coverage are unchanged.
+      expect(farthest).toBeLessThanOrEqual(37.001);
+      expect(highestRootError).toBeLessThan(0.0005);
+      expect(smallestWaterGap).toBeGreaterThanOrEqual(0.349);
     } finally {
       grass.dispose();
     }
