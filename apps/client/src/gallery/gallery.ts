@@ -5,6 +5,7 @@ import { createDiscoveryLandmarks } from '../scene/discovery-sites';
 import { createForageModel, createMealModel } from '../scene/forest-food';
 import { DISCOVERIES, parseSeason } from '@acorn/shared';
 import { createSeasonRig } from '../scene/seasons';
+import { createSeasonFall } from '../scene/season-fall';
 import { createFlatTerrain } from '@acorn/shared';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
@@ -337,6 +338,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   if (params.has('height')) height = Number(params.get('height'));
   if (params.has('distance')) distance = Number(params.get('distance'));
 
+  const seasonFall =
+    focus === 'trees' && season !== undefined ? createSeasonFall(123, () => 0) : null;
+  if (seasonFall !== null) scene.add(seasonFall.group);
+  const fallDirection = new THREE.Vector3();
+  const fallCentre = new THREE.Vector3();
+
   const resize = (): void => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -358,6 +365,19 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
       target.z + Math.cos(angle) * distance,
     );
     camera.lookAt(target);
+    if (seasonFall !== null && season !== undefined) {
+      camera.getWorldDirection(fallDirection);
+      fallCentre.copy(camera.position).addScaledVector(fallDirection, 10);
+      seasonFall.update(
+        delta,
+        fallCentre,
+        { from: season, to: season, amount: 0 },
+        { kind: 'clear', cycle: 0, precipitation: 0, wind: 0.2, mushroomsAbundant: false },
+        dayBrightness(Number.isFinite(time) ? time : 0.42),
+        false,
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      );
+    }
     daylight.sun.position.set(target.x + 28, 40, target.z + 18);
     daylight.sun.target.position.copy(target);
     daylight.sun.target.updateMatrixWorld();

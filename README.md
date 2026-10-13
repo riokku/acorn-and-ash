@@ -1409,3 +1409,7 @@ Remote respawn-sized relocations start fresh interpolation history instead of
 drawing a character through intervening hills. Ordinary movement, falls and
 modest corrections continue to blend. See
 [remote relocation](docs/decisions/0141-discontinuous-remote-positions.md).
+
+Summer pollen keeps its airborne world height and fades before recycling across a
+wider area, so camera turns do not reveal a following patch. Preview it with
+`?gallery=trees&season=summer&spin`; see [decision 0155](docs/decisions/0155-world-space-summer-pollen.md).

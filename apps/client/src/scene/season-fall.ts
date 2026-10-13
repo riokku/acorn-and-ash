@@ -5,12 +5,12 @@ import { fallFor, type FallAmounts, type FallKind } from '../art/season-fall';
 
 /** Side of the square of air kept in front of the camera, in metres. Things leave one edge and enter the other. */
 const SPAN = 28;
-const HALF = SPAN / 2;
 
 interface Pool {
   readonly mesh: THREE.InstancedMesh;
   /** The most there can ever be: nothing is added or removed while playing. */
   readonly max: number;
+  readonly span: number;
   /** How tall the column of air is, in metres above the ground. */
   readonly height: number;
   /** Metres per second down (0 for things that float). */
@@ -31,6 +31,9 @@ interface Grain {
   phase: number;
   scale: number;
   speed: number;
+  groundY?: number;
+  lastX?: number;
+  lastZ?: number;
 }
 
 const LEAF_COLOURS = [0xc9742a, 0xd9a13a, 0xa6492a, 0x8c5a2b, 0xe0b04a];
@@ -45,7 +48,7 @@ function makePool(
   kind: FallKind,
   geometry: THREE.BufferGeometry,
   material: THREE.MeshBasicMaterial,
-  settings: Omit<Pool, 'mesh' | 'dispose'>,
+  settings: Omit<Pool, 'mesh' | 'dispose' | 'span'> & { span?: number },
   colours: readonly number[] | null,
   rng: ReturnType<typeof createRng>,
 ): Pool {
@@ -62,6 +65,7 @@ function makePool(
   }
   return {
     ...settings,
+    span: settings.span ?? SPAN,
     mesh,
     dispose() {
       mesh.dispose();
@@ -104,7 +108,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
         opacity: 0.8,
         depthWrite: false,
       }),
-      { max: 100, height: 3.2, fall: 0, sway: 0.6, spin: 0, drift: 0.2 },
+      { max: 520, span: 64, height: 3.2, fall: 0, sway: 0.6, spin: 0, drift: 0.2 },
       null,
       rng,
     ),
@@ -138,8 +142,8 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
     group.add(pool.mesh);
     for (let i = 0; i < pool.max; i++) {
       grains[kind].push({
-        x: rng.nextRange(0, SPAN),
-        z: rng.nextRange(0, SPAN),
+        x: rng.nextRange(0, pool.span),
+        z: rng.nextRange(0, pool.span),
         height: rng.nextRange(0, pool.height),
         phase: rng.nextRange(0, Math.PI * 2),
         scale: rng.nextRange(0.7, 1.35),
@@ -151,7 +155,13 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
   const dummy = new THREE.Object3D();
   let seconds = 0;
 
-  function place(kind: FallKind, count: number, point: { x: number; z: number }, wind: number) {
+  function place(
+    kind: FallKind,
+    count: number,
+    point: { x: number; z: number },
+    wind: number,
+    delta: number,
+  ) {
     const pool = pools[kind];
     pool.mesh.count = count;
     pool.mesh.visible = count > 0;
@@ -162,18 +172,40 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
     for (let i = 0; i < count; i++) {
       const grain = grains[kind][i]!;
       const sway = Math.sin(t * 0.7 * grain.speed + grain.phase) * pool.sway;
-      const along = grain.x + sway + t * pool.drift * wind;
+      // Integrate the wind: a forecast change must not relocate the entire pool.
+      grain.x += delta * pool.drift * wind;
+      const along = grain.x + sway;
       const across = grain.z + Math.cos(t * 0.5 * grain.speed + grain.phase) * pool.sway * 0.6;
-      const x = point.x + wrap(along - point.x, SPAN) - HALF;
-      const z = point.z + wrap(across - point.z, SPAN) - HALF;
+      const half = pool.span / 2;
+      const x = point.x + wrap(along - point.x, pool.span) - half;
+      const z = point.z + wrap(across - point.z, pool.span) - half;
+      if (
+        floats &&
+        (grain.groundY === undefined ||
+          Math.abs(x - grain.lastX!) > half ||
+          Math.abs(z - grain.lastZ!) > half)
+      ) {
+        grain.groundY = heightAt(x, z);
+      }
+      grain.lastX = x;
+      grain.lastZ = z;
       const above = wrap(grain.height - t * pool.fall * grain.speed, pool.height);
       const lift = floats ? 0.5 + Math.sin(t * 0.6 + grain.phase) * 0.35 : 0;
-      dummy.position.set(x, heightAt(x, z) + above + lift, z);
+      dummy.position.set(x, (floats ? grain.groundY! : heightAt(x, z)) + above + lift, z);
       // Shrink to nothing at the top and bottom of the column, so none of them pop in or out.
       const edge = floats
         ? 1
         : Math.max(0.001, Math.min(1, above / 0.8, (pool.height - above) / 1.5));
-      dummy.scale.setScalar(grain.scale * edge);
+      // Recycle pollen outside the view, fading at the boundary rather than
+      // revealing a hard square that swivels with the camera.
+      const border = floats
+        ? Math.max(
+            0,
+            Math.min(1, (half - Math.max(Math.abs(x - point.x), Math.abs(z - point.z))) / 12),
+          )
+        : 1;
+      const fade = border * border * (3 - 2 * border);
+      dummy.scale.setScalar(grain.scale * edge * fade);
       if (pool.spin > 0) {
         dummy.rotation.set(
           t * pool.spin * 0.7 * grain.speed + grain.phase,
@@ -224,12 +256,19 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
       reducedMotion: boolean,
     ) {
       group.visible = !indoors;
-      seconds += Math.min(delta, 0.1);
+      const elapsed = Math.max(0, Math.min(delta, 0.1));
+      seconds += elapsed;
       const amounts = densities(fallFor(mix), weather, daylight);
       for (const kind of kinds) {
         // Like the rain, nothing falls for anyone who has asked for less movement.
         const count = reducedMotion || indoors ? 0 : Math.round(pools[kind].max * amounts[kind]);
-        place(kind, count, point, weather.kind === 'blizzard' ? weather.wind * 7 : weather.wind);
+        place(
+          kind,
+          count,
+          point,
+          weather.kind === 'blizzard' ? weather.wind * 7 : weather.wind,
+          elapsed,
+        );
       }
     },
     dispose() {
