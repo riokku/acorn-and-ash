@@ -1696,7 +1696,13 @@ export class Game {
       {
         onMessage: (message) => this.handleMessage(message),
         onStateChange: (state, detail) => {
-          if (this.connectionState !== state) {
+          // Clear stale gameplay at the outage/recovery boundary. Retrying an
+          // already-paused connection must not swallow journal keys or the
+          // fresh clicks that explain why an offline action cannot proceed.
+          if (
+            this.connectionState !== state &&
+            (this.connectionState === 'connected' || state === 'connected')
+          ) {
             this.controls?.releaseAll();
             this.localPlayer?.pause();
           }
