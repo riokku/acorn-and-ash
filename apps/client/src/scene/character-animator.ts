@@ -506,23 +506,39 @@ export class CharacterAnimator {
   }
 
   private advanceChannel(channel: Channel, deltaSeconds: number): void {
+    const current = channel.at(-1);
+    if (
+      channel === this.fishing &&
+      current !== undefined &&
+      !current.ending &&
+      current.then !== null &&
+      current.seconds !== null &&
+      current.elapsed + deltaSeconds >= Math.max(0, current.seconds - 0.2)
+    ) {
+      const next = this.fishingOverlay(current.then);
+      if (next !== null) {
+        // Start within this frame, using only the time after the cast's
+        // overlap boundary. Waiting never loses a frame to an idle pose.
+        next.elapsed = -Math.max(0, current.seconds - 0.2 - current.elapsed);
+        channel.push(next);
+      }
+    }
     for (let i = channel.length - 1; i >= 0; i--) {
       const layer = channel[i];
       if (layer === undefined) continue;
+      const previous = Math.max(0, layer.elapsed);
       layer.elapsed += deltaSeconds;
-      if (layer.seconds !== null && !layer.ending && layer.elapsed >= layer.seconds - 0.2) {
+      const elapsed = Math.max(0, layer.elapsed);
+      const activeDelta = elapsed - previous;
+      const untilFade =
+        layer.seconds === null ? Infinity : Math.max(0, layer.seconds - 0.2 - previous);
+      const incoming = layer.ending ? 0 : Math.min(activeDelta, untilFade);
+      layer.weight = Math.min(1, layer.weight + incoming / 0.12);
+      if (layer.seconds !== null && elapsed >= Math.max(0, layer.seconds - 0.2))
         layer.ending = true;
-        // A cast carries straight on into waiting for a bite.
-        if (layer.then !== null && channel === this.fishing && i === channel.length - 1) {
-          const next = this.fishingOverlay(layer.then);
-          if (next !== null) channel.push(next);
-        }
-      }
-      layer.weight = layer.ending
-        ? layer.weight - deltaSeconds / 0.2
-        : Math.min(1, layer.weight + deltaSeconds / 0.12);
+      if (layer.ending) layer.weight -= (activeDelta - incoming) / 0.2;
       const duration = layer.upper.getClip().duration;
-      const time = layer.elapsed * layer.speed;
+      const time = elapsed * layer.speed;
       const at = layer.loop ? time % Math.max(duration, 1e-3) : Math.min(time, duration - 1e-4);
       layer.upper.time = at;
       if (layer.lower !== null) layer.lower.time = at;

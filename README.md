@@ -166,7 +166,9 @@ There is nothing to land on yet, so a jump is a hop in place.
 The mouse is free the rest of the time, the way it is in World of Warcraft:
 click on a tree, an animal or the water and your character turns to face it,
 and the same click chops, catches or casts. A fishing click never also swings
-a weapon. Click the hotbar or your pack instead of only pressing a number. Only holding the right button and
+a weapon. Casting carries into waiting within the same animation frame, including
+on a slow frame; see [overlay transitions](docs/decisions/0151-timed-overlay-overlap.md).
+Click the hotbar or your pack instead of only pressing a number. Only holding the right button and
 dragging turns the camera - a left click never moves it. Your character
 swings or casts whichever way it faces: the way you last clicked, or the way
 you are walking. See
