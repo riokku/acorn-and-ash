@@ -77,6 +77,7 @@ import {
   encodeCache,
   encodeCaught,
   encodeCrafted,
+  encodeCraftRefused,
   encodeCooked,
   encodeDiscarded,
   encodePickupRefused,
@@ -401,6 +402,11 @@ export class World extends DurableObject<WorldEnv> {
       // Not tied to reach or the tick loop the way chopping and picking
       // things up are, so it is settled the moment it arrives rather than
       // waiting for the next step.
+      const refusal = simulation.craftRefusalFor(attachment.netId, decoded.item);
+      if (refusal !== null) {
+        this.trySend(ws, encodeCraftRefused(decoded.item, refusal));
+        return;
+      }
       simulation.craftItem(attachment.netId, decoded.item);
       this.announceCrafting(simulation);
       this.announceEquipped(simulation);

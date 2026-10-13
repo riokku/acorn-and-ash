@@ -33,6 +33,7 @@ export interface RaidBanner {
 
 /** Everything the HUD shows. */
 export interface HudState {
+  readonly craftPending?: ItemId | null;
   readonly expedition?: ExpeditionView;
   readonly fishRecords?: FishRecords;
   readonly reel?: ReelView | null;

@@ -7,9 +7,41 @@
  * the pack changes.
  */
 
-import type { ItemId } from '../data/items';
+import { ITEM_KINDS, type ItemId } from '../data/items';
 import { recipeFor, type RecipeCost } from '../data/recipes';
 import { addItem, countOf, removeItem, roomFor, type Inventory } from './inventory';
+
+/** Append-only order: indices are used in the refusal wire message. */
+export const CRAFT_REFUSALS = [
+  'unavailable',
+  'recipe',
+  'materials',
+  'alreadyOwned',
+  'packFull',
+  'busy',
+  'campfire',
+  'workbench',
+] as const;
+export type CraftRefusal = (typeof CRAFT_REFUSALS)[number];
+
+/** Why the pack cannot make this item, without spending anything. */
+export function inventoryCraftRefusal(
+  inventory: Inventory,
+  item: ItemId,
+  discoveries = 0,
+): CraftRefusal | null {
+  const recipe = recipeFor(item);
+  if (recipe === null) return 'unavailable';
+  if (recipe.discoveryId !== undefined && !(discoveries & (1 << recipe.discoveryId)))
+    return 'recipe';
+  if (!canAfford(inventory, recipe)) return 'materials';
+  const afterSpending = { ...inventory };
+  for (const cost of recipe.costs) removeItem(afterSpending, cost.item, cost.amount);
+  if (roomFor(afterSpending, item) > 0) return null;
+  return ITEM_KINDS[item].maxCarry === 1 && countOf(afterSpending, item) > 0
+    ? 'alreadyOwned'
+    : 'packFull';
+}
 
 /**
  * Whether this pack has everything something costs.
@@ -30,17 +62,7 @@ export function canAfford(
  * are spent - two sticks used up can free the very slot a torch goes in.
  */
 export function canCraft(inventory: Inventory, item: ItemId, discoveries = 0): boolean {
-  const recipe = recipeFor(item);
-  if (
-    recipe === null ||
-    !canAfford(inventory, recipe) ||
-    (recipe.discoveryId !== undefined && !(discoveries & (1 << recipe.discoveryId)))
-  )
-    return false;
-
-  const afterSpending = { ...inventory };
-  for (const cost of recipe.costs) removeItem(afterSpending, cost.item, cost.amount);
-  return roomFor(afterSpending, item) > 0;
+  return inventoryCraftRefusal(inventory, item, discoveries) === null;
 }
 
 /**

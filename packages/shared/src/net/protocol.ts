@@ -1,3 +1,4 @@
+import { CRAFT_REFUSALS, type CraftRefusal } from '../sim/crafting';
 import {
   GEAR_SLOTS,
   gearSlotFromIndex,
@@ -1516,6 +1517,16 @@ function decodeHunger(view: DataView): HungerEvent {
   };
 }
 
+/** Private refusal for one craft request; older clients ignore this message. */
+export function encodeCraftRefused(item: ItemId, reason: CraftRefusal): ArrayBuffer {
+  const buffer = new ArrayBuffer(3);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.CraftRefused);
+  view.setUint8(1, itemIndex(item));
+  view.setUint8(2, CRAFT_REFUSALS.indexOf(reason) + 1);
+  return buffer;
+}
+
 /** What a player just made, in four bytes. Only they are ever sent it. */
 export function encodeCrafted(event: CraftedEvent): ArrayBuffer {
   const buffer = new ArrayBuffer(CRAFTED_MESSAGE_BYTES);
@@ -2268,6 +2279,12 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.Hunger: {
       if (data.byteLength !== HUNGER_MESSAGE_BYTES) return null;
       return { type: 'hunger', event: decodeHunger(view) };
+    }
+    case ServerMessageType.CraftRefused: {
+      if (data.byteLength !== 3) return null;
+      const item = itemFromIndex(view.getUint8(1));
+      const reason = CRAFT_REFUSALS[view.getUint8(2) - 1];
+      return item === null || reason === undefined ? null : { type: 'craftRefused', item, reason };
     }
     case ServerMessageType.Crafted: {
       if (data.byteLength !== CRAFTED_MESSAGE_BYTES) return null;

@@ -1,3 +1,4 @@
+import { CraftFeedback, craftRefusalText } from './hud/craft-feedback';
 import { menuPanelState, type MenuPanel } from './input/menu-panels';
 import { createWildfireArt } from './scene/wildfire';
 import { groundHeightAt } from '@acorn/shared';
@@ -1041,6 +1042,7 @@ export class Game {
   /** How much health we have left, as far as the server has told us. */
   private health = HEALTH_MAX;
   private healthNews: { text: string; until: number } | null = null;
+  private readonly craftFeedback = new CraftFeedback();
   private craftingNews: { text: string; until: number } | null = null;
   private cookingNews: { text: string; until: number } | null = null;
   private huntingNews: { text: string; until: number } | null = null;
@@ -1699,6 +1701,12 @@ export class Game {
           this.mealHeardAt = performance.now();
           this.connectionState = state;
           if (state !== 'connected') {
+            if (this.craftFeedback.clear()) {
+              this.showActionNote(
+                'Connection interrupted. Check your pack after reconnecting before crafting again.',
+              );
+              this.options.hud.publish({ craftPending: null });
+            }
             this.closeChest();
             this.targeting.clear();
           }
@@ -2101,6 +2109,12 @@ export class Game {
         this.hearAboutHealth(message.event);
         break;
       }
+      case 'craftRefused': {
+        this.craftFeedback.settle(message.item);
+        this.options.hud.publish({ craftPending: this.craftFeedback.item });
+        this.showActionNote(craftRefusalText(message.reason));
+        break;
+      }
       case 'crafted': {
         this.hearAboutCrafting(message.event);
         break;
@@ -2369,6 +2383,9 @@ export class Game {
   /** Only ever about us: nobody else has any reason to know what we just made. */
   private hearAboutCrafting(event: CraftedEvent): void {
     const now = performance.now();
+    this.craftFeedback.settle(event.item);
+    this.options.hud.publish({ craftPending: this.craftFeedback.item });
+    this.showActionNote(`${ITEM_KINDS[event.item].displayName} ready.`);
     const name = ITEM_KINDS[event.item].displayName.toLowerCase();
     this.craftingNews = { text: `You made ${article(name)} ${name}.`, until: now + NEWS_MS };
     // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
@@ -4015,6 +4032,12 @@ export class Game {
     ];
   }
 
+  private showActionNote(text: string): void {
+    this.interactionNote = text;
+    this.interactionNoteUntil = performance.now() + 3200;
+    this.options.hud.publish({ interactionNote: text });
+  }
+
   /** Submission is not confirmation: only server replies change items or buildings. */
   private submitAction(purpose: string, send: () => boolean | undefined): boolean {
     if (!this.playing) return false;
@@ -4157,9 +4180,19 @@ export class Game {
    * the menu open for the next one, or pick up a piece to place, which closes it.
    */
   pickCraftEntry(action: CraftAction): void {
-    if (action.kind === 'craft')
-      this.submitAction('craft', () => this.connection?.sendCraft(action.item));
-    else this.pickBuildable(action.buildable);
+    if (action.kind === 'build') {
+      this.pickBuildable(action.buildable);
+      return;
+    }
+    if (this.craftFeedback.item !== null) return;
+    if (!this.submitAction('craft', () => this.connection?.sendCraft(action.item))) return;
+    this.craftFeedback.begin(action.item, performance.now());
+    this.interactionNote = null;
+    this.interactionNoteUntil = 0;
+    this.options.hud.publish({
+      craftPending: action.item,
+      interactionNote: this.craftFeedback.text(performance.now()),
+    });
   }
 
   private updateDiscoveryMarkers(): void {
@@ -5444,7 +5477,11 @@ export class Game {
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
               },
-      interactionNote: now < this.interactionNoteUntil ? this.interactionNote : this.supportHint,
+      craftPending: this.craftFeedback.item,
+      interactionNote:
+        now < this.interactionNoteUntil
+          ? this.interactionNote
+          : (this.craftFeedback.text(now) ?? this.supportHint),
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,

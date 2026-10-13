@@ -1045,13 +1045,16 @@ describe('gathering and crafting', () => {
     await gatherSticks(client, 1);
 
     client.craft('axe');
-    await sleep(150);
+    await waitFor('craft refusal', () => client.received.some((m) => m.type === 'craftRefused'));
 
     expect(client.inventory()).toEqual([
       { item: 'stick', count: 1 },
       { item: 'bag', count: 1 },
     ]);
     expect(client.crafted()).toEqual([]);
+    expect(client.received.filter((m) => m.type === 'craftRefused')).toEqual([
+      { type: 'craftRefused', item: 'axe', reason: 'materials' },
+    ]);
     client.close();
   });
 

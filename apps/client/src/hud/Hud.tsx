@@ -774,8 +774,10 @@ function CraftPanel({
   const tab = shownTab(entries, state.craftTab);
   const shown = entriesOnTab(entries, tab);
   const renderEntry = (entry: CraftEntry, index: number): React.JSX.Element => {
+    const pending = entry.action.kind === 'craft' && state.craftPending != null;
+    const awaitingThis = entry.action.kind === 'craft' && state.craftPending === entry.action.item;
     const pick = (): void => {
-      if (!entry.locked) onPick?.(entry.action);
+      if (!entry.locked && !pending) onPick?.(entry.action);
     };
     const color =
       'item' in entry.icon
@@ -785,7 +787,8 @@ function CraftPanel({
       <div
         className="hud-journal-entry hud-journal-entry-pickable"
         key={`${entry.action.kind}-${'item' in entry.action ? entry.action.item : entry.action.buildable}`}
-        aria-disabled={entry.locked || undefined}
+        aria-disabled={entry.locked || pending || undefined}
+        aria-busy={awaitingThis || undefined}
         onClick={pick}
         role="button"
         tabIndex={0}
@@ -855,7 +858,7 @@ function CraftPanel({
                 : 'hud-journal-status hud-journal-status-blocked'
           }
         >
-          {entry.statusLabel}
+          {awaitingThis ? 'Waiting for confirmation' : entry.statusLabel}
         </span>
       </div>
     );

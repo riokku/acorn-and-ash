@@ -305,7 +305,7 @@ import {
   type DroppedPileView,
 } from './dropping';
 import { buryHalf, nearestBuriedCache } from './burying';
-import { canAfford, craft } from './crafting';
+import { canAfford, craft, inventoryCraftRefusal, type CraftRefusal } from './crafting';
 import { treeInReach, type ChopTarget } from './chopping';
 import { treeFallTimes, treeFallYaw, treeLogSpots, type TreeFall } from './tree-fall';
 import { animalInReach, type CatchCandidate } from './hunting';
@@ -5424,6 +5424,21 @@ export class WorldSimulation {
     return this.hungerEvents.splice(0);
   }
 
+  /** Explain the existing crafting rules without changing the pack or queuing events. */
+  craftRefusalFor(netId: number, item: ItemId): CraftRefusal | null {
+    const runtime = this.players.get(netId);
+    if (runtime === undefined) return 'unavailable';
+    const recipe = recipeFor(item);
+    if (
+      (recipe?.discoveryId !== undefined || recipe?.station !== undefined) &&
+      (!isFreeToInteract(runtime.action) || runtime.health <= 0 || runtime.cast !== null)
+    )
+      return 'busy';
+    if (recipe?.station === 'campfire' && !this.nearCookingFireOf(netId)) return 'campfire';
+    if (recipe?.station === 'workbench' && !this.nearWorkbenchOf(netId)) return 'workbench';
+    return inventoryCraftRefusal(runtime.inventory, item, runtime.discoveriesClaimed);
+  }
+
   /**
    * Make something out of whatever this player is carrying, if there is a
    * recipe for it, they can afford it and have room for the result.
@@ -5434,16 +5449,8 @@ export class WorldSimulation {
    * anything was actually made.
    */
   craftItem(netId: number, item: ItemId): boolean {
-    const runtime = this.players.get(netId);
-    if (runtime === undefined) return false;
-    const recipe = recipeFor(item);
-    if (
-      (recipe?.discoveryId !== undefined || recipe?.station !== undefined) &&
-      (!isFreeToInteract(runtime.action) || runtime.health <= 0 || runtime.cast !== null)
-    )
-      return false;
-    if (recipe?.station === 'campfire' && !this.nearCookingFireOf(netId)) return false;
-    if (recipe?.station === 'workbench' && !this.nearWorkbenchOf(netId)) return false;
+    if (this.craftRefusalFor(netId, item) !== null) return false;
+    const runtime = this.players.get(netId)!;
     if (!craft(runtime.inventory, item, runtime.discoveriesClaimed)) return false;
     if (
       toolKind(item) !== null &&
