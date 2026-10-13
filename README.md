@@ -408,6 +408,11 @@ below). See [decision 0015](docs/decisions/0015-wilderness-beyond-the-clearing.m
 for the forest itself and
 [decision 0098](docs/decisions/0098-every-tree-can-be-chopped.md) for chopping it.
 
+The river begins in a rock-framed mountain spring and its banks vary independently
+while sharing shoreline and depth rules with movement and boats. Inspect
+`?gallery=mountain-spring` (add `&frozen` for ice) or `?gallery=river-banks&spin`.
+See [decision 0157](docs/decisions/0157-mountain-spring-and-independent-river-banks.md).
+
 ### The lake
 
 In the north-east corner of the world, a good walk from home, there is a big

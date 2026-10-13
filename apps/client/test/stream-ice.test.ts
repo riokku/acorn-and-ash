@@ -6,6 +6,7 @@ import { waterPlantMaterials } from '../src/scene/water-plants';
 
 it('freezes and thaws the river and all sloughs, including floating plants', () => {
   const river = createStreamScene(STREAM, createWildernessTerrain(1234));
+  expect(river.group.getObjectByName('mountain-spring')).toBeDefined();
   const floating = waterPlantMaterials();
   const pads: THREE.Mesh[] = [];
   const surfaces: THREE.Mesh[] = [];

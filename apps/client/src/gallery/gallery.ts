@@ -1,3 +1,5 @@
+import { createRiverExhibit } from './river';
+import { STREAM, streamPointAt, streamSurfaceAt } from '@acorn/shared';
 import { createFishDisplay } from '../scene/fish-display';
 import { createGuardianTrophy } from '../scene/guardian-trophy';
 import { createWoodlandCreature } from '../scene/woodland-creatures';
@@ -90,6 +92,8 @@ const POND: WaterCircle[] = [
 ];
 
 const EXHIBITS: readonly Exhibit[] = [
+  { name: 'mountain-spring', x: 0, z: 0, view: 15, alone: true, create: createRiverExhibit },
+  { name: 'river-banks', x: 0, z: 0, view: 24, alone: true, create: createRiverExhibit },
   { name: 'fish-display', x: 26, z: 20, view: 2.2, create: () => createFishDisplay() },
   { name: 'golden-fish-display', x: 26, z: 23, view: 2.2, create: () => createFishDisplay(true) },
   { name: 'guardian-trophy', x: 26, z: 16, view: 2.3, create: createGuardianTrophy },
@@ -202,6 +206,20 @@ const VIEWPOINTS: Record<
   string,
   { x: number; y: number; z: number; distance: number; height: number; angle?: number }
 > = {
+  'mountain-spring': {
+    ...streamPointAt(STREAM, 0),
+    y: streamSurfaceAt(STREAM, 0),
+    distance: 17,
+    height: 9,
+    angle: 2.5,
+  },
+  'river-banks': {
+    ...streamPointAt(STREAM, Math.round(STREAM.count * 0.6)),
+    y: streamSurfaceAt(STREAM, STREAM.length * 0.6),
+    distance: 24,
+    height: 20,
+    angle: 0.5,
+  },
   pond: { x: 9.5, y: 0, z: -6.5, distance: 8, height: 4.5 },
   trees: { x: -2, y: 3, z: -10, distance: 13, height: 1.5 },
   rocks: { x: 4, y: 0.4, z: -4, distance: 5, height: 2 },

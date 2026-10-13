@@ -28,7 +28,7 @@ it('fades damp sand through the bank into grass and leaves steep faces unsanded'
   const dx = next.x - point.x,
     dz = next.z - point.z,
     length = Math.hypot(dx, dz);
-  const width = streamWaterHalfWidthAt(STREAM, (row * STREAM.length) / (STREAM.count - 1));
+  const width = streamWaterHalfWidthAt(STREAM, (row * STREAM.length) / (STREAM.count - 1), 1);
   const sample = (gap: number, slope = 0) =>
     shader.shadeAt(
       point.x - (dz / length) * (width + gap),
