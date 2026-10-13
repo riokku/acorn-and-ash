@@ -87,6 +87,8 @@ export interface Character {
   setRestSpot(spot: RestSpot | null): void;
   /** Freeze the moment a blow of theirs lands, for a beat. */
   hitStop(seconds: number): void;
+  /** Visible grounded stride phase, null while inactive, undefined on a placeholder. */
+  stridePhase(): number | null | undefined;
   /**
    * Where the far end of whatever is in hand is right now - the axe's head,
    * the rod's tip - in the world, or null with nothing in hand.
@@ -831,6 +833,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       restSpot = spot;
     },
     hitStop: (seconds) => animatorFor()?.hitStop(seconds),
+    stridePhase: () => animator?.stridePhase,
     heldTip: (into) => {
       const held = shown();
       if (held === undefined) return null;
@@ -1075,6 +1078,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     setFishing: () => {},
     setRestSpot: () => {},
     hitStop: () => {},
+    stridePhase: () => undefined,
     heldTip: () => null,
     handPosition: () => null,
     update: () => null,

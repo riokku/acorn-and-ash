@@ -59,6 +59,7 @@ export class FollowCamera {
   private pitchNudge: number | null = null;
   /** 0 to 1: how hard the camera is currently shaking, decaying back to 0. */
   private shakeStrength = 0;
+  private reducedMotion = false;
   private readonly target = new THREE.Vector3();
   private readonly desired = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
@@ -98,7 +99,14 @@ export class FollowCamera {
    * rather than resetting, so a flurry of hits reads as more than one would.
    */
   shake(strength: number): void {
+    if (this.reducedMotion) return;
     this.shakeStrength = Math.min(1, this.shakeStrength + strength);
+  }
+
+  /** Suppress cosmetic impact shake without changing orbit controls or clearance. */
+  setReducedMotion(reduced: boolean): void {
+    this.reducedMotion = reduced;
+    if (reduced) this.shakeStrength = 0;
   }
 
   /** Turn the camera in response to the mouse. */

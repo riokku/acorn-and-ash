@@ -37,6 +37,8 @@ let music: HTMLAudioElement | null = null;
  */
 let musicVolumeScale = 1;
 let sfxVolumeScale = 1;
+let impactSoundsActive = true;
+const impactVoices = new Map<string, HTMLAudioElement[]>();
 
 /**
  * Starts the background loop, once. Call this from a real click or key
@@ -64,6 +66,10 @@ export function setMusicVolume(scale: number): void {
 /** From the Settings menu. Applies to every sound effect played from here on. */
 export function setSfxVolume(scale: number): void {
   sfxVolumeScale = scale;
+  for (const [url, clips] of impactVoices) {
+    const level = TOOK_DAMAGE_URLS.includes(url) ? DAMAGE_VOLUME : SFX_VOLUME;
+    for (const clip of clips) clip.volume = level * scale;
+  }
 }
 
 export function playTreeHit(): void {
@@ -78,13 +84,52 @@ export function playTookDamage(): void {
   playRandom(TOOK_DAMAGE_URLS, DAMAGE_VOLUME);
 }
 
-/** A fresh Audio per call, so two hits landing close together both play in full. */
+/** Stop old impact tails while the world is hidden or paused; never replay them on return. */
+export function setImpactSoundsActive(active: boolean): void {
+  if (active === impactSoundsActive) return;
+  impactSoundsActive = active;
+  if (!active)
+    for (const voices of impactVoices.values()) for (const voice of voices) voice.pause();
+}
+
+/** Warm the existing short recordings while the world loads, without playing them. */
+export function preloadImpactSounds(): void {
+  if (typeof Audio === 'undefined' || sfxVolumeScale <= 0) return;
+  for (const url of [...TREE_HIT_URLS, ...THREAT_HIT_URLS, ...TOOK_DAMAGE_URLS]) voicesFor(url);
+}
+
+function voicesFor(url: string): HTMLAudioElement[] {
+  let voices = impactVoices.get(url);
+  if (voices === undefined) {
+    const clip = new Audio(url);
+    clip.preload = 'auto';
+    voices = [clip];
+    impactVoices.set(url, voices);
+  }
+  return voices;
+}
+
+/** Reuse preloaded recordings with up to three overlapping voices per variant. */
 function playRandom(urls: readonly string[], volume: number): void {
+  if (!impactSoundsActive || sfxVolumeScale <= 0 || typeof Audio === 'undefined') return;
   const url = urls[Math.floor(Math.random() * urls.length)];
   if (url === undefined) return;
-  const clip = new Audio(url);
+  const voices = voicesFor(url);
+  let clip = voices.find((voice) => voice.paused || voice.ended);
+  if (clip === undefined) {
+    if (voices.length < 3) {
+      clip = new Audio(url);
+      clip.preload = 'auto';
+    } else {
+      clip = voices.shift()!;
+      clip.pause();
+    }
+  } else voices.splice(voices.indexOf(clip), 1);
+  voices.push(clip);
+  clip.currentTime = 0;
   clip.volume = volume * sfxVolumeScale;
   void clip.play().catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
     console.error('Could not play a sound effect.', error);
   });
 }

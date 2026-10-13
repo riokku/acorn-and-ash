@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ForestAtmosphere,
   type ForestListener,
@@ -127,5 +127,87 @@ describe('surface and living canopy lookup', () => {
   it('takes exposed hillside classification from actual elevation rather than assuming flat terrain', () => {
     const steep = createForestEnvironment([], [], { kind: 'slope', heightAt: (x) => x });
     expect(steep.surfaceAt(10, 0)).toBe('forestFloor');
+  });
+});
+
+describe('visible foot contact feedback', () => {
+  it('retains the last phase across a brief inactive snapshot frame without losing a contact', () => {
+    const { events, atmosphere } = setup();
+    atmosphere.update(1 / 60, { ...listener, stridePhase: 0.49 }, environment);
+    atmosphere.update(1 / 60, { ...listener, x: 0.02, stridePhase: null }, environment);
+    atmosphere.update(1 / 60, { ...listener, x: 0.04, stridePhase: 0.51 }, environment);
+    expect(events.filter((event) => event.kind === 'step')).toHaveLength(1);
+  });
+
+  it.each([30, 60, 144])(
+    'follows contact phase instead of a separate distance clock at %s FPS',
+    (fps) => {
+      const { events, atmosphere } = setup();
+      atmosphere.update(1 / fps, { ...listener, stridePhase: 0 }, environment);
+      for (let frame = 1; frame <= fps * 2; frame++)
+        atmosphere.update(
+          1 / fps,
+          { ...listener, x: (frame / fps) * 4.5, stridePhase: (frame / fps) % 1 },
+          environment,
+        );
+      const steps = events.filter((event) => event.kind === 'step');
+      expect(steps).toHaveLength(4);
+      expect(steps.map((step) => step.pan)).toEqual([0.06, -0.06, 0.06, -0.06]);
+    },
+  );
+  it('does not step while a full-body move or boat carries grounded feet, or replay a teleport', () => {
+    const { events, atmosphere } = setup();
+    for (let frame = 1; frame <= 60; frame++)
+      atmosphere.update(1 / 60, { ...listener, x: frame * 0.05, stridePhase: null }, environment);
+    expect(events.filter((event) => event.kind === 'step')).toHaveLength(0);
+    atmosphere.update(1 / 60, { ...listener, x: 40, stridePhase: 0.8 }, environment);
+    expect(events.filter((event) => event.kind === 'step')).toHaveLength(0);
+    atmosphere.update(1 / 60, { ...listener, x: 40, stridePhase: 0.1 }, environment);
+    expect(events.filter((event) => event.kind === 'step')).toHaveLength(0);
+  });
+  it('selects water, ice and snow at contact, while indoor floors retain wood', () => {
+    const { events, atmosphere } = setup();
+    const water = { ...environment, surfaceAt: () => 'water' as const };
+    atmosphere.update(1 / 60, { ...listener, stridePhase: 0.4 }, water);
+    atmosphere.update(1 / 60, { ...listener, x: 0.05, stridePhase: 0.6 }, water);
+    atmosphere.update(1 / 60, { ...listener, x: 0.1, stridePhase: 0.1, frozenWater: true }, water);
+    atmosphere.update(1 / 60, { ...listener, x: 0.15, stridePhase: 0.6, snow: true }, environment);
+    atmosphere.update(
+      1 / 60,
+      { ...listener, x: 0.2, stridePhase: 0.1, indoors: true, snow: true },
+      environment,
+    );
+    atmosphere.update(
+      1 / 60,
+      { ...listener, x: 0.25, stridePhase: 0.6, indoors: true, snow: true },
+      environment,
+    );
+    expect(events.filter((event) => event.kind === 'step').map((step) => step.surface)).toEqual([
+      'water',
+      'ice',
+      'snow',
+      'wood',
+    ]);
+  });
+  it('classifies a surface only when contact occurs, and keeps landing to one event', () => {
+    const { events, atmosphere } = setup();
+    const surfaceAt = vi.fn(() => 'grass' as const);
+    const ground = { ...environment, surfaceAt };
+    for (let frame = 0; frame < 60; frame++)
+      atmosphere.update(1 / 60, { ...listener, stridePhase: null }, ground);
+    expect(surfaceAt).not.toHaveBeenCalled();
+    atmosphere.update(1 / 60, { ...listener, grounded: false, stridePhase: null }, ground);
+    atmosphere.update(1 / 60, { ...listener, stridePhase: null }, ground);
+    atmosphere.update(1 / 60, { ...listener, stridePhase: null }, ground);
+    expect(surfaceAt).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.kind === 'step')).toHaveLength(1);
+    expect(atmosphere.scheduledSteps).toBe(1);
+  });
+  it('uses the actual water depth for wet ground classification', () => {
+    const forest = createForestEnvironment([], [], createFlatTerrain());
+    expect(forest.surfaceAt(100, -100)).toBe('water');
+    expect(forest.surfaceAt(0, 0)).not.toBe('water');
+    const pond = createForestEnvironment([], [{ x: 20, z: 20, radius: 2 }], createFlatTerrain());
+    expect(pond.surfaceAt(20, 20)).toBe('water');
   });
 });

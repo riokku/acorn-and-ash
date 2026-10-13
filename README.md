@@ -1337,6 +1337,11 @@ worn soil and indoor wood. Nearby trees carry occasional daytime birds and
 quiet canopy rustles with directional sound. Sound effects settings also
 control this atmosphere. The [Pacific Northwest tree direction](docs/art/pacific-northwest-trees.md)
 recommends fir, cedar and spruce silhouettes for a future art pass.
+Footsteps now follow the visible rig's left/right contacts, with shallow-water,
+snow and ice sounds and one landing event. Existing impact recordings preload
+and reuse bounded voices; paused/hidden worlds stop old tails. Reduced motion
+suppresses impact camera shake. See
+[contact feedback](docs/decisions/0154-visible-contact-and-impact-feedback.md).
 
 The woodland now uses Douglas-fir, western redcedar and Sitka spruce models.
 Most trees are 10–21 metres tall, with a mature mix reaching 32 metres in the

@@ -28,7 +28,16 @@ export class ForestAudio {
     if (event.kind === 'step') {
       const variation = 0.9 + Math.random() * 0.2;
       const volume = event.volume * variation;
-      if (event.surface === 'wood') {
+      if (event.surface === 'water') {
+        this.noise(at, 0.16, 1700, volume * 0.12, event.pan);
+        this.tone(at + 0.02, 340 * variation, 140, 0.09, volume * 0.035, event.pan);
+      } else if (event.surface === 'snow') {
+        this.noise(at, 0.17, 2200, volume * 0.09, event.pan);
+        this.tone(at, 65 * variation, 35, 0.07, volume * 0.035, event.pan);
+      } else if (event.surface === 'ice') {
+        this.noise(at, 0.06, 3000, volume * 0.055, event.pan);
+        this.tone(at, 850 * variation, 450, 0.08, volume * 0.025, event.pan);
+      } else if (event.surface === 'wood') {
         this.tone(at, 125 * variation, 65, 0.13, volume * 0.12, event.pan);
         this.noise(at, 0.085, 650, volume * 0.075, event.pan);
       } else {

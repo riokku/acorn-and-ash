@@ -9,6 +9,9 @@ export interface ForestListener extends ForestPoint {
   readonly active: boolean;
   readonly night: boolean;
   readonly cameraYaw: number;
+  readonly stridePhase?: number | null;
+  readonly snow?: boolean;
+  readonly frozenWater?: boolean;
 }
 
 /** Cosmetic scheduling uses the existing frame, never background timers. */
@@ -19,6 +22,8 @@ export class ForestAtmosphere {
   private birdIn = 5;
   private rustleIn = 2;
   private foot = 1;
+  private contactPhase: number | null = null;
+  scheduledSteps = 0;
   constructor(
     private readonly emit: (event: ForestSound) => void,
     private readonly random: () => number = Math.random,
@@ -35,6 +40,7 @@ export class ForestAtmosphere {
       previous.indoors !== listener.indoors
     ) {
       this.stride = this.brushDistance = 0;
+      this.contactPhase = listener.active ? (listener.stridePhase ?? null) : null;
       // No old calls replay after a pause, space change or background tab.
       this.birdIn = 4 + this.random() * 5;
       this.rustleIn = 1.5 + this.random() * 3;
@@ -43,26 +49,54 @@ export class ForestAtmosphere {
     const distance = Math.hypot(listener.x - previous.x, listener.z - previous.z);
     if (distance > 2) {
       this.stride = this.brushDistance = 0;
+      this.contactPhase = null;
       return;
     }
-    const surface = listener.indoors
-      ? 'wood'
-      : (environment?.surfaceAt(listener.x, listener.z) ?? 'grass');
     if (listener.grounded) {
       const landed = !previous.grounded;
-      this.stride += previous.grounded ? distance : 0;
       const running = distance / Math.max(delta, 0.001) > 5;
-      if (landed || this.stride >= (running ? 2.1 : 1.55)) {
+      let contacted = false;
+      if (listener.stridePhase === undefined) {
+        this.contactPhase = null;
+        // Placeholder models retain distance-based feedback until a rig is available.
+        this.stride += previous.grounded ? distance : 0;
+        contacted = this.stride >= (running ? 2.1 : 1.55);
+        if (contacted) this.foot *= -1;
+      } else {
         this.stride = 0;
-        this.foot *= -1;
+        const before = this.contactPhase;
+        const phase = listener.stridePhase;
+        if (phase !== null && before !== null) {
+          contacted = phase < before || (before < 0.5 && phase >= 0.5);
+          if (contacted) this.foot = phase < before ? -1 : 1;
+        }
+        if (phase !== null) this.contactPhase = phase;
+      }
+      if (landed || contacted) {
+        this.stride = 0;
+        const ground = listener.indoors
+          ? 'wood'
+          : (environment?.surfaceAt(listener.x, listener.z) ?? 'grass');
+        const surface =
+          ground === 'water' && listener.frozenWater
+            ? 'ice'
+            : ground === 'water' || listener.indoors
+              ? ground
+              : listener.snow
+                ? 'snow'
+                : ground;
+        this.scheduledSteps++;
         this.emit({
           kind: 'step',
           surface,
           volume: landed ? 0.8 : running ? 0.7 : 0.5,
-          pan: this.foot * 0.06,
+          pan: landed ? 0 : this.foot * 0.06,
         });
       }
-    } else this.stride = 0;
+    } else {
+      this.stride = 0;
+      this.contactPhase = null;
+    }
     if (listener.indoors || environment === null) return;
     const trees = environment.treesNear(listener.x, listener.z);
     this.birdIn -= delta;

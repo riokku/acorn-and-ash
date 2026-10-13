@@ -281,6 +281,8 @@ import {
   playThreatHit,
   playTookDamage,
   playTreeHit,
+  preloadImpactSounds,
+  setImpactSoundsActive,
   startAmbientMusic,
 } from './audio/sound';
 import { playRaidHorn, playRaidOver, playVictory } from './audio/raid-sounds';
@@ -602,6 +604,7 @@ export interface GameDebug {
   grassClumps(): number;
   combatMove(): { kind: number; age: number; grounded: boolean };
   snowFootprints(): number;
+  footstepCount(): number;
   wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
   /** How much of the ground and grass is under snow right now, from 0 to 1. */
@@ -1124,6 +1127,8 @@ export class Game {
   async start(): Promise<void> {
     this.options.hud.publish({ loadingProgress: 5, loadingStage: 'Preparing the view' });
     installBvhRaycasting();
+    setImpactSoundsActive(false);
+    preloadImpactSounds();
     // Kicked off now rather than in enterWorld, so they have the whole time
     // it takes to set up the renderer and reach the server to finish loading.
     void preloadPropModels();
@@ -1226,6 +1231,7 @@ export class Game {
     if (!playing) this.closeChest();
     this.controls?.setGameplayEnabled(playing && !this.chestOpen && !this.settingsOpen);
     this.forestAudio.update(playing && !document.hidden);
+    setImpactSoundsActive(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
       this.stopPlacing();
@@ -1483,6 +1489,7 @@ export class Game {
         age: this.localPlayer?.actionAge() ?? 0,
         grounded: this.localPlayer?.motion.grounded ?? true,
       }),
+      footstepCount: () => this.forestAtmosphere.scheduledSteps,
       snowFootprints: () => this.footprints?.visibleCount() ?? 0,
       wildfireEffects: () =>
         this.wildfireArt?.visibleEffects() ?? { fires: 0, smoke: 0, embers: 0, lightning: false },
@@ -1629,6 +1636,7 @@ export class Game {
   }
 
   stop(): void {
+    setImpactSoundsActive(false);
     window.removeEventListener('resize', this.handleResize);
     document.removeEventListener('visibilitychange', this.handleForestVisibility);
     window.removeEventListener('pointerdown', this.startMusicFromInput);
@@ -3072,6 +3080,7 @@ export class Game {
 
   private readonly handleForestVisibility = (): void => {
     this.forestAudio.update(this.playing && !document.hidden);
+    setImpactSoundsActive(this.playing && !document.hidden);
   };
 
   private readonly frame = (): void => {
@@ -3086,6 +3095,7 @@ export class Game {
     const deltaSeconds = Math.min((now - this.lastFrameMs) / 1000, 0.25);
     this.lastFrameMs = now;
 
+    camera.setReducedMotion(this.reducedMotion.matches);
     const mouse = controls.takeMouseDelta();
     if (mouse.x !== 0 || mouse.y !== 0) {
       camera.turn(mouse.x, mouse.y, BASE_MOUSE_SENSITIVITY * this.lookSensitivity);
@@ -3181,9 +3191,12 @@ export class Game {
       this.forestAtmosphere.update(
         deltaSeconds,
         {
-          x: this.localPlayer.motion.position.x,
-          z: this.localPlayer.motion.position.z,
+          x: this.localCharacter?.group.position.x ?? this.localPlayer.motion.position.x,
+          z: this.localCharacter?.group.position.z ?? this.localPlayer.motion.position.z,
           grounded: this.localPlayer.motion.grounded,
+          stridePhase: this.localCharacter?.stridePhase(),
+          snow: seasonUniforms.snow.value > 0.5,
+          frozenWater: this.lakeFrozen,
           indoors: this.space !== OUTDOORS,
           active: forestActive,
           night: isNight(dayProgress(this.estimatedServerTimeMs())),
