@@ -1,3 +1,4 @@
+import { streamRockColliders } from '@acorn/shared';
 import { BuildFeedback, buildReplyText } from './hud/build-feedback';
 import { DecorationFeedback } from './hud/decoration-feedback';
 import { CraftFeedback, craftRefusalText } from './hud/craft-feedback';
@@ -2705,7 +2706,14 @@ export class Game {
       this.supportPreview = createSupportPreview();
       this.outdoors.add(this.supportPreview.group);
       this.lakeScene?.dispose();
-      this.lakeScene = createLakeScene(LAKE, undefined, undefined, riverMouthConnections(STREAM));
+      this.lakeScene = createLakeScene(
+        LAKE,
+        undefined,
+        undefined,
+        riverMouthConnections(STREAM),
+        undefined,
+        { groundHeightAt: (x, z) => terrain.heightAt(x, z) },
+      );
       this.lakeScene.setFrozen(this.lakeFrozen);
       this.outdoors.add(this.lakeScene.group);
       this.streamScene?.dispose();
@@ -2728,6 +2736,7 @@ export class Game {
           ...wilderness.colliders,
           ...encounterColliders(encounterSites, terrain),
           ...discoveryColliders(this.discoverySites, terrain),
+          ...streamRockColliders(STREAM, terrain),
         ],
         PLAYABLE_HALF_EXTENT,
         LAKE,
@@ -2821,7 +2830,9 @@ export class Game {
       replaceCollider(
         collision,
         inClearing ?? clearing.colliders.length + (inForest ?? 0),
-        state.felled ? stumpColliderFor(grown) : colliderForProp(grown),
+        state.felled
+          ? stumpColliderFor(grown, collision.terrain)
+          : colliderForProp(grown, collision.terrain),
       );
     }
     this.standingProps = standing;

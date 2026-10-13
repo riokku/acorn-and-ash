@@ -1,3 +1,4 @@
+import { colliderTopAt } from '../src/collision/solid-surface';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -2362,7 +2363,12 @@ describe('trees in the wilderness', () => {
       ];
     if (stump?.shape !== 'cylinder') throw new Error('expected a cylinder stump');
     expect(stump.height).toBeLessThan(trunkHeight);
-    expect(stump.height).toBeLessThan(1);
+    // Buried roots may extend well below a sloping bank. The standing roof,
+    // rather than the entire buried collision span, must remain stump-sized.
+    const roof = colliderTopAt(stump, tree.x, tree.z)!;
+    expect(roof - (tree.y ?? 0)).toBeGreaterThan(0);
+    expect(roof - (tree.y ?? 0)).toBeLessThan(1);
+    expect(stump.standable).toBe(true);
     // The logs show once the tree has finished falling.
     sim.step(clockMs + (TREE_BREAK_SECONDS + 1) * 1000);
     expect(sim.droppedPilesList().length).toBeGreaterThan(0);
@@ -2440,7 +2446,12 @@ describe('trees in the wilderness', () => {
         later.clearing.colliders.length + (later.wilderness.indexById.get(tree.id) ?? -1)
       ];
     if (stump?.shape !== 'cylinder') throw new Error('expected a cylinder');
-    expect(stump.height).toBeLessThan(1);
+    // Buried roots may extend well below a sloping bank. The standing roof,
+    // rather than the entire buried collision span, must remain stump-sized.
+    const roof = colliderTopAt(stump, tree.x, tree.z)!;
+    expect(roof - (tree.y ?? 0)).toBeGreaterThan(0);
+    expect(roof - (tree.y ?? 0)).toBeLessThan(1);
+    expect(stump.standable).toBe(true);
     // What was only read back is not news to be saved again.
     expect(later.drainTreeChanges()).toEqual([]);
   });

@@ -174,8 +174,8 @@ export function buildWilderness(
   const standing = [...kept, ...onIslands];
   return {
     props: standing,
-    colliders: standing.map(colliderForProp),
+    colliders: standing.map((prop) => colliderForProp(prop, terrain)),
     indexById: new Map(standing.map((prop, index) => [prop.id, index])),
-    siteColliders: props.map(colliderForProp),
+    siteColliders: props.map((prop) => colliderForProp(prop, terrain)),
   };
 }

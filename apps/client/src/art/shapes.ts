@@ -1,3 +1,4 @@
+import { stonePositions } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -241,39 +242,13 @@ export function stoneGeometry(
   tile = 0.8,
   detail = 1,
 ): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(radius, detail);
-  const position = geometry.attributes.position;
-  if (position === undefined) return geometry;
-  const random = seededRandom(seed);
-  // The same corner appears several times in an icosahedron's mesh; keep
-  // them together so the stone does not split open where they meet.
-  const bumps = new Map<string, number>();
-  const stretchX = 1 + (random() - 0.5) * 0.5;
-  const stretchZ = 1 + (random() - 0.5) * 0.5;
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const z = position.getZ(i);
-    const key = `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
-    let bump = bumps.get(key);
-    if (bump === undefined) {
-      bump = 1 + (random() - 0.5) * 0.35;
-      bumps.set(key, bump);
-    }
-    const flatBottom = y < 0 ? 0.25 : 1;
-    position.setXYZ(
-      i,
-      x * bump * stretchX,
-      y * bump * (height / radius) * flatBottom + height * 0.25,
-      z * bump * stretchZ,
-    );
-  }
-  const uv = geometry.attributes.uv;
-  if (uv !== undefined) {
-    for (let i = 0; i < position.count; i++) {
-      uv.setXY(i, position.getX(i) / tile + seed * 0.37, position.getZ(i) / tile + seed * 0.61);
-    }
-  }
+  const geometry = new THREE.BufferGeometry();
+  const position = new THREE.BufferAttribute(stonePositions(radius, height, seed, detail), 3);
+  geometry.setAttribute('position', position);
+  const uv = new THREE.BufferAttribute(new Float32Array(position.count * 2), 2);
+  for (let i = 0; i < position.count; i++)
+    uv.setXY(i, position.getX(i) / tile + seed * 0.37, position.getZ(i) / tile + seed * 0.61);
+  geometry.setAttribute('uv', uv);
   geometry.computeVertexNormals();
   return geometry;
 }

@@ -1,3 +1,4 @@
+import { colliderTopAt, pushOutOfSurface } from './solid-surface';
 import { PLAYABLE_HALF_EXTENT } from '../constants';
 import { clamp, type Vec3 } from '../math/vec3';
 import {
@@ -122,10 +123,11 @@ export interface CollisionWorld {
  */
 export function groundHeightAt(world: CollisionWorld, x: number, z: number, feetY: number): number {
   const dug = world.dug;
-  if (dug == null || !dug.hasColumn(voxelIndex(x), voxelIndex(z))) {
-    return world.terrain.heightAt(x, z);
-  }
-  return dug.floorAt(x, z, feetY);
+  const terrain =
+    dug == null || !dug.hasColumn(voxelIndex(x), voxelIndex(z))
+      ? world.terrain.heightAt(x, z)
+      : dug.floorAt(x, z, feetY);
+  return supportHeightAt(world, x, z, feetY + COLLISION_SKIN_WIDTH, terrain);
 }
 
 export function createCollisionWorld(
@@ -241,6 +243,38 @@ function nearbyStaticColliders(
   return nearby.sort((a, b) => a - b);
 }
 
+/** Highest solid roof below a height, without snapping someone up through its side. */
+function supportHeightAt(
+  world: CollisionWorld,
+  x: number,
+  z: number,
+  highest: number,
+  floor: number,
+): number {
+  const inspect = (collider: Collider | undefined) => {
+    if (collider === undefined || !collider.standable) return;
+    const top = colliderTopAt(collider, x, z);
+    if (top !== null && top <= highest && top > floor) floor = top;
+  };
+  const broadphase = world.broadphase;
+  if (broadphase != null)
+    for (const index of nearbyStaticColliders(broadphase, x, z, 0)) inspect(world.colliders[index]);
+  for (let index = broadphase?.count ?? 0; index < world.colliders.length; index++)
+    inspect(world.colliders[index]);
+  return floor;
+}
+
+/** Swept landing: catch a descending foot before side resolution pushes it away from a roof. */
+export function landingHeightAt(
+  world: CollisionWorld,
+  x: number,
+  z: number,
+  fromY: number,
+  stepAllowance = 0,
+): number {
+  return groundHeightAt(world, x, z, fromY + stepAllowance);
+}
+
 /**
  * How many times we re-check after pushing.
  *
@@ -295,14 +329,14 @@ export function resolveCapsule(
       }
     }
     const wall = world.lakeWall;
-    if (wall !== null && wall.up && pushOutOfLake(position, radius, wall.lake)) {
+    if (wall !== null && wall.up && pushOutOfLake(position, radius, wall.lake, world)) {
       movedThisPass = true;
       touched = true;
     }
     if (
       world.stream != null &&
       !isLakeFrozen(world) &&
-      pushOutOfDeepStream(position, radius, world.stream)
+      pushOutOfDeepStream(position, radius, world.stream, world)
     ) {
       movedThisPass = true;
       touched = true;
@@ -335,7 +369,9 @@ function pushOutOfCollider(
   if (head <= span.min || feet >= span.max) return false;
   if (!isWithinReach(position, radius, collider)) return false;
   return collider.shape === 'cylinder'
-    ? pushOutOfCylinder(position, radius, collider)
+    ? collider.surface
+      ? pushOutOfSurface(position, radius, head, collider, COLLISION_SKIN_WIDTH)
+      : pushOutOfCylinder(position, radius, collider)
     : pushOutOfBox(position, radius, collider);
 }
 
@@ -347,8 +383,13 @@ const shoreScratch: LakeSlope = { depth: 0, towardX: 0, towardZ: 0 };
  * away from the nearest shore - so someone pressing into the lake slides
  * along the bank instead of sticking to it.
  */
-function pushOutOfLake(position: Vec3, radius: number, lake: Lake): boolean {
+function pushOutOfLake(position: Vec3, radius: number, lake: Lake, world: CollisionWorld): boolean {
   if (!isNearLake(lake, position.x, position.z, radius + 1)) return false;
+  if (
+    supportHeightAt(world, position.x, position.z, position.y + COLLISION_SKIN_WIDTH, -Infinity) >
+    lake.level + COLLISION_SKIN_WIDTH
+  )
+    return false;
   const shore = lakeSlopeAt(lake, position.x, position.z, shoreScratch);
   // `depth` is how far in from the water's edge the centre is, so the body
   // reaches deep water until the centre stays a radius back from its contour.
@@ -433,9 +474,19 @@ function pushOutOfBox(position: Vec3, radius: number, collider: BoxCollider): bo
 }
 
 /** Slide along the wading-depth contour, leaving the banks open as a way round each pool. */
-function pushOutOfDeepStream(position: Vec3, radius: number, stream: Stream): boolean {
+function pushOutOfDeepStream(
+  position: Vec3,
+  radius: number,
+  stream: Stream,
+  world: CollisionWorld,
+): boolean {
   const spot = nearestOnStream(stream, position.x, position.z, 6);
   if (spot === null) return false;
+  if (
+    supportHeightAt(world, position.x, position.z, position.y + COLLISION_SKIN_WIDTH, -Infinity) >
+    streamSurfaceAt(stream, spot.along) + COLLISION_SKIN_WIDTH
+  )
+    return false;
   const across = signedStreamAcross(stream, spot, position.x, position.z);
   const side = across < 0 ? -1 : 1;
   const row = Math.round(spot.along / (stream.length / (stream.count - 1)));

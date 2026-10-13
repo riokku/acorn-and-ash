@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
-    "check:assets": "node tools/check-asset-licenses.mjs",
+    "check:assets": "node tools/check-asset-licenses.mjs && node tools/export-rock-collision.mjs --check",
     "bench:tick": "pnpm --filter @acorn/tools bench:tick",
     "loadtest": "pnpm --filter @acorn/tools loadtest",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm check:assets && pnpm build",

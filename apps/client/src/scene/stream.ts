@@ -1,18 +1,22 @@
+import {
+  buildStreamStones,
+  buildSpringRocks,
+  buildSloughBoulders,
+  buildWaterfallRocks,
+  type SceneryRock,
+} from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 
 import {
-  STREAM_STONES_PER_100M,
   signedStreamAcross,
   streamPools,
   LAKE,
-  streamBedAt,
   streamWaterDepthAt,
   streamFallGradientAt,
   streamPointAt,
   streamSurfaceAt,
   streamWaterHalfWidthAt,
   lakeDepthAt,
-  basinDepthAt,
   isInStream,
   nearestOnStream,
   sloughSurfaceAt,
@@ -188,138 +192,17 @@ export function createStreamScene(
 
 /** A broken upstream crescent suggests water emerging from a mountain rock shelf. */
 function createSpringRocks(stream: Stream, terrain: Terrain) {
-  const builder = new ModelBuilder();
-  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
-  const spring = stream.spring;
-  if (spring !== undefined) {
-    const source = spring.basin[0]!;
-    const next = streamPointAt(stream, 4);
-    const upstream = Math.atan2(source.z - next.z, source.x - next.x);
-    const random = seededRandom(7219);
-    for (let index = 0; index < 7; index++) {
-      const angle = upstream - 1.05 + index * 0.35 + (random() - 0.5) * 0.16;
-      const radius = 1.2 + random() * 1.3;
-      const height = radius * (0.9 + random() * 0.5);
-      const reach = source.radius + radius * 0.45;
-      const x = source.x + Math.cos(angle) * reach;
-      const z = source.z + Math.sin(angle) * reach;
-      const y = terrain.heightAt(x, z) - height * 0.18;
-      builder.add(
-        stone,
-        buryGeometryBase(stoneGeometry(radius, height, 7219 + index, 0.8, 1), { x, y, z }, (x, z) =>
-          terrain.heightAt(x, z),
-        ),
-        placed(x, y, z, { y: random() * Math.PI * 2 }),
-      );
-    }
-  }
-  const result = builder.build();
-  result.group.name = 'mountain-spring-rocks';
-  return result;
+  return createRockGroup(buildSpringRocks(stream, terrain), terrain, 'mountain-spring-rocks');
 }
 
 /** Loose rock shelves frame each drop without crossing the flowing channel. */
 function createWaterfallRocks(stream: Stream, terrain: Terrain) {
-  const builder = new ModelBuilder();
-  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
-  for (const [index, fall] of stream.falls.entries()) {
-    const random = seededRandom(4909 + index * 173);
-    const placements: { x: number; z: number; radius: number }[] = [];
-    for (let attempt = 0; attempt < 60 && placements.length < 8; attempt++) {
-      const along = fall.at - 5 + random() * 13;
-      const row = Math.round(along / (stream.length / (stream.count - 1)));
-      const here = streamPointAt(stream, row);
-      const before = streamPointAt(stream, row - 1),
-        after = streamPointAt(stream, row + 1);
-      const dx = after.x - before.x,
-        dz = after.z - before.z,
-        length = Math.hypot(dx, dz);
-      const radius = 0.6 + random() * 0.9;
-      const side = random() < 0.5 ? -1 : 1;
-      const reach =
-        side * (streamWaterHalfWidthAt(stream, along, side) + radius + 0.25 + random() * 1.3);
-      const x = here.x - (dz / length) * reach,
-        z = here.z + (dx / length) * reach;
-      if (isInStream(stream, x, z, -radius - 0.15)) continue;
-      if (
-        placements.some(
-          (rock) => Math.hypot(x - rock.x, z - rock.z) < (radius + rock.radius) * 0.85,
-        )
-      )
-        continue;
-      const heights = [terrain.heightAt(x, z)];
-      for (let edge = 0; edge < 8; edge++) {
-        const angle = (edge / 8) * Math.PI * 2;
-        heights.push(terrain.heightAt(x + Math.cos(angle) * radius, z + Math.sin(angle) * radius));
-      }
-      const y = Math.min(...heights) - 0.1;
-      const height = Math.max(radius * (0.7 + random() * 0.5), Math.max(...heights) - y + 0.35);
-      builder.add(
-        stone,
-        buryGeometryBase(
-          stoneGeometry(radius, height, 5909 + index * 173 + placements.length, 0.8, 1),
-          { x, y, z },
-          (x, z) => terrain.heightAt(x, z),
-        ),
-        placed(x, y, z, { y: random() * Math.PI * 2 }),
-      );
-      placements.push({ x, z, radius });
-    }
-  }
-  const result = builder.build();
-  result.group.name = 'waterfall-rocks';
-  return result;
+  return createRockGroup(buildWaterfallRocks(stream, terrain), terrain, 'waterfall-rocks');
 }
 
 /** Different loose groups of larger, embedded stones on each slough's dry banks. */
-function createSloughBoulders(
-  stream: Stream,
-  terrain: Terrain,
-): { group: THREE.Group; dispose(): void } {
-  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
-  const builder = new ModelBuilder();
-  for (const [index, slough] of streamPools(stream).entries()) {
-    const random = seededRandom(2909 + index * 137);
-    const count = slough === stream.spring ? 12 : 4 + Math.floor(random() * 4);
-    const placedRocks: { x: number; z: number; radius: number }[] = [];
-    for (let attempt = 0; attempt < 120 && placedRocks.length < count; attempt++) {
-      // The two outer pool lobes, leaving the broad river mouth open.
-      const circle = slough.basin[Math.floor(random() * 2)]!;
-      const angle = random() * Math.PI * 2;
-      const radius = slough === stream.spring ? 1 + random() * 1.4 : 0.7 + random() * 1.1;
-      const reach = circle.radius + radius * 0.8 + random() * 1.8;
-      const x = circle.x + Math.cos(angle) * reach;
-      const z = circle.z + Math.sin(angle) * reach;
-      if (isInStream(stream, x, z, -radius - 0.8)) continue;
-      if (streamPools(stream).some((pool) => basinDepthAt(pool, x, z) > -radius * 0.7)) continue;
-      if (placedRocks.some((rock) => Math.hypot(x - rock.x, z - rock.z) < radius + rock.radius))
-        continue;
-      const height = radius * (0.65 + random() * 0.45);
-      // Embed the base across its footprint, rather than floating a rock off
-      // the downhill side of a slope. Reject banks too steep for this rock.
-      const heights = [terrain.heightAt(x, z)];
-      for (let edge = 0; edge < 8; edge++) {
-        const turn = (edge / 8) * Math.PI * 2;
-        heights.push(terrain.heightAt(x + Math.cos(turn) * radius, z + Math.sin(turn) * radius));
-      }
-      const base = Math.min(...heights);
-      if (Math.max(...heights) - base > height * 0.8) continue;
-      const y = base - height * 0.12;
-      builder.add(
-        stone,
-        buryGeometryBase(
-          stoneGeometry(radius, height, 3909 + index * 137 + placedRocks.length, 0.8, 1),
-          { x, y, z },
-          (x, z) => terrain.heightAt(x, z),
-        ),
-        placed(x, y, z, { y: random() * Math.PI * 2 }),
-      );
-      placedRocks.push({ x, z, radius });
-    }
-  }
-  const result = builder.build();
-  result.group.name = 'slough-boulders';
-  return result;
+function createSloughBoulders(stream: Stream, terrain: Terrain) {
+  return createRockGroup(buildSloughBoulders(stream, terrain), terrain, 'slough-boulders');
 }
 
 /** The lake's green reeds and cattails in loose clusters on both riverbanks. */
@@ -451,40 +334,24 @@ function ribbonGeometry(stream: Stream, terrain: Terrain): THREE.BufferGeometry 
 }
 
 /** Stones in the shallows and along the banks: rounded, half buried, from pebbles to boulders. */
-function createStones(stream: Stream, terrain: Terrain): { group: THREE.Group; dispose(): void } {
-  const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
+function createStones(stream: Stream, terrain: Terrain) {
+  return createRockGroup(buildStreamStones(stream, terrain), terrain, 'stream-stones');
+}
+
+function createRockGroup(rocks: readonly SceneryRock[], terrain: Terrain, name: string) {
   const builder = new ModelBuilder();
-  const random = seededRandom(1414);
-  const count = Math.round((stream.length / 100) * STREAM_STONES_PER_100M);
-  for (let index = 0; index < count; index++) {
-    const along = random() * stream.length;
-    const row = Math.min(
-      stream.count - 1,
-      Math.round(along / (stream.length / (stream.count - 1))),
-    );
-    const here = streamPointAt(stream, row);
-    const before = streamPointAt(stream, Math.max(0, row - 1));
-    const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
-    const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
-    const normalX = -(after.z - before.z) / size;
-    const normalZ = (after.x - before.x) / size;
-    const half = streamWaterHalfWidthAt(stream, along);
-    // Mostly in the water or at its lip, a few further up the bank.
-    const across = (random() * 2 - 1) * (half + 0.9);
-    const x = here.x + normalX * across;
-    const z = here.z + normalZ * across;
-    const radius = 0.14 + random() * random() * 0.55;
-    const ground = Math.max(terrain.heightAt(x, z), streamBedAt(stream, along) - 0.2);
-    const y = ground + radius * 0.12;
+  const material = paintedMaterial('stone', { roughness: 1, flatShading: true });
+  for (const rock of rocks)
     builder.add(
-      stone,
+      material,
       buryGeometryBase(
-        stoneGeometry(radius, radius * 0.6, 1400 + index, 0.5, 0),
-        { x, y, z },
+        stoneGeometry(rock.radius, rock.height, rock.seed, rock.tile, rock.detail),
+        rock,
         (x, z) => terrain.heightAt(x, z),
       ),
-      placed(x, y, z, { y: random() * Math.PI * 2 }),
+      placed(rock.x, rock.y, rock.z, { y: rock.yaw }),
     );
-  }
-  return builder.build();
+  const result = builder.build();
+  result.group.name = name;
+  return result;
 }
