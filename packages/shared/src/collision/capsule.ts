@@ -303,6 +303,8 @@ export function resolveCapsule(
   radius: number,
   height: number,
   world: CollisionWorld,
+  /** Already-grounded controllers may step over a low solid without hitting an ankle-high wall. */
+  stepUp = 0,
 ): boolean {
   let touched = false;
   const feet = position.y;
@@ -316,14 +318,14 @@ export function resolveCapsule(
       for (const index of nearbyStaticColliders(broadphase, position.x, position.z, radius)) {
         const collider = world.colliders[index];
         if (collider === undefined) continue;
-        if (pushOutOfCollider(position, radius, feet, head, collider)) {
+        if (pushOutOfCollider(position, radius, feet, head, collider, stepUp)) {
           movedThisPass = true;
           touched = true;
         }
       }
     }
     for (let index = firstUnindexed; index < world.colliders.length; index++) {
-      if (pushOutOfCollider(position, radius, feet, head, world.colliders[index]!)) {
+      if (pushOutOfCollider(position, radius, feet, head, world.colliders[index]!, stepUp)) {
         movedThisPass = true;
         touched = true;
       }
@@ -363,10 +365,12 @@ function pushOutOfCollider(
   feet: number,
   head: number,
   collider: Collider,
+  stepUp: number,
 ): boolean {
   const span = colliderVerticalSpan(collider);
   // A capsule only collides with something it overlaps vertically.
   if (head <= span.min || feet >= span.max) return false;
+  if (collider.standable && span.max <= feet + stepUp) return false;
   if (!isWithinReach(position, radius, collider)) return false;
   return collider.shape === 'cylinder'
     ? collider.surface

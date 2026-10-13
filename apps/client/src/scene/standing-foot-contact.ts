@@ -1,9 +1,19 @@
 import * as THREE from 'three/webgpu';
-import { smoothstep } from '@acorn/shared';
+import { groundHeightAt, smoothstep, type CollisionWorld } from '@acorn/shared';
 
 import { ArmReach, turnInWorld } from './arm-reach';
 
 export type FootGroundHeight = (x: number, z: number, referenceY: number) => number;
+
+/** Feet can follow nearby rock facets within the same bound as the pose solver. */
+export function footGroundHeightAt(
+  world: CollisionWorld | null,
+  x: number,
+  z: number,
+  referenceY: number,
+): number {
+  return world === null ? referenceY : groundHeightAt(world, x, z, referenceY + MAX_HEIGHT_CHANGE);
+}
 
 const MAX_HEIGHT_CHANGE = 0.18;
 const MAX_PELVIS_DROP = 0.12;
