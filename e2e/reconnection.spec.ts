@@ -1,11 +1,11 @@
 import { expect, test } from './fixtures';
-import type { WebSocketRoute } from '@playwright/test';
+import type { Page, WebSocketRoute } from '@playwright/test';
 import * as shared from '../packages/shared/src/index';
 
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 
-async function frames(page: import('@playwright/test').Page, count = 20) {
+async function frames(page: Page, count = 20) {
   await page.evaluate(
     (n) =>
       new Promise<void>((resolve) => {
