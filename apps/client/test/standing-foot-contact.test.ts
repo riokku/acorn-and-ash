@@ -169,7 +169,31 @@ describe('grounded animated feet', () => {
     expect(Math.abs(nearLimit - 0.8)).toBeLessThan(0.001);
     model.contact.restore();
     model.contact.apply(1 / 60, (x) => x * 1.01, 1);
-    expect(model.hips.position.y).toBe(0.8);
+    expect(model.hips.position.y).toBeCloseTo(0.8, 3);
     expect(Math.abs(model.hips.position.y - nearLimit)).toBeLessThan(0.001);
+  });
+});
+
+describe('one foot near a ledge', () => {
+  it('keeps the supported foot planted when the other foot is over a drop', () => {
+    const model = rig();
+    const ground = (x: number) => (x < -0.1 ? -2 : x > 0.1 ? 0.054 : 0);
+    model.settle(ground);
+    const feet = model.pose();
+    expect(feet[0]!.y - ground(feet[0]!.x)).toBeCloseTo(0.04, 3);
+    expect(feet[1]!.y).toBeCloseTo(0.04, 3);
+    expect(model.hips.position.y).toBeCloseTo(0.8, 3);
+  });
+  it('releases slope correction gradually when one foot moves over a cliff', () => {
+    const model = rig();
+    model.settle((x) => x * 0.3);
+    const before = model.pose();
+    model.contact.restore();
+    model.contact.apply(1 / 60, (x) => (x < -0.1 ? -2 : x * 0.3), 1);
+    const after = model.pose();
+    expect(after[1]!.distanceTo(before[1]!)).toBeLessThan(0.025);
+    expect(after[0]!.distanceTo(before[0]!)).toBeLessThan(0.01);
+    model.settle((x) => (x < -0.1 ? -2 : x * 0.3));
+    expect(model.pose()[1]!.y).toBeGreaterThan(-0.1);
   });
 });

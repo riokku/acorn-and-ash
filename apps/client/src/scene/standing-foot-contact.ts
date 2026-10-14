@@ -32,6 +32,8 @@ interface Leg {
   readonly normal: THREE.Vector3;
   readonly footTurn: THREE.Quaternion;
   height: number;
+  weight: number;
+  readonly wantedNormal: THREE.Vector3;
 }
 
 /** Small, reversible pose corrections for grounded feet on gentle terrain. */
@@ -70,9 +72,11 @@ export class StandingFootContact {
         foot,
         reach: new ArmReach(upper, lower, foot),
         target: new THREE.Vector3(),
-        normal: new THREE.Vector3(),
+        normal: new THREE.Vector3(0, 1, 0),
+        wantedNormal: new THREE.Vector3(0, 1, 0),
         footTurn: new THREE.Quaternion(),
         height: 0,
+        weight: 0,
       });
     }
     return hips ? new StandingFootContact(root, hips, footing, legs) : null;
@@ -91,13 +95,26 @@ export class StandingFootContact {
   apply(deltaSeconds: number, ground: FootGroundHeight | undefined, weight: number): void {
     if (!ground || weight <= 0.001) {
       this.pelvisDrop = 0;
-      for (const leg of this.legs) leg.height = 0;
+      for (const leg of this.legs) {
+        leg.height = 0;
+        leg.weight = 0;
+        leg.normal.copy(UP);
+      }
       return;
     }
     this.root.updateWorldMatrix(true, true);
     this.footing.getWorldPosition(this.offset);
     const centerY = ground(this.offset.x, this.offset.z, this.offset.y);
-    const heights: number[] = [];
+    if (!Number.isFinite(centerY)) {
+      this.pelvisDrop = 0;
+      for (const leg of this.legs) {
+        leg.height = leg.weight = 0;
+        leg.normal.copy(UP);
+      }
+      return;
+    }
+    const follow = 1 - Math.exp(-FOLLOW * Math.max(0, deltaSeconds));
+    let drop = 0;
     for (const leg of this.legs) {
       leg.foot.getWorldPosition(leg.target);
       leg.foot.getWorldQuaternion(leg.footTurn);
@@ -105,31 +122,27 @@ export class StandingFootContact {
       const y = ground(x, z, centerY);
       const dx = ground(x + NORMAL_SAMPLE, z, centerY) - ground(x - NORMAL_SAMPLE, z, centerY);
       const dz = ground(x, z + NORMAL_SAMPLE, centerY) - ground(x, z - NORMAL_SAMPLE, centerY);
-      // A ledge or dug opening must not stretch the character to reach a distant floor.
-      if (
-        ![centerY, y, dx, dz].every(Number.isFinite) ||
-        Math.abs(y - centerY) > MAX_HEIGHT_CHANGE
-      ) {
-        this.pelvisDrop = 0;
-        for (const other of this.legs) other.height = 0;
-        return;
-      }
-      heights.push(y - centerY);
-      leg.normal.set(-dx / (2 * NORMAL_SAMPLE), 1, -dz / (2 * NORMAL_SAMPLE)).normalize();
+      // One unsupported foot must not remove the other foot's contact. Release
+      // only that foot's bounded previous correction; never reach for the drop.
+      const supported = Number.isFinite(y) && Math.abs(y - centerY) <= MAX_HEIGHT_CHANGE;
+      const height = supported ? y - centerY : 0;
+      const contact = supported
+        ? 1 - smoothstep(Math.abs(height), MAX_HEIGHT_CHANGE * 0.75, MAX_HEIGHT_CHANGE)
+        : 0;
+      leg.height += (height - leg.height) * follow;
+      leg.weight += (contact - leg.weight) * follow;
+      if (supported && Number.isFinite(dx) && Number.isFinite(dz))
+        leg.wantedNormal.set(-dx / (2 * NORMAL_SAMPLE), 1, -dz / (2 * NORMAL_SAMPLE)).normalize();
+      else leg.wantedNormal.copy(UP);
+      leg.normal.lerp(leg.wantedNormal, follow).normalize();
+      drop = Math.min(drop, height * contact);
     }
+    this.pelvisDrop += (Math.max(-MAX_PELVIS_DROP, drop) - this.pelvisDrop) * follow;
     if (
-      heights.every((height) => Math.abs(height) < 1e-6) &&
       this.legs.every((leg) => Math.abs(leg.height) < 1e-6 && leg.normal.dot(UP) > 0.999999) &&
       Math.abs(this.pelvisDrop) < 1e-6
     )
       return;
-    // A moving foot can approach the reach limit during a stride. Fade its
-    // terrain correction before the limit instead of dropping it suddenly.
-    const heightChange = Math.max(...heights.map(Math.abs));
-    weight *= 1 - smoothstep(heightChange, MAX_HEIGHT_CHANGE * 0.75, MAX_HEIGHT_CHANGE);
-    const follow = 1 - Math.exp(-FOLLOW * Math.max(0, deltaSeconds));
-    const drop = Math.max(-MAX_PELVIS_DROP, Math.min(0, ...heights));
-    this.pelvisDrop += (drop - this.pelvisDrop) * follow;
     this.remember(this.hips);
     // Move the pelvis in world Y, regardless of the rig's imported axes or scale.
     this.offset.set(0, this.pelvisDrop * weight, 0);
@@ -141,18 +154,18 @@ export class StandingFootContact {
     this.hips.position.add(this.offset);
     this.root.updateWorldMatrix(true, true);
     this.root.localToWorld(this.pole.set(0, 0, 2));
-    this.legs.forEach((leg, index) => {
-      leg.height += ((heights[index] ?? 0) - leg.height) * follow;
-      leg.target.y += leg.height * weight;
+    this.legs.forEach((leg) => {
+      const contactWeight = weight * leg.weight;
+      leg.target.y += leg.height * contactWeight;
       this.remember(leg.upper);
       this.remember(leg.lower);
       this.remember(leg.foot);
-      leg.reach.reach(leg.target, this.pole, weight);
+      leg.reach.reach(leg.target, this.pole, contactWeight);
       // Keep the animated foot's world orientation, then add a restrained slope tilt.
       this.tilt.setFromUnitVectors(UP, leg.normal);
       const angle = UP.angleTo(leg.normal);
       if (angle > MAX_TILT) this.tilt.slerp(this.identity, 1 - MAX_TILT / angle);
-      this.tilt.slerp(this.identity, 1 - weight);
+      this.tilt.slerp(this.identity, 1 - contactWeight);
       if (leg.foot.parent) {
         leg.foot.parent.getWorldQuaternion(this.parentTurn);
         leg.foot.quaternion.copy(this.parentTurn.invert().multiply(leg.footTurn));

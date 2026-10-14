@@ -338,6 +338,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showHomeInside(renderer, scene, fireLights, daylight, params, time);
     return;
   }
+  if (focus === 'footing') {
+    const { showFooting, galleryLedgeHeight } = await import('./footing');
+    scene.add(createGalleryGround([], galleryLedgeHeight, 4, 160));
+    await showFooting(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'moves') {
     scene.add(createGalleryGround([]));
     if (params.get('demo') === 'network') {
@@ -562,9 +568,10 @@ function showHomeInside(
 function createGalleryGround(
   scenery: readonly PlacedProp[],
   heightAt = (_x: number, _z: number) => 0,
+  size = 80,
+  segments = 160,
 ): THREE.Mesh {
-  const size = 80;
-  const geometry = new THREE.PlaneGeometry(size, size, 160, 160);
+  const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
   const shader = createGroundShader({ water: POND, props: scenery });
   const position = geometry.attributes.position;
