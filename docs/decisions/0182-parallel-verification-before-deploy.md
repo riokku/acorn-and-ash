@@ -18,7 +18,10 @@ Split browser coverage over eight runners, each with one Playwright worker.
 Keep every scenario, retry, assertion and existing time limit. The campfire
 fixtures click the visible trunk, wait for their selected recipe and actual
 built kind, and collect
-separate piles with separate E inputs, matching normal interaction semantics.
+separate piles with separate E inputs, matching normal interaction semantics. Wildlife waits for its rendered hint
+before its first swing, within the existing chase bound. The contact-sound
+fixture advances a controlled browser clock so a long CPU frame cannot trigger
+the game's intentional pause suppression; host reply-delay timers remain real.
 
 Upload only public client build files as a short-lived artifact named for the
 workflow commit, retained for seven days to allow environment approval. Preview and deploy jobs download it from their own run after

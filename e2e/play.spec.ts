@@ -1515,8 +1515,8 @@ async function nearestAnimalOfKind(
  * The hint on screen is drawn a moment after the game notices what is in front
  * of the player, so a first look often catches the hint from before. When the
  * caller says which hint it is after (`hint`), the chase keeps closing in for a
- * few looks to let it appear (standing still to wait would hand a fleeing
- * animal the lead), then swings regardless.
+ * looks until it appears before swinging (standing still to wait would hand
+ * a fleeing animal the lead). The same maxSteps bound limits this wait.
  *
  * A chase is not guaranteed to end in a catch: prey runs straight through trees
  * a player has to go round, and can run out past the edge of the world, where
@@ -1533,7 +1533,6 @@ async function huntAnimal(
   const hitsLeft: number[] = [];
   const maxSteps = options.maxSteps ?? 150;
   const wantedHint = options.hint;
-  let hintLooks = 0;
   await centerMouse(page);
 
   // A sprinting player only just outpaces a fleeing rabbit (7 m/s against 6),
@@ -1589,12 +1588,7 @@ async function huntAnimal(
         return { caught: false, gaveUp: false, hints, hitsLeft };
       }
 
-      if (
-        wantedHint !== undefined &&
-        !hints.some((hint) => wantedHint.test(hint)) &&
-        hintLooks < 3
-      ) {
-        hintLooks++;
+      if (wantedHint !== undefined && !hints.some((hint) => wantedHint.test(hint))) {
         await page.waitForTimeout(60);
         continue;
       }

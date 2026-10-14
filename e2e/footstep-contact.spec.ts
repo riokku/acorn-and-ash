@@ -60,6 +60,7 @@ for (const replyDelay of [0, 125])
       });
     });
     try {
+      await page.clock.install();
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto('/?renderer=webgl2&world=footstep-contact');
       await page.locator('#home-name').fill('Footstep Walker');
@@ -68,27 +69,37 @@ for (const replyDelay of [0, 125])
         timeout: 120000,
       });
       await expect(page.getByTestId('loading-screen')).toBeHidden();
+      // Keep the animation frame cadence deterministic. A >=250 ms CPU
+      // frame intentionally suppresses atmospheric sounds after a pause;
+      // it must not make this contact-scheduling check depend on runner load.
+      // Replies still use the real host timer, preserving both latency cases.
+      await page.clock.pauseAt(Date.now() + 100);
       const count = () => page.evaluate(() => window.acornDebug!.footstepCount());
       await page.keyboard.down('KeyW');
+      await page.clock.runFor(1000);
       await expect.poll(count).toBeGreaterThan(0);
       await page.keyboard.up('KeyW');
+      await page.clock.runFor(500);
       await expect.poll(() => sim.snapshotFor(1).find((entity) => entity.netId === 1)?.vz).toBe(0);
       await expect
         .poll(() => page.evaluate(() => window.acornDebug!.combatMove().grounded))
         .toBe(true);
       const stopped = await count();
-      await page.waitForTimeout(350);
+      await page.clock.runFor(350);
       expect(await count()).toBe(stopped);
-      await page.keyboard.press('Space');
+      await page.keyboard.down('Space');
+      await page.clock.runFor(50);
+      await page.keyboard.up('Space');
       await expect
         .poll(() => page.evaluate(() => window.acornDebug!.combatMove().grounded))
         .toBe(false);
       expect(await count()).toBe(stopped);
+      await page.clock.runFor(2000);
       await expect
         .poll(() => page.evaluate(() => window.acornDebug!.combatMove().grounded))
         .toBe(true);
       await expect.poll(count).toBe(stopped + 1);
-      await page.waitForTimeout(350);
+      await page.clock.runFor(350);
       expect(await count()).toBe(stopped + 1);
       expect(errors).toEqual([]);
     } finally {
