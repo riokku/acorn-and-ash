@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { lootUnderCursor, lootUnderRay, type LootTarget } from '../src/input/loot-target';
 
 const meshes: THREE.Mesh[] = [];
@@ -117,4 +117,44 @@ describe('cursor tolerance for thin loot', () => {
     parent.add(item.object);
     expect(lootUnderCursor(caster, { x: 403, y: 400 }, viewport, camera, [item], [])).toBeNull();
   });
+});
+
+it('updates moved targets and blockers once per pointer query while preserving every occlusion probe', () => {
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 0, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const target = loot(11, 0),
+    blocker = box(2);
+  const targetUpdates = vi.spyOn(target.object, 'updateWorldMatrix');
+  const blockerUpdates = vi.spyOn(blocker, 'updateWorldMatrix');
+  const query = () =>
+    lootUnderCursor(
+      ray(),
+      { x: 300, y: 300 },
+      { width: 600, height: 600 },
+      camera,
+      [target],
+      [blocker],
+    );
+  expect(query()).toBeNull();
+  expect(targetUpdates).toHaveBeenCalledTimes(1);
+  expect(blockerUpdates).toHaveBeenCalledTimes(1);
+  blocker.position.x = 5;
+  expect(query()).toBe(target);
+  expect(targetUpdates).toHaveBeenCalledTimes(2);
+  target.object.position.x = 5;
+  expect(query()).toBeNull();
+  expect(targetUpdates).toHaveBeenCalledTimes(3);
+  targetUpdates.mockRestore();
+  blockerUpdates.mockRestore();
+});
+
+it('preserves candidate priority when a visible child belongs to overlapping target roots', () => {
+  const child = loot(12, 0);
+  const group = new THREE.Group();
+  group.add(child.object);
+  const parent = { ...child, request: { kind: 'pile' as const, id: 13 }, object: group };
+  expect(lootUnderRay(ray(), [parent, child], [])).toBe(parent);
+  expect(lootUnderRay(ray(), [child, parent], [])).toBe(child);
 });

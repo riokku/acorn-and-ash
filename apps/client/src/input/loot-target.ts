@@ -12,43 +12,57 @@ export interface LootTarget {
   readonly heightOffset?: number;
 }
 
+/** Transforms and lists are prepared once for this pointer query, never cached across frames. */
+function prepareLoot(candidates: readonly LootTarget[], blockers: readonly THREE.Object3D[]) {
+  const objects: THREE.Object3D[] = [];
+  const owners = new Map<THREE.Object3D, { target: LootTarget; index: number }>();
+  const preparedBlockers = new Set<THREE.Object3D>();
+  for (const [index, candidate] of candidates.entries()) {
+    candidate.object.updateWorldMatrix(true, true);
+    objects.push(candidate.object);
+    if (!owners.has(candidate.object)) owners.set(candidate.object, { target: candidate, index });
+  }
+  return (raycaster: THREE.Raycaster): LootTarget | null => {
+    const hit = raycaster.intersectObjects(objects, true).find((entry) => visible(entry.object));
+    if (hit === undefined) return null;
+    const previousFar = raycaster.far;
+    try {
+      raycaster.far = Math.min(previousFar, Math.max(0, hit.distance - 0.02));
+      // Collision proxies are intentionally invisible. Stop at the first
+      // blocker: the result is occluded regardless of any later intersection.
+      for (const blocker of blockers) {
+        if (!preparedBlockers.has(blocker)) {
+          blocker.updateWorldMatrix(true, true);
+          preparedBlockers.add(blocker);
+        }
+        if (raycaster.intersectObject(blocker, true).length > 0) return null;
+      }
+    } finally {
+      raycaster.far = previousFar;
+    }
+    let chosen: { target: LootTarget; index: number } | undefined;
+    for (let object: THREE.Object3D | null = hit.object; object !== null; object = object.parent) {
+      const owner = owners.get(object);
+      if (owner !== undefined && (chosen === undefined || owner.index < chosen.index))
+        chosen = owner;
+    }
+    return chosen?.target ?? null;
+  };
+}
+
+function visible(object: THREE.Object3D): boolean {
+  for (let parent: THREE.Object3D | null = object; parent !== null; parent = parent.parent)
+    if (!parent.visible) return false;
+  return true;
+}
+
 /** Pick visible loot, with invisible collision meshes enforcing scenery occlusion. */
 export function lootUnderRay(
   raycaster: THREE.Raycaster,
   candidates: readonly LootTarget[],
   blockers: readonly THREE.Object3D[],
 ): LootTarget | null {
-  for (const candidate of candidates) candidate.object.updateWorldMatrix(true, true);
-  const visible = (object: THREE.Object3D): boolean => {
-    for (let parent: THREE.Object3D | null = object; parent !== null; parent = parent.parent)
-      if (!parent.visible) return false;
-    return true;
-  };
-  const hit = raycaster
-    .intersectObjects(
-      candidates.map((candidate) => candidate.object),
-      true,
-    )
-    .find((entry) => visible(entry.object));
-  if (hit === undefined) return null;
-  // Collision proxies are intentionally invisible. Only hits before the loot matter.
-  const previousFar = raycaster.far;
-  let blocked: boolean;
-  try {
-    raycaster.far = Math.min(previousFar, Math.max(0, hit.distance - 0.02));
-    for (const blocker of blockers) blocker.updateWorldMatrix(true, true);
-    blocked = raycaster.intersectObjects([...blockers], true).length > 0;
-  } finally {
-    raycaster.far = previousFar;
-  }
-  if (blocked) return null;
-  return (
-    candidates.find((candidate) => {
-      for (let parent: THREE.Object3D | null = hit.object; parent !== null; parent = parent.parent)
-        if (parent === candidate.object) return true;
-      return false;
-    }) ?? null
-  );
+  return prepareLoot(candidates, blockers)(raycaster);
 }
 
 const cursor = new Vector2();
@@ -75,6 +89,7 @@ export function lootUnderCursor(
     cursor.set((x / viewport.width) * 2 - 1, -(y / viewport.height) * 2 + 1);
     raycaster.setFromCamera(cursor, camera);
   };
+  const pick = prepareLoot(candidates, blockers);
   try {
     for (const [x, y] of CURSOR_SAMPLES) {
       const sampleX = point.x + x,
@@ -82,7 +97,7 @@ export function lootUnderCursor(
       if (sampleX < 0 || sampleY < 0 || sampleX > viewport.width || sampleY > viewport.height)
         continue;
       setRay(sampleX, sampleY);
-      const target = lootUnderRay(raycaster, candidates, blockers);
+      const target = pick(raycaster);
       if (target !== null) return target;
     }
     return null;
