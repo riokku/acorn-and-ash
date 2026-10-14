@@ -211,6 +211,9 @@ export class FollowCamera {
       }
       this.camera.lookAt(this.target);
     }
+    // Input can cast a ray after a zero-time orbit update, before rendering.
+    // lookAt changes the quaternion after its own matrix update; sync the final view.
+    this.camera.updateMatrixWorld();
   }
 
   /** Sweep the centre and near-plane corners against the rendered ground. */

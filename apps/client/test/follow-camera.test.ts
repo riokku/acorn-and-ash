@@ -240,3 +240,15 @@ describe('short gaps between camera blockers', () => {
     disposeBlocker(blocker);
   });
 });
+
+it('makes cursor rays follow an immediate camera turn before any renderer update', () => {
+  const follow = new FollowCamera(16 / 9);
+  follow.update(PLAYER_POSITION, 0, []);
+  follow.turn(85, 20, 0.01);
+  follow.update(PLAYER_POSITION, 0, []);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(0, 0), follow.camera);
+  const target = new THREE.Vector3(0, PLAYER_HEIGHT * 0.78, 0);
+  const expected = target.sub(follow.camera.position).normalize();
+  expect(ray.ray.direction.distanceTo(expected)).toBeLessThan(1e-8);
+});
