@@ -4,7 +4,7 @@ import { handItemFor } from '../src/hud/hand-item';
 
 describe('what the main hand slot shows', () => {
   it('shows a tool chosen from the hotbar, held rather than worn', () => {
-    for (const tool of ['axe', 'rod', 'shovel'] as const) {
+    for (const tool of ['axe', 'refinedAxe', 'rod', 'refinedRod', 'shovel'] as const) {
       expect(handItemFor(tool, {})).toEqual({ item: tool, fromHotbar: true });
     }
   });
@@ -21,10 +21,12 @@ describe('what the main hand slot shows', () => {
   });
 
   it('puts a tool ahead of the worn weapon while it is out', () => {
-    expect(handItemFor('axe', { mainHand: 'ironSword' })).toEqual({
-      item: 'axe',
-      fromHotbar: true,
-    });
+    for (const tool of ['axe', 'refinedAxe', 'refinedRod'] as const) {
+      expect(handItemFor(tool, { mainHand: 'ironSword' })).toEqual({
+        item: tool,
+        fromHotbar: true,
+      });
+    }
   });
 
   it('shows nothing for food, a torch or an empty hand', () => {

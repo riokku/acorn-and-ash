@@ -75,6 +75,7 @@ test('one Craft menu fits a laptop screen and lists rope with the other things t
   await expect(pills).toHaveText([
     'All',
     'Tools',
+    'Gear',
     'Food',
     'Home',
     'Camp',
@@ -91,6 +92,17 @@ test('one Craft menu fits a laptop screen and lists rope with the other things t
   await expect(page.locator('.hud-journal')).toContainText('Axe');
   await expect(page.locator('.hud-journal')).toContainText('Campfire');
   await expect(page.locator('.hud-journal')).toContainText('Rope');
+
+  // Winter clothing and the shield are grouped on their own reachable page.
+  await page.locator('.craft-tabs').getByRole('button', { name: 'Gear', exact: true }).click();
+  const gearEntries = page.locator('.hud-journal-entry');
+  await expect(gearEntries).toHaveCount(3);
+  await expect(gearEntries.filter({ hasText: "Mage's hat" })).toBeVisible();
+  await expect(gearEntries.filter({ hasText: 'Wooden shield' })).toBeVisible();
+  const jacket = gearEntries.filter({ hasText: 'Warm jacket' });
+  await expect(jacket).toBeVisible();
+  await expect(jacket).toContainText('8 reeds');
+  await expect(jacket).toContainText('2 rope');
 
   // Rope is first on the Lake page, so it is key 1, with the boat beside it.
   await page.locator('.craft-tabs').getByRole('button', { name: 'Lake', exact: true }).click();

@@ -1,4 +1,4 @@
-import { isWeapon, type ItemId, type WornGear } from '@acorn/shared';
+import { isWeapon, toolKind, type ItemId, type WornGear } from '@acorn/shared';
 
 /**
  * What the character screen shows in the main hand, and whether it is only
@@ -10,6 +10,7 @@ export function handItemFor(
   held: ItemId | null,
   worn: Readonly<WornGear>,
 ): { readonly item: ItemId | null; readonly fromHotbar: boolean } {
-  const item = held !== null && isWeapon(held) ? held : (worn.mainHand ?? null);
+  const item =
+    held !== null && (isWeapon(held) || toolKind(held) !== null) ? held : (worn.mainHand ?? null);
   return { item, fromHotbar: item !== null && item !== worn.mainHand };
 }

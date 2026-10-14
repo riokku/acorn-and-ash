@@ -12,7 +12,7 @@ Body warmth is a separate 0–100 meter, advanced only on active server ticks. U
 
 Any lit campfire within 4.5 horizontal metres and 2.5 vertical metres restores 2 points/second; expired, unlit or distant fires contribute nothing. Indoor homes restore one point/second. Sufficient insulation or leaving winter restores 0.5 points/second. Recovery resets the cold countdown.
 
-The jacket is crafted from eight reeds and two rope; the mage hat from four reeds and one rope. A Gear page groups clothing and the shield. The raccoon hollow cache adds a bear hat for new claims. Existing clothing rendering supplies the jacket's appearance. Its multipart arm meshes now receive sleeves and gloves, and helms load from the separately exported gear assets rather than looking for removed parts in the plain bodies; `?gallery=winter-gear` shows it on any body, with `&before` for plain clothes. Item IDs append to the wire order.
+The jacket is crafted from eight reeds and two rope; the mage hat from four reeds and one rope. A Gear page groups clothing and the shield; the browser menu regression covers its tabs, recipes and laptop layout. Active-hand previews include refined tools as well as their original versions. The raccoon hollow cache adds a bear hat for new claims. Existing clothing rendering supplies the jacket's appearance. Its multipart arm meshes now receive sleeves and gloves, and helms load from the separately exported gear assets rather than looking for removed parts in the plain bodies; `?gallery=winter-gear` shows it on any body, with `&before` for plain clothes. Item IDs append to the wire order.
 
 ## Consequences
 
