@@ -1,3 +1,4 @@
+import { characterStats } from '@acorn/shared';
 import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
@@ -374,7 +375,7 @@ export function Hud({
       {showingWorld ? (
         <div className="vitals">
           <HungerBar hunger={state.hunger} />
-          <HealthBar health={state.health} />
+          <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
         </div>
       ) : null}
       {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
@@ -432,6 +433,7 @@ export function Hud({
                 : (slot) => onGearChange({ action: 'takeOff', slot })
             }
             carrying={state.carrying}
+            worn={state.worn}
             equippedItem={state.equippedItem}
             onUseItem={onUseItem}
             onUnpinFromHotbar={(slotIndex) =>
@@ -622,7 +624,7 @@ function Health({ state }: { state: HudState }): React.JSX.Element {
   const className = state.health <= HEALTH_LOW_THRESHOLD ? 'hud-status-bad' : undefined;
   return (
     <span className={className}>
-      {Math.round(state.health)}/{HEALTH_MAX}
+      {Math.round(state.health)}/{characterStats(state.worn).vitality}
     </span>
   );
 }
@@ -665,9 +667,9 @@ function HungerBar({ hunger }: { hunger: number }): React.JSX.Element {
  * strip behind it shows what that blow took and catches up a beat later,
  * and the whole thing flashes. Red and throbbing once there is little left.
  */
-function HealthBar({ health }: { health: number }): React.JSX.Element {
-  const fraction = Math.min(1, Math.max(0, health / HEALTH_MAX));
-  const low = vitalsThrob(HUNGER_MAX, health).health;
+function HealthBar({ health, maximum }: { health: number; maximum: number }): React.JSX.Element {
+  const fraction = Math.min(1, Math.max(0, health / maximum));
+  const low = vitalsThrob(HUNGER_MAX, (health * HEALTH_MAX) / maximum).health;
   // Counts every blow taken, so the flash plays again for each one.
   const [hits, setHits] = useState(0);
   const [last, setLast] = useState(health);
@@ -676,7 +678,15 @@ function HealthBar({ health }: { health: number }): React.JSX.Element {
     setLast(health);
   }
   return (
-    <div className={low ? 'health-bar health-bar-low' : 'health-bar'} data-testid="health-bar">
+    <div
+      className={low ? 'health-bar health-bar-low' : 'health-bar'}
+      data-testid="health-bar"
+      role="meter"
+      aria-label="Health"
+      aria-valuemin={0}
+      aria-valuemax={maximum}
+      aria-valuenow={Math.round(health)}
+    >
       <svg className="health-bar-heart" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 20.5C6 16 2.5 12.5 2.5 8.6c0-2.8 2.2-4.8 4.8-4.8 1.9 0 3.6 1.1 4.7 2.8 1.1-1.7 2.8-2.8 4.7-2.8 2.6 0 4.8 2 4.8 4.8 0 3.9-3.5 7.4-9.5 11.9z" />
       </svg>

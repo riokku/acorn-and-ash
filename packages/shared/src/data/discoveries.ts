@@ -24,7 +24,10 @@ export const DISCOVERIES: readonly DiscoveryDefinition[] = [
     clue: 'Beyond the clearing, look for an old trail cairn and a weathered bedroll.',
     note: 'Someone left a recipe for food that travels well. A good place to begin an expedition.',
     recipe: 'trailRation',
-    reward: [{ item: 'berry', count: 4 }],
+    reward: [
+      { item: 'berry', count: 4 },
+      { item: 'travelerTunic', count: 1 },
+    ],
   },
   {
     id: 1,

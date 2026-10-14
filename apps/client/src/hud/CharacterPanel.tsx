@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  characterStats,
   GEAR_SLOT_LABELS,
   ITEM_KINDS,
   type GearRequest,
@@ -16,6 +17,7 @@ import { ItemIcon } from './item-icons';
 import { Tooltip } from './Tooltip';
 import { itemDescription } from './item-description';
 import { handItemFor } from './hand-item';
+import { equipmentDetail } from './equipment-stats';
 
 /** Set on a gear piece dragged out of the pack: which item it is. */
 export const GEAR_ITEM_DRAG_TYPE = 'application/x-acorn-gear-item';
@@ -38,7 +40,7 @@ function colorOf(placeholderColor: number): string {
  * character turning in the middle, a slot for each place something can be
  * worn, and the gear in them shown on the model. Drag a piece from the pack
  * onto a slot, or onto an occupied slot to swap; drag between slots to move or
- * swap; right-click a worn piece to take it off. Appearance only, for now.
+ * swap; right-click a worn piece to take it off. Equipment totals reflect what is actually in the hand.
  */
 export function CharacterPanel({
   worn,
@@ -84,8 +86,22 @@ export function CharacterPanel({
           ))}
         </div>
       </div>
+      <dl className="character-stats" data-testid="character-stats">
+        <div title="Weapon damage compared with the original attack. 100% is the baseline.">
+          <dt>Power</dt>
+          <dd>{characterStats(worn, held).power}%</dd>
+        </div>
+        <div title="The percentage of damage your worn armor and shield prevent.">
+          <dt>Protection</dt>
+          <dd>{characterStats(worn, held).protection}%</dd>
+        </div>
+        <div title="Maximum health from your worn equipment. Putting gear on does not heal you.">
+          <dt>Vitality</dt>
+          <dd>{characterStats(worn, held).vitality}</dd>
+        </div>
+      </dl>
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
-        {notice?.text ?? 'Gear changes how you look. You cannot change it in a fight.'}
+        {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}
       </p>
     </div>
   );
@@ -132,6 +148,9 @@ function GearSlotView({
       <>
         <strong>{kind.displayName}</strong>
         <span className="item-tooltip-detail">{itemDescription(item)}</span>
+        {equipmentDetail(item) === null ? null : (
+          <span className="item-tooltip-detail">{equipmentDetail(item)}</span>
+        )}
         <span className="item-tooltip-action">
           {held
             ? 'In your hand from the hotbar. Choose something else there to put it away.'

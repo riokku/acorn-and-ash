@@ -76,6 +76,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await page.keyboard.press('KeyZ');
   const panel = page.getByTestId('character-panel');
   await expect(panel).toBeVisible();
+  await expect(page.getByTestId('character-stats')).toContainText('Power100%');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toBeVisible();
   await expect(page.getByTestId('gear-preview')).toHaveAttribute('data-state', 'ready', {
     timeout: 60_000,
@@ -94,15 +95,20 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-helm'));
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'knightHelmet');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toHaveCount(0);
+  await expect(page.getByTestId('character-stats')).toContainText('Protection8%');
 
   // Right-click wears too, in the slot it fits.
   await page.getByTestId('pack-slot-ironSword').click({ button: 'right' });
   await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'ironSword');
+  await expect(page.getByTestId('character-stats')).toContainText('Power150%');
 
   // Dragging onto an occupied slot swaps the two.
   await page.getByTestId('pack-slot-mageHat').dragTo(page.getByTestId('gear-slot-helm'));
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'mageHat');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toBeVisible();
+  await expect(page.getByTestId('character-stats')).toContainText('Protection0%');
+  await expect(page.getByTestId('character-stats')).toContainText('Vitality110');
+  await expect(page.getByTestId('health-bar')).toHaveAttribute('aria-valuemax', '110');
 
   // A piece that does not fit is turned down, and the screen says so.
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-feet'));
@@ -115,6 +121,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   }
   await expect(page.getByTestId('gear-slot-hands')).toHaveAttribute('data-item', 'leatherGloves');
   await expect(page.getByTestId('gear-slot-offHand')).toHaveAttribute('data-item', 'woodenShield');
+  await expect(page.getByTestId('health-bar')).toHaveAttribute('aria-valuemax', '120');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: testInfo.outputPath('gear-worn.png') });
 
@@ -122,6 +129,9 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await page.getByTestId('gear-slot-helm').click({ button: 'right' });
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', '');
   await expect(page.getByTestId('pack-slot-mageHat')).toBeVisible();
+
+  await page.getByTestId('gear-slot-mainHand').click({ button: 'right' });
+  await expect(page.getByTestId('character-stats')).toContainText('Power100%');
 
   // Z puts it all away again.
   await page.keyboard.press('KeyZ');

@@ -1,3 +1,4 @@
+import { characterStats } from '@acorn/shared';
 import { CombatSwoosh } from './audio/combat-swoosh';
 import { footGroundHeightAt } from './scene/standing-foot-contact';
 import { placedPropColliders, type Collider } from '@acorn/shared';
@@ -2344,7 +2345,7 @@ export class Game {
 
   /** Only ever about us: nobody else's health is any of our business. */
   private hearAboutHealth(event: HealthEvent): void {
-    if (event.health < this.health) {
+    if (event.health < this.health && !event.adjusted) {
       this.signOutCountdown.noteHurt();
       this.camera?.shake(TOOK_DAMAGE_SHAKE);
       playTookDamage();
@@ -3496,7 +3497,7 @@ export class Game {
     const selected = this.selectedTarget();
     feed.target = null;
     feed.showing = this.playing && !this.mapOpen && me !== null;
-    feed.health = this.health / HEALTH_MAX;
+    feed.health = this.health / characterStats(this.worn.get(this.selfNetId) ?? {}).vitality;
     feed.cameraYaw = camera.look.yaw;
     if (!feed.showing || me === null) {
       feed.threats = [];

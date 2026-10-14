@@ -4169,3 +4169,24 @@ body {
     animation: none;
   }
 }
+
+.character-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 12px 16px;
+}
+.character-stats > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.character-stats dt {
+  color: var(--ink-warm-dim);
+  font-size: 12px;
+}
+.character-stats dd {
+  margin: 0;
+  color: var(--ink-warm);
+  font-weight: 600;
+}
