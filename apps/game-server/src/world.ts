@@ -576,7 +576,15 @@ export class World extends DurableObject<WorldEnv> {
     ws.send(encodePong(decoded.clientTimeMs, this.worldTimeMs()));
   }
 
-  override webSocketClose(ws: WebSocket): void {
+  override webSocketClose(ws: WebSocket, code = 1000, reason = ''): void {
+    // Hibernatable sockets can remain half-open after the peer closes. Reply
+    // before releasing the player so the runtime and test pool can shut down.
+    const replyCode = [1004, 1005, 1006, 1015].includes(code) ? 1000 : code;
+    try {
+      ws.close(replyCode, reason);
+    } catch {
+      // An already closed or failed socket still needs player cleanup.
+    }
     this.dropConnection(ws);
   }
 
