@@ -73,7 +73,8 @@ for (const replyDelay of [0, 125])
       // frame intentionally suppresses atmospheric sounds after a pause;
       // it must not make this contact-scheduling check depend on runner load.
       // Replies still use the real host timer, preserving both latency cases.
-      await page.clock.pauseAt(Date.now() + 100);
+      // Allow a busy renderer time to receive the pause command.
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 5000));
       const count = () => page.evaluate(() => window.acornDebug!.footstepCount());
       await page.keyboard.down('KeyW');
       await page.clock.runFor(1000);
