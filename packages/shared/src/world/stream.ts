@@ -67,6 +67,24 @@ const MEANDER_WAVELENGTH = 110;
 /** Half the width of the bowl the water sits in, at the spring and at the lake. */
 const HALF_WIDTH_SPRING = 1.6;
 const HALF_WIDTH_MOUTH = 5;
+/** Unequal lengths of pools and constrictions, smoothly joined along the channel. */
+const WIDTH_REACHES: readonly (readonly [number, number])[] = [
+  [0, 1],
+  [0.09, 0.85],
+  [0.14, 1.6],
+  [0.23, 0.6],
+  [0.34, 1.45],
+  [0.44, 0.65],
+  [0.59, 1.65],
+  [0.69, 0.62],
+  [0.78, 1.45],
+  [0.87, 0.72],
+  [0.94, 1.25],
+  [1, 1],
+];
+const MAX_HALF_WIDTH = HALF_WIDTH_MOUTH * 1.65;
+/** Typical flat-water speed, also the reference pace for downstream ripples. */
+export const STREAM_CURRENT_SPEED = 0.65;
 /** Depth of the water along the middle, at the spring and at the lake, in metres. */
 const DEPTH_SPRING = 0.3;
 const DEPTH_MOUTH = 0.5;
@@ -265,7 +283,7 @@ export function createStream(lake: Lake = LAKE): Stream {
   const length = (count - 1) * SAMPLE_SPACING;
   const falls = fallsFor(length);
   const mouthSurface = lake.level + 0.02;
-  const reach = VALLEY_RUN_MAX + HALF_WIDTH_MOUTH + BANK_WIDTH;
+  const reach = VALLEY_RUN_MAX + MAX_HALF_WIDTH + BANK_WIDTH;
 
   const bed = new Float64Array(count);
   const bank = new Float64Array(count);
@@ -399,20 +417,41 @@ export function streamDepthMiddle(stream: Stream, along: number): number {
   return middleDepth(along, stream.length);
 }
 
-/** Half the width of the bowl the water sits in, `along` metres down. */
-export function streamHalfWidthAt(stream: Stream, along: number, side = 0): number {
+function baseHalfWidth(stream: Stream, along: number): number {
   const t = Math.min(Math.max(along / stream.length, 0), 1);
-  const base = lerp(HALF_WIDTH_SPRING, HALF_WIDTH_MOUTH, Math.pow(t, 0.75));
-  // With no side, return a conservative extent for placement/keep-out queries.
-  if (side === 0) return base;
+  return lerp(HALF_WIDTH_SPRING, HALF_WIDTH_MOUTH, Math.pow(t, 0.75));
+}
+
+function reachWidthFactor(stream: Stream, along: number): number {
+  const t = Math.min(Math.max(along / stream.length, 0), 1);
+  for (let index = 1; index < WIDTH_REACHES.length; index++) {
+    const [end, width] = WIDTH_REACHES[index]!;
+    if (t > end) continue;
+    const [start, before] = WIDTH_REACHES[index - 1]!;
+    return lerp(before, width, smoothstep(t, start, end));
+  }
+  return 1;
+}
+
+/** Half the bowl's width; without a side, the conservative placement extent. */
+export function streamHalfWidthAt(stream: Stream, along: number, side = 0): number {
+  const calm =
+    smoothstep(along, 12, 35) * (1 - smoothstep(along, stream.length - 25, stream.length));
+  const reach = baseHalfWidth(stream, along) * lerp(1, reachWidthFactor(stream, along), calm);
+  if (side === 0) return reach;
   const phase = side > 0 ? 0.7 : 3.1;
   const variation =
     0.1 + 0.07 * Math.sin(along / 17 + phase) + 0.03 * Math.sin(along / 7 + phase * 2);
-  const calm =
-    smoothstep(along, 12, 35) * (1 - smoothstep(along, stream.length - 25, stream.length));
-  // Broad alternating reaches change the whole channel width as well as its sides.
-  const reach = 0.12 + 0.08 * Math.sin(along / 26 + 0.4) + 0.04 * Math.sin(along / 11 + 1.7);
-  return base * (1 - reach * calm) * (1 - variation * calm);
+  return reach * (1 - variation * calm);
+}
+
+/** Narrow runs accelerate; broad pools relax. Ripples and boats share this pace. */
+export function streamFlowPaceAt(stream: Stream, along: number): number {
+  const meanWidth =
+    (streamHalfWidthAt(stream, along, -1) + streamHalfWidthAt(stream, along, 1)) / 2;
+  const channelPace = Math.min(1.8, Math.max(0.55, baseHalfWidth(stream, along) / meanWidth));
+  const fallPace = 1 + Math.min(streamFallGradientAt(stream, along) / 0.5, 1) * 1.6;
+  return channelPace * fallPace;
 }
 
 /** Height of the water's surface along the middle, `along` metres down. */
@@ -471,7 +510,7 @@ export function nearestOnStream(
   z: number,
   within: number,
 ): StreamSpot | null {
-  if (!insideReach(stream, x, z, within - (VALLEY_RUN_MAX + HALF_WIDTH_MOUTH + BANK_WIDTH)))
+  if (!insideReach(stream, x, z, within - (VALLEY_RUN_MAX + MAX_HALF_WIDTH + BANK_WIDTH)))
     return null;
   const { points, count } = stream;
   let bestCoarse = 0;
@@ -586,7 +625,7 @@ export function streamGroundHeight(
   z: number,
   ground: number,
 ): number {
-  const spot = nearestOnStream(stream, x, z, VALLEY_RUN_MAX + HALF_WIDTH_MOUTH + BANK_WIDTH);
+  const spot = nearestOnStream(stream, x, z, VALLEY_RUN_MAX + MAX_HALF_WIDTH + BANK_WIDTH);
   if (spot === null) return ground;
   const { distance, along } = spot;
   const half = streamHalfWidthAt(stream, along, signedStreamAcross(stream, spot, x, z));
@@ -664,7 +703,7 @@ export function streamGroundHeight(
  * The shallows can be waded; darker pools exceed STREAM_WADING_DEPTH.
  */
 export function streamWaterDepthAt(stream: Stream, x: number, z: number): number {
-  const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + 1);
+  const spot = nearestOnStream(stream, x, z, MAX_HALF_WIDTH + 1);
   if (spot === null) return 0;
   const half = streamHalfWidthAt(stream, spot.along, signedStreamAcross(stream, spot, x, z));
   if (spot.distance >= half) return 0;
@@ -702,7 +741,7 @@ export function streamPoolDepthAt(stream: Stream, along: number, across: number)
 
 /** Is this spot in the water, at least `margin` metres in from its edge? */
 export function isInStream(stream: Stream, x: number, z: number, margin = 0): boolean {
-  const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + 1);
+  const spot = nearestOnStream(stream, x, z, MAX_HALF_WIDTH + 1);
   if (spot === null) return false;
   return (
     spot.distance <=
@@ -732,7 +771,7 @@ export const STREAM_KEEP_OUT: readonly WaterCircle[] = streamKeepOut(STREAM);
 /** Is the spot on a bank or in the water of the stream, with `footprint` metres to spare? */
 export function nearStream(stream: Stream, x: number, z: number, footprint: number): boolean {
   if (streamPools(stream).some((slough) => basinDepthAt(slough, x, z) > -footprint)) return true;
-  const spot = nearestOnStream(stream, x, z, HALF_WIDTH_MOUTH + footprint + 1);
+  const spot = nearestOnStream(stream, x, z, MAX_HALF_WIDTH + footprint + 1);
   if (spot === null) return false;
   return spot.distance < streamHalfWidthAt(stream, spot.along) + footprint;
 }
@@ -760,7 +799,8 @@ export function streamCurrentAt(stream: Stream, x: number, z: number): { x: numb
   const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
   const length = Math.hypot(after.x - before.x, after.z - before.z) || 1;
   const speed =
-    (0.65 + Math.min(streamFallGradientAt(stream, spot.along), 0.5) * 1.5) *
+    STREAM_CURRENT_SPEED *
+    streamFlowPaceAt(stream, spot.along) *
     smoothstep(margin, -0.8, 1.2) *
     (1 - smoothstep(spot.along, stream.length - 10, stream.length));
   return { x: ((after.x - before.x) / length) * speed, z: ((after.z - before.z) / length) * speed };

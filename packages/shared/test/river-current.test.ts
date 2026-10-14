@@ -145,6 +145,17 @@ describe('river current', () => {
     }
   });
 
+  it('drifts more slowly through broad pools than nearby narrow runs', () => {
+    const broad = riverSpot(0.59);
+    const narrow = riverSpot(0.69);
+    const travel = (p: ReturnType<typeof riverSpot>) => {
+      const boat = { x: p.x, z: p.z, yaw: p.yaw };
+      for (let step = 0; step < 20; step++) driftBoat(boat, TICK_SECONDS);
+      return Math.hypot(boat.x - p.x, boat.z - p.z);
+    };
+    expect(travel(narrow)).toBeGreaterThan(travel(broad) * 2);
+  });
+
   it('runs downstream, fades at slough mouths and stops inside each slough and the lake', () => {
     const p = riverSpot(0.7),
       current = streamCurrentAt(STREAM, p.x, p.z);

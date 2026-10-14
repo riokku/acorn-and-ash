@@ -13,6 +13,7 @@ import {
   LAKE,
   streamWaterDepthAt,
   streamFallGradientAt,
+  streamFlowPaceAt,
   streamPointAt,
   streamSurfaceAt,
   streamWaterHalfWidthAt,
@@ -38,8 +39,6 @@ const ACROSS = 7;
 const EDGE_OVERLAP = 1.04;
 /** A drop this steep (rise over run along the stream) is all foam. */
 const FULL_FOAM_GRADIENT = 0.5;
-/** Water is quick down the falls and slow on the flat. */
-const FALL_PACE = 2.6;
 
 /** Water joining the lake erases its old shoreline across the river mouth. */
 export function riverMouthConnections(stream: Stream) {
@@ -138,8 +137,7 @@ export function createStreamScene(
         const before = streamPointAt(stream, Math.max(0, row - 1));
         const after = streamPointAt(stream, Math.min(stream.count - 1, row + 1));
         const size = Math.hypot(after.x - before.x, after.z - before.z) || 1;
-        const steep = Math.min(streamFallGradientAt(stream, spot.along) / FULL_FOAM_GRADIENT, 1);
-        const pace = 1 + steep * (FALL_PACE - 1);
+        const pace = streamFlowPaceAt(stream, spot.along);
         const half = streamWaterHalfWidthAt(
           stream,
           spot.along,
@@ -284,7 +282,7 @@ function ribbonGeometry(stream: Stream, terrain: Terrain): THREE.BufferGeometry 
       positions[vertex * 3] = here.x + normalX * half * across;
       positions[vertex * 3 + 1] = surface;
       positions[vertex * 3 + 2] = here.z + normalZ * half * across;
-      const pace = 1 + steep * (FALL_PACE - 1);
+      const pace = streamFlowPaceAt(stream, along);
       const water = vertex * 10;
       waterValues[water] = half * across;
       waterValues[water + 1] = along;

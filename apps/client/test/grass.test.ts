@@ -18,7 +18,9 @@ function scene() {
     terrain,
   };
 }
-describe('nearby grass cover', () => {
+// Each case builds a complete wilderness and thousands of clumps. Keep a
+// bounded allowance for shared CI CPUs; this suite checks geometry, not FPS.
+describe('nearby grass cover', { timeout: 15_000 }, () => {
   it('keeps grass above terrain, out of water, and within a bounded draw budget', () => {
     const { grass, clearing, terrain } = scene();
     try {
@@ -123,6 +125,11 @@ describe('nearby grass cover', () => {
       const facings = new Set<number>();
       const tones: number[] = [];
       let leaning = 0;
+      let tallest = 0;
+      let minTone = Infinity;
+      let maxTone = -Infinity;
+      let maxLean = -Infinity;
+      let minBladeShare = Infinity;
       for (let i = 0; i < grass.mesh.count; i++) {
         grass.mesh.getMatrixAt(i, matrix);
         matrix.decompose(position, spin, size);
@@ -132,12 +139,17 @@ describe('nearby grass cover', () => {
         facings.add(Math.round(spin.y * 20));
         tones.push(looks.getX(i));
         if (looks.getY(i) > 0.03) leaning++;
-        expect(size.y).toBeLessThanOrEqual(1.8001);
-        expect(looks.getX(i)).toBeGreaterThanOrEqual(0);
-        expect(looks.getX(i)).toBeLessThanOrEqual(1);
-        expect(looks.getY(i)).toBeLessThanOrEqual(0.12);
-        expect(looks.getW(i)).toBeGreaterThan(0.5);
+        tallest = Math.max(tallest, size.y);
+        minTone = Math.min(minTone, looks.getX(i));
+        maxTone = Math.max(maxTone, looks.getX(i));
+        maxLean = Math.max(maxLean, looks.getY(i));
+        minBladeShare = Math.min(minBladeShare, looks.getW(i));
       }
+      expect(tallest).toBeLessThanOrEqual(1.8001);
+      expect(minTone).toBeGreaterThanOrEqual(0);
+      expect(maxTone).toBeLessThanOrEqual(1);
+      expect(maxLean).toBeLessThanOrEqual(0.12);
+      expect(minBladeShare).toBeGreaterThan(0.5);
       const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
       const share = (values: number[], test: (value: number) => boolean) =>
         values.filter(test).length / values.length;

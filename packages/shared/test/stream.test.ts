@@ -13,6 +13,7 @@ import {
   streamPoolDepthAt,
   signedStreamAcross,
   streamHalfWidthAt,
+  streamFlowPaceAt,
   streamPointAt,
   streamSurfaceAt,
   sloughSurfaceAt,
@@ -351,6 +352,32 @@ describe('the stream', () => {
     }
     expect(Number.isFinite(total)).toBe(true);
     expect(performance.now() - started).toBeLessThan(1500);
+  });
+
+  it('has distinct broad pools and narrow runs with smoothly changing, unequal banks', () => {
+    const broad = STREAM.length * 0.59;
+    const narrow = STREAM.length * 0.69;
+    const width = (along: number) =>
+      streamWaterHalfWidthAt(STREAM, along, -1) + streamWaterHalfWidthAt(STREAM, along, 1);
+    expect(width(broad)).toBeGreaterThan(width(narrow) * 2);
+    expect(streamFlowPaceAt(STREAM, narrow)).toBeGreaterThan(streamFlowPaceAt(STREAM, broad) * 2);
+    expect(streamHalfWidthAt(STREAM, 0, 1)).toBeCloseTo(1.6);
+    expect(streamHalfWidthAt(STREAM, STREAM.length, -1)).toBeCloseTo(5);
+    let asymmetric = 0;
+    for (const along of samples(0.5)) {
+      const left = streamHalfWidthAt(STREAM, along, -1);
+      const right = streamHalfWidthAt(STREAM, along, 1);
+      expect(Math.max(left, right)).toBeLessThanOrEqual(streamHalfWidthAt(STREAM, along));
+      for (const side of [-1, 1]) {
+        expect(
+          Math.abs(
+            streamHalfWidthAt(STREAM, along + 0.5, side) - streamHalfWidthAt(STREAM, along, side),
+          ),
+        ).toBeLessThan(0.15);
+      }
+      if (Math.abs(left - right) > 0.2) asymmetric++;
+    }
+    expect(asymmetric).toBeGreaterThan(100);
   });
 
   it('reports the water half width inside the bowl', () => {
