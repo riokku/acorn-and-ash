@@ -106,7 +106,12 @@ it('alternates broad and narrow reaches instead of only offsetting opposite bank
   const ratios = [];
   for (let along = 40; along < STREAM.length - 30; along += 3) {
     const width = streamHalfWidthAt(STREAM, along, -1) + streamHalfWidthAt(STREAM, along, 1);
-    ratios.push(width / (2 * streamHalfWidthAt(STREAM, along)));
+    // The conservative extent now includes each reach's width change. Compare
+    // against the gradual endpoint trend, so that change is not divided away.
+    const spring = streamHalfWidthAt(STREAM, 0);
+    const mouth = streamHalfWidthAt(STREAM, STREAM.length);
+    const trend = spring + (mouth - spring) * (along / STREAM.length);
+    ratios.push(width / (2 * trend));
   }
-  expect(Math.max(...ratios) - Math.min(...ratios)).toBeGreaterThan(0.16);
+  expect(Math.max(...ratios) - Math.min(...ratios)).toBeGreaterThan(0.8);
 });
