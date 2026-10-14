@@ -4190,3 +4190,48 @@ body {
   color: var(--ink-warm);
   font-weight: 600;
 }
+
+.warmth-meter {
+  width: 230px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(20, 30, 29, 0.82);
+  color: #e2f2ed;
+}
+.warmth-meter [role='meter'] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 12px;
+}
+.warmth-meter-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #384b49;
+}
+.warmth-meter-track > div {
+  height: 100%;
+  background: #9ccfc7;
+  transition: width 0.4s;
+}
+.warmth-meter p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.warmth-meter-warning {
+  color: #ffddbd;
+  box-shadow: 0 0 0 1px #bd8058;
+}
+.warmth-meter-warning .warmth-meter-track > div {
+  background: #e5a568;
+}
+@media (prefers-reduced-motion: reduce) {
+  .warmth-meter-track > div {
+    transition: none;
+  }
+}

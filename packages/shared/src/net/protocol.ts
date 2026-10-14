@@ -1,3 +1,5 @@
+import { displayedHealth } from '../sim/health';
+import { WARMTH_STATUSES, type WarmthView } from '../sim/warmth';
 import { BUILD_REPLY_REASONS, type BuildReply } from '../sim/building';
 import { CRAFT_REFUSALS, type CraftRefusal } from '../sim/crafting';
 import {
@@ -1628,6 +1630,7 @@ function decodeThreatHit(view: DataView): ThreatHit {
 const HEALTH_FLAG_KNOCKED_OUT = 1 << 0;
 const HEALTH_FLAG_DODGED = 1 << 1;
 const HEALTH_FLAG_ADJUSTED = 1 << 2;
+const HEALTH_FLAG_COLD = 1 << 3;
 
 /** How much health a player has left, in five bytes. Only they are ever sent it. */
 export function encodeHealth(event: HealthEvent): ArrayBuffer {
@@ -1635,12 +1638,13 @@ export function encodeHealth(event: HealthEvent): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.Health);
   view.setUint16(1, event.netId & 0xffff, true);
-  view.setUint8(3, clamp(Math.round(event.health), 0, 255));
+  view.setUint8(3, clamp(displayedHealth(event.health), 0, 255));
   view.setUint8(
     4,
     (event.knockedOut ? HEALTH_FLAG_KNOCKED_OUT : 0) |
       (event.dodged ? HEALTH_FLAG_DODGED : 0) |
-      (event.adjusted ? HEALTH_FLAG_ADJUSTED : 0),
+      (event.adjusted ? HEALTH_FLAG_ADJUSTED : 0) |
+      (event.cold ? HEALTH_FLAG_COLD : 0),
   );
   return buffer;
 }
@@ -1653,6 +1657,7 @@ function decodeHealth(view: DataView): HealthEvent {
     knockedOut: (flags & HEALTH_FLAG_KNOCKED_OUT) !== 0,
     dodged: (flags & HEALTH_FLAG_DODGED) !== 0,
     ...((flags & HEALTH_FLAG_ADJUSTED) !== 0 ? { adjusted: true } : {}),
+    ...((flags & HEALTH_FLAG_COLD) !== 0 ? { cold: true } : {}),
   };
 }
 
@@ -1697,12 +1702,44 @@ export function encodeDiscoveries(state: DiscoveryState): ArrayBuffer {
   ]).buffer;
 }
 
+/** Private warmth state, five bytes; only changes in visible values are sent. */
+export function encodeWarmth(state: WarmthView): ArrayBuffer {
+  return new Uint8Array([
+    ServerMessageType.Warmth,
+    state.value,
+    WARMTH_STATUSES.indexOf(state.status),
+    state.heat === 'fire' ? 1 : state.heat === 'indoors' ? 2 : 0,
+    state.secondsToDamage === null ? 255 : state.secondsToDamage,
+  ]).buffer;
+}
+
 export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
   if (data.byteLength < 1) return null;
   const view = new DataView(data);
   const type = view.getUint8(0);
 
   switch (type) {
+    case ServerMessageType.Warmth: {
+      if (data.byteLength !== 5) return null;
+      const value = view.getUint8(1),
+        status = WARMTH_STATUSES[view.getUint8(2)],
+        heat = view.getUint8(3),
+        seconds = view.getUint8(4);
+      if (
+        value > 100 ||
+        status === undefined ||
+        heat > 2 ||
+        (status === 'freezing' ? seconds > 35 || value !== 0 || heat !== 0 : seconds !== 255)
+      )
+        return null;
+      return {
+        type: 'warmth',
+        value,
+        status,
+        heat: heat === 1 ? 'fire' : heat === 2 ? 'indoors' : null,
+        secondsToDamage: seconds === 255 ? null : seconds,
+      };
+    }
     case ServerMessageType.Garden: {
       if (
         data.byteLength !== 7 + GARDEN_PLOTS * 3 ||

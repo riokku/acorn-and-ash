@@ -47,8 +47,8 @@ describe('mountain stone and ore', () => {
     }
   });
 
-  it('adds stone, ore and the shovel at the end of the wire order', () => {
-    expect(ITEM_ORDER.slice(-5)).toEqual(['stone', 'ironOre', 'shovel', 'clay', 'mineSupport']);
+  it('keeps saved stone, ore and shovel indices stable when later items are appended', () => {
+    expect(ITEM_ORDER.slice(41, 46)).toEqual(['stone', 'ironOre', 'shovel', 'clay', 'mineSupport']);
   });
 
   it('makes a shovel from sticks and stone by hand', () => {

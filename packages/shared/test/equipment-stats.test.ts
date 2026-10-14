@@ -139,3 +139,18 @@ describe('equipment vitality', () => {
     expect(sim.healthOf(1)).toBe(115);
   });
 });
+
+it('preserves fractional armor damage through saving and reconnecting', () => {
+  const sim = world();
+  sim.giveTestGear(1, ['travelerTunic']);
+  expect(sim.wearGear(1, 'travelerTunic', 'upperBody').ok).toBe(true);
+  (
+    sim as unknown as { raiderStrikesPlayer(id: number, damage: number, tick: number): void }
+  ).raiderStrikesPlayer(1, 20, sim.tick);
+  expect(sim.healthOf(1)).toBeCloseTo(80.8, 8);
+  const saved = sim.persistablePlayers()[0]!;
+  expect(saved.health).toBeCloseTo(80.8, 8);
+  sim.removePlayer(1);
+  sim.addPlayer(1, saved);
+  expect(sim.healthOf(1)).toBeCloseTo(80.8, 8);
+});

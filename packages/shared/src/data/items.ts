@@ -53,7 +53,8 @@ export type ItemId =
   | 'ironOre'
   | 'shovel'
   | 'clay'
-  | 'mineSupport';
+  | 'mineSupport'
+  | 'winterJacket';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -667,6 +668,19 @@ export const ITEM_KINDS = {
     equippable: true,
     gearSlots: ['mainHand'],
   },
+  winterJacket: {
+    id: 'winterJacket',
+    displayName: 'Warm jacket',
+    pluralName: 'Warm jackets',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8a483b,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['upperBody'],
+  },
   // Two wooden posts and a cross beam, ready to stand in a tunnel (decision 0119).
   mineSupport: {
     id: 'mineSupport',
@@ -736,6 +750,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'shovel',
   'clay',
   'mineSupport',
+  'winterJacket',
 ];
 
 export function itemIndex(id: ItemId): number {

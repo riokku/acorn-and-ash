@@ -1,3 +1,4 @@
+import type { WarmthView } from '../sim/warmth';
 import type { BuildReply } from '../sim/building';
 import type { CraftRefusal } from '../sim/crafting';
 import type { Dig } from '../world/digging';
@@ -118,6 +119,7 @@ export const ServerMessageType = {
   CraftRefused: 0x44,
   DecorationReply: 0x45,
   BuildReply: 0x46,
+  Warmth: 0x47,
 } as const;
 
 export const RejectReason = {
@@ -696,6 +698,8 @@ export type HomeBuildFeedbackMessage = HomeBuildFeedback & { readonly type: 'hom
 export type DiscoveriesMessage = DiscoveryState & { readonly type: 'discoveries' };
 export type HomeSuppliesMessage = HomeSupplies & { readonly type: 'homeSupplies' };
 
+export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
+
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
@@ -719,6 +723,7 @@ export type ServerMessage =
   | { readonly type: 'recoveryMarkers'; readonly caches: readonly BuriedCacheView[] }
   | (DecorationState & { readonly type: 'decoration' })
   | MealMessage
+  | WarmthMessage
   | HomeSuppliesMessage
   | (GardenState & { readonly type: 'garden' })
   | DiscoveriesMessage

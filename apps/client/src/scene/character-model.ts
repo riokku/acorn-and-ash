@@ -1,3 +1,4 @@
+import { preloadWornGearModels } from './worn-gear-models';
 import type { CharacterId } from '@acorn/shared';
 
 import { loadAnimatedModel, type AnimatedModel } from './model-loading';
@@ -38,18 +39,21 @@ export function characterModelTemplate(character: CharacterId): AnimatedModel | 
 }
 
 async function loadAll(): Promise<void> {
-  await Promise.all(
-    (Object.entries(MODEL_URLS) as Array<[CharacterId, string]>).map(async ([id, url]) => {
-      try {
-        templates.set(id, await loadAnimatedModel(url));
-      } catch (error) {
-        // The placeholder capsule is a fine fallback, so a fetch failure here
-        // shouldn't stop the player from getting into the world.
-        console.error(
-          `Could not load the character model for "${id}"; keeping the placeholder.`,
-          error,
-        );
-      }
-    }),
-  );
+  await Promise.all([
+    preloadWornGearModels(),
+    Promise.all(
+      (Object.entries(MODEL_URLS) as Array<[CharacterId, string]>).map(async ([id, url]) => {
+        try {
+          templates.set(id, await loadAnimatedModel(url));
+        } catch (error) {
+          // The placeholder capsule is a fine fallback, so a fetch failure here
+          // shouldn't stop the player from getting into the world.
+          console.error(
+            `Could not load the character model for "${id}"; keeping the placeholder.`,
+            error,
+          );
+        }
+      }),
+    ),
+  ]);
 }

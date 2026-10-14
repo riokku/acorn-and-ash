@@ -267,6 +267,7 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   rogueMask: (
     <path d="M2 8C6 6 9 8 12 8C15 8 18 6 22 8C22 15 18 19 12 19C6 19 2 15 2 8ZM6 10H10V12H6ZM14 10H18V12H14Z" />
   ),
+  winterJacket: <path d="M8 2H16L22 6L20 14L17 12V22H7V12L4 14L2 6ZM12 5V20" />,
   travelerTunic: <path d="M8 2H16L22 6L19 11L17 10V22H7V10L5 11L2 6Z" />,
   travelerTrousers: <path d="M6 2H18L19 22H13L12 10L11 22H5Z" />,
   leatherBoots: <path d="M5 2H11V12L19 15C21 16 21 20 19 20H4C3 20 3 19 4 18Z" />,

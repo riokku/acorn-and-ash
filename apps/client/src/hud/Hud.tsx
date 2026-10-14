@@ -1,3 +1,4 @@
+import { WarmthBar } from './WarmthBar';
 import { characterStats } from '@acorn/shared';
 import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
 import { FishingJournal, RareReelHint } from './FishingJournal';
@@ -374,6 +375,10 @@ export function Hud({
       ) : null}
       {showingWorld ? (
         <div className="vitals">
+          {state.warmth !== null &&
+          (state.season?.season === 'winter' || state.warmth.value < 100) ? (
+            <WarmthBar warmth={state.warmth} />
+          ) : null}
           <HungerBar hunger={state.hunger} />
           <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
         </div>

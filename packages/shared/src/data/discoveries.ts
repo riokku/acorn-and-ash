@@ -81,6 +81,7 @@ export const DISCOVERIES: readonly DiscoveryDefinition[] = [
     reward: [
       { item: 'berry', count: 4 },
       { item: 'mushroom', count: 3 },
+      { item: 'bearHat', count: 1 },
     ],
   },
   {

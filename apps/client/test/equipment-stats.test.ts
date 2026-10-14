@@ -14,6 +14,6 @@ describe('equipment explanations', () => {
 it('compares the protection lost when replacing a helmet', () => {
   expect(equipmentComparison('knightHelmet', {}, null)).toBe('Protection 0% → 8% (+8%).');
   expect(equipmentComparison('mageHat', { helm: 'knightHelmet' }, null)).toBe(
-    'Protection 8% → 0% (-8%). Vitality 100 → 110 (+10).',
+    'Protection 8% → 0% (-8%). Vitality 100 → 110 (+10). Warmth 0 → 15 (+15).',
   );
 });
