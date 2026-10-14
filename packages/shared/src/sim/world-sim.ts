@@ -1,3 +1,12 @@
+import {
+  advanceWarmth,
+  warmthFromSaved,
+  warmthView,
+  CAMPFIRE_WARMTH_RADIUS,
+  type WarmthState,
+  type WarmthView,
+  type WarmthEnvironment,
+} from './warmth';
 import { characterStats, protectedDamage } from '../data/equipment-stats';
 import { placedPropColliders } from '../world/placed-solids';
 import type { Collider } from '../world/colliders';
@@ -491,6 +500,7 @@ export interface PersistedPlayer {
   readonly items: readonly { readonly item: ItemId; readonly count: number }[];
   readonly hunger: number;
   readonly meal?: MealState;
+  readonly warmth?: WarmthState;
   /**
    * Optional, and defaults to full: added after every existing save already
    * had a player in it, the same reason `addPlayer`'s `playerKey` is its own
@@ -618,6 +628,8 @@ export interface HealthEvent {
   readonly dodged: boolean;
   /** A cap adjustment after changing equipment, not an incoming blow. */
   readonly adjusted?: boolean;
+  /** Environmental exposure, not a directional physical blow. */
+  readonly cold?: boolean;
 }
 
 /** Something a player has placed in the world. */
@@ -1002,6 +1014,8 @@ interface PlayerRuntime {
   /** How hungry they are, from `HUNGER_MAX` (full) down to zero. */
   hunger: number;
   meal: MealState;
+  warmth: WarmthState;
+  lastSentWarmth: string;
   /**
    * The last whole number of hunger this player was actually sent, so a
    * message only goes out when it would show something different.
@@ -1569,6 +1583,7 @@ export class WorldSimulation {
   private readonly mealChanges = new Map<number, MealState>();
   private readonly hungerEvents: HungerEvent[] = [];
   private readonly healthEvents: HealthEvent[] = [];
+  private readonly warmthChanges = new Map<number, WarmthView>();
   private readonly gestureEvents: GestureEvent[] = [];
   private readonly craftEvents: CraftedEvent[] = [];
   private readonly cookingEvents: CookedEvent[] = [];
@@ -1942,6 +1957,8 @@ export class WorldSimulation {
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
       meal: mealFromSaved(saved?.meal),
+      warmth: warmthFromSaved(saved?.warmth),
+      lastSentWarmth: '',
       health: Math.min(
         healthMax,
         Math.max(0, Number.isFinite(saved?.health) ? saved!.health! : healthMax),
@@ -2169,6 +2186,7 @@ export class WorldSimulation {
     this.putBoatAshore(runtime);
     runtime.entity.destroy();
     this.players.delete(netId);
+    this.warmthChanges.delete(netId);
     this.expeditionChanges.delete(netId);
     this.sentinelProgressChanges.delete(netId);
     this.reelChanges.delete(netId);
@@ -2522,6 +2540,7 @@ export class WorldSimulation {
         // Catches the meter crossing a whole point on its own, if eating did
         // not already say something this tick.
         this.queueHungerEvent(runtime, null);
+        this.stepWarmth(runtime);
       });
 
     this.driftUnoccupiedBoats();
@@ -4648,9 +4667,14 @@ export class WorldSimulation {
    * A dodge timed right beats this outright: mid-roll, the hit simply never
    * lands. Nobody can be hit while down or getting back up either.
    */
-  private damagePlayer(runtime: PlayerRuntime, amount: number): void {
-    runtime.lastCombatTick = this.tick;
-    if (runtime.action.kind === ActionKind.Dodge) {
+  private damagePlayer(runtime: PlayerRuntime, amount: number, cold = false): void {
+    if (
+      cold &&
+      (runtime.action.kind === ActionKind.KnockedOut || runtime.action.kind === ActionKind.Rise)
+    )
+      return;
+    if (!cold) runtime.lastCombatTick = this.tick;
+    if (!cold && runtime.action.kind === ActionKind.Dodge) {
       if (this.tick - runtime.dodgeStartedAtTick < DODGE.invulnerable) {
         this.healthEvents.push({
           netId: runtime.netId,
@@ -4660,19 +4684,25 @@ export class WorldSimulation {
         });
         return;
       }
-    } else if (isUntouchable(runtime.action)) {
+    } else if (!cold && isUntouchable(runtime.action)) {
       return;
     }
 
     const remaining = Math.max(
       0,
       runtime.health -
-        protectedDamage(amount, characterStats(runtime.worn, this.equippedItemOf(runtime.netId))),
+        (cold
+          ? amount
+          : protectedDamage(
+              amount,
+              characterStats(runtime.worn, this.equippedItemOf(runtime.netId)),
+            )),
     );
     const knockedOut = remaining <= 0;
     runtime.health = knockedOut ? characterStats(runtime.worn).vitality : remaining;
 
     if (knockedOut) {
+      runtime.warmth = warmthFromSaved(null);
       // Out of the boat first, so what they buried is on dry ground.
       this.putBoatAshore(runtime);
       // A boat they can no longer walk back to is not worth keeping (decision 0094).
@@ -4697,7 +4727,7 @@ export class WorldSimulation {
       this.discardBuild(runtime, 'busy');
       beginAction(runtime.action, ActionKind.KnockedOut);
       runtime.knockedOutAtTick = this.tick;
-    } else if (runtime.boatId === null) {
+    } else if (!cold && runtime.boatId === null) {
       // A rower takes the blow, but there is nothing to flinch with: they stay in the boat.
       beginAction(runtime.action, ActionKind.Flinch);
     }
@@ -4707,6 +4737,7 @@ export class WorldSimulation {
       health: Math.round(runtime.health),
       knockedOut,
       dodged: false,
+      ...(cold ? { cold: true } : {}),
     });
   }
 
@@ -5524,6 +5555,62 @@ export class WorldSimulation {
     return Math.round(this.players.get(netId)?.health ?? HEALTH_MAX);
   }
 
+  private warmthEnvironment(runtime: PlayerRuntime): WarmthEnvironment {
+    const calendar = this.calendar();
+    const position = runtime.entity.get(Position);
+    let heat: WarmthEnvironment['heat'] = runtime.space !== OUTDOORS ? 'indoors' : null;
+    if (heat === null && position !== undefined) {
+      for (const prop of this.builtProps) {
+        if (prop.kind !== 'campfire' || !prop.lit) continue;
+        const expires = this.campfireLitUntilMs.get(prop.id);
+        if (expires !== undefined && expires <= this.nowMs) continue;
+        if (
+          Math.hypot(position.x - prop.x, position.z - prop.z) <= CAMPFIRE_WARMTH_RADIUS &&
+          Math.abs(position.y - this.collision.terrain.heightAt(prop.x, prop.z)) <= 2.5
+        ) {
+          heat = 'fire';
+          break;
+        }
+      }
+    }
+    return {
+      winter: calendar.season === 'winter',
+      blizzard: this.weather().kind === 'blizzard',
+      insulation: characterStats(runtime.worn).warmth,
+      heat,
+    };
+  }
+
+  private stepWarmth(runtime: PlayerRuntime): void {
+    const environment = this.warmthEnvironment(runtime);
+    if (runtime.action.kind !== ActionKind.KnockedOut && runtime.action.kind !== ActionKind.Rise) {
+      const next = advanceWarmth(runtime.warmth, environment);
+      runtime.warmth = next.state;
+      if (next.damage > 0) this.damagePlayer(runtime, next.damage, true);
+    }
+    const view = warmthView(runtime.warmth, environment);
+    const key = `${view.value}:${view.status}:${view.heat}:${view.secondsToDamage}`;
+    if (key !== runtime.lastSentWarmth) {
+      runtime.lastSentWarmth = key;
+      this.warmthChanges.set(runtime.netId, view);
+    }
+  }
+
+  warmthStateOf(netId: number): WarmthState {
+    return { ...(this.players.get(netId)?.warmth ?? warmthFromSaved(null)) };
+  }
+  warmthOf(netId: number): WarmthView {
+    const runtime = this.players.get(netId);
+    return runtime === undefined
+      ? { value: 100, status: 'comfortable', heat: null, secondsToDamage: null }
+      : warmthView(runtime.warmth, this.warmthEnvironment(runtime));
+  }
+  drainWarmthChanges(): ReadonlyMap<number, WarmthView> {
+    const changes = new Map(this.warmthChanges);
+    this.warmthChanges.clear();
+    return changes;
+  }
+
   /** Hand over every change to anybody's hunger since this was last asked. */
   mealStateOf(netId: number): MealState {
     return { ...(this.players.get(netId)?.meal ?? mealFromSaved(null)) };
@@ -6243,6 +6330,7 @@ export class WorldSimulation {
         items: inventoryEntries(runtime.inventory),
         hunger: runtime.hunger,
         meal: { ...runtime.meal },
+        warmth: { ...runtime.warmth },
         health: runtime.health,
         equippedItem: runtime.equippedItem,
         worn: wornEntries(runtime.worn),

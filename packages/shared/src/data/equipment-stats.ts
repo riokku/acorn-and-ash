@@ -17,6 +17,8 @@ export interface EquipmentBonus {
   readonly protection?: number;
   /** Extra maximum health points while worn. */
   readonly vitality?: number;
+  /** Insulation rating against winter exposure. */
+  readonly warmth?: number;
 }
 
 /** Fixed bonuses: no levels, random rolls or changes to attack/movement timing. */
@@ -25,14 +27,15 @@ export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>
   huntingKnife: { power: 25 },
   refinedAxe: { power: 25 },
   knightHelmet: { protection: 8 },
-  bearHat: { vitality: 15 },
-  mageHat: { vitality: 10 },
-  rogueMask: { vitality: 5 },
-  travelerTunic: { protection: 4, vitality: 10 },
-  travelerTrousers: { protection: 3 },
-  leatherBoots: { protection: 2 },
-  leatherGloves: { protection: 2 },
+  bearHat: { vitality: 15, warmth: 25 },
+  mageHat: { vitality: 10, warmth: 15 },
+  rogueMask: { vitality: 5, warmth: 5 },
+  travelerTunic: { protection: 4, vitality: 10, warmth: 10 },
+  travelerTrousers: { protection: 3, warmth: 10 },
+  leatherBoots: { protection: 2, warmth: 5 },
+  leatherGloves: { protection: 2, warmth: 5 },
   woodenShield: { protection: 15 },
+  winterJacket: { protection: 4, warmth: 60 },
 };
 
 export interface CharacterStats {
@@ -42,6 +45,8 @@ export interface CharacterStats {
   readonly protection: number;
   /** Maximum health, capped at 150; equipping does not heal. */
   readonly vitality: number;
+  /** Winter insulation, capped at 100. Ordinary winter needs 60; blizzards 80. */
+  readonly warmth: number;
 }
 
 /** `held` is the effective hand item, after the server resolves pack choices. */
@@ -51,17 +56,20 @@ export function characterStats(
 ): CharacterStats {
   let protection = 0;
   let vitality = HEALTH_MAX;
+  let warmth = 0;
   for (const slot of GEAR_SLOTS) {
     const item = worn[slot];
     if (item !== undefined && canWearIn(item, slot)) {
       protection += EQUIPMENT_BONUSES[item]?.protection ?? 0;
       vitality += EQUIPMENT_BONUSES[item]?.vitality ?? 0;
+      warmth += EQUIPMENT_BONUSES[item]?.warmth ?? 0;
     }
   }
   return {
     power: 100 + (held === null ? 0 : (EQUIPMENT_BONUSES[held]?.power ?? 0)),
     protection: Math.min(40, protection),
     vitality: Math.min(150, vitality),
+    warmth: Math.min(100, warmth),
   };
 }
 

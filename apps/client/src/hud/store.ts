@@ -1,3 +1,4 @@
+import type { WarmthView } from '@acorn/shared';
 import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
 import { emptyExpedition, type ExpeditionView } from '@acorn/shared';
 import type { HomeDecoration } from '@acorn/shared';
@@ -171,6 +172,7 @@ export interface HudState {
   readonly hungerNews: string | null;
   /** How much health we have left, from `HEALTH_MAX` (full) down to zero. */
   readonly health: number;
+  readonly warmth: WarmthView | null;
   /** What just happened to our health, while it is still worth showing. */
   readonly healthNews: string | null;
   /** Whether a charged attack is currently winding up. */
@@ -299,6 +301,7 @@ const INITIAL: HudState = {
   hunger: HUNGER_MAX,
   hungerNews: null,
   health: HEALTH_MAX,
+  warmth: null,
   healthNews: null,
   charging: false,
   craftingNews: null,

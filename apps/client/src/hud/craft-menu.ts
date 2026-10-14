@@ -15,6 +15,7 @@ import {
   MEAL_BENEFITS,
   RECIPE_ITEMS,
   canCraft,
+  isGear,
   combineHomeSupplies,
   countOf,
   fishDisplayLearned,
@@ -35,7 +36,8 @@ import {
 import type { HudState } from './store';
 
 /** The kinds of thing the menu is sorted into, in the order the full list shows them. */
-export type CraftGroupId = 'tools' | 'food' | 'home' | 'camp' | 'garden' | 'lake' | 'trophies';
+export type CraftGroupId =
+  'tools' | 'gear' | 'food' | 'home' | 'camp' | 'garden' | 'lake' | 'trophies';
 
 /** Which page of the menu is showing: everything together, or one kind of thing. */
 export type CraftTabId = 'all' | CraftGroupId;
@@ -48,6 +50,7 @@ export const CRAFT_GROUPS: readonly {
   readonly tab: string;
 }[] = [
   { id: 'tools', heading: 'Tools', tab: 'Tools' },
+  { id: 'gear', heading: 'Clothing & equipment', tab: 'Gear' },
   { id: 'food', heading: 'Food', tab: 'Food' },
   { id: 'home', heading: 'Home', tab: 'Home' },
   { id: 'camp', heading: 'Camp & lighting', tab: 'Camp' },
@@ -129,6 +132,7 @@ export type CraftMenuState = Pick<
 /** Which group a thing made by hand belongs to. Rope is for the boat, so it sits with the lake. */
 export function recipeGroup(item: ItemId): CraftGroupId {
   if (item === 'rope') return 'lake';
+  if (isGear(item) && item !== 'axe' && item !== 'rod' && item !== 'shovel') return 'gear';
   return isMealItem(item) ? 'food' : 'tools';
 }
 
@@ -145,7 +149,7 @@ export function buildableGroup(kind: BuildableKindId): CraftGroupId {
 
 /** Whether a page lists anything you place, so the home's building boundary is worth showing. */
 export function tabListsPlacedPieces(tab: CraftTabId): boolean {
-  return tab !== 'tools' && tab !== 'food';
+  return tab !== 'tools' && tab !== 'gear' && tab !== 'food';
 }
 
 /**

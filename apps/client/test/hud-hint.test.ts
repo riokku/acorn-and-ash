@@ -71,6 +71,7 @@ const BASE_STATE: HudState = {
   hunger: HUNGER_MAX,
   hungerNews: null,
   health: HEALTH_MAX,
+  warmth: null,
   healthNews: null,
   charging: false,
   craftingNews: null,

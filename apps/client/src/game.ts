@@ -1803,6 +1803,7 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.options.hud.publish({ warmth: null });
         this.clearRemoteActors();
         if (this.selfNetId !== 0 && this.selfNetId !== message.netId) {
           this.floats.reelIn(this.selfNetId);
@@ -2159,6 +2160,17 @@ export class Game {
         this.hearAboutHunger(message.event);
         break;
       }
+      case 'warmth': {
+        this.options.hud.publish({
+          warmth: {
+            value: message.value,
+            status: message.status,
+            heat: message.heat,
+            secondsToDamage: message.secondsToDamage,
+          },
+        });
+        break;
+      }
       case 'health': {
         this.hearAboutHealth(message.event);
         break;
@@ -2347,13 +2359,16 @@ export class Game {
   private hearAboutHealth(event: HealthEvent): void {
     if (event.health < this.health && !event.adjusted) {
       this.signOutCountdown.noteHurt();
-      this.camera?.shake(TOOK_DAMAGE_SHAKE);
-      playTookDamage();
-      this.combatFeed.hurt(
-        (this.health - event.health) / HURT_FULL_FLASH,
-        this.hurtFromYaw(),
-        performance.now(),
-      );
+      if (!event.cold) {
+        this.camera?.shake(TOOK_DAMAGE_SHAKE);
+        playTookDamage();
+      }
+      if (!event.cold)
+        this.combatFeed.hurt(
+          (this.health - event.health) / HURT_FULL_FLASH,
+          this.hurtFromYaw(),
+          performance.now(),
+        );
     }
     this.health = event.health;
     if (event.knockedOut) {

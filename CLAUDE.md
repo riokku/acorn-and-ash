@@ -17,14 +17,14 @@ A cozy, third-person survival game that runs in the browser. The player lives in
 | Area | Decision |
 | --- | --- |
 | Camera | Third-person follow camera that pulls in when blocked |
-| Survival | Cozy-light: hunger and energy only |
+| Survival | Cozy-light: hunger and energy; winter warmth from clothing, campfires and indoor shelter, with warnings before gentle cold damage |
 | Knockout | Player wakes in their bed. Some items are buried somewhere in the world, and the player has to find them. |
 | Threats | Creatures first (e.g. goblins, masked raccoons). Bandits and rival settlers come later. No PvP. |
 | Combat | Light action: light and charged attacks, dodge, readable enemy wind-ups |
 | World | Hand-built home clearing (about 64 × 64 m) surrounded by wilderness generated from a seed |
 | Time | 20-minute day. Night never skips in multiplayer. |
 | Characters | Tied to one world, never carried between worlds |
-| Gear | Everyone starts in plain clothes, just a shirt and shorts: six bodies, shown as Body 1 to Body 6. Outfits are gear found along the way (discovery-site rewards, hidden caches, creature drops, crafting). Gear supplies modest equipment bonuses; character body choices remain cosmetic. See `docs/decisions/0112-plain-clothes-start-and-found-gear.md` |
+| Gear | Everyone starts in plain clothes, just a shirt and shorts: six bodies, shown as Body 1 to Body 6. Outfits are gear found along the way (discovery-site rewards, hidden caches, creature drops, crafting). Gear supplies modest Power, Protection, Vitality and Warmth bonuses; character body choices remain cosmetic. See `docs/decisions/0177-equipment-power.md` through `0180-winter-warmth.md`. See `docs/decisions/0112-plain-clothes-start-and-found-gear.md` |
 | Devices | Desktop keyboard and mouse first. Gamepad later. No mobile at launch. |
 | Art | Stylized low-poly that matches Quaternius "Ultimate Stylized Nature" (CC0) |
 | Goal | Free to play on the web |

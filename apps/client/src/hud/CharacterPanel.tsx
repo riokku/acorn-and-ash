@@ -99,6 +99,10 @@ export function CharacterPanel({
           <dt>Vitality</dt>
           <dd>{characterStats(worn, held).vitality}</dd>
         </div>
+        <div title="Winter insulation. 60 keeps you warm in ordinary winter; 80 in a blizzard.">
+          <dt>Warmth</dt>
+          <dd>{characterStats(worn, held).warmth}</dd>
+        </div>
       </dl>
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
         {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}

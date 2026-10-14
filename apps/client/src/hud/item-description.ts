@@ -39,6 +39,8 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   reed: 'Cut from the tall golden mature reeds at the pond and the lake, which return somewhere else along the same shore. Twist three together into a length of rope.',
   rope: 'Twisted from lake reeds. Strong enough to lash a rowboat together.',
   bone: 'Left behind by skeletons in the wilderness.',
+  winterJacket:
+    'A padded jacket woven from reeds and rope. Wear it on your upper body to stay warm in winter; add a warm hat for blizzards.',
   knightHelmet: "A knight's steel helmet. Wear it on your head from the character screen (Z).",
   mageHat: "A tall, pointed mage's hat. Wear it on your head from the character screen (Z).",
   bearHat: 'A shaggy bear-ear hat. Wear it on your head from the character screen (Z).',

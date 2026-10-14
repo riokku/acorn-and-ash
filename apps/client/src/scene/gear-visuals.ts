@@ -1,22 +1,15 @@
 import * as THREE from 'three/webgpu';
 
-import {
-  GEAR_SLOTS,
-  ITEM_KINDS,
-  type CharacterId,
-  type GearSlot,
-  type ItemId,
-  type WornGear,
-} from '@acorn/shared';
+import { GEAR_SLOTS, ITEM_KINDS, type GearSlot, type ItemId, type WornGear } from '@acorn/shared';
 
 import { plainMaterial } from '../art/materials';
-import { characterModelTemplate } from './character-model';
+import { wornGearModelTemplate } from './worn-gear-models';
 import { woodenShieldParts } from './gear-models';
 
 /**
  * What a character is wearing, drawn on the body (decision 0113).
  *
- * Helms are the real head pieces already in the character models: the Knight's
+ * Helms use the existing separately exported head pieces: the Knight's
  * helmet and visor, the Mage's hat, the Barbarian's bear hat and the hooded
  * Rogue's mask. Every body shares one skeleton, so any of them fits on any head.
  * Body, legs, boots and gloves are a thin coloured skin laid over the matching
@@ -26,14 +19,6 @@ import { woodenShieldParts } from './gear-models';
  * The pieces already baked into the six models (the helmet, the hat, the mask)
  * are hidden, so a head is bare until a helm is worn.
  */
-
-/** The head pieces in the character models, and which model each one is cut from. */
-const HELM_SOURCES: Partial<Record<ItemId, { from: CharacterId; nodes: readonly string[] }>> = {
-  knightHelmet: { from: 'knight', nodes: ['Knight_Helmet', 'Knight_HelmetVisor'] },
-  mageHat: { from: 'mage', nodes: ['Mage_Hat'] },
-  bearHat: { from: 'barbarian', nodes: ['Barbarian_BearHat'] },
-  rogueMask: { from: 'rogueHooded', nodes: ['RogueHooded_Mask'] },
-};
 
 /** The baked-in head pieces to hide, by the end of their names. */
 const BAKED_HEAD_PIECE = /_(Helmet|HelmetVisor|Hat|BearHat|Mask)$/;
@@ -57,16 +42,26 @@ interface Layer {
 
 const LAYERS: Record<'upperBody' | 'lowerBody' | 'feet' | 'hands', readonly Layer[]> = {
   upperBody: [
-    { meshes: /_Body$/, region: (min) => min >= CHEST_BOTTOM, inflate: 0.02 },
-    { meshes: /_Arm(Left|Right)$/, region: (_min, _max, x) => x <= HAND_STARTS_AT, inflate: 0.02 },
+    { meshes: /_Body(?:_\d+)?$/, region: (min) => min >= CHEST_BOTTOM, inflate: 0.02 },
+    {
+      meshes: /_Arm(Left|Right)(?:_\d+)?$/,
+      region: (_min, _max, x) => x <= HAND_STARTS_AT,
+      inflate: 0.02,
+    },
   ],
   lowerBody: [
-    { meshes: /_Body$/, region: (_min, max) => max <= HIPS_TOP, inflate: 0.03 },
-    { meshes: /_Leg(Left|Right)$/, region: (min) => min >= BOOT_TOP, inflate: 0.025 },
+    { meshes: /_Body(?:_\d+)?$/, region: (_min, max) => max <= HIPS_TOP, inflate: 0.03 },
+    { meshes: /_Leg(Left|Right)(?:_\d+)?$/, region: (min) => min >= BOOT_TOP, inflate: 0.025 },
   ],
-  feet: [{ meshes: /_Leg(Left|Right)$/, region: (_min, max) => max < BOOT_TOP, inflate: 0.035 }],
+  feet: [
+    { meshes: /_Leg(Left|Right)(?:_\d+)?$/, region: (_min, max) => max < BOOT_TOP, inflate: 0.035 },
+  ],
   hands: [
-    { meshes: /_Arm(Left|Right)$/, region: (_min, _max, x) => x > HAND_STARTS_AT, inflate: 0.035 },
+    {
+      meshes: /_Arm(Left|Right)(?:_\d+)?$/,
+      region: (_min, _max, x) => x > HAND_STARTS_AT,
+      inflate: 0.035,
+    },
   ],
 };
 
@@ -197,17 +192,15 @@ export function createGearVisuals(
   };
 
   const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
-    const piece = HELM_SOURCES[item];
     const body = skinned[0];
-    const template = piece === undefined ? undefined : characterModelTemplate(piece.from);
-    if (piece === undefined || template === undefined || body === undefined) return;
-    for (const name of piece.nodes) {
-      const found = template.root.getObjectByName(name);
+    const template = wornGearModelTemplate(item);
+    if (template === undefined || body === undefined) return;
+    template.root.traverse((found) => {
       if (found instanceof THREE.SkinnedMesh) {
         const material = Array.isArray(found.material) ? found.material[0] : found.material;
         if (material !== undefined) addSkinned(body, found, found.geometry, material, into);
       }
-    }
+    });
   };
 
   const buildSkin = (slot: keyof typeof LAYERS, item: ItemId, into: THREE.Object3D[]): void => {
@@ -241,6 +234,7 @@ export function createGearVisuals(
     else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
       buildSkin(slot, item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
+    for (const object of objects) object.userData.gearItem = item;
     return objects;
   };
 

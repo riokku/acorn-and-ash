@@ -338,6 +338,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showHomeInside(renderer, scene, fireLights, daylight, params, time);
     return;
   }
+  if (focus === 'winter-gear') {
+    scene.add(createGalleryGround([]));
+    const { showWinterGear } = await import('./winter-gear');
+    await showWinterGear(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'footing') {
     const { showFooting, galleryLedgeHeight } = await import('./footing');
     scene.add(createGalleryGround([], galleryLedgeHeight, 4, 160));

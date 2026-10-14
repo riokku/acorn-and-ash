@@ -1,3 +1,4 @@
+import { encodeWarmth, warmthFromSaved, type WarmthState } from '@acorn/shared';
 import { encodeBuildReply } from '@acorn/shared';
 import { encodeWildfire } from '@acorn/shared';
 import { encodeRaiderVitals } from '@acorn/shared';
@@ -155,6 +156,7 @@ const PER_PLAYER_TABLES = [
   'player_items',
   'players',
   'player_meals',
+  'player_warmth',
   'player_home_skills',
   'player_sentinel',
   'player_blueprint_progress',
@@ -303,12 +305,12 @@ export class World extends DurableObject<WorldEnv> {
 
     if (earlier !== null) simulation.handOver(netId);
     else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
-    // The axe and rod are main-hand gear too, but they are found in the world;
+    // The axe, rod and shovel are main-hand gear too, but they are found or crafted;
     // leaving them out keeps the hand-out inside the pack's slots.
     if (this.testGear(url))
       simulation.giveTestGear(netId, [
         'bag',
-        ...GEAR_ITEMS.filter((item) => item !== 'axe' && item !== 'rod'),
+        ...GEAR_ITEMS.filter((item) => item !== 'axe' && item !== 'rod' && item !== 'shovel'),
       ]);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
     // Whether the lake is ice, before anything that depends on it.
@@ -322,6 +324,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeHomeSkills(simulation.homeSkillsOf(netId)));
     server.send(encodeHomeSupplies(simulation.homeSuppliesOf(netId)));
     server.send(encodeMeal(simulation.mealStateOf(netId)));
+    server.send(encodeWarmth(simulation.warmthOf(netId)));
     server.send(encodeDecorationState({ pieces: simulation.decorationsList(), reason: null }));
     server.send(encodePickupsTaken(simulation.takenPickupIdsOf(netId)));
     server.send(encodeTreeStates(simulation.changedTrees()));
@@ -673,6 +676,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceEquipped(simulation);
     this.announceWorn(simulation);
     this.announceHealth(simulation);
+    this.announceWarmth(simulation);
     this.announceExpeditions(simulation);
     this.announceMeals(simulation);
     this.announceBuriedCaches(simulation);
@@ -1177,6 +1181,17 @@ export class World extends DurableObject<WorldEnv> {
    * else's business how hurt anybody else is. A knockout's new position
    * needs no message of its own - it is already in the next snapshot.
    */
+  private announceWarmth(simulation: WorldSimulation): void {
+    const changes = simulation.drainWarmthChanges();
+    if (changes.size === 0) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      if (attachment === null) continue;
+      const warmth = changes.get(attachment.netId);
+      if (warmth !== undefined) this.trySend(ws, encodeWarmth(warmth));
+    }
+  }
+
   private announceMeals(simulation: WorldSimulation): void {
     const changes = simulation.drainMealChanges();
     if (changes.size === 0) return;
@@ -1980,6 +1995,9 @@ export class World extends DurableObject<WorldEnv> {
       'CREATE TABLE IF NOT EXISTS player_expeditions (player_key TEXT PRIMARY KEY, state TEXT NOT NULL)',
     );
     sql.exec(
+      'CREATE TABLE IF NOT EXISTS player_warmth (player_key TEXT PRIMARY KEY, value REAL NOT NULL, cold_ticks INTEGER NOT NULL)',
+    );
+    sql.exec(
       'CREATE TABLE IF NOT EXISTS player_meals (player_key TEXT PRIMARY KEY, item_index INTEGER, ticks_left INTEGER NOT NULL)',
     );
     sql.exec(
@@ -2251,6 +2269,12 @@ export class World extends DurableObject<WorldEnv> {
       .toArray();
     const row = rows[0];
     if (row === undefined) return undefined;
+    const savedWarmth = this.ctx.storage.sql
+      .exec<{ value: number; cold_ticks: number }>(
+        'SELECT value,cold_ticks FROM player_warmth WHERE player_key=?',
+        playerKey,
+      )
+      .toArray()[0];
     const savedMeal = this.ctx.storage.sql
       .exec<{ item_index: number | null; ticks_left: number }>(
         'SELECT item_index,ticks_left FROM player_meals WHERE player_key=?',
@@ -2265,6 +2289,11 @@ export class World extends DurableObject<WorldEnv> {
       .toArray()[0];
     return {
       takenPickups: this.loadTakenPickups(playerKey),
+      warmth: warmthFromSaved(
+        savedWarmth === undefined
+          ? null
+          : { value: savedWarmth.value, coldTicks: savedWarmth.cold_ticks },
+      ),
       expedition: this.readExpedition(playerKey),
       fishRecords: this.readFishRecords(playerKey),
       meal: mealFromSaved(
@@ -2722,6 +2751,7 @@ export class World extends DurableObject<WorldEnv> {
     );
     this.writePlayerGear(attachment.playerKey, wornEntries(simulation.wornOf(attachment.netId)));
     this.writeMeal(attachment.playerKey, simulation.mealStateOf(attachment.netId));
+    this.writeWarmth(attachment.playerKey, simulation.warmthStateOf(attachment.netId));
     this.writeExpedition(attachment.playerKey, simulation.expeditionStateOf(attachment.netId));
     this.writeFishRecords(attachment.playerKey, simulation.fishRecordsOf(attachment.netId));
     this.writeSentinel(attachment.playerKey, simulation.sentinelVictoriesOf(attachment.netId));
@@ -2781,6 +2811,15 @@ export class World extends DurableObject<WorldEnv> {
       JSON.stringify(saved),
     );
   }
+  private writeWarmth(playerKey: string, warmth: WarmthState): void {
+    this.ctx.storage.sql.exec(
+      'INSERT INTO player_warmth (player_key,value,cold_ticks) VALUES (?,?,?) ON CONFLICT(player_key) DO UPDATE SET value=excluded.value,cold_ticks=excluded.cold_ticks',
+      playerKey,
+      warmth.value,
+      warmth.coldTicks,
+    );
+  }
+
   private writeMeal(playerKey: string, meal: MealState): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO player_meals (player_key,item_index,ticks_left) VALUES (?,?,?) ON CONFLICT(player_key) DO UPDATE SET item_index=excluded.item_index,ticks_left=excluded.ticks_left',
@@ -2974,6 +3013,7 @@ export class World extends DurableObject<WorldEnv> {
       this.writePlayerItems(attachment.playerKey, player.items);
       this.writePlayerGear(attachment.playerKey, player.worn ?? []);
       this.writeMeal(attachment.playerKey, mealFromSaved(player.meal));
+      this.writeWarmth(attachment.playerKey, warmthFromSaved(player.warmth));
       this.writeExpedition(attachment.playerKey, expeditionFromSaved(player.expedition));
       this.writeFishRecords(attachment.playerKey, fishRecordsFromSaved(player.fishRecords));
       this.writeSentinel(attachment.playerKey, player.sentinelVictories ?? 0);
