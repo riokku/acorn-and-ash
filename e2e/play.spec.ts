@@ -36,6 +36,7 @@ declare global {
       droppedPiles(): Array<{ id: number; item: string; count: number; x: number; z: number }>;
       nearbyItem(): string | null;
       nearbyPile(): { item: string; count: number } | null;
+      pileInReach(id: number): boolean;
       nearGatherSpot(): string | null;
       toasts(): Array<{ item: string; count: number }>;
       felledTrees(): number[];
@@ -530,23 +531,35 @@ async function walkWithinReachOf(page: Page, x: number, z: number, item: string)
 }
 
 /**
- * Walk to an exact spot until close enough for the interact key, for
- * something with no debug flag of its own to say "this is nearby" - unlike
- * `walkWithinReachOf`, which watches `nearbyItem()` for a pickup.
+ * Approach a dropped pile until the game says that pile is reachable. Other
+ * targets, such as a campfire, keep their original 1.5 metre approach distance.
  */
-async function walkOntoSpot(page: Page, x: number, z: number): Promise<void> {
+async function walkOntoSpot(page: Page, x: number, z: number, pileId?: number): Promise<void> {
+  let previous: { x: number; z: number } | undefined;
   for (let step = 0; step < 80; step++) {
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
-    if (gap < 1.5) return;
+    if (
+      pileId === undefined
+        ? gap < 1.5
+        : await page.evaluate((id) => window.acornDebug?.pileInReach(id) ?? false, pileId)
+    )
+      return;
     await page.evaluate(
       ([targetX, targetZ]) => window.acornDebug?.faceTowards(targetX ?? 0, targetZ ?? 0),
       [x, z],
     );
 
-    await page.keyboard.down('KeyW');
-    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
-    await page.keyboard.up('KeyW');
+    // Walk around solid stumps and rocks when a direct approach stops moving.
+    const stuck =
+      previous !== undefined &&
+      here !== undefined &&
+      Math.hypot(here.x - previous.x, here.z - previous.z) < 0.05;
+    const key = stuck ? 'KeyD' : 'KeyW';
+    await page.keyboard.down(key);
+    await page.waitForTimeout(stuck ? 300 : Math.min(250, Math.max(80, gap * 40)));
+    await page.keyboard.up(key);
+    previous = here;
     await page.waitForTimeout(200);
   }
   throw new Error(`Never got within reach of ${x}, ${z}`);
@@ -997,7 +1010,10 @@ async function collectFallenLogs(page: Page): Promise<void> {
       ))
     )
       continue;
-    await walkOntoSpot(page, log.x, log.z);
+    // Solid stumps can prevent standing 1.5 m from a log behind them. Stop
+    // when that exact pile is reachable, as the game does, then verify E
+    // actually collects it. Other nearby piles must not end this approach.
+    await walkOntoSpot(page, log.x, log.z, log.id);
     await page.keyboard.down('KeyE');
     await expect
       .poll(async () =>
