@@ -107,6 +107,8 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'mageHat');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toBeVisible();
   await expect(page.getByTestId('character-stats')).toContainText('Protection0%');
+  await expect(page.getByTestId('character-stats')).toContainText('Vitality110');
+  await expect(page.getByTestId('health-bar')).toHaveAttribute('aria-valuemax', '110');
 
   // A piece that does not fit is turned down, and the screen says so.
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-feet'));
@@ -119,6 +121,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   }
   await expect(page.getByTestId('gear-slot-hands')).toHaveAttribute('data-item', 'leatherGloves');
   await expect(page.getByTestId('gear-slot-offHand')).toHaveAttribute('data-item', 'woodenShield');
+  await expect(page.getByTestId('health-bar')).toHaveAttribute('aria-valuemax', '120');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: testInfo.outputPath('gear-worn.png') });
 

@@ -1627,6 +1627,7 @@ function decodeThreatHit(view: DataView): ThreatHit {
 /** Bit flags packed into a Health message's last byte, so a dodge costs no extra space. */
 const HEALTH_FLAG_KNOCKED_OUT = 1 << 0;
 const HEALTH_FLAG_DODGED = 1 << 1;
+const HEALTH_FLAG_ADJUSTED = 1 << 2;
 
 /** How much health a player has left, in five bytes. Only they are ever sent it. */
 export function encodeHealth(event: HealthEvent): ArrayBuffer {
@@ -1637,7 +1638,9 @@ export function encodeHealth(event: HealthEvent): ArrayBuffer {
   view.setUint8(3, clamp(Math.round(event.health), 0, 255));
   view.setUint8(
     4,
-    (event.knockedOut ? HEALTH_FLAG_KNOCKED_OUT : 0) | (event.dodged ? HEALTH_FLAG_DODGED : 0),
+    (event.knockedOut ? HEALTH_FLAG_KNOCKED_OUT : 0) |
+      (event.dodged ? HEALTH_FLAG_DODGED : 0) |
+      (event.adjusted ? HEALTH_FLAG_ADJUSTED : 0),
   );
   return buffer;
 }
@@ -1649,6 +1652,7 @@ function decodeHealth(view: DataView): HealthEvent {
     health: view.getUint8(3),
     knockedOut: (flags & HEALTH_FLAG_KNOCKED_OUT) !== 0,
     dodged: (flags & HEALTH_FLAG_DODGED) !== 0,
+    ...((flags & HEALTH_FLAG_ADJUSTED) !== 0 ? { adjusted: true } : {}),
   };
 }
 

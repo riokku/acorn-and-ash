@@ -13,6 +13,8 @@ export function equipmentDetail(item: ItemId): string | null {
   const parts: string[] = [];
   if (bonus.power !== undefined) parts.push(`Power +${bonus.power}% when used in your main hand.`);
   if (bonus.protection !== undefined) parts.push(`Protection +${bonus.protection}% while worn.`);
+  if (bonus.vitality !== undefined)
+    parts.push(`Vitality +${bonus.vitality} maximum health while worn.`);
   return parts.join(' ') || null;
 }
 
@@ -28,10 +30,14 @@ export function equipmentComparison(
   for (const [key, label] of [
     ['power', 'Power'],
     ['protection', 'Protection'],
+    ['vitality', 'Vitality'],
   ] as const) {
     const delta = after[key] - before[key];
+    const unit = key === 'vitality' ? '' : '%';
     if (delta !== 0)
-      parts.push(`${label} ${before[key]}% → ${after[key]}% (${delta > 0 ? '+' : ''}${delta}%).`);
+      parts.push(
+        `${label} ${before[key]}${unit} → ${after[key]}${unit} (${delta > 0 ? '+' : ''}${delta}${unit}).`,
+      );
   }
   return parts.join(' ') || 'No change to your current equipment stats.';
 }

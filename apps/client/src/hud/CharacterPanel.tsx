@@ -95,6 +95,10 @@ export function CharacterPanel({
           <dt>Protection</dt>
           <dd>{characterStats(worn, held).protection}%</dd>
         </div>
+        <div title="Maximum health from your worn equipment. Putting gear on does not heal you.">
+          <dt>Vitality</dt>
+          <dd>{characterStats(worn, held).vitality}</dd>
+        </div>
       </dl>
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
         {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}

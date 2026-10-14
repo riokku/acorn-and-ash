@@ -616,6 +616,8 @@ export interface HealthEvent {
   readonly knockedOut: boolean;
   /** Whether a dodge is the only reason this did not cost any health. */
   readonly dodged: boolean;
+  /** A cap adjustment after changing equipment, not an incoming blow. */
+  readonly adjusted?: boolean;
 }
 
 /** Something a player has placed in the world. */
@@ -1891,6 +1893,8 @@ export class WorldSimulation {
       AimYaw({ yaw: facingYaw }),
     );
 
+    const worn = wornFromEntries(saved?.worn);
+    const healthMax = characterStats(worn).vitality;
     const hunger = saved?.hunger ?? HUNGER_MAX;
     const inventory = saved ? inventoryFromEntries(saved.items) : createInventory();
     this.players.set(netId, {
@@ -1938,7 +1942,10 @@ export class WorldSimulation {
       // arrival, so the tick loop does not repeat itself the moment it runs.
       lastSentHunger: Math.round(hunger),
       meal: mealFromSaved(saved?.meal),
-      health: saved?.health ?? HEALTH_MAX,
+      health: Math.min(
+        healthMax,
+        Math.max(0, Number.isFinite(saved?.health) ? saved!.health! : healthMax),
+      ),
       action: createActionState(),
       previousButtons: 0,
       knockedOutAtTick: 0,
@@ -1947,10 +1954,10 @@ export class WorldSimulation {
       // With a weapon already in the main hand, nothing chosen from the pack
       // means the weapon is drawn, not that a tool should be picked up.
       equippedItem:
-        saved?.equippedItem == null && wornFromEntries(saved?.worn).mainHand !== undefined
+        saved?.equippedItem == null && worn.mainHand !== undefined
           ? null
           : initialEquippedItem(inventory, saved?.equippedItem ?? null),
-      worn: wornFromEntries(saved?.worn),
+      worn,
       lastCombatTick: -Infinity,
       explored: exploredMapFrom(saved?.explored),
       exploredCell: null,
@@ -2243,8 +2250,9 @@ export class WorldSimulation {
         const hadMeal = runtime.meal.item !== null;
         const mealStep = advanceMeal(runtime.meal);
         runtime.meal = mealStep.state;
-        if (mealStep.healing > 0 && runtime.health > 0 && runtime.health < HEALTH_MAX) {
-          runtime.health = Math.min(HEALTH_MAX, runtime.health + mealStep.healing);
+        const healthMax = characterStats(runtime.worn).vitality;
+        if (mealStep.healing > 0 && runtime.health > 0 && runtime.health < healthMax) {
+          runtime.health = Math.min(healthMax, runtime.health + mealStep.healing);
           this.healthEvents.push({
             netId: runtime.netId,
             health: Math.round(runtime.health),
@@ -4662,7 +4670,7 @@ export class WorldSimulation {
         protectedDamage(amount, characterStats(runtime.worn, this.equippedItemOf(runtime.netId))),
     );
     const knockedOut = remaining <= 0;
-    runtime.health = knockedOut ? HEALTH_MAX : remaining;
+    runtime.health = knockedOut ? characterStats(runtime.worn).vitality : remaining;
 
     if (knockedOut) {
       // Out of the boat first, so what they buried is on dry ground.
@@ -5725,6 +5733,17 @@ export class WorldSimulation {
   }
 
   private gearChanged(runtime: PlayerRuntime): void {
+    const maximum = characterStats(runtime.worn).vitality;
+    if (runtime.health > maximum) {
+      runtime.health = maximum;
+      this.healthEvents.push({
+        netId: runtime.netId,
+        health: Math.round(runtime.health),
+        knockedOut: false,
+        dodged: false,
+        adjusted: true,
+      });
+    }
     // A weapon put on is what they now hold, ahead of whatever they chose
     // from the pack; and a tool leaving the hand changes what is shown.
     this.wornEvents.push(runtime.netId);

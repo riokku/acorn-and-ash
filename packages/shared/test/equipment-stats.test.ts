@@ -5,6 +5,8 @@ import {
   WorldSimulation,
   characterStats,
   statsWithItem,
+  encodeHealth,
+  decodeServerMessage,
 } from '../src/index';
 const worlds: WorldSimulation[] = [];
 afterEach(() => worlds.splice(0).forEach((sim) => sim.dispose()));
@@ -89,4 +91,51 @@ it('lets a player make and wear a protective shield with ordinary gathered suppl
   expect(characterStats(sim.wornOf(1), sim.equippedItemOf(1)).protection).toBe(15);
   expect(sim.inventoryOf(1).log).toBeUndefined();
   expect(sim.inventoryOf(1).rope).toBeUndefined();
+});
+
+describe('equipment vitality', () => {
+  it('raises the cap without healing, clamps removal, and cannot heal by repeatedly swapping', () => {
+    const sim = world();
+    sim.giveTestGear(1, ['bearHat']);
+    expect(sim.wearGear(1, 'bearHat', 'helm').ok).toBe(true);
+    expect(characterStats(sim.wornOf(1)).vitality).toBe(115);
+    expect(sim.healthOf(1)).toBe(100);
+    const saved = sim.persistablePlayers()[0]!;
+    sim.removePlayer(1);
+    sim.addPlayer(1, { ...saved, health: 115 });
+    expect(sim.takeOffGear(1, 'helm').ok).toBe(true);
+    expect(sim.healthOf(1)).toBe(100);
+    const adjustment = sim.drainHealthEvents().at(-1)!;
+    expect(adjustment.adjusted).toBe(true);
+    expect(decodeServerMessage(encodeHealth(adjustment))).toEqual({
+      type: 'health',
+      event: adjustment,
+    });
+    expect(sim.wearGear(1, 'bearHat', 'helm').ok).toBe(true);
+    expect(sim.healthOf(1)).toBe(100);
+  });
+  it('restores the derived cap on reconnect and heals meals up to that cap', () => {
+    const sim = world();
+    const saved = sim.persistablePlayers()[0]!;
+    sim.removePlayer(1);
+    sim.addPlayer(1, {
+      ...saved,
+      health: 114,
+      worn: [{ slot: 'helm', item: 'bearHat' }],
+      meal: { item: 'forestStew', ticksLeft: 1 },
+    });
+    sim.step(1000);
+    expect(sim.healthOf(1)).toBe(115);
+    expect(sim.persistablePlayers()[0]?.health).toBe(115);
+  });
+  it('wakes a knocked-out player at their equipment cap', () => {
+    const sim = world();
+    sim.giveTestGear(1, ['bearHat']);
+    sim.wearGear(1, 'bearHat', 'helm');
+    (
+      sim as unknown as { raiderStrikesPlayer(id: number, damage: number, tick: number): void }
+    ).raiderStrikesPlayer(1, 500, sim.tick);
+    expect(sim.drainHealthEvents().at(-1)).toMatchObject({ health: 115, knockedOut: true });
+    expect(sim.healthOf(1)).toBe(115);
+  });
 });
