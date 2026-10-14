@@ -10,6 +10,7 @@ import type { ItemId } from '../data/items';
 import { forestTreeScale } from './tree-stature';
 import { cylinder, type Collider } from './colliders';
 import { overlapsWater, waterColliders, type WaterCircle } from './water';
+import { pondGroundHeight } from './pond';
 
 /** One piece of scenery standing in the world. */
 export interface PlacedProp {
@@ -18,8 +19,8 @@ export interface PlacedProp {
   readonly x: number;
   readonly z: number;
   /**
-   * Base height off the ground, in metres. Absent, or zero, everywhere in the
-   * hand-built clearing, which is flat; the wilderness sets this from the
+   * World height at the planted base, in metres. Usually zero in the
+   * hand-built clearing; the pond bank and wilderness set this from the
    * terrain so a tree on a hillside sits on the slope rather than floating
    * above or sinking into it.
    */
@@ -92,22 +93,16 @@ export const AXE_PICKUP_ID = 1;
 /**
  * The pond, on the open ground to the right of where you start.
  *
- * Three overlapping circles make a kidney shape rather than a perfect disc. It
+ * Four unequal, offset lobes make a broad pool, a narrow end and a small cove. It
  * sits clear of the landmarks and of the walk from the start to the axe, so the
  * clearing you already know keeps its shape.
  */
-// Scaling both radii and offsets by √2 doubles the whole water area. Anchor
-// the west bank so the starting rod remains on dry land beside the pond.
-const POND_SCALE = Math.SQRT2;
 export const POND: readonly WaterCircle[] = [
-  { x: 11, z: -5, radius: 4.2 },
-  { x: 14.5, z: -3, radius: 3.2 },
-  { x: 9.5, z: -8.2, radius: 2.6 },
-].map((circle) => ({
-  x: 6.8 + (circle.x - 6.8) * POND_SCALE,
-  z: -5 + (circle.z + 5) * POND_SCALE,
-  radius: circle.radius * POND_SCALE,
-}));
+  { x: 12.8, z: -5, radius: 5.9 },
+  { x: 18.1, z: -3.4, radius: 3.9 },
+  { x: 10.3, z: -9.1, radius: 3.3 },
+  { x: 15.3, z: 0.2, radius: 2.9 },
+];
 
 /** Where the first fishing rod lies, on the bank nearest the start. */
 export const ROD_SPOT = { x: 5.6, z: -4.2 } as const;
@@ -165,7 +160,10 @@ const ROCK_CLEARANCE = 1.2;
  * The same seed always produces the same clearing, on the server and on every
  * client, so nobody has to send the scenery over the network.
  */
-export function buildTestClearing(seed: number): Clearing {
+export function buildTestClearing(
+  seed: number,
+  terrain: Terrain = { kind: 'pond-clearing', heightAt: (x, z) => pondGroundHeight(POND, x, z) },
+): Clearing {
   const rng = createRng(seed);
   const props: PlacedProp[] = [];
   let nextId = 1;
@@ -231,7 +229,12 @@ export function buildTestClearing(seed: number): Clearing {
   // rather than never placed: skipping one while placing would shift every id
   // after it, and trees are saved by their ids.
   const spotsToKeepClear = [...pickups, ...gatherSpots];
-  const kept = props.filter((prop) => !isRockInTheWay(prop, water, spotsToKeepClear));
+  const kept = props
+    .filter((prop) => !isRockInTheWay(prop, water, spotsToKeepClear))
+    .map((prop) => {
+      const y = terrain.heightAt(prop.x, prop.z);
+      return y === 0 ? prop : { ...prop, y };
+    });
 
   const indexById = new Map<number, number>();
   kept.forEach((prop, index) => indexById.set(prop.id, index));
@@ -242,7 +245,7 @@ export function buildTestClearing(seed: number): Clearing {
     pickups,
     gatherSpots,
     water,
-    colliders: [...kept.map((prop) => colliderForProp(prop)), ...waterColliders(water)],
+    colliders: [...kept.map((prop) => colliderForProp(prop, terrain)), ...waterColliders(water)],
     indexById,
   };
 }

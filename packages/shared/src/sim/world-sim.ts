@@ -1680,10 +1680,10 @@ export class WorldSimulation {
     this.hungerDrainPerSecond = hungerDrainPerSecond(
       options.hungerEmptyAfterSeconds ?? HUNGER_EMPTY_AFTER_SECONDS,
     );
-    this.clearing = buildTestClearing(options.seed);
+    const terrain = options.terrain ?? createWildernessTerrain(options.seed);
+    this.clearing = buildTestClearing(options.seed, terrain);
     this.keepOutWater = [...this.clearing.water, ...LAKE.basin, ...STREAM_KEEP_OUT];
     this.patches = this.clearing.gatherSpots.map((spot) => freshPatch(options.seed, spot));
-    const terrain = options.terrain ?? createWildernessTerrain(options.seed);
     this.wilderness = buildWilderness(options.seed, terrain);
     this.encounterSites = buildEncounterSites(
       options.seed,
@@ -1742,7 +1742,7 @@ export class WorldSimulation {
     if (options.withProps !== false) {
       for (const prop of this.clearing.props) {
         this.world.spawn(
-          Position({ x: prop.x, y: 0, z: prop.z }),
+          Position({ x: prop.x, y: prop.y ?? 0, z: prop.z }),
           Prop({
             kindIndex: propKindIndex(prop.kind),
             rotationY: prop.rotationY,

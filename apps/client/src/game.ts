@@ -2636,8 +2636,8 @@ export class Game {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       if (this.clearingScene !== null) return;
 
-      const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
+      const clearing = buildTestClearing(seed, terrain);
       this.footprints?.dispose();
       this.waterWake.clear();
       this.footprints = createSnowFootprints((x, z) =>
@@ -2693,7 +2693,7 @@ export class Game {
       this.outdoors.add(this.encounterLandmarks.group);
 
       this.clearing = clearing;
-      this.clearingScene = buildClearingScene(clearing);
+      this.clearingScene = buildClearingScene(clearing, terrain);
       this.clearingScene.setTakenPickups(this.takenPickups);
       this.outdoors.add(this.clearingScene.group);
 

@@ -12,6 +12,7 @@ import {
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
+  type Terrain,
 } from '@acorn/shared';
 
 import { itemModelParts } from './item-models';
@@ -80,11 +81,11 @@ export interface TreeAppearance {
  * fifty trees cost a handful of draw calls instead of three hundred.
  *
  * The ground itself is not built here: the wilderness scene draws one mesh for
- * the whole visible world, flat through the clearing and rolling into hills
+ * the whole visible world, recessed by the pond and rolling into hills
  * beyond it, so there is only ever one surface to stand on and nothing for two
  * flat planes to z-fight over.
  */
-export function buildClearingScene(clearing: Clearing): ClearingScene {
+export function buildClearingScene(clearing: Clearing, terrain?: Terrain): ClearingScene {
   const group = new THREE.Group();
   const disposables: Array<{ dispose(): void }> = [];
 
@@ -107,7 +108,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
     const [kindId = '', variantText = '0'] = key.split(':');
     const variant = Number(variantText);
     const kind = PROP_KINDS[kindId as keyof typeof PROP_KINDS];
-    const parts = createPropMeshes(kind, props.length, false, undefined, variant);
+    const parts = createPropMeshes(kind, props.length, false, terrain, variant);
     for (const part of parts) {
       group.add(part.mesh);
       disposables.push(part);
@@ -124,7 +125,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
 
   // One spare stump per tree, waiting out of sight until that tree comes down.
   const trees = clearing.props.filter((prop) => choppingRuleFor(PROP_KINDS[prop.kind]) !== null);
-  const freshStumps = createPropMeshes(PROP_KINDS.stump, trees.length);
+  const freshStumps = createPropMeshes(PROP_KINDS.stump, trees.length, false, terrain);
   for (const part of freshStumps) {
     group.add(part.mesh);
     disposables.push(part);
@@ -142,6 +143,7 @@ export function buildClearingScene(clearing: Clearing): ClearingScene {
   const pickups = new Map<number, THREE.Object3D>();
   for (const pickup of clearing.pickups) {
     const model = createPickup(pickup, disposables);
+    model.position.y += terrain?.heightAt(pickup.x, pickup.z) ?? 0;
     pickups.set(pickup.id, model);
     group.add(model);
   }

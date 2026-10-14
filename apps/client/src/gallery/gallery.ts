@@ -20,12 +20,14 @@ import {
   POND as CLEARING_POND,
   DEFAULT_WORLD_SEED,
   buildTestClearing,
+  pondGroundHeight,
   dayBrightness,
   isHomeKind,
   type BuildableKindId,
   type PlacedProp,
   type PropKindId,
   type WaterCircle,
+  type Terrain,
 } from '@acorn/shared';
 
 import { createGroundShader } from '../art/ground-shading';
@@ -392,9 +394,26 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const alone = EXHIBITS.some((exhibit) => exhibit.name === focus && exhibit.alone === true);
   if (!alone) {
     const water = focus === 'pond' ? CLEARING_POND : POND;
-    scene.add(createGalleryGround(scenery, undefined, undefined, undefined, water));
+    scene.add(
+      createGalleryGround(
+        scenery,
+        (x, z) => pondGroundHeight(water, x, z),
+        undefined,
+        focus === 'pond' ? 400 : undefined,
+        water,
+      ),
+    );
     scene.add(createPond(water).group);
-    addScenery(scene, scenery);
+    addScenery(
+      scene,
+      scenery,
+      focus === 'pond'
+        ? {
+            kind: 'pond-gallery',
+            heightAt: (x, z) => pondGroundHeight(water, x, z),
+          }
+        : undefined,
+    );
   }
 
   const updaters: Array<(deltaSeconds: number) => void> = [];
@@ -500,7 +519,10 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     renderer.render(scene, camera);
     frames += 1;
     // For screenshots: say so once a few frames have settled.
-    if (frames === 8) document.body.dataset.galleryReady = 'true';
+    if (frames === 8) {
+      document.body.dataset.galleryReady = 'true';
+      if (params.has('still')) renderer.setAnimationLoop(null);
+    }
   });
 }
 
@@ -612,7 +634,7 @@ function createGalleryGround(
   return mesh;
 }
 
-function addScenery(scene: THREE.Scene, scenery: readonly PlacedProp[]): void {
+function addScenery(scene: THREE.Scene, scenery: readonly PlacedProp[], terrain?: Terrain): void {
   const byKind = new Map<string, PlacedProp[]>();
   for (const prop of scenery) {
     const key = `${prop.kind}:${treeVariant(prop)}`;
@@ -624,7 +646,7 @@ function addScenery(scene: THREE.Scene, scenery: readonly PlacedProp[]): void {
       PROP_KINDS[kind as PropKindId],
       props.length,
       false,
-      undefined,
+      terrain,
       Number(variantText),
     );
     props.forEach((prop, index) => placeInstance(parts, index, prop));

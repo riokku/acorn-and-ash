@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../src/constants';
 import { mountainWeight } from '../src/world/mountains';
+import { POND } from '../src/world/clearing';
+import { POND_BANK_WIDTH } from '../src/world/pond';
+import { overlapsWater } from '../src/world/water';
 import { nearestOnStream, STREAM } from '../src/world/stream';
 import {
   createFlatTerrain,
@@ -22,10 +25,11 @@ describe('flat terrain', () => {
 });
 
 describe('the wilderness terrain', () => {
-  it('stays flat through the hand-built clearing and its tree line', () => {
+  it('stays flat through the hand-built clearing and its tree line outside the pond bank', () => {
     const terrain = createWildernessTerrain(4242);
     for (let radius = 0; radius <= WILDERNESS.flatRadius; radius += 5) {
-      expect(terrain.heightAt(radius, 0)).toBe(0);
+      if (!overlapsWater(POND, radius, 0, POND_BANK_WIDTH))
+        expect(terrain.heightAt(radius, 0)).toBe(0);
       expect(terrain.heightAt(0, -radius)).toBe(0);
     }
   });

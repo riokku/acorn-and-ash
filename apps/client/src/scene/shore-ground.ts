@@ -3,6 +3,7 @@ import {
   streamPointAt,
   streamWaterHalfWidthAt,
   streamPools,
+  POND,
   type Lake,
   type Stream,
   type Terrain,
@@ -38,6 +39,7 @@ export function shoreGroundCells(
     }
   };
   for (const circle of [
+    ...POND,
     ...lake.basin,
     ...lake.islands.flatMap((island) => island.lobes),
     ...streamPools(stream).flatMap((slough) => slough.basin),
