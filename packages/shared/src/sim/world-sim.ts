@@ -5550,9 +5550,9 @@ export class WorldSimulation {
     return Math.round(this.players.get(netId)?.hunger ?? HUNGER_MAX);
   }
 
-  /** How much health a player has left right now, from `HEALTH_MAX` down to zero. */
+  /** Current health, retaining armor's fractional damage for saving. The wire encoder rounds for display. */
   healthOf(netId: number): number {
-    return Math.round(this.players.get(netId)?.health ?? HEALTH_MAX);
+    return this.players.get(netId)?.health ?? HEALTH_MAX;
   }
 
   private warmthEnvironment(runtime: PlayerRuntime): WarmthEnvironment {
