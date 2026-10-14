@@ -5,14 +5,14 @@ import {
   ActionKind,
   CHARGE_TICKS,
   LIGHT_COMBO,
+  STRIKE,
   RAIDER_KINDS,
   RiseFrom,
-  STRIKE,
   TICK_SECONDS,
   type RaiderKindId,
 } from '@acorn/shared';
 
-import { playSwoosh } from '../audio/sound';
+import { CombatSwoosh } from '../audio/combat-swoosh';
 import { playBoneClatter, playClank, playEarthRumble, playWindupRing } from '../audio/raid-sounds';
 import { createCharacterFromModel, type Character, type CharacterFrame } from './character';
 import { isSweeping, type MovePose } from './character-moves';
@@ -84,6 +84,7 @@ export class RaiderFigure {
   private readonly glint: THREE.Sprite;
   private readonly glintMaterial: THREE.SpriteMaterial;
   private seen: SeenMove | null = null;
+  private readonly swoosh = new CombatSwoosh();
   private flash = 0;
   private flashColor = FLASH_WHITE;
   private jolt: { awayX: number; awayZ: number; age: number; strength: number } | null = null;
@@ -191,6 +192,7 @@ export class RaiderFigure {
     group.position.set(at.x, at.y, at.z);
     group.rotation.y = at.yaw;
     this.lastFrame = frame;
+    this.swoosh.update(frame.move, volume);
     this.noticeNewMove(frame.move, volume);
 
     const pose = this.character.update(deltaSeconds, frame);
@@ -229,6 +231,7 @@ export class RaiderFigure {
 
   /** Gave up, or went out of sight: sink back into the earth rather than vanish. */
   depart(): void {
+    this.swoosh.clear();
     if (this.departing !== null) return;
     this.departing = 0;
     this.bar.setWanted(false, false);
@@ -285,6 +288,7 @@ export class RaiderFigure {
    * away. Use the body that comes back for the next one of the same kind.
    */
   retire(): Character {
+    this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.group.remove(this.bar.sprite);
     this.trail.dispose();
@@ -307,6 +311,7 @@ export class RaiderFigure {
   }
 
   dispose(): void {
+    this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.dispose();
     this.trail.dispose();
@@ -334,17 +339,6 @@ export class RaiderFigure {
         this.glintStrength = 1.4;
         playWindupRing(volume, true);
         break;
-      case ActionKind.Swing: {
-        const swing = LIGHT_COMBO[Math.min(Math.max(move.step, 1), LIGHT_COMBO.length) - 1];
-        const ticksToBlow = (swing?.impact ?? 4) - age;
-        if (ticksToBlow > 0) playSwoosh(ticksToBlow * TICK_SECONDS, 1, volume);
-        break;
-      }
-      case ActionKind.Strike: {
-        const ticksToBlow = STRIKE.impact - age;
-        if (ticksToBlow > 0) playSwoosh(ticksToBlow * TICK_SECONDS, 1.6, volume);
-        break;
-      }
       case ActionKind.KnockedOut:
         if (this.sinceDown === null) {
           this.sinceDown = 0;

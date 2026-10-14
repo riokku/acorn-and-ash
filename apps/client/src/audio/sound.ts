@@ -39,6 +39,7 @@ let musicVolumeScale = 1;
 let sfxVolumeScale = 1;
 let impactSoundsActive = true;
 const impactVoices = new Map<string, HTMLAudioElement[]>();
+const activeSwooshes = new Set<() => void>();
 
 /**
  * Starts the background loop, once. Call this from a real click or key
@@ -66,6 +67,7 @@ export function setMusicVolume(scale: number): void {
 /** From the Settings menu. Applies to every sound effect played from here on. */
 export function setSfxVolume(scale: number): void {
   sfxVolumeScale = scale;
+  if (scale <= 0) for (const cancel of activeSwooshes) cancel();
   for (const [url, clips] of impactVoices) {
     const level = TOOK_DAMAGE_URLS.includes(url) ? DAMAGE_VOLUME : SFX_VOLUME;
     for (const clip of clips) clip.volume = level * scale;
@@ -88,8 +90,10 @@ export function playTookDamage(): void {
 export function setImpactSoundsActive(active: boolean): void {
   if (active === impactSoundsActive) return;
   impactSoundsActive = active;
-  if (!active)
+  if (!active) {
     for (const voices of impactVoices.values()) for (const voice of voices) voice.pause();
+    for (const cancel of activeSwooshes) cancel();
+  }
 }
 
 /** Warm the existing short recordings while the world loads, without playing them. */
@@ -171,14 +175,18 @@ export function effectsVolume(): number {
  * through a filter, so it never sounds quite the same twice and needs no
  * recording of its own.
  */
-export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): void {
+export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): (() => void) | null {
+  if (!impactSoundsActive || sfxVolumeScale <= 0 || volume <= 0 || !Number.isFinite(peakInSeconds))
+    return null;
   const context = soundContext();
-  if (context === null) return;
+  if (context === null) return null;
 
   const rise = 0.13 * strength;
   const fall = 0.12 * strength;
-  const start = context.currentTime + Math.max(0, peakInSeconds - rise);
-  const peak = start + rise;
+  // A partly observed swing still peaks on its actual impact, not a full
+  // rise later. Compress the rise when less time remains.
+  const peak = context.currentTime + Math.max(0, peakInSeconds);
+  const start = Math.max(context.currentTime, peak - rise);
   const end = peak + fall;
   const pitch = (0.85 + Math.random() * 0.3) / strength;
 
@@ -198,6 +206,23 @@ export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): voi
   source.connect(filter).connect(gain).connect(context.destination);
   source.start(start, Math.random() * 0.2);
   source.stop(end + 0.02);
+  let ended = false;
+  const release = () => {
+    if (ended) return;
+    ended = true;
+    activeSwooshes.delete(cancel);
+    source.disconnect();
+    filter.disconnect();
+    gain.disconnect();
+  };
+  const cancel = () => {
+    if (ended) return;
+    source.stop();
+    release();
+  };
+  source.onended = release;
+  activeSwooshes.add(cancel);
+  return cancel;
 }
 
 const SWOOSH_VOLUME = 0.32;

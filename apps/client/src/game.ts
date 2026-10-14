@@ -1,3 +1,4 @@
+import { CombatSwoosh } from './audio/combat-swoosh';
 import { footGroundHeightAt } from './scene/standing-foot-contact';
 import { placedPropColliders, type Collider } from '@acorn/shared';
 import { streamRockColliders } from '@acorn/shared';
@@ -47,14 +48,7 @@ import {
   streamSurfaceAt,
 } from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
-import {
-  NO_MEAL,
-  mealCooldown,
-  type MealState,
-  DODGE,
-  DODGE_ATTACKS,
-  TICK_HZ,
-} from '@acorn/shared';
+import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
 import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
@@ -111,7 +105,6 @@ import {
   HUNGER_MAX,
   PICKUP_REACH,
   ITEM_KINDS,
-  DIG_SWING,
   VOXEL,
   digRefusal,
   overlapsWater,
@@ -123,9 +116,6 @@ import {
   supportInReach,
   type Support,
   type SupportCell,
-  LIGHT_COMBO,
-  STRIKE,
-  TICK_SECONDS,
   isFreeToInteract,
   restingPlaceInReach,
   POND_FISH,
@@ -281,7 +271,6 @@ import { preloadRaiderModels } from './scene/raider-model';
 import { RaiderCrowd, type FlatPoint } from './scene/raiders';
 import { MoveMemory, boatSeatAt, restSpotFor, rollDirection } from './scene/character-driver';
 import {
-  playSwoosh,
   playThreatHit,
   playTookDamage,
   playTreeHit,
@@ -785,6 +774,7 @@ export class Game {
   private lookSensitivity: number;
   private grassDensity: number;
   private grass: GrassScene | null = null;
+  private readonly ownSwoosh = new CombatSwoosh();
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly scene = new THREE.Scene();
   private readonly remotePlayers = createRemotePlayback();
@@ -1655,6 +1645,7 @@ export class Game {
     window.removeEventListener('pointerdown', this.startMusicFromInput);
     window.removeEventListener('keydown', this.startMusicFromInput);
     this.setup?.renderer.setAnimationLoop(null);
+    this.ownSwoosh.clear();
     this.signOutCountdown.dispose();
     this.controls?.dispose();
     this.connection?.close();
@@ -1775,6 +1766,7 @@ export class Game {
   }
 
   private handleMessage(message: ServerMessage): void {
+    if (message.type === 'welcome') this.ownSwoosh.clear();
     switch (message.type) {
       case 'chest': {
         if (!this.chestPending) break;
@@ -4752,6 +4744,7 @@ export class Game {
       rollDirection(action.heading, player.renderYaw()),
       this.isEquipped('shovel'),
     );
+    this.ownSwoosh.update(move);
     character.setEquippedItem(this.equipped.get(this.selfNetId) ?? null);
     character.setFishing(this.fishingPoses.get(this.selfNetId) ?? null);
     const rowing = action.kind === ActionKind.Row;
@@ -5104,6 +5097,7 @@ export class Game {
   }
 
   private moveToSpace(space: number, x: number, z: number, yaw: number): void {
+    this.ownSwoosh.clear();
     const player = this.localPlayer;
     if (player === null) return;
     const inside = space !== OUTDOORS;
@@ -5355,23 +5349,6 @@ export class Game {
     for (const event of events) {
       if (event.kind === 'cast') this.setFishingPose(this.selfNetId, 'casting');
       else if (event.kind === 'impact') this.showOwnBlow(event.impact);
-      else if (event.kind === 'began') this.swooshFor(event.action, event.step);
-    }
-  }
-
-  /** The swish of a swing of ours, timed to peak as its blow lands. */
-  private swooshFor(action: ActionKind, step: number): void {
-    if (action === ActionKind.Swing) {
-      const swing = this.isEquipped('shovel')
-        ? DIG_SWING
-        : LIGHT_COMBO[Math.min(Math.max(step, 1), LIGHT_COMBO.length) - 1];
-      playSwoosh((swing?.impact ?? 4) * TICK_SECONDS);
-    } else if (action === ActionKind.Strike) {
-      playSwoosh(STRIKE.impact * TICK_SECONDS, CHARGED_BLOW);
-    } else if (action === ActionKind.DodgeLight) {
-      playSwoosh(DODGE_ATTACKS.light.impact * TICK_SECONDS, 1.3);
-    } else if (action === ActionKind.DodgeHeavy) {
-      playSwoosh(DODGE_ATTACKS.heavy.impact * TICK_SECONDS, CHARGED_BLOW * 1.3);
     }
   }
 
