@@ -567,6 +567,7 @@ async function walkOntoSpot(page: Page, x: number, z: number, pileId?: number): 
 
 /** Walk to a gather spot until the game says something is in reach there. */
 async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Promise<void> {
+  let previous: { x: number; z: number } | undefined;
   for (let step = 0; step < 80; step++) {
     if ((await page.evaluate(() => window.acornDebug?.nearGatherSpot() ?? null)) !== null) return;
 
@@ -577,9 +578,15 @@ async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Pr
       [x, z],
     );
 
-    await page.keyboard.down('KeyW');
-    await page.waitForTimeout(Math.min(250, Math.max(80, gap * 40)));
-    await page.keyboard.up('KeyW');
+    const stuck =
+      previous !== undefined &&
+      here !== undefined &&
+      Math.hypot(here.x - previous.x, here.z - previous.z) < 0.05;
+    const key = stuck ? 'KeyD' : 'KeyW';
+    await page.keyboard.down(key);
+    await page.waitForTimeout(stuck ? 300 : Math.min(250, Math.max(80, gap * 40)));
+    await page.keyboard.up(key);
+    previous = here;
     await page.waitForTimeout(200);
   }
   throw new Error(`Never got within reach of the gather spot at ${x}, ${z}`);
