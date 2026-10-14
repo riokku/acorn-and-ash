@@ -40,6 +40,8 @@ export interface ChoppingRule {
   readonly swingsToFell: number;
   /** Logs it gives when it does. */
   readonly logs: number;
+  /** Loose branches scattered beside the fallen trunk. */
+  readonly sticks: number;
 }
 
 export interface PropKind {
@@ -72,7 +74,7 @@ export const PROP_KINDS = {
       canopyRadius: 2.6,
       canopyHeight: 10.2,
     },
-    chopping: { swingsToFell: 4, logs: 3 },
+    chopping: { swingsToFell: 4, logs: 3, sticks: 3 },
     colliderRadius: 0.5,
     triangleBudget: 4000,
     placeholderColor: 0x3f6b4a,
@@ -87,7 +89,7 @@ export const PROP_KINDS = {
       canopyRadius: 2.8,
       canopyHeight: 9.2,
     },
-    chopping: { swingsToFell: 3, logs: 2 },
+    chopping: { swingsToFell: 3, logs: 2, sticks: 2 },
     colliderRadius: 0.42,
     triangleBudget: 4000,
     placeholderColor: 0x7fa85c,
@@ -102,7 +104,7 @@ export const PROP_KINDS = {
       canopyRadius: 2.4,
       canopyHeight: 13,
     },
-    chopping: { swingsToFell: 5, logs: 4 },
+    chopping: { swingsToFell: 5, logs: 4, sticks: 3 },
     colliderRadius: 0.72,
     triangleBudget: 4000,
     placeholderColor: 0x4e7c42,
@@ -133,7 +135,7 @@ export const PROP_KINDS = {
       canopyRadius: 4.6,
       canopyHeight: 8.8,
     },
-    chopping: { swingsToFell: 4, logs: 3 },
+    chopping: { swingsToFell: 4, logs: 3, sticks: 3 },
     deciduous: true,
     colliderRadius: 0.55,
     triangleBudget: 4000,
@@ -149,7 +151,7 @@ export const PROP_KINDS = {
       canopyRadius: 2.5,
       canopyHeight: 8.8,
     },
-    chopping: { swingsToFell: 3, logs: 2 },
+    chopping: { swingsToFell: 3, logs: 2, sticks: 2 },
     deciduous: true,
     colliderRadius: 0.38,
     triangleBudget: 4000,

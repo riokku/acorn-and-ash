@@ -1289,18 +1289,20 @@ describe('dropping and destroying', () => {
   });
 });
 
-/** Wait for a fallen trunk to break, then gather each loose log with E. */
-async function collectFallenLogs(client: TestClient): Promise<void> {
-  await waitFor('the fallen logs', () => client.droppedPiles().some((pile) => pile.item === 'log'));
+/** Wait for a fallen trunk to break, then gather its loose wood with E. */
+async function collectFallenWood(client: TestClient, item: 'log' | 'stick' = 'log'): Promise<void> {
+  await waitFor(`the fallen ${item}s`, () =>
+    client.droppedPiles().some((pile) => pile.item === item),
+  );
   for (let attempt = 0; attempt < 20; attempt++) {
-    const log = client.droppedPiles().find((pile) => pile.item === 'log');
+    const log = client.droppedPiles().find((pile) => pile.item === item);
     if (log === undefined) return;
     await walkWithinReach(client, log);
     client.walk(0, 0, 0, 1, PlayerButton.Interact);
     client.walk(0, 0, 0, 1);
     await client.caughtUp();
   }
-  throw new Error('fallen logs were not collected');
+  throw new Error(`fallen ${item}s were not collected`);
 }
 
 describe('chopping a tree down', () => {
@@ -1381,7 +1383,7 @@ describe('chopping a tree down', () => {
     // Whose swing it was, so only the chopper's own client plays its axe swinging back.
     expect(hits.every((hit) => hit.netId === client.welcome().netId)).toBe(true);
 
-    await collectFallenLogs(client);
+    await collectFallenWood(client);
     // E can also gather a nearby shared stick patch while collecting logs.
     // Verify this tree's exact yield without assuming unrelated gathering is absent.
     expect(client.inventory().find((entry) => entry.item === 'log')?.count).toBe(logs);
@@ -1421,8 +1423,13 @@ describe('chopping a tree down', () => {
     expect(second.felledTrees()).toEqual([oak.id]);
     expect(second.treeStates().find((tree) => tree.treeId === oak.id)?.fall).toEqual(fall);
     expect(second.inventory().some((entry) => entry.item === 'log')).toBe(false);
-    await collectFallenLogs(second);
+    await collectFallenWood(second);
+    if (second.droppedPiles().some((pile) => pile.item === 'stick'))
+      await collectFallenWood(second, 'stick');
     expect(second.droppedPiles()).toEqual([]);
+    expect(
+      second.inventory().find((entry) => entry.item === 'stick')?.count,
+    ).toBeGreaterThanOrEqual(PROP_KINDS.oak.chopping.sticks);
     // A nearby loose stick can be collected while walking among the fallen logs.
     expect(second.inventory().filter((entry) => entry.item !== 'stick')).toEqual([
       { item: 'axe', count: 1 },
@@ -2042,7 +2049,7 @@ describe('building', () => {
 
     const oak = theOak(client.welcome().seed);
     await chopUntilFelled(client, oak, oak.id);
-    await collectFallenLogs(client);
+    await collectFallenWood(client);
   }
 
   /** Walk back to open ground near spawn - clear of every landmark - to build on. */
@@ -2074,22 +2081,26 @@ describe('building', () => {
     await getLogsForACampfire(client);
     // The oak pays out exactly what a campfire costs, so this is the plainest
     // possible check that a build is not free.
-    expect(client.inventory()).toEqual([
+    expect(client.inventory().filter((entry) => entry.item !== 'stick')).toEqual([
       { item: 'axe', count: 1 },
       { item: 'log', count: 4 },
       { item: 'bag', count: 1 },
     ]);
 
+    const sticksBefore = client.inventory().find((entry) => entry.item === 'stick')?.count ?? 0;
     await walkToOpenGround(client);
     await buildCampfire(client);
 
     const props = client.builtProps().filter((prop) => prop.id !== 60000);
     expect(props).toHaveLength(1);
     expect(props[0]?.kind).toBe('campfire');
-    expect(client.inventory()).toEqual([
+    expect(client.inventory().filter((entry) => entry.item !== 'stick')).toEqual([
       { item: 'axe', count: 1 },
       { item: 'bag', count: 1 },
     ]);
+    expect(client.inventory().find((entry) => entry.item === 'stick')?.count ?? 0).toBe(
+      sticksBefore,
+    );
     client.close();
   }, 30_000);
 

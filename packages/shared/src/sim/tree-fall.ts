@@ -59,3 +59,19 @@ export function treeLogSpots(tree: PlacedProp, yaw: number): Array<{ x: number; 
     };
   });
 }
+
+/** A few loose branches beside the trunk, using the same fall direction as its logs. */
+export function treeStickSpots(tree: PlacedProp, yaw: number): Array<{ x: number; z: number }> {
+  const kind = PROP_KINDS[tree.kind];
+  const rule = choppingRuleFor(kind);
+  if (rule === null || kind.shape.family !== 'tree') return [];
+  const length = Math.min(6, (kind.shape.trunkHeight + kind.shape.canopyHeight * 0.4) * tree.scale);
+  return Array.from({ length: rule.sticks }, (_, index) => {
+    const along = 1.2 + ((index + 0.5) / rule.sticks) * length;
+    const across = (index % 2 === 0 ? 1 : -1) * (0.65 + index * 0.12);
+    return {
+      x: tree.x + Math.sin(yaw) * along + Math.cos(yaw) * across,
+      z: tree.z + Math.cos(yaw) * along - Math.sin(yaw) * across,
+    };
+  });
+}

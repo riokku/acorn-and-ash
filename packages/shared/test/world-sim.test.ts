@@ -2068,7 +2068,7 @@ describe('chopping a tree down', () => {
     expect(landed).toBe(1);
   });
 
-  it('leaves individual logs on the ground after the fall, for anybody to gather', () => {
+  it('leaves logs and sticks after the fall, for anybody to gather', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     const tree = findTree(sim, 'oak');
@@ -2081,19 +2081,25 @@ describe('chopping a tree down', () => {
     sim.step(felledAt + TREE_BREAK_SECONDS * 1000 - 1);
     expect(sim.droppedPilesList()).toEqual([]);
     sim.step(felledAt + TREE_BREAK_SECONDS * 1000);
-    const logs = sim.droppedPilesList();
+    const piles = sim.droppedPilesList();
+    const logs = piles.filter((pile) => pile.item === 'log');
+    const sticks = piles.filter((pile) => pile.item === 'stick');
+    expect(sticks).toHaveLength(PROP_KINDS.oak.chopping.sticks);
+    expect(sticks.every((pile) => pile.count === 1)).toBe(true);
+    expect(piles.every((pile) => !overlapsWater(sim.clearing.water, pile.x, pile.z, 0))).toBe(true);
     expect(logs).toHaveLength(choppingRuleFor(PROP_KINDS.oak)?.logs ?? 0);
     expect(logs.every((pile) => pile.item === 'log' && pile.count === 1)).toBe(true);
     expect(logs.every((pile) => pile.z < tree.z)).toBe(true);
     expect(logs.every((pile) => !overlapsWater(sim.clearing.water, pile.x, pile.z, 0))).toBe(true);
     sim.addPlayer(2);
-    for (const [index, pile] of logs.entries()) {
+    for (const [index, pile] of piles.entries()) {
       sim.placePlayer(2, { x: pile.x, y: 0, z: pile.z }, 0);
       sim.queueInput(2, createInput(index + 1, 0, 0, 0, PlayerButton.Interact));
       sim.step(felledAt + (TREE_BREAK_SECONDS + 1) * 1000 + index * TICK_MILLISECONDS);
     }
     expect(sim.droppedPilesList()).toEqual([]);
     expect(countOf(sim.inventoryOf(2), 'log')).toBe(logs.length);
+    expect(countOf(sim.inventoryOf(2), 'stick')).toBe(sticks.length);
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
   });
 
@@ -2114,9 +2120,13 @@ describe('chopping a tree down', () => {
     expect(waking.changedTrees()).toEqual(sim.changedTrees());
     expect(waking.droppedPilesList()).toEqual([]);
     waking.fadeDroppedPiles(clockMs + TREE_BREAK_SECONDS * 1000);
-    expect(waking.droppedPilesList()).toHaveLength(4);
+    expect(waking.droppedPilesList()).toHaveLength(
+      PROP_KINDS.oak.chopping.logs + PROP_KINDS.oak.chopping.sticks,
+    );
     waking.fadeDroppedPiles(clockMs + TREE_BREAK_SECONDS * 1000 + 1000);
-    expect(waking.droppedPilesList()).toHaveLength(4);
+    expect(waking.droppedPilesList()).toHaveLength(
+      PROP_KINDS.oak.chopping.logs + PROP_KINDS.oak.chopping.sticks,
+    );
     waking.fadeDroppedPiles(clockMs + (TREE_BREAK_SECONDS + DROPPED_PILE_SECONDS) * 1000);
     expect(waking.droppedPilesList()).toEqual([]);
   });
@@ -2141,7 +2151,9 @@ describe('chopping a tree down', () => {
     );
     expect(countOf(sim.inventoryOf(2), 'log')).toBe(0);
     sim.step(clockMs + TREE_BREAK_SECONDS * 1000);
-    expect(sim.droppedPilesList()).toHaveLength(4);
+    expect(sim.droppedPilesList()).toHaveLength(
+      PROP_KINDS.oak.chopping.logs + PROP_KINDS.oak.chopping.sticks,
+    );
   });
 
   it('leaves the tree down and out of the way', () => {
@@ -2213,14 +2225,18 @@ describe('chopping a tree down', () => {
       sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
       sim.step(tickClock());
     }
-    const logs = sim.droppedPilesList();
+    const piles = sim.droppedPilesList();
+    const logs = piles.filter((pile) => pile.item === 'log');
+    expect(piles.filter((pile) => pile.item === 'stick')).toHaveLength(
+      PROP_KINDS.birch.chopping.sticks,
+    );
     expect(logs).toHaveLength(choppingRuleFor(PROP_KINDS.birch)?.logs ?? 0);
     const first = logs[0];
     if (first === undefined) throw new Error('missing fallen logs');
     sim.placePlayer(1, { x: first.x, y: 0, z: first.z }, 0);
     sim.queueInput(1, createInput(1000, 0, 0, 0, PlayerButton.Interact));
     sim.step(clockMs + (TREE_BREAK_SECONDS + 1) * 1000);
-    expect(sim.droppedPilesList()).toHaveLength(logs.length);
+    expect(sim.droppedPilesList()).toHaveLength(piles.length);
   });
 
   it('remembers half-chopped trees and felled ones across a restart', () => {

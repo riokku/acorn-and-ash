@@ -188,6 +188,19 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
     .poll(() => sim.droppedPilesList().some((pile) => pile.item === 'log'), { timeout: 30_000 })
     .toBe(true);
 
+  // The same landing packet includes the loose branches alongside the logs.
+  const rule = shared.choppingRuleFor(shared.PROP_KINDS[tree.kind])!;
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.acornDebug
+          ?.droppedPiles()
+          .filter((pile) => pile.item === 'stick')
+          .reduce((count, pile) => count + pile.count, 0),
+      ),
+    )
+    .toBe(rule.sticks);
+
   // Later, with nobody standing on the spot, it comes back at a size of its own.
   // (A tree will not grow back through somebody standing at its foot, so step away first.)
   sim.placePlayer(1, { x: x + 15, y: terrain.heightAt(x + 15, z), z }, yaw);
