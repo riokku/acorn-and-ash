@@ -1887,8 +1887,8 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     .poll(async () => (await page.locator('.hud-hint').allTextContents()).join(' '))
     .not.toContain('Press B to build');
 
-  // Opening the menu with only four logs offers the campfire but not the
-  // starter tent (which costs six sticks). Picking the unaffordable one still shows its
+  // Four logs and any branches collected along the way offer the campfire,
+  // but still leave the player short of the tent's six sticks. Picking the unaffordable one still shows its
   // preview, red, saying what is missing (decision 0052) - and a click
   // then places nothing. The one Craft menu lists every option (decisions 0043
   // and 0096); the hint line beneath it just says how to close it.
@@ -1900,7 +1900,13 @@ test('you can chop enough logs to build a campfire, and it is still there next t
     .click();
   expect(await page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true)).toBe(false);
   await centerMouse(page);
-  await expect(page.locator('.hud-hint')).toContainText('Need 6 more sticks');
+  const sticks =
+    (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).find(
+      (entry) => entry.item === 'stick',
+    )?.count ?? 0;
+  const missingSticks = 6 - sticks;
+  expect(missingSticks).toBeGreaterThan(0);
+  await expect(page.locator('.hud-hint')).toContainText(`Need ${missingSticks} more sticks`);
   await page.mouse.down();
   await page.mouse.up();
   await page.waitForTimeout(300);
