@@ -7,7 +7,7 @@ import {
   streamWaterHalfWidthAt,
 } from '@acorn/shared';
 import { createGroundShader } from '../src/art/ground-shading';
-import { createGround } from '../src/scene/wilderness';
+import { createGround, type GroundLattice } from '../src/scene/wilderness';
 
 it.each([1234, 734])(
   'keeps rendered terrain below waterfall channels and supports digging (seed %i)',
@@ -18,10 +18,22 @@ it.each([1234, 734])(
       createGroundShader({ water: [], props: [], stream: STREAM }),
     );
     const divisions = 8;
+    // Several probes share each unchanged cell. Sample its rendered lattice
+    // once rather than rebuilding all of its paint and normals for every probe.
+    const patches = new Map<string, GroundLattice>();
+    const patchAt = (cellX: number, cellZ: number) => {
+      const key = `${cellX},${cellZ}`;
+      let patch = patches.get(key);
+      if (!patch) {
+        patch = ground.lattice!(cellX, cellZ, divisions)!;
+        patches.set(key, patch);
+      }
+      return patch;
+    };
     const renderedHeight = (x: number, z: number) => {
       const cellX = Math.floor((x - ground.origin) / ground.cell),
         cellZ = Math.floor((z - ground.origin) / ground.cell);
-      const patch = ground.lattice!(cellX, cellZ, divisions)!;
+      const patch = patchAt(cellX, cellZ);
       const u = ((x - ground.origin) / ground.cell - cellX) * divisions,
         v = ((z - ground.origin) / ground.cell - cellZ) * divisions;
       const i = Math.min(divisions - 1, Math.floor(u)),
@@ -61,15 +73,21 @@ it.each([1234, 734])(
     );
     const cellX = Math.floor((center.x - ground.origin) / ground.cell),
       cellZ = Math.floor((center.z - ground.origin) / ground.cell);
-    const patch = ground.lattice!(cellX, cellZ, divisions)!;
+    const patch = patchAt(cellX, cellZ);
     for (let i = 0; i < patch.position.length / 3; i++)
       expect(patch.normal[i * 3 + 1]).toBeGreaterThan(0);
     const index = ground.mesh.geometry.getIndex()!;
-    const before = Array.from(index.array);
+    // Preserve the full index scan without allocating a boxed array and
+    // another filtered array for a terrain mesh with millions of indices.
+    const before = index.array.slice();
     ground.hide(cellX, cellZ);
-    const removed = before.filter((value, i) => value !== index.getX(i));
-    expect(removed.length).toBeGreaterThan(6);
+    const after = index.array;
+    let removed = 0;
+    for (let i = 0; i < before.length; i++) if (before[i] !== after[i]) removed++;
+    expect(removed).toBeGreaterThan(6);
     ground.dispose();
   },
-  15_000,
+  // This constructs the entire wilderness mesh per seed on a shared CI CPU.
+  // Geometry assertions retain their bounds; this is not a frame-rate benchmark.
+  30_000,
 );
