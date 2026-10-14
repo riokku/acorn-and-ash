@@ -774,9 +774,9 @@ export class Game {
   private lookSensitivity: number;
   private grassDensity: number;
   private grass: GrassScene | null = null;
+  private readonly ownSwoosh = new CombatSwoosh();
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly scene = new THREE.Scene();
-  private readonly ownSwoosh = new CombatSwoosh();
   private readonly remotePlayers = new InterpolatedEntities();
   private readonly remoteCharacters = new Map<number, Character>();
   /** What the server's Roster says about everybody currently connected. */
@@ -1766,6 +1766,7 @@ export class Game {
   }
 
   private handleMessage(message: ServerMessage): void {
+    if (message.type === 'welcome') this.ownSwoosh.clear();
     switch (message.type) {
       case 'chest': {
         if (!this.chestPending) break;
@@ -1801,7 +1802,6 @@ export class Game {
         break;
       }
       case 'welcome': {
-        this.ownSwoosh.clear();
         if (this.selfNetId !== 0 && this.selfNetId !== message.netId) {
           this.floats.reelIn(this.selfNetId);
           this.fishingPhase = null;
