@@ -1020,17 +1020,22 @@ async function collectFallenLogs(page: Page): Promise<void> {
     // Solid stumps can prevent standing 1.5 m from a log behind them. Stop
     // when that exact pile is reachable, as the game does, then verify E
     // actually collects it. Other nearby piles must not end this approach.
-    await walkOntoSpot(page, log.x, log.z, log.id);
-    await page.keyboard.down('KeyE');
-    await expect
-      .poll(async () =>
-        page.evaluate(
-          (id) => window.acornDebug?.droppedPiles().some((pile) => pile.id === id),
-          log.id,
-        ),
-      )
-      .toBe(false);
-    await page.keyboard.up('KeyE');
+    const stillThere = () =>
+      page.evaluate(
+        (id) => window.acornDebug?.droppedPiles().some((pile) => pile.id === id) ?? false,
+        log.id,
+      );
+    for (let attempt = 0; attempt < 20 && (await stillThere()); attempt++) {
+      await walkOntoSpot(page, log.x, log.z, log.id);
+      // A felled tree drops sticks too. One held E spends its interaction on
+      // the nearest pile, so release between pickups instead of waiting for
+      // that same input to collect a second pile. Give both edges a frame.
+      await page.keyboard.down('KeyE');
+      await page.waitForTimeout(150);
+      await page.keyboard.up('KeyE');
+      await page.waitForTimeout(300);
+    }
+    await expect.poll(stillThere).toBe(false);
   }
 }
 
@@ -1731,32 +1736,48 @@ async function walkToward(page: Page, target: { x: number; z: number }): Promise
  * appears - the way a player places a piece once its preview follows the
  * mouse (decision 0052). Tries a few spots up and down the screen from the
  * middle, nearer and farther from the player, in case the first is not clear. Stops once
- * `piecesWanted` pieces stand in the world, counting any built already.
+ * `piecesWanted` pieces stand in the world, including the requested kind.
  */
 async function buildFacing(
   page: Page,
   target: { x: number; z: number },
   tab: string,
   digit: string,
+  kind: string,
   piecesWanted = 1,
 ): Promise<void> {
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  const builtRequestedPiece = () =>
+    page.evaluate(
+      ({ kind, piecesWanted }) => {
+        const pieces = window.acornDebug?.builtProps() ?? [];
+        return pieces.length >= piecesWanted && pieces.some((piece) => piece.kind === kind);
+      },
+      { kind, piecesWanted },
+    );
   for (let attempt = 0; attempt < 15; attempt++) {
-    if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) >= piecesWanted) {
+    if (await builtRequestedPiece()) {
       break;
     }
     await page.evaluate(
       ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
       [target.x, target.z],
     );
-    if ((await page.evaluate(() => window.acornDebug?.buildPreview() ?? null)) === null) {
+    const currentPreview = await page.evaluate(() => window.acornDebug?.buildPreview() ?? null);
+    if (currentPreview?.kind !== kind) {
+      if (currentPreview !== null) await page.keyboard.press('Escape');
       // Wait for the menu itself rather than a fixed moment: at a few frames a
       // second a key pressed just after another can be taken for the same press.
       const menuOpen = async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? false);
       if (!(await menuOpen())) await page.keyboard.press('KeyC');
       await expect.poll(menuOpen).toBe(true);
-      await page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true }).click();
+      const category = page.locator('.craft-tabs').getByRole('button', { name: tab, exact: true });
+      await category.click();
+      await expect(category).toHaveAttribute('aria-pressed', 'true');
       await page.keyboard.press(digit);
+      await expect
+        .poll(async () => (await page.evaluate(() => window.acornDebug?.buildPreview()))?.kind)
+        .toBe(kind);
     }
     // Up the screen is farther from the player and down is nearer: a big piece
     // like the tent needs room round it, so it is not clear at the first spot.
@@ -1774,8 +1795,8 @@ async function buildFacing(
     }
     await page.waitForTimeout(300);
   }
-  if ((await page.evaluate(() => window.acornDebug?.builtProps().length ?? 0)) < piecesWanted) {
-    throw new Error('never built anything');
+  if (!(await builtRequestedPiece())) {
+    throw new Error(`never built the requested ${kind}`);
   }
   // Whatever was left out to place another goes away again - on its own
   // once the materials run out, a moment after the server says so, or
@@ -1797,6 +1818,7 @@ async function buildFacingAnyWay(
   firstChoice: { x: number; z: number },
   tab: string,
   digit: string,
+  kind: string,
   piecesWanted = 1,
 ): Promise<void> {
   const here = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
@@ -1807,7 +1829,7 @@ async function buildFacingAnyWay(
   const choices = [firstChoice, ...around];
   for (const [index, target] of choices.entries()) {
     try {
-      await buildFacing(page, target, tab, digit, piecesWanted);
+      await buildFacing(page, target, tab, digit, kind, piecesWanted);
       return;
     } catch (error) {
       if (index === choices.length - 1) throw error;
@@ -1843,7 +1865,7 @@ async function buildFirstTent(
     ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
     [spawnSpot.x, spawnSpot.z],
   );
-  await buildFacingAnyWay(page, spawnSpot, 'Home', 'Digit1');
+  await buildFacingAnyWay(page, spawnSpot, 'Home', 'Digit1', 'tent');
   const tent = (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
     (piece) => piece.kind === 'tent',
   );
@@ -1944,7 +1966,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   // A campfire needs a building area, and the first tent is what makes one. Then
   // the campfire goes up on the other side of the player from the tent.
   const tent = await buildFirstTent(page, spawnSpot);
-  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 'campfire', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built.map((piece) => piece.kind).sort()).toEqual(['campfire', 'tent']);
@@ -1987,6 +2009,15 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
 
   const pickups = await page.evaluate(() => window.acornDebug?.pickups() ?? []);
+  // Clear the nearby rod through the normal pickup input. Otherwise a
+  // campfire placed beside it correctly offers the higher-priority rod
+  // interaction, and E would test picking that up rather than lighting.
+  const rod = pickups.find((entry) => entry.item === 'rod');
+  if (rod === undefined) throw new Error('no fishing rod in the clearing');
+  await walkWithinReachOf(page, rod.x, rod.z, 'rod');
+  await page.keyboard.press('KeyE');
+  await expect.poll(async () => countHeld(page, 'rod')).toBe(1);
+
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
   await walkWithinReachOf(page, axe.x, axe.z, 'axe');
@@ -2009,7 +2040,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
 
   // The first tent makes the building area the campfire goes into.
   const tent = await buildFirstTent(page, spawnSpot);
-  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 'campfire', 2);
 
   const campfireNow = async () =>
     (await page.evaluate(() => window.acornDebug?.builtProps() ?? [])).find(
@@ -2094,7 +2125,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   // Gathering the tent's supplies can also collect a nearby flower. Compare
   // the lantern's cost with the pack immediately before this placement.
   const gathered = await countHeld(page, 'flower');
-  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 2);
+  await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit2', 'lantern', 2);
 
   const built = await page.evaluate(() => window.acornDebug?.builtProps() ?? []);
   expect(built.map((piece) => piece.kind).sort()).toEqual(['lantern', 'tent']);

@@ -57,7 +57,7 @@ tools/              Asset scripts (glTF Transform), load-test bots
 docs/decisions/     Short decision records
 ```
 
-**Why two Workers:** Cloudflare doesn't generate preview URLs for Workers that implement a Durable Object. Keeping the Durable Object in `game-server` lets `apps/web` get a preview URL for each PR. `apps/web` binds to the World class with `script_name`, and previews connect to the **staging** game server.
+**Why two Workers:** Cloudflare doesn't generate preview URLs for Workers that implement a Durable Object. Keeping the Durable Object in `game-server` lets `apps/web` get a preview URL for each PR. `apps/web` binds to the World class with `script_name`, and each preview connects to its **own per-PR** game server built from the same branch.
 
 ## Architecture rules
 
@@ -87,7 +87,8 @@ docs/decisions/     Short decision records
 ## CI/CD (GitHub Actions)
 
 - Deploys use `cloudflare/wrangler-action@v3`. Repo secrets: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-- **Pull request:** install, typecheck, lint, test, build, asset-license check. Then upload a preview version of `apps/web` with alias `pr-<number>` and comment the link on the PR.
+- **Verification:** typecheck, lint, formatting, asset licences and build run alongside four independent package test runners. Deploys reuse the verified client artifact from their own run; all verification must pass. See `docs/decisions/0182-parallel-verification-before-deploy.md`.
+- **Pull request:** verification plus eight browser shards. Upload a preview version of `apps/web` with alias `pr-<number>`, binding it to its own per-PR game server, and comment the link on the PR.
 - **Push to `main`:** deploy `game-server` and `web` to staging.
 - **Tag `v*`:** deploy both to production.
 
