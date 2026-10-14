@@ -1,3 +1,5 @@
+import type { WornGear } from '@acorn/shared';
+import { equipmentDetail, equipmentComparison } from './equipment-stats';
 import {
   ITEM_KINDS,
   PACK_ITEMS,
@@ -143,6 +145,7 @@ export function InventoryPanel({
   open,
   carrying,
   equippedItem,
+  worn = {},
   onUseItem,
   onUnpinFromHotbar,
   onOpenSlotMenu,
@@ -153,6 +156,7 @@ export function InventoryPanel({
   open: boolean;
   carrying: CarriedEntries;
   equippedItem: ItemId | null;
+  worn?: Readonly<WornGear>;
   onUseItem: (item: ItemId) => void;
   onUnpinFromHotbar: (slotIndex: number) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
@@ -230,6 +234,7 @@ export function InventoryPanel({
             item={stack.item}
             count={stack.count}
             equipped={stack.item === equippedItem}
+            comparison={equipmentComparison(stack.item, worn, equippedItem)}
             onUseItem={onUseItem}
             onOpenSlotMenu={onOpenSlotMenu}
             onWearGear={onWearGear}
@@ -250,6 +255,7 @@ function PackSlot({
   item,
   count,
   equipped,
+  comparison,
   onUseItem,
   onOpenSlotMenu,
   onWearGear,
@@ -257,6 +263,7 @@ function PackSlot({
   item: ItemId;
   count: number;
   equipped: boolean;
+  comparison: string | null;
   onUseItem: (item: ItemId) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
   onWearGear?: (item: ItemId) => void;
@@ -272,6 +279,10 @@ function PackSlot({
         <>
           <strong>{kind.displayName}</strong>
           <span className="item-tooltip-detail">{itemDescription(item)}</span>
+          {equipmentDetail(item) === null ? null : (
+            <span className="item-tooltip-detail">{equipmentDetail(item)}</span>
+          )}
+          {comparison === null ? null : <span className="item-tooltip-detail">{comparison}</span>}
           <span className="item-tooltip-action">{itemUseHint(item)}</span>
         </>
       }

@@ -95,7 +95,7 @@ export interface ItemKind {
   /**
    * If this is gear, the slots it can be worn in (see `data/gear.ts`). Gear is
    * worn rather than held: it leaves the pack for its slot and changes how a
-   * character looks, nothing more.
+   * character looks and contributes the bonuses in `equipment-stats.ts`.
    */
   readonly gearSlots?: readonly GearSlot[];
 }

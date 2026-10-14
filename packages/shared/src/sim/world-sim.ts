@@ -1,3 +1,4 @@
+import { characterStats } from '../data/equipment-stats';
 import { placedPropColliders } from '../world/placed-solids';
 import type { Collider } from '../world/colliders';
 import { streamRockColliders } from '../world/scenery-rocks';
@@ -3834,7 +3835,16 @@ export class WorldSimulation {
 
     // A skeleton in front comes before anything else: mid-fight, the swing
     // was for it, not the tree beside it.
-    if (this.raids.blowLands(runtime.netId, position, aimYaw, impact, lookBack)) {
+    if (
+      this.raids.blowLands(
+        runtime.netId,
+        position,
+        aimYaw,
+        impact,
+        lookBack,
+        characterStats(runtime.worn, this.equippedItemOf(runtime.netId)).power,
+      )
+    ) {
       runtime.lastCombatTick = this.tick;
       return;
     }
@@ -4575,8 +4585,11 @@ export class WorldSimulation {
       kind.threat !== undefined &&
       (dodgeWeight !== undefined || !charged || animal.kind === 'woodlandGuardian')
     ) {
-      animal.hitsTaken += dodgeWeight ?? (charged ? 2 : 1);
-      const hitsLeft = kind.threat.hitsToDefeat - animal.hitsTaken;
+      animal.hitsTaken +=
+        ((dodgeWeight ?? (charged ? 2 : 1)) *
+          characterStats(runtime.worn, this.equippedItemOf(runtime.netId)).power) /
+        100;
+      const hitsLeft = Math.ceil(kind.threat.hitsToDefeat - animal.hitsTaken);
       if (hitsLeft > 0) {
         this.threatHitEvents.push({ animalId: animal.id, hitsLeft, netId: runtime.netId });
         return;

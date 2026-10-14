@@ -432,6 +432,7 @@ export function Hud({
                 : (slot) => onGearChange({ action: 'takeOff', slot })
             }
             carrying={state.carrying}
+            worn={state.worn}
             equippedItem={state.equippedItem}
             onUseItem={onUseItem}
             onUnpinFromHotbar={(slotIndex) =>

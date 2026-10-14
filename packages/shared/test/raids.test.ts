@@ -799,3 +799,17 @@ describe('raids in the world', () => {
     expect(isFacing(Math.PI, 0)).toBe(false);
   });
 });
+
+it('applies weapon power without promoting a light hit into a heavy stagger', () => {
+  const scene = arena();
+  const player = scene.addFighter(1);
+  const { raiderIds } = raidOn(scene, 1, ['warrior']);
+  const id = raiderIds[0]!;
+  scene.inFrontOf(player, id);
+  beginAction(actionOf(scene, id), ActionKind.Swing);
+  expect(scene.director.blowLands(1, player.position, player.aimYaw, SWING_1, 0, 150)).toBe(true);
+  expect(actionOf(scene, id).kind).toBe(ActionKind.Swing);
+  expect(scene.director.drainHits().at(-1)?.hitsLeft).toBe(
+    Math.ceil(RAIDER_KINDS.warrior.toughness - 1.5),
+  );
+});

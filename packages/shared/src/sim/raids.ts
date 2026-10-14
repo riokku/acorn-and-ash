@@ -466,6 +466,7 @@ export class RaidDirector {
     aimYaw: number,
     impact: Impact,
     ticksBack: number,
+    power = 100,
   ): boolean {
     const raiderId = this.raiderInReachOf(position, aimYaw, ticksBack);
     const raider = raiderId === null ? undefined : this.raiders.get(raiderId);
@@ -493,7 +494,7 @@ export class RaidDirector {
         : impact.step === 3
           ? RAIDER_BLOW_WEIGHT.finisher
           : RAIDER_BLOW_WEIGHT.swing;
-    raider.damageTaken += weight;
+    raider.damageTaken += (weight * power) / 100;
     raider.contributors.add(attackerNetId);
     const attacker = this.fighterById.get(attackerNetId) ?? this.findFighter(attackerNetId);
     raider.contributorKeys.add(attacker?.rewardKey ?? `session:${attackerNetId}`);
@@ -501,7 +502,7 @@ export class RaidDirector {
     if (encounterRaid?.encounter !== undefined && encounterRaid.targetNetId === 0)
       this.engageEncounter(encounterRaid, attackerNetId);
     if (raider.kind === 'sentinel') this.listChanged = true;
-    const hitsLeft = Math.max(0, this.maxHitsOf(raider.id) - raider.damageTaken);
+    const hitsLeft = Math.max(0, Math.ceil(this.maxHitsOf(raider.id) - raider.damageTaken));
     const heavy = weight > RAIDER_BLOW_WEIGHT.swing;
 
     // Knocked back, away from whoever hit it.
@@ -637,7 +638,7 @@ export class RaidDirector {
       list.push({
         id: raider.id,
         kind: raider.kind,
-        hitsLeft: Math.max(0, this.maxHitsOf(raider.id) - raider.damageTaken),
+        hitsLeft: Math.max(0, Math.ceil(this.maxHitsOf(raider.id) - raider.damageTaken)),
       });
     }
     return list;

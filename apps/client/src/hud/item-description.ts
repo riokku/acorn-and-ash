@@ -49,7 +49,8 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
     "Sturdy traveler's trousers. Wear them on your lower body from the character screen (Z).",
   leatherBoots: 'Hard-wearing leather boots. Wear them on your feet from the character screen (Z).',
   leatherGloves: 'Soft leather gloves. Wear them on your hands from the character screen (Z).',
-  ironSword: 'An iron sword. Wear it in your main hand and you swing it. Looks only, for now.',
+  ironSword:
+    'An iron sword. Wear it in your main hand and you swing it. Increases the damage of your attacks.',
   huntingKnife: 'A short hunting knife. Wear it in either hand; in your main hand you swing it.',
   woodenShield: 'A round wooden shield. Wear it in your off hand from the character screen (Z).',
 };
