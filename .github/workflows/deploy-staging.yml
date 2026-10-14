@@ -15,6 +15,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     environment: staging
     steps:
       - uses: actions/checkout@v5
@@ -29,8 +30,23 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Check before deploying
-        run: pnpm typecheck && pnpm lint && pnpm test && pnpm check:assets
+      - name: Typecheck
+        timeout-minutes: 5
+        run: pnpm typecheck
+
+      - name: Lint
+        timeout-minutes: 5
+        run: pnpm lint
+
+      # A Workers pool teardown stalled after every test passed. A stalled
+      # runner must fail visibly rather than block newer deployments for hours.
+      - name: Test
+        timeout-minutes: 20
+        run: pnpm test
+
+      - name: Asset licences
+        timeout-minutes: 5
+        run: pnpm check:assets
 
       - name: Build the client
         run: pnpm --filter @acorn/client build
