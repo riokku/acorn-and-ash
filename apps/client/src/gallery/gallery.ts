@@ -17,6 +17,9 @@ import * as THREE from 'three/webgpu';
 
 import {
   PROP_KINDS,
+  POND as CLEARING_POND,
+  DEFAULT_WORLD_SEED,
+  buildTestClearing,
   dayBrightness,
   isHomeKind,
   type BuildableKindId,
@@ -278,7 +281,7 @@ const VIEWPOINTS: Record<
     height: 20,
     angle: 0.5,
   },
-  pond: { x: 9.5, y: 0, z: -6.5, distance: 8, height: 4.5 },
+  pond: { x: 14, y: 0, z: -5.5, distance: 17, height: 13, angle: -0.7 },
   trees: { x: -2, y: 3, z: -10, distance: 13, height: 1.5 },
   rocks: { x: 4, y: 0.4, z: -4, distance: 5, height: 2 },
   ground: { x: -2, y: 0, z: 4, distance: 5, height: 2.2 },
@@ -375,26 +378,32 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     return;
   }
 
-  const scenery: PlacedProp[] = SCENERY.map((entry, index) => ({
-    id: index + 1,
-    kind: entry.kind,
-    x: entry.x,
-    z: entry.z,
-    rotationY: index * 1.3,
-    scale: entry.scale,
-  }));
+  const scenery: readonly PlacedProp[] =
+    focus === 'pond'
+      ? buildTestClearing(DEFAULT_WORLD_SEED).props
+      : SCENERY.map((entry, index) => ({
+          id: index + 1,
+          kind: entry.kind,
+          x: entry.x,
+          z: entry.z,
+          rotationY: index * 1.3,
+          scale: entry.scale,
+        }));
   const alone = EXHIBITS.some((exhibit) => exhibit.name === focus && exhibit.alone === true);
   if (!alone) {
-    scene.add(createGalleryGround(scenery));
-    scene.add(createPond(POND).group);
+    const water = focus === 'pond' ? CLEARING_POND : POND;
+    scene.add(createGalleryGround(scenery, undefined, undefined, undefined, water));
+    scene.add(createPond(water).group);
     addScenery(scene, scenery);
   }
 
   const updaters: Array<(deltaSeconds: number) => void> = [];
   const focusedExhibits = EXHIBITS.filter((exhibit) => exhibit.name === focus);
-  for (const exhibit of focusedExhibits.length > 0
-    ? focusedExhibits
-    : EXHIBITS.filter((entry) => entry.alone !== true)) {
+  for (const exhibit of focus === 'pond'
+    ? []
+    : focusedExhibits.length > 0
+      ? focusedExhibits
+      : EXHIBITS.filter((entry) => entry.alone !== true)) {
     const made = exhibit.create();
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;
@@ -576,10 +585,11 @@ function createGalleryGround(
   heightAt = (_x: number, _z: number) => 0,
   size = 80,
   segments = 160,
+  water: readonly WaterCircle[] = POND,
 ): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
-  const shader = createGroundShader({ water: POND, props: scenery });
+  const shader = createGroundShader({ water, props: scenery });
   const position = geometry.attributes.position;
   if (position === undefined) throw new Error('Plane geometry has no position attribute');
   const floor = new Float32Array(position.count);

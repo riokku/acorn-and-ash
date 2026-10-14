@@ -96,11 +96,18 @@ export const AXE_PICKUP_ID = 1;
  * sits clear of the landmarks and of the walk from the start to the axe, so the
  * clearing you already know keeps its shape.
  */
+// Scaling both radii and offsets by √2 doubles the whole water area. Anchor
+// the west bank so the starting rod remains on dry land beside the pond.
+const POND_SCALE = Math.SQRT2;
 export const POND: readonly WaterCircle[] = [
   { x: 11, z: -5, radius: 4.2 },
   { x: 14.5, z: -3, radius: 3.2 },
   { x: 9.5, z: -8.2, radius: 2.6 },
-];
+].map((circle) => ({
+  x: 6.8 + (circle.x - 6.8) * POND_SCALE,
+  z: -5 + (circle.z + 5) * POND_SCALE,
+  radius: circle.radius * POND_SCALE,
+}));
 
 /** Where the first fishing rod lies, on the bank nearest the start. */
 export const ROD_SPOT = { x: 5.6, z: -4.2 } as const;

@@ -2609,7 +2609,7 @@ body {
   pointer-events: none;
 }
 
-/* Hunger over health, bottom left, in the same warm material as the hotbar. */
+/* Warmth, hunger, then health, bottom left. */
 .vitals {
   position: absolute;
   left: 16px;
