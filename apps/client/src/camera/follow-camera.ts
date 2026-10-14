@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { CameraDistance } from './camera-distance';
 
 import { PLAYER_HEIGHT, clamp, type Vec3 } from '@acorn/shared';
 
@@ -54,7 +55,7 @@ export class FollowCamera {
   readonly camera: THREE.PerspectiveCamera;
   readonly look: CameraLook = { yaw: 0, pitch: 0.32 };
 
-  private currentDistance = RESTING_DISTANCE;
+  private readonly distance = new CameraDistance(RESTING_DISTANCE, RESTING_DISTANCE, PULL_OUT_RATE);
   /** A pitch the game has asked the camera to ease towards, until the mouse moves. */
   private pitchNudge: number | null = null;
   /** 0 to 1: how hard the camera is currently shaking, decaying back to 0. */
@@ -134,7 +135,7 @@ export class FollowCamera {
       if (facingYaw !== undefined) this.look.yaw = facingYaw;
       this.look.pitch = this.outdoorLook.pitch;
       this.outdoorLook = null;
-      this.currentDistance = RESTING_DISTANCE;
+      this.distance.reset(RESTING_DISTANCE);
     }
   }
 
@@ -181,19 +182,10 @@ export class FollowCamera {
             this.distanceToBlocker(blockers),
             this.distanceAboveGround(ground, RESTING_DISTANCE),
           );
-    if (this.outdoorLook !== null) {
-      this.currentDistance = ROOM_DISTANCE;
-    } else if (blocked < this.currentDistance) {
-      // Snap in immediately, so the view never ends up inside a tree.
-      this.currentDistance = blocked;
-    } else {
-      // Ease back out once the way is clear again.
-      const room = Math.min(blocked, RESTING_DISTANCE);
-      this.currentDistance +=
-        (room - this.currentDistance) * (1 - Math.exp(-PULL_OUT_RATE * deltaSeconds));
-    }
+    if (this.outdoorLook !== null) this.distance.reset(ROOM_DISTANCE);
+    else this.distance.update(blocked, deltaSeconds);
 
-    this.desired.copy(this.direction).multiplyScalar(this.currentDistance).add(this.target);
+    this.desired.copy(this.direction).multiplyScalar(this.distance.value).add(this.target);
     this.camera.position.copy(this.desired);
     this.camera.lookAt(this.target);
 
@@ -215,10 +207,13 @@ export class FollowCamera {
       );
       if (safe < distance) {
         this.camera.position.copy(this.direction).multiplyScalar(safe).add(this.target);
-        this.currentDistance = Math.min(this.currentDistance, safe);
+        this.distance.constrain(safe);
       }
       this.camera.lookAt(this.target);
     }
+    // Input can cast a ray after a zero-time orbit update, before rendering.
+    // lookAt changes the quaternion after its own matrix update; sync the final view.
+    this.camera.updateMatrixWorld();
   }
 
   /** Sweep the centre and near-plane corners against the rendered ground. */
