@@ -21,6 +21,13 @@ export interface Recipe {
 }
 
 export const RECIPES: Partial<Record<ItemId, Recipe>> = {
+  woodenShield: {
+    result: 'woodenShield',
+    costs: [
+      { item: 'log', amount: 4 },
+      { item: 'rope', amount: 1 },
+    ],
+  },
   refinedAxe: {
     result: 'refinedAxe',
     station: 'workbench',

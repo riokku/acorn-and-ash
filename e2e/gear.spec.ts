@@ -95,6 +95,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-helm'));
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'knightHelmet');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toHaveCount(0);
+  await expect(page.getByTestId('character-stats')).toContainText('Protection8%');
 
   // Right-click wears too, in the slot it fits.
   await page.getByTestId('pack-slot-ironSword').click({ button: 'right' });
@@ -105,6 +106,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await page.getByTestId('pack-slot-mageHat').dragTo(page.getByTestId('gear-slot-helm'));
   await expect(page.getByTestId('gear-slot-helm')).toHaveAttribute('data-item', 'mageHat');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toBeVisible();
+  await expect(page.getByTestId('character-stats')).toContainText('Protection0%');
 
   // A piece that does not fit is turned down, and the screen says so.
   await page.getByTestId('pack-slot-knightHelmet').dragTo(page.getByTestId('gear-slot-feet'));

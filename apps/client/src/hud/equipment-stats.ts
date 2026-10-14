@@ -9,8 +9,11 @@ import {
 
 export function equipmentDetail(item: ItemId): string | null {
   const bonus = EQUIPMENT_BONUSES[item];
-  if (bonus?.power === undefined) return null;
-  return `Power +${bonus.power}% when used in your main hand.`;
+  if (bonus === undefined) return null;
+  const parts: string[] = [];
+  if (bonus.power !== undefined) parts.push(`Power +${bonus.power}% when used in your main hand.`);
+  if (bonus.protection !== undefined) parts.push(`Protection +${bonus.protection}% while worn.`);
+  return parts.join(' ') || null;
 }
 
 export function equipmentComparison(
@@ -18,11 +21,17 @@ export function equipmentComparison(
   worn: Readonly<WornGear>,
   held: ItemId | null,
 ): string | null {
-  if (EQUIPMENT_BONUSES[item] === undefined && !gearSlotsOf(item).includes('mainHand')) return null;
+  if (EQUIPMENT_BONUSES[item] === undefined && gearSlotsOf(item).length === 0) return null;
   const before = characterStats(worn, held);
   const after = statsWithItem(worn, held, item);
-  const delta = after.power - before.power;
-  return delta === 0
-    ? 'No change to your current Power.'
-    : `Power ${before.power}% → ${after.power}% (${delta > 0 ? '+' : ''}${delta}%).`;
+  const parts: string[] = [];
+  for (const [key, label] of [
+    ['power', 'Power'],
+    ['protection', 'Protection'],
+  ] as const) {
+    const delta = after[key] - before[key];
+    if (delta !== 0)
+      parts.push(`${label} ${before[key]}% → ${after[key]}% (${delta > 0 ? '+' : ''}${delta}%).`);
+  }
+  return parts.join(' ') || 'No change to your current equipment stats.';
 }

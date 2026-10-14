@@ -55,3 +55,38 @@ describe('equipment power', () => {
     expect(baseline.drainCatchEvents()).toHaveLength(0);
   });
 });
+
+describe('equipment protection', () => {
+  it('adds only valid worn slots and keeps hand selection separate from armor', () => {
+    expect(
+      characterStats({ helm: 'knightHelmet', offHand: 'woodenShield' }, 'axe').protection,
+    ).toBe(23);
+    expect(characterStats({ feet: 'knightHelmet' }, 'axe').protection).toBe(0);
+    expect(characterStats({ offHand: 'huntingKnife' }, 'axe').protection).toBe(0);
+  });
+  it('reduces authoritative hostile damage and preserves ordinary damage without gear', () => {
+    const protectedPlayer = world();
+    protectedPlayer.giveTestGear(1, ['woodenShield']);
+    expect(protectedPlayer.wearGear(1, 'woodenShield', 'offHand').ok).toBe(true);
+    const strike = (sim: WorldSimulation) =>
+      (
+        sim as unknown as { raiderStrikesPlayer(id: number, damage: number, tick: number): void }
+      ).raiderStrikesPlayer(1, 20, sim.tick);
+    strike(protectedPlayer);
+    expect(protectedPlayer.healthOf(1)).toBe(83);
+    expect(protectedPlayer.drainHealthEvents().at(-1)?.health).toBe(83);
+    const ordinary = world();
+    strike(ordinary);
+    expect(ordinary.healthOf(1)).toBe(80);
+  });
+});
+
+it('lets a player make and wear a protective shield with ordinary gathered supplies', () => {
+  const sim = world();
+  Object.assign(sim.inventoryOf(1), { log: 4, rope: 1 });
+  expect(sim.craftItem(1, 'woodenShield')).toBe(true);
+  expect(sim.wearGear(1, 'woodenShield', 'offHand').ok).toBe(true);
+  expect(characterStats(sim.wornOf(1), sim.equippedItemOf(1)).protection).toBe(15);
+  expect(sim.inventoryOf(1).log).toBeUndefined();
+  expect(sim.inventoryOf(1).rope).toBeUndefined();
+});

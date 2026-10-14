@@ -5,8 +5,15 @@ describe('equipment explanations', () => {
     expect(equipmentComparison('ironSword', {}, 'axe')).toBe('Power 100% → 150% (+50%).');
     expect(equipmentDetail('huntingKnife')).toContain('main hand');
     expect(equipmentComparison('huntingKnife', { mainHand: 'ironSword' }, 'ironSword')).toBe(
-      'No change to your current Power.',
+      'No change to your current equipment stats.',
     );
     expect(equipmentComparison('flower', {}, null)).toBeNull();
   });
+});
+
+it('compares the protection lost when replacing a helmet', () => {
+  expect(equipmentComparison('knightHelmet', {}, null)).toBe('Protection 0% → 8% (+8%).');
+  expect(equipmentComparison('mageHat', { helm: 'knightHelmet' }, null)).toBe(
+    'Protection 8% → 0% (-8%).',
+  );
 });

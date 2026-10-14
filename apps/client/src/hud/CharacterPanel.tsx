@@ -91,6 +91,10 @@ export function CharacterPanel({
           <dt>Power</dt>
           <dd>{characterStats(worn, held).power}%</dd>
         </div>
+        <div title="The percentage of damage your worn armor and shield prevent.">
+          <dt>Protection</dt>
+          <dd>{characterStats(worn, held).protection}%</dd>
+        </div>
       </dl>
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
         {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}

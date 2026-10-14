@@ -1,4 +1,4 @@
-import { characterStats } from '../data/equipment-stats';
+import { characterStats, protectedDamage } from '../data/equipment-stats';
 import { placedPropColliders } from '../world/placed-solids';
 import type { Collider } from '../world/colliders';
 import { streamRockColliders } from '../world/scenery-rocks';
@@ -4656,7 +4656,11 @@ export class WorldSimulation {
       return;
     }
 
-    const remaining = Math.max(0, runtime.health - amount);
+    const remaining = Math.max(
+      0,
+      runtime.health -
+        protectedDamage(amount, characterStats(runtime.worn, this.equippedItemOf(runtime.netId))),
+    );
     const knockedOut = remaining <= 0;
     runtime.health = knockedOut ? HEALTH_MAX : remaining;
 
