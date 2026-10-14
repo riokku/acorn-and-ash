@@ -10,18 +10,28 @@ import {
   type Terrain,
 } from '@acorn/shared';
 import { createGroundShader } from '../src/art/ground-shading';
-import { createGround } from '../src/scene/wilderness';
+import { createGround, type GroundLattice } from '../src/scene/wilderness';
 import { refineGroundContacts } from '../src/scene/ground-contact';
 import { shoreGroundCells } from '../src/scene/shore-ground';
 import { installBvhRaycasting } from '../src/scene/bvh';
 
 installBvhRaycasting();
 
-function renderedHeight(ground: ReturnType<typeof createGround>, x: number, z: number): number {
+function renderedHeight(
+  ground: ReturnType<typeof createGround>,
+  x: number,
+  z: number,
+  patches: Map<string, GroundLattice>,
+): number {
   const n = 16;
   const cx = Math.floor((x - ground.origin) / ground.cell),
     cz = Math.floor((z - ground.origin) / ground.cell);
-  const patch = ground.lattice!(cx, cz, n)!;
+  const key = `${cx},${cz}`;
+  let patch = patches.get(key);
+  if (patch === undefined) {
+    patch = ground.lattice!(cx, cz, n)!;
+    patches.set(key, patch);
+  }
   const u = ((x - ground.origin) / ground.cell - cx) * n,
     v = ((z - ground.origin) / ground.cell - cz) * n;
   const i = Math.min(n - 1, Math.floor(u)),
@@ -43,9 +53,11 @@ it.each([734, 1234])(
       terrain,
       createGroundShader({ water: [], props: [], stream: STREAM }),
     );
+    // Reuse the unchanged cell lattice across probes, as the waterfall regression does.
+    const patches = new Map<string, GroundLattice>();
     const check = (name: string, x: number, z: number) =>
       expect(
-        Math.abs(renderedHeight(ground, x, z) - terrain.heightAt(x, z)),
+        Math.abs(renderedHeight(ground, x, z, patches) - terrain.heightAt(x, z)),
         `${name} at ${x}, ${z}`,
       ).toBeLessThan(0.1);
     for (const [name, circles] of [
@@ -91,14 +103,18 @@ it.each([734, 1234])(
     expect(hit).toBeDefined();
     expect(Math.abs(hit!.point.y - terrain.heightAt(x, z))).toBeLessThan(0.1);
     const index = ground.mesh.geometry.getIndex()!;
-    const before = Array.from(index.array);
+    // Preserve the full scan without boxing millions of indices into arrays.
+    const before = index.array.slice();
     ground.hide(cx, cz);
     expect(ray.intersectObject(ground.mesh)).toHaveLength(0);
-    expect(before.filter((value, i) => value !== index.getX(i)).length).toBeGreaterThan(6);
+    let changedIndices = 0;
+    for (let i = 0; i < before.length; i++) if (before[i] !== index.array[i]) changedIndices++;
+    expect(changedIndices).toBeGreaterThan(6);
     expect(ground.lattice!(cx, cz, 50)?.position).toHaveLength(51 * 51 * 3);
     ground.dispose();
   },
-  20_000,
+  // The whole wilderness is meshed per seed on shared CI CPUs, like waterfalls.test.ts.
+  30_000,
 );
 
 function geometryFor(terrain: Terrain) {
