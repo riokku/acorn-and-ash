@@ -94,7 +94,9 @@ describe('terrain camera clearance', () => {
     follow.update(PLAYER_POSITION, 1 / 60, [], ground);
     const target = new THREE.Vector3(0, PLAYER_HEIGHT * 0.78, 0);
     const easing = follow.camera.position.distanceTo(target);
-    expect(easing).toBeGreaterThan(pulledIn);
+    expect(easing).toBeCloseTo(pulledIn);
+    follow.update(PLAYER_POSITION, 0.15, [], ground);
+    expect(follow.camera.position.distanceTo(target)).toBeGreaterThan(pulledIn);
     expect(easing).toBeLessThan(6);
     follow.update(PLAYER_POSITION, 2, [], ground);
     expect(follow.camera.position.distanceTo(target)).toBeCloseTo(6);
@@ -159,6 +161,8 @@ describe('scenery camera clearance', () => {
     follow.update(PLAYER_POSITION, 0, [blocker]);
     expect(follow.camera.position.z).toBeCloseTo(0.35);
     follow.update(PLAYER_POSITION, 1 / 60, []);
+    expect(follow.camera.position.z).toBeCloseTo(0.35);
+    follow.update(PLAYER_POSITION, 0.15, []);
     expect(follow.camera.position.z).toBeGreaterThan(0.35);
     expect(follow.camera.position.z).toBeLessThan(6);
     disposeBlocker(blocker);
@@ -195,7 +199,7 @@ describe('camera easing across frame rates', () => {
     for (const fps of [30, 60, 144])
       expect(released(Array(fps / 2).fill(1 / fps))).toBeCloseTo(baseline, 10);
     expect(released([0.2, 0.1, 0.2])).toBeCloseTo(baseline, 10);
-    expect(baseline).toBeGreaterThan(5.8);
+    expect(baseline).toBeGreaterThan(5.6);
     expect(baseline).toBeLessThan(6);
   });
 
@@ -217,5 +221,22 @@ describe('camera easing across frame rates', () => {
     const requested = follow.look.pitch;
     follow.update(PLAYER_POSITION, 1, []);
     expect(follow.look.pitch).toBe(requested);
+  });
+});
+
+describe('short gaps between camera blockers', () => {
+  it('does not pump outward through two-frame gaps while passing a row of trunks', () => {
+    const follow = new FollowCamera(16 / 9),
+      blocker = boxBlocker(0, 3, 8);
+    follow.look.pitch = 0;
+    follow.update(PLAYER_POSITION, 0, [blocker]);
+    const held = follow.camera.position.z;
+    for (let frame = 0; frame < 60; frame++) {
+      follow.update(PLAYER_POSITION, 1 / 60, frame % 4 < 2 ? [] : [blocker]);
+      expect(follow.camera.position.z).toBeCloseTo(held, 6);
+    }
+    follow.update(PLAYER_POSITION, 0.5, []);
+    expect(follow.camera.position.z).toBeGreaterThan(5.5);
+    disposeBlocker(blocker);
   });
 });
