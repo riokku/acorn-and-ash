@@ -3,20 +3,39 @@ import {
   PICKUP_REACH,
   buildTestClearing,
   colliderFootprintRadius,
+  POND,
+  POND_BANK_WIDTH,
 } from '@acorn/shared';
 
 type Point = { readonly x: number; readonly z: number };
 const obstaclesBySeed = new Map<number, readonly (Point & { radius: number })[]>();
 
+function distanceToSegment(a: Point, b: Point, point: Point): number {
+  const dx = b.x - a.x,
+    dz = b.z - a.z;
+  const length = dx * dx + dz * dz;
+  const t =
+    length === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / length));
+  return Math.hypot(a.x + dx * t - point.x, a.z + dz * t - point.z);
+}
+
 /** Choose a dry next waypoint for the real-input test walker around the pond. */
 export function pondWaypoint(start: Point, goal: Point, seed: number): Point {
+  if (!POND.some((p) => distanceToSegment(start, goal, p) < p.radius + POND_BANK_WIDTH))
+    return goal;
   let all = obstaclesBySeed.get(seed);
   if (all === undefined) {
-    all = buildTestClearing(seed).colliders.map((c) => ({
-      x: c.x,
-      z: c.z,
-      radius: colliderFootprintRadius(c),
-    }));
+    all = buildTestClearing(seed)
+      .colliders.map((c) => ({
+        x: c.x,
+        z: c.z,
+        radius: colliderFootprintRadius(c),
+      }))
+      .filter((c) =>
+        POND.some((p) => Math.hypot(c.x - p.x, c.z - p.z) < c.radius + p.radius + POND_BANK_WIDTH),
+      );
     obstaclesBySeed.set(seed, all);
   }
   const obstacles = all.filter(
@@ -27,19 +46,9 @@ export function pondWaypoint(start: Point, goal: Point, seed: number): Point {
       c.z - c.radius < Math.max(start.z, goal.z) + 3,
   );
   const clear = (a: Point, b: Point): boolean =>
-    obstacles.every((circle) => {
-      const dx = b.x - a.x,
-        dz = b.z - a.z;
-      const length = dx * dx + dz * dz;
-      const t =
-        length === 0
-          ? 0
-          : Math.max(0, Math.min(1, ((circle.x - a.x) * dx + (circle.z - a.z) * dz) / length));
-      return (
-        Math.hypot(a.x + dx * t - circle.x, a.z + dz * t - circle.z) >=
-        circle.radius + PLAYER_RADIUS - 0.03
-      );
-    });
+    obstacles.every(
+      (circle) => distanceToSegment(a, b, circle) >= circle.radius + PLAYER_RADIUS - 0.03,
+    );
   if (clear(start, goal)) return goal;
   const nodes: Point[] = [start, goal];
   for (const circle of obstacles) {
