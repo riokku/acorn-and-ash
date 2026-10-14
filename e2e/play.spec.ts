@@ -1063,6 +1063,17 @@ async function chopUntilFelled(
       ([x, z]) => window.acornDebug?.faceTowards(x ?? 0, z ?? 0),
       [tree.x, tree.z],
     );
+    // Camera collision can pull the view sideways. Screen centre then aims
+    // at ground beside the trunk, even though faceTowards lined up the yaw.
+    // Click the tree itself, just as a player does, after the camera settles.
+    await page.waitForTimeout(250);
+    const trunk = await page.evaluate(
+      ({ x, z }) => window.acornDebug?.screenPoint(x, 1.4, z) ?? null,
+      tree,
+    );
+    if (trunk === null) throw new Error(`tree ${tree.id} is outside the camera view`);
+    await page.mouse.move(trunk.x, trunk.y);
+    await page.waitForTimeout(150);
     // Taps, not a hold: a slow machine must not lose the button press, and the
     // server paces the swings anyway.
     await page.mouse.down();

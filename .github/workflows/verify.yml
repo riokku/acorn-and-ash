@@ -51,7 +51,7 @@ jobs:
           name: verified-client-${{ github.sha }}
           path: apps/client/dist/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   unit:
     name: Unit tests (${{ matrix.package }})

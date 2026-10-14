@@ -16,11 +16,12 @@ protection names; both fail unless every constituent job succeeds.
 
 Split browser coverage over eight runners, each with one Playwright worker.
 Keep every scenario, retry, assertion and existing time limit. The campfire
-fixtures wait for their selected recipe and actual built kind, and collect
+fixtures click the visible trunk, wait for their selected recipe and actual
+built kind, and collect
 separate piles with separate E inputs, matching normal interaction semantics.
 
 Upload only public client build files as a short-lived artifact named for the
-workflow commit. Preview and deploy jobs download it from their own run after
+workflow commit, retained for seven days to allow environment approval. Preview and deploy jobs download it from their own run after
 all verification succeeds. Deployment still orders game server, database
 migrations and website, then verifies the live version, health and sign-in.
 Deployment concurrency remains serialized and never cancels an active deploy.
