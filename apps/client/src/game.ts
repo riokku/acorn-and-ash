@@ -235,7 +235,7 @@ import { lootUnderCursor, type LootTarget } from './input/loot-target';
 import { SignInError, resumeAccount } from './net/account';
 import { WorldConnection, worldSocketUrl, type ConnectionState } from './net/connection';
 import { LocalPlayer, type PredictedEvent } from './net/local-player';
-import { InterpolatedEntities } from './net/interpolated-entities';
+import { createRemotePlayback } from './net/remote-playback';
 import { GatheringFocus } from './scene/gathering-focus';
 import { ForestAtmosphere } from './audio/forest-atmosphere';
 import { ForestAudio } from './audio/forest-sounds';
@@ -787,7 +787,7 @@ export class Game {
   private grass: GrassScene | null = null;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly scene = new THREE.Scene();
-  private readonly remotePlayers = new InterpolatedEntities();
+  private readonly remotePlayers = createRemotePlayback();
   private readonly remoteCharacters = new Map<number, Character>();
   /** What the server's Roster says about everybody currently connected. */
   private readonly roster = new Map<number, RosterEntry>();
@@ -798,7 +798,7 @@ export class Game {
   /** Whether the character screen (Z) is open beside the pack. */
   private characterOpen = false;
   private gearNotice: { text: string; key: number } | null = null;
-  private readonly remoteAnimals = new InterpolatedEntities();
+  private readonly remoteAnimals = createRemotePlayback();
   private readonly critters = new Map<number, Critter | Raccoon | Fox | WoodlandCreature>();
   private readonly builtMeshes = new Map<
     number,
@@ -1810,6 +1810,7 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.clearRemoteActors();
         if (this.selfNetId !== 0 && this.selfNetId !== message.netId) {
           this.floats.reelIn(this.selfNetId);
           this.fishingPhase = null;
@@ -5155,15 +5156,7 @@ export class Game {
     if (changed) {
       // Everybody we could see is somewhere else now; the next snapshot
       // brings whoever is here with us.
-      for (const netId of this.remotePlayers.netIds()) {
-        this.remotePlayers.remove(netId);
-        this.removeRemote(netId);
-      }
-      for (const id of this.remoteAnimals.netIds()) {
-        this.remoteAnimals.remove(id);
-        this.removeCritter(id);
-      }
-      this.raiders.clear();
+      this.clearRemoteActors();
       this.targeting.clear();
       this.stopPlacing();
       this.buildMenuOpen = false;
@@ -5508,6 +5501,15 @@ export class Game {
    */
   private isEquipped(item: ItemId): boolean {
     return this.equipped.get(this.selfNetId) === item;
+  }
+
+  /** A new connection or space has no useful actor history from the old one. */
+  private clearRemoteActors(): void {
+    for (const id of this.remotePlayers.netIds()) this.removeRemote(id);
+    for (const id of this.remoteAnimals.netIds()) this.removeCritter(id);
+    this.remotePlayers.clear();
+    this.remoteAnimals.clear();
+    this.raiders.clear();
   }
 
   private updateRemotePlayers(deltaSeconds: number): void {

@@ -15,7 +15,7 @@ import {
   type SnapshotEntity,
 } from '@acorn/shared';
 
-import { InterpolatedEntities } from '../net/interpolated-entities';
+import { createRemotePlayback } from '../net/remote-playback';
 import type { Character } from './character';
 import type { FootGroundHeight } from './standing-foot-contact';
 import { MoveMemory, rollDirection } from './character-driver';
@@ -83,7 +83,7 @@ const ATTACKING: ReadonlySet<ActionKind> = new Set([
 export class RaiderCrowd {
   // A little extra snapshot room absorbs ordinary arrival jitter. The eased
   // clock keeps that room from shrinking after one late packet.
-  private readonly positions = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
+  private readonly positions = createRemotePlayback();
   private readonly figures = new Map<number, RaiderFigure>();
   private readonly memories = new Map<number, MoveMemory>();
   private readonly kinds = new Map<number, RaiderKindId>();
