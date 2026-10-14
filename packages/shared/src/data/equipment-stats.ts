@@ -23,13 +23,18 @@ export interface EquipmentBonus {
 
 /** Fixed bonuses: no levels, random rolls or changes to attack/movement timing. */
 export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>> = {
+  axe: { power: 10 },
   ironSword: { power: 50 },
   huntingKnife: { power: 25 },
   refinedAxe: { power: 25 },
-  knightHelmet: { protection: 8 },
-  bearHat: { vitality: 15, warmth: 25 },
-  mageHat: { vitality: 10, warmth: 15 },
-  rogueMask: { vitality: 5, warmth: 5 },
+  shovel: { power: 5 },
+  rod: { power: 5 },
+  refinedRod: { power: 10 },
+  torch: { power: 5 },
+  knightHelmet: { protection: 8, warmth: 5 },
+  bearHat: { protection: 2, vitality: 15, warmth: 25 },
+  mageHat: { protection: 1, vitality: 10, warmth: 15 },
+  rogueMask: { protection: 1, vitality: 5, warmth: 5 },
   travelerTunic: { protection: 4, vitality: 10, warmth: 10 },
   travelerTrousers: { protection: 3, warmth: 10 },
   leatherBoots: { protection: 2, warmth: 5 },

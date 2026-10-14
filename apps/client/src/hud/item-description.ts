@@ -15,7 +15,7 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   guardianTrophy:
     'Earned by helping defeat the woodland guardian. Place it inside your home area from Build. Kept through a knockout.',
   refinedAxe:
-    'Made at a cabin workbench. Chops twice as much per light swing; combat damage stays the same.',
+    'Made at a cabin workbench. Chops twice as much per light swing and hits harder than a basic axe in combat.',
   refinedRod:
     'Made at a cabin workbench. Fish bite 25% sooner; use the same click timing to catch them.',
   berry: 'Forage in woodland glades. Eat fresh or use in trail rations and berry tea.',

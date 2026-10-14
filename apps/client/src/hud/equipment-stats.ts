@@ -11,7 +11,8 @@ export function equipmentDetail(item: ItemId): string | null {
   const bonus = EQUIPMENT_BONUSES[item];
   if (bonus === undefined) return null;
   const parts: string[] = [];
-  if (bonus.power !== undefined) parts.push(`Power +${bonus.power}% when used in your main hand.`);
+  if (bonus.power !== undefined)
+    parts.push(`Attack power +${bonus.power}% when used in your main hand.`);
   if (bonus.protection !== undefined) parts.push(`Protection +${bonus.protection}% while worn.`);
   if (bonus.vitality !== undefined)
     parts.push(`Vitality +${bonus.vitality} maximum health while worn.`);
@@ -29,7 +30,7 @@ export function equipmentComparison(
   const after = statsWithItem(worn, held, item);
   const parts: string[] = [];
   for (const [key, label] of [
-    ['power', 'Power'],
+    ['power', 'Attack power'],
     ['protection', 'Protection'],
     ['vitality', 'Vitality'],
     ['warmth', 'Warmth'],

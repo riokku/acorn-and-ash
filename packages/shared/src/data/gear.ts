@@ -2,8 +2,8 @@
  * Gear: what a character can wear, and where.
  *
  * Gear is an item (see `data/items.ts`) that fits one or more slots on the
- * body. It leaves the pack for its slot, and for now only changes how a
- * character looks (decision 0113). The slots are listed top to bottom in the
+ * body. It leaves the pack for its slot, changes how a character looks and contributes equipment bonuses
+ * (decisions 0177–0180). The slots are listed top to bottom in the
  * order the character screen shows them.
  */
 

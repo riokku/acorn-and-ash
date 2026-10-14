@@ -738,8 +738,24 @@ your character, and everyone else sees it too. Drag onto a slot that already has
 something to swap the two. Right-click a worn piece, or drop it back on the pack,
 to take it off. You cannot change gear in a fight. Whatever is in your main hand
 is what you swing. To drop a piece of gear instead of wearing it, hold `Shift`
-while you right-click. For now gear only changes how you look. See
-[decision 0113](docs/decisions/0113-wearing-gear.md).
+while you right-click. Gear changes your appearance and supplies Attack power,
+Protection, Vitality (maximum health) and Warmth. Hover an item to see its own
+bonuses and the change from what you currently wear. Only the active main-hand
+weapon adds attack damage; clothing supplies protection and winter insulation.
+See [decision 0183](docs/decisions/0183-complete-item-equipment-bonuses.md).
+
+| Weapon or tool             | Attack power bonus |
+| -------------------------- | ------------------ |
+| Iron sword                 | +50%               |
+| Hunting knife, refined axe | +25%               |
+| Axe, refined fishing rod   | +10%               |
+| Fishing rod, shovel, torch | +5%                |
+
+Every garment supplies both Protection and Warmth. A steel helmet favors
+protection; a bear hat and padded jacket favor warmth. Existing maximum-health
+bonuses remain. Bonuses apply while equipped, with Protection capped at 40%,
+maximum health at 150, and Warmth at 100. Ordinary winter needs Warmth 60;
+blizzards need 80. A lit campfire or indoor shelter also restores body warmth.
 
 `WORLD_ALLOW_TEST_GEAR` is `1` in the same places as `WORLD_ALLOW_TEST_SEASON`.
 It lets `?gear=all` in the address start your pack with one of every piece, as far
