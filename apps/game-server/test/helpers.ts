@@ -1,4 +1,19 @@
 import { SELF } from 'cloudflare:test';
+import { afterEach } from 'vitest';
+
+const openClients = new Set<TestClient>();
+
+// A close request is asynchronous. Drain every owned connection before the
+// Workers pool disposes its runtime, including clients left by a failed test.
+afterEach(async () => {
+  const clients = [...openClients];
+  for (const client of clients) client.close();
+  await Promise.all(
+    clients.map((client) =>
+      waitFor('test client close handshake', () => client.closedWith !== null),
+    ),
+  );
+});
 
 import {
   BUILDABLE_KINDS,
@@ -70,6 +85,7 @@ export class TestClient {
     readonly playerKey?: string,
   ) {
     this.socket = socket;
+    openClients.add(this);
     // Binary frames arrive as Blobs unless we ask for buffers.
     socket.binaryType = 'arraybuffer';
     // Listen before accepting: the welcome is already waiting on the socket, and
@@ -84,6 +100,7 @@ export class TestClient {
     });
     socket.addEventListener('close', (event: CloseEvent) => {
       this.closedWith = event.code;
+      openClients.delete(this);
     });
     socket.accept();
   }
@@ -204,7 +221,7 @@ export class TestClient {
   }
 
   close(): void {
-    this.socket.close(1000, 'test over');
+    if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1000, 'test over');
   }
 
   welcome(): WelcomeMessage {
