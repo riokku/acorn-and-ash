@@ -22,7 +22,7 @@ import {
 const WINTER: WarmthEnvironment = { winter: true, blizzard: false, insulation: 0, heat: null };
 const worlds: WorldSimulation[] = [];
 afterEach(() => worlds.splice(0).forEach((sim) => sim.dispose()));
-function world(warmth: WarmthState = { value: 100, coldTicks: 0 }) {
+function world(warmth: WarmthState = { value: 100, coldTicks: 0 }, health = 100) {
   const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED, raidIntervalSeconds: 86400 });
   worlds.push(sim);
   sim.setCalendarShift(clockShiftForSeason(sim.seed, 0, 'winter'));
@@ -34,7 +34,7 @@ function world(warmth: WarmthState = { value: 100, coldTicks: 0 }) {
     z: 0,
     facingYaw: 0,
     hunger: 100,
-    health: 100,
+    health,
     items: [],
     warmth,
   });
@@ -234,4 +234,20 @@ it('round-trips private warmth views and rejects truncated and inconsistent mess
   const invalid = encodeWarmth(freezing);
   new DataView(invalid).setUint8(1, 101);
   expect(decodeServerMessage(invalid)).toBeNull();
+});
+
+it('shows one health point while fractional health remains and preserves the actual value', () => {
+  const sim = world(
+    { value: 0, coldTicks: COLD_GRACE_TICKS + COLD_DAMAGE_INTERVAL_TICKS - 1 },
+    1.4,
+  );
+  sim.step(1000);
+  expect(sim.healthOf(1)).toBeCloseTo(0.4, 8);
+  const event = sim.drainHealthEvents().at(-1)!;
+  expect(event).toMatchObject({ health: 1, knockedOut: false });
+  expect(decodeServerMessage(encodeHealth(event))).toEqual({ type: 'health', event });
+  expect(decodeServerMessage(encodeHealth({ ...event, health: 0.4 }))).toMatchObject({
+    event: { health: 1 },
+  });
+  expect(sim.persistablePlayers()[0]?.health).toBeCloseTo(0.4, 8);
 });

@@ -1,3 +1,4 @@
+import { displayedHealth } from './health';
 import {
   advanceWarmth,
   warmthFromSaved,
@@ -2273,7 +2274,7 @@ export class WorldSimulation {
           runtime.health = Math.min(healthMax, runtime.health + mealStep.healing);
           this.healthEvents.push({
             netId: runtime.netId,
-            health: Math.round(runtime.health),
+            health: displayedHealth(runtime.health),
             knockedOut: false,
             dodged: false,
           });
@@ -2598,7 +2599,7 @@ export class WorldSimulation {
     ) {
       this.healthEvents.push({
         netId,
-        health: Math.round(runtime.health),
+        health: displayedHealth(runtime.health),
         knockedOut: false,
         dodged: true,
       });
@@ -4678,7 +4679,7 @@ export class WorldSimulation {
       if (this.tick - runtime.dodgeStartedAtTick < DODGE.invulnerable) {
         this.healthEvents.push({
           netId: runtime.netId,
-          health: Math.round(runtime.health),
+          health: displayedHealth(runtime.health),
           knockedOut: false,
           dodged: true,
         });
@@ -4734,7 +4735,7 @@ export class WorldSimulation {
 
     this.healthEvents.push({
       netId: runtime.netId,
-      health: Math.round(runtime.health),
+      health: displayedHealth(runtime.health),
       knockedOut,
       dodged: false,
       ...(cold ? { cold: true } : {}),
@@ -5825,7 +5826,7 @@ export class WorldSimulation {
       runtime.health = maximum;
       this.healthEvents.push({
         netId: runtime.netId,
-        health: Math.round(runtime.health),
+        health: displayedHealth(runtime.health),
         knockedOut: false,
         dodged: false,
         adjusted: true,

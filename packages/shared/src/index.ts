@@ -112,3 +112,5 @@ export * from './collision/solid-surface';
 export * from './world/placed-solids';
 
 export * from './sim/warmth';
+
+export * from './sim/health';

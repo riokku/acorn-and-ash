@@ -1,3 +1,4 @@
+import { displayedHealth } from '../sim/health';
 import { WARMTH_STATUSES, type WarmthView } from '../sim/warmth';
 import { BUILD_REPLY_REASONS, type BuildReply } from '../sim/building';
 import { CRAFT_REFUSALS, type CraftRefusal } from '../sim/crafting';
@@ -1637,7 +1638,7 @@ export function encodeHealth(event: HealthEvent): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.Health);
   view.setUint16(1, event.netId & 0xffff, true);
-  view.setUint8(3, clamp(Math.round(event.health), 0, 255));
+  view.setUint8(3, clamp(displayedHealth(event.health), 0, 255));
   view.setUint8(
     4,
     (event.knockedOut ? HEALTH_FLAG_KNOCKED_OUT : 0) |
