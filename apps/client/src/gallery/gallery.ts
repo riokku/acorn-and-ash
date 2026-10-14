@@ -340,8 +340,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   }
   if (focus === 'moves') {
     scene.add(createGalleryGround([]));
-    const { showMoves } = await import('./moves');
-    await showMoves(renderer, scene, fireLights, params);
+    if (params.get('demo') === 'network') {
+      const { showNetworkMotion } = await import('./network-motion');
+      await showNetworkMotion(renderer, scene, fireLights);
+    } else {
+      const { showMoves } = await import('./moves');
+      await showMoves(renderer, scene, fireLights, params);
+    }
     return;
   }
   if (focus === 'bodies') {
