@@ -23,6 +23,7 @@ interface Sample {
   /** The move under way, packed as the snapshot carries it (see `packActionByte`). */
   readonly action: number;
   readonly actionAge: number;
+  readonly actionStartMs: number;
   readonly actionHeading: number;
 }
 
@@ -47,6 +48,14 @@ export interface RemotePose {
 
 /** Older samples than this are no use to anybody. */
 const HISTORY_MS = 1500;
+const CLOCK_FOLLOW = 2;
+const MAX_CLOCK_CORRECTION = 0.1;
+
+export interface InterpolationOptions {
+  readonly delaySeconds?: number;
+  /** Ease packet clock corrections instead of jumping forward or accumulating lateness. */
+  readonly smoothClock?: boolean;
+}
 
 /**
  * Where everybody else is - other players, and now animals too.
@@ -58,10 +67,21 @@ const HISTORY_MS = 1500;
  * instance for players and for animals - so nothing here needs to know which
  * kind it is.
  */
+
 export class InterpolatedEntities {
   private readonly history = new Map<number, Sample[]>();
   /** The client's running estimate of what time it is on the server. */
   private serverTimeMs = 0;
+  private targetTimeMs = 0;
+  private latestPacketTimeMs: number | null = null;
+  private playbackRate = 1;
+  private readonly delaySeconds: number;
+  private readonly smoothClock: boolean;
+
+  constructor(options: InterpolationOptions = {}) {
+    this.delaySeconds = options.delaySeconds ?? INTERPOLATION_DELAY_SECONDS;
+    this.smoothClock = options.smoothClock ?? false;
+  }
 
   /**
    * Take everything in a snapshot, except the one entity this browser
@@ -70,7 +90,26 @@ export class InterpolatedEntities {
    * animal tracker included.
    */
   ingest(serverTimeMs: number, entities: readonly SnapshotEntity[], excludeId?: number): void {
-    this.serverTimeMs = Math.max(this.serverTimeMs, serverTimeMs);
+    if (this.smoothClock) {
+      // A stale packet must not rewind the target clock. The target advances
+      // between arrivals too, but each new packet resets its timing estimate.
+      const newestTime = this.latestPacketTimeMs;
+      if (
+        newestTime === null ||
+        serverTimeMs - newestTime > HISTORY_MS ||
+        (serverTimeMs > newestTime && Math.abs(serverTimeMs - this.serverTimeMs) > HISTORY_MS)
+      ) {
+        this.serverTimeMs = serverTimeMs;
+        this.targetTimeMs = serverTimeMs;
+        this.playbackRate = 1;
+      } else if (serverTimeMs > newestTime) {
+        this.targetTimeMs = serverTimeMs;
+      }
+    } else {
+      this.serverTimeMs = Math.max(this.serverTimeMs, serverTimeMs);
+    }
+
+    this.latestPacketTimeMs = Math.max(this.latestPacketTimeMs ?? -Infinity, serverTimeMs);
 
     for (const entity of entities) {
       if (entity.netId === excludeId) continue;
@@ -106,6 +145,16 @@ export class InterpolatedEntities {
         verticalSpeed: Math.abs(entity.vy),
         action: entity.action,
         actionAge: entity.actionAge,
+        // A tick's timestamp can wobble a little. Once this move has started,
+        // keep its origin until the kind/step changes or its age resets.
+        actionStartMs:
+          this.smoothClock &&
+          samples.length > 0 &&
+          newest !== undefined &&
+          newest.action === entity.action &&
+          entity.actionAge >= newest.actionAge
+            ? beganAt(newest)
+            : serverTimeMs - entity.actionAge * TICK_MILLISECONDS,
         actionHeading: entity.actionHeading,
       });
       while (samples.length > 2 && (samples[0]?.timeMs ?? 0) < serverTimeMs - HISTORY_MS) {
@@ -117,7 +166,29 @@ export class InterpolatedEntities {
 
   /** Keep the clock moving between snapshots. */
   advance(deltaSeconds: number): void {
-    this.serverTimeMs += deltaSeconds * 1000;
+    if (this.smoothClock) {
+      // At most ten percent faster/slower, always forward. Packet jitter cannot
+      // jump a pose or rewind a combat clip; a lost connection still holds the
+      // newest position rather than extrapolating through scenery.
+      const errorSeconds = (this.targetTimeMs - this.serverTimeMs) / 1000;
+      this.playbackRate =
+        1 +
+        Math.min(
+          MAX_CLOCK_CORRECTION,
+          Math.max(-MAX_CLOCK_CORRECTION, errorSeconds * CLOCK_FOLLOW),
+        );
+      this.targetTimeMs += deltaSeconds * 1000;
+    }
+    this.serverTimeMs += deltaSeconds * 1000 * this.playbackRate;
+  }
+
+  /** A new connection/world must not inherit the previous playback clock. */
+  clear(): void {
+    this.history.clear();
+    this.serverTimeMs = 0;
+    this.targetTimeMs = 0;
+    this.latestPacketTimeMs = null;
+    this.playbackRate = 1;
   }
 
   remove(netId: number): void {
@@ -146,7 +217,7 @@ export class InterpolatedEntities {
     const samples = this.history.get(netId);
     if (samples === undefined || samples.length === 0) return undefined;
 
-    const renderTime = this.serverTimeMs - INTERPOLATION_DELAY_SECONDS * 1000;
+    const renderTime = this.serverTimeMs - this.delaySeconds * 1000;
     const newest = samples[samples.length - 1];
     if (newest === undefined) return undefined;
 
@@ -177,11 +248,12 @@ export class InterpolatedEntities {
           sprinting: after.sprinting,
           airborne: after.airborne,
           speed: before.speed + (after.speed - before.speed) * alpha,
-          // Corrections must not make the gait faster than either reported pace.
-          travelSpeed: Math.min(
-            Math.hypot(after.x - before.x, after.z - before.z) / (span / 1000),
-            Math.max(before.speed, after.speed),
-          ),
+          // Cap correction distance, then match the pace of the playback clock.
+          travelSpeed:
+            Math.min(
+              Math.hypot(after.x - before.x, after.z - before.z) / (span / 1000),
+              Math.max(before.speed, after.speed),
+            ) * this.playbackRate,
           action: move.action,
           actionAge: (renderTime - beganAt(move)) / TICK_MILLISECONDS,
           actionHeading: move.actionHeading,
@@ -194,7 +266,7 @@ export class InterpolatedEntities {
 
 /** When, on the server's clock, the move a sample shows had begun. */
 function beganAt(sample: Sample): number {
-  return sample.timeMs - sample.actionAge * TICK_MILLISECONDS;
+  return sample.actionStartMs;
 }
 
 function toPose(sample: Sample, renderTime: number): RemotePose {

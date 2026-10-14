@@ -235,3 +235,104 @@ describe('discontinuous remote movement', () => {
     expect(players.poseOf(2)?.travelSpeed).toBe(0);
   });
 });
+
+describe('buffered skeleton snapshot playback', () => {
+  it.each([30, 60, 144])(
+    'keeps position, gait and combat age advancing through packet jitter at %i FPS',
+    (fps) => {
+      const skeletons = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
+      const delays = [0, 45, 10, 60, 5, 35, 0, 55];
+      let next = 0;
+      let previousX = 0;
+      let previousAge = 0;
+      for (let frame = 0; frame < fps * 5; frame++) {
+        const now = (frame * 1000) / fps;
+        while (next * 100 + delays[next % delays.length]! <= now) {
+          skeletons.ingest(1000 + next * 100, [
+            {
+              ...entity(2, next * 0.3, 0, 0, SnapshotFlag.Moving, 1, next * 2),
+              vx: 3,
+            },
+          ]);
+          next++;
+        }
+        skeletons.advance(1 / fps);
+        const pose = skeletons.poseOf(2)!;
+        if (now > 500) {
+          // No pause/restart in either the body or feet, and no rewound clip.
+          expect((pose.x - previousX) * fps).toBeGreaterThan(2.4);
+          expect((pose.x - previousX) * fps).toBeLessThan(3.4);
+          expect(pose.travelSpeed).toBeGreaterThan(2.4);
+          expect(pose.actionAge).toBeGreaterThan(previousAge);
+        }
+        previousX = pose.x;
+        previousAge = pose.actionAge;
+      }
+      const held = skeletons.poseOf(2)!;
+      skeletons.advance(2);
+      const stopped = skeletons.poseOf(2)!;
+      expect(stopped.x).toBeGreaterThanOrEqual(held.x);
+      expect(stopped.travelSpeed).toBe(0);
+      skeletons.advance(1);
+      expect(skeletons.poseOf(2)!.x).toBe(stopped.x);
+    },
+  );
+
+  it('eases an early packet without jumping, ignores stale packets and resets on a teleport', () => {
+    const skeletons = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
+    for (let i = 0; i < 5; i++) {
+      skeletons.ingest(1000 + i * 100, [{ ...entity(2, i * 0.3, 0), vx: 3 }]);
+      skeletons.advance(0.1);
+    }
+    const before = skeletons.poseOf(2)!;
+    skeletons.ingest(1500, [{ ...entity(2, 1.5, 0), vx: 3 }]);
+    expect(skeletons.poseOf(2)!.x).toBe(before.x);
+    skeletons.ingest(1200, [entity(2, 99, 0)]);
+    expect(skeletons.poseOf(2)!.x).toBe(before.x);
+    skeletons.advance(1 / 60);
+    expect(skeletons.poseOf(2)!.x - before.x).toBeLessThan(0.06);
+    skeletons.ingest(1600, [entity(2, 40, 0)]);
+    expect(skeletons.poseOf(2)!.x).toBe(40);
+    expect(skeletons.poseOf(2)!.travelSpeed).toBe(0);
+  });
+  it('resumes recent movement after hidden-tab frames stop and starts fresh on reconnect', () => {
+    const skeletons = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
+    // Packets keep arriving while the browser suspends render callbacks.
+    for (let i = 0; i <= 50; i++) {
+      skeletons.ingest(1000 + i * 100, [{ ...entity(2, i * 0.3, 0), vx: 3 }]);
+    }
+    skeletons.advance(1 / 60);
+    expect(skeletons.poseOf(2)!.x).toBeGreaterThan(13);
+    expect(skeletons.poseOf(2)!.travelSpeed).toBeGreaterThan(0);
+    skeletons.clear();
+    expect(skeletons.netIds()).toEqual([]);
+    skeletons.ingest(100, [entity(3, 0, 0)]);
+    skeletons.advance(0.1);
+    skeletons.ingest(200, [{ ...entity(3, 0.3, 0), vx: 3 }]);
+    skeletons.advance(0.1);
+    expect(skeletons.poseOf(3)!.x).toBeGreaterThan(0);
+    expect(skeletons.poseOf(3)!.x).toBeLessThan(0.3);
+  });
+  it('keeps the current combat clip advancing when tick timestamps wobble', () => {
+    const skeletons = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
+    const wobble = [0, 18, -18, 14, -10];
+    let next = 0;
+    let age = 0;
+    for (let frame = 0; frame < 300; frame++) {
+      const now = (frame * 1000) / 60;
+      while (next * 100 <= now) {
+        skeletons.ingest(1000 + next * 100 + wobble[next % wobble.length]!, [
+          {
+            ...entity(2, next * 0.3, 0, 0, SnapshotFlag.Moving, 1, next * 2),
+            vx: 3,
+          },
+        ]);
+        next++;
+      }
+      skeletons.advance(1 / 60);
+      const nextAge = skeletons.poseOf(2)!.actionAge;
+      if (now > 500) expect(nextAge).toBeGreaterThan(age);
+      age = nextAge;
+    }
+  });
+});
