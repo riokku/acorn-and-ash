@@ -43,6 +43,7 @@ import {
 } from '@acorn/shared';
 
 import { sleep, TestClient, waitFor } from './helpers';
+import { pondWaypoint } from './pond-route';
 
 /** Each test gets its own world so they cannot tread on each other. */
 let worldCounter = 0;
@@ -695,7 +696,8 @@ async function walkWithinReach(
       continue;
     }
     // Walking forward is walking down -Z, so this is the heading that lines up.
-    const yaw = Math.atan2(-(spot.x - here.x), -(spot.z - here.z));
+    const waypoint = pondWaypoint(here, spot, client.welcome().seed);
+    const yaw = Math.atan2(-(waypoint.x - here.x), -(waypoint.z - here.z));
     // Pressed flat against something - the pond, say, now that a patch can
     // be anywhere - so step sideways around it before heading on.
     const stuck =
@@ -2054,8 +2056,8 @@ describe('building', () => {
 
   /** Walk back to open ground near spawn - clear of every landmark - to build on. */
   async function walkToOpenGround(client: TestClient): Promise<void> {
-    // The same walk as reaching for anything, so it steps around the pond
-    // from wherever a patch happened to be.
+    // The walker follows dry waypoints around the larger pond, from wherever
+    // a regenerated flower patch happened to be.
     await walkWithinReach(client, SPAWN_POSITION);
   }
 

@@ -635,6 +635,8 @@ export interface GameDebug {
   nearbyItem(): string | null;
   /** Something dropped within reach right now, if anything. */
   nearbyPile(): { item: string; count: number } | null;
+  /** Whether this specific pile is reachable using the game's ground-loot rules. */
+  pileInReach(id: number): boolean;
   /** The toasts showing right now: what each one says it gained, and how many. */
   toasts(): Array<{ item: string; count: number }>;
   /** What a nearby patch would gather, if anything is within reach right now. */
@@ -1524,6 +1526,15 @@ export class Game {
       takenPickups: () => [...this.takenPickups],
       nearbyItem: () => this.nearbyItem,
       nearbyPile: () => (this.nearbyPile === null ? null : { ...this.nearbyPile }),
+      pileInReach: (id) => {
+        const pile = this.droppedPiles.find((entry) => entry.id === id);
+        return (
+          this.localPlayer !== null &&
+          pile !== undefined &&
+          this.space === OUTDOORS &&
+          this.canReachGroundLoot(this.localPlayer.motion.position, pile)
+        );
+      },
       nearGatherSpot: () => this.nearGatherSpot,
       felledTrees: () => [...this.treeStates].filter(([, state]) => state.felled).map(([id]) => id),
       treeGenerations: () =>
@@ -2636,8 +2647,8 @@ export class Game {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       if (this.clearingScene !== null) return;
 
-      const clearing = buildTestClearing(seed);
       const terrain = createWildernessTerrain(seed);
+      const clearing = buildTestClearing(seed, terrain);
       this.footprints?.dispose();
       this.waterWake.clear();
       this.footprints = createSnowFootprints((x, z) =>
@@ -2693,7 +2704,7 @@ export class Game {
       this.outdoors.add(this.encounterLandmarks.group);
 
       this.clearing = clearing;
-      this.clearingScene = buildClearingScene(clearing);
+      this.clearingScene = buildClearingScene(clearing, terrain);
       this.clearingScene.setTakenPickups(this.takenPickups);
       this.outdoors.add(this.clearingScene.group);
 

@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { expect, it } from 'vitest';
 import {
   LAKE,
+  POND,
   STREAM,
   createWildernessTerrain,
   basinDepthAt,
@@ -61,6 +62,7 @@ it.each([734, 1234])(
         `${name} at ${x}, ${z}`,
       ).toBeLessThan(0.1);
     for (const [name, circles] of [
+      ['pond', POND],
       ['lake', LAKE.basin],
       ['island', LAKE.islands.flatMap((island) => island.lobes)],
       ['slough', STREAM.sloughs.flatMap((slough) => slough.basin)],

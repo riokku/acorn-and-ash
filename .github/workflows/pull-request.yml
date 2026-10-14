@@ -13,53 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+    with:
+      build-all: true
+
+  # Preserve the branch-protection check name and require every verification
+  # job, including all package suites, to succeed before uploading a preview.
   check:
     name: Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    needs: verify
+    if: always()
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Formatting
-        run: pnpm format:check
-
-      - name: Test
-        timeout-minutes: 20
-        run: pnpm test
-
-      - name: Preview lifecycle tests
-        run: node --test tools/preview-pr-state.test.mjs
-
-      - name: Asset licences
-        run: pnpm check:assets
-
-      - name: Build
-        run: pnpm build
+      - name: Check all verification results
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: test "$VERIFY_RESULT" = success
 
   browser:
-    name: Browser tests (${{ matrix.shard }}/4)
+    name: Browser tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v5
 
@@ -80,7 +59,7 @@ jobs:
       # World Durable Object in apps/game-server, all locally.
       - name: Play the game
         timeout-minutes: 30
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/8
 
       # Screenshots and traces from a failure live in test-results, and the
       # HTML report is not written in CI at all. Keeping only the report meant
@@ -135,8 +114,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Build the client
-        run: pnpm --filter @acorn/client build
+      - name: Use the verified client build
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-client-${{ github.sha }}
+          path: apps/client/dist/
 
       # The preview attaches to the deployed staging Worker, so the name has to
       # match. If it is ever renamed, fail here rather than quietly deciding

@@ -13,6 +13,7 @@ export * from './math/angles';
 export * from './rng';
 
 export * from './world/terrain';
+export * from './world/pond';
 export * from './world/mountains';
 export * from './world/stream';
 export * from './world/navigable-water';

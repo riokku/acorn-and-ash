@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-import { REED_PATCHES, type WaterCircle } from '@acorn/shared';
+import { REED_PATCHES, POND_BANK_WIDTH, pondGroundHeight, type WaterCircle } from '@acorn/shared';
 
 import { createBankMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
@@ -10,14 +10,9 @@ import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
 /**
  * Where the water's surface is drawn.
  *
- * A hair above the ground, which is a flat plane at zero, so the ground does
- * not show through. The float bobs relative to this.
+ * The level water is recessed beneath its bank; the float bobs relative to this.
  */
 export const WATER_SURFACE_Y = 0.03;
-/** The muddy bank sits between the grass and the water. */
-const BANK_Y = 0.015;
-/** How far the bank reaches out past the water's edge, fading into the grass as it goes. */
-const BANK_WIDTH = 0.85;
 
 /** Lily pads, as a fraction of the way from a circle's middle to its edge, and an angle. */
 const LILY_PADS: readonly { circle: number; out: number; angle: number; size: number }[] = [
@@ -56,16 +51,16 @@ export function createPond(water: readonly WaterCircle[]): {
   const geometries: THREE.BufferGeometry[] = [];
 
   const waterMaterial = createWaterMaterial(water);
-  const bankMaterial = createBankMaterial(water, BANK_WIDTH);
-  for (const circle of water) {
-    const bank = flatDisc(circle.radius + BANK_WIDTH, 28);
+  const bankMaterial = createBankMaterial(water, POND_BANK_WIDTH);
+  if (water.length > 0) {
+    const bank = bankGeometry(water);
     geometries.push(bank);
     const bankMesh = new THREE.Mesh(bank, bankMaterial);
-    bankMesh.position.set(circle.x, BANK_Y, circle.z);
     bankMesh.receiveShadow = true;
     group.add(bankMesh);
-
-    const surface = flatDisc(circle.radius, 28);
+  }
+  for (const circle of water) {
+    const surface = flatDisc(circle.radius, 64);
     geometries.push(surface);
     const surfaceMesh = new THREE.Mesh(surface, waterMaterial);
     surfaceMesh.position.set(circle.x, WATER_SURFACE_Y, circle.z);
@@ -87,6 +82,30 @@ export function createPond(water: readonly WaterCircle[]): {
       plants.dispose();
     },
   };
+}
+
+/** One continuous mud layer hugs the physical bank, including between lobes. */
+function bankGeometry(water: readonly WaterCircle[]): THREE.BufferGeometry {
+  const minX = Math.min(...water.map((c) => c.x - c.radius)) - POND_BANK_WIDTH;
+  const maxX = Math.max(...water.map((c) => c.x + c.radius)) + POND_BANK_WIDTH;
+  const minZ = Math.min(...water.map((c) => c.z - c.radius)) - POND_BANK_WIDTH;
+  const maxZ = Math.max(...water.map((c) => c.z + c.radius)) + POND_BANK_WIDTH;
+  const geometry = new THREE.PlaneGeometry(
+    maxX - minX,
+    maxZ - minZ,
+    Math.ceil((maxX - minX) / 0.2),
+    Math.ceil((maxZ - minZ) / 0.2),
+  );
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+  const position = geometry.getAttribute('position');
+  for (let i = 0; i < position.count; i++) {
+    // Clear the ground mesh's permitted 4 cm interpolation error, while
+    // remaining below the water at the shore itself.
+    position.setY(i, pondGroundHeight(water, position.getX(i), position.getZ(i)) + 0.045);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /** A flat disc lying on the ground, facing up. */
@@ -155,7 +174,11 @@ function createPondPlants(water: readonly WaterCircle[]): { group: THREE.Group; 
         stoneGeometry(r, r * 0.55, 720 + circleIndex * 10 + i, 0.5, 0),
         placed(
           circle.x + Math.cos(angle) * (circle.radius + 0.05),
-          0,
+          pondGroundHeight(
+            water,
+            circle.x + Math.cos(angle) * (circle.radius + 0.05),
+            circle.z + Math.sin(angle) * (circle.radius + 0.05),
+          ) - 0.04,
           circle.z + Math.sin(angle) * (circle.radius + 0.05),
           { y: random() * 3 },
         ),

@@ -375,10 +375,7 @@ export function Hud({
       ) : null}
       {showingWorld ? (
         <div className="vitals">
-          {state.warmth !== null &&
-          (state.season?.season === 'winter' || state.warmth.value < 100) ? (
-            <WarmthBar warmth={state.warmth} />
-          ) : null}
+          {state.warmth !== null ? <WarmthBar warmth={state.warmth} /> : null}
           <HungerBar hunger={state.hunger} />
           <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
         </div>

@@ -12,8 +12,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   deploy:
     name: Deploy
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: staging
@@ -30,26 +34,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        timeout-minutes: 5
-        run: pnpm typecheck
-
-      - name: Lint
-        timeout-minutes: 5
-        run: pnpm lint
-
-      # A Workers pool teardown stalled after every test passed. A stalled
-      # runner must fail visibly rather than block newer deployments for hours.
-      - name: Test
-        timeout-minutes: 20
-        run: pnpm test
-
-      - name: Asset licences
-        timeout-minutes: 5
-        run: pnpm check:assets
-
-      - name: Build the client
-        run: pnpm --filter @acorn/client build
+      - name: Use the verified client build
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-client-${{ github.sha }}
+          path: apps/client/dist/
 
       # The game server goes first: apps/web binds to the World class by script
       # name, so that script has to already exist.

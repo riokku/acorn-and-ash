@@ -63,7 +63,7 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
     });
   });
   try {
-    await page.goto('/?renderer=webgl2&world=warmth-ui');
+    await page.goto('/?renderer=webgl2&world=warmth-ui&season=summer');
     await page.locator('#home-name').fill('Winter Walker');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
@@ -71,6 +71,11 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
       timeout: 120_000,
     });
     const meter = page.getByTestId('warmth-meter');
+    const warmthBox = (await meter.boundingBox())!;
+    const hungerBox = (await page.getByTestId('hunger-bar').boundingBox())!;
+    const healthBox = (await page.getByTestId('health-bar').boundingBox())!;
+    expect(warmthBox.y + warmthBox.height).toBeLessThanOrEqual(hungerBox.y);
+    expect(hungerBox.y + hungerBox.height).toBeLessThanOrEqual(healthBox.y);
     await expect(meter).toHaveAttribute('data-status', 'cold');
     await expect(meter).toContainText('warmer gear');
     await page.keyboard.press('KeyZ');
@@ -100,6 +105,12 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
       shared.encodeWarmth({ value: 0, status: 'freezing', heat: null, secondsToDamage: 12 }),
     );
     await expect(meter).toContainText('health loss in 12s');
+    sendWorld(shared.encodeLakeIce(false));
+    sendWorld(
+      shared.encodeWarmth({ value: 100, status: 'comfortable', heat: null, secondsToDamage: null }),
+    );
+    await expect(meter).toBeVisible();
+    await expect(meter).toContainText('Comfortably warm');
     expect(errors).toEqual([]);
   } finally {
     sim.dispose();

@@ -8,6 +8,8 @@ import { LAKE, lakeGroundHeight, type Lake } from './lake';
 import { mountainHeightAt } from './mountains';
 import { STREAM, streamGroundHeight, type Stream } from './stream';
 import { fractalNoise2D } from './noise';
+import { POND } from './clearing';
+import { pondGroundHeight } from './pond';
 
 export interface Terrain {
   /** A label used in logs and save files. */
@@ -26,7 +28,7 @@ export function createFlatTerrain(height = 0): Terrain {
 /**
  * The generated wilderness beyond the hand-built clearing.
  *
- * Ground stays flat through the clearing and its ring of trees, rolls into
+ * Ground stays flat through the clearing apart from the pond basin, rolls into
  * hills beyond that, and flattens again for the last stretch before the
  * invisible wall at the edge of the world - so neither the clearing nor the
  * boundary ever sit on a slope. Same seed, same hills, on the server and in
@@ -79,7 +81,8 @@ export function wildernessHeightAt(
     z,
     hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z),
   );
-  return stream === null ? ground : streamGroundHeight(stream, lake, x, z, ground);
+  const riverGround = stream === null ? ground : streamGroundHeight(stream, lake, x, z, ground);
+  return pondGroundHeight(POND, x, z, riverGround);
 }
 
 /** What the hills alone would make the ground, before the lake shapes it. */

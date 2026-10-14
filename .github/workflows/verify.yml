@@ -1,0 +1,77 @@
+name: Verify game
+
+on:
+  workflow_call:
+    inputs:
+      build-all:
+        description: Also check every package build before a PR preview
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Types, style and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        timeout-minutes: 5
+        run: pnpm typecheck
+      - name: Lint
+        timeout-minutes: 5
+        run: pnpm lint
+      - name: Formatting
+        run: pnpm format:check
+      - name: Preview lifecycle tests
+        run: node --test tools/preview-pr-state.test.mjs
+      - name: Asset licences
+        timeout-minutes: 5
+        run: pnpm check:assets
+      - name: Build every package
+        if: inputs.build-all
+        run: pnpm build
+      - name: Build the client
+        if: '!inputs.build-all'
+        run: pnpm --filter @acorn/client build
+      # Only compiled public assets, scoped to this run and commit. Deploy jobs
+      # consume these exact files after all verification jobs have passed.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-client-${{ github.sha }}
+          path: apps/client/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  unit:
+    name: Unit tests (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ['@acorn/shared', '@acorn/client', '@acorn/game-server', '@acorn/web']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Independent runners avoid both dependency-order waits and competition
+      # between the simulation/Workers tests for one runner's CPU.
+      - name: Test
+        timeout-minutes: 20
+        run: pnpm --filter '${{ matrix.package }}' test

@@ -2262,7 +2262,10 @@ describe('chopping a tree down', () => {
     const index = later.clearing.indexById.get(felled.id);
     const collider = index === undefined ? undefined : later.collision.colliders[index];
     if (collider?.shape !== 'cylinder') throw new Error('expected a cylinder');
-    expect(collider.height).toBeLessThan(1);
+    // Buried roots can extend the collider downward on the pond bank. The
+    // visible stump stays low, and restoration preserves its complete surface.
+    expect(collider.baseY + collider.height).toBeLessThan((felled.y ?? 0) + 1);
+    expect(collider).toEqual(sim.collision.colliders[index!]);
   });
 
   it('reports each swing exactly once', () => {
