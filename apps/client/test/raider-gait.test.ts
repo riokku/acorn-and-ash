@@ -44,8 +44,9 @@ it('uses visible snapshot travel for gait, holds idle during gaps, and supplies 
   try {
     crowd.setList([{ id: 1, kind: 'minion', hitsLeft: 2 }]);
     crowd.ingest(1000, [sample(0)]);
+    crowd.update(0.1, null, null);
     crowd.ingest(1100, [sample(0.3)]);
-    crowd.update(0.05, null, null);
+    crowd.update(0.1, null, null);
     let frame = draw.mock.lastCall![2] as CharacterFrame;
     expect(frame.locomotion.speed).toBeCloseTo(3);
     expect(frame.groundHeight).toBe(height);
@@ -55,7 +56,7 @@ it('uses visible snapshot travel for gait, holds idle during gaps, and supplies 
     expect(frame.locomotion.speed).toBe(0);
     // Holding location never suppresses or freezes combat actions.
     crowd.ingest(1400, [sample(0.3, ActionKind.Dodge)]);
-    crowd.update(0.2, null, null);
+    crowd.update(0.35, null, null);
     frame = draw.mock.lastCall![2] as CharacterFrame;
     expect(frame.move.kind).toBe(ActionKind.Dodge);
     expect(frame.move.age).toBeGreaterThan(2);

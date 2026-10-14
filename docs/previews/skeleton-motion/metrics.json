@@ -1,0 +1,21 @@
+{
+  "scenario": "Actual warrior rig, gallery network demo, 10 Hz packets with 0\u201360 ms delivery jitter, controlled 60 FPS stepping in Chrome",
+  "before": {
+    "frames": 300,
+    "pauses": 148,
+    "walking": 178,
+    "minSpeed": 0,
+    "maxSpeed": 14.995660098966985,
+    "limbChanges": 213,
+    "errors": []
+  },
+  "after": {
+    "frames": 300,
+    "pauses": 0,
+    "walking": 177,
+    "minSpeed": 2.24773642448014,
+    "maxSpeed": 2.599939887400731,
+    "limbChanges": 287,
+    "errors": []
+  }
+}

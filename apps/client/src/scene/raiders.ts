@@ -24,7 +24,7 @@ import { RaiderFigure } from './raider-figure';
 
 /**
  * Every skeleton raider in sight, drawn (see decision 0063): where each is,
- * from the snapshots, a tenth of a second behind like any other player; what
+ * from the snapshots, a small buffered interval behind; what
  * kind each is and how many blows each still needs, from the server's
  * list; and the blows landing on them, shown the moment our own swing
  * connects and confirmed when the server says so.
@@ -81,7 +81,9 @@ const ATTACKING: ReadonlySet<ActionKind> = new Set([
 ]);
 
 export class RaiderCrowd {
-  private readonly positions = new InterpolatedEntities();
+  // A little extra snapshot room absorbs ordinary arrival jitter. The eased
+  // clock keeps that room from shrinking after one late packet.
+  private readonly positions = new InterpolatedEntities({ delaySeconds: 0.18, smoothClock: true });
   private readonly figures = new Map<number, RaiderFigure>();
   private readonly memories = new Map<number, MoveMemory>();
   private readonly kinds = new Map<number, RaiderKindId>();
@@ -311,6 +313,7 @@ export class RaiderCrowd {
       const figure = this.forget(id);
       if (figure !== undefined) this.putBy(figure);
     }
+    this.positions.clear();
     for (const figure of this.departing) this.putBy(figure);
     this.departing.length = 0;
   }

@@ -14,6 +14,9 @@ import {
   STRIKE,
   TICK_SECONDS,
   windupTicks,
+  SnapshotFlag,
+  packActionByte,
+  createActionState,
   type RaiderKindId,
 } from '@acorn/shared';
 
@@ -21,6 +24,7 @@ import { preloadCharacterAnimations } from '../scene/character-animations';
 import { MoveMemory } from '../scene/character-driver';
 import { ImpactBursts } from '../scene/impact-bursts';
 import { createNameplate } from '../scene/nameplate';
+import { RaiderCrowd } from '../scene/raiders';
 import { RaiderFigure } from '../scene/raider-figure';
 import { preloadRaiderModels } from '../scene/raider-model';
 import type { FireLights } from '../scene/fire-light';
@@ -145,6 +149,10 @@ export async function showRaiders(
   await Promise.all([preloadRaiderModels(), preloadCharacterAnimations()]);
   const slope = Math.max(-0.3, Math.min(0.3, Number(params.get('slope') ?? 0))) || 0;
   const groundHeight = (x: number) => x * slope;
+  if (params.get('demo') === 'network') {
+    showNetworkRaider(renderer, scene, fireLights, params, groundHeight);
+    return;
+  }
   const picked = params.get('demo');
   const demos = picked === null ? DEMOS : DEMOS.filter((demo) => demo.name === picked);
   const askedKind = params.get('kind');
@@ -272,5 +280,116 @@ export async function showRaiders(
     renderer.render(scene, camera);
     frames += 1;
     if (frames === 8) document.body.dataset.galleryReady = 'true';
+  });
+}
+
+interface RaiderMotionFrame {
+  readonly dt: number;
+  readonly x: number;
+  readonly z: number;
+  readonly leg: readonly number[];
+  readonly walking: boolean;
+}
+declare global {
+  interface Window {
+    /** Bounded gallery-only samples from the actual rendered skeleton rig. */
+    acornRaiderMotion?: RaiderMotionFrame[];
+    /** Advance the gallery rig at a controlled frame rate for browser checks. */
+    acornAdvanceRaiderMotion?: (deltaSeconds: number) => void;
+  }
+}
+
+/** Exercise the gameplay crowd with 10 Hz snapshots and uneven delivery, not an on-the-spot rig. */
+function showNetworkRaider(
+  renderer: RendererSetup['renderer'],
+  scene: THREE.Scene,
+  fireLights: FireLights,
+  params: URLSearchParams,
+  groundHeight: (x: number, z: number) => number,
+): void {
+  const asked = params.get('kind');
+  const kind: RaiderKindId =
+    asked !== null && asked in RAIDER_KINDS ? (asked as RaiderKindId) : 'minion';
+  const bursts = new ImpactBursts();
+  scene.add(bursts.group);
+  const crowd = new RaiderCrowd(scene, bursts, groundHeight);
+  crowd.setList([{ id: 1, kind, hitsLeft: RAIDER_KINDS[kind].toughness }]);
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 300);
+  camera.position.set(0, 3.5, 11);
+  camera.lookAt(0, 0.8, 0);
+  const resize = () => {
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  const delays = [0, 45, 10, 60, 5, 35, 0, 55];
+  let next = 0;
+  let elapsed = 0;
+  let last = performance.now();
+  let frames = 0;
+  window.acornRaiderMotion = [];
+  const step = (delta: number): void => {
+    elapsed += delta;
+    while (next * 100 + delays[next % delays.length]! <= elapsed * 1000) {
+      const seconds = next * 0.1;
+      const angle = (seconds * 2.5) / 3;
+      const x = Math.sin(angle) * 3;
+      const z = Math.cos(angle) * 3;
+      const vx = Math.cos(angle) * 2.5;
+      const vz = -Math.sin(angle) * 2.5;
+      const cycle = seconds % 9;
+      const move =
+        cycle < 5
+          ? IDLE
+          : cycle < 7
+            ? attack(kind, (cycle - 5) / TICK_SECONDS)
+            : cycle < 7 + DODGE.end * TICK_SECONDS
+              ? { kind: ActionKind.Dodge, step: 0, age: (cycle - 7) / TICK_SECONDS }
+              : IDLE;
+      crowd.ingest(1000 + next * 100, [
+        {
+          netId: 1,
+          x,
+          y: groundHeight(x, z),
+          z,
+          vx,
+          vy: 0,
+          vz,
+          yaw: Math.atan2(-vx, -vz),
+          flags: SnapshotFlag.Raider | SnapshotFlag.Moving,
+          action: packActionByte({ ...createActionState(), kind: move.kind, step: move.step }),
+          actionAge: move.age,
+          actionHeading: Math.atan2(vx, vz),
+        },
+      ]);
+      next++;
+    }
+    crowd.update(delta, null, null);
+    bursts.update(delta);
+    const body = scene.children.find((child) => child.getObjectByName('upperlegl') !== undefined);
+    const leg = body?.getObjectByName('upperlegl');
+    if (body && leg && elapsed > 0.5) {
+      const samples = window.acornRaiderMotion!;
+      samples.push({
+        dt: delta,
+        x: body.position.x,
+        z: body.position.z,
+        leg: leg.quaternion.toArray(),
+        walking: elapsed % 9 < 4.7,
+      });
+      if (samples.length > 300) samples.shift();
+    }
+  };
+  window.acornAdvanceRaiderMotion = step;
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const delta = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    step(delta);
+    fireLights.update(camera.position);
+    renderer.render(scene, camera);
+    if (++frames === 8) document.body.dataset.galleryReady = 'true';
   });
 }
