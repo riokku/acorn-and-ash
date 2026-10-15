@@ -1,7 +1,7 @@
+import { ITEM_KINDS } from '../item-catalog';
 import * as THREE from 'three/webgpu';
 
 import {
-  ITEM_KINDS,
   PROP_KINDS,
   choppingRuleFor,
   stumpFor,

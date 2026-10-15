@@ -1,3 +1,4 @@
+import { ITEM_KINDS } from '../item-catalog';
 /**
  * What the Craft menu lists (see decision 0096).
  *
@@ -11,7 +12,6 @@
 import {
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
-  ITEM_KINDS,
   MEAL_BENEFITS,
   RECIPE_ITEMS,
   canCraft,

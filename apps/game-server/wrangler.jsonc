@@ -10,9 +10,15 @@
   // The free plan only supports SQLite-backed Durable Objects, and each world
   // keeps its state in its own SQLite database inside the object.
   "durable_objects": {
-    "bindings": [{ "name": "WORLD", "class_name": "World" }],
+    "bindings": [
+      { "name": "WORLD", "class_name": "World" },
+      { "name": "ITEM_CATALOG", "class_name": "ItemCatalog" },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["World"] },
+    { "tag": "v2", "new_sqlite_classes": ["ItemCatalog"] },
+  ],
 
   // Running locally, trees come back in a couple of minutes rather than half an
   // hour, so regrowth can be watched instead of waited out. Not shorter than
@@ -53,7 +59,10 @@
     "e2e": {
       "name": "acorn-ash-game-server",
       "durable_objects": {
-        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+        "bindings": [
+          { "name": "WORLD", "class_name": "World" },
+          { "name": "ITEM_CATALOG", "class_name": "ItemCatalog" },
+        ],
       },
       "vars": {
         "WORLD_REGROW_SECONDS": "120",
@@ -76,7 +85,10 @@
       "name": "acorn-ash-game-server-preview",
       "observability": { "enabled": true },
       "durable_objects": {
-        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+        "bindings": [
+          { "name": "WORLD", "class_name": "World" },
+          { "name": "ITEM_CATALOG", "class_name": "ItemCatalog" },
+        ],
       },
       // A preview is for trying things out, so trees come back while you watch:
       // two to four minutes rather than thirty to sixty. Hunger empties in
@@ -99,7 +111,10 @@
       "name": "acorn-ash-game-server-staging",
       "observability": { "enabled": true },
       "durable_objects": {
-        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+        "bindings": [
+          { "name": "WORLD", "class_name": "World" },
+          { "name": "ITEM_CATALOG", "class_name": "ItemCatalog" },
+        ],
       },
       // The real wait: half an hour, up to an hour. Hunger takes the real
       // twenty minutes too, patches the real three to six and raids the real
@@ -120,7 +135,10 @@
       "name": "acorn-ash-game-server-production",
       "observability": { "enabled": true },
       "durable_objects": {
-        "bindings": [{ "name": "WORLD", "class_name": "World" }],
+        "bindings": [
+          { "name": "WORLD", "class_name": "World" },
+          { "name": "ITEM_CATALOG", "class_name": "ItemCatalog" },
+        ],
       },
       "vars": {
         "WORLD_REGROW_SECONDS": "1800",

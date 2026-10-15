@@ -1,6 +1,7 @@
+import { ITEM_KINDS } from '../item-catalog';
 import * as THREE from 'three/webgpu';
 
-import { GEAR_SLOTS, ITEM_KINDS, type GearSlot, type ItemId, type WornGear } from '@acorn/shared';
+import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/shared';
 
 import { plainMaterial } from '../art/materials';
 import { wornGearModelTemplate } from './worn-gear-models';

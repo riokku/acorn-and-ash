@@ -1438,3 +1438,25 @@ modest corrections continue to blend. See
 Summer pollen keeps its airborne world height and fades before recycling across a
 wider area, so camera turns do not reveal a following patch. Preview it with
 `?gallery=trees&season=summer&spin`; see [decision 0155](docs/decisions/0155-world-space-summer-pollen.md).
+
+### Private item catalogue
+
+The verified Google owner can open **Manage items** from the character screen's
+Settings → Account, or visit `/admin/items`. Search the full catalogue, edit names,
+plural names, descriptions, rarity and applicable equipment bonuses, then **Save
+draft**. **Review & publish** shows the changes before publishing them to every
+world on that site. Connected worlds update within 15 seconds. A stale tab cannot
+overwrite a newer draft or publication; reload the draft to review it first.
+Restoring an item's defaults also requires Save and Publish.
+
+Rarity is a displayed tier; changing it does not adjust drop chances. IDs, recipes,
+wearable slots and saved inventories stay intact. Existing protection, maximum
+health and warmth caps remain in force; publishing never heals players.
+
+One-time setup in the Cloudflare dashboard: open the web Worker for the intended
+environment (`acorn-ash-web-staging` or `acorn-ash-web-production`), choose
+**Settings → Variables and Secrets → Add**, and create a **Secret** named
+`ADMIN_OWNER_EMAIL` whose value is the owner's verified Google sign-in address.
+Deploy the secret change, then sign in with Google. Do this independently for each
+environment. Keep the address out of public configuration files. Missing secrets,
+unverified addresses, other accounts and test sign-in all leave the editor locked.

@@ -1,4 +1,5 @@
-import { DISCOVERIES, ITEM_KINDS, discoveryKnown, type DiscoveryKind } from '@acorn/shared';
+import { ITEM_KINDS } from '../item-catalog';
+import { DISCOVERIES, discoveryKnown, type DiscoveryKind } from '@acorn/shared';
 import type { HudState } from './store';
 
 export function JournalTabs({

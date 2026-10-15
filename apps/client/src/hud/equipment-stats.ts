@@ -1,11 +1,5 @@
-import {
-  EQUIPMENT_BONUSES,
-  gearSlotsOf,
-  characterStats,
-  statsWithItem,
-  type ItemId,
-  type WornGear,
-} from '@acorn/shared';
+import { EQUIPMENT_BONUSES, characterStats, statsWithItem } from '../item-catalog';
+import { gearSlotsOf, type ItemId, type WornGear } from '@acorn/shared';
 
 export function equipmentDetail(item: ItemId): string | null {
   const bonus = EQUIPMENT_BONUSES[item];

@@ -1,3 +1,4 @@
+import type { PublishedCatalog } from '../data/item-catalog';
 import type { WarmthView } from '../sim/warmth';
 import type { BuildReply } from '../sim/building';
 import type { CraftRefusal } from '../sim/crafting';
@@ -120,6 +121,7 @@ export const ServerMessageType = {
   DecorationReply: 0x45,
   BuildReply: 0x46,
   Warmth: 0x47,
+  ItemCatalog: 0x48,
 } as const;
 
 export const RejectReason = {
@@ -703,6 +705,7 @@ export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | (PublishedCatalog & { readonly type: 'itemCatalog' })
   | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage
   | GearRefusedMessage

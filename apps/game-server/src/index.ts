@@ -36,3 +36,5 @@ export function forwardToWorld(
 }
 
 export default app;
+
+export { ItemCatalog } from './item-catalog';

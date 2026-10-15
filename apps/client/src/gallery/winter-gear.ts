@@ -1,5 +1,6 @@
+import { characterStats } from '../item-catalog';
 import * as THREE from 'three/webgpu';
-import { CHARACTER_KINDS, characterStats, type CharacterId } from '@acorn/shared';
+import { CHARACTER_KINDS, type CharacterId } from '@acorn/shared';
 import { createCharacter } from '../scene/character';
 import { MoveMemory } from '../scene/character-driver';
 import { preloadCharacterModels } from '../scene/character-model';

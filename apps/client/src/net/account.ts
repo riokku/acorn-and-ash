@@ -37,6 +37,7 @@ export function loginPath(provider: Provider): string {
 /** What the site says about this browser before anything is shown. */
 export interface SessionStatus {
   readonly signedIn: boolean;
+  readonly canEditItems?: boolean;
   /** What the account is called at the login service. Only ever shown back to them. */
   readonly name: string | null;
   /** The login services that are set up here. Empty until they have been. */
@@ -90,6 +91,7 @@ function parseStatus(raw: unknown): SessionStatus {
     : [];
   return {
     signedIn: body.signedIn === true,
+    ...(body.canEditItems === true ? { canEditItems: true } : {}),
     name: typeof body.name === 'string' ? body.name : null,
     providers,
     testSignIn:

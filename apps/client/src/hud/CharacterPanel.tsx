@@ -1,9 +1,8 @@
+import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { useEffect, useRef, useState } from 'react';
 
 import {
-  characterStats,
   GEAR_SLOT_LABELS,
-  ITEM_KINDS,
   type GearRequest,
   type GearSlot,
   type ItemId,

@@ -115,3 +115,6 @@ export * from './world/placed-solids';
 export * from './sim/warmth';
 
 export * from './sim/health';
+
+export * from './data/item-catalog';
+export * from './data/item-description';

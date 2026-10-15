@@ -1,3 +1,4 @@
+import { ITEM_KINDS } from '../item-catalog';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -10,7 +11,6 @@ import {
   Gesture,
   HOME_BED,
   HOME_CHAIR,
-  ITEM_KINDS,
   KNOCKED_OUT_TICKS,
   DIG_SWING,
   LIGHT_COMBO,

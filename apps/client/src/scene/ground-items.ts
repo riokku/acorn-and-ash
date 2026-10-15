@@ -1,10 +1,10 @@
+import { ITEM_KINDS } from '../item-catalog';
 import { createSentinelTrophy } from './sentinel-art';
 import { createForageModel, createMealModel } from './forest-food';
 import * as THREE from 'three/webgpu';
 
 import {
   GATHER_PATCH_MAX_COUNT,
-  ITEM_KINDS,
   blueprintHome,
   type DroppedPileView,
   type GatherPatchView,

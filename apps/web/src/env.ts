@@ -1,3 +1,5 @@
+import type { ItemCatalog } from '../../game-server/src/item-catalog';
+
 /**
  * What the web Worker is given by Cloudflare.
  *
@@ -13,8 +15,11 @@
  * - `TEST_SIGN_IN` is only ever set for your own machine and for pull request
  *   previews (decision 0086).
  */
-export type WebEnv = Omit<Env, 'BETTER_AUTH_SECRET' | 'TEST_SIGN_IN'> & {
+export type WebEnv = Omit<Env, 'BETTER_AUTH_SECRET' | 'TEST_SIGN_IN' | 'ITEM_CATALOG'> & {
   BETTER_AUTH_SECRET?: string;
+  /** Verified Google owner. Missing configuration locks the editor. */
+  ADMIN_OWNER_EMAIL?: string;
+  ITEM_CATALOG: DurableObjectNamespace<ItemCatalog>;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   DISCORD_CLIENT_ID?: string;

@@ -28,6 +28,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL('./index.html', import.meta.url)),
+        admin: fileURLToPath(new URL('./admin.html', import.meta.url)),
+      },
+    },
     // Static assets are limited to 25 MiB per file on Workers. Shout well before
     // we get anywhere near that.
     chunkSizeWarningLimit: 2048,

@@ -198,6 +198,7 @@ const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): voi
     readIdentity(window.localStorage),
     {
       name: entrance.accountName,
+      canEditItems: entrance.canEditItems,
       saved: entrance.saved,
       onDeleteCharacter: deleteCharacterAndRestart,
       // Only somebody starting a new character is shown it.

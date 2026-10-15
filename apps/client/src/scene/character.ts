@@ -1,3 +1,4 @@
+import { ITEM_KINDS } from '../item-catalog';
 import { StandingFootContact, type FootGroundHeight } from './standing-foot-contact';
 import * as THREE from 'three/webgpu';
 import { plainMaterial } from '../art/materials';
@@ -6,7 +7,6 @@ import {
   ActionKind,
   DEFAULT_SKIN_TONE,
   Gesture,
-  ITEM_KINDS,
   isWeapon,
   ITEM_ORDER,
   PLAYER_HEIGHT,

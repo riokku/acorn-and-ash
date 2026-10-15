@@ -1,5 +1,6 @@
+import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { WarmthBar } from './WarmthBar';
-import { characterStats } from '@acorn/shared';
+
 import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acorn/shared';
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
@@ -36,7 +37,6 @@ import {
   HEALTH_MAX,
   HUNGER_LOW_THRESHOLD,
   HUNGER_MAX,
-  ITEM_KINDS,
   canCook,
   cookedItemFor,
   hasItem,

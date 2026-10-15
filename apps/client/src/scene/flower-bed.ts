@@ -1,6 +1,5 @@
+import { ITEM_KINDS } from '../item-catalog';
 import * as THREE from 'three/webgpu';
-
-import { ITEM_KINDS } from '@acorn/shared';
 
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';

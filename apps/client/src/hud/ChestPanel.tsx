@@ -1,8 +1,8 @@
+import { ITEM_KINDS } from '../item-catalog';
 import { useEffect, useRef } from 'react';
 import {
   CHEST_SLOTS,
   CHEST_BUILDING_SUPPLIES,
-  ITEM_KINDS,
   inventoryFromEntries,
   packSlots,
   packStacks,

@@ -31,6 +31,7 @@ interface HomeProps {
   readonly saved: PlayerIdentity | null;
   /** Who is signed in, shown back to them so they know it is the right account. */
   readonly accountName: string;
+  readonly canEditItems?: boolean;
   readonly onSignOut: () => void;
   /**
    * Delete the saved character (decision 0108). Rejects when it could not be done.
@@ -79,6 +80,7 @@ export function Home({
   initial,
   saved,
   accountName,
+  canEditItems,
   onSignOut,
   onDeleteCharacter,
   notice = null,
@@ -94,6 +96,7 @@ export function Home({
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
   const account: SettingsAccount = {
+    canEditItems,
     waitSeconds: 0,
     secondsLeft: null,
     onSignOut,
