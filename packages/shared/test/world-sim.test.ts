@@ -3682,7 +3682,7 @@ describe('a charged attack', () => {
   it('catches creatures on every side once through a full charged whirlwind', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
-    sim.placePlayer(1, { x: 0, y: 0, z: 0 });
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
     const rabbits = ANIMAL_DENS.filter((den) => den.kind === 'rabbit').slice(0, 4);
     expect(rabbits).toHaveLength(4);
     const offsets = [
