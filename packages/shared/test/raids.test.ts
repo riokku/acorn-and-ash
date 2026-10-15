@@ -401,6 +401,32 @@ describe('a fight', () => {
   });
 });
 
+describe('a skeleton whirlwind', () => {
+  it('settles one hit on nearby players on every side, excluding distant and elevated players', () => {
+    const scene = arena();
+    scene.addFighter(1, 0, -1.5);
+    scene.addFighter(2, 0, 1.5);
+    scene.addFighter(3, -1.5, 0);
+    scene.addFighter(4, 1.5, 0);
+    scene.addFighter(5, 0, 6);
+    scene.addFighter(6, 0, 0).position.y = 4;
+    const id = only(raidOn(scene, 1, ['minion']).raiderIds);
+    scene.step(RISE.ground + 1);
+    scene.strikes.length = 0;
+    scene.director.placeRaider(id, { x: 0, y: 0, z: 0 });
+    const action = actionOf(scene, id);
+    beginAction(action, ActionKind.Strike);
+    action.age = STRIKE.impact - 1;
+    scene.step();
+    expect(scene.strikes).toEqual([]);
+    scene.step(BLOW_SETTLE_TICKS);
+    expect(scene.strikes.map((strike) => strike.netId).sort()).toEqual([1, 2, 3, 4]);
+    expect(
+      scene.strikes.every((strike) => strike.damage === RAIDER_KINDS.minion.strikeDamage),
+    ).toBe(true);
+  });
+});
+
 describe("a player's blows on a raider", () => {
   /** One raider of this kind, done climbing out, right in front of the player. */
   function standoff(kind: RaiderKindId, seed = 1234) {
@@ -439,6 +465,39 @@ describe("a player's blows on a raider", () => {
     const heavy = standoff('warrior');
     hit(heavy.scene, heavy.player, { kind: 'strike', dodge: true });
     expect(only(heavy.scene.director.drainHits())).toMatchObject({ hitsLeft: 1, heavy: true });
+  });
+
+  it('hits all nearby skeletons around the player once, while light and dodge slams stay directed', () => {
+    const scene = arena();
+    const player = scene.addFighter(1);
+    const { raiderIds } = raidOn(scene, 1, [
+      'warrior',
+      'warrior',
+      'warrior',
+      'warrior',
+      'warrior',
+      'warrior',
+    ]);
+    scene.step(RISE.ground + 1);
+    const places = [
+      { x: 0, y: 0, z: -1.5 },
+      { x: 0, y: 0, z: 1.5 },
+      { x: -1.5, y: 0, z: 0 },
+      { x: 1.5, y: 0, z: 0 },
+      { x: 0, y: 0, z: 6 },
+      { x: 0, y: 4, z: -1.5 },
+    ];
+    raiderIds.forEach((id, i) => scene.director.placeRaider(id, places[i]!));
+    scene.director.drainHits();
+    hit(scene, player, STRIKE_BLOW);
+    const hits = scene.director.drainHits();
+    expect(hits.map((entry) => entry.raiderId)).toEqual(raiderIds.slice(0, 4));
+    expect(hits.every((entry) => entry.hitsLeft === 3 && entry.heavy)).toBe(true);
+    raiderIds.forEach((id, i) => scene.director.placeRaider(id, places[i]!));
+    hit(scene, player, SWING_1);
+    expect(scene.director.drainHits()).toHaveLength(1);
+    hit(scene, player, { kind: 'strike', dodge: true });
+    expect(scene.director.drainHits()).toHaveLength(1);
   });
 
   it('misses a raider standing behind the player', () => {

@@ -341,7 +341,7 @@ import {
   treeStickSpots,
   type TreeFall,
 } from './tree-fall';
-import { animalInReach, type CatchCandidate } from './hunting';
+import { animalInReach, whirlwindTargets, type WhirlwindCandidate } from './hunting';
 import {
   buildableFootprint,
   checkBuildSpot,
@@ -4072,9 +4072,8 @@ export class WorldSimulation {
    * failing that on whatever animal is in reach, with anything at all in
    * hand. Swinging at nothing is a swing at nothing.
    *
-   * A charged strike is the payoff for winding up, rooted to the spot:
-   * whatever it lands on goes down outright, however many swings that would
-   * otherwise have taken.
+   * A charged whirlwind hits each nearby creature once. When no creatures
+   * are reached, aimed tool work retains its usual single tree or dig.
    */
   private landBlow(
     runtime: PlayerRuntime,
@@ -4084,6 +4083,7 @@ export class WorldSimulation {
   ): void {
     if (this.equippedItemOf(runtime.netId) === null) return;
     const charged = impact.kind === 'strike';
+    const whirlwind = charged && impact.dodge !== true;
 
     // Looking back to when the swing began, and a little before for the
     // browser having shown it slightly in the past (see decision 0056).
@@ -4096,19 +4096,24 @@ export class WorldSimulation {
         : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
     const lookBack = began + LAG_COMPENSATION_TICKS;
 
-    // A skeleton in front comes before anything else: mid-fight, the swing
-    // was for it, not the tree beside it.
-    if (
-      this.raids.blowLands(
-        runtime.netId,
-        position,
-        aimYaw,
-        impact,
-        lookBack,
-        characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses)
-          .power,
-      )
-    ) {
+    // Directed blows prefer a skeleton. A whirlwind reaches all creatures
+    // around the player, even when one of them is beside an aimed-at tree.
+    const hitRaider = this.raids.blowLands(
+      runtime.netId,
+      position,
+      aimYaw,
+      impact,
+      lookBack,
+      characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses).power,
+    );
+    if (whirlwind) {
+      const animals = whirlwindTargets(position, this.animalBlowCandidates(lookBack));
+      for (const animal of animals) this.catchAnimal(runtime, animal.id, true);
+      if (hitRaider || animals.length > 0) {
+        runtime.lastCombatTick = this.tick;
+        return;
+      }
+    } else if (hitRaider) {
       runtime.lastCombatTick = this.tick;
       return;
     }
@@ -4139,6 +4144,7 @@ export class WorldSimulation {
     if (this.isActiveItem(runtime, 'shovel') && this.digAhead(runtime, position, aimYaw, charged))
       return;
 
+    if (whirlwind) return;
     const animalTarget = this.animalInReachOf(position, aimYaw, lookBack);
     if (animalTarget !== null)
       this.catchAnimal(
@@ -5510,12 +5516,18 @@ export class WorldSimulation {
 
   /** The animal this player would catch if they swung, or null. Used by tests. */
   animalInReachOf(position: Readonly<Vec3>, aimYaw: number, ticksBack = 0): CatchTarget | null {
-    const candidates: CatchCandidate[] = [];
+    const found = animalInReach(position, aimYaw, this.animalBlowCandidates(ticksBack));
+    const runtime = found === null ? undefined : this.animals.get(found.id);
+    return runtime === undefined ? null : { id: runtime.id, kind: runtime.kind };
+  }
+
+  private animalBlowCandidates(ticksBack: number): WhirlwindCandidate[] {
+    const candidates: WhirlwindCandidate[] = [];
     for (const runtime of this.animals.values()) {
       if (runtime.caught || runtime.kind === 'curiousRaccoon') continue;
       const animalPosition = runtime.entity.get(Position);
       if (animalPosition === undefined) continue;
-      candidates.push({ id: runtime.id, x: animalPosition.x, z: animalPosition.z });
+      candidates.push({ id: runtime.id, ...animalPosition });
       // Wherever it was over the last few ticks counts too: a swing that
       // began with it in reach lands, however fast it bolted since.
       const back = Math.min(ticksBack, runtime.trailCount - 1);
@@ -5523,15 +5535,14 @@ export class WorldSimulation {
         const index = (runtime.trailHead - i + ANIMAL_TRAIL_TICKS) % ANIMAL_TRAIL_TICKS;
         candidates.push({
           id: runtime.id,
+          y: animalPosition.y,
           x: runtime.trailX[index] ?? 0,
           z: runtime.trailZ[index] ?? 0,
         });
       }
     }
 
-    const found = animalInReach(position, aimYaw, candidates);
-    const runtime = found === null ? undefined : this.animals.get(found.id);
-    return runtime === undefined ? null : { id: runtime.id, kind: runtime.kind };
+    return candidates;
   }
 
   /** How many more swings this tree needs, or null if it is already down. */

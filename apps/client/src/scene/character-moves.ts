@@ -147,6 +147,10 @@ export interface MovePose {
   /** A full aerial spin/somersault; completed turns leave the landing upright. */
   readonly aerialTurn?: number;
   readonly somersault?: boolean;
+  /** Completed grounded rotations; present through the whirlwind recovery. */
+  readonly whirlwindTurn?: number;
+  /** Blends the extended weapon stance in and back out. */
+  readonly whirlwindReach?: number;
 }
 
 const NO_MOVE: MovePose = {
@@ -269,9 +273,16 @@ export function movePose(move: MoveView): MovePose {
       };
 
     case ActionKind.Strike: {
-      const blow = CLIP_BLOW_SECONDS.strike ?? 0.73;
-      const speed = (blow - STRIKE_LEAP_SECONDS) / (STRIKE.impact * TICK_SECONDS);
-      return { ...NO_MOVE, clip: 'strike', time: STRIKE_LEAP_SECONDS + seconds * speed };
+      const progress = smoothstep(STRIKE.spinStart, STRIKE.spinEnd, move.age);
+      const recovery = smoothstep(STRIKE.spinEnd, STRIKE.end, move.age);
+      return {
+        ...NO_MOVE,
+        // Reuse the low, balanced horizontal slash stance rather than the leap.
+        clip: 'attack2',
+        time: 0.1 + 0.15 * smoothstep(0, STRIKE.spinStart, move.age) + 0.3 * recovery,
+        whirlwindTurn: progress * STRIKE.turns,
+        whirlwindReach: smoothstep(0, STRIKE.spinStart, move.age) * (1 - recovery),
+      };
     }
 
     case ActionKind.DodgeLight: {
@@ -434,6 +445,8 @@ const SWEEP_AFTER = 0.08;
 
 /** Whether a swing is sweeping round fast right now, fast enough to leave a streak behind it. */
 export function isSweeping(pose: MovePose): boolean {
+  if (pose.whirlwindTurn !== undefined)
+    return pose.whirlwindTurn > 0 && pose.whirlwindTurn < STRIKE.turns;
   if (pose.clip === null) return false;
   const blow = CLIP_BLOW_SECONDS[pose.clip];
   if (blow === undefined) return false;

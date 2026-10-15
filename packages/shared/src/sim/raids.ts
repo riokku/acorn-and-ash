@@ -62,7 +62,7 @@ import {
   type ActionState,
   type Impact,
 } from './actions';
-import { animalInReach, type CatchCandidate } from './hunting';
+import { animalInReach, whirlwindTargets, type WhirlwindCandidate } from './hunting';
 import {
   PlayerButton,
   createPlayerMotion,
@@ -457,7 +457,8 @@ export class RaidDirector {
 
   /**
    * A player's blow, landing at `position` aimed along `aimYaw`: on the
-   * raider in front of them, if there is one. Looks back `ticksBack` ticks
+   * raider in front, or all nearby raiders for a charged whirlwind.
+   * Looks back `ticksBack` ticks
    * along each raider's path, for what the player saw a moment ago. Returns
    * whether a raider took it - landed, shrugged off or rolled clear of - so
    * nothing else behind it is hit as well.
@@ -470,9 +471,25 @@ export class RaidDirector {
     ticksBack: number,
     power = 100,
   ): boolean {
-    const raiderId = this.raiderInReachOf(position, aimYaw, ticksBack);
-    const raider = raiderId === null ? undefined : this.raiders.get(raiderId);
-    if (raider === undefined) return false;
+    const targets =
+      impact.kind === 'strike' && impact.dodge !== true
+        ? whirlwindTargets(position, this.blowCandidates(ticksBack)).map((target) => target.id)
+        : [this.raiderInReachOf(position, aimYaw, ticksBack)].filter((id) => id !== null);
+    for (const id of targets) {
+      const raider = this.raiders.get(id);
+      if (raider !== undefined) this.hitRaider(raider, attackerNetId, position, impact, power);
+    }
+    return targets.length > 0;
+  }
+
+  /** The damage, stagger and rewards are shared by a directed hit and each whirlwind target. */
+  private hitRaider(
+    raider: RaiderRuntime,
+    attackerNetId: number,
+    position: Readonly<Vec3>,
+    impact: Impact,
+    power: number,
+  ): void {
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];
 
     // Mid-roll it is simply not there - unless the roll only began a moment
@@ -484,7 +501,7 @@ export class RaidDirector {
       raider.action.age >= LAG_COMPENSATION_TICKS &&
       raider.action.age < DODGE.invulnerable
     ) {
-      return true;
+      return;
     }
 
     const weight = impact.dodge
@@ -578,26 +595,30 @@ export class RaidDirector {
       shrugged: shrugged || steadfastBlock,
     });
     this.listChanged = true;
-    return true;
   }
 
   /** The raider a blow from here, aimed this way, would land on - looking back `ticksBack` ticks. */
   raiderInReachOf(position: Readonly<Vec3>, aimYaw: number, ticksBack = 0): number | null {
-    const candidates: CatchCandidate[] = [];
+    return animalInReach(position, aimYaw, this.blowCandidates(ticksBack))?.id ?? null;
+  }
+
+  private blowCandidates(ticksBack: number): WhirlwindCandidate[] {
+    const candidates: WhirlwindCandidate[] = [];
     for (const raider of this.raiders.values()) {
       if (raider.mode === 'down') continue;
-      candidates.push({ id: raider.id, x: raider.motion.position.x, z: raider.motion.position.z });
+      candidates.push({ id: raider.id, ...raider.motion.position });
       const back = Math.min(ticksBack, RAIDER_TRAIL_TICKS - 1, raider.trailCount - 1);
       for (let i = 1; i <= back; i++) {
         const index = (raider.trailHead - i + RAIDER_TRAIL_TICKS) % RAIDER_TRAIL_TICKS;
         candidates.push({
           id: raider.id,
+          y: raider.motion.position.y,
           x: raider.trailX[index] ?? 0,
           z: raider.trailZ[index] ?? 0,
         });
       }
     }
-    return animalInReach(position, aimYaw, candidates)?.id ?? null;
+    return candidates;
   }
 
   /** What a raider is in the middle of, for its snapshot. */
@@ -1344,10 +1365,14 @@ export class RaidDirector {
       const dz = here.z - fighter.position.z;
       const distance = Math.hypot(dx, dz);
       if (distance > DODGE_NOTICE_RADIUS || distance < 1e-6) continue;
-      // Only a swing actually aimed its way.
+      // A whirlwind threatens every direction; ordinary swings still need aim.
       const forwardX = -Math.sin(fighter.aimYaw);
       const forwardZ = -Math.cos(fighter.aimYaw);
-      if ((dx / distance) * forwardX + (dz / distance) * forwardZ < CHOP_FACING_COSINE) continue;
+      if (
+        action.kind !== ActionKind.Strike &&
+        (dx / distance) * forwardX + (dz / distance) * forwardZ < CHOP_FACING_COSINE
+      )
+        continue;
       raider.noticedSwingTick = startedAt;
       if (raider.rng.nextFloat() >= kind.dodgeChance) continue;
       // Sideways, and a little back, the moment it sees it: any later and
@@ -1520,31 +1545,36 @@ export class RaidDirector {
   }
 
   /**
-   * A raider's swing or strike lands: on the nearest player in reach in
-   * front of it. It settles a moment later (see `BLOW_SETTLE_TICKS`).
+   * A raider's swing lands in front; a whirlwind reaches nearby players on
+   * every side. It settles a moment later (see `BLOW_SETTLE_TICKS`).
    */
   private landRaiderBlow(raider: RaiderRuntime, impact: Impact): void {
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];
-    const candidates: CatchCandidate[] = [];
+    const candidates: WhirlwindCandidate[] = [];
     for (const fighter of this.fighterById.values()) {
       if (!isFightable(fighter)) continue;
-      candidates.push({ id: fighter.netId, x: fighter.position.x, z: fighter.position.z });
+      candidates.push({ id: fighter.netId, ...fighter.position });
     }
-    const hit = animalInReach(raider.motion.position, raider.aimYaw, candidates);
-    if (hit === null) return;
+    const hits =
+      impact.kind === 'strike' && impact.dodge !== true
+        ? whirlwindTargets(raider.motion.position, candidates)
+        : [animalInReach(raider.motion.position, raider.aimYaw, candidates)].filter(
+            (target) => target !== null,
+          );
     const damage =
       impact.kind === 'strike'
         ? kind.strikeDamage
         : impact.step === 3
           ? Math.round(kind.swingDamage * 1.5)
           : kind.swingDamage;
-    this.pendingBlows.push({
-      targetNetId: hit.id,
-      damage,
-      impactTick: this.tick,
-      x: raider.motion.position.x,
-      z: raider.motion.position.z,
-    });
+    for (const hit of hits)
+      this.pendingBlows.push({
+        targetNetId: hit.id,
+        damage,
+        impactTick: this.tick,
+        x: raider.motion.position.x,
+        z: raider.motion.position.z,
+      });
   }
 
   private settleBlows(): void {

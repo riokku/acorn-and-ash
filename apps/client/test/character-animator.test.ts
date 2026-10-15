@@ -204,3 +204,25 @@ describe('impact pause timing', () => {
     animator.dispose();
   });
 });
+
+it('eases the extended whirlwind grip out when a hit interrupts the spin', () => {
+  const { animator } = fishingAnimator();
+  const spin = animator.update(
+    1 / 60,
+    { ...idle, kind: ActionKind.Strike, age: 10 },
+    { speed: 0, airborne: false },
+  );
+  expect(spin.whirlwindReach).toBe(1);
+  const hit = animator.update(
+    1 / 60,
+    { ...idle, kind: ActionKind.Flinch, age: 0 },
+    { speed: 0, airborne: false },
+  );
+  expect(hit.whirlwindReach).toBeGreaterThan(0.5);
+  expect(hit.whirlwindReach).toBeLessThan(1);
+  let recovered = hit;
+  for (let frame = 0; frame < 60; frame++)
+    recovered = animator.update(1 / 60, idle, { speed: 0, airborne: false });
+  expect(recovered.whirlwindReach ?? 0).toBeLessThan(1e-4);
+  animator.dispose();
+});

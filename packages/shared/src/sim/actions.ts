@@ -280,7 +280,7 @@ export function advanceAction(
 
     case ActionKind.Strike: {
       const impact: Impact | null = state.age === STRIKE.impact ? { kind: 'strike' } : null;
-      if (state.age > STRIKE.impact) {
+      if (state.age >= STRIKE.spinEnd) {
         const dodged = tryDodge();
         if (dodged !== null) return dodged;
       }

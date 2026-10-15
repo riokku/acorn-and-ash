@@ -8,6 +8,7 @@
  */
 
 import { CHOP_FACING_COSINE, CHOP_REACH } from '../constants';
+import { STRIKE } from '../data/moves';
 import type { Vec3 } from '../math/vec3';
 
 /** A point a swing could land on: an animal's id and where it is right now. */
@@ -52,4 +53,23 @@ export function animalInReach<T extends CatchCandidate>(
   }
 
   return best;
+}
+
+/** One target in a grounded whirlwind, including height so a ledge stays safe. */
+export interface WhirlwindCandidate extends CatchCandidate {
+  readonly y: number;
+}
+
+/** All nearby targets, once each even if their motion history contains several samples. */
+export function whirlwindTargets<T extends WhirlwindCandidate>(
+  position: Readonly<Vec3>,
+  candidates: readonly T[],
+): T[] {
+  const found = new Map<number, T>();
+  for (const candidate of candidates) {
+    if (Math.abs(candidate.y - position.y) > STRIKE.height) continue;
+    if (Math.hypot(candidate.x - position.x, candidate.z - position.z) > CHOP_REACH) continue;
+    found.set(candidate.id, candidate);
+  }
+  return [...found.values()];
 }

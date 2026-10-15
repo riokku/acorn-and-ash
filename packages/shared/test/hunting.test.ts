@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CHOP_REACH } from '../src/constants';
-import { animalInReach, type CatchCandidate } from '../src/sim/hunting';
+import { animalInReach, whirlwindTargets, type CatchCandidate } from '../src/sim/hunting';
 
 const rabbit: CatchCandidate = { id: 1, x: 0, z: -5 };
 const other: CatchCandidate = { id: 2, x: 6, z: 0 };
@@ -53,5 +53,24 @@ describe('what a swing reaches, out among the wildlife', () => {
 
   it('finds nothing among an empty list', () => {
     expect(animalInReach({ x: 0, y: 0, z: -3.5 }, NORTH, [])).toBeNull();
+  });
+});
+
+describe('whirlwind reach', () => {
+  it('reaches every direction, includes overlapping targets, and counts history once', () => {
+    const at = { x: 0, y: 0, z: 0 };
+    const candidates = [
+      { id: 1, x: 0, y: 0, z: -1 },
+      { id: 2, x: 0, y: 0, z: 1 },
+      { id: 3, x: 1, y: 0, z: 0 },
+      { id: 4, x: -1, y: 0, z: 0 },
+      { id: 5, ...at },
+      { id: 2, x: 0, y: 0, z: 1.2 },
+      { id: 6, x: 0, y: 0, z: CHOP_REACH + 0.01 },
+      { id: 7, x: 0, y: 3, z: 1 },
+      { id: 8, x: 0, y: -3, z: 1 },
+    ];
+    expect(whirlwindTargets(at, candidates).map((target) => target.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(whirlwindTargets(at, [])).toEqual([]);
   });
 });

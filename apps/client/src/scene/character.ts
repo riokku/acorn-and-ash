@@ -650,15 +650,17 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // instead.
   model.rotation.y = Math.PI;
   model.scale.setScalar(MODEL_SCALE);
-  // group (where they stand) > rest (onto a seat or a mattress) > pivot (a
-  // roll tumbles about it) > the model itself.
+  // group (where they stand) > rest (onto a seat or a mattress) > spin
+  // (a grounded whirlwind) > pivot (a roll) > the model itself.
   const group = new THREE.Group();
   const rest = new THREE.Group();
+  const spin = new THREE.Group();
   const pivot = new THREE.Group();
   pivot.position.y = ROLL_PIVOT_HEIGHT;
   model.position.y = -ROLL_PIVOT_HEIGHT;
   pivot.add(model);
-  rest.add(pivot);
+  spin.add(pivot);
+  rest.add(spin);
   group.add(rest);
   const footContact = StandingFootContact.forRig(model, group);
 
@@ -887,9 +889,20 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
           carrying.slerp(steadyInHand(held.group, held.steady, model), steadying);
         }
         held.group.quaternion.slerpQuaternions(carrying, held.use, gripBlend);
+        if ((pose.whirlwindReach ?? 0) > 0)
+          held.group.quaternion.slerp(
+            steadyInHand(held.group, WHIRLWIND_WEAPON_TURN, model),
+            pose.whirlwindReach ?? 0,
+          );
         held.group.position.lerpVectors(held.carryOffset, held.useOffset, gripBlend);
         if (thing === eating && bites !== null) holdToMouth(held.group, model, bites.reach);
       }
+      // Follow the authoritative move clock during the spin. If hit midway,
+      // settle the remaining visual turn smoothly while the flinch blends in.
+      spin.rotation.y =
+        pose.whirlwindTurn === undefined
+          ? shortestTurn(0, spin.rotation.y) * Math.exp(-22 * deltaSeconds)
+          : pose.whirlwindTurn * Math.PI * 2;
       placeBody(pose, frame, group, rest, pivot, restSpot, clock);
       const grounded =
         !frame.locomotion.airborne &&
@@ -931,6 +944,10 @@ const MOUTHFUL_TURN = new THREE.Quaternion().setFromAxisAngle(
 );
 const wantedTurn = new THREE.Quaternion();
 const handTurn = new THREE.Quaternion();
+// The rig faces +Z with its right arm along -X: extend the blade radially.
+const WHIRLWIND_WEAPON_TURN = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(0, 0, Math.PI / 2),
+);
 const carrying = new THREE.Quaternion();
 const steadied = new THREE.Quaternion();
 

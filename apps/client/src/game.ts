@@ -142,6 +142,7 @@ import {
   SnapshotFlag,
   TINT_COLORS,
   animalInReach,
+  whirlwindTargets,
   buildTestClearing,
   buildableFootprint,
   cabinCollider,
@@ -5547,7 +5548,8 @@ export class Game {
     const from = player.motion.position;
     const aimYaw = this.aimYaw ?? player.motion.facingYaw;
     const strength = strike ? CHARGED_BLOW * (impact.dodge ? 1.35 : 1) : impact.dodge ? 1.4 : 1;
-    if (strike) this.showSlam(impact.dodge ? 1.5 : 1);
+    if (strike && impact.dodge) this.showSlam(1.5);
+    if (strike && !impact.dodge && this.showOwnWhirlwind(from, strength)) return;
     if (this.aimedRaiderId !== null) {
       this.showOwnBlowOnRaider(this.aimedRaiderId, impact);
       return;
@@ -5564,6 +5566,38 @@ export class Game {
     }
     this.localCharacter?.hitStop(strike ? 0.14 : 0.07);
     this.camera?.shake(strike ? HIT_LANDED_SHAKE * 1.8 : HIT_LANDED_SHAKE);
+  }
+
+  /** Predict the same radial targets as the server, with one light impact pause for the group. */
+  private showOwnWhirlwind(from: Readonly<Vec3>, strength: number): boolean {
+    const raiders = whirlwindTargets(from, this.raiders.targets());
+    let landed = false;
+    for (const raider of raiders)
+      landed = this.raiders.predictBlow(raider.id, from, false, true) !== 'missed' || landed;
+    const animals = whirlwindTargets(
+      from,
+      this.remoteAnimals.netIds().flatMap((id) => {
+        const pose = this.remoteAnimals.poseOf(id);
+        const kind = animalKindOf(id);
+        return pose === undefined ||
+          kind === undefined ||
+          kind === 'curiousRaccoon' ||
+          (pose.action & 8) !== 0
+          ? []
+          : [{ id, x: pose.x, y: pose.y, z: pose.z }];
+      }),
+    );
+    for (const animal of animals) this.showBlowOnAnimal(animal.id, from, strength);
+    if (animals.length > 0) {
+      playThreatHit();
+      landed = true;
+    }
+    if (landed) {
+      // Keep the follow-through flowing even when several creatures were hit.
+      this.localCharacter?.hitStop(0.035);
+      this.camera?.shake(HIT_LANDED_SHAKE * 1.3);
+    }
+    return raiders.length > 0 || animals.length > 0;
   }
 
   /**
@@ -5585,7 +5619,7 @@ export class Game {
     this.camera?.shake(HIT_LANDED_SHAKE * weight * (shrugged ? 0.6 : 1));
   }
 
-  /** A charged strike coming down: dust thrown up where it hits the ground. */
+  /** An aerial dodge slam coming down: dust thrown up where it hits the ground. */
   private showSlam(strength = 1): void {
     const player = this.localPlayer;
     const tip = this.localCharacter?.heldTip(this.scratchBlow) ?? null;

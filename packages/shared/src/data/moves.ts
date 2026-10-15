@@ -50,10 +50,18 @@ export const DIG_SWING: ComboSwing = { impact: 12, chain: 20, end: 20 };
 export const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ);
 
 /**
- * The charged strike itself, once the wind-up is done: a leap and a slam,
- * given long enough in the air to read as one.
+ * The charged whirlwind: two full turns, then a short recovery. Each target
+ * takes the existing charged damage once, as the first turn completes.
  */
-export const STRIKE = { impact: 6, planted: 12, end: 16 } as const;
+export const STRIKE = {
+  height: 1.4,
+  spinStart: 2,
+  impact: 10,
+  spinEnd: 18,
+  turns: 2,
+  planted: 18,
+  end: 22,
+} as const;
 
 /**
  * A dodge roll: carried `DODGE_DISTANCE` over `travel` ticks, then a moment
