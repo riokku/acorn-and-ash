@@ -1,5 +1,13 @@
 import * as THREE from 'three/webgpu';
-import { ActionKind, STREAM, navigableWaterSurfaceAt, streamPointAt } from '@acorn/shared';
+import {
+  ActionKind,
+  BOAT_ROW_SPEED,
+  CHARACTER_KINDS,
+  type CharacterId,
+  STREAM,
+  navigableWaterSurfaceAt,
+  streamPointAt,
+} from '@acorn/shared';
 import { createWaterMaterial } from '../art/materials';
 import { createCharacter } from '../scene/character';
 import { preloadCharacterAnimations } from '../scene/character-animations';
@@ -22,7 +30,11 @@ export async function showCanoe(
   const boat = createRowboat();
   boat.group.position.set(spot.x, level, spot.z);
   scene.add(boat.group);
-  const rider = createCharacter('knight', 0xf2efe6);
+  const requestedBody = params.get('body') ?? 'knight';
+  const body: CharacterId = Object.hasOwn(CHARACTER_KINDS, requestedBody)
+    ? (requestedBody as CharacterId)
+    : 'knight';
+  const rider = createCharacter(body, 0xf2efe6);
   rider.group.position.set(spot.x, level, spot.z);
   rider.group.rotation.y = -Math.PI / 2;
   rider.setRestSpot(boatSeatAt(spot.x, spot.z, -Math.PI / 2));
@@ -54,8 +66,11 @@ export async function showCanoe(
     elapsed += delta;
     if (params.has('spin')) angle += delta * 0.3;
     const frozen = params.has('at');
-    const age = frozen ? Math.max(10, Number(params.get('at')) || 60) : 60 + elapsed * 20;
+    const strokeTick = frozen ? Math.max(0, Number(params.get('at')) || 0) : 60 + elapsed * 20;
+    const age = Math.max(10, strokeTick);
     rider.update(delta, {
+      rowingSpeed: params.has('coast') ? 0 : BOAT_ROW_SPEED,
+      ...(frozen ? { rowingPhase: (strokeTick * 0.05 * 0.85) % 1 } : {}),
       move: {
         kind: ActionKind.Row,
         step: 0,
@@ -66,7 +81,7 @@ export async function showCanoe(
       },
       locomotion: { speed: 0, airborne: false },
     });
-    boat.setRowing(params.has('empty') ? null : (age / 24) % 1);
+    boat.setOccupied(!params.has('empty'));
     rider.group.visible = !params.has('empty');
     const distance = Number(params.get('distance') ?? 5.2);
     camera.position.set(

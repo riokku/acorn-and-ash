@@ -397,8 +397,7 @@ export function movePose(move: MoveView): MovePose {
     }
 
     case ActionKind.Row:
-      // Sat on the rower's seat from the moment they climb in, the oars
-      // being the boat's own business (see `scene/rowboat.ts`).
+      // Seated legs under the two-handed paddle solve (see canoe-paddling.ts).
       return {
         ...NO_MOVE,
         clip: 'sitIdle',

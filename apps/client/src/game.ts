@@ -4973,17 +4973,10 @@ export class Game {
       rowing ? 0 : travelSpeed,
       this.openWaterAt(position.x, position.z),
     );
-    if (rowing)
-      this.rowingBoats.place(
-        this.selfNetId,
-        position.x,
-        position.z,
-        player.renderYaw(),
-        speed,
-        deltaSeconds,
-      );
+    if (rowing) this.rowingBoats.place(this.selfNetId, position.x, position.z, player.renderYaw());
     const pose = character.update(deltaSeconds, {
       move,
+      ...(rowing ? { rowingSpeed: speed } : {}),
       // Seated, so the legs never walk while the boat carries them along.
       locomotion: { speed: rowing ? 0 : travelSpeed, airborne: !player.motion.grounded && !rowing },
       groundHeight: this.characterGroundHeight,
@@ -5805,9 +5798,10 @@ export class Game {
           ? boatSeatAt(pose.x, pose.z, pose.yaw)
           : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
       );
-      if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw, pose.speed, deltaSeconds);
+      if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw);
       const drawn = character.update(deltaSeconds, {
         move,
+        ...(rowing ? { rowingSpeed: pose.speed } : {}),
         locomotion: { speed: rowing ? 0 : pose.travelSpeed, airborne: pose.airborne && !rowing },
         groundHeight: this.characterGroundHeight,
       });

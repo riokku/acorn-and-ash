@@ -482,6 +482,11 @@ boat under each rider is drawn by `apps/client/src/scene/rowing-boats.ts`. See
 The rider stays seated above the local water at every elevation, and the timber
 floor and closed underside remain visible. Existing saved rowboats become canoes.
 Inspect it at `?gallery=canoe`; see [decision 0193](docs/decisions/0193-narrow-river-canoe.md).
+Both hands grip the paddle through the stroke. The blade feathers clear during
+recovery and settles into a raised resting grip when you stop paddling; current
+alone does not keep the arms stroking. Other players use the same motion. Add
+`&coast` or `&body=ranger` in the canoe gallery to inspect it. See
+[decision 0194](docs/decisions/0194-hand-held-canoe-paddling.md).
 
 If you are knocked out and your boat is left on an island, where you can't walk
 back to it, it falls apart where it sits and you wake in bed free to build
