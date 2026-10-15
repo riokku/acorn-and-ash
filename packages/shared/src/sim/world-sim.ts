@@ -94,6 +94,7 @@ import {
 } from '../data/discoveries';
 import { recipeFor } from '../data/recipes';
 import { createRng, hashSeed } from '../rng';
+import { creatureClothingDrop } from './creature-loot';
 import {
   blueprintDropChance,
   BLUEPRINT_MAX_MISSES,
@@ -1832,6 +1833,10 @@ export class WorldSimulation {
             runtime.blueprintMisses = Math.min(BLUEPRINT_MAX_MISSES, runtime.blueprintMisses + 1);
           }
           this.blueprintProgressChanges.add(netId);
+        },
+        dropBonusLoot: (raiderId, kind, position, facingYaw) => {
+          const clothing = creatureClothingDrop(this.seed, 'raider', kind, raiderId, this.tick);
+          if (clothing !== null) this.dropPile(clothing, 1, position, facingYaw, this.nowMs);
         },
         dropLoot: (item, count, position, facingYaw) =>
           this.dropPile(item, count, position, facingYaw, this.nowMs),
@@ -4805,6 +4810,10 @@ export class WorldSimulation {
       }
     }
     animal.damageHelpers.clear();
+    const clothing = creatureClothingDrop(this.seed, 'animal', animal.kind, animalId, this.tick);
+    const at = animal.entity.get(Position);
+    if (clothing !== null && at !== undefined)
+      this.dropPile(clothing, 1, at, runtime.entity.get(Facing)?.yaw ?? 0, this.nowMs);
 
     const item = kind.catchItem;
     // A full pack means it was still caught - the den stays empty for the

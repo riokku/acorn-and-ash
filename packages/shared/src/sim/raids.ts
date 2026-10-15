@@ -151,6 +151,8 @@ export interface RaidHost {
     kind: RaiderKindId,
   ): void;
   dropLoot(item: ItemId, count: number, position: Readonly<Vec3>, facingYaw: number): void;
+  /** Public bonus loot belongs to the creature, once, rather than to each contributor. */
+  dropBonusLoot?(id: number, kind: RaiderKindId, position: Readonly<Vec3>, facingYaw: number): void;
 }
 
 export interface RaidOptions {
@@ -1044,6 +1046,12 @@ export class RaidDirector {
         const { item, count } = RAIDER_KINDS[raider.kind].loot;
         if (count > 0)
           this.host.dropLoot(item, count, raider.motion.position, raider.motion.facingYaw);
+        this.host.dropBonusLoot?.(
+          raider.id,
+          raider.kind,
+          raider.motion.position,
+          raider.motion.facingYaw,
+        );
         this.despawn(raider);
       }
       return;

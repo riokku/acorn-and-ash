@@ -43,6 +43,9 @@ export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>
   leatherGloves: { protection: 2, warmth: 5 },
   woodenShield: { protection: 15 },
   winterJacket: { protection: 4, warmth: 60 },
+  woolCap: { protection: 1, warmth: 15 },
+  linenShirt: { protection: 2, warmth: 5 },
+  workTrousers: { protection: 2, warmth: 10 },
 };
 
 export interface CharacterStats {

@@ -41,6 +41,8 @@ export * from './data/characters';
 export * from './data/moves';
 export * from './data/gear';
 export * from './data/equipment-stats';
+export * from './data/creature-loot';
+export * from './sim/creature-loot';
 export * from './data/raiders';
 
 export * from './collision/capsule';

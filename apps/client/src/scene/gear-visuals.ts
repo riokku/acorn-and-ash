@@ -6,6 +6,7 @@ import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/sh
 import { plainMaterial } from '../art/materials';
 import { wornGearModelTemplate } from './worn-gear-models';
 import { woodenShieldParts } from './gear-models';
+import { woolCapGeometry } from './basic-clothing';
 
 /**
  * What a character is wearing, drawn on the body (decision 0113).
@@ -193,6 +194,14 @@ export function createGearVisuals(
   };
 
   const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
+    if (item === 'woolCap') {
+      const heads = skinned.filter((mesh) => /_Head(?:_\d+)?$/.test(mesh.name));
+      const source = heads[0];
+      if (source !== undefined)
+        for (const geometry of woolCapGeometry(heads))
+          addSkinned(source, source, geometry, clothMaterial(item), into);
+      return;
+    }
     const body = skinned[0];
     const template = wornGearModelTemplate(item);
     if (template === undefined || body === undefined) return;
