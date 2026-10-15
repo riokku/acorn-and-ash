@@ -4,7 +4,7 @@ import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 
-test('a torch click ignites a tree and shows the authoritative summer fire', async ({ page }) => {
+test('a torch ignites a tree and burns it down without loot', async ({ page }) => {
   const sim = new shared.WorldSimulation({
     seed: shared.DEFAULT_WORLD_SEED,
     forestEncounters: false,
@@ -30,6 +30,7 @@ test('a torch click ignites a tree and shows the authoritative summer fire', asy
     equippedItem: 'torch',
     takenPickups: sim.clearing.pickups.map((pickup) => pickup.id),
   });
+  let finishBurn = () => {};
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://fonts.googleapis.com/**', (route) =>
@@ -46,6 +47,13 @@ test('a torch click ignites a tree and shows the authoritative summer fire', asy
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     const send = (data: ArrayBuffer) => socket.send(Buffer.from(data));
     const clock = () => sim.tick * shared.TICK_MILLISECONDS;
+    finishBurn = () => {
+      const fire = sim.wildfire.fires.get(`tree:${tree.id}`)!;
+      sim.tick = Math.ceil(fire.startedAt / 1000 + shared.fireLifetime(fire)) * shared.TICK_HZ - 1;
+      sim.step(clock());
+      send(shared.encodeTreeStates(sim.changedTrees()));
+      send(shared.encodeWildfire(sim.wildfireView()));
+    };
     send(shared.encodeWelcome(1, sim.seed, 0, clock()));
     send(shared.encodeSpace(0, x, z, 0));
     send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
@@ -83,6 +91,12 @@ test('a torch click ignites a tree and shows the authoritative summer fire', asy
       .poll(() => page.evaluate(() => window.acornDebug?.wildfireEffects().fires))
       .toBeGreaterThan(0);
     expect(sim.isFelled(tree.id)).toBe(false);
+    finishBurn();
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.felledTrees()))
+      .toContain(tree.id);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.burned).toBe(true);
+    expect(sim.droppedPilesList()).toEqual([]);
     expect(errors).toEqual([]);
   } finally {
     sim.dispose();

@@ -2174,6 +2174,7 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('trees', 'felled_at_ms', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('trees', 'generation', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('trees', 'fall_yaw', 'REAL');
+    this.addColumn('trees', 'burned', 'INTEGER NOT NULL DEFAULT 0');
     // A player saved before this release has no hunger on record. The default
     // above starts them full, same as anybody arriving fresh.
     this.addColumn('players', 'hunger', 'REAL NOT NULL DEFAULT 100');
@@ -2547,7 +2548,10 @@ export class World extends DurableObject<WorldEnv> {
         felled_at_ms: number;
         generation: number;
         fall_yaw: number | null;
-      }>('SELECT tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw FROM trees')
+        burned: number;
+      }>(
+        'SELECT tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned FROM trees',
+      )
       .toArray()
       .map((row) => ({
         treeId: row.tree_id,
@@ -2556,22 +2560,24 @@ export class World extends DurableObject<WorldEnv> {
         felledAtMs: row.felled_at_ms,
         generation: row.generation,
         fallYaw: row.fall_yaw,
+        burned: row.burned !== 0,
       }));
   }
 
   private writeTree(tree: PersistedTree): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
+      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
         'swings_taken = excluded.swings_taken, felled = excluded.felled, ' +
         'felled_at_ms = excluded.felled_at_ms, generation = excluded.generation, ' +
-        'fall_yaw = excluded.fall_yaw, updated_at = excluded.updated_at',
+        'fall_yaw = excluded.fall_yaw, burned = excluded.burned, updated_at = excluded.updated_at',
       tree.treeId,
       tree.swingsTaken,
       tree.felled ? 1 : 0,
       tree.felledAtMs,
       tree.generation,
       tree.fallYaw ?? null,
+      tree.burned ? 1 : 0,
       Date.now(),
     );
   }

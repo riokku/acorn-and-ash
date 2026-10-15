@@ -147,3 +147,54 @@ it('does not rewrite or upload unchanged tree slots while walking within the sam
     scene.dispose();
   }
 });
+
+it('keeps soot with its forest tree when detail slots are repacked and when it falls', () => {
+  let now = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const { props, scene, meshes } = forestOfTwoPines();
+  const fire = {
+    id: props[0]!.id,
+    kind: 'tree' as const,
+    x: 10,
+    y: 0,
+    z: 0,
+    height: 14,
+    radius: 1,
+    startedAt: 1000,
+    generation: 0,
+    spread: true,
+  };
+  scene.setWildfire({ fires: [fire], lightning: null, now: 23_500 });
+  scene.update(0, { x: 0, z: 0 });
+  expect(meshes[0]!.geometry.getAttribute('treeBurn').getX(0)).toBeCloseTo(0.5, 1);
+  scene.update(1, { x: 100, z: 0 });
+  expect(meshes[2]!.geometry.getAttribute('treeBurn').getX(0)).toBeCloseTo(0.5, 1);
+  expect(meshes[2]!.geometry.getAttribute('treeBurn').getX(1)).toBe(0);
+  scene.setTreeStates(
+    new Map([
+      [
+        fire.id,
+        {
+          generation: 0,
+          felled: true,
+          burned: true,
+          fall: { yaw: 0, startedAtMs: 46_000 },
+        },
+      ],
+    ]),
+    46_000,
+  );
+  scene.setWildfire({ fires: [], lightning: null, now: 46_000 });
+  scene.update(0, { x: 100, z: 0 });
+  expect(meshes[2]!.geometry.getAttribute('treeBurn').getX(0)).toBe(1);
+  for (const stump of meshes.slice(4))
+    expect(stump.geometry.getAttribute('treeBurn').getX(0)).toBe(1);
+  now = 3000;
+  scene.update(0, { x: 100, z: 0 });
+  // The settled tree gives up its old slot; its soot must not tint a different tree using it.
+  scene.update(1, { x: 200, z: 0 });
+  expect(meshes[0]!.count).toBe(1);
+  expect(meshes[0]!.geometry.getAttribute('treeBurn').getX(0)).toBe(0);
+  scene.dispose();
+  clock.mockRestore();
+});

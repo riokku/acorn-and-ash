@@ -1505,6 +1505,7 @@ describe('a world played before trees grew back', () => {
       expect(columns).toContain('felled_at_ms');
       expect(columns).toContain('generation');
       expect(columns).toContain('fall_yaw');
+      expect(columns).toContain('burned');
 
       // The old stump is treated as freshly cut rather than as felled in 1970,
       // so it waits its turn instead of coming back the instant anybody joins.

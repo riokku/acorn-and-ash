@@ -1,8 +1,22 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-import { smoothstep, type PlacedProp, type PropKind, type Terrain } from '@acorn/shared';
-import { attribute, positionLocal, vec3 } from 'three/tsl';
+import {
+  smoothstep,
+  propHeight,
+  type PlacedProp,
+  type PropKind,
+  type Terrain,
+} from '@acorn/shared';
+import {
+  attribute,
+  positionLocal,
+  vec3,
+  uniform,
+  texture,
+  mix,
+  smoothstep as nodeSmoothstep,
+} from 'three/tsl';
 
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
@@ -32,6 +46,9 @@ export interface PropPart {
   readonly offset: THREE.Matrix4;
   /** Update the buried base when an instance is packed, regrown or tipped. */
   ground?(index: number, prop: PlacedProp, tilt?: THREE.Quaternion): void;
+  /** Char this instance from its roots upward; other trees keep their seasonal colours. */
+  burn?(index: number, progress: number): void;
+  syncAppearance?(): void;
   dispose(): void;
 }
 
@@ -51,7 +68,10 @@ export function createPropMeshes(
   const band =
     kind.shape.family === 'tree' ? kind.shape.trunkHeight * 0.18 : kind.shape.height * 0.35;
   const footprint = propFootprint(bases, band);
-  return parts.map((part) => groundPart(part, footprint, terrain));
+  return parts.map((part) => {
+    const grounded = groundPart(part, footprint, terrain);
+    return kind.shape.family === 'rock' ? grounded : burnablePart(grounded, propHeight(kind));
+  });
 }
 
 function propMeshes(kind: PropKind, count: number, distant: boolean, variant: number): PropPart[] {
@@ -201,6 +221,63 @@ function groundPart(part: PropPart, footprint: PropFootprint, terrain?: Terrain)
   };
 }
 
+/** One small per-instance attribute keeps both LODs batched, with no new tree assets. */
+function burnablePart(part: PropPart, height: number): PropPart {
+  const source = part.mesh.material;
+  if (
+    !(source instanceof THREE.MeshStandardMaterial) &&
+    !(source instanceof THREE.MeshStandardNodeMaterial)
+  )
+    return part;
+  const groundedGeometry = part.mesh.geometry;
+  const geometry = groundedGeometry.clone();
+  // The grounding wrapper updates this live attribute and its culling bounds.
+  const depth = part.mesh.geometry.getAttribute('propGroundDepth');
+  if (depth) geometry.setAttribute('propGroundDepth', depth);
+  geometry.boundingBox = part.mesh.geometry.boundingBox;
+  geometry.boundingSphere = part.mesh.geometry.boundingSphere;
+  const progress = new THREE.InstancedBufferAttribute(new Float32Array(part.mesh.count), 1);
+  progress.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('treeBurn', progress);
+  const material =
+    source instanceof THREE.MeshStandardNodeMaterial
+      ? source.clone()
+      : new THREE.MeshStandardNodeMaterial().copy(source);
+  // Keep the live seasonal colour, rather than freezing the cloned foliage's tint.
+  const base = material.colorNode
+    ? vec3(material.colorNode as THREE.Node<'vec3'>)
+    : source.map
+      ? texture(source.map).rgb.mul(uniform(source.color))
+      : uniform(source.color).rgb;
+  const localHeight = positionLocal.y.add(part.offset.elements[13]!).div(height).clamp(0, 1);
+  const front = attribute('treeBurn', 'float').mul(1.2).sub(0.1);
+  const char = nodeSmoothstep(localHeight.sub(0.08), localHeight.add(0.08), front);
+  material.colorNode = mix(base, base.mul(0.12).add(vec3(0.018, 0.012, 0.009)), char);
+  part.mesh.geometry = geometry;
+  part.mesh.material = material;
+  return {
+    ...part,
+    ground(index, prop, tilt) {
+      part.ground?.(index, prop, tilt);
+      geometry.boundingBox = groundedGeometry.boundingBox;
+      geometry.boundingSphere = groundedGeometry.boundingSphere;
+    },
+    burn(index, amount) {
+      if (progress.getX(index) === amount) return;
+      progress.setX(index, amount);
+      progress.needsUpdate = true;
+    },
+    syncAppearance() {
+      material.visible = source.visible;
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+      part.dispose();
+    },
+  };
+}
+
 function instanced(
   geometry: THREE.BufferGeometry,
   material: THREE.Material,
@@ -250,6 +327,7 @@ export function placeOneInstance(
   );
   part.mesh.setMatrixAt(index, part.offset.clone().premultiply(matrix));
   part.ground?.(index, prop, tilt);
+  part.burn?.(index, 0);
 }
 
 /** A cylinder standing where the prop does, matching what the server collides with. */

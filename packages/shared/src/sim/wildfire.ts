@@ -3,7 +3,7 @@ import { hashSeed } from '../rng';
 export const FIRE_LIMIT = 32;
 export const FIRE_SPREAD_METRES = 5;
 export const FIRE_SPREAD_SECONDS = 12;
-export const FIRE_TREE_SECONDS = 55;
+export const FIRE_TREE_SECONDS = 45;
 export const FIRE_BUILDING_SECONDS = 90;
 export const LIGHTNING_INTERVAL_MS = 18_000;
 export interface FireTarget {
@@ -13,6 +13,7 @@ export interface FireTarget {
   readonly y: number;
   readonly z: number;
   readonly height: number;
+  /** Canopy radius for trees; footprint radius for buildings. */
   readonly radius: number;
 }
 export interface Wildfire extends FireTarget {
@@ -35,7 +36,17 @@ export interface WildfireView {
 export const fireKey = (target: Pick<FireTarget, 'kind' | 'id'>): string =>
   `${target.kind}:${target.id}`;
 export const fireLifetime = (target: FireTarget): number =>
-  target.kind === 'tree' ? FIRE_TREE_SECONDS : FIRE_BUILDING_SECONDS;
+  target.kind === 'tree'
+    ? FIRE_TREE_SECONDS * Math.max(2 / 3, Math.min(5 / 3, Math.sqrt(target.height / 14)))
+    : FIRE_BUILDING_SECONDS;
+
+/** One shared clock for the rising flame front, charring and server burnout. */
+export const treeBurnProgress = (fire: Wildfire, now: number): number =>
+  Math.max(0, Math.min(1, (now - fire.startedAt) / (fireLifetime(fire) * 1000)));
+
+/** The crown catches before burnout, leaving a short crown-burning finale. */
+export const treeFireHeight = (progress: number): number =>
+  Math.max(0.06, Math.min(1, progress / 0.8));
 
 /** Bounded, deterministic fire fronts. Spread happens once per tree, never every frame. */
 export class WildfireSimulation {

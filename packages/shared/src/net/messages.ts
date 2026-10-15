@@ -343,6 +343,7 @@ export interface TreeState {
   readonly felled: boolean;
   /** Timing and direction let observers, including late joiners, see the same fall. */
   readonly fall?: TreeFall;
+  readonly burned?: boolean;
 }
 
 /**

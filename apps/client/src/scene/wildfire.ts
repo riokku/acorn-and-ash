@@ -3,6 +3,8 @@ import { attribute, float, mix, sin, smoothstep, uv, vec3 } from 'three/tsl';
 import {
   createRng,
   fireLifetime,
+  treeBurnProgress,
+  treeFireHeight,
   hashSeed,
   LIGHTNING_INTERVAL_MS,
   type WildfireView,
@@ -23,7 +25,7 @@ export function createWildfireArt() {
   const template = flameModelTemplate();
   const pools = Array.from({ length: VISIBLE_FIRES }, () => {
     const root = new THREE.Group();
-    const flames = Array.from({ length: 5 }, (_, i) => {
+    const flames = Array.from({ length: 7 }, (_, i) => {
       if (!template) return null;
       const instance = instantiateAnimatedModel(template);
       for (const action of instance.actions) action.play();
@@ -31,10 +33,12 @@ export function createWildfireArt() {
       root.add(instance.root);
       return instance;
     });
+    const treeLight = createFireGlow(0xff823a, 26, 12);
+    root.add(treeLight.anchor);
     const light = createFireGlow(0xff823a, 38, 18);
     root.add(light.anchor);
     group.add(root);
-    return { root, flames, light };
+    return { root, flames, light, treeLight };
   });
   const smokeGeometry = new THREE.PlaneGeometry(1, 1);
   const lives = new Float32Array(VISIBLE_FIRES * PUFFS);
@@ -173,14 +177,16 @@ export function createWildfireArt() {
     update(delta: number, camera: THREE.Camera, indoors: boolean, reducedMotion: boolean) {
       const dt = Math.min(delta, 0.1);
       seconds += reducedMotion ? 0 : dt;
-      sinceState += dt;
+      sinceState += Math.max(0, delta);
       boltAge += dt;
       group.visible = !indoors;
       bolt.visible = !reducedMotion && boltAge < 0.32;
       boltMaterial.opacity = Math.max(0, 1 - boltAge / 0.32);
       flash.anchor.visible = bolt.visible;
       flash.brightness = boltMaterial.opacity;
+      const now = state.now + sinceState * 1000;
       const fires = state.fires
+        .filter((fire) => now < fire.startedAt + fireLifetime(fire) * 1000)
         .filter((fire) => Math.hypot(fire.x - camera.position.x, fire.z - camera.position.z) < 100)
         .sort(
           (a, b) =>
@@ -199,32 +205,44 @@ export function createWildfireArt() {
         const age = (state.now - fire.startedAt) / 1000 + sinceState;
         const intensity =
           Math.min(1, (age + 1) / 5) * Math.min(1, Math.max(0, fireLifetime(fire) - age) / 7);
-        const height = Math.min(9, fire.height);
+        const isTree = fire.kind === 'tree';
+        const height = isTree
+          ? fire.height * treeFireHeight(treeBurnProgress(fire, now))
+          : Math.min(9, fire.height);
         pool.root.position.set(fire.x, fire.y, fire.z);
-        pool.light.anchor.position.y = height * 0.4;
+        pool.light.anchor.position.y = Math.min(3, height * 0.25);
+        pool.treeLight.anchor.position.y = height * 0.85;
+        pool.treeLight.brightness = isTree ? intensity : 0;
+        pool.treeLight.update(reducedMotion ? 0 : dt);
         pool.light.brightness = intensity;
         pool.light.update(reducedMotion ? 0 : dt);
         for (let i = 0; i < pool.flames.length; i++) {
           const flame = pool.flames[i];
           if (!flame) continue;
           const angle = i * 2.4;
-          const spread = fire.kind === 'building' ? fire.radius * 0.7 : 0.35 + i * 0.13;
-          flame.root.position.set(
-            Math.sin(angle) * spread,
-            i * height * 0.12,
-            Math.cos(angle) * spread,
-          );
+          const atHeight = (i / (pool.flames.length - 1)) * height * 0.92;
+          const spread = isTree
+            ? treeFlameRadius(fire.radius, atHeight / fire.height)
+            : fire.radius * 0.7;
+          flame.root.position.set(Math.sin(angle) * spread, atHeight, Math.cos(angle) * spread);
           flame.root.rotation.y = angle;
-          flame.root.scale.set(1.6 * intensity, (1.6 + height * 0.25) * intensity, 1.6 * intensity);
+          flame.root.scale.set(
+            (isTree ? 1.8 : 1.6) * intensity,
+            (1.5 + height / pool.flames.length) * intensity,
+            (isTree ? 1.8 : 1.6) * intensity,
+          );
           flame.mixer.update(reducedMotion ? 0 : dt * (0.85 + i * 0.07));
         }
         for (let i = 0; i < WISPS; i++) {
           const phase = (seconds * (0.38 + (i % 4) * 0.04) + i / WISPS) % 1;
           const angle = i * 2.399 + Math.sin(seconds * 0.6 + i) * 0.25;
-          const radius = (fire.kind === 'building' ? fire.radius * 0.65 : 0.5) + phase * 0.6;
+          const atHeight = 0.4 + phase * height * 0.7 + (i % 3) * height * 0.1;
+          const radius =
+            (isTree ? treeFlameRadius(fire.radius, atHeight / fire.height) : fire.radius * 0.65) +
+            phase * 0.3;
           dummy.position.set(
             fire.x + Math.sin(angle) * radius + phase * phase * 0.8,
-            fire.y + 0.4 + phase * height * 0.7 + (i % 3) * height * 0.1,
+            fire.y + atHeight,
             fire.z + Math.cos(angle) * radius,
           );
           dummy.quaternion.copy(camera.quaternion);
@@ -242,7 +260,7 @@ export function createWildfireArt() {
           const radius = 0.4 + phase * 2.4;
           dummy.position.set(
             fire.x + phase * phase * 8 + Math.sin(swirl) * radius,
-            fire.y + height * 0.3 + phase * 13,
+            fire.y + height * 0.85 + phase * 13,
             fire.z + phase * 2 + Math.cos(swirl) * radius * 0.5,
           );
           dummy.quaternion.copy(camera.quaternion);
@@ -256,7 +274,7 @@ export function createWildfireArt() {
           const phase = (((seconds * (0.24 + (i % 3) * 0.04) + i / EMBERS) % 1) + 1) % 1;
           dummy.position.set(
             fire.x + Math.sin(i * 3 + seconds * 1.6) * phase + phase * 3,
-            fire.y + height * 0.3 + phase * 7,
+            fire.y + height * 0.7 + phase * 7,
             fire.z + Math.cos(i * 2 + seconds) * phase,
           );
           dummy.quaternion.identity();
@@ -274,6 +292,7 @@ export function createWildfireArt() {
     dispose() {
       for (const pool of pools) {
         pool.light.dispose();
+        pool.treeLight.dispose();
         for (const flame of pool.flames) {
           flame?.mixer.stopAllAction();
           if (flame) flame.mixer.uncacheRoot(flame.root);
@@ -297,4 +316,10 @@ export function createWildfireArt() {
       group.removeFromParent();
     },
   };
+}
+
+/** Keep rising flames outside the opaque lower crown, tapering towards its tip. */
+function treeFlameRadius(canopyRadius: number, relativeHeight: number): number {
+  if (relativeHeight < 0.2) return 0.45;
+  return 0.25 + (canopyRadius * Math.max(0, 1 - relativeHeight)) / 0.8;
 }
