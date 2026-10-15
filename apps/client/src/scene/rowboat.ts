@@ -13,8 +13,8 @@ import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
  */
 export interface Rowboat {
   readonly group: THREE.Group;
-  /** Paddle with the rider's stroke, or lay it inside an unattended canoe. */
-  setRowing(stroke: number | null, pulling?: boolean): void;
+  /** Occupied canoes use the rider's hand-held paddle; empty ones keep theirs stowed. */
+  setOccupied(occupied: boolean): void;
   dispose(): void;
 }
 
@@ -142,32 +142,27 @@ export function createRowboat(): Rowboat {
 
   const built = builder.build();
   built.group.name = 'canoe';
-  const paddle = createPaddle(planking, trim);
-  built.group.add(paddle.pivot);
-  const setRowing = (stroke: number | null, pulling = true): void => {
-    if (stroke === null) {
-      // Stowed lengthwise; no wide oars to snag the river banks.
-      paddle.pivot.position.set(0.4, 0.08, 0.18);
-      paddle.pivot.rotation.set(0, 0, -Math.PI / 2);
-    } else {
-      const phase = stroke * Math.PI * 2;
-      paddle.pivot.position.set(0.22, 0.72, 0.25);
-      paddle.pivot.rotation.set(0.28, 0, pulling ? Math.cos(phase) * 0.5 : 0.35);
-    }
-  };
-  setRowing(null);
+  const paddle = createCanoePaddle(planking, trim);
+  paddle.group.position.set(0.4, 0.08, 0.18);
+  paddle.group.rotation.set(0, 0, -Math.PI / 2);
+  built.group.add(paddle.group);
   return {
     group: built.group,
-    setRowing,
+    setOccupied: (occupied) => {
+      paddle.group.visible = !occupied;
+    },
     dispose: () => {
       built.dispose();
-      for (const geometry of paddle.geometries) geometry.dispose();
+      paddle.dispose();
     },
   };
 }
 
 /** A single slim paddle, turning about the paddler's hands. */
-function createPaddle(bladeMaterial: THREE.Material, shaftMaterial: THREE.Material) {
+export function createCanoePaddle(
+  bladeMaterial: THREE.Material = paintedMaterial('wood', { tint: 0xb5834f, roughness: 0.9 }),
+  shaftMaterial: THREE.Material = paintedMaterial('wood', { tint: 0x80573a, roughness: 0.9 }),
+): { group: THREE.Group; dispose(): void } {
   const shaft = new THREE.CylinderGeometry(0.018, 0.018, 1.2, 6);
   shaft.translate(0, -0.18, 0);
   const blade = plankGeometry(0.18, 0.4, 0.025, 'y', 0.6, 7);
@@ -185,5 +180,10 @@ function createPaddle(bladeMaterial: THREE.Material, shaftMaterial: THREE.Materi
     mesh.castShadow = true;
     pivot.add(mesh);
   }
-  return { pivot, geometries: [shaft, blade, grip] };
+  return {
+    group: pivot,
+    dispose: () => {
+      for (const geometry of [shaft, blade, grip]) geometry.dispose();
+    },
+  };
 }

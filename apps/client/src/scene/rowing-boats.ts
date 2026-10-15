@@ -1,18 +1,11 @@
 import type * as THREE from 'three/webgpu';
 
-import { BOAT_ROW_SPEED, navigableWaterSurfaceAt, boatYawFor } from '@acorn/shared';
+import { navigableWaterSurfaceAt, boatYawFor } from '@acorn/shared';
 
 import { createRowboat, type Rowboat } from './rowboat';
 
-/** Strokes a second at a steady row; faster or slower with the boat. */
-const STROKES_PER_SECOND = 0.85;
-/** Slower than this, nobody is pulling at the oars: they are held out over the water. */
-const GLIDING_BELOW = 0.4;
-
 interface DrawnBoat {
   readonly boat: Rowboat;
-  /** How far through a stroke, from 0 to 1 and round again. */
-  stroke: number;
   seen: boolean;
 }
 
@@ -28,31 +21,19 @@ export class RowingBoats {
 
   constructor(private readonly parent: THREE.Object3D) {}
 
-  /** A boat under this rider this frame, turned the way they face, oars going with the speed. */
-  place(
-    netId: number,
-    x: number,
-    z: number,
-    facingYaw: number,
-    speed: number,
-    deltaSeconds: number,
-  ): void {
+  /** A boat under this rider this frame, turned the way they face. Its rider owns the held paddle. */
+  place(netId: number, x: number, z: number, facingYaw: number): void {
     let entry = this.drawn.get(netId);
     if (entry === undefined) {
       const boat = createRowboat();
       this.parent.add(boat.group);
-      entry = { boat, stroke: 0, seen: true };
+      boat.setOccupied(true);
+      entry = { boat, seen: true };
       this.drawn.set(netId, entry);
     }
     entry.seen = true;
     entry.boat.group.position.set(x, navigableWaterSurfaceAt(x, z), z);
     entry.boat.group.rotation.y = boatYawFor(facingYaw);
-    const pulling = speed >= GLIDING_BELOW;
-    if (pulling) {
-      entry.stroke =
-        (entry.stroke + (speed / BOAT_ROW_SPEED) * STROKES_PER_SECOND * deltaSeconds) % 1;
-    }
-    entry.boat.setRowing(entry.stroke, pulling);
   }
 
   /**

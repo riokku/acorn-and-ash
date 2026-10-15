@@ -1,4 +1,5 @@
 import { ITEM_KINDS } from '../item-catalog';
+import { CanoePaddling } from './canoe-paddling';
 import { StandingFootContact, type FootGroundHeight } from './standing-foot-contact';
 import * as THREE from 'three/webgpu';
 import { plainMaterial } from '../art/materials';
@@ -42,6 +43,10 @@ export interface CharacterFrame {
   readonly locomotion: Locomotion;
   /** Current collision ground, including rooms and dug openings. */
   readonly groundHeight?: FootGroundHeight;
+  /** Effort at the paddle, excluding movement supplied by the current. */
+  readonly rowingSpeed?: number;
+  /** Fixed stroke for gallery inspection only. */
+  readonly rowingPhase?: number;
 }
 
 /** Where a sitting or lying body rests, in the same space the character stands in. */
@@ -785,6 +790,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   /** How far into the using grip whatever is in hand is, from carrying (0) to using (1). */
   let gripBlend = 0;
   let clock = 0;
+  let paddling: CanoePaddling | null = null;
   const nameplate = attachNameplate(group);
 
   /** The animator, made once the library has loaded, or null while it is on its way. */
@@ -872,6 +878,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       if (frame.move.digging === true && frame.move.kind === ActionKind.Swing)
         digging = Math.max(digging, DIG_SHOW_SECONDS);
       footContact?.restore();
+      paddling?.restore();
       const pose = playing.update(deltaSeconds, frame.move, frame.locomotion);
       handsFree = pose.handsFree;
       const bites = playing.eating;
@@ -904,6 +911,10 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
           ? shortestTurn(0, spin.rotation.y) * Math.exp(-22 * deltaSeconds)
           : pose.whirlwindTurn * Math.PI * 2;
       placeBody(pose, frame, group, rest, pivot, restSpot, clock);
+      if (frame.move.kind === ActionKind.Row) {
+        paddling ??= CanoePaddling.forRig(model);
+        paddling?.update(deltaSeconds, frame.rowingSpeed ?? 0, pose.rest, frame.rowingPhase);
+      }
       const grounded =
         !frame.locomotion.airborne &&
         restSpot === null &&
@@ -916,6 +927,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
     },
     dispose: () => {
       gear.dispose();
+      paddling?.dispose();
       animator?.dispose();
       instance.mixer.stopAllAction();
       for (const material of materials) material.dispose();
