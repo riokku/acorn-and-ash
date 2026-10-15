@@ -72,6 +72,8 @@ function arena(options: ArenaOptions = {}) {
   const fighters: TestFighter[] = [];
   const strikes: { netId: number; damage: number; impactTick: number; atTick: number }[] = [];
   const loot: { item: string; count: number; x: number; z: number }[] = [];
+  const bonusLoot: { id: number; kind: RaiderKindId }[] = [];
+  const credited: number[] = [];
   let tick = 0;
   const director = new RaidDirector(
     world,
@@ -83,6 +85,8 @@ function arena(options: ArenaOptions = {}) {
       strikePlayer: (netId, damage, impactTick) =>
         strikes.push({ netId, damage, impactTick, atTick: tick }),
       dropLoot: (item, count, position) => loot.push({ item, count, x: position.x, z: position.z }),
+      dropBonusLoot: (id, kind) => bonusLoot.push({ id, kind }),
+      defeated: (netId) => credited.push(netId),
     },
     { intervalMinSeconds: options.intervalMinSeconds ?? 600 },
   );
@@ -121,6 +125,8 @@ function arena(options: ArenaOptions = {}) {
     fighters,
     strikes,
     loot,
+    bonusLoot,
+    credited,
     addFighter,
     step,
     inFrontOf,
@@ -530,6 +536,24 @@ describe("a player's blows on a raider", () => {
 });
 
 describe('the end of a raid', () => {
+  it('drops public bonus loot once after falling, even when two players earned defeat credit', () => {
+    const scene = arena();
+    const first = scene.addFighter(1),
+      second = scene.addFighter(2);
+    const id = only(raidOn(scene, 1, ['minion']).raiderIds);
+    scene.step(RISE.ground + 1);
+    scene.inFrontOf(first, id);
+    hit(scene, first, SWING_1);
+    scene.inFrontOf(second, id);
+    hit(scene, second, STRIKE_BLOW);
+    expect(new Set(scene.credited)).toEqual(new Set([1, 2]));
+    expect(scene.bonusLoot).toEqual([]);
+    scene.step(seconds(RAID.crumbleSeconds));
+    expect(scene.bonusLoot).toEqual([{ id, kind: 'minion' }]);
+    scene.step(seconds(RAID.crumbleSeconds));
+    expect(scene.bonusLoot).toHaveLength(1);
+  });
+
   it('leaves a bone where a beaten raider falls apart, and calls the raid fought off', () => {
     const scene = arena();
     const player = scene.addFighter(1);

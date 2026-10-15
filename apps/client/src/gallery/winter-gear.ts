@@ -19,26 +19,36 @@ export async function showWinterGear(
   const asked = params.get('body');
   const kind: CharacterId =
     asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'ranger';
-  const worn = {
-    upperBody: 'winterJacket',
-    helm: 'bearHat',
-    lowerBody: 'travelerTrousers',
-    feet: 'leatherBoots',
-    hands: 'leatherGloves',
-  } as const;
+  const basic = params.get('gallery') === 'basic-clothing';
+  const worn = basic
+    ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
+    : ({
+        upperBody: 'winterJacket',
+        helm: 'bearHat',
+        lowerBody: 'travelerTrousers',
+        feet: 'leatherBoots',
+        hands: 'leatherGloves',
+      } as const);
   const actor = createCharacter(kind, 0x82955e);
   actor.setGear(params.has('before') ? {} : worn);
-  actor.group.rotation.y = Math.PI - 0.18;
+  actor.group.rotation.y = params.has('back') ? -0.18 : Math.PI - 0.18;
   scene.add(actor.group);
   let heads = 0;
   actor.group.traverse((object) => {
-    if (object.userData.gearItem === 'bearHat') heads++;
+    if (object.userData.gearItem === (basic ? 'woolCap' : 'bearHat')) heads++;
   });
   document.body.dataset.winterGearHeads = String(heads);
+  document.body.dataset.clothingPieces = String(
+    actor.group
+      .getObjectsByProperty('type', 'SkinnedMesh')
+      .filter((mesh) => mesh.userData.gearItem !== undefined).length,
+  );
   const caption = document.createElement('p');
   caption.textContent = params.has('before')
     ? 'Plain clothes · Warmth 0'
-    : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
+    : basic
+      ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
+      : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
   caption.style.cssText =
     'position:absolute;left:0;right:0;bottom:24px;text-align:center;color:#f1efdc;font:18px Georgia;pointer-events:none';
   document.body.append(caption);

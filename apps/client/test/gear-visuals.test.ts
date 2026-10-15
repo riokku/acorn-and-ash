@@ -61,3 +61,38 @@ it('covers sleeves and hands in the multipart meshes exported by glTF', () => {
   visuals.dispose();
   expect(extraMeshes(root, [sleeve.mesh, hand.mesh])).toHaveLength(0);
 });
+it('fits a low-poly cap to the head and keeps it attached through animation and repeated swaps', () => {
+  const root = new THREE.Group();
+  const head = part('Ranger_Head');
+  root.add(head.mesh, head.bone);
+  const visuals = createGearVisuals(root, undefined, 1);
+  visuals.setWorn({ helm: 'woolCap' });
+  const cap = extraMeshes(root, [head.mesh]);
+  expect(cap).toHaveLength(2);
+  expect(cap.every((mesh) => mesh.skeleton === head.mesh.skeleton && !mesh.frustumCulled)).toBe(
+    true,
+  );
+  const point = new THREE.Vector3();
+  cap[0]!.updateMatrixWorld(true);
+  head.bone.updateMatrixWorld(true);
+  head.mesh.skeleton.update();
+  cap[0]!.getVertexPosition(0, point);
+  const before = point.clone();
+  head.bone.position.x += 0.3;
+  head.bone.updateMatrixWorld(true);
+  head.mesh.skeleton.update();
+  cap[0]!.getVertexPosition(0, point);
+  expect(point.x - before.x).toBeCloseTo(0.3);
+  const triangles = cap.reduce(
+    (sum, mesh) =>
+      sum + (mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position').count) / 3,
+    0,
+  );
+  expect(triangles).toBeLessThan(2000);
+  visuals.setWorn({});
+  expect(extraMeshes(root, [head.mesh])).toHaveLength(0);
+  visuals.setWorn({ helm: 'woolCap' });
+  expect(extraMeshes(root, [head.mesh])).toHaveLength(2);
+  visuals.dispose();
+  expect(extraMeshes(root, [head.mesh])).toHaveLength(0);
+});

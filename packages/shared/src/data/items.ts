@@ -54,7 +54,10 @@ export type ItemId =
   | 'shovel'
   | 'clay'
   | 'mineSupport'
-  | 'winterJacket';
+  | 'winterJacket'
+  | 'woolCap'
+  | 'linenShirt'
+  | 'workTrousers';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -668,6 +671,45 @@ export const ITEM_KINDS = {
     equippable: true,
     gearSlots: ['mainHand'],
   },
+  woolCap: {
+    id: 'woolCap',
+    displayName: 'Wool cap',
+    pluralName: 'Wool caps',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x767b65,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  linenShirt: {
+    id: 'linenShirt',
+    displayName: 'Linen shirt',
+    pluralName: 'Linen shirts',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0xa9a084,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['upperBody'],
+  },
+  workTrousers: {
+    id: 'workTrousers',
+    displayName: 'Work trousers',
+    pluralName: 'Work trousers',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x655d4e,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['lowerBody'],
+  },
   winterJacket: {
     id: 'winterJacket',
     displayName: 'Warm jacket',
@@ -751,6 +793,9 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'clay',
   'mineSupport',
   'winterJacket',
+  'woolCap',
+  'linenShirt',
+  'workTrousers',
 ];
 
 export function itemIndex(id: ItemId): number {

@@ -349,7 +349,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showHomeInside(renderer, scene, fireLights, daylight, params, time);
     return;
   }
-  if (focus === 'winter-gear') {
+  if (focus === 'winter-gear' || focus === 'basic-clothing') {
     scene.add(createGalleryGround([]));
     const { showWinterGear } = await import('./winter-gear');
     await showWinterGear(renderer, scene, fireLights, params);
