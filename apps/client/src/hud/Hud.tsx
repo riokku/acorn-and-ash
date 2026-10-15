@@ -1017,10 +1017,9 @@ export function hint(state: HudState): string {
   if (state.nearbyPile !== null) return pileHint(state, state.nearbyPile);
   if (state.nearGatherSpot !== null) return gatherHint(state, state.nearGatherSpot);
   // A boat comes after the reeds: the press cuts them first, the way the server does.
-  if (state.boat === 'board') return 'Press E to climb into the rowboat';
+  if (state.boat === 'board') return 'Press E to climb into the canoe';
   if (state.boat === 'taken') return 'Somebody is already rowing this boat';
-  if (state.boat === 'frozen')
-    return 'The rowboat is frozen in the ice · it floats again in spring';
+  if (state.boat === 'frozen') return 'The canoe is frozen in the ice · it floats again in spring';
   if (state.nearBuriedCache) return 'Press E to recover belongings · leftovers stay safely here';
   if (state.nearTreasure === 'shovel')
     return 'Press E to dig up treasure · leftovers stay safely here';

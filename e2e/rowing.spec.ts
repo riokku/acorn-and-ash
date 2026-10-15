@@ -144,7 +144,7 @@ test('you can climb into a rowboat, row it, and climb out again', async ({ page 
   };
 
   // On the bank beside a free boat: it says how to climb in, and it is drawn moored.
-  await expect(hint).toContainText('Press E to climb into the rowboat');
+  await expect(hint).toContainText('Press E to climb into the canoe');
   expect(await boats()).toEqual({ moored: 1, rowed: [] });
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/rowing-bank.png` });
 
@@ -208,7 +208,7 @@ test('you can climb into a rowboat, row it, and climb out again', async ({ page 
   expect(boat().rower).toBeUndefined();
   await page.waitForTimeout(1000);
   expect({ x: boat().x, z: boat().z }).toEqual(left);
-  await expect(hint).toContainText('Press E to climb into the rowboat');
+  await expect(hint).toContainText('Press E to climb into the canoe');
   const mooredAt = (await page.evaluate(() => window.acornDebug!.builtProps())).find(
     (prop) => prop.id === BOAT_ID,
   )!;
@@ -231,7 +231,7 @@ test('you can climb into a rowboat, row it, and climb out again', async ({ page 
   botPressesE();
   await expect.poll(async () => (await boats()).moored).toBe(1);
   await expect.poll(async () => (await boats()).rowed).toEqual([]);
-  await expect(hint).toContainText('Press E to climb into the rowboat');
+  await expect(hint).toContainText('Press E to climb into the canoe');
 
   expect(errors).toEqual([]);
 });

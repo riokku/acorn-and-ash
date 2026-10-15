@@ -13,7 +13,9 @@
  * metres: with the bed as it is, a hand's width or two of water under it, so
  * the boat floats instead of sitting on the sand.
  */
-export const BOAT_HULL_MIN_DEPTH = 1.2;
+// This is horizontal clearance from the bank, not water depth. A shallow
+// canoe needs a little room under its hull, without excluding narrow creeks.
+export const BOAT_HULL_MIN_DEPTH = 0.75;
 
 /**
  * The middle of a boat built from the bank is no further out than this, in

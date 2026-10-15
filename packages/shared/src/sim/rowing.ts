@@ -141,6 +141,14 @@ export function stepBoat(
   );
   const wantsToMove = direction.x !== 0 || direction.z !== 0;
 
+  const current = streamCurrentAt(STREAM, position.x, position.z);
+  if (!wantsToMove && Math.hypot(current.x, current.z) > 0.03) {
+    motion.facingYaw = rotateToward(
+      motion.facingYaw,
+      Math.atan2(-current.x, -current.z),
+      BOAT_TURN_RATE * 0.5 * deltaSeconds,
+    );
+  }
   let desiredX = 0;
   let desiredZ = 0;
   if (wantsToMove) {
@@ -170,7 +178,6 @@ export function stepBoat(
   }
   velocity.y = 0;
 
-  const current = streamCurrentAt(STREAM, position.x, position.z);
   position.x += (velocity.x + current.x) * deltaSeconds;
   position.z += (velocity.z + current.z) * deltaSeconds;
 
@@ -284,6 +291,14 @@ export function driftBoat(
 ): boolean {
   const current = streamCurrentAt(STREAM, boat.x, boat.z);
   if (current.x === 0 && current.z === 0) return false;
+  const oldYaw = boat.yaw;
+  if (Math.hypot(current.x, current.z) > 0.03) {
+    boat.yaw = rotateToward(
+      boat.yaw,
+      Math.atan2(-current.z, current.x),
+      BOAT_TURN_RATE * 0.5 * deltaSeconds,
+    );
+  }
   const position = {
     x: boat.x + current.x * deltaSeconds,
     y: 0,
@@ -293,5 +308,5 @@ export function driftBoat(
   const moved = Math.hypot(position.x - boat.x, position.z - boat.z) > 0.00001;
   boat.x = position.x;
   boat.z = position.z;
-  return moved;
+  return moved || Math.abs(angleDelta(oldYaw, boat.yaw)) > 0.00001;
 }

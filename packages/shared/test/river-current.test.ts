@@ -6,7 +6,9 @@ import { driftBoat, keepBoatAfloat, stepBoat, landingBeside } from '../src/sim/r
 import { buildableFootprint, checkBuildSpot } from '../src/sim/building';
 import { clockShiftForSeason } from '../src/sim/seasons';
 import { WorldSimulation } from '../src/sim/world-sim';
-import { LAKE } from '../src/world/lake';
+import { LAKE, lakeDepthAt } from '../src/world/lake';
+import { BOAT_HULL_MIN_DEPTH } from '../src/world/boat';
+import { BUILDABLE_KINDS } from '../src/data/buildables';
 import { navigableWaterDepthAt, navigableWaterSurfaceAt } from '../src/world/navigable-water';
 import {
   STREAM,
@@ -72,6 +74,67 @@ describe('deep river pools', () => {
 });
 
 describe('river current', () => {
+  it('fits the canoe through the spring outlet and every narrow reach without touching a bank', () => {
+    for (let row = 0; row < STREAM.count - 1; row++) {
+      const p = streamPointAt(STREAM, row),
+        next = streamPointAt(STREAM, row + 1);
+      const yaw = Math.atan2(-(next.z - p.z), next.x - p.x);
+      const placed = { ...p, y: navigableWaterSurfaceAt(p.x, p.z) };
+      const correction = keepBoatAfloat(placed, yaw);
+      // Meanders can need a small adjustment, but never shove the hull out
+      // onto the opposite bank or block its passage along the channel.
+      expect(Math.hypot(placed.x - p.x, placed.z - p.z)).toBeLessThan(0.25);
+      expect(navigableWaterDepthAt(placed.x, placed.z)).toBeGreaterThan(
+        BUILDABLE_KINDS.rowboat.footprintRadius + BOAT_HULL_MIN_DEPTH,
+      );
+      if (correction !== null) expect(keepBoatAfloat(placed, yaw)).toBeNull();
+    }
+    const outlet = streamPointAt(STREAM, 5),
+      ahead = streamPointAt(STREAM, 6);
+    expect(
+      checkBuildSpot(
+        buildableFootprint(
+          'rowboat',
+          outlet.x,
+          outlet.z,
+          Math.atan2(-(ahead.z - outlet.z), ahead.x - outlet.x),
+        ),
+        { ...landingBeside(outlet.x, outlet.z), y: 36 },
+        10,
+        [],
+        [],
+      ),
+    ).toBeNull();
+  });
+
+  it('carries both an idle paddler and an unattended canoe from the spring into the lake', () => {
+    const start = streamPointAt(STREAM, 2),
+      next = streamPointAt(STREAM, 3);
+    // Start broadside in the spring; the current should bring the bow around.
+    const yaw = Math.atan2(-(next.z - start.z), next.x - start.x) + Math.PI / 2;
+    const empty = { ...start, yaw };
+    const rider = createPlayerMotion({ ...start, y: navigableWaterSurfaceAt(start.x, start.z) });
+    rider.facingYaw = yaw - Math.PI / 2;
+    const world = createCollisionWorld(terrain, [], undefined, LAKE, false, STREAM);
+    let previous = 0;
+    for (let tick = 0; tick < 12_000; tick++) {
+      driftBoat(empty, TICK_SECONDS);
+      stepBoat(rider, createInput(tick, 0, 0, 0, 0), TICK_SECONDS, world);
+      if (tick % 100 === 0) {
+        const along = nearestOnStream(STREAM, empty.x, empty.z, 12)!.along;
+        expect(along).toBeGreaterThanOrEqual(previous - 0.02);
+        previous = along;
+        expect(Math.hypot(rider.position.x - empty.x, rider.position.z - empty.z)).toBeLessThan(
+          0.01,
+        );
+        expect(rider.position.y).toBe(navigableWaterSurfaceAt(rider.position.x, rider.position.z));
+      }
+    }
+    expect(nearestOnStream(STREAM, empty.x, empty.z, 12)!.along).toBeGreaterThan(STREAM.length - 2);
+    expect(lakeDepthAt(LAKE, empty.x, empty.z)).toBeGreaterThan(0);
+    expect(navigableWaterSurfaceAt(empty.x, empty.z)).toBeCloseTo(LAKE.level, 1);
+  });
+
   it('allows river boats to be built and boarded, drifts once per tick and stops when frozen', () => {
     const p = riverSpot(0.7);
     const bank = landingBeside(p.x, p.z);

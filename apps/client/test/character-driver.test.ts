@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ActionKind,
   HOME_BED,
+  BOAT_SEAT_HEIGHT,
+  STREAM,
+  streamPointAt,
+  navigableWaterSurfaceAt,
   HOME_CHAIR,
   OUTDOORS,
   RiseFrom,
@@ -10,7 +14,7 @@ import {
   createInput,
 } from '@acorn/shared';
 
-import { MoveMemory, restSpotFor, rollDirection } from '../src/scene/character-driver';
+import { MoveMemory, restSpotFor, rollDirection, boatSeatAt } from '../src/scene/character-driver';
 
 /** The roll heading for a push of the stick (+Z forward, +X right), the camera looking along -Z. */
 function headingFor(moveX: number, moveZ: number): number {
@@ -41,6 +45,20 @@ describe('which way a roll tumbles', () => {
 });
 
 describe('where a body rests', () => {
+  it('keeps the rider above the actual water at the mountain spring and down the river', () => {
+    for (const index of [0, 2, 20, 80, 160, STREAM.count - 1]) {
+      const spot = streamPointAt(STREAM, index);
+      const seat = boatSeatAt(spot.x, spot.z, 0.7);
+      expect(seat).toEqual({
+        ...spot,
+        y: navigableWaterSurfaceAt(spot.x, spot.z) + BOAT_SEAT_HEIGHT,
+        yaw: 0.7,
+      });
+    }
+    const source = streamPointAt(STREAM, 0);
+    expect(boatSeatAt(source.x, source.z, 0).y).toBeGreaterThan(30);
+  });
+
   it('settles onto the chair sitting down, and stays there getting up out of it', () => {
     expect(restSpotFor(ActionKind.Sit, 0, 1)).toEqual(HOME_CHAIR.rest);
     expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, 1)).toEqual(HOME_CHAIR.rest);
