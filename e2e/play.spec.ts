@@ -2020,20 +2020,26 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   const rod = pickups.find((entry) => entry.item === 'rod');
   if (rod === undefined) throw new Error('no fishing rod in the clearing');
   await walkWithinReachOf(page, rod.x, rod.z, 'rod');
-  await page.keyboard.press('KeyE');
-  await expect.poll(async () => countHeld(page, 'rod')).toBe(1);
+  // A predicted reach hint can appear at the edge before the server has caught up.
+  // Step comfortably inside reach and hold E until the authoritative pack confirms pickup.
+  await walkOntoSpot(page, rod.x, rod.z);
+  await page.keyboard.down('KeyE');
+  try {
+    await expect.poll(async () => countHeld(page, 'rod')).toBe(1);
+  } finally {
+    await page.keyboard.up('KeyE');
+  }
 
   const axe = pickups.find((entry) => entry.item === 'axe');
   if (axe === undefined) throw new Error('no axe in the clearing');
   await walkWithinReachOf(page, axe.x, axe.z, 'axe');
-  await page.keyboard.press('KeyE');
-  await expect
-    .poll(async () =>
-      (await page.evaluate(() => window.acornDebug?.carrying() ?? [])).some(
-        (entry) => entry.item === 'axe',
-      ),
-    )
-    .toBe(true);
+  await walkOntoSpot(page, axe.x, axe.z);
+  await page.keyboard.down('KeyE');
+  try {
+    await expect.poll(async () => countHeld(page, 'axe')).toBe(1);
+  } finally {
+    await page.keyboard.up('KeyE');
+  }
   await equip(page, 'axe');
 
   const trees = await page.evaluate(() => window.acornDebug?.trees() ?? []);
