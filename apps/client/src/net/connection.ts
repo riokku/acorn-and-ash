@@ -1,3 +1,4 @@
+import { encodeFireRequest, type FireRequest } from '@acorn/shared';
 import { encodeExpeditionRequest, type ExpeditionRequest, type SeasonId } from '@acorn/shared';
 import { encodeDecorationRequest, type DecorationRequest } from '@acorn/shared';
 import {
@@ -299,6 +300,12 @@ export class WorldConnection {
   sendExpedition(request: ExpeditionRequest): boolean {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeExpeditionRequest(request));
+    return true;
+  }
+  sendFire(request: FireRequest): boolean {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.flush();
+    this.socket.send(encodeFireRequest(request));
     return true;
   }
   sendGarden(request: GardenRequest): void {

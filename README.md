@@ -550,6 +550,21 @@ firelight itself and
 [decision 0062](docs/decisions/0062-tools-held-forward-and-firelight-without-a-freeze.md)
 for why lighting one never freezes the game.
 
+### Fire fuel and firewood
+
+Indoor cooking fires and outdoor campfires need logs. Each log burns for ten real
+minutes, up to five logs (50 minutes) per fire. Approach a fire to see its remaining
+time and add a log from your pack. Adding fuel lights it; putting it out preserves
+unused fuel. Lit fires keep burning while the world is empty. Cooking and warmth
+stop when the fuel runs out. Unheated homes still shelter you from blizzard winds,
+but need a fueled fire to restore body warmth.
+
+Each cabin has a wood pile along its left wall: 20 logs for a cabin, 50 for a large
+cabin. Every stored log is visible. Stand beside it to store logs from your pack or
+take them back out. Carry wood indoors and add it to the fire yourself. Storage
+survives reconnects and cabin upgrades. See
+[decision 0188](docs/decisions/0188-fire-fuel-and-cabin-firewood.md).
+
 ### The seasons
 
 The year turns round spring, summer, autumn and winter, six game days (two

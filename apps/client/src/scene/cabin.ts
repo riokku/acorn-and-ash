@@ -1,3 +1,4 @@
+import { createLogsModel } from './ground-items';
 import * as THREE from 'three/webgpu';
 
 import { createFireGlow } from './fire-light';
@@ -22,6 +23,7 @@ import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from 
  */
 export interface Cabin {
   readonly group: THREE.Group;
+  setStoredLogs?(count: number): void;
   setDaylight?(brightness: number): void;
   update?(deltaSeconds: number): void;
   groundOn?(heightAt: GroundHeight): void;
@@ -51,7 +53,7 @@ const ROOF_SIDE = WIDTH / 2 + OVERHANG + 0.2;
 const DOOR = { left: -1.05, right: -0.1, bottom: FOOTING, top: FOOTING + 1.85 };
 const WINDOW = { left: 0.75, right: 1.55, bottom: FOOTING + 0.85, top: FOOTING + 1.6 };
 
-export function createCabin(): Cabin {
+export function createCabin(logCapacity = 20): Cabin {
   const logs = paintedMaterial('wood', { tint: 0xf2e2cc, roughness: 0.85 });
   const logEnds = paintedMaterial('logEnd', { roughness: 0.9 });
   const boards = paintedMaterial('wood', { tint: 0xc9a07a, roughness: 0.9 });
@@ -61,7 +63,6 @@ export function createCabin(): Cabin {
   const cobbles = paintedMaterial('cobbles', { tint: 0xf1e6d6, roughness: 1 });
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const soil = paintedMaterial('soil', { roughness: 1 });
-  const bark = paintedMaterial('bark', { roughness: 1 });
   // Somebody's home, so the lamp inside is always on: a soft glow by day
   // that reads as a warm window at night.
   const glass = plainMaterial(0xffd79a, {
@@ -73,7 +74,6 @@ export function createCabin(): Cabin {
 
   const builder = new ModelBuilder();
   const supports = new ModelBuilder();
-  const firewood = new ModelBuilder();
   let seed = 1;
   const addLog = (
     material: THREE.Material,
@@ -123,12 +123,13 @@ export function createCabin(): Cabin {
   addGables(builder, boards);
   addRoof(builder, { shingles, boards, logs, logEnds });
   addChimney(builder, supports, cobbles, stone);
-  addWoodpile(firewood, bark, logEnds, () => seed++);
 
   const model = builder.build();
   const base = supports.build();
-  const woodpile = firewood.build();
-  woodpile.group.position.x = -WIDTH / 2 - 0.5;
+  const woodpile = createLogsModel(logCapacity, true);
+  woodpile.show(0);
+  woodpile.group.name = 'cabin-log-storage';
+  woodpile.group.position.x = -2.9;
   model.group.add(base.group, woodpile.group);
   const groundSupports = base.group.children.map((part) =>
     groundBuildingSupport(part as THREE.Mesh, 0.09, (part as THREE.Mesh).material === stone),
@@ -142,6 +143,7 @@ export function createCabin(): Cabin {
   model.group.add(glow.anchor);
   return {
     group: model.group,
+    setStoredLogs: (count) => woodpile.show(count),
     groundOn(heightAt) {
       for (const fit of groundSupports) fit(heightAt);
       groundLooseBuildingPart(woodpile.group, heightAt);
@@ -436,34 +438,4 @@ function addChimney(
     plankGeometry(0.58, 0.07, 0.62, 'x', 0.8, 122),
     placed(x - 0.04, RIDGE + 0.73, z),
   );
-}
-
-/** Split logs stacked along the left-hand wall, their cut ends facing out. */
-function addWoodpile(
-  builder: ModelBuilder,
-  bark: THREE.Material,
-  logEnds: THREE.Material,
-  nextSeed: () => number,
-): void {
-  const x = 0;
-  const radius = 0.09;
-  const rows = [
-    { count: 5, y: radius },
-    { count: 4, y: radius * 2.7 },
-    { count: 3, y: radius * 4.4 },
-  ];
-  for (const row of rows) {
-    for (let i = 0; i < row.count; i++) {
-      const z = (i - (row.count - 1) / 2) * radius * 2.05;
-      const { side, ends } = logGeometry(0.55, radius * (0.9 + ((i * 7) % 3) * 0.06), {
-        sides: 6,
-        seed: nextSeed(),
-        wobble: 0.08,
-        tile: 0.6,
-        ringEvery: 1,
-      });
-      const matrix = placed(x, row.y, z + (row.count % 2 === 0 ? 0 : 0.02));
-      builder.add(bark, side, matrix).add(logEnds, ends, matrix);
-    }
-  }
 }

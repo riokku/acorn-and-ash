@@ -2043,6 +2043,13 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   await chopUntilFelled(page, oak);
   await collectFallenLogs(page);
 
+  // Keep fuel beyond the logs spent constructing the tent and campfire.
+  const fuelTree = trees.find((tree) => tree.kind === 'birch');
+  if (fuelTree === undefined) throw new Error('no birch for firewood');
+  await walkWithinReachOfTree(page, fuelTree);
+  await chopUntilFelled(page, fuelTree);
+  await collectFallenLogs(page);
+
   // The first tent makes the building area the campfire goes into.
   const tent = await buildFirstTent(page, spawnSpot);
   await buildFacingAnyWay(page, await pointAwayFrom(page, tent), 'Camp', 'Digit1', 'campfire', 2);
@@ -2057,7 +2064,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
 
   // Built BUILD_DISTANCE away, past interact reach - one more short walk.
   await walkOntoSpot(page, campfire.x, campfire.z);
-  await expect(page.locator('.hud-hint')).toContainText('Press E to light the campfire');
+  await expect(page.locator('.hud-hint')).toContainText('Add a log to light the fire');
 
   await page.keyboard.press('KeyE');
   await expect.poll(async () => (await campfireNow())?.lit).toBe(true);

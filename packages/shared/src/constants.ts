@@ -251,8 +251,7 @@ export const FENCE_JOIN_TOLERANCE = 0.08;
 /**
  * Campfires.
  *
- * Atmosphere only for now - no warmth stat, no fuel cost to light one. It
- * burns down on its own; a player can also put it out early by hand.
+ * Each fuel log burns for ten real minutes. Extinguishing saves unused fuel.
  */
 export const CAMPFIRE_BURN_SECONDS = 10 * 60;
 
