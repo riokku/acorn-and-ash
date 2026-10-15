@@ -1,4 +1,4 @@
-import type { ExpeditionRequest } from '@acorn/shared';
+import type { FireRequest, ExpeditionRequest } from '@acorn/shared';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -40,6 +40,7 @@ export function mountHud(
     onCraftTab: (tab: CraftTabId) => void;
     onPickCraft: (action: CraftAction) => void;
     onExpedition?: (request: ExpeditionRequest) => void;
+    onFire?: (request: FireRequest) => void;
     onGarden?: (request: GardenRequest) => void;
     onToggleDecorations?: () => void;
     onMoveDecoration?: (id: number) => void;
@@ -80,6 +81,7 @@ export function mountHud(
         onJournalTabChange={journalActions?.onTabChange}
         onCraftTabChange={journalActions?.onCraftTab}
         onPickCraft={journalActions?.onPickCraft}
+        onFire={journalActions?.onFire}
         onGardenUse={journalActions?.onGarden}
         onExpedition={journalActions?.onExpedition}
         onToggleDecorations={journalActions?.onToggleDecorations}

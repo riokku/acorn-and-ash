@@ -173,6 +173,7 @@ describe('deleting a character', () => {
     function pressEAt(sim: WorldSimulation, id: number): void {
       const fire = builtIn(sim, id)!;
       sim.addPlayer(2, undefined, 'visitor');
+      sim.inventoryOf(2).log = 1;
       sim.placePlayer(2, { x: fire.x, y: 0, z: fire.z }, 0);
       sim.queueInput(2, createInput(1, 0, 0, 0, PlayerButton.Interact));
       sim.step(tickClock());

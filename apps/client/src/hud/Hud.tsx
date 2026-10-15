@@ -1,3 +1,5 @@
+import { FirePanel } from './FirePanel';
+import type { FireRequest } from '@acorn/shared';
 import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { WarmthBar } from './WarmthBar';
 
@@ -76,6 +78,7 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
+  readonly onFire?: (request: FireRequest) => void;
   readonly onExpedition?: (request: ExpeditionRequest) => void;
   readonly onToggleDecorations?: () => void;
   readonly onMoveDecoration?: (id: number) => void;
@@ -116,6 +119,7 @@ interface HudProps {
 }
 
 export function Hud({
+  onFire,
   onExpedition,
   store,
   onPlay,
@@ -176,6 +180,14 @@ export function Hud({
     <>
       {/* First, so it sits under everything else: it is part of the world, not a panel. */}
       <CombatOverlay feed={combatFeed} />
+      {showingWorld &&
+      !state.inventoryOpen &&
+      !state.characterOpen &&
+      !state.craftMenuOpen &&
+      !state.buildMenuOpen &&
+      state.firePanel ? (
+        <FirePanel fire={state.firePanel} state={state} onRequest={onFire} />
+      ) : null}
       <div
         className="hud-panel"
         data-world-ready={state.ready && state.playing}
@@ -1014,7 +1026,10 @@ export function hint(state: HudState): string {
     return 'Press E to sketch the elk · give it room to settle';
   if (state.nearbyDiscovery !== null)
     return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
-  if (state.nearCampfire === 'unlit') return 'Press E to light the campfire';
+  if (state.nearCampfire === 'unlit')
+    return state.firePanel?.remainingMs === 0
+      ? 'Add a log to light the fire · E or use the fuel meter'
+      : 'Press E to light the campfire';
   if (state.nearGarden) return 'Click a garden box, or open Garden in the C journal';
   if (state.nearWorkbench) return 'Cabin workbench · C to refine your tools';
   if (state.nearCampfire === 'lit')

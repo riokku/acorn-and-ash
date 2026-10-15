@@ -29,6 +29,7 @@ export interface HomeInterior {
   readonly chest: THREE.Group;
   readonly garden: THREE.Group;
   setGardenPlots(plots: readonly GardenPlot[]): void;
+  setFireLit(lit: boolean): void;
   setChestOpen(open: boolean): void;
   /** Cut down whichever walls the camera, at this spot in the room's own coordinates, is looking in through. */
   cutAway(cameraX: number, cameraZ: number): void;
@@ -541,6 +542,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   if (!canvasHome) group.add(fireGlow.anchor);
   disposers.push(() => fireGlow.dispose());
   let flameMixer: THREE.AnimationMixer | null = null;
+  let hearthFlame: THREE.Object3D | null = null;
   const flameTemplate = flameModelTemplate();
   if (!canvasHome && flameTemplate !== undefined) {
     const flame = instantiateAnimatedModel(flameTemplate);
@@ -548,6 +550,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     flame.root.scale.setScalar(0.7);
     for (const action of flame.actions) action.play();
     flameMixer = flame.mixer;
+    hearthFlame = flame.root;
     group.add(flame.root);
   }
 
@@ -918,6 +921,11 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     chest,
     garden: facilities.garden,
     setGardenPlots: facilities.setGardenPlots,
+    setFireLit(lit) {
+      if (hearthFlame) hearthFlame.visible = lit;
+      fireGlow.anchor.visible = lit && !canvasHome;
+      facilities.setFireLit(lit);
+    },
     setChestOpen(open) {
       chestOpen = open;
     },

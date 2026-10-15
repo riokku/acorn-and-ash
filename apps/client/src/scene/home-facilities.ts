@@ -7,6 +7,10 @@ import { createForageModel } from './forest-food';
 /** Tier facilities use the same room coordinates as authoritative reach checks. */
 export function createHomeFacilities(kind: HomeKind) {
   const builder = new ModelBuilder();
+  const cookingFlameMaterial = plainMaterial(0xff9e47, {
+    emissive: 0xe85c24,
+    emissiveIntensity: 0.8,
+  });
   const wood = paintedMaterial('wood', { tint: 0xd2b08a, roughness: 0.9 });
   const metal = plainMaterial(0x484c47, { roughness: 0.55 });
   const stone = paintedMaterial('stone', { tint: 0xaab79b, roughness: 1 });
@@ -28,11 +32,7 @@ export function createHomeFacilities(kind: HomeKind) {
     );
     const handle = new THREE.TorusGeometry(0.2, 0.015, 5, 12, Math.PI);
     builder.add(metal, handle, placed(x, 0.38, z));
-    builder.add(
-      plainMaterial(0xff9e47, { emissive: 0xe85c24, emissiveIntensity: 0.8 }),
-      new THREE.ConeGeometry(0.09, 0.17, 5),
-      placed(x, 0.1, z),
-    );
+    builder.add(cookingFlameMaterial, new THREE.ConeGeometry(0.09, 0.17, 5), placed(x, 0.1, z));
   }
   if (homeHasFacility(kind, 'workbench')) {
     const { x, z } = HOME_FACILITIES.workbench;
@@ -116,6 +116,12 @@ export function createHomeFacilities(kind: HomeKind) {
   return {
     group: model.group,
     garden,
+    setFireLit(lit: boolean) {
+      model.group.traverse((part) => {
+        if (part instanceof THREE.Mesh && part.material === cookingFlameMaterial)
+          part.visible = lit;
+      });
+    },
     setGardenPlots(plots: readonly GardenPlot[]) {
       plants.forEach((plant, index) => {
         const plot = plots[index];

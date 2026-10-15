@@ -1,11 +1,10 @@
 import type { WarmthView } from '@acorn/shared';
 export function warmthExplanation(warmth: WarmthView): string {
   if (warmth.heat === 'fire') return 'Warming by the campfire';
-  if (warmth.heat === 'indoors') return 'Sheltered indoors';
+  if (warmth.heat === 'indoors') return 'Warming by the indoor fire';
   if (warmth.status === 'freezing')
-    return `Freezing — health loss in ${warmth.secondsToDamage ?? 0}s. Find a lit campfire, shelter or warmer gear.`;
-  if (warmth.status === 'cold')
-    return 'Getting cold — find a lit campfire, shelter or warmer gear.';
+    return `Freezing — health loss in ${warmth.secondsToDamage ?? 0}s. Find a lit fire or warmer gear.`;
+  if (warmth.status === 'cold') return 'Getting cold — find a lit fire or warmer gear.';
   if (warmth.status === 'cooling')
     return 'Cooling — warm clothing helps. Winter needs 60 Warmth; blizzards need 80.';
   if (warmth.status === 'warming') return 'Warming up';

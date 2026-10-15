@@ -1,3 +1,4 @@
+import { encodeFireFuel } from '@acorn/shared';
 import {
   EMPTY_CATALOG,
   catalogBonuses,
@@ -360,6 +361,7 @@ export class World extends DurableObject<WorldEnv> {
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
     server.send(encodeWildfire(simulation.wildfireView()));
+    server.send(encodeFireFuel(simulation.fireFuelViews(Date.now())));
     // The tunnels and pits dug so far, before this player first moves.
     server.send(encodeDug(simulation.digsList(), true));
     server.send(encodeSupports(simulation.supportsList(), true));
@@ -561,6 +563,13 @@ export class World extends DurableObject<WorldEnv> {
         this.broadcast(encodeDecorationState(result));
       } else this.trySend(ws, encodeDecorationState(result));
       this.trySend(ws, encodeDecorationReply(decoded, result.reason));
+      return;
+    }
+    if (decoded.type === 'fire') {
+      simulation.requestFire(attachment.netId, decoded, Date.now());
+      this.announceCampfireLighting(simulation, Date.now());
+      this.announceEquipped(simulation);
+      this.trySend(ws, encodeFireFuel(simulation.fireFuelViews(Date.now())));
       return;
     }
     if (decoded.type === 'garden') {
@@ -1506,12 +1515,32 @@ export class World extends DurableObject<WorldEnv> {
    */
   private announceCampfireLighting(simulation: WorldSimulation, nowMs: number): void {
     const events = simulation.extinguishBurnedOutCampfires(nowMs);
-    if (events.length === 0) return;
-
-    this.broadcastBuiltProps(simulation);
-    for (const event of events) {
-      this.writeCampfireLitState(event.propId, simulation.campfireLitUntilMsFor(event.propId));
+    const changedPlayers = new Set(
+      events.flatMap((event) => (event.netId === undefined ? [] : [event.netId])),
+    );
+    if (events.length > 0) {
+      this.ctx.storage.transactionSync(() => {
+        for (const event of events)
+          this.writeCampfireLitState(
+            event.propId,
+            simulation.campfireLitUntilMsFor(event.propId),
+            simulation.fireFuelMsFor(event.propId),
+            simulation.builtPropsList().find((prop) => prop.id === event.propId)?.storedLogs ?? 0,
+          );
+        for (const ws of this.ctx.getWebSockets()) {
+          const attachment = this.attachmentFor(ws);
+          if (attachment && changedPlayers.has(attachment.netId))
+            this.savePlayer(simulation, attachment);
+        }
+      });
+      this.broadcastBuiltProps(simulation);
+      this.sendPacks(simulation, changedPlayers);
     }
+    if (
+      events.length > 0 ||
+      (simulation.tick % TICK_HZ === 0 && simulation.fireFuelViews(nowMs).some((fire) => fire.lit))
+    )
+      this.broadcast(encodeFireFuel(simulation.fireFuelViews(nowMs)));
   }
 
   /**
@@ -2151,6 +2180,8 @@ export class World extends DurableObject<WorldEnv> {
     // means unlit - true of everything built before this existed, which is
     // exactly right, and of every non-campfire kind, forever.
     this.addColumn('built_props', 'lit_until_ms', 'INTEGER');
+    this.addColumn('built_props', 'fuel_ms', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('built_props', 'stored_logs', 'INTEGER NOT NULL DEFAULT 0');
     // Which way a piece was turned when placed. Null for everything built
     // before pieces could be turned, which all faced the same way - zero.
     this.addColumn('built_props', 'yaw', 'REAL');
@@ -2528,11 +2559,13 @@ export class World extends DurableObject<WorldEnv> {
   private loadBuiltProps(): (BuiltProp & {
     readonly ownerKey: string | null;
     readonly litUntilMs: number | null;
+    readonly fuelMs: number;
     readonly expiresAtMs: number | null;
   })[] {
     const props: (BuiltProp & {
       readonly ownerKey: string | null;
       readonly litUntilMs: number | null;
+      readonly fuelMs: number;
       readonly expiresAtMs: number | null;
     })[] = [];
     const rows = this.ctx.storage.sql
@@ -2543,11 +2576,13 @@ export class World extends DurableObject<WorldEnv> {
         z: number;
         owner_key: string | null;
         lit_until_ms: number | null;
+        fuel_ms: number;
+        stored_logs: number;
         yaw: number | null;
         locked: number;
         expires_at_ms: number | null;
       }>(
-        'SELECT id, kind_index, x, z, owner_key, lit_until_ms, yaw, locked, expires_at_ms FROM built_props',
+        'SELECT id, kind_index, x, z, owner_key, lit_until_ms, fuel_ms, stored_logs, yaw, locked, expires_at_ms FROM built_props',
       )
       .toArray();
     for (const row of rows) {
@@ -2569,6 +2604,8 @@ export class World extends DurableObject<WorldEnv> {
         locked: row.locked !== 0,
         ownerKey: row.owner_key,
         litUntilMs: row.lit_until_ms,
+        fuelMs: row.fuel_ms,
+        storedLogs: row.stored_logs,
         expiresAtMs: row.expires_at_ms,
       });
     }
@@ -2601,10 +2638,17 @@ export class World extends DurableObject<WorldEnv> {
     );
   }
 
-  private writeCampfireLitState(propId: number, litUntilMs: number | null): void {
+  private writeCampfireLitState(
+    propId: number,
+    litUntilMs: number | null,
+    fuelMs = 0,
+    storedLogs = 0,
+  ): void {
     this.ctx.storage.sql.exec(
-      'UPDATE built_props SET lit_until_ms = ? WHERE id = ?',
+      'UPDATE built_props SET lit_until_ms = ?, fuel_ms = ?, stored_logs = ? WHERE id = ?',
       litUntilMs,
+      fuelMs,
+      storedLogs,
       propId,
     );
   }
@@ -3026,6 +3070,13 @@ export class World extends DurableObject<WorldEnv> {
 
   /** Write everything worth keeping: the tick count and where everyone is. */
   private save(simulation: WorldSimulation): void {
+    for (const fire of simulation.fireFuelViews(Date.now()))
+      this.writeCampfireLitState(
+        fire.propId,
+        simulation.campfireLitUntilMsFor(fire.propId),
+        simulation.fireFuelMsFor(fire.propId),
+        fire.storedLogs,
+      );
     for (const garden of simulation.savedGardens()) this.writeGarden(garden);
     this.writeMeta('tick', String(simulation.tick));
     this.writeMeta('wildfire', simulation.wildfire.save());

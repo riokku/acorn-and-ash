@@ -132,7 +132,6 @@ import {
   PLAYER_RADIUS,
   PLAYABLE_HALF_EXTENT,
   BUILD_REACH_SLACK,
-  CAMPFIRE_BURN_SECONDS,
   GATHER_PATCH_MAX_COUNT,
   HEALTH_MAX,
   HUNGER_EMPTY_AFTER_SECONDS,
@@ -197,7 +196,7 @@ import {
 } from '../world/clearing';
 import type { GatherSpot } from '../world/clearing';
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
-import { homeFacilityInReach } from '../data/home-facilities';
+import { homeFacilityInReach, homeHasFacility } from '../data/home-facilities';
 import { toolKind } from '../data/items';
 import { canWearIn, isWeapon, type GearSlot, type WornGear } from '../data/gear';
 import {
@@ -358,6 +357,15 @@ import {
 } from './fishing';
 import { drainHunger, eat, foodToEat, hungerDrainPerSecond } from './hunger';
 import { cookOne, cookedItemFor } from './cooking';
+import {
+  logStorageCapacity,
+  logStorageSpot,
+  FIRE_LOG_MS,
+  FIRE_CAPACITY_MS,
+  remainingFireFuel,
+  type FireRequest,
+  type FireFuelView,
+} from './fire-fuel';
 import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
 import {
   PlayerButton,
@@ -655,12 +663,10 @@ export interface BuiltProp {
    */
   yaw: number;
   /**
-   * Only meaningful for a campfire - always false for every other kind.
-   * Atmosphere only: it burns down on its own after `CAMPFIRE_BURN_SECONDS`,
-   * or a player can put it out early by hand. Mutable, unlike the fields
-   * above: a campfire's identity never changes once built, but this does.
+   * Whether a campfire or a home's cooking fire is burning its stored fuel.
    */
   lit: boolean;
+  storedLogs?: number;
   /**
    * For a home: whether its owner has locked the door to visitors (see
    * decision 0055). Absent, like false, for anything built before doors could
@@ -706,6 +712,7 @@ export interface SpaceChange {
 export interface CampfireLitEvent {
   readonly propId: number;
   readonly lit: boolean;
+  readonly netId?: number;
 }
 
 /**
@@ -1290,6 +1297,7 @@ export class WorldSimulation {
         const prop = this.builtPropsById.get(target.id);
         if (!prop) continue;
         const stacks = [...(this.homeChests.get(prop.id) ?? [])];
+        if (prop.storedLogs) stacks.push({ item: 'log', count: prop.storedLogs });
         this.removeAbandonedBuild(prop);
         for (const [index, stack] of stacks.entries()) {
           if (!stack) continue;
@@ -1519,6 +1527,7 @@ export class WorldSimulation {
   private addHomeSolid(prop: BuiltProp): void {
     const solid = cabinCollider(prop, this.collision.terrain.heightAt(prop.x, prop.z));
     this.homeSolids.set(prop.id, solid);
+    this.updatePlacedSolid(prop);
     this.collision.colliders.push(solid);
   }
   private removePlacedSolid(id: number): void {
@@ -1532,7 +1541,8 @@ export class WorldSimulation {
   }
   private updatePlacedSolid(prop: BuiltProp): void {
     this.removePlacedSolid(prop.id);
-    const solids = placedPropColliders(prop, this.collision.terrain.heightAt(prop.x, prop.z));
+    const ground = logStorageCapacity(prop.kind) > 0 ? logStorageSpot(prop) : prop;
+    const solids = placedPropColliders(prop, this.collision.terrain.heightAt(ground.x, ground.z));
     if (solids.length === 0) return;
     this.placedSolids.set(prop.id, solids);
     this.collision.colliders.push(...solids);
@@ -1649,6 +1659,7 @@ export class WorldSimulation {
   private lakeFreezeChange: boolean | null = null;
   /** When each currently-lit campfire should go out on its own, by prop id. Absent while unlit. */
   private readonly campfireLitUntilMs = new Map<number, number>();
+  private readonly fireFuelMs = new Map<number, number>();
   private readonly campfireLitEvents: CampfireLitEvent[] = [];
   /** Built-prop id -> whoever it belongs to, for anything capped per player. */
   private readonly ownedBuiltProps = new Map<number, string>();
@@ -3705,7 +3716,7 @@ export class WorldSimulation {
     // full pack never turns "cook this" into the surprising act of putting
     // the fire out.
     const held = this.equippedItemOf(runtime.netId);
-    if (campfire.lit && held !== null && cookedItemFor(held) !== null) {
+    if (this.fireIsLit(campfire.id, nowMs) && held !== null && cookedItemFor(held) !== null) {
       const cooked = cookOne(runtime.inventory, held);
       if (cooked !== null) {
         this.cookingEvents.push({ netId: runtime.netId, raw: held, cooked });
@@ -3717,14 +3728,123 @@ export class WorldSimulation {
       return true;
     }
 
-    campfire.lit = !campfire.lit;
-    if (campfire.lit) {
-      this.campfireLitUntilMs.set(campfire.id, nowMs + CAMPFIRE_BURN_SECONDS * 1000);
-    } else {
-      this.campfireLitUntilMs.delete(campfire.id);
+    this.requestFire(runtime.netId, { propId: campfire.id, action: 'toggle' }, nowMs);
+    return true;
+  }
+
+  /** Only cooking fires accept fuel; a tent has no hearth. */
+  private hasFuelFire(prop: BuiltProp): boolean {
+    return (
+      prop.kind === 'campfire' || (isHomeKind(prop.kind) && homeHasFacility(prop.kind, 'cooking'))
+    );
+  }
+
+  fireFuelRemainingMs(propId: number, nowMs = this.nowMs): number {
+    const prop = this.builtPropsById.get(propId);
+    if (!prop || !this.hasFuelFire(prop)) return 0;
+    return remainingFireFuel(
+      prop.lit ? (this.campfireLitUntilMs.get(propId) ?? null) : null,
+      this.fireFuelMs.get(propId) ?? 0,
+      nowMs,
+    );
+  }
+
+  fireFuelMsFor(propId: number): number {
+    return this.fireFuelMs.get(propId) ?? 0;
+  }
+
+  fireIsLit(propId: number, nowMs = this.nowMs): boolean {
+    return (
+      this.builtPropsById.get(propId)?.lit === true && this.fireFuelRemainingMs(propId, nowMs) > 0
+    );
+  }
+
+  fireFuelViews(nowMs = this.nowMs): FireFuelView[] {
+    return this.builtProps
+      .filter((prop) => this.hasFuelFire(prop))
+      .map((prop) => ({
+        propId: prop.id,
+        lit: this.fireIsLit(prop.id, nowMs),
+        remainingMs: this.fireFuelRemainingMs(prop.id, nowMs),
+        storedLogs: prop.storedLogs ?? 0,
+      }));
+  }
+
+  /** All fuel and reach checks run on the server, including ordinary E presses. */
+  requestFire(netId: number, request: FireRequest, nowMs = this.nowMs): boolean {
+    const runtime = this.players.get(netId),
+      prop = this.builtPropsById.get(request.propId);
+    const position = runtime?.entity.get(Position);
+    if (
+      !runtime ||
+      !position ||
+      !prop ||
+      !this.hasFuelFire(prop) ||
+      this.builtPropOwner(prop.id) === ABANDONED_OWNER ||
+      runtime.health <= 0 ||
+      !isFreeToInteract(runtime.action) ||
+      runtime.cast !== null
+    )
+      return false;
+    if (request.action === 'storeLogs' || request.action === 'takeLogs') {
+      const capacity = logStorageCapacity(prop.kind),
+        spot = logStorageSpot(prop);
+      const amount = request.amount ?? 1;
+      if (
+        capacity === 0 ||
+        runtime.space !== OUTDOORS ||
+        runtime.playerKey === null ||
+        this.builtPropOwner(prop.id) !== runtime.playerKey ||
+        Math.hypot(position.x - spot.x, position.z - spot.z) > 2 ||
+        Math.abs(position.y - this.collision.terrain.heightAt(spot.x, spot.z)) > 2.5 ||
+        !Number.isInteger(amount) ||
+        amount < 1 ||
+        amount > 50
+      )
+        return false;
+      const stored = prop.storedLogs ?? 0;
+      const moved =
+        request.action === 'storeLogs'
+          ? Math.min(amount, capacity - stored, countOf(runtime.inventory, 'log'))
+          : Math.min(amount, stored, roomFor(runtime.inventory, 'log'));
+      if (moved <= 0) return false;
+      if (request.action === 'storeLogs') removeItem(runtime.inventory, 'log', moved);
+      else addItem(runtime.inventory, 'log', moved);
+      prop.storedLogs = stored + (request.action === 'storeLogs' ? moved : -moved);
+      this.updatePlacedSolid(prop);
+      this.campfireLitEvents.push({ propId: prop.id, lit: prop.lit, netId });
+      this.equipEvents.push(netId);
+      this.gestureEvents.push({ netId, gesture: Gesture.Reach, item: 'log' });
+      return true;
     }
-    this.campfireLitEvents.push({ propId: campfire.id, lit: campfire.lit });
-    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: null });
+    if (runtime.space === OUTDOORS) {
+      if (
+        prop.kind !== 'campfire' ||
+        nearestCampfire(position, [prop]) === null ||
+        Math.abs(position.y - this.collision.terrain.heightAt(prop.x, prop.z)) > 2.5
+      )
+        return false;
+    } else if (
+      runtime.space !== prop.id ||
+      !isHomeKind(prop.kind) ||
+      !homeFacilityInReach(prop.kind, 'cooking', position)
+    )
+      return false;
+    let remaining = this.fireFuelRemainingMs(prop.id, nowMs);
+    const addLog = request.action === 'addLog' || (request.action === 'toggle' && remaining === 0);
+    if (addLog) {
+      if (remaining + FIRE_LOG_MS > FIRE_CAPACITY_MS || !hasItem(runtime.inventory, 'log'))
+        return false;
+      removeItem(runtime.inventory, 'log', 1);
+      remaining += FIRE_LOG_MS;
+      prop.lit = true;
+      this.equipEvents.push(netId);
+    } else prop.lit = !this.fireIsLit(prop.id, nowMs);
+    this.fireFuelMs.set(prop.id, remaining);
+    if (prop.lit) this.campfireLitUntilMs.set(prop.id, nowMs + remaining);
+    else this.campfireLitUntilMs.delete(prop.id);
+    this.campfireLitEvents.push({ propId: prop.id, lit: prop.lit, netId });
+    this.gestureEvents.push({ netId, gesture: Gesture.Reach, item: addLog ? 'log' : null });
     return true;
   }
 
@@ -3743,6 +3863,7 @@ export class WorldSimulation {
 
       campfire.lit = false;
       this.campfireLitUntilMs.delete(propId);
+      this.fireFuelMs.set(propId, 0);
       this.campfireLitEvents.push({ propId, lit: false });
     }
     return this.campfireLitEvents.splice(0);
@@ -4478,6 +4599,7 @@ export class WorldSimulation {
     this.ownedBuiltProps.delete(prop.id);
     this.abandonedUntilMs.delete(prop.id);
     this.campfireLitUntilMs.delete(prop.id);
+    this.fireFuelMs.delete(prop.id);
     this.boatChanges.delete(prop.id);
   }
 
@@ -5459,11 +5581,12 @@ export class WorldSimulation {
       BuiltProp & {
         readonly ownerKey: string | null;
         readonly litUntilMs: number | null;
+        readonly fuelMs?: number;
         readonly expiresAtMs?: number | null;
       }
     >,
   ): void {
-    for (const { ownerKey, litUntilMs, expiresAtMs, ...prop } of props) {
+    for (const { ownerKey, litUntilMs, fuelMs, expiresAtMs, ...prop } of props) {
       this.builtProps.push(prop);
       this.builtPropsById.set(prop.id, prop);
       if (BUILDABLE_KINDS[prop.kind].isHome) this.addHomeSolid(prop);
@@ -5471,6 +5594,14 @@ export class WorldSimulation {
       this.nextBuiltPropId = Math.max(this.nextBuiltPropId, prop.id + 1);
       if (ownerKey !== null) this.ownedBuiltProps.set(prop.id, ownerKey);
       if (litUntilMs !== null) this.campfireLitUntilMs.set(prop.id, litUntilMs);
+      if (prop.storedLogs !== undefined)
+        prop.storedLogs = Math.max(
+          0,
+          Math.min(logStorageCapacity(prop.kind), Math.floor(prop.storedLogs) || 0),
+        );
+      this.updatePlacedSolid(prop);
+      if (fuelMs !== undefined && Number.isFinite(fuelMs))
+        this.fireFuelMs.set(prop.id, Math.max(0, Math.min(FIRE_CAPACITY_MS, fuelMs)));
       if (expiresAtMs !== undefined && expiresAtMs !== null) {
         this.abandonedUntilMs.set(prop.id, expiresAtMs);
         prop.locked = true;
@@ -5609,10 +5740,11 @@ export class WorldSimulation {
   private warmthEnvironment(runtime: PlayerRuntime): WarmthEnvironment {
     const calendar = this.calendar();
     const position = runtime.entity.get(Position);
-    let heat: WarmthEnvironment['heat'] = runtime.space !== OUTDOORS ? 'indoors' : null;
-    if (heat === null && position !== undefined) {
+    let heat: WarmthEnvironment['heat'] =
+      runtime.space !== OUTDOORS && this.fireIsLit(runtime.space) ? 'indoors' : null;
+    if (runtime.space === OUTDOORS && position !== undefined) {
       for (const prop of this.builtProps) {
-        if (prop.kind !== 'campfire' || !prop.lit) continue;
+        if (prop.kind !== 'campfire' || !this.fireIsLit(prop.id)) continue;
         const expires = this.campfireLitUntilMs.get(prop.id);
         if (expires !== undefined && expires <= this.nowMs) continue;
         if (
@@ -5626,7 +5758,7 @@ export class WorldSimulation {
     }
     return {
       winter: calendar.season === 'winter',
-      blizzard: this.weather().kind === 'blizzard',
+      blizzard: runtime.space === OUTDOORS && this.weather().kind === 'blizzard',
       insulation: characterStats(runtime.worn, undefined, this.equipmentBonuses).warmth,
       heat,
     };
@@ -6142,8 +6274,12 @@ export class WorldSimulation {
       position = runtime?.entity.get(Position);
     if (runtime === undefined || position === undefined) return false;
     if (runtime.space !== OUTDOORS)
-      return homeFacilityInReach(this.kindOfHome(runtime.space), 'cooking', position);
-    return nearestCampfire(position, this.builtProps)?.lit === true;
+      return (
+        this.fireIsLit(runtime.space) &&
+        homeFacilityInReach(this.kindOfHome(runtime.space), 'cooking', position)
+      );
+    const fire = nearestCampfire(position, this.builtProps);
+    return fire !== null && this.fireIsLit(fire.id);
   }
 
   nearWorkbenchOf(netId: number): boolean {
@@ -6165,14 +6301,14 @@ export class WorldSimulation {
     if (!homeFacilityInReach(this.kindOfHome(runtime.space), 'cooking', position)) return false;
     if (!fresh) return true;
     const held = this.equippedItemOf(runtime.netId);
-    if (held !== null && cookedItemFor(held) !== null) {
+    if (this.fireIsLit(runtime.space) && held !== null && cookedItemFor(held) !== null) {
       const cooked = cookOne(runtime.inventory, held);
       if (cooked !== null) {
         this.cookingEvents.push({ netId: runtime.netId, raw: held, cooked });
         this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Reach, item: held });
         this.equipEvents.push(runtime.netId);
       }
-    }
+    } else this.requestFire(runtime.netId, { propId: runtime.space, action: 'toggle' });
     return true;
   }
 

@@ -236,13 +236,46 @@ function createRocksModel(item: 'stone' | 'ironOre'): GroundModel {
 }
 
 /** Short bark-covered lengths with visible growth rings, lying on the grass. */
-function createLogsModel(): GroundModel {
+export function createLogsModel(capacity = 5, stacked = false): GroundModel {
   const group = new THREE.Group();
   const geometry = new THREE.CylinderGeometry(0.14, 0.17, 0.8, 9).rotateZ(Math.PI / 2);
   const bark = paintedMaterial('bark', { roughness: 1 });
   const end = paintedMaterial('logEnd', { roughness: 0.95 });
+  if (stacked) {
+    // A full wood store still uses one instanced mesh rather than fifty draws.
+    const stack = new THREE.InstancedMesh(geometry, [bark, end, end], capacity);
+    const columns = capacity > 20 ? 10 : 5;
+    const matrix = new THREE.Matrix4();
+    for (let index = 0; index < capacity; index++) {
+      matrix.makeTranslation(
+        0,
+        0.17 + Math.floor(index / columns) * 0.26,
+        ((index % columns) - (columns - 1) / 2) * 0.28,
+      );
+      stack.setMatrixAt(index, matrix);
+    }
+    stack.instanceMatrix.needsUpdate = true;
+    // Keep bounds valid when an empty pile later fills or gains another row.
+    stack.computeBoundingBox();
+    stack.computeBoundingSphere();
+    stack.castShadow = true;
+    stack.receiveShadow = true;
+    group.add(stack);
+    return {
+      item: 'log',
+      group,
+      show(count) {
+        stack.count = Math.max(0, Math.min(capacity, Math.floor(count)));
+        group.visible = stack.count > 0;
+      },
+      dispose() {
+        stack.dispose();
+        geometry.dispose();
+      },
+    };
+  }
   const logs: THREE.Mesh[] = [];
-  for (let index = 0; index < 5; index++) {
+  for (let index = 0; index < capacity; index++) {
     const log = new THREE.Mesh(geometry, [bark, end, end]);
     log.position.set((index % 2) * 0.14, 0.16 + Math.floor(index / 3) * 0.24, (index % 3) * 0.25);
     log.rotation.y = index * 0.16;

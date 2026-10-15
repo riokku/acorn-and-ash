@@ -23,6 +23,7 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
     items: [
       { item: 'bag', count: 1 },
       { item: 'winterJacket', count: 1 },
+      { item: 'log', count: 1 },
     ],
     warmth: { value: 20, coldTicks: 0 },
   });
@@ -31,6 +32,7 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
   page.on('pageerror', (error) => errors.push(error.message));
   let refresh = () => {};
   let sendWorld = (_data: ArrayBuffer) => {};
+  let simulationTime = 1000;
   await page.route('https://fonts.googleapis.com/**', (route) =>
     route.fulfill({ body: '', contentType: 'text/css' }),
   );
@@ -41,6 +43,8 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
       send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
       send(shared.encodeWorn(sim.wornList()));
       send(shared.encodeEquipped(sim.equippedList()));
+      send(shared.encodeBuiltProps(sim.builtPropsList()));
+      send(shared.encodeFireFuel(sim.fireFuelViews(simulationTime)));
       send(shared.encodeWarmth(sim.warmthOf(1)));
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
@@ -57,7 +61,7 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
         if (request.action === 'wear') sim.wearGear(1, request.item, request.slot);
         if (request.action === 'takeOff') sim.takeOffGear(1, request.slot);
         if (request.action === 'swap') sim.swapGear(1, request.from, request.to);
-        sim.step(1000);
+        sim.step(simulationTime);
         refresh();
       }
     });
@@ -93,14 +97,27 @@ test('explains winter cold, equips a jacket and recovers warmth by a lit fire', 
         x: 3,
         z: 0,
         yaw: 0,
-        lit: true,
+        lit: false,
         ownerKey: null,
         litUntilMs: null,
       },
     ]);
-    sim.step(1100);
+    // Fuel the fire through the same validated action as a player, then stand
+    // within its warmth radius (outside the shorter refueling reach).
+    sim.placePlayer(1, { x: 1.6, y: 0, z: 0 }, 0);
+    expect(sim.requestFire(1, { propId: 500, action: 'addLog' }, simulationTime)).toBe(true);
+    expect(shared.countOf(sim.inventoryOf(1), 'log')).toBe(0);
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+    simulationTime += 100;
+    sim.step(simulationTime);
     refresh();
     await expect(meter).toContainText('Warming by the campfire');
+    simulationTime += shared.FIRE_LOG_MS;
+    sim.extinguishBurnedOutCampfires(simulationTime);
+    sim.step(simulationTime);
+    refresh();
+    await expect(meter).toHaveAttribute('data-status', 'cold');
+    await expect(meter).not.toContainText('Warming by the campfire');
     sendWorld(
       shared.encodeWarmth({ value: 0, status: 'freezing', heat: null, secondsToDamage: 12 }),
     );

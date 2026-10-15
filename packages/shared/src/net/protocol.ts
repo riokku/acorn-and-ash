@@ -1,3 +1,4 @@
+import { FIRE_CAPACITY_MS, type FireRequest, type FireFuelView } from '../sim/fire-fuel';
 import { parsePublishedCatalog, type PublishedCatalog } from '../data/item-catalog';
 import { displayedHealth } from '../sim/health';
 import { WARMTH_STATUSES, type WarmthView } from '../sim/warmth';
@@ -606,11 +607,53 @@ export function encodeHello(
  * Returns `null` for anything malformed. The server never trusts the contents:
  * the caller still clamps and validates whatever comes back.
  */
+export function encodeFireRequest(request: FireRequest): ArrayBuffer {
+  const buffer = new ArrayBuffer(5),
+    view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.Fire);
+  view.setUint16(1, request.propId, true);
+  view.setUint8(3, ['addLog', 'toggle', 'storeLogs', 'takeLogs'].indexOf(request.action));
+  view.setUint8(
+    4,
+    request.action === 'storeLogs' || request.action === 'takeLogs' ? (request.amount ?? 1) : 0,
+  );
+  return buffer;
+}
+
+export function encodeFireFuel(fires: readonly FireFuelView[]): ArrayBuffer {
+  const visible = fires.slice(-MAX_BUILT_PROPS);
+  const buffer = new ArrayBuffer(2 + visible.length * 8),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.FireFuel);
+  view.setUint8(1, visible.length);
+  visible.forEach((fire, index) => {
+    const at = 2 + index * 8;
+    view.setUint16(at, fire.propId, true);
+    view.setUint32(at + 2, Math.ceil(fire.remainingMs), true);
+    view.setUint8(at + 6, fire.lit ? 1 : 0);
+    view.setUint8(at + 7, fire.storedLogs);
+  });
+  return buffer;
+}
+
 export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
   if (data.byteLength < 1) return null;
   const view = new DataView(data);
   const type = view.getUint8(0);
 
+  if (type === ClientMessageType.Fire) {
+    if (data.byteLength !== 5 || view.getUint16(1, true) === 0 || view.getUint8(3) > 3) return null;
+    const action = (['addLog', 'toggle', 'storeLogs', 'takeLogs'] as const)[view.getUint8(3)]!;
+    const amount = view.getUint8(4),
+      storage = action === 'storeLogs' || action === 'takeLogs';
+    if (storage ? amount < 1 || amount > 50 : amount !== 0) return null;
+    return {
+      type: 'fire',
+      propId: view.getUint16(1, true),
+      action,
+      ...(storage ? { amount } : {}),
+    };
+  }
   if (type === ClientMessageType.Gear) return decodeGear(data, view);
   if (type === ClientMessageType.Expedition) {
     if (data.byteLength < 2) return null;
@@ -1730,6 +1773,31 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
   const type = view.getUint8(0);
 
   switch (type) {
+    case ServerMessageType.FireFuel: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (data.byteLength !== 2 + count * 8) return null;
+      const fires: FireFuelView[] = [],
+        ids = new Set<number>();
+      for (let index = 0; index < count; index++) {
+        const at = 2 + index * 8,
+          propId = view.getUint16(at, true),
+          remainingMs = view.getUint32(at + 2, true),
+          lit = view.getUint8(at + 6);
+        if (
+          propId === 0 ||
+          ids.has(propId) ||
+          remainingMs > FIRE_CAPACITY_MS ||
+          lit > 1 ||
+          view.getUint8(at + 7) > 50 ||
+          (lit === 1 && remainingMs === 0)
+        )
+          return null;
+        ids.add(propId);
+        fires.push({ propId, remainingMs, lit: lit === 1, storedLogs: view.getUint8(at + 7) });
+      }
+      return { type: 'fireFuel', fires };
+    }
     case ServerMessageType.ItemCatalog: {
       if (data.byteLength > 256_001) return null;
       try {

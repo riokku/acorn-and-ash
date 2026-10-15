@@ -6,7 +6,7 @@ import { groundBuildingSupport } from './building-ground';
 
 /** A modest expansion of the established cabin, with a sheltered porch and timber rails. */
 export function createLargeCabin(): Cabin {
-  const cabin = createCabin();
+  const cabin = createCabin(50);
   cabin.group.scale.set(1.2, 1, 1.2);
   const group = new THREE.Group();
   group.name = 'large-cabin';
@@ -49,6 +49,7 @@ export function createLargeCabin(): Cabin {
   );
   return {
     group,
+    setStoredLogs: (count) => cabin.setStoredLogs?.(count),
     groundOn(heightAt) {
       cabin.groundOn?.(heightAt);
       for (const fit of [...groundPosts, ...groundSteps]) fit(heightAt);

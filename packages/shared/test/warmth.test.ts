@@ -201,9 +201,9 @@ describe('authoritative winter warmth', () => {
         x: 12,
         z: 12,
         yaw: 0,
-        lit: false,
+        lit: true,
         ownerKey: 'owner',
-        litUntilMs: null,
+        litUntilMs: 600_000,
       },
     ]);
     sim.addPlayer(

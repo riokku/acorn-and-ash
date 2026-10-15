@@ -4488,19 +4488,20 @@ describe('building', () => {
       const built = sim.drainBuildEvents()[0]?.prop;
       if (built === undefined) throw new Error('test setup failed to build a campfire');
       sim.placePlayer(netId, { x: built.x, y: 0, z: built.z }, FACE_OUT);
+      addItem(sim.inventoryOf(netId), 'log');
       return built;
     }
 
-    it('lights an unlit campfire in reach, at no cost', () => {
+    it('lights an unlit campfire in reach, spending one fuel log', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
-      expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
+      expect(countOf(sim.inventoryOf(1), 'log')).toBe(1);
 
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
 
       expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);
-      // Atmosphere only, per the design: nothing was spent to light it.
+      // The one fuel log supplies ten minutes of flame.
       expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
     });
 
@@ -4662,7 +4663,9 @@ describe('building', () => {
       // Draining the toggle event itself first, the way a real tick would
       // right after it happens - what is left to check below is only the
       // auto-extinguish, on an otherwise-empty event queue.
-      expect(sim.extinguishBurnedOutCampfires(tickClock())).toEqual([{ propId, lit: true }]);
+      expect(sim.extinguishBurnedOutCampfires(tickClock())).toEqual([
+        { propId, lit: true, netId: 1 },
+      ]);
 
       expect(sim.extinguishBurnedOutCampfires(litUntilMs - 1)).toEqual([]);
       expect(sim.builtPropsList().filter((prop) => prop.id !== 60000)[0]?.lit).toBe(true);

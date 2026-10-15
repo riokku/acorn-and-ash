@@ -33,7 +33,19 @@ export interface RaidBanner {
 }
 
 /** Everything the HUD shows. */
+export interface FirePanelState {
+  readonly propId: number;
+  readonly mode: 'fire' | 'storage';
+  readonly lit: boolean;
+  readonly remainingMs: number;
+  readonly storedLogs: number;
+  readonly capacity: number;
+  readonly yours: boolean;
+  readonly x: number;
+  readonly y: number;
+}
 export interface HudState {
+  readonly firePanel?: FirePanelState | null;
   /** Owner-only UI capability returned by the authenticated web session. */
   readonly canEditItems?: boolean;
   readonly decorationPending?: boolean;

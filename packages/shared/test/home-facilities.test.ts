@@ -45,6 +45,10 @@ function atHome(
     scale = homeRoomScale(kind);
   for (const netId of [1, 2])
     sim.placePlayer(netId, { x: spot.x * scale - 0.75, y: 0, z: spot.z * scale }, 0, 7);
+  if (facility === 'cooking' && homeHasFacility(kind, 'cooking')) {
+    sim.inventoryOf(1).log = 1;
+    sim.requestFire(1, { propId: 7, action: 'addLog' }, 0);
+  }
   return sim;
 }
 describe('useful housing facilities', () => {
