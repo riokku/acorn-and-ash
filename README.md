@@ -117,6 +117,10 @@ Starting play shows a Pacific Northwest dawn landscape and “Entering the woods
 while a progress bar follows completed loading stages, including the first drawn
 world frame. A stalled stage keeps its percentage until it finishes. Loading
 errors offer a retry button.
+Signing in indoors also prepares an outdoor frame before showing the room. The
+forest remains loaded around the home while you are inside; door fades wait for
+the destination's first frames to settle, with a quiet loading indicator on slower
+transitions. See [decision 0192](docs/decisions/0192-preparing-home-transitions.md).
 
 Hover world loot to see its name, quantity, and whether you can reach or carry it.
 A short right-click picks that specific item up; a drag still turns the camera.

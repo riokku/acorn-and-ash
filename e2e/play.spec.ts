@@ -11,6 +11,8 @@ import { skipDrawing } from './skip-drawing';
 declare global {
   interface Window {
     acornDebug?: {
+      space(): number;
+      outdoorFocus(): { x: number; z: number };
       selfNetId(): number;
       selectedTargetId(): number | null;
       grassClumps(): number;
