@@ -156,6 +156,40 @@ describe('buried treasure', () => {
     expect(sim.drainTreasureEvents()).toHaveLength(1);
   });
 
+  it('keeps a mound clear of construction without blocking an entire nearby home area', () => {
+    const sim = world();
+    sim.initializeTreasures([{ ...mound, z: -8 }]);
+    sim.removePlayer(1);
+    sim.addPlayer(
+      1,
+      {
+        netId: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        facingYaw: 0,
+        hunger: 100,
+        items: [
+          { item: 'bag', count: 1 },
+          { item: 'stick', count: 6 },
+          { item: 'log', count: 10 },
+        ],
+      },
+      'builder',
+    );
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+    sim.requestBuild(1, { kind: 'tent', x: 0, z: -4.2, yaw: 0 });
+    sim.step(1000);
+    expect(sim.drainBuildEvents().some((event) => event.prop.kind === 'tent')).toBe(true);
+    for (let tick = 0; tick < 30; tick++) sim.step(1050 + tick * 50);
+    sim.placePlayer(1, { x: 0, y: 0, z: -10 }, 0);
+    sim.requestBuild(1, { kind: 'campfire', x: 0, z: -8, yaw: 0 });
+    sim.step(2600);
+    expect(sim.drainBuildEvents()).toEqual([]);
+    expect(sim.savedTreasures()).toHaveLength(1);
+    expect(sim.inventoryOf(1).log).toBe(10);
+  });
+
   it('places initial mounds on usable terrain in a real forest', () => {
     const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED, forestEncounters: false });
     worlds.push(sim);

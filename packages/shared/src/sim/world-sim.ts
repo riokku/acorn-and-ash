@@ -5228,12 +5228,6 @@ export class WorldSimulation {
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
   private protectedBuildSites(): ProtectedBuildSite[] {
     return [
-      ...this.treasures.map((spot) => ({
-        x: spot.x,
-        z: spot.z,
-        radius: 1.5,
-        name: 'buried treasure',
-      })),
       ...WOODLAND_ENCOUNTERS,
       ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
       ...this.encounterSites.map((site) => ({ x: site.x, z: site.z, radius: 12, name: site.kind })),
@@ -5277,6 +5271,7 @@ export class WorldSimulation {
   ): Footprint[] {
     return [
       ...this.propFootprints(includeWilderness, near),
+      ...this.treasures.map((spot) => roundFootprint(spot.x, spot.z, 0.7, 'buried treasure')),
       ...this.builtProps
         .filter((built) => built.id !== excludeId)
         .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),
