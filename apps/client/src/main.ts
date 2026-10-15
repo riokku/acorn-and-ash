@@ -188,6 +188,7 @@ let unmountEntrance: (() => void) | null = null;
 
 /** The Home screen, with the character the player already has when they have one. */
 const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): void => {
+  hud.publish({ canEditItems: entrance.canEditItems === true });
   if (entrance.saved === null) {
     const empty = [null, null, null, null, null, null];
     writeHotbarLayout(window.localStorage, empty);
@@ -231,6 +232,7 @@ const showCharacterScreen = (entrance: Extract<Entrance, { kind: 'home' }>): voi
  * did not work, is not asked to press it again.
  */
 const showEntrance = async (notice: string | null = null): Promise<void> => {
+  hud.publish({ canEditItems: false });
   unmountEntrance?.();
   unmountEntrance = null;
   const worldId = settings.worldId ?? DEFAULT_WORLD_ID_FALLBACK;

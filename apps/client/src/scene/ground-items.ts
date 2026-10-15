@@ -157,7 +157,7 @@ function createPartsModel(item: ItemId, model: PartsModel): GroundModel {
  * a dropped handful reads as exactly what it is; anything else is a small
  * bundle in its own colour until it has a model of its own.
  */
-function createPileModel(item: ItemId): GroundModel {
+export function createPileModel(item: ItemId): GroundModel {
   if (item === 'sentinelTrophy') {
     const model = createSentinelTrophy();
     model.group.scale.setScalar(0.55);

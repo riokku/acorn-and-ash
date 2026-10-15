@@ -1441,13 +1441,15 @@ wider area, so camera turns do not reveal a following patch. Preview it with
 
 ### Private item catalogue
 
-The verified Google owner can open **Manage items** from the character screen's
-Settings → Account, or visit `/admin/items`. Search the full catalogue, edit names,
+The verified Google owner can open **Manage items** directly from the welcome or
+new-character screen and the in-game character panel (Z), or visit `/admin`. Search the full catalogue, edit names,
 plural names, descriptions, rarity and applicable equipment bonuses, then **Save
 draft**. **Review & publish** shows the changes before publishing them to every
 world on that site. Connected worlds update within 15 seconds. A stale tab cannot
 overwrite a newer draft or publication; reload the draft to review it first.
-Restoring an item's defaults also requires Save and Publish.
+Restoring an item's defaults also requires Save and Publish. The item model can
+be rotated with dragging or arrow keys; Reset view restores its angle. Clear
+filters resets the search and rarity filters without changing any draft edits.
 
 Rarity is a displayed tier; changing it does not adjust drop chances. IDs, recipes,
 wearable slots and saved inventories stay intact. Existing protection, maximum

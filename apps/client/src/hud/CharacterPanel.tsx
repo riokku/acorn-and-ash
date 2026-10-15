@@ -1,3 +1,4 @@
+import { AdminItemsLink } from '../home/AdminItemsLink';
 import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { useEffect, useRef, useState } from 'react';
 
@@ -43,12 +44,14 @@ function colorOf(placeholderColor: number): string {
  */
 export function CharacterPanel({
   worn,
+  canEditItems = false,
   held = null,
   look,
   notice,
   onChange,
 }: {
   worn: Readonly<WornGear>;
+  canEditItems?: boolean;
   /** What is in the hand right now, if it is a tool or weapon: shown in the main hand even if only chosen from the hotbar. */
   held?: ItemId | null;
   look: StageLook | null;
@@ -103,6 +106,7 @@ export function CharacterPanel({
           <dd>{characterStats(worn, held).warmth}</dd>
         </div>
       </dl>
+      <AdminItemsLink allowed={canEditItems} compact />
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
         {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}
       </p>

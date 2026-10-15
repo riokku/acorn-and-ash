@@ -528,7 +528,7 @@ interface HeldModel {
 
 /** This thing's parts to put in a hand, or undefined to leave it showing nothing. */
 const REFINED_HELD_PARTS = new Map<ItemId, ModelPart[]>();
-function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined {
+export function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined {
   if (thing === 'refinedAxe' || thing === 'refinedRod') {
     const existing = REFINED_HELD_PARTS.get(thing);
     if (existing !== undefined) return existing;
