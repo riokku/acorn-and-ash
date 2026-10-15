@@ -16,6 +16,7 @@ import {
   type Impact,
 } from '../src/sim/actions';
 import { addItem } from '../src/sim/inventory';
+import { whirlwindTargets } from '../src/sim/hunting';
 import { PlayerButton, createInput } from '../src/sim/player';
 import {
   BLOW_SETTLE_TICKS,
@@ -416,15 +417,43 @@ describe('a skeleton whirlwind', () => {
     scene.director.placeRaider(id, { x: 0, y: 0, z: 0 });
     const action = actionOf(scene, id);
     beginAction(action, ActionKind.Strike);
-    action.age = STRIKE.impact - 1;
-    scene.step();
+    scene.step(STRIKE.spinStart);
     expect(scene.strikes).toEqual([]);
-    scene.step(BLOW_SETTLE_TICKS);
+    scene.step(STRIKE.spinEnd - STRIKE.spinStart + BLOW_SETTLE_TICKS);
     expect(scene.strikes.map((strike) => strike.netId).sort()).toEqual([1, 2, 3, 4]);
     expect(
       scene.strikes.every((strike) => strike.damage === RAIDER_KINDS.minion.strikeDamage),
     ).toBe(true);
   });
+});
+
+it('contacts four raiders around a player once each across both weapon turns', () => {
+  const scene = arena();
+  scene.addFighter(1);
+  const ids = raidOn(scene, 1, ['warrior', 'warrior', 'warrior', 'warrior']).raiderIds;
+  scene.step(RISE.ground + 1);
+  const offsets = [
+    { x: 1.5, y: 0, z: 0 },
+    { x: 0, y: 0, z: -1.5 },
+    { x: -1.5, y: 0, z: 0 },
+    { x: 0, y: 0, z: 1.5 },
+  ];
+  ids.forEach((id, i) => scene.director.placeRaider(id, offsets[i]!));
+  scene.director.drainHits();
+  const hit = new Set<number>();
+  for (let age = STRIKE.spinStart + 1; age <= STRIKE.spinEnd; age++)
+    scene.director.blowLands(
+      1,
+      { x: 0, y: 0, z: 0 },
+      0,
+      { kind: 'strike', sweep: age },
+      0,
+      100,
+      hit,
+    );
+  const contacts = scene.director.drainHits();
+  expect(contacts.map((event) => event.raiderId)).toEqual(ids);
+  expect(contacts).toHaveLength(4);
 });
 
 describe("a player's blows on a raider", () => {
@@ -797,26 +826,45 @@ describe('raids in the world', () => {
     const id = only(sim.raids.raidersOf(sim.startRaid(1, ['minion']) ?? -1));
     const events: ReturnType<WorldSimulation['drainHealthEvents']> = [];
     let rolled = false;
+    let settledAt = Infinity;
     until(
       sim,
       () => {
         events.push(...sim.drainHealthEvents());
-        return events.length > 0;
+        return sim.tick >= settledAt;
       },
       (seq) => {
         const action = sim.raids.actionOf(id);
-        // Roll the tick before the blow falls, a swing or a charged strike.
+        // React when the next weapon arc crosses the player, rather than
+        // using the old single impact tick for the whole whirlwind.
+        const raider = sim.snapshotFor(1).find((entity) => entity.netId === id);
+        const player = sim.readPlayer(1)!.position;
         const falling =
           action?.kind === ActionKind.Swing
             ? action.age === (LIGHT_COMBO[action.step - 1]?.impact ?? 0) - 1
-            : action?.kind === ActionKind.Strike && action.age === STRIKE.impact - 1;
+            : action?.kind === ActionKind.Strike &&
+              raider !== undefined &&
+              action.age < STRIKE.spinEnd &&
+              whirlwindTargets(raider, [{ id: 1, ...player }], {
+                age: action.age + 1,
+                yaw: raider.yaw,
+              }).length > 0;
         const now = !rolled && falling;
-        if (now) rolled = true;
+        if (now) {
+          rolled = true;
+          settledAt =
+            sim.tick +
+            BLOW_SETTLE_TICKS +
+            1 +
+            (action?.kind === ActionKind.Strike ? STRIKE.spinEnd - action.age : 0);
+        }
         return createInput(seq, 0, 0, 0, now ? PlayerButton.Dodge : 0);
       },
     );
     expect(rolled).toBe(true);
-    expect(events[0]).toMatchObject({ dodged: true, health: HEALTH_MAX });
+    // A roll may clear reach completely, so a miss need not create a health event.
+    expect(events.every((event) => event.health === HEALTH_MAX)).toBe(true);
+    expect(sim.healthOf(1)).toBe(HEALTH_MAX);
   });
 
   it('gives up on somebody it knocked out', () => {

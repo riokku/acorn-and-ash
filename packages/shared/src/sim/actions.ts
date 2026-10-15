@@ -182,7 +182,12 @@ export type Footing = 'free' | 'creeping' | 'planted' | 'still' | 'dodging' | 'a
 /** A blow landing on this tick. */
 export type Impact =
   | { readonly kind: 'swing'; readonly step: 1 | 2 | 3; readonly dodge?: true }
-  | { readonly kind: 'strike'; readonly dodge?: true };
+  | {
+      readonly kind: 'strike';
+      readonly dodge?: true;
+      /** End age of the one-tick weapon arc; aerial slams omit it. */
+      readonly sweep?: number;
+    };
 
 export interface ActionTick {
   readonly footing: Footing;
@@ -279,10 +284,13 @@ export function advanceAction(
       return { footing: 'creeping', impact: null, cast: false };
 
     case ActionKind.Strike: {
-      const impact: Impact | null = state.age === STRIKE.impact ? { kind: 'strike' } : null;
+      const impact: Impact | null =
+        state.age > STRIKE.spinStart && state.age <= STRIKE.spinEnd
+          ? { kind: 'strike', sweep: state.age }
+          : null;
       if (state.age >= STRIKE.spinEnd) {
         const dodged = tryDodge();
-        if (dodged !== null) return dodged;
+        if (dodged !== null) return { ...dodged, impact };
       }
       if (state.age >= STRIKE.end || (state.age >= STRIKE.spinEnd && moving)) {
         beginAction(state, ActionKind.Idle);

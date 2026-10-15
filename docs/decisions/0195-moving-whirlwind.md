@@ -11,7 +11,7 @@ through both rotations.
 Keep the existing charging controls and slow wind-up. From the release tick, the
 whirlwind uses ordinary movement: walking, sprinting, jumping, turning and
 collision all run through the same shared rules as normal movement. Moving does
-not cancel either rotation or skip the single radial impact. Dodge cancellation
+not cancel either rotation or skip weapon contacts (refined in decision 0196). Dodge cancellation
 remains available after the spin, and movement can finish the short recovery as
 before. The animator layers the upper-body strike over walking legs when moving;
 standing still retains the balanced whole-body stance.

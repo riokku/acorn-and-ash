@@ -1185,7 +1185,7 @@ test('you can chop a tree down, and the stump is still there next time', async (
   await context.close();
 });
 
-test('a charged attack fells a tree in one go', async ({ page }) => {
+test('a charged attack reaches a tree behind the player and drops logs', async ({ page }) => {
   await page.goto(`/?world=charge-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -1213,17 +1213,27 @@ test('a charged attack fells a tree in one go', async ({ page }) => {
   // Holding starts only the charge. Even once ready, the oak stays untouched
   // until release: no preliminary light swing and no automatic strong swing.
   await centerMouse(page);
+  // The oak stays in reach, behind us: the axe must find it during its turn.
+  const here = await page.evaluate(() => window.acornDebug!.localPosition());
+  await page.evaluate(
+    ([x, z]) => window.acornDebug?.faceTowards(x!, z!),
+    [2 * here.x - oak.x, 2 * here.z - oak.z],
+  );
   await page.mouse.down();
   await expect(page.locator('.hud-hint')).toContainText('Charging a heavy swing');
   await page.waitForTimeout(1500);
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([]);
   await page.mouse.up();
   await expect
-    .poll(async () => (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length, {
-      timeout: 20_000,
-    })
-    .toBe(1);
-  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
+    .poll(
+      async () =>
+        (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).includes(oak.id),
+      {
+        timeout: 20_000,
+      },
+    )
+    .toBe(true);
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toContain(oak.id);
   await collectFallenLogs(page);
   const carried = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carried.find((entry) => entry.item === 'log')?.count).toBeGreaterThan(0);

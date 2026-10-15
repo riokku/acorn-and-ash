@@ -34,7 +34,7 @@ import {
   TICK_SECONDS,
 } from '../constants';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
-import { DODGE, DODGE_ATTACKS } from '../data/moves';
+import { DODGE, DODGE_ATTACKS, STRIKE } from '../data/moves';
 import type { ItemId } from '../data/items';
 import {
   RAID,
@@ -221,6 +221,7 @@ interface RaiderRuntime {
   readonly entity: Entity;
   readonly motion: PlayerMotion;
   readonly action: ActionState;
+  readonly whirlwindHits: Set<number>;
   readonly rng: Rng;
   previousButtons: number;
   aimYaw: number;
@@ -470,12 +471,22 @@ export class RaidDirector {
     impact: Impact,
     ticksBack: number,
     power = 100,
+    alreadyHit?: Set<number>,
+    previousYaw = aimYaw,
   ): boolean {
     const targets =
       impact.kind === 'strike' && impact.dodge !== true
-        ? whirlwindTargets(position, this.blowCandidates(ticksBack)).map((target) => target.id)
+        ? whirlwindTargets(
+            position,
+            this.blowCandidates(ticksBack),
+            impact.sweep === undefined
+              ? undefined
+              : { age: impact.sweep, yaw: aimYaw, previousYaw },
+            alreadyHit,
+          ).map((target) => target.id)
         : [this.raiderInReachOf(position, aimYaw, ticksBack)].filter((id) => id !== null);
     for (const id of targets) {
+      alreadyHit?.add(id);
       const raider = this.raiders.get(id);
       if (raider !== undefined) this.hitRaider(raider, attackerNetId, position, impact, power);
     }
@@ -797,6 +808,7 @@ export class RaidDirector {
       entity,
       motion: createPlayerMotion(position, facingYaw),
       action: createActionState(),
+      whirlwindHits: new Set(),
       rng,
       previousButtons: 0,
       aimYaw: facingYaw,
@@ -1490,6 +1502,8 @@ export class RaidDirector {
     const beforeZ = motion.position.z;
     const facingBefore = motion.facingYaw;
 
+    if (action.kind !== ActionKind.Strike || action.age <= STRIKE.spinStart)
+      raider.whirlwindHits.clear();
     const tick = advanceAction(action, input, raider.previousButtons, RAIDER_CONTEXT);
     raider.previousButtons = input.buttons;
     if (tick.footing === 'dodging') {
@@ -1507,7 +1521,7 @@ export class RaidDirector {
         );
       }
     }
-    if (tick.impact !== null) this.landRaiderBlow(raider, tick.impact);
+    if (tick.impact !== null) this.landRaiderBlow(raider, tick.impact, facingBefore);
 
     // Stuck on something: go round it for a bit.
     const wanted = Math.hypot(input.moveX, input.moveZ);
@@ -1548,7 +1562,7 @@ export class RaidDirector {
    * A raider's swing lands in front; a whirlwind reaches nearby players on
    * every side. It settles a moment later (see `BLOW_SETTLE_TICKS`).
    */
-  private landRaiderBlow(raider: RaiderRuntime, impact: Impact): void {
+  private landRaiderBlow(raider: RaiderRuntime, impact: Impact, previousYaw: number): void {
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];
     const candidates: WhirlwindCandidate[] = [];
     for (const fighter of this.fighterById.values()) {
@@ -1557,7 +1571,14 @@ export class RaidDirector {
     }
     const hits =
       impact.kind === 'strike' && impact.dodge !== true
-        ? whirlwindTargets(raider.motion.position, candidates)
+        ? whirlwindTargets(
+            raider.motion.position,
+            candidates,
+            impact.sweep === undefined
+              ? undefined
+              : { age: impact.sweep, yaw: raider.motion.facingYaw, previousYaw },
+            raider.whirlwindHits,
+          )
         : [animalInReach(raider.motion.position, raider.aimYaw, candidates)].filter(
             (target) => target !== null,
           );
@@ -1567,7 +1588,8 @@ export class RaidDirector {
         : impact.step === 3
           ? Math.round(kind.swingDamage * 1.5)
           : kind.swingDamage;
-    for (const hit of hits)
+    for (const hit of hits) {
+      if (impact.kind === 'strike' && !impact.dodge) raider.whirlwindHits.add(hit.id);
       this.pendingBlows.push({
         targetNetId: hit.id,
         damage,
@@ -1575,6 +1597,7 @@ export class RaidDirector {
         x: raider.motion.position.x,
         z: raider.motion.position.z,
       });
+    }
   }
 
   private settleBlows(): void {

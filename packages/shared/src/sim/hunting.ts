@@ -8,7 +8,8 @@
  */
 
 import { CHOP_FACING_COSINE, CHOP_REACH } from '../constants';
-import { STRIKE } from '../data/moves';
+import { STRIKE, whirlwindTurn } from '../data/moves';
+import { wrapAngle } from '../math/angles';
 import type { Vec3 } from '../math/vec3';
 
 /** A point a swing could land on: an animal's id and where it is right now. */
@@ -55,20 +56,51 @@ export function animalInReach<T extends CatchCandidate>(
   return best;
 }
 
-/** One target in a grounded whirlwind, including height so a ledge stays safe. */
+/** One target in a whirlwind, including height so a ledge stays safe. */
 export interface WhirlwindCandidate extends CatchCandidate {
   readonly y: number;
+  /** Trees measure reach to the trunk surface. Creatures retain their usual centre reach. */
+  readonly radius?: number;
 }
 
-/** All nearby targets, once each even if their motion history contains several samples. */
+export interface WhirlwindSweep {
+  readonly age: number;
+  readonly yaw: number;
+  readonly previousYaw?: number;
+}
+
+/** Targets crossed by this slice of the visible axe's turn, deduplicating history samples. */
 export function whirlwindTargets<T extends WhirlwindCandidate>(
   position: Readonly<Vec3>,
   candidates: readonly T[],
+  sweep?: WhirlwindSweep,
+  alreadyHit?: ReadonlySet<number>,
 ): T[] {
   const found = new Map<number, T>();
   for (const candidate of candidates) {
+    if (alreadyHit?.has(candidate.id)) continue;
     if (Math.abs(candidate.y - position.y) > STRIKE.height) continue;
-    if (Math.hypot(candidate.x - position.x, candidate.z - position.z) > CHOP_REACH) continue;
+    const dx = candidate.x - position.x,
+      dz = candidate.z - position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance - (candidate.radius ?? 0) > CHOP_REACH + 1e-6) continue;
+    if (sweep !== undefined) {
+      const turn = Math.PI * 2;
+      // The extended right hand starts on the rider's right; positive model
+      // rotation sweeps through the front, left and back. Cover the whole
+      // interval between ticks so a fast blade cannot skip a narrow target.
+      const previousYaw = sweep.previousYaw ?? sweep.yaw;
+      const from = previousYaw - Math.PI / 2 + whirlwindTurn(sweep.age - 1) * turn;
+      const travel =
+        (whirlwindTurn(sweep.age) - whirlwindTurn(sweep.age - 1)) * turn +
+        wrapAngle(sweep.yaw - previousYaw);
+      const slack = Math.asin(
+        Math.min(1, Math.max(0.3, candidate.radius ?? 0) / Math.max(1e-6, distance)),
+      );
+      const offset =
+        ((((Math.atan2(-dx, -dz) - from) * (travel < 0 ? -1 : 1) + slack) % turn) + turn) % turn;
+      if (offset > Math.abs(travel) + 2 * slack) continue;
+    }
     found.set(candidate.id, candidate);
   }
   return [...found.values()];

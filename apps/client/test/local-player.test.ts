@@ -336,3 +336,21 @@ describe('animation pace after collisions', () => {
     expect(player.travelSpeed()).toBe(0);
   });
 });
+
+it('keeps each whirlwind arc at its own input position through a slow frame and does not replay effects', () => {
+  const player = new LocalPlayer(vec3(0, 0, 0), collision);
+  player.setActionContext(() => ({ canAttack: true, castInstead: false }));
+  player.action.kind = ActionKind.Strike;
+  player.action.age = 4;
+  player.advance(TICK_SECONDS * 3, 1, 0, 0);
+  const hits = player.drainEvents().filter((event) => event.kind === 'impact');
+  expect(hits.map((hit) => (hit.impact.kind === 'strike' ? hit.impact.sweep : null))).toEqual([
+    5, 6, 7,
+  ]);
+  expect(hits[0]!.position.x).toBeLessThan(hits[1]!.position.x);
+  expect(hits[1]!.position.x).toBeLessThan(hits[2]!.position.x);
+  expect(hits[1]!.previousYaw).toBe(hits[0]!.yaw);
+  expect(hits[2]!.position).toEqual(player.motion.position);
+  player.reconcile({ ...serverState(1, 0, 0), action: ActionKind.Strike, actionAge: 4 }, 0);
+  expect(player.drainEvents()).toEqual([]);
+});

@@ -51,7 +51,7 @@ export const CHARGE_TICKS = Math.round(CHARGE_SECONDS * TICK_HZ);
 
 /**
  * The charged whirlwind: two full turns, then a short recovery. Each target
- * takes the existing charged damage once, as the first turn completes.
+ * takes the existing charged damage once, when the weapon sweeps past it.
  */
 export const STRIKE = {
   height: 1.4,
@@ -114,3 +114,12 @@ export const DODGE_ATTACKS = {
   light: { impact: 5, land: 10, end: 14, height: 0.95, damage: 2 },
   heavy: { impact: 9, land: 9, end: 20, height: 1.65, damage: 6 },
 } as const;
+
+/** Shared by the visible weapon turn and the server's swept contact checks. */
+export function whirlwindTurn(age: number): number {
+  const t = Math.max(
+    0,
+    Math.min(1, (age - STRIKE.spinStart) / (STRIKE.spinEnd - STRIKE.spinStart)),
+  );
+  return t * t * (3 - 2 * t) * STRIKE.turns;
+}

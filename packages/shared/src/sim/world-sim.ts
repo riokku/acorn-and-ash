@@ -333,7 +333,7 @@ import {
 } from './dropping';
 import { buryHalf, nearestBuriedCache } from './burying';
 import { canAfford, craft, inventoryCraftRefusal, type CraftRefusal } from './crafting';
-import { treeInReach, type ChopTarget } from './chopping';
+import { treeInReach, treesInWhirlwind, type ChopTarget } from './chopping';
 import {
   treeFallTimes,
   treeFallYaw,
@@ -1048,6 +1048,8 @@ interface PlayerRuntime {
    * down, sitting... - see `sim/actions.ts`, which their browser runs too.
    */
   readonly action: ActionState;
+  readonly whirlwindHits: Set<number>;
+  readonly whirlwindTrees: Set<number>;
   /** The buttons on the last input, so the next one can tell a fresh press. */
   previousButtons: number;
   /** The tick they were knocked out on, so they wake up a while later. */
@@ -2009,6 +2011,8 @@ export class WorldSimulation {
         Math.max(0, Number.isFinite(saved?.health) ? saved!.health! : healthMax),
       ),
       action: createActionState(),
+      whirlwindHits: new Set(),
+      whirlwindTrees: new Set(),
       previousButtons: 0,
       knockedOutAtTick: 0,
       dodgeStartedAtTick: -Infinity,
@@ -2347,7 +2351,7 @@ export class WorldSimulation {
         let walkZ = 0;
         // Blows that land this tick, judged once the player has finished
         // moving, the same as every other reach.
-        const impacts: Impact[] = [];
+        const impacts: { impact: Impact; position: Vec3; yaw: number; previousYaw: number }[] = [];
         // Inside a home only its own walls and furniture are there to bump
         // into, and nothing out in the world is in reach.
         const outdoors = runtime.space === OUTDOORS;
@@ -2393,6 +2397,7 @@ export class WorldSimulation {
               scratch.grounded,
             );
             const beforeAction = runtime.action.kind;
+            const previousYaw = scratch.facingYaw;
             const tick = advanceAction(runtime.action, input, runtime.previousButtons, context);
             if (
               beforeAction === ActionKind.Dodge &&
@@ -2400,6 +2405,10 @@ export class WorldSimulation {
                 runtime.action.kind === ActionKind.DodgeHeavy)
             )
               runtime.dodgeAttackStartedAtTick = this.tick;
+            if (beforeAction !== ActionKind.Strike && runtime.action.kind === ActionKind.Strike) {
+              runtime.whirlwindHits.clear();
+              runtime.whirlwindTrees.clear();
+            }
             runtime.previousButtons = input.buttons;
             if (runtime.action.kind === ActionKind.Dodge && runtime.action.age === 0) {
               runtime.dodgeStartedAtTick = this.tick;
@@ -2427,7 +2436,13 @@ export class WorldSimulation {
               walkX = 0;
               walkZ = 0;
             }
-            if (tick.impact !== null) impacts.push(tick.impact);
+            if (tick.impact !== null)
+              impacts.push({
+                impact: tick.impact,
+                position: { ...scratch.position },
+                yaw: scratch.facingYaw,
+                previousYaw,
+              });
             if (tick.cast) wantsToCast = true;
 
             const interactHeld = isHeld(input, PlayerButton.Interact);
@@ -2559,7 +2574,14 @@ export class WorldSimulation {
           // Nothing to chop, catch, cast at or build on in here.
           this.discardBuild(runtime, 'indoors');
         } else {
-          for (const impact of impacts) this.landBlow(runtime, scratch.position, aimedYaw, impact);
+          for (const hit of impacts)
+            this.landBlow(
+              runtime,
+              hit.position,
+              hit.impact.kind === 'strike' && hit.impact.sweep !== undefined ? hit.yaw : aimedYaw,
+              hit.impact,
+              hit.previousYaw,
+            );
           if (wantsToCast && runtime.cast === null) {
             this.tryCast(runtime, scratch.position, aimedYaw);
           }
@@ -4072,14 +4094,15 @@ export class WorldSimulation {
    * failing that on whatever animal is in reach, with anything at all in
    * hand. Swinging at nothing is a swing at nothing.
    *
-   * A charged whirlwind hits each nearby creature once. When no creatures
-   * are reached, aimed tool work retains its usual single tree or dig.
+   * A charged whirlwind sweeps creatures and trunks in every direction as
+   * the weapon passes, with each target contacted once per attack.
    */
   private landBlow(
     runtime: PlayerRuntime,
     position: Readonly<Vec3>,
     aimYaw: number,
     impact: Impact,
+    previousYaw = aimYaw,
   ): void {
     if (this.equippedItemOf(runtime.netId) === null) return;
     const charged = impact.kind === 'strike';
@@ -4094,7 +4117,11 @@ export class WorldSimulation {
       : impact.kind === 'strike'
         ? STRIKE.impact
         : (LIGHT_COMBO[impact.step - 1]?.impact ?? 0);
-    const lookBack = began + LAG_COMPENSATION_TICKS;
+    const lookBack = (whirlwind ? 0 : began) + LAG_COMPENSATION_TICKS;
+    const sweep =
+      impact.kind === 'strike' && impact.sweep !== undefined
+        ? { age: impact.sweep, yaw: aimYaw, previousYaw }
+        : undefined;
 
     // Directed blows prefer a skeleton. A whirlwind reaches all creatures
     // around the player, even when one of them is beside an aimed-at tree.
@@ -4105,14 +4132,49 @@ export class WorldSimulation {
       impact,
       lookBack,
       characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses).power,
+      whirlwind ? runtime.whirlwindHits : undefined,
+      previousYaw,
     );
     if (whirlwind) {
-      const animals = whirlwindTargets(position, this.animalBlowCandidates(lookBack));
-      for (const animal of animals) this.catchAnimal(runtime, animal.id, true);
-      if (hitRaider || animals.length > 0) {
-        runtime.lastCombatTick = this.tick;
-        return;
+      const animals = whirlwindTargets(
+        position,
+        this.animalBlowCandidates(lookBack),
+        sweep,
+        runtime.whirlwindHits,
+      );
+      for (const animal of animals) {
+        runtime.whirlwindHits.add(animal.id);
+        this.catchAnimal(runtime, animal.id, true);
       }
+      if (hitRaider || animals.length > 0) runtime.lastCombatTick = this.tick;
+      const axe = this.isActiveItem(runtime, 'axe');
+      const torch = this.isActiveItem(runtime, 'torch') && this.calendar().season !== 'winter';
+      if ((axe || torch) && sweep !== undefined) {
+        for (const props of [this.standing, this.standingWilderness]) {
+          const trees = treesInWhirlwind(
+            position,
+            aimYaw,
+            sweep.age,
+            props,
+            (id) => this.isFelled(id),
+            runtime.whirlwindTrees,
+            previousYaw,
+          );
+          for (const tree of trees) {
+            runtime.whirlwindTrees.add(tree.prop.id);
+            if (axe) this.chopTree(runtime, tree, true, position);
+            else this.igniteTree(tree.prop.id, this.calendar().season === 'summer');
+          }
+        }
+      }
+      // The shovel still digs one deliberate opening; each arc must not excavate again.
+      if (
+        this.isActiveItem(runtime, 'shovel') &&
+        (sweep === undefined || sweep.age === STRIKE.impact)
+      ) {
+        if (!this.tryDigTreasure(runtime, position)) this.digAhead(runtime, position, aimYaw, true);
+      }
+      return;
     } else if (hitRaider) {
       runtime.lastCombatTick = this.tick;
       return;
@@ -4144,7 +4206,6 @@ export class WorldSimulation {
     if (this.isActiveItem(runtime, 'shovel') && this.digAhead(runtime, position, aimYaw, charged))
       return;
 
-    if (whirlwind) return;
     const animalTarget = this.animalInReachOf(position, aimYaw, lookBack);
     if (animalTarget !== null)
       this.catchAnimal(

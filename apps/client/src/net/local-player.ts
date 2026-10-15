@@ -34,7 +34,14 @@ export type ActionContextFor = (position: Readonly<Vec3>, aimYaw: number) => Act
 
 /** Something this browser's own player just did, on its own say-so, for drawing straight away. */
 export type PredictedEvent =
-  | { readonly kind: 'impact'; readonly impact: Impact; readonly seq: number }
+  | {
+      readonly kind: 'impact';
+      readonly impact: Impact;
+      readonly seq: number;
+      readonly position: Readonly<Vec3>;
+      readonly yaw: number;
+      readonly previousYaw: number;
+    }
   | { readonly kind: 'cast'; readonly seq: number }
   | {
       readonly kind: 'began';
@@ -192,6 +199,7 @@ export class LocalPlayer {
         aimYaw ?? this.motion.facingYaw,
       );
       const before = this.action.kind;
+      const previousYaw = this.motion.facingYaw;
       const beforeAge = this.action.age;
       const tick = advanceAction(
         this.action,
@@ -210,7 +218,14 @@ export class LocalPlayer {
         });
       }
       if (tick.impact !== null)
-        this.events.push({ kind: 'impact', impact: tick.impact, seq: input.seq });
+        this.events.push({
+          kind: 'impact',
+          impact: tick.impact,
+          seq: input.seq,
+          position: cloneVec3(this.motion.position),
+          yaw: this.motion.facingYaw,
+          previousYaw,
+        });
       if (tick.cast) this.events.push({ kind: 'cast', seq: input.seq });
       this.pending.push(input);
       produced.push(input);

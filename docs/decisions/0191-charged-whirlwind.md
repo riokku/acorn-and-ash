@@ -18,3 +18,7 @@ during the spin. Dodge cancellation still waits until the spin ends. A hit can i
 ## Consequences
 
 The strong attack is useful when surrounded without multiplying its per-target damage. Existing action ids and snapshot formats remain unchanged, so prediction and remote interpolation use the same timing data. Old forward-slam descriptions are superseded for ordinary charged attacks; aerial dodge slams retain their existing animation and rules.
+
+Decision 0196 supersedes the single impact tick and aimed-tree fallback: contacts
+now follow the weapon arc throughout both rotations and include every reachable
+trunk, with one hit per target for the whole attack.

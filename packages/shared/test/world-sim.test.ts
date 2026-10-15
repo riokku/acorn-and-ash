@@ -3657,7 +3657,7 @@ describe('a charged attack', () => {
     return seq;
   }
 
-  it('winds up for as long as it says, then lands partway into the strike', () => {
+  it('winds up fully, then hits the tree when the weapon crosses its direction', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     const tree = findTree(sim, 'oak');
@@ -3670,13 +3670,50 @@ describe('a charged attack', () => {
       expect(sim.actionOf(1)?.kind).toBe(ActionKind.Charge);
     }
     expect(sim.drainChopEvents()).toEqual([]);
-    for (let i = 0; i <= STRIKE.impact; i++) {
+    for (let i = 0; i <= STRIKE.spinStart; i++) {
       expect(sim.drainChopEvents()).toEqual([]);
+      sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
+      sim.step(tickClock());
+    }
+    expect(sim.felledTreeIds()).not.toContain(tree.id);
+    for (let i = STRIKE.spinStart + 1; i <= STRIKE.spinEnd; i++) {
       sim.queueInput(1, createInput(seq++, 0, 0, 0, 0));
       sim.step(tickClock());
     }
     expect(sim.actionOf(1)?.kind).toBe(ActionKind.Strike);
     expect(sim.felledTreeIds()).toContain(tree.id);
+  });
+
+  it('fells a tree behind the player while also striking a creature in front', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const tree = findTree(sim, 'oak');
+    standAt(sim, 1, tree);
+    const start = { ...sim.readPlayer(1)!.position };
+    sim.placePlayer(1, start, Math.PI);
+    const rabbit = ANIMAL_DENS.find((den) => den.kind === 'rabbit')!;
+    const catches = [];
+    for (let tick = 0; tick <= CHARGE_TICKS + STRIKE.end; tick++) {
+      if (tick <= CHARGE_TICKS + STRIKE.spinEnd) {
+        const at = sim.readPlayer(1)!.position;
+        sim.placeAnimal(rabbit.id, { x: at.x, y: at.y, z: at.z + 1.3 });
+      }
+      sim.queueInput(
+        1,
+        createInput(
+          tick + 1,
+          0,
+          0,
+          Math.PI,
+          tick < CHARGE_TICKS ? PlayerButton.Charge : 0,
+          Math.PI,
+        ),
+      );
+      sim.step(tickClock());
+      catches.push(...sim.drainCatchEvents());
+    }
+    expect(sim.felledTreeIds()).toContain(tree.id);
+    expect(catches).toHaveLength(1);
   });
 
   it('moves through a full whirlwind and catches creatures around the moving player once', () => {
@@ -3694,7 +3731,7 @@ describe('a charged attack', () => {
     const catches = [];
     let releasedAtX = 0;
     for (let tick = 0; tick < CHARGE_TICKS + STRIKE.end + 2; tick++) {
-      if (tick <= CHARGE_TICKS + STRIKE.impact) {
+      if (tick <= CHARGE_TICKS + STRIKE.spinEnd) {
         const at = sim.readPlayer(1)!.position;
         rabbits.forEach((den, i) =>
           sim.placeAnimal(den.id, {
@@ -3719,7 +3756,7 @@ describe('a charged attack', () => {
       if (tick >= CHARGE_TICKS && tick < CHARGE_TICKS + STRIKE.spinEnd)
         expect(sim.actionOf(1)?.kind).toBe(ActionKind.Strike);
       catches.push(...sim.drainCatchEvents());
-      if (tick < CHARGE_TICKS + STRIKE.impact) expect(catches).toEqual([]);
+      if (tick <= CHARGE_TICKS + STRIKE.spinStart) expect(catches).toEqual([]);
     }
     expect(sim.readPlayer(1)!.position.x - releasedAtX).toBeGreaterThan(2);
     expect(catches).toHaveLength(4);

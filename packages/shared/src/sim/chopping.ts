@@ -7,9 +7,10 @@
  */
 
 import { CHOP_FACING_COSINE, CHOP_REACH } from '../constants';
-import { PROP_KINDS, choppingRuleFor, type ChoppingRule } from '../data/props';
+import { PROP_KINDS, choppingRuleFor, propHeight, type ChoppingRule } from '../data/props';
 import type { Vec3 } from '../math/vec3';
 import type { PlacedProp } from '../world/clearing';
+import { whirlwindTargets } from './hunting';
 
 /** A tree a swing would land on. */
 export interface ChopTarget {
@@ -66,4 +67,34 @@ export function treeInReach(
   }
 
   return best;
+}
+
+/** Every standing trunk crossed by the axe this tick, rather than just the tree ahead. */
+export function treesInWhirlwind(
+  position: Readonly<Vec3>,
+  yaw: number,
+  age: number,
+  props: readonly PlacedProp[],
+  isFelled: (propId: number) => boolean,
+  alreadyHit: ReadonlySet<number>,
+  previousYaw = yaw,
+): ChopTarget[] {
+  const candidates = props.flatMap((prop) => {
+    if (isFelled(prop.id) || alreadyHit.has(prop.id)) return [];
+    const kind = PROP_KINDS[prop.kind];
+    const rule = choppingRuleFor(kind);
+    if (rule === null) return [];
+    const radius = kind.colliderRadius * prop.scale;
+    if (
+      Math.abs(prop.x - position.x) > CHOP_REACH + radius ||
+      Math.abs(prop.z - position.z) > CHOP_REACH + radius
+    )
+      return [];
+    const base = prop.y ?? 0;
+    if (position.y + 1.4 < base || position.y > base + propHeight(kind) * prop.scale) return [];
+    return [
+      { id: prop.id, x: prop.x, y: Math.max(base, position.y), z: prop.z, radius, prop, rule },
+    ];
+  });
+  return whirlwindTargets(position, candidates, { age, yaw, previousYaw }, alreadyHit);
 }
