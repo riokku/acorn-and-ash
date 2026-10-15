@@ -337,6 +337,14 @@ const HELD_ITEM_REST: Partial<Record<ItemId, HeldGrips>> = {
   roastedMeat: FOOD_GRIPS,
 };
 
+/** Extra handle below the hand, in item-local metres, shared by carrying and using. */
+const HANDLE_GRIP_INSET: Readonly<Partial<Record<ItemId, number>>> = {
+  axe: 0.08,
+  refinedAxe: 0.08,
+  rod: 0.1,
+  refinedRod: 0.1,
+};
+
 /** Warm torchlight - dimmer and closer than the campfire's (see fire-light.ts and campfire.ts). */
 const TORCH_LIGHT_COLOR = 0xffa25a;
 const TORCH_LIGHT_INTENSITY = 9;
@@ -725,8 +733,11 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
               ];
       if (parts === undefined || grips === undefined) continue;
       const held = new THREE.Group();
+      const gripInset = thing === 'weapon' ? 0 : (HANDLE_GRIP_INSET[thing] ?? 0);
       for (const part of parts) {
         const mesh = new THREE.Mesh(part.geometry, part.material);
+        // Slide along the handle itself so the grip also fits a turned or steadied wrist.
+        mesh.position.y = -gripInset;
         mesh.castShadow = true;
         held.add(mesh);
       }
@@ -745,9 +756,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       heldItems.set(thing, {
         group: held,
         tipHeight:
-          thing === 'weapon'
+          (thing === 'weapon'
             ? (look.weapon?.length ?? 0)
-            : (gearWeapon?.length ?? tipHeightOf(thing)),
+            : (gearWeapon?.length ?? tipHeightOf(thing))) - gripInset,
         carry: new THREE.Quaternion().setFromEuler(grips.carry.rotation),
         use: new THREE.Quaternion().setFromEuler(grips.use.rotation),
         carryOffset: grips.carry.offset,
