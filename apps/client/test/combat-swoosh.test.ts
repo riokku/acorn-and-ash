@@ -43,3 +43,15 @@ it('covers airborne follow-ups and releases a pending move on removal', () => {
   swish.clear();
   expect(sound.cancel).toHaveBeenCalledTimes(2);
 });
+
+it('schedules both whirlwind sweeps once and cancels both when interrupted', () => {
+  sound.play.mockReturnValue(sound.cancel);
+  const swish = new CombatSwoosh();
+  swish.update({ kind: ActionKind.Strike, step: 0, age: 0 });
+  expect(sound.play).toHaveBeenCalledTimes(2);
+  expect(sound.play.mock.calls[0]![0]).toBeLessThan(sound.play.mock.calls[1]![0]);
+  swish.update({ kind: ActionKind.Strike, step: 0, age: 1 });
+  expect(sound.play).toHaveBeenCalledTimes(2);
+  swish.update({ kind: ActionKind.Flinch, step: 0, age: 0 });
+  expect(sound.cancel).toHaveBeenCalledTimes(2);
+});

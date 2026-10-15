@@ -107,7 +107,6 @@ const DEMOS: readonly Demo[] = [
   {
     name: 'strike',
     item: 'axe',
-    burst: 'dust',
     length: CHARGE_TICKS + STRIKE.end + 8,
     move: (age) =>
       age < CHARGE_TICKS
@@ -120,7 +119,6 @@ const DEMOS: readonly Demo[] = [
     // The same wind-up, creeping along on walking legs.
     name: 'creep',
     item: 'axe',
-    burst: 'dust',
     length: CHARGE_TICKS + STRIKE.end + 8,
     move: (age) =>
       age < CHARGE_TICKS
@@ -230,7 +228,8 @@ export async function showMoves(
   params: URLSearchParams,
 ): Promise<void> {
   await Promise.all([preloadCharacterModels(), preloadItemModels(), preloadCharacterAnimations()]);
-  const picked = params.get('demo');
+  const askedDemo = params.get('demo');
+  const picked = askedDemo === 'whirlwind' ? 'strike' : askedDemo;
   const demos = picked === null ? DEMOS : DEMOS.filter((demo) => demo.name === picked);
   const strip = Number(params.get('strip') ?? 0);
   const freezeAt = params.has('at') ? Number(params.get('at')) : null;

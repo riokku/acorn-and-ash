@@ -184,7 +184,7 @@ describe('a fishing-only click', () => {
 });
 
 describe('a charged strike', () => {
-  it('slows you to a creep while it winds up, then plants you to leap and land', () => {
+  it('slows you to a creep while it winds up, then plants you through the whirlwind', () => {
     const { state, feed } = player();
     const footing: string[] = [];
     let landedOn = -1;
@@ -200,6 +200,23 @@ describe('a charged strike', () => {
     expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['planted']));
     expect(landedOn).toBe(CHARGE_TICKS + STRIKE.impact);
     expect(state.kind).toBe(ActionKind.Strike);
+  });
+
+  it('hits once, keeps both rotations committed, then allows a dodge or movement', () => {
+    const { state, feed } = player();
+    feed(PlayerButton.Charge);
+    for (let i = 1; i < CHARGE_TICKS; i++) feed();
+    feed();
+    let hits = 0;
+    for (let age = 1; age < STRIKE.spinEnd; age++) {
+      const tick = feed(PlayerButton.Dodge, 0, 1);
+      if (tick.impact !== null) hits++;
+      expect(state.kind).toBe(ActionKind.Strike);
+      expect(tick.footing).toBe('planted');
+    }
+    expect(hits).toBe(1);
+    expect(feed(PlayerButton.Dodge).footing).toBe('dodging');
+    expect(state.kind).toBe(ActionKind.Dodge);
   });
 
   it('holds a fully charged blow without swinging until the button is released', () => {

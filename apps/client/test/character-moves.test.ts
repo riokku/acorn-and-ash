@@ -22,6 +22,7 @@ import {
   clipBlowSeconds,
   eatingPose,
   lineUp,
+  isSweeping,
   movePose,
   type MoveView,
 } from '../src/scene/character-moves';
@@ -112,10 +113,30 @@ describe('drawing a charged strike', () => {
     expect(movePose(view(ActionKind.Swing, 2, { afterWindup: true })).legsFree).toBe(false);
   });
 
-  it('brings the strike down on the tick it lands', () => {
-    const pose = movePose(view(ActionKind.Strike, STRIKE.impact));
-    expect(pose.clip).toBe('strike');
-    expect(pose.time).toBeCloseTo(clipBlowSeconds('strike') ?? -1, 5);
+  it('sweeps a complete first turn at impact, completes two turns, then lowers the weapon', () => {
+    const start = movePose(view(ActionKind.Strike, 0));
+    const hit = movePose(view(ActionKind.Strike, STRIKE.impact));
+    const end = movePose(view(ActionKind.Strike, STRIKE.end));
+    expect(start.whirlwindTurn).toBe(0);
+    expect(start.whirlwindReach).toBe(0);
+    expect(hit.clip).toBe('attack2');
+    expect(hit.whirlwindTurn).toBe(1);
+    expect(hit.whirlwindReach).toBe(1);
+    expect(end.whirlwindTurn).toBe(2);
+    expect(end.whirlwindReach).toBe(0);
+    expect(isSweeping(start)).toBe(false);
+    expect(isSweeping(hit)).toBe(true);
+    expect(isSweeping(end)).toBe(false);
+  });
+
+  it('keeps spinning continuously at fractional snapshot ages', () => {
+    let last = 0;
+    for (let age = STRIKE.spinStart; age <= STRIKE.spinEnd; age += 0.1) {
+      const turn = movePose(view(ActionKind.Strike, age)).whirlwindTurn ?? -1;
+      expect(turn).toBeGreaterThanOrEqual(last);
+      expect(turn - last).toBeLessThan(0.025);
+      last = turn;
+    }
   });
 });
 

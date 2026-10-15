@@ -48,6 +48,9 @@ const CATCH_UP = 0.6;
 const MOUTHFUL = new THREE.Vector3(-0.1, 1.36, 0.66);
 const BETWEEN_BITES = new THREE.Vector3(-0.16, 1.26, 0.84);
 const EATING_ELBOW = new THREE.Vector3(-0.9, 0.7, 0);
+/** Weapon arm out to the side, with a slight bend instead of a locked elbow. */
+const WHIRLWIND_HAND = new THREE.Vector3(-1.1, 1.05, 0.08);
+const WHIRLWIND_ELBOW = new THREE.Vector3(-0.6, 0.6, -0.35);
 /** How far the head dips to take each bite, in radians. */
 const BITE_NOD = 0.14;
 
@@ -136,6 +139,7 @@ export class CharacterAnimator {
   private lag = 0;
   private use = 0;
   private swing = 0;
+  private whirlwindReach = 0;
   /** Share of the idle leg pose, available for small terrain corrections. */
   private standing = 1;
   private grounded = 1;
@@ -261,7 +265,13 @@ export class CharacterAnimator {
     this.eatingNow = this.eatingFor === null ? null : eatingPose(this.eatingFor);
 
     this.rememberMove(move);
-    const pose = movePose({ ...move, age: move.age - this.lag / TICK_SECONDS });
+    const requested = movePose({ ...move, age: move.age - this.lag / TICK_SECONDS });
+    // Preserve the extended arm through an interrupted spin's crossfade.
+    this.whirlwindReach = requested.whirlwindReach ?? this.whirlwindReach * Math.exp(-22 * delta);
+    const pose =
+      this.whirlwindReach > 1e-4
+        ? { ...requested, whirlwindReach: this.whirlwindReach }
+        : requested;
     const stillness = 1 - Math.min(1, locomotion.speed / 1.5);
     this.updateMoves(delta, move.kind, pose);
     const moveWeight = Math.min(
@@ -319,6 +329,12 @@ export class CharacterAnimator {
     this.gaitRate('idle', gaitRate);
     this.gaitRate('jumpAir', gaitRate);
     this.mixer.update(deltaSeconds);
+    if ((pose.whirlwindReach ?? 0) > 0 && this.rightArm !== null) {
+      this.root.updateWorldMatrix(true, false);
+      this.root.localToWorld(this.target.copy(WHIRLWIND_HAND));
+      this.root.localToWorld(this.pole.copy(WHIRLWIND_ELBOW));
+      this.rightArm.reach(this.target, this.pole, pose.whirlwindReach ?? 0);
+    }
     // A whole-body move takes the arm back for itself.
     if (this.eatingNow !== null) this.bringToMouth(this.eatingNow, free);
     return pose;

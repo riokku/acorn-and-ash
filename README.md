@@ -358,7 +358,7 @@ move does not switch animation midway through. See
 
 Every move your character makes is a real animation now, from KayKit's free
 Character Animations pack: three different swings in a row if you keep
-clicking as each one lands, a crouch and a leaping two-handed slam for a
+clicking as each one lands, a crouch and two grounded whirlwind turns for a
 charged strike, a tumble for a dodge, a stagger when something hits you,
 falling down when you're knocked out and getting back up, chopping at a tree
 like a woodcutter, casting, waiting and reeling at the pond, bending down to
@@ -382,7 +382,7 @@ the remainder of a frame after a hit pause ends. See
 Blows land on the very moment the animation does, and feel like it: a brief
 pause on the hit, a little camera kick, chips of wood flying out of a tree
 as it shivers, tufts of fur off an animal as it's knocked back, a pale streak
-behind the swing, a whoosh through the air, and dust where a charged strike
+behind the swing, a whoosh through the air, and dust where an aerial slam
 hits the ground. See
 [decision 0056](docs/decisions/0056-moves-with-weight.md).
 
@@ -688,15 +688,16 @@ through a swing rather than only away from it. It gets you out of a stagger,
 too. It needs a moment to recharge before it is ready again.
 See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
-Holding left click past a quick tap winds up a charged attack - about a
+Holding left click past a quick tap winds up a charged attack: about a
 second with your arm wound back, slowed to a creep at a third of walking
-pace - then leaps forward into a slam. Whatever it lands on when it goes off is finished
-outright: a tree falls in one regardless of how many ordinary swings it
-would otherwise take, and a raccoon is beaten in one regardless of how many
-hits it has left. It is a real trade - you can only creep, and cannot run,
-jump, dodge or block while charging - so it suits a decisive moment more
-than a running fight. Creep while charging and you turn to face the way you
-walk, so the slam lands that way.
+pace. Release to sweep through two grounded whirlwind turns. Nearby creatures
+on every side take the existing charged damage once; the second turn is
+follow-through. It stays a commitment: no running, jumping, dodging or blocking
+while charging, and the feet stay planted until both rotations finish.
+Creep while charging and you turn to face the way you walk. If no creatures
+are in reach, aimed tool work still fells one tree or digs ahead as before.
+Skeleton charged attacks share the whirlwind, with their usual wind-up and
+damage. See [charged whirlwind](docs/decisions/0191-charged-whirlwind.md).
 See [decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md)
 for the charge itself,
 [decision 0059](docs/decisions/0059-creeping-through-a-charge.md) for

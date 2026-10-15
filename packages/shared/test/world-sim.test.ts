@@ -3679,6 +3679,42 @@ describe('a charged attack', () => {
     expect(sim.felledTreeIds()).toContain(tree.id);
   });
 
+  it('catches creatures on every side once through a full charged whirlwind', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 });
+    const rabbits = ANIMAL_DENS.filter((den) => den.kind === 'rabbit').slice(0, 4);
+    expect(rabbits).toHaveLength(4);
+    const offsets = [
+      { x: 0, z: -1.2 },
+      { x: 0, z: 1.2 },
+      { x: -1.2, z: 0 },
+      { x: 1.2, z: 0 },
+    ];
+    const catches = [];
+    for (let tick = 0; tick < CHARGE_TICKS + STRIKE.end + 2; tick++) {
+      if (tick <= CHARGE_TICKS + STRIKE.impact) {
+        const at = sim.readPlayer(1)!.position;
+        rabbits.forEach((den, i) =>
+          sim.placeAnimal(den.id, {
+            x: at.x + offsets[i]!.x,
+            y: at.y,
+            z: at.z + offsets[i]!.z,
+          }),
+        );
+      }
+      sim.queueInput(
+        1,
+        createInput(tick + 1, 0, 0, 0, tick < CHARGE_TICKS ? PlayerButton.Charge : 0),
+      );
+      sim.step(tickClock());
+      catches.push(...sim.drainCatchEvents());
+      if (tick < CHARGE_TICKS + STRIKE.impact) expect(catches).toEqual([]);
+    }
+    expect(catches).toHaveLength(4);
+    expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
+  });
+
   it('slows you to a creep while it winds up, holding a direction the whole time', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
