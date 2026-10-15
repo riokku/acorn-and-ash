@@ -25,6 +25,7 @@ import {
   signedStreamAcross,
   streamPools,
   streamWaterHalfWidthAt,
+  forestTrailCoverage,
   type Lake,
   type PlacedProp,
   type Stream,
@@ -182,6 +183,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         (1 - smoothstep(1.4, 2.4, slope));
       // Steep hillsides lose their grass too, and rock and snow have none.
       const floor = Math.max(
+        forestTrailCoverage(x, z),
         sand,
         clamp01(
           Math.max(wildPatches + underTrees, worn, smoothstep(0.35, 0.8, slope), rock, pebbles) *

@@ -32,6 +32,7 @@ import { broadleafOrConifer } from './broadleaf';
 import { mountainWeight } from './mountains';
 import { basinDepthAt, LAKE, LAKE_PROP_CLEARANCE, type Lake } from './lake';
 import { nearStream, STREAM, STREAM_PROP_CLEARANCE, type Stream } from './stream';
+import { blocksForestTrail } from './forest-relief';
 
 const TREE_KINDS: readonly PropKindId[] = ['pine', 'birch', 'oak'];
 const ROCK_KINDS: readonly PropKindId[] = ['boulder', 'mossyRock'];
@@ -101,6 +102,9 @@ export function buildWilderness(
   const outerExtent = PLAYABLE_HALF_EXTENT + WILDERNESS.scatterMargin;
   const steps = Math.floor(outerExtent / WILDERNESS.cellSize);
   let nextId = WILDERNESS_PROP_FIRST_ID;
+  const sceneryTerrain = terrain.sceneryHeightAt
+    ? { kind: terrain.kind, heightAt: terrain.sceneryHeightAt }
+    : terrain;
 
   for (let ix = -steps; ix <= steps; ix++) {
     for (let iz = -steps; iz <= steps; iz++) {
@@ -134,10 +138,11 @@ export function buildWilderness(
       if (cellRng.nextFloat() > density) continue;
 
       // Up the mountain the trees thin out and give way to bare rock.
-      const y = terrain.heightAt(x, z);
+      const y = sceneryTerrain.heightAt(x, z);
       // Nothing is set on a steep face: it would sink into the slope on one
       // side and hang in the air on the other.
-      if (mountainWeight(x, z) > 0 && steepnessAt(terrain, x, z) > PROP_MAX_GRADIENT) continue;
+      if (mountainWeight(x, z) > 0 && steepnessAt(sceneryTerrain, x, z) > PROP_MAX_GRADIENT)
+        continue;
       const treeShare = 1 - smoothstep(y, TREE_THINNING_START, MOUNTAINS.treeLine);
       const rockChance = lerp(ROCK_CHANCE, HIGH_ROCK_CHANCE, 1 - treeShare);
       const isRock = cellRng.nextFloat() < rockChance;
@@ -146,13 +151,14 @@ export function buildWilderness(
         isRock ? ROCK_KINDS : y > HIGH_PINE_HEIGHT ? ['pine' as const] : TREE_KINDS,
       );
       const kind = isRock ? picked : broadleafOrConifer(seed, lake, stream, picked, x, y, z);
+      const plantedY = terrain.heightAt(x, z);
 
       props.push({
         id: nextId++,
-        kind,
+        kind: !isRock && plantedY > HIGH_PINE_HEIGHT ? 'pine' : kind,
         x,
         z,
-        y,
+        y: plantedY,
         rotationY: cellRng.nextRange(0, Math.PI * 2),
         // An independent stream changes stature without reshuffling any seeded positions.
         scale: isRock
@@ -166,6 +172,11 @@ export function buildWilderness(
     (prop) =>
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
+      !blocksForestTrail(prop) &&
+      !(prop.kind === 'pine' && (prop.y ?? 0) > MOUNTAINS.treeLine) &&
+      // Newly cut banks can be steeper than the original wooded hill. Drop
+      // those candidates after numbering too, without moving any other tree.
+      !(terrain.sceneryHeightAt && steepnessAt(terrain, prop.x, prop.z) > PROP_MAX_GRADIENT) &&
       !WOODLAND_ENCOUNTERS.some(
         (site) => Math.hypot(prop.x - site.x, prop.z - site.z) < site.radius + 2,
       ),

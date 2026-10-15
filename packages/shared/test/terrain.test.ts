@@ -42,7 +42,7 @@ describe('the wilderness terrain', () => {
     expect(terrain.heightAt(PLAYABLE_HALF_EXTENT, PLAYABLE_HALF_EXTENT)).toBe(0);
   });
 
-  it('rolls into hills somewhere in between, bounded by the configured height', () => {
+  it('rolls into hills and wooded terraces below the mountain tree line', () => {
     const terrain = createWildernessTerrain(4242);
     let sawNonZero = false;
     for (let radius = WILDERNESS.flatRadius; radius < PLAYABLE_HALF_EXTENT; radius += 3) {
@@ -55,7 +55,9 @@ describe('the wilderness terrain', () => {
         if (nearestOnStream(STREAM, x, z, 90) !== null) continue;
         const height = terrain.heightAt(x, z);
         expect(Number.isFinite(height)).toBe(true);
-        expect(Math.abs(height)).toBeLessThanOrEqual(WILDERNESS.hillHeight + 1e-9);
+        // The new wooded shelves rise beyond the original five-metre hills.
+        expect(height).toBeGreaterThanOrEqual(-WILDERNESS.hillHeight);
+        expect(height).toBeLessThanOrEqual(30);
         if (height !== 0) sawNonZero = true;
       }
     }

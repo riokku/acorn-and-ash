@@ -337,6 +337,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     createSeasonRig().apply({ from: season, to: season, amount: 0 }, daylight);
   const fireLights = new FireLights(scene);
 
+  if (focus === 'forest-trails') {
+    const { showForestTrails } = await import('./forest-trails');
+    showForestTrails(renderer, scene, fireLights, params);
+    return;
+  }
+
   // The inside of a home is its own place (see decision 0055), shown the
   // way the game shows it: a dollhouse with the near walls cut away.
   if (focus === 'home') {

@@ -4,6 +4,7 @@ import {
   LAKE,
   POND,
   STREAM,
+  FOREST_TRAILS,
   createWildernessTerrain,
   basinDepthAt,
   streamPointAt,
@@ -89,6 +90,11 @@ it.each([734, 1234])(
           point.z + ((next.x - point.x) / length) * width * across,
         );
     }
+    for (const trail of FOREST_TRAILS)
+      for (let point = 0; point < trail.points.length; point += 5) {
+        const spot = trail.points[point]!;
+        check(trail.name, spot.x, spot.z);
+      }
     // Local patches add detail without raising the resolution across the entire world.
     expect(ground.mesh.geometry.getAttribute('position').count).toBeLessThan(600_000);
     const x = 61.34,
