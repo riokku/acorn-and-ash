@@ -6,77 +6,57 @@ import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 
 /**
- * A rowboat (see decisions 0092 and 0093): a plain timber hull with a pointed
- * bow, a seat for the rower in the middle and one in the stern, a coil of rope
- * in the bow and a pair of oars - laid along the bottom while it is moored,
- * out over the sides and sweeping while somebody rows.
- *
- * Its length runs along the model's own X axis with the bow at +X, and the
- * waterline is at local y = 0: the hull reaches a little below it (hidden
- * under the water) and its rim stands a little above. It is about 3.2 m long
- * and 1.2 m across, which is the room its footprint keeps clear. Whoever
- * rows sits on the middle seat, which is at the model's origin.
+ * A temporary timber canoe using the existing painted boat materials. Its
+ * double-ended hull is 3.34 m long and 0.84 m wide, with one visible paddler
+ * on the middle thwart. Local +X is the bow, local y=0 the waterline.
+ * The legacy Rowboat API and saved kind remain compatible with existing worlds.
  */
 export interface Rowboat {
   readonly group: THREE.Group;
-  /**
-   * Put the oars out and sweep them, or ship them again. `stroke` is how far
-   * through a stroke the rower is, from 0 to 1 (and on round again), or null
-   * for the oars laid along the bottom. With `pulling` false the oars are out
-   * and resting just above the water, as when gliding.
-   */
+  /** Paddle with the rider's stroke, or lay it inside an unattended canoe. */
   setRowing(stroke: number | null, pulling?: boolean): void;
   dispose(): void;
 }
 
 /** Half the hull's length and width, at its longest and widest. */
-const HALF_LENGTH = 1.6;
-const HALF_BEAM = 0.62;
+const HALF_LENGTH = 1.67;
+const HALF_BEAM = 0.42;
 /** How thick the planking is, seen from above. */
-const WALL = 0.085;
+const WALL = 0.055;
 /** Keel, waterline and rim, as heights above the waterline. */
-const KEEL_Y = -0.2;
+const KEEL_Y = -0.1;
 const CHINE_Y = 0.05;
-const RIM_Y = 0.3;
-const FLOOR_THICKNESS = 0.06;
+const RIM_Y = 0.28;
+const FLOOR_THICKNESS = 0.04;
 /** Below the chine the hull narrows, the way a real one tucks in under the water. */
 const BELOW_CHINE_NARROWING = 0.78;
 
-/** The hull seen from above: a pointed bow at +X, a blunt stern at -X. */
+/** Pointed at both ends, with a rounded belly for the paddler. */
 function hullOutline(halfLength: number, halfBeam: number): THREE.Shape {
-  const stern = halfBeam * 0.58;
   const shape = new THREE.Shape();
   shape.moveTo(halfLength, 0);
+  shape.bezierCurveTo(halfLength * 0.7, halfBeam * 0.7, halfLength * 0.35, halfBeam, 0, halfBeam);
   shape.bezierCurveTo(
-    halfLength * 0.6,
-    halfBeam * 0.95,
-    halfLength * 0.15,
-    halfBeam,
     -halfLength * 0.35,
     halfBeam,
+    -halfLength * 0.7,
+    halfBeam * 0.7,
+    -halfLength,
+    0,
   );
   shape.bezierCurveTo(
-    -halfLength * 0.75,
-    halfBeam,
-    -halfLength,
-    halfBeam * 0.82,
-    -halfLength,
-    stern,
-  );
-  shape.lineTo(-halfLength, -stern);
-  shape.bezierCurveTo(
-    -halfLength,
-    -halfBeam * 0.82,
-    -halfLength * 0.75,
-    -halfBeam,
+    -halfLength * 0.7,
+    -halfBeam * 0.7,
     -halfLength * 0.35,
     -halfBeam,
+    0,
+    -halfBeam,
   );
   shape.bezierCurveTo(
-    halfLength * 0.15,
+    halfLength * 0.35,
     -halfBeam,
-    halfLength * 0.6,
-    -halfBeam * 0.95,
+    halfLength * 0.7,
+    -halfBeam * 0.7,
     halfLength,
     0,
   );
@@ -114,11 +94,16 @@ export function createRowboat(): Rowboat {
 
   // The planking: a narrower tub under the waterline, the full width above it.
   builder.add(planking, slab(wallOutline(HALF_LENGTH, HALF_BEAM), CHINE_Y, RIM_Y - CHINE_Y));
-  builder.add(
-    planking,
-    slab(wallOutline(HALF_LENGTH, HALF_BEAM * BELOW_CHINE_NARROWING), KEEL_Y, CHINE_Y - KEEL_Y),
-  );
-  // The floor, a little above the keel, so you cannot see through to the water.
+  const lowerHull = slab(wallOutline(HALF_LENGTH, HALF_BEAM), KEEL_Y, CHINE_Y - KEEL_Y);
+  const vertices = lowerHull.getAttribute('position');
+  for (let index = 0; index < vertices.count; index++) {
+    const rise = (vertices.getY(index) - KEEL_Y) / (CHINE_Y - KEEL_Y);
+    const taper = BELOW_CHINE_NARROWING + (1 - BELOW_CHINE_NARROWING) * rise;
+    vertices.setZ(index, vertices.getZ(index) * taper);
+  }
+  lowerHull.computeVertexNormals();
+  builder.add(planking, lowerHull);
+  // Close the underside too: the canoe is a hull, not an open ring.
   builder.add(
     trim,
     slab(
@@ -127,11 +112,17 @@ export function createRowboat(): Rowboat {
       FLOOR_THICKNESS,
     ),
   );
+  // A dry inner sole just above the water plane; the shallow keel remains
+  // below it. This keeps the shared water surface out of the open interior.
+  builder.add(
+    trim,
+    slab(hullOutline(HALF_LENGTH - WALL * 1.4, HALF_BEAM - WALL), 0.025, FLOOR_THICKNESS),
+  );
 
-  // The rower's seat across the middle, and one in the stern.
+  // The paddler's seat across the middle, and a smaller stern thwart.
   for (const [x, width] of [
-    [0, 1.08],
-    [-0.9, 0.9],
+    [0, 0.72],
+    [-0.85, 0.55],
   ] as const) {
     builder.add(
       trim,
@@ -140,108 +131,59 @@ export function createRowboat(): Rowboat {
     );
   }
 
-  // Oarlocks on the rim, level with the rower.
-  for (const side of [-1, 1]) {
-    builder.add(
-      trim,
-      new THREE.CylinderGeometry(0.025, 0.03, 0.14, 6),
-      placed(0, RIM_Y + 0.05, side * OARLOCK_Z),
-    );
-  }
+  builder.add(trim, slab(wallOutline(HALF_LENGTH, HALF_BEAM), RIM_Y, 0.025));
 
   // A coil of rope in the bow, the rope it was lashed with.
   builder.add(
     rope,
     new THREE.TorusGeometry(0.1, 0.028, 5, 10),
-    placed(1.05, -0.12, 0, { x: Math.PI / 2 }),
+    placed(1.05, 0.09, 0, { x: Math.PI / 2 }),
   );
 
   const built = builder.build();
-  const oars = ([1, -1] as const).map((side) => createOar(side, planking, trim));
-  for (const oar of oars) built.group.add(oar.pivot);
+  built.group.name = 'canoe';
+  const paddle = createPaddle(planking, trim);
+  built.group.add(paddle.pivot);
   const setRowing = (stroke: number | null, pulling = true): void => {
-    for (const oar of oars) {
-      if (stroke === null) shipOar(oar);
-      else swingOar(oar, stroke, pulling);
+    if (stroke === null) {
+      // Stowed lengthwise; no wide oars to snag the river banks.
+      paddle.pivot.position.set(0.4, 0.08, 0.18);
+      paddle.pivot.rotation.set(0, 0, -Math.PI / 2);
+    } else {
+      const phase = stroke * Math.PI * 2;
+      paddle.pivot.position.set(0.22, 0.72, 0.25);
+      paddle.pivot.rotation.set(0.28, 0, pulling ? Math.cos(phase) * 0.5 : 0.35);
     }
   };
   setRowing(null);
-
   return {
     group: built.group,
     setRowing,
     dispose: () => {
       built.dispose();
-      for (const oar of oars) for (const geometry of oar.geometries) geometry.dispose();
+      for (const geometry of paddle.geometries) geometry.dispose();
     },
   };
 }
 
-/** Where the oarlock stands across the boat, in metres from its middle line. */
-const OARLOCK_Z = HALF_BEAM - WALL / 2 - 0.02;
-/** The oarlock's height above the waterline, where an oar turns. */
-const OARLOCK_Y = RIM_Y + 0.06;
-/** How far an oar reaches inboard of the oarlock, and out over the side to the blade's end. */
-const OAR_INBOARD = 0.5;
-const OAR_OUTBOARD = 1.4;
-/** How far the blade sweeps either way of straight out, and how deep it dips on the power stroke. */
-const STROKE_SWEEP = 0.5;
-const STROKE_DIP = 0.34;
-/** How far it tips on the way back, clear of the water. */
-const STROKE_RAISED = 0.18;
-/** Where the blade rests, skimming just above the water, when gliding. */
-const GLIDE_DIP = 0.13;
-
-interface Oar {
-  /** Which side of the boat it is on: 1 to starboard, -1 to port. */
-  readonly side: 1 | -1;
-  /** Turns about the oarlock; the oar's length runs along its own Z with the blade at +Z. */
-  readonly pivot: THREE.Group;
-  readonly geometries: readonly THREE.BufferGeometry[];
-}
-
-function createOar(
-  side: 1 | -1,
-  bladeMaterial: THREE.Material,
-  shaftMaterial: THREE.Material,
-): Oar {
-  const shaftLength = OAR_INBOARD + OAR_OUTBOARD - 0.4;
-  const shaft = new THREE.CylinderGeometry(0.022, 0.022, shaftLength, 6);
-  shaft.rotateX(Math.PI / 2);
-  shaft.translate(0, 0, shaftLength / 2 - OAR_INBOARD);
-  const blade = new THREE.BoxGeometry(0.11, 0.015, 0.4);
-  blade.translate(0, 0, OAR_OUTBOARD - 0.2);
-
+/** A single slim paddle, turning about the paddler's hands. */
+function createPaddle(bladeMaterial: THREE.Material, shaftMaterial: THREE.Material) {
+  const shaft = new THREE.CylinderGeometry(0.018, 0.018, 1.2, 6);
+  shaft.translate(0, -0.18, 0);
+  const blade = plankGeometry(0.18, 0.4, 0.025, 'y', 0.6, 7);
+  blade.translate(0, -0.95, 0);
+  const grip = new THREE.BoxGeometry(0.12, 0.025, 0.035);
+  grip.translate(0, 0.43, 0);
   const pivot = new THREE.Group();
-  pivot.rotation.order = 'YXZ';
+  pivot.name = 'canoe-paddle';
   for (const [geometry, material] of [
     [shaft, shaftMaterial],
     [blade, bladeMaterial],
+    [grip, shaftMaterial],
   ] as const) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     pivot.add(mesh);
   }
-  return { side, pivot, geometries: [shaft, blade] };
-}
-
-/** Laid along the bottom of the boat, blade towards the stern. */
-function shipOar(oar: Oar): void {
-  oar.pivot.position.set(0.55, -0.1, oar.side * 0.3);
-  // Local +Z (the blade) turned to point at -X, the stern.
-  oar.pivot.rotation.set(0, -Math.PI / 2, 0);
-}
-
-/** Out over the side, the blade sweeping fore and aft and dipping in on the power stroke. */
-function swingOar(oar: Oar, stroke: number, pulling: boolean): void {
-  const turn = stroke * Math.PI * 2;
-  // Forward at the start of the stroke, drawn back through the middle of it.
-  const sweep = pulling ? STROKE_SWEEP * Math.cos(turn) : 0.15;
-  const dip = pulling
-    ? STROKE_RAISED + (STROKE_DIP - STROKE_RAISED) * Math.max(0, Math.sin(turn))
-    : GLIDE_DIP;
-  oar.pivot.position.set(0, OARLOCK_Y, oar.side * OARLOCK_Z);
-  // A turn of the whole oar about the oarlock: starboard's blade points out
-  // to +Z, port's to -Z, and a positive sweep carries either one forward.
-  oar.pivot.rotation.set(dip, oar.side === 1 ? sweep : Math.PI - sweep, 0);
+  return { pivot, geometries: [shaft, blade, grip] };
 }

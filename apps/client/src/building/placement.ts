@@ -206,7 +206,7 @@ export function describeRefusal(refusal: BuildRefusal): string {
     case 'water':
       return 'Too close to the water';
     case 'needsWater':
-      return 'Rowboats float in the lake · moor it a step or two out from the bank';
+      return 'Canoes float in the river or lake · moor it just off the bank';
     case 'tooFarOut':
       return 'Too far out · moor it closer to the bank';
     case 'frozen':

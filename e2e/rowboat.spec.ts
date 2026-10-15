@@ -100,7 +100,7 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
   // The Craft menu has a Lake section with the rowboat and its price.
   await page.keyboard.press('KeyC');
   await page.locator('.craft-tabs').getByRole('button', { name: 'Lake', exact: true }).click();
-  const entry = page.locator('.hud-journal-entry').filter({ hasText: 'Rowboat' });
+  const entry = page.locator('.hud-journal-entry').filter({ hasText: 'Canoe' });
   await expect(page.locator('.hud-journal')).toContainText('Lake');
   await expect(entry).toContainText('6');
   await expect(entry).toContainText('2');
@@ -118,7 +118,7 @@ test('you can build a rowboat on the lake and it stays moored', async ({ page })
   await page.mouse.move(land.x, land.y);
   await expect
     .poll(() => page.evaluate(() => window.acornDebug?.buildPreview()?.refusal))
-    .toContain('Rowboats float in the lake');
+    .toContain('Canoes float in the river or lake');
 
   // Pointed at the water a step or two out, it fits.
   const onWater = await page.evaluate(

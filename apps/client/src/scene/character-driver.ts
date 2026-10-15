@@ -9,6 +9,7 @@
 import {
   ActionKind,
   BOAT_SEAT_HEIGHT,
+  navigableWaterSurfaceAt,
   HOME_BED,
   homeRestingPlace,
   type HomeKind,
@@ -44,7 +45,7 @@ export function rollDirection(heading: number, facingYaw: number): RollDirection
  * boat is, so the seat only needs lifting to the height of the thwart.
  */
 export function boatSeatAt(x: number, z: number, facingYaw: number): RestSpot {
-  return { x, y: BOAT_SEAT_HEIGHT, z, yaw: facingYaw };
+  return { x, y: navigableWaterSurfaceAt(x, z) + BOAT_SEAT_HEIGHT, z, yaw: facingYaw };
 }
 
 /**

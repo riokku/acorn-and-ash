@@ -113,7 +113,7 @@ describe('where a rowboat can be moored', () => {
   });
 
   it('needs water under all of it, so not right at the water edge', () => {
-    const berth = berthBeside(first, 1);
+    const berth = berthBeside(first, 0.5);
     const piece = buildableFootprint('rowboat', berth.x, berth.z, berth.yaw);
     expect(lakeDepthAt(LAKE, berth.x, berth.z)).toBeLessThan(BOAT_HULL_MIN_DEPTH + 0.3);
     expect(checkBuildSpot(piece, FAR_AWAY, ANY_REACH, [], [])).toEqual({ reason: 'needsWater' });
@@ -121,7 +121,7 @@ describe('where a rowboat can be moored', () => {
 
   it('needs water under its bow as well as its middle', () => {
     // Turned so the bow points at the bank: its middle floats, its bow does not.
-    const berth = berthBeside(first);
+    const berth = berthBeside(first, 1.4);
     const piece = buildableFootprint('rowboat', berth.x, berth.z, berth.yaw + Math.PI / 2);
     expect(checkBuildSpot(piece, FAR_AWAY, ANY_REACH, [], [])).toEqual({ reason: 'needsWater' });
   });
@@ -161,7 +161,7 @@ describe('where a rowboat can be moored', () => {
     const other = buildableFootprint('rowboat', berth.x, berth.z, berth.yaw);
     expect(checkBuildSpot(piece, FAR_AWAY, ANY_REACH, [], [other])).toEqual({
       reason: 'tooClose',
-      what: 'rowboat',
+      what: 'canoe',
     });
   });
 

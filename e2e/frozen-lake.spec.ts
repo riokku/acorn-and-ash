@@ -144,7 +144,7 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
 
   // Autumn: open water, and the boat can be climbed into and rowed out.
   expect(await frozen()).toBe(false);
-  await expect(hint).toContainText('Press E to climb into the rowboat');
+  await expect(hint).toContainText('Press E to climb into the canoe');
   await pressE();
   await expect.poll(move).toBe(shared.ActionKind.Row);
   await faceFrom(water.inward.x, water.inward.z);
@@ -165,7 +165,7 @@ test('the lake freezes under a rower, who walks off across the ice, and thaws in
   const boat = sim.builtPropsList().find((prop) => prop.id === BOAT_ID)!;
   expect(Math.hypot(boat.x - stood.x, boat.z - stood.z)).toBeLessThan(2.5);
   expect(boat.rower).toBeUndefined();
-  await expect(hint).toContainText('The rowboat is frozen in the ice');
+  await expect(hint).toContainText('The canoe is frozen in the ice');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/frozen-lake-stepped-out.png` });
 
   // E does not climb back in: it is frozen there until spring.

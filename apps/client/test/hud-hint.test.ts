@@ -660,19 +660,19 @@ describe('the hint while sitting on the ground', () => {
 
 describe('the hint at a rowboat', () => {
   it('offers to climb into a free boat, and says when somebody else has it', () => {
-    expect(hint({ ...BASE_STATE, boat: 'board' })).toBe('Press E to climb into the rowboat');
+    expect(hint({ ...BASE_STATE, boat: 'board' })).toBe('Press E to climb into the canoe');
     expect(hint({ ...BASE_STATE, boat: 'taken' })).toBe('Somebody is already rowing this boat');
   });
 
   it('says a boat is frozen in, in winter', () => {
     expect(hint({ ...BASE_STATE, boat: 'frozen' })).toBe(
-      'The rowboat is frozen in the ice · it floats again in spring',
+      'The canoe is frozen in the ice · it floats again in spring',
     );
   });
 
   it('cuts reeds first: a patch beside the boat is what E does', () => {
     const state: HudState = { ...BASE_STATE, boat: 'board', nearGatherSpot: 'reed' };
-    expect(hint(state)).not.toBe('Press E to climb into the rowboat');
+    expect(hint(state)).not.toBe('Press E to climb into the canoe');
   });
 
   it('tells a rower how to row, and whether they can climb out here', () => {

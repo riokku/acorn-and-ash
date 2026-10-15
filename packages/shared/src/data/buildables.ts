@@ -319,17 +319,16 @@ export const BUILDABLE_KINDS = {
   },
   rowboat: {
     id: 'rowboat',
-    displayName: 'Rowboat',
+    displayName: 'Canoe',
     // Planks from the woods, lashed together with rope twisted from lake reeds.
     costs: [
       { item: 'log', amount: 6 },
       { item: 'rope', amount: 2 },
     ],
-    // A hull about three and a quarter metres long and a metre and a third
-    // across: a line along its length with its round ends, the way a fence
-    // is, laid along the model's own X axis with the bow at +X.
-    footprintRadius: 0.65,
-    footprintHalfLength: 0.95,
+    // A narrow, double-ended canoe, along the model's own X axis.
+    // The persisted rowboat id stays stable for existing boats and saves.
+    footprintRadius: 0.42,
+    footprintHalfLength: 1.25,
     isHome: false,
     // One each, like a home: a lake full of boats nobody rows helps nobody.
     capPerPlayer: true,

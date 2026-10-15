@@ -1,4 +1,4 @@
-import { driftBoat, navigableWaterSurfaceAt, type BoatPlace } from '@acorn/shared';
+import { angleDelta, driftBoat, navigableWaterSurfaceAt, type BoatPlace } from '@acorn/shared';
 
 /** Predict only water drift between server updates, blending small position corrections. */
 export class FloatingBoatMotion {
@@ -6,6 +6,7 @@ export class FloatingBoatMotion {
   private locked: boolean;
   private correctionX = 0;
   private correctionZ = 0;
+  private correctionYaw = 0;
 
   constructor(boat: BoatPlace & { locked?: boolean }) {
     this.place = { ...boat };
@@ -18,6 +19,7 @@ export class FloatingBoatMotion {
     const close = Math.hypot(dx, dz) < 3;
     this.correctionX = close ? dx : 0;
     this.correctionZ = close ? dz : 0;
+    this.correctionYaw = close ? angleDelta(boat.yaw, this.place.yaw + this.correctionYaw) : 0;
     Object.assign(this.place, boat);
     this.locked = boat.locked === true;
   }
@@ -29,8 +31,9 @@ export class FloatingBoatMotion {
     const decay = Math.exp(-deltaSeconds * 6);
     this.correctionX *= decay;
     this.correctionZ *= decay;
+    this.correctionYaw *= decay;
     const x = this.place.x + this.correctionX,
       z = this.place.z + this.correctionZ;
-    return { x, y: navigableWaterSurfaceAt(x, z), z, yaw: this.place.yaw };
+    return { x, y: navigableWaterSurfaceAt(x, z), z, yaw: this.place.yaw + this.correctionYaw };
   }
 }

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { STREAM, streamPointAt, navigableWaterSurfaceAt } from '@acorn/shared';
+import { angleDelta, STREAM, streamPointAt, navigableWaterSurfaceAt } from '@acorn/shared';
 import { FloatingBoatMotion } from '../src/scene/floating-boat-motion';
 
 it('smooths server corrections while river drift continues and holds still in sloughs or ice', () => {
@@ -22,4 +22,17 @@ it('smooths server corrections while river drift continues and holds still in sl
     const start = calm.update(0, false);
     expect(calm.update(1, false)).toEqual(start);
   }
+});
+
+it('blends downstream heading corrections across the angle boundary without a snap', () => {
+  const calm = STREAM.sloughs[0]!.basin[0]!;
+  const boat = new FloatingBoatMotion({ ...calm, yaw: Math.PI - 0.1 });
+  boat.sync({ ...calm, yaw: -Math.PI + 0.1 });
+  const before = boat.update(0, false).yaw;
+  expect(angleDelta(Math.PI - 0.1, before)).toBeCloseTo(0);
+  const halfway = boat.update(0.1, false).yaw;
+  expect(angleDelta(before, halfway)).toBeGreaterThan(0);
+  expect(angleDelta(before, halfway)).toBeLessThan(0.2);
+  const settled = boat.update(2, false).yaw;
+  expect(angleDelta(-Math.PI + 0.1, settled)).toBeCloseTo(0, 4);
 });

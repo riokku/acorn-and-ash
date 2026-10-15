@@ -135,7 +135,7 @@ nearby interaction shortcut. Inventory and hotbar tooltips explain what items do
 | Right mouse on world loot (tap)      | Pick up the clicked item or gather one from a patch                      |
 | `E`                                  | Pick up nearby loot, gather, dig up a cache, use/cook at a campfire, eat |
 | `E` beside your chair or bed         | Sit down or lie down (move, or `E` again, to get up)                     |
-| `E` beside a rowboat                 | Climb in (one rider to a boat); in a boat at a shore, climb out          |
+| `E` beside a canoe                   | Climb in (one rider to a boat); in a boat at a shore, climb out          |
 | `E` at your expedition board         | Read the board on your doorstep; `E` again to put it away                |
 | `W` `A` `S` `D`, `Shift` (in a boat) | Row (steer toward where you point), pull harder                          |
 | `1`–`6`                              | Equip the hotbar slot - eats it too if it's food                         |
@@ -421,10 +421,10 @@ every world. The ground slopes down to a gentle beach, the water goes from clear
 green in the shallows to deep blue, and there are reeds, lily pads and stones
 along the shore. You can't wade in: the shore holds you back, and you slide
 along it if you walk at it on a slant. The islands, with their own trees and
-rocks, are out of reach on foot: you reach them by rowboat. It shows on
+rocks, are out of reach on foot: you reach them by canoe. It shows on
 the minimap and the big map. You can cast a rod onto the lake the same as onto
 the pond (a cast never lands on an island). In winter the lake freezes over: see
-[Rowboat](#rowboat) below. The code is in
+[Canoe](#canoe) below. The code is in
 `packages/shared/src/world/lake.ts` and `apps/client/src/scene/lake.ts`. See
 [decision 0090](docs/decisions/0090-the-lake.md).
 
@@ -439,7 +439,7 @@ two to six. Once it is cut bare it comes back after a random fifteen to
 twenty-five minutes, at a different place round the shore of the same water: a
 pond bed never turns up at the lake, nor the other way round, so both always
 have some. Open the Craft menu (`C`), turn to its **Lake** page and twist three
-reeds into a length of rope, by hand with no workbench. Rope is for the rowboat,
+reeds into a length of rope, by hand with no workbench. Rope is for the canoe,
 below, which is for the lake only.
 
 The places are worked out in `packages/shared/src/world/reeds.ts` and drawn in
@@ -450,9 +450,9 @@ bed back in 45 to 75 seconds instead, set by `WORLD_REED_REGROW_SECONDS` in
 [decision 0099](docs/decisions/0099-mature-reeds.md) and
 [decision 0101](docs/decisions/0101-reeds-at-every-water.md).
 
-### Rowboat
+### Canoe
 
-With six logs and two rope, open the Craft menu (`C` or `B`) and pick **Rowboat** on
+With six logs and two rope, open the Craft menu (`C` or `B`) and pick **Canoe** on
 the Lake page. Stand on the bank, point at the water a step or two out, and a see-through
 boat floats there: green where it fits, red where it can't. Scroll to turn it
 along the bank, then click to moor it. You can have one, and it stays where you
@@ -465,14 +465,19 @@ ground. The mooring rule is in `packages/shared/src/world/boat.ts` and
 Stand within a few steps of a boat and press `E` to climb in. You sit in the
 middle with the bow ahead of you. Move to row: the boat turns toward the way you
 point (relative to the camera, like walking) and picks up speed as it comes
-round, and `Shift` pulls harder. Let go and it glides to a stop; it never runs
-aground, it slides along the bank. Press `E` near a shore to climb out onto the
+round, and `Shift` pulls harder. Let go and it glides; in the river the current
+carries it downstream and gently turns its bow with the channel. The narrow canoe
+fits from the mountain spring to the lake. It stays calm inside sloughs and on the
+lake, and slides along banks instead of running aground. Press `E` near a shore to climb out onto the
 bank (further out, `E` does nothing). Anyone can climb into anybody's boat,
-one rider to a boat, and a boat you leave stays where you left it. If you leave
+one rider to a boat. An unattended canoe also drifts with the river current. If you leave
 the game or are knocked out on the water, the boat is put ashore and you are on
 the bank. The rowing rules are in `packages/shared/src/sim/rowing.ts`, and the
 boat under each rider is drawn by `apps/client/src/scene/rowing-boats.ts`. See
 [decision 0093](docs/decisions/0093-rowing.md).
+The rider stays seated above the local water at every elevation, and the timber
+floor and closed underside remain visible. Existing saved rowboats become canoes.
+Inspect it at `?gallery=canoe`; see [decision 0193](docs/decisions/0193-narrow-river-canoe.md).
 
 If you are knocked out and your boat is left on an island, where you can't walk
 back to it, it falls apart where it sits and you wake in bed free to build

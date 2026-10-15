@@ -154,7 +154,7 @@ describe("the game's own models", () => {
     cabin.dispose();
   });
 
-  it('floats a rowboat on its waterline, inside the room its footprint asks for', () => {
+  it('floats a canoe on its waterline, inside the room its footprint asks for', () => {
     const boat = createRowboat();
     const box = new THREE.Box3().setFromObject(boat.group);
     const { footprintHalfLength, footprintRadius } = BUILDABLE_KINDS.rowboat;
@@ -170,7 +170,23 @@ describe("the game's own models", () => {
     boat.dispose();
   });
 
-  it('gives a rowboat a pointed bow at +X and a blunter stern at -X', () => {
+  it('has a dry wooden floor visible above the water and a closed underside', () => {
+    const boat = createRowboat();
+    boat.group.updateMatrixWorld(true);
+    // Away from the seats and paddle: these rays must hit the floor itself.
+    const above = new THREE.Raycaster(new THREE.Vector3(0.5, 1, 0.05), new THREE.Vector3(0, -1, 0));
+    const below = new THREE.Raycaster(new THREE.Vector3(0.5, -1, 0.05), new THREE.Vector3(0, 1, 0));
+    const top = above.intersectObject(boat.group, true)[0];
+    const bottom = below.intersectObject(boat.group, true)[0];
+    expect(top).toBeDefined();
+    expect(bottom).toBeDefined();
+    expect(top!.point.y).toBeGreaterThan(0.01);
+    expect(top!.point.y).toBeLessThan(0.1);
+    expect(bottom!.point.y).toBeLessThan(-0.05);
+    boat.dispose();
+  });
+
+  it('gives a canoe two narrow pointed ends', () => {
     const boat = createRowboat();
     let bowWidth = 0;
     let sternWidth = 0;
@@ -187,7 +203,8 @@ describe("the game's own models", () => {
       }
     });
     expect(bowWidth).toBeGreaterThan(0);
-    expect(bowWidth).toBeLessThan(sternWidth);
+    expect(bowWidth).toBeCloseTo(sternWidth, 5);
+    expect(bowWidth).toBeLessThan(0.2);
     boat.dispose();
   });
 

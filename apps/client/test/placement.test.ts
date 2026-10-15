@@ -173,9 +173,7 @@ describe('moored boats', () => {
     // A few steps inland from where the player stands on the bank.
     const inland = { x: bank.x - inward.x * 2.5, z: bank.z - inward.z * 2.5 };
     const plan = planPlacement({ ...BOAT, mouse: inland });
-    expect(plan.refusal).toBe(
-      'Rowboats float in the lake · moor it a step or two out from the bank',
-    );
+    expect(plan.refusal).toBe('Canoes float in the river or lake · moor it just off the bank');
   });
 
   it('asks for rope and logs like any other piece', () => {
@@ -189,7 +187,7 @@ describe('moored boats', () => {
       ...BOAT,
       built: [built({ kind: 'rowboat', x: 400, z: 400, yours: true })],
     });
-    expect(plan.refusal).toBe('You already have a rowboat');
+    expect(plan.refusal).toBe('You already have a canoe');
   });
 
   it('describes a boat that is too far out in the deep', () => {
