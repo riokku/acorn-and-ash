@@ -808,12 +808,14 @@ export interface CacheEvent {
 
 /**
  * `CacheEvent` plus what the game server needs to persist it - the full
- * cache for a fresh burial, or just the id to delete for a dig-up - which
+ * cache for a fresh burial, or just the id to delete for a dig-up or loss - which
  * never goes to a client and so never needs to be a `CacheEvent` itself.
  */
 export type CacheChange =
-  | { readonly netId: number; readonly kind: 'buried' | 'partial'; readonly cache: BuriedCache }
-  | { readonly netId: number; readonly kind: 'dugUp'; readonly cacheId: number };
+  | { readonly netId: number; readonly kind: 'buried'; readonly cache: BuriedCache }
+  | { readonly netId: number; readonly kind: 'partial'; readonly cache: BuriedCache }
+  | { readonly netId: number; readonly kind: 'dugUp'; readonly cacheId: number }
+  | { readonly netId: number; readonly kind: 'lost'; readonly cacheId: number };
 
 /** A tree's state, as it goes into and comes out of storage. */
 export interface PersistedTree {
@@ -5047,6 +5049,16 @@ export class WorldSimulation {
 
     if (knockedOut) {
       runtime.warmth = warmthFromSaved(null);
+      // Only this death's belongings can be reclaimed, even when there is
+      // nothing new to bury. Stable ownership also covers a reconnect.
+      if (runtime.playerKey !== null) {
+        for (let index = this.buriedCaches.length - 1; index >= 0; index--) {
+          const cache = this.buriedCaches[index];
+          if (cache?.ownerPlayerKey !== runtime.playerKey) continue;
+          this.buriedCaches.splice(index, 1);
+          this.cacheEvents.push({ netId: runtime.netId, kind: 'lost', cacheId: cache.id });
+        }
+      }
       // Out of the boat first, so what they buried is on dry ground.
       this.putBoatAshore(runtime);
       // A boat they can no longer walk back to is not worth keeping (decision 0094).
@@ -5818,12 +5830,32 @@ export class WorldSimulation {
     }));
   }
 
-  /** Put buried caches back as they were after the world wakes from storage. */
-  restoreBuriedCaches(caches: Iterable<BuriedCache>): void {
+  /** Restore only each owner's latest cache; return obsolete IDs for storage to delete. */
+  restoreBuriedCaches(caches: Iterable<BuriedCache>): number[] {
     for (const cache of caches) {
       this.buriedCaches.push(cache);
       this.nextBuriedCacheId = Math.max(this.nextBuriedCacheId, cache.id + 1);
     }
+    // IDs increase at every burial. Use those rather than input order so
+    // older worlds with several caches per character migrate consistently.
+    const newest = new Map<string, number>();
+    for (const cache of this.buriedCaches) {
+      if (cache.ownerPlayerKey !== null)
+        newest.set(cache.ownerPlayerKey, Math.max(newest.get(cache.ownerPlayerKey) ?? 0, cache.id));
+    }
+    const discarded: number[] = [];
+    for (let index = this.buriedCaches.length - 1; index >= 0; index--) {
+      const cache = this.buriedCaches[index];
+      if (
+        cache === undefined ||
+        cache.ownerPlayerKey === null ||
+        newest.get(cache.ownerPlayerKey) === cache.id
+      )
+        continue;
+      this.buriedCaches.splice(index, 1);
+      discarded.push(cache.id);
+    }
+    return discarded;
   }
 
   /** The network id of whoever is connected under this stable key right now, or null. */

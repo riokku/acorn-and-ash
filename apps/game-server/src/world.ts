@@ -1349,7 +1349,8 @@ export class World extends DurableObject<WorldEnv> {
     const changedPlayers = new Set(changes.map((change) => change.netId));
     this.ctx.storage.transactionSync(() => {
       for (const change of changes) {
-        if (change.kind !== 'dugUp') this.writeBuriedCache(change.cache);
+        if (change.kind === 'buried' || change.kind === 'partial')
+          this.writeBuriedCache(change.cache);
         else this.deleteBuriedCache(change.cacheId);
       }
       for (const ws of this.ctx.getWebSockets()) {
@@ -1367,13 +1368,14 @@ export class World extends DurableObject<WorldEnv> {
       const attachment = this.attachmentFor(ws);
       if (attachment === null) continue;
       const event = byNetId.get(attachment.netId);
-      if (event !== undefined) this.trySend(ws, encodeCache(event));
+      if (event !== undefined && event.kind !== 'lost')
+        this.trySend(ws, encodeCache({ netId: event.netId, kind: event.kind }));
       this.trySend(
         ws,
         encodeRecoveryMarkers(caches.filter((cache) => cache.ownerNetId === attachment.netId)),
       );
     }
-    this.sendPacks(simulation, new Set(byNetId.keys()));
+    this.sendPacks(simulation, changedPlayers);
 
     this.broadcast(encodeBuriedCaches(caches));
   }
@@ -1906,7 +1908,10 @@ export class World extends DurableObject<WorldEnv> {
         console.error('Invalid saved chest', row.home_id);
       }
     }
-    simulation.restoreBuriedCaches(this.loadBuriedCaches());
+    this.ctx.storage.transactionSync(() => {
+      const obsolete = simulation.restoreBuriedCaches(this.loadBuriedCaches());
+      for (const id of obsolete) this.deleteBuriedCache(id);
+    });
     simulation.restorePatches(this.loadPatches());
     simulation.restoreDigs(this.loadDigs());
     simulation.restoreSupports(this.loadSupports());

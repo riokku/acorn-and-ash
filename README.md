@@ -687,12 +687,15 @@ A knockout buries half of what you were carrying - your axe and rod always
 stay with you - right where you went down, and heals you fully same as
 before. A small mound marks the spot; walk back to it and the HUD offers to
 dig it up, the same as reaching for anything else on the ground. Nobody but
-you can dig up your own cache. See
-[decision 0028](docs/decisions/0028-buried-items-after-a-knockout.md).
+you can dig up your own cache. Only the most recent death is recoverable: dying
+again permanently removes any older stash, including partially recovered
+leftovers, even if the new death drops nothing. See
+[decision 0198](docs/decisions/0198-latest-death-recovery.md).
 
 A small compass appears on screen too, the moment you're not already
-standing next to it: an arrow pointing the way, and how far, to the nearest
-thing you have buried and not yet dug up. It turns as you look around, so
+standing next to it: an arrow pointing the way, and how far, to the belongings
+from your most recent death, if you have not yet dug them up. It turns as
+you look around, so
 it always points the real way regardless of which way you're facing, and it
 disappears once you're close enough to dig - handed straight back to the
 usual "press E" hint at that point. See
@@ -1467,7 +1470,7 @@ Most outings have clear skies or drizzle, with short rain and occasional brief s
 
 Click Decorate inside your home to place a cedar bench, timber table, woven forest rug, colored lantern, flower planter or earned trophy. Colored lanterns and planters also work outdoors inside your building area. Point at the floor, scroll to rotate, and click to place. The preview protects doors, waking spots and useful stations. Move pieces for free or pack them up to recover their materials; a full backpack keeps the piece intact. Visitors can admire decorations but only owners can rearrange them. See [private decoration](docs/decisions/0081-private-home-decoration.md).
 
-Returning home closes the expedition loop: store building supplies with one chest button, prepare a meal and rest. Knockout recovery markers never expire. Digging takes only what fits in your backpack; leftovers remain safely buried and marked, including in long-lived worlds with many caches. Cabin windows brighten softly at night.
+Returning home closes the expedition loop: store building supplies with one chest button, prepare a meal and rest. Knockout recovery markers remain until recovery or the next death; dying again permanently removes the old stash. Digging takes only what fits in your backpack; leftovers remain safely buried and marked until that character dies again. Cabin windows brighten softly at night.
 
 During a dodge, tap left mouse for an aerial spin slash or click right mouse for an immediate higher somersault slam. Both follow-ups keep momentum along the original dodge path while aiming the weapon independently. Movement resumes on landing; the slam hits harder and has longer attack recovery. Outside a dodge, hold left mouse for the normal charged attack. Right-click still loots or drags the camera; see Settings > Keybindings and [dodge follow-ups](docs/decisions/0083-dodge-follow-up-attacks.md).
 

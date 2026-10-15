@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
-test('keeps private recovery guidance after partial recovery with a crowded world', async ({
+test('replaces private recovery guidance on death after partial recovery in a crowded world', async ({
   page,
 }, testInfo) => {
   const sim = new shared.WorldSimulation({
@@ -15,12 +15,13 @@ test('keeps private recovery guidance after partial recovery with a crowded worl
   sim.restoreBuriedCaches(
     Array.from({ length: 300 }, (_, i) => ({
       id: 70000 + i,
-      ownerPlayerKey: 'recovering',
+      ownerPlayerKey: i === 0 ? 'recovering' : `visitor-${i}`,
       x: i === 0 ? 0 : 100,
       z: i === 0 ? 10 : 100 + i / 100,
       items: [{ item: 'log' as const, count: i === 0 ? 4 : 1 }],
     })),
   );
+  let dieAgain = () => {};
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://fonts.googleapis.com/**', (route) =>
@@ -33,8 +34,23 @@ test('keeps private recovery guidance after partial recovery with a crowded worl
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
       );
-      send(shared.encodeRecoveryMarkers(sim.buriedCachesList()));
+      send(
+        shared.encodeRecoveryMarkers(
+          sim.buriedCachesList().filter((cache) => cache.ownerNetId === 1),
+        ),
+      );
       send(shared.encodeBuriedCaches([]));
+    };
+    dieAgain = () => {
+      (
+        sim as unknown as {
+          raiderStrikesPlayer(id: number, damage: number, tick: number): void;
+        }
+      ).raiderStrikesPlayer(1, 1000, sim.tick);
+      for (const event of sim.drainHealthEvents()) send(shared.encodeHealth(event));
+      for (const event of sim.drainCacheEvents())
+        if (event.kind !== 'lost') send(shared.encodeCache(event));
+      refresh();
     };
     send(shared.encodeWelcome(1, shared.DEFAULT_WORLD_SEED, 0, Date.now()));
     refresh();
@@ -47,7 +63,8 @@ test('keeps private recovery guidance after partial recovery with a crowded worl
           sim.queueInput(1, input);
           sim.step(Date.now());
         }
-        for (const event of sim.drainCacheEvents()) send(shared.encodeCache(event));
+        for (const event of sim.drainCacheEvents())
+          if (event.kind !== 'lost') send(shared.encodeCache(event));
         refresh();
       }
     });
@@ -61,15 +78,22 @@ test('keeps private recovery guidance after partial recovery with a crowded worl
       timeout: 120_000,
     });
     await expect(page.locator('body')).toContainText('Press E to recover belongings');
-    await expect
-      .poll(() => page.evaluate(() => window.acornDebug?.buriedCaches().length))
-      .toBe(300);
+    await expect.poll(() => page.evaluate(() => window.acornDebug?.buriedCaches().length)).toBe(1);
     await page.keyboard.down('KeyE');
     await expect.poll(() => sim.inventoryOf(1).log).toBe(60);
     await page.keyboard.up('KeyE');
     await expect(page.locator('body')).toContainText('Some belongings recovered');
     await expect(page.locator('body')).toContainText('leftovers stay safely here');
     expect(sim.buriedCachesList()).toHaveLength(300);
+    dieAgain();
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.buriedCaches().map((cache) => cache.id)))
+      .toEqual([70300]);
+    expect(sim.buriedCachesList().some((cache) => cache.id === 70000)).toBe(false);
+    await expect(page.locator('body')).toContainText(
+      'Any belongings from an earlier death are lost',
+    );
+    await expect(page.locator('body')).not.toContainText('All belongings recovered');
     await page.screenshot({
       path: process.env.CI
         ? testInfo.outputPath('recovery-guidance.png')
