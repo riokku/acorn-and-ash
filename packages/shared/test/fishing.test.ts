@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import {
   BITE_DELAY_MAX_SECONDS,
@@ -124,18 +125,52 @@ describe('the pond in the clearing', () => {
     expect(overlapsWater(POND, ROD_SPOT.x, ROD_SPOT.z, 2)).toBe(true);
   });
 
-  it('keeps every landmark and every tree in the ring, so saved trees still line up', () => {
-    // Trees are saved by id. Only rocks scattered after the ring may be moved
-    // out of the water, so every id up to the end of the ring must still be here
-    // and still be where the seed put it.
+  it('keeps landmark and ring identities, except for the two authored trail openings', () => {
+    // Independent baselines from main at 6c1e432, omitting only the trees in
+    // the authored trail openings. Hash rounded positions as well as IDs so
+    // an accidental renumber or movement cannot pass as an intentional gap.
+    const baselines = [
+      {
+        seed: DEFAULT_WORLD_SEED,
+        removed: [16, 17, 18, 34, 35, 36],
+        digest: '4ae6cb83051729995f767d84e05e726b5b62f75cdef4846c0672aa42836bb3c4',
+      },
+      {
+        seed: 1,
+        removed: [17, 18, 19, 34, 35],
+        digest: 'd2e03626e9f4f795a0046a2b805491b16433f3e246fa27c1cc4d2b173df74d68',
+      },
+      {
+        seed: 2,
+        removed: [17, 18, 33, 34, 35, 36, 37],
+        digest: '1043e794f2a6a61cfb836533d2de8e3c88382e6a963f8af7b8c22797489e5dd8',
+      },
+      {
+        seed: 4242,
+        removed: [16, 17, 18, 19, 34, 35, 36, 37],
+        digest: '2210c2c920ab5163b0c31a32e8e1aa59f879377e05f3e409f5f92a35019afa2e',
+      },
+      {
+        seed: 99,
+        removed: [16, 17, 18, 19, 34, 35, 36, 37],
+        digest: '8064056a4c4ba17ed9dc5607b23979af50100e232d68cbbc33fe029d8e6bab74',
+      },
+    ];
     const landmarksAndRing = 9 + 132;
-    for (const seed of [DEFAULT_WORLD_SEED, 1, 2, 4242, 99]) {
+    for (const { seed, removed, digest } of baselines) {
       const clearing = buildTestClearing(seed);
       for (let id = 1; id <= landmarksAndRing; id++) {
         const index = clearing.indexById.get(id);
-        expect(index).toBeDefined();
-        expect(clearing.props[index ?? -1]?.id).toBe(id);
+        if (removed.includes(id)) expect(index).toBeUndefined();
+        else {
+          expect(index).toBeDefined();
+          expect(clearing.props[index ?? -1]?.id).toBe(id);
+        }
       }
+      const positions = clearing.props
+        .filter((p) => p.id <= landmarksAndRing)
+        .map((p) => [p.id, Number(p.x.toFixed(8)), Number(p.z.toFixed(8))]);
+      expect(createHash('sha256').update(JSON.stringify(positions)).digest('hex')).toBe(digest);
     }
   });
 

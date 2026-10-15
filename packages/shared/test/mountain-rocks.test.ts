@@ -9,11 +9,12 @@ import {
   MOUNTAIN_ORE_PILES,
   MOUNTAIN_PATCH_LAST_ID,
   MOUNTAIN_STONE_PILES,
+  MOUNTAIN_PATCH_FIRST_ID,
 } from '../src/world/mountain-rocks';
 import { mountainWeight } from '../src/world/mountains';
 import { nearStream, STREAM } from '../src/world/stream';
 
-const SEEDS = [1, 7, 12345];
+const SEEDS = [1, 7, 12345, 0x41434f52];
 
 describe('mountain stone and ore', () => {
   it('lays out every pile, stone then ore, with ids that fit in a byte', () => {
@@ -22,6 +23,12 @@ describe('mountain stone and ore', () => {
       expect(spots.filter((s) => s.item === 'stone')).toHaveLength(MOUNTAIN_STONE_PILES);
       expect(spots.filter((s) => s.item === 'ironOre')).toHaveLength(MOUNTAIN_ORE_PILES);
       expect(new Set(spots.map((s) => s.id)).size).toBe(spots.length);
+      expect(spots.filter((s) => s.item === 'ironOre').map((s) => s.id)).toEqual(
+        Array.from(
+          { length: MOUNTAIN_ORE_PILES },
+          (_, i) => MOUNTAIN_PATCH_FIRST_ID + MOUNTAIN_STONE_PILES + i,
+        ),
+      );
       for (const spot of spots) {
         expect(isMountainPatch(spot.id)).toBe(true);
         expect(spot.id).toBeLessThanOrEqual(MOUNTAIN_PATCH_LAST_ID);
@@ -32,6 +39,23 @@ describe('mountain stone and ore', () => {
   it('is the same every time for one seed', () => {
     const terrain = createWildernessTerrain(7);
     expect(buildMountainRockSpots(7, terrain)).toEqual(buildMountainRockSpots(7, terrain));
+  });
+
+  it('never forces deposits into scenery when all usable ground is blocked', () => {
+    expect(buildMountainRockSpots(1, createWildernessTerrain(1), () => false)).toEqual([]);
+  });
+
+  it('preserves the ore ID range even when there are no clear stone sites', () => {
+    const terrain = createWildernessTerrain(1);
+    const spots = buildMountainRockSpots(1, terrain, (x, z) => terrain.heightAt(x, z) > 26);
+    expect(spots.filter((s) => s.item === 'stone')).toEqual([]);
+    expect(spots.filter((s) => s.item === 'ironOre')).toHaveLength(MOUNTAIN_ORE_PILES);
+    expect(spots.map((s) => s.id)).toEqual(
+      Array.from(
+        { length: MOUNTAIN_ORE_PILES },
+        (_, i) => MOUNTAIN_PATCH_FIRST_ID + MOUNTAIN_STONE_PILES + i,
+      ),
+    );
   });
 
   it('keeps piles on the range, out of the stream, and ore above the stone', () => {

@@ -26,6 +26,10 @@ glades may relocate to meet their flat-ground checks and stay clear of trails;
 their IDs and discovery rules are unchanged. This terrain update applies to
 existing worlds too; there is no per-world terrain version or save reset.
 
+If random resource placement misses suitable foothill pockets, a bounded sweep
+uses the same slope, spacing, water and scenery checks to fill the remaining
+deposits. Stone and ore retain separate ID ranges even when a site is blocked.
+
 `?gallery=forest-trails` shows the actual seeded map with three orbitable
 viewpoints. Tests walk every complete route with scenery, encounter and water
 collision, sample grades and tread width across seeds, check tree identity and

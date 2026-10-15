@@ -77,26 +77,44 @@ export function buildMountainRockSpots(
   const { ridgeStart: a, ridgeEnd: b } = MOUNTAINS;
   for (const { item, count } of wanted) {
     let placed = 0;
-    for (let attempt = 0; attempt < ATTEMPTS && placed < count; attempt++) {
-      // Anywhere in a box round the ridge; the checks below keep it on the range.
-      const t = rng.nextRange(0, 1);
-      const x = a.x + (b.x - a.x) * t + rng.nextRange(-MOUNTAINS.footRadius, MOUNTAINS.footRadius);
-      const z = a.z + (b.z - a.z) * t + rng.nextRange(-MOUNTAINS.footRadius, MOUNTAINS.footRadius);
-      if (mountainWeight(x, z) < STONE_MIN_WEIGHT) continue;
+    const addIfSuitable = (x: number, z: number): void => {
+      if (mountainWeight(x, z) < STONE_MIN_WEIGHT) return;
       const height = terrain.heightAt(x, z);
       if (
         item === 'stone'
           ? height > STONE_MAX_HEIGHT
           : height < ORE_MIN_HEIGHT || height > ORE_MAX_HEIGHT
       )
-        continue;
-      if (gradientAround(terrain, x, z) > MAX_PILE_GRADIENT) continue;
-      if (nearStream(STREAM, x, z, 4)) continue;
-      if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < PILE_SPACING)) continue;
-      if (!isClear(x, z)) continue;
-      spots.push({ id: MOUNTAIN_PATCH_FIRST_ID + spots.length, x, z, item });
+        return;
+      if (gradientAround(terrain, x, z) > MAX_PILE_GRADIENT) return;
+      if (nearStream(STREAM, x, z, 4)) return;
+      if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < PILE_SPACING)) return;
+      if (!isClear(x, z)) return;
+      const offset = item === 'stone' ? 0 : MOUNTAIN_STONE_PILES;
+      spots.push({ id: MOUNTAIN_PATCH_FIRST_ID + offset + placed, x, z, item });
       placed++;
+    };
+    for (let attempt = 0; attempt < ATTEMPTS && placed < count; attempt++) {
+      // Anywhere in a box round the ridge; the checks below keep it on the range.
+      const t = rng.nextRange(0, 1);
+      const x = a.x + (b.x - a.x) * t + rng.nextRange(-MOUNTAINS.footRadius, MOUNTAINS.footRadius);
+      const z = a.z + (b.z - a.z) * t + rng.nextRange(-MOUNTAINS.footRadius, MOUNTAINS.footRadius);
+      addIfSuitable(x, z);
     }
+    // Reshaped foothills leave narrower bands of suitable ground. A bounded
+    // sweep finds pockets the random draws missed without weakening slope,
+    // spacing or scenery checks, or moving piles already placed.
+    for (
+      let x = Math.min(a.x, b.x) - MOUNTAINS.footRadius;
+      x <= Math.max(a.x, b.x) + MOUNTAINS.footRadius && placed < count;
+      x += 3
+    )
+      for (
+        let z = Math.min(a.z, b.z) - MOUNTAINS.footRadius;
+        z <= Math.max(a.z, b.z) + MOUNTAINS.footRadius && placed < count;
+        z += 3
+      )
+        addIfSuitable(x, z);
   }
   return spots;
 }
