@@ -543,9 +543,9 @@ describe('the end of a raid', () => {
     const id = only(raidOn(scene, 1, ['minion']).raiderIds);
     scene.step(RISE.ground + 1);
     scene.inFrontOf(first, id);
-    hit(scene, first, SWING_1);
+    scene.director.blowLands(first.netId, first.position, first.aimYaw, SWING_1, 0);
     scene.inFrontOf(second, id);
-    hit(scene, second, STRIKE_BLOW);
+    scene.director.blowLands(second.netId, second.position, second.aimYaw, STRIKE_BLOW, 0);
     expect(new Set(scene.credited)).toEqual(new Set([1, 2]));
     expect(scene.bonusLoot).toEqual([]);
     scene.step(seconds(RAID.crumbleSeconds));
