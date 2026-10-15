@@ -2,8 +2,8 @@
  * Water: where it is, and whether a point is in it.
  *
  * A body of water is a few overlapping circles. That gives a pond a shape with
- * some character while staying something the collision code already knows how
- * to push a player out of: each circle becomes a cylinder you cannot walk into.
+ * some character. A smaller version of each circle can block deep water
+ * while leaving its sloping shoreline open for wading.
  */
 
 import {
@@ -52,9 +52,11 @@ export function isOnWater(
   return false;
 }
 
-/** The walls that keep players out of the water, one per circle. */
-export function waterColliders(water: readonly WaterCircle[]): Collider[] {
-  return water.map((circle) => cylinder(circle.x, circle.z, circle.radius, WATER_WALL_HEIGHT));
+/** Walls inside the given shore distance; wholly shallow lobes need no wall. */
+export function waterColliders(water: readonly WaterCircle[], shoreDepth = 0): Collider[] {
+  return water
+    .filter((circle) => circle.radius > shoreDepth)
+    .map((circle) => cylinder(circle.x, circle.z, circle.radius - shoreDepth, WATER_WALL_HEIGHT));
 }
 
 /** How finely the cast looks for water between its longest and shortest throw. */

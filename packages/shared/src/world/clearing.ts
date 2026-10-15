@@ -10,7 +10,7 @@ import type { ItemId } from '../data/items';
 import { forestTreeScale } from './tree-stature';
 import { cylinder, type Collider } from './colliders';
 import { overlapsWater, waterColliders, type WaterCircle } from './water';
-import { pondGroundHeight } from './pond';
+import { pondGroundHeight, POND_WADING_SHORE_DEPTH } from './pond';
 import { blocksForestTrail } from './forest-relief';
 
 /** One piece of scenery standing in the world. */
@@ -247,7 +247,10 @@ export function buildTestClearing(
     pickups,
     gatherSpots,
     water,
-    colliders: [...kept.map((prop) => colliderForProp(prop, terrain)), ...waterColliders(water)],
+    colliders: [
+      ...kept.map((prop) => colliderForProp(prop, terrain)),
+      ...waterColliders(water, POND_WADING_SHORE_DEPTH),
+    ],
     indexById,
   };
 }

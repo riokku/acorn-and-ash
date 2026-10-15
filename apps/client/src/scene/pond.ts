@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 
-import { REED_PATCHES, POND_BANK_WIDTH, pondGroundHeight, type WaterCircle } from '@acorn/shared';
+import {
+  REED_PATCHES,
+  POND_BANK_WIDTH,
+  POND_LEVEL,
+  pondGroundHeight,
+  type WaterCircle,
+} from '@acorn/shared';
 
 import { createBankMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
@@ -12,7 +18,7 @@ import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
  *
  * The level water is recessed beneath its bank; the float bobs relative to this.
  */
-export const WATER_SURFACE_Y = 0.03;
+export const WATER_SURFACE_Y = POND_LEVEL;
 
 /** Lily pads, as a fraction of the way from a circle's middle to its edge, and an angle. */
 const LILY_PADS: readonly { circle: number; out: number; angle: number; size: number }[] = [
@@ -24,7 +30,7 @@ const LILY_PADS: readonly { circle: number; out: number; angle: number; size: nu
   { circle: 2, out: 0.5, angle: 5.2, size: 0.33 },
 ];
 
-/** Reeds stand in the shallows, just inside the edge, where nobody walks. */
+/** Reeds stand in the shallows, just inside the edge. */
 const REED_CLUMPS: readonly { circle: number; angle: number }[] = [
   { circle: 0, angle: 3.9 },
   { circle: 1, angle: 0.3 },
