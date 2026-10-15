@@ -1,3 +1,4 @@
+import { TREASURE_COUNT, type TreasureSpot } from '../sim/treasure';
 import { parsePublishedCatalog, type PublishedCatalog } from '../data/item-catalog';
 import { displayedHealth } from '../sim/health';
 import { WARMTH_STATUSES, type WarmthView } from '../sim/warmth';
@@ -1022,6 +1023,22 @@ export function encodeBuiltProps(
  * ones for the same reason: a very old, likely-forgotten mound is a smaller
  * loss than a fresh one nobody can ever see.
  */
+/** Public positions only; contents always remain on the server. */
+export function encodeTreasure(spots: readonly TreasureSpot[]): ArrayBuffer {
+  const count = Math.min(spots.length, TREASURE_COUNT);
+  const buffer = new ArrayBuffer(2 + count * 9);
+  const view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.Treasure);
+  view.setUint8(1, count);
+  spots.slice(0, count).forEach((spot, index) => {
+    const at = 2 + index * 9;
+    view.setUint8(at, spot.id);
+    view.setFloat32(at + 1, spot.x, true);
+    view.setFloat32(at + 5, spot.z, true);
+  });
+  return buffer;
+}
+
 export function encodeBuriedCaches(caches: readonly BuriedCacheView[]): ArrayBuffer {
   const start = Math.max(0, caches.length - MAX_BURIED_CACHES);
   const count = caches.length - start;
@@ -1670,7 +1687,18 @@ export function encodeCache(event: CacheEvent): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.Cache);
   view.setUint16(1, event.netId & 0xffff, true);
-  view.setUint8(3, event.kind === 'dugUp' ? CACHE_FLAG_DUG_UP : event.kind === 'partial' ? 2 : 0);
+  view.setUint8(
+    3,
+    event.kind === 'treasure'
+      ? 3
+      : event.kind === 'treasurePartial'
+        ? 4
+        : event.kind === 'dugUp'
+          ? CACHE_FLAG_DUG_UP
+          : event.kind === 'partial'
+            ? 2
+            : 0,
+  );
   return buffer;
 }
 
@@ -1678,11 +1706,15 @@ function decodeCache(view: DataView): CacheEvent {
   return {
     netId: view.getUint16(1, true),
     kind:
-      view.getUint8(3) === 2
-        ? 'partial'
-        : view.getUint8(3) === CACHE_FLAG_DUG_UP
-          ? 'dugUp'
-          : 'buried',
+      view.getUint8(3) === 3
+        ? 'treasure'
+        : view.getUint8(3) === 4
+          ? 'treasurePartial'
+          : view.getUint8(3) === 2
+            ? 'partial'
+            : view.getUint8(3) === CACHE_FLAG_DUG_UP
+              ? 'dugUp'
+              : 'buried',
   };
 }
 
@@ -2281,6 +2313,30 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       }
       return { type: 'recoveryMarkers', caches };
     }
+    case ServerMessageType.Treasure: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (count > TREASURE_COUNT || data.byteLength !== 2 + count * 9) return null;
+      const spots: TreasureSpot[] = [];
+      const ids = new Set<number>();
+      for (let index = 0; index < count; index++) {
+        const at = 2 + index * 9;
+        const id = view.getUint8(at),
+          x = view.getFloat32(at + 1, true),
+          z = view.getFloat32(at + 5, true);
+        if (
+          id < 1 ||
+          id > TREASURE_COUNT ||
+          ids.has(id) ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(z)
+        )
+          return null;
+        ids.add(id);
+        spots.push({ id, x, z });
+      }
+      return { type: 'treasure', spots };
+    }
     case ServerMessageType.BuriedCaches: {
       if (data.byteLength < 2) return null;
       const count = view.getUint8(1);
@@ -2417,7 +2473,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       return { type: 'health', event: decodeHealth(view) };
     }
     case ServerMessageType.Cache: {
-      if (data.byteLength !== CACHE_MESSAGE_BYTES || view.getUint8(3) > 2) return null;
+      if (data.byteLength !== CACHE_MESSAGE_BYTES || view.getUint8(3) > 4) return null;
       return { type: 'cache', event: decodeCache(view) };
     }
     case ServerMessageType.Roster: {

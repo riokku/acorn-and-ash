@@ -1,3 +1,4 @@
+import { encodeTreasure, treasuresFromSaved } from '@acorn/shared';
 import {
   EMPTY_CATALOG,
   catalogBonuses,
@@ -374,6 +375,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeTreeStates(simulation.changedTrees()));
     server.send(this.builtPropsFor(simulation, playerKey));
     server.send(encodeBuriedCaches(simulation.buriedCachesList()));
+    server.send(encodeTreasure(simulation.treasureSpots()));
     // Where every stick and flower patch is now, and what anybody dropped.
     server.send(encodeGatherPatches(simulation.gatherPatchesList()));
     server.send(
@@ -725,6 +727,7 @@ export class World extends DurableObject<WorldEnv> {
     this.announceExpeditions(simulation);
     this.announceMeals(simulation);
     this.announceBuriedCaches(simulation);
+    this.announceTreasure(simulation);
     this.announceRegrowth(simulation, startedAt);
     this.announcePatches(simulation, startedAt);
     this.announcePiles(simulation, startedAt);
@@ -1309,6 +1312,27 @@ export class World extends DurableObject<WorldEnv> {
    * A dig-up also changes the digger's own pack, the same as a build changes
    * the builder's - `sendPacks` handles that the same way.
    */
+  private announceTreasure(simulation: WorldSimulation): void {
+    const events = simulation.drainTreasureEvents();
+    if (events.length === 0) return;
+    const changed = new Set(events.map((event) => event.netId));
+    this.ctx.storage.transactionSync(() => {
+      this.writeMeta('buried-treasure-v1', JSON.stringify(simulation.savedTreasures()));
+      for (const ws of this.ctx.getWebSockets()) {
+        const attachment = this.attachmentFor(ws);
+        if (attachment !== null && changed.has(attachment.netId))
+          this.savePlayer(simulation, attachment);
+      }
+    });
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(ws);
+      const event = events.findLast((entry) => entry.netId === attachment?.netId);
+      if (event !== undefined) this.trySend(ws, encodeCache(event));
+    }
+    this.sendPacks(simulation, changed);
+    this.broadcast(encodeTreasure(simulation.treasureSpots()));
+  }
+
   private announceBuriedCaches(simulation: WorldSimulation): void {
     const changes = simulation.drainCacheEvents();
     if (changes.length === 0) return;
@@ -1857,6 +1881,18 @@ export class World extends DurableObject<WorldEnv> {
     simulation.restorePatches(this.loadPatches());
     simulation.restoreDigs(this.loadDigs());
     simulation.restoreSupports(this.loadSupports());
+    let savedTreasure = null;
+    const treasure = this.readMeta('buried-treasure-v1');
+    if (treasure !== null) {
+      try {
+        savedTreasure = treasuresFromSaved(JSON.parse(treasure));
+      } catch {
+        console.error('Invalid buried treasure save');
+      }
+    }
+    simulation.initializeTreasures(savedTreasure);
+    if (savedTreasure === null)
+      this.writeMeta('buried-treasure-v1', JSON.stringify(simulation.savedTreasures()));
     const encounterRest = this.readMeta('encounterRest');
     this.savedEncounterRest = encounterRest ?? '[]';
     if (encounterRest !== null) {

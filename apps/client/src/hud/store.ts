@@ -106,6 +106,7 @@ export interface HudState {
   readonly season?: Calendar;
   /** Whether a cache of our own is close enough right now to dig up. */
   readonly nearBuriedCache: boolean;
+  readonly nearTreasure?: 'shovel' | 'needsShovel' | null;
   /**
    * The way back to a buried cache of our own, whenever we have one and are
    * not already standing next to it - null the rest of the time, including

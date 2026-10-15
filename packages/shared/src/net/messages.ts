@@ -1,3 +1,4 @@
+import type { TreasureSpot } from '../sim/treasure';
 import type { PublishedCatalog } from '../data/item-catalog';
 import type { WarmthView } from '../sim/warmth';
 import type { BuildReply } from '../sim/building';
@@ -122,6 +123,7 @@ export const ServerMessageType = {
   BuildReply: 0x46,
   Warmth: 0x47,
   ItemCatalog: 0x48,
+  Treasure: 0x4a,
 } as const;
 
 export const RejectReason = {
@@ -705,6 +707,7 @@ export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'treasure'; readonly spots: readonly TreasureSpot[] }
   | (PublishedCatalog & { readonly type: 'itemCatalog' })
   | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage

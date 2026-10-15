@@ -1010,6 +1010,9 @@ export function hint(state: HudState): string {
   if (state.boat === 'frozen')
     return 'The rowboat is frozen in the ice · it floats again in spring';
   if (state.nearBuriedCache) return 'Press E to recover belongings · leftovers stay safely here';
+  if (state.nearTreasure === 'shovel')
+    return 'Press E to dig up treasure · leftovers stay safely here';
+  if (state.nearTreasure === 'needsShovel') return 'Buried treasure · equip a shovel to dig it up';
   if (state.nearbyDiscovery === 'The elk grove')
     return 'Press E to sketch the elk · give it room to settle';
   if (state.nearbyDiscovery !== null)

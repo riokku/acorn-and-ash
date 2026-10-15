@@ -41,6 +41,8 @@ describe('E reads the expedition board', () => {
     ['a dropped pile', { nearbyPile: { item: 'log', count: 2 } }],
     ['a patch to gather', { nearGatherSpot: 'stick' }],
     ['a cache of your own to dig up', { nearBuriedCache: true }],
+    ['buried treasure without a shovel', { nearTreasure: 'needsShovel' }],
+    ['buried treasure with a shovel', { nearTreasure: 'shovel' }],
     ['a find to inspect', { nearbyDiscovery: 'The elk grove' }],
     ['an unlit campfire', { nearCampfire: 'unlit' }],
     ['a lit campfire', { nearCampfire: 'lit' }],

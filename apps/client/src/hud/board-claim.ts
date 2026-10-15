@@ -16,6 +16,7 @@ export interface BoardClaimState {
   readonly nearbyPile: unknown;
   readonly nearGatherSpot: unknown;
   readonly nearBuriedCache: boolean;
+  readonly nearTreasure?: 'shovel' | 'needsShovel' | null;
   readonly nearbyDiscovery: string | null;
   readonly nearCampfire: 'lit' | 'unlit' | null;
   readonly boat: HudState['boat'];
@@ -42,6 +43,7 @@ export function expeditionBoardClaimsInteract(state: BoardClaimState): boolean {
     state.nearbyPile === null &&
     state.nearGatherSpot === null &&
     !state.nearBuriedCache &&
+    state.nearTreasure == null &&
     state.nearbyDiscovery === null &&
     state.nearCampfire === null &&
     state.boat !== 'board'
