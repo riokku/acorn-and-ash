@@ -26,6 +26,28 @@ describe('outdoor light readability', () => {
     expect(luminance(sky.groundColor)).toBeLessThan(luminance(sky.color));
     expect(rig.sun.intensity).toBeLessThan(sky.intensity);
   });
+  it('keeps the same fog program through rooms and restores outdoor weather immediately', () => {
+    const scene = new THREE.Scene();
+    const rig = addDaylight(scene);
+    const fog = scene.fog as THREE.Fog;
+    rig.update(0.5);
+    expect(fog.near).toBe(55);
+    expect(fog.far).toBe(120);
+    for (let visit = 0; visit < 3; visit++) {
+      rig.setIndoors(true);
+      rig.update(0.5, 1, true);
+      expect(scene.fog).toBe(fog);
+      expect(fog.near).toBeGreaterThan(1000);
+      expect(fog.far).toBeGreaterThan(fog.near);
+      for (let frame = 0; frame < 120; frame++) rig.update(0.5, 1, true);
+      rig.setIndoors(false);
+      expect(scene.fog).toBe(fog);
+      expect(fog.near).toBeGreaterThanOrEqual(10);
+      expect(fog.near).toBeLessThan(55);
+      expect(fog.far).toBeGreaterThanOrEqual(48);
+      expect(fog.far).toBeLessThan(120);
+    }
+  });
   it('keeps tunnel darkness, weather attenuation and the same lights through transitions', () => {
     const scene = new THREE.Scene();
     const rig = addDaylight(scene);

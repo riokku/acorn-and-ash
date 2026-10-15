@@ -332,6 +332,7 @@ import { createRowboat, type Rowboat } from './scene/rowboat';
 import { RowingBoats } from './scene/rowing-boats';
 import { createGrass, type GrassScene } from './scene/grass';
 import { createHomeInterior, type HomeInterior } from './scene/home-interior';
+import { SpaceTransition } from './scene/space-transition';
 import { planPlacement, type PlacementPlan } from './building/placement';
 import type { BoatHint, FishingPhase, HudStore, RaidBanner } from './hud/store';
 import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
@@ -358,12 +359,9 @@ const HUD_INTERVAL_MS = 200;
 /** If the server cannot be reached, let the player walk about on their own. */
 const OFFLINE_FALLBACK_MS = 4000;
 /**
- * Going through a door (see decision 0055): how long the screen stays dark
- * once we are through, so the new place has drawn before it shows, and how
- * long a fade started by walking at a door waits for the server before
- * giving up (a locked door, say) and lifting again.
+ * How long a predicted door fade waits for the server before giving up
+ * (a locked door, say). Confirmed transitions wait for rendered frames.
  */
-const DOOR_FADE_HOLD_MS = 140;
 const DOOR_FADE_GIVE_UP_MS = 800;
 /**
  * How long news from the water stays on screen.
@@ -717,6 +715,8 @@ export interface GameDebug {
    * home we are inside.
    */
   space(): number;
+  /** The retained outdoor detail centre, even while a room uses local coordinates. */
+  outdoorFocus(): { x: number; z: number };
   /**
    * Turn the camera towards a spot in the world.
    *
@@ -911,6 +911,12 @@ export class Game {
   /** A dark veil over the scene for going through a door, and when the dark should lift if nothing happens. */
   private sceneFade: HTMLDivElement | null = null;
   private fadeGiveUpAt: number | null = null;
+  private readonly spaceTransition = new SpaceTransition();
+  /** The forest stays centred on its outdoor location while the room uses local coordinates. */
+  private readonly outdoorFocus: { x: number; z: number } = {
+    x: SPAWN_POSITION.x,
+    z: SPAWN_POSITION.z,
+  };
   /** What a door right here would do, for the hint. */
   private doorHint: 'enter' | 'visit' | 'locked' | 'leave' | null = null;
   /** The chair or the bed close enough to use, inside a home, while free to. */
@@ -1180,6 +1186,11 @@ export class Game {
     fade.className = 'scene-fade';
     this.options.canvas.insertAdjacentElement('afterend', fade);
     this.sceneFade = fade;
+    const arrival = document.createElement('div');
+    arrival.className = 'scene-arrival';
+    arrival.hidden = true;
+    arrival.setAttribute('role', 'status');
+    fade.append(arrival);
     this.camera = new FollowCamera(window.innerWidth / window.innerHeight);
     this.controls = new Controls(
       this.options.canvas,
@@ -1246,13 +1257,19 @@ export class Game {
 
   setSettingsOpen(open: boolean): void {
     this.settingsOpen = open;
-    this.controls?.setGameplayEnabled(this.playing && !this.chestOpen && !open);
+    this.syncGameplayControls();
+  }
+
+  private syncGameplayControls(): void {
+    this.controls?.setGameplayEnabled(
+      this.playing && !this.chestOpen && !this.settingsOpen && !this.spaceTransition.active,
+    );
   }
 
   private setPlaying(playing: boolean): void {
     this.playing = playing;
     if (!playing) this.closeChest();
-    this.controls?.setGameplayEnabled(playing && !this.chestOpen && !this.settingsOpen);
+    this.syncGameplayControls();
     this.forestAudio.update(playing && !document.hidden);
     setImpactSoundsActive(playing && !document.hidden);
     if (!playing) {
@@ -1291,7 +1308,7 @@ export class Game {
     this.chestOpen = false;
     this.chestPending = false;
     this.homeInterior?.setChestOpen(false);
-    this.controls?.setGameplayEnabled(this.playing && !this.settingsOpen);
+    this.syncGameplayControls();
     this.options.hud.publish({ chestSlots: null, chestPending: false, chestNote: null });
   }
 
@@ -1606,6 +1623,7 @@ export class Game {
       treasureSpots: () => this.treasures.map((spot) => ({ ...spot })),
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
       space: () => this.space,
+      outdoorFocus: () => ({ ...this.outdoorFocus }),
       mapState: () => ({
         painted: this.mapFeed.image !== null,
         open: this.mapOpen,
@@ -2310,7 +2328,7 @@ export class Game {
         break;
       }
       case 'space': {
-        if (this.localPlayer === null) {
+        if (this.localPlayer === null || this.enteringWorld) {
           this.pendingSpace = {
             space: message.space,
             x: message.x,
@@ -2835,11 +2853,14 @@ export class Game {
       this.localCharacter.setName(this.options.identity.name);
       this.localCharacter.setGear(this.worn.get(this.selfNetId) ?? {});
       this.scene.add(this.localCharacter.group);
-      // Word of where we are can beat the world to it on arrival: waking up
-      // inside our own home, say.
-      const arrived = this.pendingSpace;
-      this.pendingSpace = null;
-      if (arrived !== null) this.moveToSpace(arrived.space, arrived.x, arrived.z, arrived.yaw);
+      // If we signed in inside a distant home, draw the forest at its door
+      // once behind the initial loading screen. Otherwise its first upload
+      // and shaders would wait until the player leaves the room.
+      const initialHome = this.builtProps.find((prop) => prop.id === this.pendingSpace?.space);
+      if (initialHome !== undefined) {
+        const door = cabinDoorway(initialHome);
+        this.moveToSpace(OUTDOORS, door.x, door.z, initialHome.yaw + Math.PI);
+      }
 
       this.mapFeed.ready = true;
       // Painted in a worker while the player gets their bearings; the minimap
@@ -2852,11 +2873,17 @@ export class Game {
 
       this.options.hud.publish({ loadingProgress: 90, loadingStage: 'Letting the light through' });
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      // Readiness follows an actual rendered world frame. Rendering and a
-      // separate shader compilation must not overlap on the same renderer.
-      await new Promise<void>((resolve) => {
-        this.firstWorldFrame = resolve;
-      });
+      // Warm the outdoor view before hiding it for a room. Keep Space
+      // messages queued during preparation so the latest server destination
+      // still wins if it changes while either view is drawing.
+      await this.waitForWorldFrame();
+      while (this.pendingSpace !== null) {
+        const arrived = this.pendingSpace;
+        this.pendingSpace = null;
+        this.moveToSpace(arrived.space, arrived.x, arrived.z, arrived.yaw);
+        await this.waitForWorldFrame();
+      }
+      this.enteringWorld = false;
       if (this.connectionState !== 'elsewhere' && this.connectionState !== 'deleted') {
         this.setPlaying(true);
       }
@@ -2866,11 +2893,19 @@ export class Game {
         loadingStage: 'Your forest is ready',
       });
     } catch (error: unknown) {
+      this.enteringWorld = false;
       console.error('Could not prepare the forest', error);
       this.options.hud.publish({
         loadingError: 'The forest couldn’t finish loading. Please try again.',
       });
     }
+  }
+
+  /** Rendering and a separate shader compilation must never overlap on this renderer. */
+  private waitForWorldFrame(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.firstWorldFrame = resolve;
+    });
   }
 
   /**
@@ -3342,8 +3377,11 @@ export class Game {
         this.forestEnvironment,
       );
     }
-    if (this.localPlayer !== null)
-      this.wildernessScene?.update(deltaSeconds, this.localPlayer.motion.position);
+    if (this.localPlayer !== null && this.space === OUTDOORS) {
+      this.outdoorFocus.x = this.localPlayer.motion.position.x;
+      this.outdoorFocus.z = this.localPlayer.motion.position.z;
+    }
+    this.wildernessScene?.update(deltaSeconds, this.outdoorFocus);
     if (this.localPlayer !== null && this.space === OUTDOORS)
       this.grass?.update(
         deltaSeconds,
@@ -3471,6 +3509,13 @@ export class Game {
     if (this.playing || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
       setup.renderer.render(this.scene, camera.camera);
       this.lastRenderedAt = now;
+      const drawnAt = performance.now();
+      if (this.spaceTransition.afterRender(drawnAt, drawnAt - now)) {
+        this.sceneFade?.classList.remove('scene-fade-dark', 'scene-fade-preparing');
+        const arrival = this.sceneFade?.querySelector<HTMLElement>('.scene-arrival');
+        if (arrival !== null && arrival !== undefined) arrival.hidden = true;
+        this.syncGameplayControls();
+      }
       const rendered = this.firstWorldFrame;
       this.firstWorldFrame = null;
       rendered?.();
@@ -5286,6 +5331,16 @@ export class Game {
     const changed = space !== this.space;
     if (changed) this.closeChest();
     this.space = space;
+    // Also covers signing in directly inside a far-away home: its outdoor
+    // trees should be prepared around the doorstep, not the clearing origin.
+    if (changed && inside) {
+      const home = this.builtProps.find((prop) => prop.id === space);
+      if (home !== undefined) {
+        const doorway = cabinDoorway(home);
+        this.outdoorFocus.x = doorway.x;
+        this.outdoorFocus.z = doorway.z;
+      }
+    }
     if (changed && inside && this.homeHere()?.yours === true) {
       const kind = this.currentHomeKind();
       this.craftingNews = {
@@ -5338,7 +5393,8 @@ export class Game {
       this.buildMenuOpen = false;
       this.aimYaw = null;
     }
-    this.liftFade();
+    // A same-space correction must not restart a door transition.
+    if (changed && !this.enteringWorld) this.liftFade(inside);
   }
 
   /** Whether walking this way, from here, is about to take us through a door. */
@@ -5410,23 +5466,24 @@ export class Game {
     this.fadeGiveUpAt = performance.now() + DOOR_FADE_GIVE_UP_MS;
   }
 
-  /**
-   * Now that we are through: straight to dark if it was not already (a
-   * knockout, or pressing E rather than walking in), then lift, once the new
-   * place has had a frame to draw.
-   */
-  private liftFade(): void {
+  /** Keep the destination covered until its actual draws have settled. */
+  private liftFade(inside: boolean): void {
     const fade = this.sceneFade;
     if (fade === null) return;
     this.fadeGiveUpAt = null;
+    this.spaceTransition.begin(performance.now());
+    this.syncGameplayControls();
+    const arrival = fade.querySelector<HTMLElement>('.scene-arrival');
+    if (arrival !== null) {
+      arrival.textContent = inside ? 'Entering your home…' : 'Stepping outside…';
+      arrival.hidden = false;
+    }
+    fade.classList.add('scene-fade-preparing');
     if (!fade.classList.contains('scene-fade-dark')) {
       fade.classList.add('scene-fade-instant', 'scene-fade-dark');
-      // Read something off it, so the browser takes the jump to dark before
-      // the fade back out starts.
       void fade.offsetWidth;
       fade.classList.remove('scene-fade-instant');
     }
-    window.setTimeout(() => fade.classList.remove('scene-fade-dark'), DOOR_FADE_HOLD_MS);
   }
 
   /** Lock or unlock our own front door - from the button shown inside our home. */
@@ -5497,7 +5554,7 @@ export class Game {
       fade.classList.add('scene-fade-slow', 'scene-fade-dark');
     } else if (kind !== ActionKind.KnockedOut && this.knockoutDark) {
       this.knockoutDark = false;
-      fade.classList.remove('scene-fade-dark');
+      if (!this.spaceTransition.active) fade.classList.remove('scene-fade-dark');
       window.setTimeout(() => fade.classList.remove('scene-fade-slow'), 900);
     }
   }

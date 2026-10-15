@@ -104,10 +104,17 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   const lightTint = new THREE.Color(1, 1, 1);
   let sunStrength = 1;
   let underground = 0;
+  let weatherFogNear = FOG_NEAR;
+  let weatherFogFar = FOG_FAR;
 
   function update(progress: number, cloud = lastCloud, blizzard = false): void {
-    fog.near += ((blizzard ? 10 : FOG_NEAR) - fog.near) * 0.025;
-    fog.far += ((blizzard ? 48 : FOG_FAR) - fog.far) * 0.025;
+    weatherFogNear += ((blizzard ? 10 : FOG_NEAR) - weatherFogNear) * 0.025;
+    weatherFogFar += ((blizzard ? 48 : FOG_FAR) - weatherFogFar) * 0.025;
+    // Keep the same fog node in both spaces. Removing it indoors invalidates
+    // material programs when the forest comes back. Far beyond the room it
+    // has no visible effect, without changing shader structure.
+    fog.near = indoors ? 1_000_000 : weatherFogNear;
+    fog.far = indoors ? 1_000_001 : weatherFogFar;
     lastProgress = progress;
     lastCloud = cloud;
     const brightness = dayBrightness(progress);
@@ -120,7 +127,7 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
     }
     if (underground > 0) background.lerp(UNDERGROUND_BLACK, underground);
     fog.color.copy(background);
-    if (underground > 0) {
+    if (!indoors && underground > 0) {
       fog.near = THREE.MathUtils.lerp(fog.near, UNDERGROUND_FOG_NEAR, underground);
       fog.far = THREE.MathUtils.lerp(fog.far, UNDERGROUND_FOG_FAR, underground);
     }
@@ -157,7 +164,6 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
     },
     setIndoors(next) {
       indoors = next;
-      scene.fog = next ? null : fog;
       update(lastProgress);
     },
   };
