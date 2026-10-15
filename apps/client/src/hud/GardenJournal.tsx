@@ -1,6 +1,6 @@
+import { ITEM_KINDS } from '../item-catalog';
 import {
   GARDEN_CROPS,
-  ITEM_KINDS,
   TICK_HZ,
   inventoryFromEntries,
   countOf,

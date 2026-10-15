@@ -1,4 +1,5 @@
-import { ITEM_KINDS, type ItemId, type CraftRefusal } from '@acorn/shared';
+import { ITEM_KINDS } from '../item-catalog';
+import { type ItemId, type CraftRefusal } from '@acorn/shared';
 
 /** One authoritative result at a time; slow replies never trigger automatic retries. */
 export class CraftFeedback {

@@ -1,8 +1,8 @@
+import { ITEM_KINDS } from '../item-catalog';
 import {
   EXPEDITIONS,
   expeditionComplete,
   emptyExpedition,
-  ITEM_KINDS,
   TRAIL_PENNANT_SKILL,
   type ExpeditionRequest,
   type ExpeditionNotice,

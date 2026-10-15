@@ -738,8 +738,24 @@ your character, and everyone else sees it too. Drag onto a slot that already has
 something to swap the two. Right-click a worn piece, or drop it back on the pack,
 to take it off. You cannot change gear in a fight. Whatever is in your main hand
 is what you swing. To drop a piece of gear instead of wearing it, hold `Shift`
-while you right-click. For now gear only changes how you look. See
-[decision 0113](docs/decisions/0113-wearing-gear.md).
+while you right-click. Gear changes your appearance and supplies Attack power,
+Protection, Vitality (maximum health) and Warmth. Hover an item to see its own
+bonuses and the change from what you currently wear. Only the active main-hand
+weapon adds attack damage; clothing supplies protection and winter insulation.
+See [decision 0183](docs/decisions/0183-complete-item-equipment-bonuses.md).
+
+| Weapon or tool             | Attack power bonus |
+| -------------------------- | ------------------ |
+| Iron sword                 | +50%               |
+| Hunting knife, refined axe | +25%               |
+| Axe, refined fishing rod   | +10%               |
+| Fishing rod, shovel, torch | +5%                |
+
+Every garment supplies both Protection and Warmth. A steel helmet favors
+protection; a bear hat and padded jacket favor warmth. Existing maximum-health
+bonuses remain. Bonuses apply while equipped, with Protection capped at 40%,
+maximum health at 150, and Warmth at 100. Ordinary winter needs Warmth 60;
+blizzards need 80. A lit campfire or indoor shelter also restores body warmth.
 
 `WORLD_ALLOW_TEST_GEAR` is `1` in the same places as `WORLD_ALLOW_TEST_SEASON`.
 It lets `?gear=all` in the address start your pack with one of every piece, as far
@@ -1422,3 +1438,25 @@ modest corrections continue to blend. See
 Summer pollen keeps its airborne world height and fades before recycling across a
 wider area, so camera turns do not reveal a following patch. Preview it with
 `?gallery=trees&season=summer&spin`; see [decision 0155](docs/decisions/0155-world-space-summer-pollen.md).
+
+### Private item catalogue
+
+The verified Google owner can open **Manage items** from the character screen's
+Settings → Account, or visit `/admin/items`. Search the full catalogue, edit names,
+plural names, descriptions, rarity and applicable equipment bonuses, then **Save
+draft**. **Review & publish** shows the changes before publishing them to every
+world on that site. Connected worlds update within 15 seconds. A stale tab cannot
+overwrite a newer draft or publication; reload the draft to review it first.
+Restoring an item's defaults also requires Save and Publish.
+
+Rarity is a displayed tier; changing it does not adjust drop chances. IDs, recipes,
+wearable slots and saved inventories stay intact. Existing protection, maximum
+health and warmth caps remain in force; publishing never heals players.
+
+One-time setup in the Cloudflare dashboard: open the web Worker for the intended
+environment (`acorn-ash-web-staging` or `acorn-ash-web-production`), choose
+**Settings → Variables and Secrets → Add**, and create a **Secret** named
+`ADMIN_OWNER_EMAIL` whose value is the owner's verified Google sign-in address.
+Deploy the secret change, then sign in with Google. Do this independently for each
+environment. Keep the address out of public configuration files. Missing secrets,
+unverified addresses, other accounts and test sign-in all leave the editor locked.

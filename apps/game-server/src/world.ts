@@ -1,3 +1,10 @@
+import {
+  EMPTY_CATALOG,
+  catalogBonuses,
+  encodeItemCatalog,
+  parsePublishedCatalog,
+  type PublishedCatalog,
+} from '@acorn/shared';
 import { encodeWarmth, warmthFromSaved, type WarmthState } from '@acorn/shared';
 import { encodeBuildReply } from '@acorn/shared';
 import { encodeWildfire } from '@acorn/shared';
@@ -179,6 +186,32 @@ export class World extends DurableObject<WorldEnv> {
   private simulation: WorldSimulation | null = null;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
   private nextNetId = 1;
+  private itemCatalog: PublishedCatalog = EMPTY_CATALOG;
+  private catalogCheckedAt = 0;
+  private catalogRefresh: Promise<void> | null = null;
+  /** Piggyback on active ticks; no timer can keep an empty world awake. */
+  private refreshCatalog(): Promise<void> {
+    if (this.catalogRefresh) return this.catalogRefresh;
+    this.catalogCheckedAt = Date.now();
+    this.catalogRefresh = (async () => {
+      try {
+        const next = await this.env.ITEM_CATALOG.get(
+          this.env.ITEM_CATALOG.idFromName('items'),
+        ).published();
+        if (JSON.stringify(next) !== JSON.stringify(this.itemCatalog)) {
+          this.itemCatalog = next;
+          this.writeMeta('item-catalog', JSON.stringify(next));
+          this.simulation?.setEquipmentBonuses(catalogBonuses(next.overrides));
+          this.broadcast(encodeItemCatalog(next));
+        }
+      } catch (error) {
+        console.error('Item catalogue refresh failed', error);
+      } finally {
+        this.catalogRefresh = null;
+      }
+    })();
+    return this.catalogRefresh;
+  }
 
   /** Reused between ticks so a busy world does not allocate per player. */
   private readonly snapshotScratch: SnapshotEntity[] = [];
@@ -192,6 +225,15 @@ export class World extends DurableObject<WorldEnv> {
     ctx.blockConcurrencyWhile(async () => {
       this.createSchema();
       this.resetStagingBuildsOnce();
+      const cachedCatalog = this.readMeta('item-catalog');
+      if (cachedCatalog !== null) {
+        try {
+          this.itemCatalog = parsePublishedCatalog(JSON.parse(cachedCatalog));
+        } catch {
+          console.error('Invalid cached item catalogue');
+        }
+      }
+      await this.refreshCatalog();
     });
   }
 
@@ -240,6 +282,7 @@ export class World extends DurableObject<WorldEnv> {
       return new Response('This endpoint speaks WebSocket.', { status: 426 });
     }
 
+    await this.refreshCatalog();
     const simulation = this.ensureSimulation();
     const requestedKey = url.searchParams.get('player');
     const playerKey =
@@ -313,6 +356,7 @@ export class World extends DurableObject<WorldEnv> {
         ...GEAR_ITEMS.filter((item) => item !== 'axe' && item !== 'rod' && item !== 'shovel'),
       ]);
     server.send(encodeWelcome(netId, simulation.seed, simulation.tick, this.worldTimeMs()));
+    server.send(encodeItemCatalog(this.itemCatalog));
     // Whether the lake is ice, before anything that depends on it.
     server.send(encodeLakeIce(simulation.lakeFrozenByCalendar()));
     server.send(encodeWildfire(simulation.wildfireView()));
@@ -648,6 +692,7 @@ export class World extends DurableObject<WorldEnv> {
     // tick to the next rather than the CPU one tick used. That is the number we
     // actually care about: if it grows past the budget the loop is falling behind.
     const startedAt = Date.now();
+    if (startedAt - this.catalogCheckedAt >= 15_000) this.ctx.waitUntil(this.refreshCatalog());
     const sinceLastTick = startedAt - this.lastTickAtMs;
     this.lastTickAtMs = startedAt;
 
@@ -1774,6 +1819,7 @@ export class World extends DurableObject<WorldEnv> {
       raidIntervalSeconds: this.raidIntervalSeconds(),
       forestEncounters: (this.raidIntervalSeconds() ?? 240) < 86400,
     });
+    simulation.setEquipmentBonuses(catalogBonuses(this.itemCatalog.overrides));
     this.simulation = simulation;
     const weatherCycle = this.readMeta('weather-cycle');
     simulation.restoreWeatherCycle(weatherCycle === null ? null : Number(weatherCycle));

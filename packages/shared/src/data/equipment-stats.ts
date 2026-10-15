@@ -21,15 +21,22 @@ export interface EquipmentBonus {
   readonly warmth?: number;
 }
 
+export type EquipmentBonuses = Readonly<Partial<Record<ItemId, EquipmentBonus>>>;
+
 /** Fixed bonuses: no levels, random rolls or changes to attack/movement timing. */
 export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>> = {
+  axe: { power: 10 },
   ironSword: { power: 50 },
   huntingKnife: { power: 25 },
   refinedAxe: { power: 25 },
-  knightHelmet: { protection: 8 },
-  bearHat: { vitality: 15, warmth: 25 },
-  mageHat: { vitality: 10, warmth: 15 },
-  rogueMask: { vitality: 5, warmth: 5 },
+  shovel: { power: 5 },
+  rod: { power: 5 },
+  refinedRod: { power: 10 },
+  torch: { power: 5 },
+  knightHelmet: { protection: 8, warmth: 5 },
+  bearHat: { protection: 2, vitality: 15, warmth: 25 },
+  mageHat: { protection: 1, vitality: 10, warmth: 15 },
+  rogueMask: { protection: 1, vitality: 5, warmth: 5 },
   travelerTunic: { protection: 4, vitality: 10, warmth: 10 },
   travelerTrousers: { protection: 3, warmth: 10 },
   leatherBoots: { protection: 2, warmth: 5 },
@@ -53,6 +60,7 @@ export interface CharacterStats {
 export function characterStats(
   worn: Readonly<WornGear>,
   held: ItemId | null = worn.mainHand ?? null,
+  bonuses: EquipmentBonuses = EQUIPMENT_BONUSES,
 ): CharacterStats {
   let protection = 0;
   let vitality = HEALTH_MAX;
@@ -60,13 +68,13 @@ export function characterStats(
   for (const slot of GEAR_SLOTS) {
     const item = worn[slot];
     if (item !== undefined && canWearIn(item, slot)) {
-      protection += EQUIPMENT_BONUSES[item]?.protection ?? 0;
-      vitality += EQUIPMENT_BONUSES[item]?.vitality ?? 0;
-      warmth += EQUIPMENT_BONUSES[item]?.warmth ?? 0;
+      protection += bonuses[item]?.protection ?? 0;
+      vitality += bonuses[item]?.vitality ?? 0;
+      warmth += bonuses[item]?.warmth ?? 0;
     }
   }
   return {
-    power: 100 + (held === null ? 0 : (EQUIPMENT_BONUSES[held]?.power ?? 0)),
+    power: 100 + (held === null ? 0 : (bonuses[held]?.power ?? 0)),
     protection: Math.min(40, protection),
     vitality: Math.min(150, vitality),
     warmth: Math.min(100, warmth),
@@ -79,11 +87,12 @@ export function statsWithItem(
   held: ItemId | null,
   item: ItemId,
   slot: GearSlot | null = slotToWear(item, worn),
+  bonuses: EquipmentBonuses = EQUIPMENT_BONUSES,
 ): CharacterStats {
   if (slot !== null && gearSlotsOf(item).includes(slot))
-    return characterStats({ ...worn, [slot]: item }, slot === 'mainHand' ? item : held);
-  if (ITEM_KINDS[item].equippable) return characterStats(worn, item);
-  return characterStats(worn, held);
+    return characterStats({ ...worn, [slot]: item }, slot === 'mainHand' ? item : held, bonuses);
+  if (ITEM_KINDS[item].equippable) return characterStats(worn, item, bonuses);
+  return characterStats(worn, held, bonuses);
 }
 
 /** Protection reduces hostile blows without granting equipment-based immunity. */

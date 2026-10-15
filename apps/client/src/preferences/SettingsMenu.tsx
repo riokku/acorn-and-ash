@@ -26,6 +26,7 @@ interface SettingsMenuProps {
  * and reports what was pressed; the countdown itself lives with the game.
  */
 export interface SettingsAccount {
+  readonly canEditItems?: boolean;
   /** How long signing out takes: 0 signs out at once, as on the character screen. */
   readonly waitSeconds: number;
   /** Seconds left while a sign-out is counting down, or null when none is. */
@@ -254,6 +255,11 @@ function AccountSection({
   return (
     <section className="settings-account" aria-labelledby="settings-account-heading">
       <h3 id="settings-account-heading">Account</h3>
+      {account.canEditItems && (
+        <p>
+          <a href="/admin/items">Manage items</a>
+        </p>
+      )}
       <p className="settings-account-note" role="status">
         {counting
           ? `Signing out in ${account.secondsLeft}…`

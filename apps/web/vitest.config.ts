@@ -12,6 +12,15 @@ import { defineConfig } from 'vitest/config';
  * Worker is what decides those, not the browser.
  */
 const stubGameServer = `
+  import { DurableObject } from 'cloudflare:workers';
+  export class ItemCatalog extends DurableObject {
+    draft = {revision: 0, overrides: {}}; publishedValue = {revision: 0, overrides: {}};
+    published() { return this.publishedValue; }
+    adminState() { return {draft: this.draft, published: this.publishedValue, history: []}; }
+    saveDraft(revision, overrides) { if (revision !== this.draft.revision) return null; this.draft = {revision: revision + 1, overrides}; return this.adminState(); }
+    publish(draftRevision, publishedRevision) { if (draftRevision !== this.draft.revision || publishedRevision !== this.publishedValue.revision) return null; this.publishedValue = {revision: publishedRevision + 1, overrides: this.draft.overrides}; return this.adminState(); }
+  }
+
   export class World {
     constructor(ctx) { this.ctx = ctx; }
     async fetch(request) {
@@ -46,7 +55,10 @@ export default defineConfig(async () => {
               name: 'acorn-ash-game-server',
               modules: true,
               script: stubGameServer,
-              durableObjects: { WORLD: { className: 'World', useSQLite: true } },
+              durableObjects: {
+                WORLD: { className: 'World', useSQLite: true },
+                ITEM_CATALOG: { className: 'ItemCatalog', useSQLite: true },
+              },
             },
           ],
         },

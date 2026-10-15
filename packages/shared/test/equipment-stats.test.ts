@@ -7,6 +7,10 @@ import {
   statsWithItem,
   encodeHealth,
   decodeServerMessage,
+  EQUIPMENT_BONUSES,
+  GEAR_ITEMS,
+  gearSlotsOf,
+  TOOL_ITEMS,
 } from '../src/index';
 const worlds: WorldSimulation[] = [];
 afterEach(() => worlds.splice(0).forEach((sim) => sim.dispose()));
@@ -20,9 +24,9 @@ function world() {
 describe('equipment power', () => {
   it('uses the active hand rather than a holstered weapon or off-hand knife', () => {
     expect(characterStats({ mainHand: 'ironSword' }).power).toBe(150);
-    expect(characterStats({ mainHand: 'ironSword' }, 'axe').power).toBe(100);
+    expect(characterStats({ mainHand: 'ironSword' }, 'axe').power).toBe(110);
     expect(characterStats({ mainHand: 'ironSword' }, 'refinedAxe').power).toBe(125);
-    expect(characterStats({ offHand: 'huntingKnife' }, 'axe').power).toBe(100);
+    expect(characterStats({ offHand: 'huntingKnife' }, 'axe').power).toBe(110);
     expect(characterStats({ mainHand: 'ironSword' }, 'berry').power).toBe(100);
     expect(characterStats({}, null).power).toBe(100);
   });
@@ -33,7 +37,7 @@ describe('equipment power', () => {
     expect(statsWithItem(worn, 'ironSword', 'huntingKnife', 'mainHand').power).toBe(125);
     expect(worn).toEqual({ mainHand: 'ironSword' });
   });
-  it('makes a worn sword stronger against wildlife while a selected axe keeps its baseline', () => {
+  it('makes a worn sword stronger against wildlife while a selected axe uses only its own bonus', () => {
     const sim = world();
     const target = ANIMAL_DENS.find((animal) => animal.kind === 'maskedRaccoon')!;
     expect(target).toBeDefined();
@@ -153,4 +157,17 @@ it('preserves fractional armor damage through saving and reconnecting', () => {
   sim.removePlayer(1);
   sim.addPlayer(1, saved);
   expect(sim.healthOf(1)).toBeCloseTo(80.8, 8);
+});
+
+it('gives every garment both protection and insulation, and every weapon/tool an active-hand bonus', () => {
+  const clothes = GEAR_ITEMS.filter((item) =>
+    gearSlotsOf(item).some((slot) => !['mainHand', 'offHand'].includes(slot)),
+  );
+  for (const item of clothes) {
+    expect(EQUIPMENT_BONUSES[item]?.protection, item).toBeGreaterThan(0);
+    expect(EQUIPMENT_BONUSES[item]?.warmth, item).toBeGreaterThan(0);
+  }
+  for (const item of [...TOOL_ITEMS, 'ironSword', 'huntingKnife', 'torch'] as const) {
+    expect(characterStats({}, item).power, item).toBeGreaterThan(100);
+  }
 });

@@ -18,6 +18,7 @@ export type Entrance =
   | {
       readonly kind: 'home';
       readonly accountName: string;
+      readonly canEditItems?: boolean;
       /** The character they already made in this world, if they have. */
       readonly saved: PlayerIdentity | null;
       readonly frontPage: boolean;
@@ -49,7 +50,13 @@ export async function findEntrance(
   try {
     status = await resumeAccount(storage, send);
     const saved = await fetchSavedCharacter(worldId, send);
-    return { kind: 'home', accountName: status.name ?? 'Player', saved, frontPage };
+    return {
+      kind: 'home',
+      accountName: status.name ?? 'Player',
+      ...(status.canEditItems ? { canEditItems: true } : {}),
+      saved,
+      frontPage,
+    };
   } catch (error) {
     // The session ended between asking and answering: start from the sign-in.
     if (error instanceof SignInError && error.status === 401) {

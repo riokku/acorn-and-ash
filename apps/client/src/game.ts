@@ -1,4 +1,6 @@
-import { characterStats } from '@acorn/shared';
+import { applyItemCatalog } from './item-catalog';
+import { characterStats, ITEM_KINDS } from './item-catalog';
+
 import { CombatSwoosh } from './audio/combat-swoosh';
 import { footGroundHeightAt } from './scene/standing-foot-contact';
 import { placedPropColliders, type Collider } from '@acorn/shared';
@@ -105,7 +107,6 @@ import {
   HEALTH_MAX,
   HUNGER_MAX,
   PICKUP_REACH,
-  ITEM_KINDS,
   VOXEL,
   digRefusal,
   overlapsWater,
@@ -1780,6 +1781,11 @@ export class Game {
   private handleMessage(message: ServerMessage): void {
     if (message.type === 'welcome') this.ownSwoosh.clear();
     switch (message.type) {
+      case 'itemCatalog': {
+        applyItemCatalog(message);
+        this.options.hud.publish({});
+        break;
+      }
       case 'chest': {
         if (!this.chestPending) break;
         this.chestPending = false;

@@ -1,3 +1,4 @@
+import { itemAdmin, canEditItems } from './item-admin';
 import { Hono } from 'hono';
 
 import { createAuth } from './accounts/auth';
@@ -42,6 +43,11 @@ app.onError((error, c) => {
   return c.json({ error: 'Something went wrong' }, 500);
 });
 
+app.route('/', itemAdmin);
+app.get('/api/items', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(await c.env.ITEM_CATALOG.get(c.env.ITEM_CATALOG.idFromName('items')).published());
+});
 app.get('/api/health', (c) => c.json({ ok: true, service: 'web' }));
 
 /** Where the browser should connect for realtime play. */
@@ -59,9 +65,10 @@ app.get('/api/config', (c) =>
  * signed in, and if not, what they can sign in with. Never says anything about
  * the key the worlds use.
  */
-function sessionStatus(account: Account | null, env: WebEnv, hostname: string) {
+async function sessionStatus(account: Account | null, env: WebEnv, hostname: string) {
   return {
     signedIn: account !== null,
+    canEditItems: await canEditItems(account, env),
     name: account?.name,
     providers: offeredProviders(env, hostname),
     testSignIn: testSignInMode(env, hostname),
@@ -70,7 +77,7 @@ function sessionStatus(account: Account | null, env: WebEnv, hostname: string) {
 
 app.get('/api/session', async (c) => {
   const { account, cookies } = await resumeSession(c.req.raw, c.env);
-  const reply = Response.json(sessionStatus(account, c.env, new URL(c.req.url).hostname));
+  const reply = Response.json(await sessionStatus(account, c.env, new URL(c.req.url).hostname));
   // Each visit pushes the year back, so the cookie has to be renewed too.
   for (const cookie of cookies) reply.headers.append('set-cookie', cookie);
   return reply;
@@ -95,7 +102,7 @@ app.post('/api/session', async (c) => {
     await adoptEarlierKey(c.env.DB, account.id, earlierKey);
   }
 
-  const reply = Response.json(sessionStatus(account, c.env, new URL(request.url).hostname));
+  const reply = Response.json(await sessionStatus(account, c.env, new URL(request.url).hostname));
   for (const cookie of cookies) reply.headers.append('set-cookie', cookie);
   return reply;
 });

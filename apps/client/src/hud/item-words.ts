@@ -1,4 +1,5 @@
-import { ITEM_KINDS, type ItemId } from '@acorn/shared';
+import { ITEM_KINDS } from '../item-catalog';
+import { type ItemId } from '@acorn/shared';
 
 /**
  * How many of something, in words: "the axe" for something you only ever

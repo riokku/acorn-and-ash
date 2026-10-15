@@ -5,7 +5,7 @@
  * generated from `wrangler.jsonc` by `pnpm types`. This adds the optional
  * variables that are set in the dashboard rather than in the config file.
  */
-export interface WorldEnv extends Env {
+export interface WorldEnv extends Pick<Env, 'WORLD' | 'ITEM_CATALOG'> {
   /** One-time built-structure reset for staging's home-clearing only. */
   readonly WORLD_STAGING_BUILD_RESET?: string;
   /** Overrides the seed new worlds are built from. Handy for testing. */

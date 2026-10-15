@@ -1,7 +1,7 @@
+import { ITEM_KINDS } from '../item-catalog';
 import type { WornGear } from '@acorn/shared';
 import { equipmentDetail, equipmentComparison } from './equipment-stats';
 import {
-  ITEM_KINDS,
   PACK_ITEMS,
   hasItem,
   inventoryFromEntries,

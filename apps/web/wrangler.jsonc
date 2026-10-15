@@ -13,8 +13,9 @@
     "directory": "../client/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
+    "html_handling": "none",
     // Without this the asset router would answer /api/* with index.html.
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api/*", "/admin", "/admin/*", "/admin.html"],
   },
 
   // This Worker does not implement the World class, it borrows it from the game
@@ -23,6 +24,11 @@
   "durable_objects": {
     "bindings": [
       { "name": "WORLD", "class_name": "World", "script_name": "acorn-ash-game-server" },
+      {
+        "name": "ITEM_CATALOG",
+        "class_name": "ItemCatalog",
+        "script_name": "acorn-ash-game-server",
+      },
     ],
   },
 
@@ -61,11 +67,17 @@
         "directory": "../client/dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"],
+        "html_handling": "none",
+        "run_worker_first": ["/api/*", "/admin", "/admin/*", "/admin.html"],
       },
       "durable_objects": {
         "bindings": [
           { "name": "WORLD", "class_name": "World", "script_name": "acorn-ash-game-server" },
+          {
+            "name": "ITEM_CATALOG",
+            "class_name": "ItemCatalog",
+            "script_name": "acorn-ash-game-server",
+          },
         ],
       },
       // The accounts database (decision 0086). CI creates the real one for each
@@ -100,13 +112,19 @@
         "directory": "../client/dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"],
+        "html_handling": "none",
+        "run_worker_first": ["/api/*", "/admin", "/admin/*", "/admin.html"],
       },
       "durable_objects": {
         "bindings": [
           {
             "name": "WORLD",
             "class_name": "World",
+            "script_name": "acorn-ash-game-server-staging",
+          },
+          {
+            "name": "ITEM_CATALOG",
+            "class_name": "ItemCatalog",
             "script_name": "acorn-ash-game-server-staging",
           },
         ],
@@ -138,13 +156,19 @@
         "directory": "../client/dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"],
+        "html_handling": "none",
+        "run_worker_first": ["/api/*", "/admin", "/admin/*", "/admin.html"],
       },
       "durable_objects": {
         "bindings": [
           {
             "name": "WORLD",
             "class_name": "World",
+            "script_name": "acorn-ash-game-server-production",
+          },
+          {
+            "name": "ITEM_CATALOG",
+            "class_name": "ItemCatalog",
             "script_name": "acorn-ash-game-server-production",
           },
         ],

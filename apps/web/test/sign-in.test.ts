@@ -29,6 +29,7 @@ describe('what the first screen is told', () => {
     const response = await app.fetch(get('/api/session'), live);
     expect(await response.json()).toEqual({
       signedIn: false,
+      canEditItems: false,
       providers: ['google', 'discord'],
       testSignIn: null,
     });

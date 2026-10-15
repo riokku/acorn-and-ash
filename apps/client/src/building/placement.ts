@@ -1,3 +1,4 @@
+import { ITEM_KINDS } from '../item-catalog';
 /**
  * Where a piece being placed would go, and whether it can (see decision
  * 0052).
@@ -28,7 +29,6 @@ import {
   knowsHome,
   BUILD_REACH,
   BUILD_ROTATION_STEP,
-  ITEM_KINDS,
   buildableFootprint,
   checkBuildSpot,
   snapFence,

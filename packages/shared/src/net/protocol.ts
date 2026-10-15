@@ -1,3 +1,4 @@
+import { parsePublishedCatalog, type PublishedCatalog } from '../data/item-catalog';
 import { displayedHealth } from '../sim/health';
 import { WARMTH_STATUSES, type WarmthView } from '../sim/warmth';
 import { BUILD_REPLY_REASONS, type BuildReply } from '../sim/building';
@@ -1713,12 +1714,39 @@ export function encodeWarmth(state: WarmthView): ArrayBuffer {
   ]).buffer;
 }
 
+/** Versioned content travels in a binary envelope, never as a client command. */
+export function encodeItemCatalog(catalog: PublishedCatalog): ArrayBuffer {
+  const payload = textEncoder.encode(JSON.stringify(parsePublishedCatalog(catalog)));
+  if (payload.length > 256_000) throw new Error('Catalogue is too large');
+  const bytes = new Uint8Array(payload.length + 1);
+  bytes[0] = ServerMessageType.ItemCatalog;
+  bytes.set(payload, 1);
+  return bytes.buffer;
+}
+
 export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
   if (data.byteLength < 1) return null;
   const view = new DataView(data);
   const type = view.getUint8(0);
 
   switch (type) {
+    case ServerMessageType.ItemCatalog: {
+      if (data.byteLength > 256_001) return null;
+      try {
+        return {
+          type: 'itemCatalog',
+          ...parsePublishedCatalog(
+            JSON.parse(
+              new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(
+                new Uint8Array(data, 1),
+              ),
+            ),
+          ),
+        };
+      } catch {
+        return null;
+      }
+    }
     case ServerMessageType.Warmth: {
       if (data.byteLength !== 5) return null;
       const value = view.getUint8(1),

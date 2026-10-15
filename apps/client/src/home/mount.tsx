@@ -9,6 +9,7 @@ import type { Preferences } from '../preferences/preferences';
 /** What the Home screen needs to know about who is signed in. */
 export interface HomeAccount {
   readonly name: string;
+  readonly canEditItems?: boolean;
   /** The character already made in this world, if there is one. */
   readonly saved: PlayerIdentity | null;
   readonly onSignOut: () => void;
@@ -37,6 +38,7 @@ export function mountHome(
         initial={initial}
         saved={account.saved}
         accountName={account.name}
+        canEditItems={account.canEditItems}
         onSignOut={account.onSignOut}
         onDeleteCharacter={account.onDeleteCharacter}
         notice={account.notice}

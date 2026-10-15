@@ -1,9 +1,8 @@
+import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { useEffect, useRef, useState } from 'react';
 
 import {
-  characterStats,
   GEAR_SLOT_LABELS,
-  ITEM_KINDS,
   type GearRequest,
   type GearSlot,
   type ItemId,
@@ -88,7 +87,7 @@ export function CharacterPanel({
       </div>
       <dl className="character-stats" data-testid="character-stats">
         <div title="Weapon damage compared with the original attack. 100% is the baseline.">
-          <dt>Power</dt>
+          <dt>Attack power</dt>
           <dd>{characterStats(worn, held).power}%</dd>
         </div>
         <div title="The percentage of damage your worn armor and shield prevent.">

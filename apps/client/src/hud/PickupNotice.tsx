@@ -1,4 +1,4 @@
-import { ITEM_KINDS } from '@acorn/shared';
+import { ITEM_KINDS } from '../item-catalog';
 
 import { ItemIcon } from './item-icons';
 import type { PickupNotice as Notice } from './pickup-notice';

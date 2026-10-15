@@ -8,7 +8,12 @@ import {
   type WarmthView,
   type WarmthEnvironment,
 } from './warmth';
-import { characterStats, protectedDamage } from '../data/equipment-stats';
+import {
+  EQUIPMENT_BONUSES,
+  type EquipmentBonuses,
+  characterStats,
+  protectedDamage,
+} from '../data/equipment-stats';
 import { placedPropColliders } from '../world/placed-solids';
 import type { Collider } from '../world/colliders';
 import { streamRockColliders } from '../world/scenery-rocks';
@@ -1672,6 +1677,13 @@ export class WorldSimulation {
   private readonly supports: Support[] = [];
   private readonly supportNews: Support[] = [];
 
+  private equipmentBonuses: EquipmentBonuses = EQUIPMENT_BONUSES;
+  /** Apply published balance without healing players or altering their saved equipment. */
+  setEquipmentBonuses(bonuses: EquipmentBonuses): void {
+    this.equipmentBonuses = bonuses;
+    for (const runtime of this.players.values()) this.gearChanged(runtime);
+  }
+
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
     this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
@@ -1910,7 +1922,7 @@ export class WorldSimulation {
     );
 
     const worn = wornFromEntries(saved?.worn);
-    const healthMax = characterStats(worn).vitality;
+    const healthMax = characterStats(worn, undefined, this.equipmentBonuses).vitality;
     const hunger = saved?.hunger ?? HUNGER_MAX;
     const inventory = saved ? inventoryFromEntries(saved.items) : createInventory();
     this.players.set(netId, {
@@ -2269,7 +2281,7 @@ export class WorldSimulation {
         const hadMeal = runtime.meal.item !== null;
         const mealStep = advanceMeal(runtime.meal);
         runtime.meal = mealStep.state;
-        const healthMax = characterStats(runtime.worn).vitality;
+        const healthMax = characterStats(runtime.worn, undefined, this.equipmentBonuses).vitality;
         if (mealStep.healing > 0 && runtime.health > 0 && runtime.health < healthMax) {
           runtime.health = Math.min(healthMax, runtime.health + mealStep.healing);
           this.healthEvents.push({
@@ -3870,7 +3882,8 @@ export class WorldSimulation {
         aimYaw,
         impact,
         lookBack,
-        characterStats(runtime.worn, this.equippedItemOf(runtime.netId)).power,
+        characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses)
+          .power,
       )
     ) {
       runtime.lastCombatTick = this.tick;
@@ -4615,7 +4628,8 @@ export class WorldSimulation {
     ) {
       animal.hitsTaken +=
         ((dodgeWeight ?? (charged ? 2 : 1)) *
-          characterStats(runtime.worn, this.equippedItemOf(runtime.netId)).power) /
+          characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses)
+            .power) /
         100;
       const hitsLeft = Math.ceil(kind.threat.hitsToDefeat - animal.hitsTaken);
       if (hitsLeft > 0) {
@@ -4696,11 +4710,17 @@ export class WorldSimulation {
           ? amount
           : protectedDamage(
               amount,
-              characterStats(runtime.worn, this.equippedItemOf(runtime.netId)),
+              characterStats(
+                runtime.worn,
+                this.equippedItemOf(runtime.netId),
+                this.equipmentBonuses,
+              ),
             )),
     );
     const knockedOut = remaining <= 0;
-    runtime.health = knockedOut ? characterStats(runtime.worn).vitality : remaining;
+    runtime.health = knockedOut
+      ? characterStats(runtime.worn, undefined, this.equipmentBonuses).vitality
+      : remaining;
 
     if (knockedOut) {
       runtime.warmth = warmthFromSaved(null);
@@ -5577,7 +5597,7 @@ export class WorldSimulation {
     return {
       winter: calendar.season === 'winter',
       blizzard: this.weather().kind === 'blizzard',
-      insulation: characterStats(runtime.worn).warmth,
+      insulation: characterStats(runtime.worn, undefined, this.equipmentBonuses).warmth,
       heat,
     };
   }
@@ -5821,7 +5841,7 @@ export class WorldSimulation {
   }
 
   private gearChanged(runtime: PlayerRuntime): void {
-    const maximum = characterStats(runtime.worn).vitality;
+    const maximum = characterStats(runtime.worn, undefined, this.equipmentBonuses).vitality;
     if (runtime.health > maximum) {
       runtime.health = maximum;
       this.healthEvents.push({
