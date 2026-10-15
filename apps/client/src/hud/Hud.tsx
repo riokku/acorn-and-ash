@@ -1036,12 +1036,18 @@ export function hint(state: HudState): string {
   if (state.restingNearby !== null && eatsInstead) return 'Press E to eat';
   if (state.restingNearby === 'chair') return 'Press E to sit down';
   if (state.restingNearby === 'bed') return 'Press E to lie down';
-  // Only the axe chops, so a tree only offers a hint once it is the active
-  // item - carrying it is not enough, it has to be equipped. Anything in hand
-  // takes a swing at an animal, though, even a fish (see decision 0056) -
-  // unless it is the rod facing water, which casts instead.
+  // Trees take an axe to chop or a torch to ignite; the tool must be equipped.
+  // Other items can swing at an animal (see decision 0056), unless the rod
+  // faces water and casts instead.
   if (state.aimedTree !== null && toolKind(state.equippedItem) === 'axe')
     return chopHint(state.aimedTree);
+  if (state.aimedTree !== null && state.equippedItem === 'torch' && state.season) {
+    if (state.season.season === 'summer')
+      return 'Left click to ignite the tree · dry summer fires can spread';
+    if (state.season.season !== 'winter')
+      return 'Left click to ignite the tree · fire stays on this tree';
+    if (state.aimedAnimal === null) return 'Winter trees are too wet to ignite';
+  }
   if (state.canCast) return 'Left click to cast';
   if (state.aimedAnimal !== null && state.equippedItem !== null) {
     return catchHint(state.aimedAnimal);

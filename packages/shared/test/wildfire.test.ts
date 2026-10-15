@@ -17,6 +17,11 @@ import {
   stepPlayer,
   BLIZZARD_SPEED,
   clockShiftForSeason,
+  PlayerButton,
+  HUNGER_MAX,
+  PROP_KINDS,
+  type SeasonId,
+  type ItemId,
 } from '../src/index';
 const tree = (id: number, x = 0): FireTarget => ({
   id,
@@ -58,6 +63,101 @@ it('survives save/restore without repeating spread, and cancels fire on chopped 
   expect(restored.advance(2, 13_000, [])).toEqual([]);
   expect(restored.fires.size).toBe(0);
 });
+it('keeps a contained ignition on its first tree, including after save/restore', () => {
+  const targets = Array.from({ length: 20 }, (_, i) => tree(i, i * 0.1));
+  const fire = new WildfireSimulation();
+  fire.ignite(targets[0]!, 0, 0, false);
+  const restored = new WildfireSimulation();
+  restored.restore(fire.save(), targets);
+  restored.advance(42, 12_000, targets);
+  expect([...restored.fires.keys()]).toEqual(['tree:0']);
+  expect(restored.advance(42, FIRE_TREE_SECONDS * 1000, targets)).toEqual([
+    expect.objectContaining({ id: 0 }),
+  ]);
+});
+it('stops an existing summer fire spreading when the dry season ends', () => {
+  const targets = Array.from({ length: 20 }, (_, i) => tree(i, i * 0.1));
+  const fire = new WildfireSimulation();
+  fire.ignite(targets[0]!, 0);
+  fire.advance(42, 1000, targets, false);
+  fire.advance(42, 12_000, targets, true);
+  expect([...fire.fires.keys()]).toEqual(['tree:0']);
+});
+
+function torchWorld(season: SeasonId, equipped: ItemId | null = 'torch') {
+  const sim = new WorldSimulation({
+    seed: DEFAULT_WORLD_SEED,
+    forestEncounters: false,
+    hungerEmptyAfterSeconds: Infinity,
+  });
+  sims.push(sim);
+  sim.setCalendarShift(clockShiftForSeason(sim.seed, 0, season));
+  sim.addPlayer(1, {
+    netId: 1,
+    x: 0,
+    y: 0,
+    z: 0,
+    facingYaw: 0,
+    hunger: HUNGER_MAX,
+    items: [
+      { item: 'torch', count: 1 },
+      { item: 'axe', count: 1 },
+    ],
+    equippedItem: equipped,
+  });
+  const target = sim.clearing.props.find((prop) => prop.kind === 'oak')!;
+  const radius = PROP_KINDS[target.kind].colliderRadius * target.scale;
+  const position = { x: target.x, y: target.y ?? 0, z: target.z + radius + 1 };
+  sim.placePlayer(1, position, 0);
+  return { sim, target, position };
+}
+function torchSwing(sim: WorldSimulation, yaw = 0, buttons = PlayerButton.Swing) {
+  for (let i = 1; i <= TICK_HZ; i++) {
+    sim.queueInput(1, createInput(i, 0, 0, 0, i === 1 ? buttons : 0, yaw));
+    sim.step(i * 50);
+  }
+}
+it.each(['spring', 'summer', 'autumn', 'winter'] as const)(
+  'applies %s torch ignition and spread rules to a real player swing',
+  (season) => {
+    const { sim, target } = torchWorld(season);
+    torchSwing(sim);
+    const fire = sim.wildfire.fires.get(`tree:${target.id}`);
+    if (season === 'winter') expect(fire).toBeUndefined();
+    else {
+      expect(fire).toMatchObject({ id: target.id, generation: 0, spread: season !== 'summer' });
+      expect(sim.isFelled(target.id)).toBe(false);
+      expect(sim.drainChopEvents()).toEqual([]);
+      // The torch uses the same nearby-tree spread as lightning, including its distance limit.
+      const neighbours = [
+        fire!,
+        ...Array.from({ length: 20 }, (_, i) => tree(90000 + i, fire!.x + i * 0.1)).map((t) => ({
+          ...t,
+          z: fire!.z,
+        })),
+        { ...tree(99999, fire!.x + 20), z: fire!.z },
+      ];
+      sim.wildfire.advance(42, fire!.startedAt + 12_000, neighbours);
+      if (season === 'summer') expect(sim.wildfire.fires.size).toBeGreaterThan(1);
+      else expect(sim.wildfire.fires.size).toBe(1);
+      expect(sim.wildfire.fires.has('tree:99999')).toBe(false);
+    }
+  },
+);
+it.each(['carrying', 'idle', 'behind', 'distant', 'above'] as const)(
+  'does not ignite a tree when the player is %s',
+  (caseName) => {
+    const { sim, position } = torchWorld('summer', caseName === 'carrying' ? 'axe' : 'torch');
+    if (caseName === 'distant') sim.placePlayer(1, { ...position, z: position.z + 8 }, 0);
+    if (caseName === 'above') sim.placePlayer(1, { ...position, y: position.y + 40 }, 0);
+    torchSwing(
+      sim,
+      caseName === 'behind' ? Math.PI : 0,
+      caseName === 'idle' ? 0 : PlayerButton.Swing,
+    );
+    expect(sim.wildfire.fires.size).toBe(0);
+  },
+);
 it('round-trips fires and lightning and rejects truncated or invalid network data', () => {
   const fire = new WildfireSimulation();
   fire.ignite(tree(1), 1000);

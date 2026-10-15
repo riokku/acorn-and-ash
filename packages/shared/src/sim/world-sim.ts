@@ -1239,9 +1239,12 @@ export class WorldSimulation {
     this.wildfire.restore(saved, this.fireTargets());
   }
   /** Server-side entry point also used by simulation tests; clients cannot ignite things. */
-  igniteTree(id: number): boolean {
+  igniteTree(id: number, canSpread = true): boolean {
     const target = this.fireTargets().find((target) => target.kind === 'tree' && target.id === id);
-    return target !== undefined && this.wildfire.ignite(target, this.tick * TICK_MILLISECONDS);
+    return (
+      target !== undefined &&
+      this.wildfire.ignite(target, this.tick * TICK_MILLISECONDS, 0, canSpread)
+    );
   }
   private updateWildfire(): void {
     if (this.tick % TICK_HZ !== 0) return;
@@ -1274,7 +1277,12 @@ export class WorldSimulation {
         }
       }
     }
-    const burned = this.wildfire.advance(this.seed, now, targets);
+    const burned = this.wildfire.advance(
+      this.seed,
+      now,
+      targets,
+      this.calendar().season === 'summer',
+    );
     for (const target of burned) {
       if (target.kind === 'tree') this.fellTree(target.id, this.nowMs);
       else {
@@ -3845,7 +3853,7 @@ export class WorldSimulation {
 
   /**
    * A swing or a charged strike lands, at the moment its blow connects:
-   * on the tree in front, with the axe - a tree is only for chopping - or
+   * on the tree in front, with the axe or torch, or
    * failing that on whatever animal is in reach, with anything at all in
    * hand. Swinging at nothing is a swing at nothing.
    *
@@ -3895,6 +3903,19 @@ export class WorldSimulation {
       if (tree !== null) {
         this.chopTree(runtime, tree, charged, position);
         return;
+      }
+    }
+
+    if (this.isActiveItem(runtime, 'torch') && this.calendar().season !== 'winter') {
+      const tree = this.treeInReachOf(position, aimYaw);
+      if (tree !== null) {
+        const base = tree.prop.y ?? 0;
+        const top = base + propHeight(PROP_KINDS[tree.prop.kind]) * tree.prop.scale;
+        // Horizontal reach alone must not light a tree on a ledge above/below us.
+        if (position.y + 1.5 >= base && position.y <= top) {
+          this.igniteTree(tree.prop.id, this.calendar().season === 'summer');
+          return;
+        }
       }
     }
 

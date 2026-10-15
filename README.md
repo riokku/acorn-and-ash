@@ -594,6 +594,12 @@ and wooden buildings, hurt nearby players, and burn out on their own. Trees
 leave stumps and regrow; destroyed homes spill their chest contents and move
 occupants outside. Leave space around homes to limit spread.
 
+With a torch equipped, face a nearby tree and left click to ignite it. Winter
+trees cannot ignite. Spring and autumn fires stay on that first tree, while dry
+summer fires can spread just like lightning fires. Carrying a torch past a tree
+does not ignite it. See
+[decision 0187](docs/decisions/0187-seasonal-torch-ignition.md).
+
 On local and preview servers, join an empty test world with `?weather=blizzard`
 or `?weather=storm` to try these events immediately (combine with `&world=` for
 a separate test world). Storm lightning begins within 18 seconds; ignition is

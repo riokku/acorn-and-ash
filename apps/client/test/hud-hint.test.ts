@@ -1,4 +1,4 @@
-import { HEALTH_MAX, HUNGER_MAX } from '@acorn/shared';
+import { HEALTH_MAX, HUNGER_MAX, calendarAt, clockShiftForSeason } from '@acorn/shared';
 import { describe, expect, it } from 'vitest';
 
 import { curtainMessage, hint } from '../src/hud/Hud';
@@ -94,6 +94,24 @@ const BASE_STATE: HudState = {
 };
 
 describe('the hint along the bottom', () => {
+  it.each(['spring', 'summer', 'autumn', 'winter'] as const)(
+    'explains torch ignition in %s',
+    (season) => {
+      const state: HudState = {
+        ...BASE_STATE,
+        equippedItem: 'torch',
+        aimedTree: { name: 'Oak', swingsLeft: 3 },
+        season: calendarAt(42, clockShiftForSeason(42, 0, season)),
+      };
+      expect(hint(state)).toBe(
+        season === 'winter'
+          ? 'Winter trees are too wet to ignite'
+          : season === 'summer'
+            ? 'Left click to ignite the tree · dry summer fires can spread'
+            : 'Left click to ignite the tree · fire stays on this tree',
+      );
+    },
+  );
   it('offers to chop a tree once the axe is equipped', () => {
     const state: HudState = {
       ...BASE_STATE,

@@ -42,13 +42,20 @@ export class WildfireSimulation {
   readonly fires = new Map<string, Wildfire>();
   lightning: LightningStrike | null = null;
   lastStrike = -1;
-  ignite(target: FireTarget, now: number, generation = 0): boolean {
+  ignite(target: FireTarget, now: number, generation = 0, canSpread = true): boolean {
     const key = fireKey(target);
     if (this.fires.has(key) || this.fires.size >= FIRE_LIMIT) return false;
-    this.fires.set(key, { ...target, startedAt: now, generation, spread: false });
+    // A contained fire has already spent its spread opportunity. This uses the
+    // existing saved flag, so it stays contained across restarts/season changes.
+    this.fires.set(key, { ...target, startedAt: now, generation, spread: !canSpread });
     return true;
   }
-  advance(seed: number, now: number, targets: readonly FireTarget[]): FireTarget[] {
+  advance(
+    seed: number,
+    now: number,
+    targets: readonly FireTarget[],
+    canSpread = true,
+  ): FireTarget[] {
     const available = new Map(targets.map((target) => [fireKey(target), target]));
     const burned: FireTarget[] = [];
     for (const [key, fire] of [...this.fires]) {
@@ -57,6 +64,8 @@ export class WildfireSimulation {
         continue;
       }
       const age = (now - fire.startedAt) / 1000;
+      // Once the dry season ends, existing fires finish burning in place.
+      if (!canSpread) fire.spread = true;
       if (age >= fireLifetime(fire)) {
         burned.push(fire);
         available.delete(key);
