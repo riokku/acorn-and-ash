@@ -1,3 +1,9 @@
+import {
+  createTreasures,
+  nearestTreasure,
+  type BuriedTreasure,
+  type TreasureSpot,
+} from './treasure';
 import { displayedHealth } from './health';
 import {
   advanceWarmth,
@@ -797,7 +803,7 @@ export interface BuriedCacheView {
  */
 export interface CacheEvent {
   readonly netId: number;
-  readonly kind: 'buried' | 'dugUp' | 'partial';
+  readonly kind: 'buried' | 'dugUp' | 'partial' | 'treasure' | 'treasurePartial';
 }
 
 /**
@@ -1670,6 +1676,8 @@ export class WorldSimulation {
   private readonly buriedCaches: BuriedCache[] = [];
   private nextBuriedCacheId = 1;
   private readonly cacheEvents: CacheChange[] = [];
+  private treasures: BuriedTreasure[] = [];
+  private readonly treasureEvents: CacheEvent[] = [];
   /** Who went in or out through a door since this was last asked. */
   private readonly spaceChanges: SpaceChange[] = [];
   /**
@@ -2526,7 +2534,9 @@ export class WorldSimulation {
               !gathered && wantsToToggleCampfire && this.tryBoardBoat(runtime, scratch);
             if (boarded) aim.yaw = scratch.facingYaw;
             if (!gathered && !boarded) {
-              const dugUp = this.tryDigUpCache(runtime, scratch.position);
+              const dugUp =
+                this.tryDigUpCache(runtime, scratch.position) ||
+                this.tryDigTreasure(runtime, scratch.position);
               if (!dugUp) {
                 // A campfire in reach always claims the button, whether or not
                 // this tick is the fresh press that actually toggles it -
@@ -3457,7 +3467,11 @@ export class WorldSimulation {
     for (const pickup of this.clearing.pickups) {
       if (tooClose(pickup)) return true;
     }
-    return this.droppedPiles.some(tooClose) || this.buriedCaches.some(tooClose);
+    return (
+      this.droppedPiles.some(tooClose) ||
+      this.buriedCaches.some(tooClose) ||
+      this.treasures.some(tooClose)
+    );
   }
 
   /**
@@ -3653,6 +3667,81 @@ export class WorldSimulation {
       this.pendingPiles.delete(pile.id);
       this.pileChanges.add(pile.id);
     }
+  }
+
+  /** Create once, then restore the remaining mounds, including their partial contents. */
+  initializeTreasures(saved: BuriedTreasure[] | null): readonly BuriedTreasure[] {
+    const terrain = this.collision.terrain;
+    const footprints = this.buildFootprints(undefined, true);
+    const protectedSites = this.protectedBuildSites();
+    this.treasures =
+      saved ??
+      createTreasures(this.seed, (x, z) => {
+        if (overlapsWater(this.keepOutWater, x, z, 2)) return false;
+        if (protectedSites.some((site) => Math.hypot(site.x - x, site.z - z) < site.radius + 2))
+          return false;
+        if (!this.patchSpotIsClear(-1, x, z, footprints)) return false;
+        const y = terrain.heightAt(x, z);
+        if (Math.abs(this.dug.floorAt(x, z, y) - y) > 0.1) return false;
+        return [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].every(([dx, dz]) => Math.abs(terrain.heightAt(x + dx!, z + dz!) - y) < 0.4);
+      });
+    return this.treasures;
+  }
+
+  treasureSpots(): readonly TreasureSpot[] {
+    return this.treasures.map(({ id, x, z }) => ({ id, x, z }));
+  }
+
+  savedTreasures(): readonly BuriedTreasure[] {
+    return this.treasures;
+  }
+
+  drainTreasureEvents(): CacheEvent[] {
+    return this.treasureEvents.splice(0);
+  }
+
+  private tryDigTreasure(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {
+    if (runtime.space !== OUTDOORS) return false;
+    const treasure = nearestTreasure(position, this.treasures, (spot) =>
+      groundItemReachable(this.collision, position, spot),
+    );
+    if (treasure === null) return false;
+    // Claim the interaction even without a shovel so E never unexpectedly eats food.
+    if (!this.isActiveItem(runtime, 'shovel')) return true;
+    let recovered = 0;
+    const remaining: { item: ItemId; count: number }[] = [];
+    for (const entry of treasure.items) {
+      const taken = addItem(runtime.inventory, entry.item, entry.count);
+      recovered += taken;
+      if (taken > 0)
+        this.collectionEvents.push({
+          netId: runtime.netId,
+          item: entry.item,
+          count: taken,
+          x: treasure.x,
+          z: treasure.z,
+          depleted: false,
+        });
+      if (taken < entry.count) remaining.push({ item: entry.item, count: entry.count - taken });
+    }
+    if (recovered === 0) {
+      const first = remaining[0];
+      return first === undefined ? true : this.refusePickup(runtime, first.item);
+    }
+    const index = this.treasures.indexOf(treasure);
+    if (remaining.length === 0) this.treasures.splice(index, 1);
+    else this.treasures[index] = { ...treasure, items: remaining };
+    this.treasureEvents.push({
+      netId: runtime.netId,
+      kind: remaining.length === 0 ? 'treasure' : 'treasurePartial',
+    });
+    this.gestureEvents.push({ netId: runtime.netId, gesture: Gesture.Dig, item: 'shovel' });
+    return true;
   }
 
   /**
@@ -4044,6 +4133,8 @@ export class WorldSimulation {
         }
       }
     }
+
+    if (this.isActiveItem(runtime, 'shovel') && this.tryDigTreasure(runtime, position)) return;
 
     if (this.isActiveItem(runtime, 'shovel') && this.digAhead(runtime, position, aimYaw, charged))
       return;
@@ -5189,6 +5280,7 @@ export class WorldSimulation {
   ): Footprint[] {
     return [
       ...this.propFootprints(includeWilderness, near),
+      ...this.treasures.map((spot) => roundFootprint(spot.x, spot.z, 0.7, 'buried treasure')),
       ...this.builtProps
         .filter((built) => built.id !== excludeId)
         .map((built) => buildableFootprint(built.kind, built.x, built.z, built.yaw)),

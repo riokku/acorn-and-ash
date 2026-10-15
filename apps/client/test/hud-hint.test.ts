@@ -714,3 +714,15 @@ describe('the paused curtain', () => {
     );
   });
 });
+
+it('explains the shovel requirement and preserves recovery priority beside treasure', () => {
+  expect(hint({ ...BASE_STATE, nearTreasure: 'needsShovel' })).toBe(
+    'Buried treasure · equip a shovel to dig it up',
+  );
+  expect(hint({ ...BASE_STATE, nearTreasure: 'shovel' })).toBe(
+    'Press E to dig up treasure · leftovers stay safely here',
+  );
+  expect(hint({ ...BASE_STATE, nearTreasure: 'shovel', nearBuriedCache: true })).toBe(
+    'Press E to recover belongings · leftovers stay safely here',
+  );
+});

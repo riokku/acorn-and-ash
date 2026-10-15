@@ -23,7 +23,7 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   stone: 'Loose stone from the mountain slopes. Lash three to sticks to make a shovel.',
   ironOre: 'Rusty-red ore from the bare rock high on the mountain. Nothing smelts it yet.',
   shovel:
-    'Made from sticks and stone. Equip it, then click to dig a tunnel ahead of you, or hold the click to dig a step down. Not in the home clearing, near water or near buildings.',
+    'Made from sticks and stone. Equip it and press E beside buried treasure to dig it up. Click to dig a tunnel ahead, or hold the click to dig a step down. Terrain digging is restricted in the home clearing, near water and near buildings.',
   mineSupport:
     'Two posts and a beam cut from logs. Equip it inside a tunnel and click a spot on the floor to prop the roof there. The tunnel must be two metres wide, two tall.',
   clay: 'Soft red clay from low, damp ground. Nothing uses it yet.',

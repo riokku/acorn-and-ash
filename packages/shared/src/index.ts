@@ -122,3 +122,6 @@ export * from './sim/health';
 
 export * from './data/item-catalog';
 export * from './data/item-description';
+
+export * from './data/treasure';
+export * from './sim/treasure';

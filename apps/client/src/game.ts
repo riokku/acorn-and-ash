@@ -1,3 +1,4 @@
+import { nearestTreasure, type TreasureSpot } from '@acorn/shared';
 import {
   FIRE_CAPACITY_MS,
   logStorageCapacity,
@@ -703,6 +704,7 @@ export interface GameDebug {
     refusal: string | null;
   } | null;
   /** Every cache currently buried, wherever this browser last heard it was. */
+  treasureSpots(): readonly TreasureSpot[];
   buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
   /**
    * The maps (see decision 0054): whether the painted world is ready, whether
@@ -836,6 +838,8 @@ export class Game {
   private recoveryMarkers: readonly BuriedCacheView[] = [];
   private recoveryHeard = false;
   private buriedCaches: readonly BuriedCacheView[] = [];
+  private treasures: readonly TreasureSpot[] = [];
+  private nearTreasure: 'shovel' | 'needsShovel' | null = null;
   /** Whether a cache of our own is close enough right now to dig up. */
   private nearBuriedCache = false;
   /** The way back to a buried cache of our own, once it is a real walk rather than something already in reach. */
@@ -1598,6 +1602,7 @@ export class Game {
               spot: this.placing.plan.spot === null ? null : { ...this.placing.plan.spot },
               refusal: this.placing.plan.refusal,
             },
+      treasureSpots: () => this.treasures.map((spot) => ({ ...spot })),
       buriedCaches: () => this.buriedCaches.map((cache) => ({ ...cache })),
       space: () => this.space,
       mapState: () => ({
@@ -1843,6 +1848,8 @@ export class Game {
         this.recoveryHeard = false;
         this.recoveryMarkers = [];
         this.buriedCaches = [];
+        this.treasures = [];
+        this.nearTreasure = null;
         this.applyBuriedCaches();
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
@@ -2282,6 +2289,11 @@ export class Game {
         this.applyBuriedCaches();
         break;
       }
+      case 'treasure': {
+        this.treasures = message.spots;
+        this.applyBuriedCaches();
+        break;
+      }
       case 'buriedCaches': {
         this.buriedCaches = this.recoveryHeard
           ? [
@@ -2538,11 +2550,15 @@ export class Game {
   private hearAboutCache(event: CacheEvent): void {
     const now = performance.now();
     const text =
-      event.kind === 'buried'
-        ? 'Safe at home. Follow your recovery marker to reclaim belongings; they never expire.'
-        : event.kind === 'partial'
-          ? 'Some belongings recovered. Make room in your pack; the rest stays safely marked.'
-          : 'All belongings recovered.';
+      event.kind === 'treasure'
+        ? 'Treasure unearthed! Supplies added to your pack.'
+        : event.kind === 'treasurePartial'
+          ? 'Some treasure collected. Make room in your pack; the rest stays here.'
+          : event.kind === 'buried'
+            ? 'Safe at home. Follow your recovery marker to reclaim belongings; they never expire.'
+            : event.kind === 'partial'
+              ? 'Some belongings recovered. Make room in your pack; the rest stays safely marked.'
+              : 'All belongings recovered.';
     this.cacheNews = { text, until: now + NEWS_MS };
     this.options.hud.publish({ cacheNews: this.currentCacheNews() });
   }
@@ -3047,7 +3063,11 @@ export class Game {
   /** Put every buried cache's mound where the server says it is, the same reconciling way as `applyBuiltProps`. */
   private applyBuriedCaches(): void {
     if (this.clearingScene === null) return;
-    const present = new Set(this.buriedCaches.map((cache) => cache.id));
+    const mounds = [
+      ...this.buriedCaches,
+      ...this.treasures.map((spot) => ({ ...spot, id: -spot.id })),
+    ];
+    const present = new Set(mounds.map((cache) => cache.id));
 
     for (const [id, mound] of this.buriedCacheMeshes) {
       if (present.has(id)) continue;
@@ -3056,10 +3076,20 @@ export class Game {
       this.buriedCacheMeshes.delete(id);
     }
 
-    for (const cache of this.buriedCaches) {
+    for (const cache of mounds) {
       if (this.buriedCacheMeshes.has(cache.id)) continue;
       const mound = createBuriedCacheMound();
-      mound.group.position.set(cache.x, 0, cache.z);
+      const terrain = this.collision?.terrain;
+      const y = terrain?.heightAt(cache.x, cache.z) ?? 0;
+      mound.group.position.set(cache.x, y, cache.z);
+      if (terrain !== undefined) {
+        const normal = new THREE.Vector3(
+          terrain.heightAt(cache.x - 0.3, cache.z) - terrain.heightAt(cache.x + 0.3, cache.z),
+          0.6,
+          terrain.heightAt(cache.x, cache.z - 0.3) - terrain.heightAt(cache.x, cache.z + 0.3),
+        ).normalize();
+        mound.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      }
       this.outdoors.add(mound.group);
       this.buriedCacheMeshes.set(cache.id, mound);
     }
@@ -4337,6 +4367,7 @@ export class Game {
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
+      nearTreasure: this.nearTreasure,
       nearbyDiscovery: this.nearbyDiscoveryName(),
       nearCampfire: this.nearCampfire,
       boat: this.space === OUTDOORS ? this.boatHint : null,
@@ -4986,6 +5017,7 @@ export class Game {
       this.nearbyPile = null;
       this.nearGatherSpot = null;
       this.nearBuriedCache = false;
+      this.nearTreasure = null;
       this.ownCacheCompass = null;
       this.nearCampfire = homeFacilityInReach(
         this.currentHomeKind(),
@@ -5104,6 +5136,19 @@ export class Game {
         this.buriedCaches,
         (cache) => cache.ownerNetId === this.selfNetId,
       ) !== null;
+    const nearbyTreasure = nearestTreasure(
+      player.motion.position,
+      this.treasures,
+      (spot) =>
+        this.collision !== null &&
+        groundItemReachable(this.collision, player.motion.position, spot),
+    );
+    this.nearTreasure =
+      nearbyTreasure === null
+        ? null
+        : this.equipped.get(this.selfNetId) === 'shovel'
+          ? 'shovel'
+          : 'needsShovel';
     // A way back to it otherwise, so it is not just something to stumble
     // back onto by luck out in the wilderness - hidden the moment the hint
     // above takes over.
@@ -5770,6 +5815,7 @@ export class Game {
       nearbyPile: this.nearbyPile,
       nearGatherSpot: this.nearGatherSpot,
       nearBuriedCache: this.nearBuriedCache,
+      nearTreasure: this.nearTreasure,
       ownCacheCompass: this.ownCacheCompass,
       nearCampfire: this.nearCampfire,
       nearWorkbench: this.nearWorkbench,
