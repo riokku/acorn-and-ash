@@ -807,6 +807,10 @@ as it fits, so you can try gear without finding any.
 
 ### Fishing
 
+The opening pond allows wading along its shallow edge, just like the lake and
+river. The sloping bed lowers your feet into the water; the deeper middle remains
+blocked at the same 0.8 m depth limit as the lake.
+
 The rod lies on the bank of the pond. Face the water - the pond or the lake -
 and left click to cast. The
 float bobs while fish nibble; when it goes right under, click. Too soon or too

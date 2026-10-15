@@ -32,6 +32,8 @@ import { PlayerButton, createInput } from '../src/sim/player';
 import { WorldSimulation, type FishingEvent, type PersistedPlayer } from '../src/sim/world-sim';
 import { POND, ROD_PICKUP_ID, ROD_SPOT, buildTestClearing } from '../src/world/clearing';
 import { castLanding, isOnWater, overlapsWater, waterColliders } from '../src/world/water';
+import { LAKE_WADING_DEPTH } from '../src/world/lake';
+import { pondWaterDepthAt } from '../src/world/pond';
 
 /** Yaw that looks along +X. Yaw zero looks down -Z. */
 const EAST = -Math.PI / 2;
@@ -595,7 +597,7 @@ describe('fishing in the world', () => {
     expect(sim.castOf(1)).not.toBeNull();
   });
 
-  it('will not let you walk into the pond', () => {
+  it('lets you wade into the pond but stops you before the deep middle', () => {
     const sim = createWorld();
     sim.addPlayer(1);
     sim.placePlayer(1, onTheBank, EAST);
@@ -606,7 +608,12 @@ describe('fishing in the world', () => {
     }
     const here = sim.readPlayer(1)?.position;
     if (here === undefined) throw new Error('missing player');
-    expect(isOnWater(POND, here.x, here.z)).toBe(false);
+    expect(isOnWater(POND, here.x, here.z)).toBe(true);
+    expect(pondWaterDepthAt(POND, here.x, here.z)).toBeGreaterThan(0.4);
+    expect(pondWaterDepthAt(POND, here.x + PLAYER_RADIUS, here.z)).toBeCloseTo(
+      LAKE_WADING_DEPTH,
+      4,
+    );
   });
 
   it('is the same pond on the server and in the browser', () => {
