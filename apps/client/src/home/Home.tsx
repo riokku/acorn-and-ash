@@ -1,3 +1,4 @@
+import { AdminItemsLink } from './AdminItemsLink';
 import { useRef, useState } from 'react';
 
 import {
@@ -96,7 +97,6 @@ export function Home({
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
   const account: SettingsAccount = {
-    canEditItems,
     waitSeconds: 0,
     secondsLeft: null,
     onSignOut,
@@ -173,6 +173,7 @@ export function Home({
                 Enter World
               </button>
               <p className="home-footnote stage-hint">{STAGE_HINT}</p>
+              <AdminItemsLink allowed={canEditItems} />
               <AccountLine accountName={accountName} onSignOut={onSignOut} />
               {onDeleteCharacter !== undefined ? (
                 <p className="home-footnote home-account">
@@ -347,6 +348,7 @@ export function Home({
           Others in the clearing will see this name. You get one character in this world, so choose
           with care: it can&rsquo;t be changed later.
         </p>
+        <AdminItemsLink allowed={canEditItems} />
         <AccountLine accountName={accountName} onSignOut={onSignOut} />
       </div>
     </form>

@@ -373,3 +373,58 @@ dialog::backdrop {
     margin: 5px 0;
   }
 }
+
+.clear-filters {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.model-preview {
+  margin-bottom: 26px;
+  border: 1px solid #e2e3d5;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.model-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f0f1e7;
+}
+.model-preview-heading button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.model-viewport {
+  height: 240px;
+  position: relative;
+  background: radial-gradient(ellipse at center, #fdfbf1, #e7eadc);
+}
+.model-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.model-viewport canvas:active {
+  cursor: grabbing;
+}
+.model-viewport canvas:focus-visible {
+  outline: 2px solid #6f8e61;
+  outline-offset: -4px;
+}
+.model-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 20px;
+  pointer-events: none;
+}
+.model-preview .hint {
+  margin: 0;
+  padding: 8px 16px;
+  background: #f8f7ef;
+}

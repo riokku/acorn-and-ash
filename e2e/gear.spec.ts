@@ -65,7 +65,14 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
     });
   });
 
+  // The UI receives an owner capability; real admin routes retain their independent server checks.
+  await page.route('**/api/session', async (route) => {
+    const response = await route.fetch();
+    const status = await response.json();
+    await route.fulfill({ response, json: { ...status, canEditItems: status.signedIn === true } });
+  });
   await page.goto('/?renderer=webgl2&world=gear-ui');
+  await expect(page.getByRole('link', { name: 'Manage items' })).toHaveAttribute('href', '/admin');
   await page.locator('#home-name').fill('Dresser');
   await page.locator('.home-play').click();
   await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
@@ -77,6 +84,7 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   const panel = page.getByTestId('character-panel');
   await expect(panel).toBeVisible();
   await expect(page.getByTestId('character-stats')).toContainText('Attack power100%');
+  await expect(panel.getByRole('link', { name: 'Manage items' })).toHaveAttribute('href', '/admin');
   await expect(page.getByTestId('pack-slot-knightHelmet')).toBeVisible();
   await expect(page.getByTestId('gear-preview')).toHaveAttribute('data-state', 'ready', {
     timeout: 60_000,

@@ -34,6 +34,8 @@ export interface RaidBanner {
 
 /** Everything the HUD shows. */
 export interface HudState {
+  /** Owner-only UI capability returned by the authenticated web session. */
+  readonly canEditItems?: boolean;
   readonly decorationPending?: boolean;
   readonly craftPending?: ItemId | null;
   readonly expedition?: ExpeditionView;

@@ -13,6 +13,7 @@ import {
   type ItemOverrides,
 } from '@acorn/shared';
 import './style.css';
+import { ItemModelPreview } from './ItemModelPreview';
 
 const LABELS = {
   power: 'Attack power (%)',
@@ -240,6 +241,17 @@ function Editor(): React.JSX.Element {
                 ))}
               </select>
             </label>
+            <button
+              type="button"
+              className="clear-filters"
+              disabled={query === '' && rarity === 'all'}
+              onClick={() => {
+                setQuery('');
+                setRarity('all');
+              }}
+            >
+              Clear filters
+            </button>
             <p className="list-count">
               {visible.length} of {ITEM_ORDER.length} items
             </p>
@@ -271,6 +283,7 @@ function Editor(): React.JSX.Element {
               </div>
               <span className={`rarity ${item.rarity}`}>{item.rarity}</span>
             </div>
+            <ItemModelPreview item={selected} name={item.displayName} />
             <form
               onSubmit={(e) => {
                 e.preventDefault();

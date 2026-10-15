@@ -4235,3 +4235,31 @@ body {
     transition: none;
   }
 }
+
+.home-admin-link,
+.character-admin-link {
+  display: block;
+  border: 1px solid #a18b5b;
+  border-radius: 6px;
+  background: #eee4cc;
+  color: #4b5939;
+  text-decoration: none;
+  text-align: center;
+  padding: 9px 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.home-admin-link:hover,
+.character-admin-link:hover {
+  background: #e2d5b5;
+}
+.home-admin-link:focus-visible,
+.character-admin-link:focus-visible {
+  outline: 2px solid #597043;
+  outline-offset: 3px;
+}
+.character-admin-link {
+  width: fit-content;
+  margin: 12px auto 0;
+}
