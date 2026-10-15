@@ -59,7 +59,6 @@ export const STRIKE = {
   impact: 10,
   spinEnd: 18,
   turns: 2,
-  planted: 18,
   end: 22,
 } as const;
 

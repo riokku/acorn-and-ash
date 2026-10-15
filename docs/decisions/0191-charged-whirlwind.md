@@ -12,7 +12,8 @@ Keep the existing hold-to-charge and release controls. Release commits to two gr
 
 The server applies the existing charged damage once to each nearby creature as the first rotation completes. Reach remains the normal melee radius, with a 1.4 m vertical allowance. Historical target samples deduplicate by id. The second rotation adds follow-through without a second damage award. Skeleton charged strikes use the same radial rule against players; their existing delayed hit settlement and dodge checks remain. Light attacks and aerial dodge slams stay directed.
 
-Both rotations commit the feet and delay dodge cancellation until the spin ends. A hit can interrupt it; the visual turn settles into the flinch rather than snapping back. No invulnerability is added. If no creatures are reached, the existing aimed single-tree and digging interactions still work.
+Originally both rotations committed the feet; decision 0195 frees movement
+during the spin. Dodge cancellation still waits until the spin ends. A hit can interrupt it; the visual turn settles into the flinch rather than snapping back. No invulnerability is added. If no creatures are reached, the existing aimed single-tree and digging interactions still work.
 
 ## Consequences
 

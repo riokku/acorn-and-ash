@@ -106,9 +106,10 @@ describe('drawing a charged strike', () => {
     expect(ready.charge).toBe(1);
   });
 
-  it('lets the legs walk on under the wind-up, but not under the strike', () => {
+  it('lets the legs walk on under both the wind-up and the full whirlwind', () => {
     expect(movePose(view(ActionKind.Charge, 2)).legsFree).toBe(true);
-    expect(movePose(view(ActionKind.Strike, 2)).legsFree).toBe(false);
+    for (let age = 0; age <= STRIKE.end; age++)
+      expect(movePose(view(ActionKind.Strike, age)).legsFree).toBe(true);
     expect(movePose(view(ActionKind.Swing, 2)).legsFree).toBe(true);
     expect(movePose(view(ActionKind.Swing, 2, { afterWindup: true })).legsFree).toBe(false);
   });

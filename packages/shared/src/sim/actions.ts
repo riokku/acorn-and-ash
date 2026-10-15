@@ -55,7 +55,7 @@ export const ActionKind = {
   Idle: 0,
   /** A swing of the light combo; `step` says which, 1 to 3. */
   Swing: 1,
-  /** Winding up a charged strike, rooted to the spot. */
+  /** Winding up a charged strike, slowed to a creep. */
   Charge: 2,
   /** The charged strike itself. */
   Strike: 3,
@@ -274,7 +274,7 @@ export function advanceAction(
       // the wind-up, so a strong attack always pays its full preparation cost.
       if (state.age >= CHARGE_TICKS && !held(PlayerButton.Charge)) {
         beginAction(state, ActionKind.Strike);
-        return { footing: 'planted', impact: null, cast: false };
+        return FREE;
       }
       return { footing: 'creeping', impact: null, cast: false };
 
@@ -284,11 +284,12 @@ export function advanceAction(
         const dodged = tryDodge();
         if (dodged !== null) return dodged;
       }
-      if (state.age >= STRIKE.end || (state.age >= STRIKE.planted && moving)) {
+      if (state.age >= STRIKE.end || (state.age >= STRIKE.spinEnd && moving)) {
         beginAction(state, ActionKind.Idle);
         return { footing: 'free', impact, cast: false };
       }
-      return { footing: state.age < STRIKE.planted ? 'planted' : 'free', impact, cast: false };
+      // Walking can steer the whirlwind without cancelling either rotation.
+      return { footing: 'free', impact, cast: false };
     }
 
     case ActionKind.Dodge:

@@ -30,8 +30,10 @@ import {
   WINDUP_TICKS,
   WindupPace,
 } from '../src/data/moves';
-import { PlayerButton, createInput } from '../src/sim/player';
-import { CHARGE_WALK_SHARE } from '../src/constants';
+import { PlayerButton, createInput, createPlayerMotion, stepPlayer } from '../src/sim/player';
+import { CHARGE_WALK_SHARE, TICK_SECONDS } from '../src/constants';
+import { createCollisionWorld } from '../src/collision/capsule';
+import { createFlatTerrain } from '../src/world/terrain';
 
 const ARMED: ActionContext = { canAttack: true, castInstead: false };
 const UNARMED: ActionContext = { canAttack: false, castInstead: false };
@@ -184,7 +186,7 @@ describe('a fishing-only click', () => {
 });
 
 describe('a charged strike', () => {
-  it('slows you to a creep while it winds up, then plants you through the whirlwind', () => {
+  it('slows you to a creep while it winds up, then frees movement through the whirlwind', () => {
     const { state, feed } = player();
     const footing: string[] = [];
     let landedOn = -1;
@@ -197,12 +199,12 @@ describe('a charged strike', () => {
       }
     }
     expect(new Set(footing.slice(0, CHARGE_TICKS))).toEqual(new Set(['creeping']));
-    expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['planted']));
+    expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['free']));
     expect(landedOn).toBe(CHARGE_TICKS + STRIKE.impact);
     expect(state.kind).toBe(ActionKind.Strike);
   });
 
-  it('hits once, keeps both rotations committed, then allows a dodge or movement', () => {
+  it('hits once while moving, keeps both rotations committed, then allows a dodge', () => {
     const { state, feed } = player();
     feed(PlayerButton.Charge);
     for (let i = 1; i < CHARGE_TICKS; i++) feed();
@@ -212,12 +214,41 @@ describe('a charged strike', () => {
       const tick = feed(PlayerButton.Dodge, 0, 1);
       if (tick.impact !== null) hits++;
       expect(state.kind).toBe(ActionKind.Strike);
-      expect(tick.footing).toBe('planted');
+      expect(tick.footing).toBe('free');
     }
     expect(hits).toBe(1);
     expect(feed(PlayerButton.Dodge).footing).toBe('dodging');
     expect(state.kind).toBe(ActionKind.Dodge);
   });
+
+  it.each([0, PlayerButton.Sprint, PlayerButton.Sprint | PlayerButton.Jump])(
+    'moves and changes direction just like ordinary movement with buttons %s',
+    (buttons) => {
+      const world = createCollisionWorld(createFlatTerrain(0), [], 100);
+      const spinning = createPlayerMotion({ x: 0, y: 0, z: 0 });
+      const walking = createPlayerMotion({ x: 0, y: 0, z: 0 });
+      const state = createActionState();
+      beginAction(state, ActionKind.Charge);
+      state.age = CHARGE_TICKS;
+      let impacts = 0;
+      for (let age = 0; age < STRIKE.spinEnd; age++) {
+        const input = createInput(age + 1, age < 8 ? 1 : -1, 0, 0, buttons);
+        const tick = advanceAction(state, input, age === 0 ? PlayerButton.Charge : buttons, ARMED);
+        stepPlayer(
+          spinning,
+          footedInput(input, tick.footing, spinning.facingYaw),
+          TICK_SECONDS,
+          world,
+        );
+        stepPlayer(walking, input, TICK_SECONDS, world);
+        expect(spinning).toEqual(walking);
+        expect(state.kind).toBe(ActionKind.Strike);
+        if (tick.impact !== null) impacts++;
+      }
+      expect(Math.hypot(spinning.velocity.x, spinning.velocity.z)).toBeGreaterThan(1);
+      expect(impacts).toBe(1);
+    },
+  );
 
   it('holds a fully charged blow without swinging until the button is released', () => {
     const { state, feed } = player();

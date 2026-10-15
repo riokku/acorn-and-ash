@@ -3679,7 +3679,7 @@ describe('a charged attack', () => {
     expect(sim.felledTreeIds()).toContain(tree.id);
   });
 
-  it('catches creatures on every side once through a full charged whirlwind', () => {
+  it('moves through a full whirlwind and catches creatures around the moving player once', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
@@ -3692,6 +3692,7 @@ describe('a charged attack', () => {
       { x: 1.2, z: 0 },
     ];
     const catches = [];
+    let releasedAtX = 0;
     for (let tick = 0; tick < CHARGE_TICKS + STRIKE.end + 2; tick++) {
       if (tick <= CHARGE_TICKS + STRIKE.impact) {
         const at = sim.readPlayer(1)!.position;
@@ -3705,12 +3706,22 @@ describe('a charged attack', () => {
       }
       sim.queueInput(
         1,
-        createInput(tick + 1, 0, 0, 0, tick < CHARGE_TICKS ? PlayerButton.Charge : 0),
+        createInput(
+          tick + 1,
+          tick >= CHARGE_TICKS ? 1 : 0,
+          0,
+          0,
+          tick < CHARGE_TICKS ? PlayerButton.Charge : 0,
+        ),
       );
       sim.step(tickClock());
+      if (tick === CHARGE_TICKS) releasedAtX = sim.readPlayer(1)!.position.x;
+      if (tick >= CHARGE_TICKS && tick < CHARGE_TICKS + STRIKE.spinEnd)
+        expect(sim.actionOf(1)?.kind).toBe(ActionKind.Strike);
       catches.push(...sim.drainCatchEvents());
       if (tick < CHARGE_TICKS + STRIKE.impact) expect(catches).toEqual([]);
     }
+    expect(sim.readPlayer(1)!.position.x - releasedAtX).toBeGreaterThan(2);
     expect(catches).toHaveLength(4);
     expect(sim.actionOf(1)?.kind).toBe(ActionKind.Idle);
   });

@@ -147,7 +147,7 @@ export interface MovePose {
   /** A full aerial spin/somersault; completed turns leave the landing upright. */
   readonly aerialTurn?: number;
   readonly somersault?: boolean;
-  /** Completed grounded rotations; present through the whirlwind recovery. */
+  /** Completed whirlwind rotations; present through the recovery. */
   readonly whirlwindTurn?: number;
   /** Blends the extended weapon stance in and back out. */
   readonly whirlwindReach?: number;
@@ -279,6 +279,7 @@ export function movePose(move: MoveView): MovePose {
         ...NO_MOVE,
         // Reuse the low, balanced horizontal slash stance rather than the leap.
         clip: 'attack2',
+        legsFree: true,
         time: 0.1 + 0.15 * smoothstep(0, STRIKE.spinStart, move.age) + 0.3 * recovery,
         whirlwindTurn: progress * STRIKE.turns,
         whirlwindReach: smoothstep(0, STRIKE.spinStart, move.age) * (1 - recovery),

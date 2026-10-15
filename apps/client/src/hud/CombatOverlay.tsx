@@ -139,17 +139,6 @@ function drawCombat(
     context.lineTo(x - 20, y);
     context.closePath();
     context.stroke();
-    context.font = '600 16px system-ui, sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'bottom';
-    const label = `Target: ${target.name} · ${Math.round(target.distance)} m`;
-    const labelX = Math.max(150, Math.min(width - 150, x));
-    const labelY = Math.max(42, y - 30);
-    context.lineWidth = 4;
-    context.strokeStyle = '#241608';
-    context.strokeText(label, labelX, labelY);
-    context.fillStyle = '#ffd45c';
-    context.fillText(label, labelX, labelY);
     context.restore();
   }
   // The calm ones first, so one about to swing is always drawn on top.
