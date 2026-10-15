@@ -4,18 +4,21 @@
 
 import { PLAYABLE_HALF_EXTENT, WILDERNESS } from '../constants';
 import { smoothstep } from '../math/vec3';
-import { LAKE, lakeGroundHeight, type Lake } from './lake';
+import { LAKE, lakeGroundHeight, lakeDepthAt, type Lake } from './lake';
 import { mountainHeightAt } from './mountains';
-import { STREAM, streamGroundHeight, type Stream } from './stream';
+import { STREAM, streamGroundHeight, nearStream, type Stream } from './stream';
 import { fractalNoise2D } from './noise';
 import { POND } from './clearing';
 import { pondGroundHeight } from './pond';
+import { forestReliefHeightAt, forestTrailHeightAt, forestTrailAt } from './forest-relief';
 
 export interface Terrain {
   /** A label used in logs and save files. */
   readonly kind: string;
   /** Ground height in metres at a world position. */
   heightAt(x: number, z: number): number;
+  /** Original ground for seeded scenery choices, so reshaping a hill never renumbers saved trees. */
+  sceneryHeightAt?(x: number, z: number): number;
 }
 
 export function createFlatTerrain(height = 0): Terrain {
@@ -33,6 +36,8 @@ export function createFlatTerrain(height = 0): Terrain {
  * invisible wall at the edge of the world - so neither the clearing nor the
  * boundary ever sit on a slope. Same seed, same hills, on the server and in
  * every browser: nothing about the shape of the ground travels over the wire.
+ * Wooded terraces and graded contour trails give the hills resting shelves
+ * and a walkable ascent into the mountain range.
  *
  * The mountain range stands in the far south-west (see mountains.ts), on top
  * of the hills.
@@ -44,6 +49,7 @@ export function createWildernessTerrain(seed: number, lake: Lake = LAKE): Terrai
   return {
     kind: 'wilderness',
     heightAt: (x, z) => wildernessHeightAt(seed, x, z, lake),
+    sceneryHeightAt: (x, z) => originalWildernessHeightAt(seed, x, z, lake),
   };
 }
 
@@ -75,12 +81,35 @@ export function wildernessHeightAt(
   lake: Lake = LAKE,
   stream: Stream | null = STREAM,
 ): number {
-  const ground = lakeGroundHeight(
-    lake,
-    x,
-    z,
-    hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z),
+  const hills = hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z);
+  const weight = wildernessHillWeight(Math.hypot(x, z), Math.max(Math.abs(x), Math.abs(z)));
+  const relief = hills + (forestReliefHeightAt(seed, x, z, hills) - hills) * weight;
+  const ground = shapeWater(lake, stream, x, z, relief);
+  if (forestTrailAt(x, z) === null) return ground;
+  // Water keeps the final say at its banks; the trails stay on dry ground.
+  if (lakeDepthAt(lake, x, z) > -8 || (stream !== null && nearStream(stream, x, z, 8)))
+    return ground;
+  const trail = forestTrailHeightAt(x, z, ground);
+  const trailWeight = smoothstep(
+    Math.hypot(x, z),
+    WILDERNESS.flatRadius,
+    WILDERNESS.flatRadius + 10,
   );
+  return ground + (trail - ground) * trailWeight;
+}
+
+function originalWildernessHeightAt(seed: number, x: number, z: number, lake: Lake): number {
+  return shapeWater(lake, STREAM, x, z, hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z));
+}
+
+function shapeWater(
+  lake: Lake,
+  stream: Stream | null,
+  x: number,
+  z: number,
+  hills: number,
+): number {
+  const ground = lakeGroundHeight(lake, x, z, hills);
   const riverGround = stream === null ? ground : streamGroundHeight(stream, lake, x, z, ground);
   return pondGroundHeight(POND, x, z, riverGround);
 }

@@ -1339,6 +1339,13 @@ licence forbids redistribution.
 
 ## Where things are written down
 
+The wilderness has wooded terraces and graded trails from the clearing toward
+the cedar bench, lake overlook and southwest mountain ridge. Follow the worn
+forest floor east or south to find them. To inspect the actual landscape without
+signing in, open `/?gallery=forest-trails`; its three viewpoint buttons, drag to
+orbit and scroll to zoom make the elevation changes easy to review. See
+[decision 0186](docs/decisions/0186-forest-terraces-and-contour-trails.md).
+
 - [`docs/decisions/`](docs/decisions/) — why things are the way they are, one
   short page each.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found

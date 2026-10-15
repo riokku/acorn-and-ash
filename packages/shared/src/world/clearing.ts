@@ -11,6 +11,7 @@ import { forestTreeScale } from './tree-stature';
 import { cylinder, type Collider } from './colliders';
 import { overlapsWater, waterColliders, type WaterCircle } from './water';
 import { pondGroundHeight } from './pond';
+import { blocksForestTrail } from './forest-relief';
 
 /** One piece of scenery standing in the world. */
 export interface PlacedProp {
@@ -230,6 +231,7 @@ export function buildTestClearing(
   // after it, and trees are saved by their ids.
   const spotsToKeepClear = [...pickups, ...gatherSpots];
   const kept = props
+    .filter((prop) => !blocksForestTrail(prop))
     .filter((prop) => !isRockInTheWay(prop, water, spotsToKeepClear))
     .map((prop) => {
       const y = terrain.heightAt(prop.x, prop.z);

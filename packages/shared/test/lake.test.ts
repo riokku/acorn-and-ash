@@ -459,9 +459,11 @@ describe('what stands on and beside the lake', () => {
     afterAll(() => {
       // A filtered seed run is useful for diagnosis; the full sweep must
       // still prove it exercises plenty of genuinely unaffected worlds.
-      if (checked === 40) expect(unaffected).toBeGreaterThan(10);
+      if (checked === 80) expect(unaffected).toBeGreaterThan(10);
     });
-    it.each(Array.from({ length: 40 }, (_, index) => index + 1))(
+    // Wooded terraces and reserved contour trails change which glades are
+    // eligible, so use a broader seed sweep to retain unaffected examples.
+    it.each(Array.from({ length: 80 }, (_, index) => index + 1))(
       'leaves unaffected encounter sites unchanged in world %i',
       (world) => {
         const clearing = buildTestClearing(seed);

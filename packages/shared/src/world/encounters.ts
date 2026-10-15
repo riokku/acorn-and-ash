@@ -8,6 +8,7 @@ import { basinDepthAt, LAKE_SHORE_WIDTH, type Lake } from './lake';
 import { nearStream, STREAM } from './stream';
 import { createRng, hashSeed } from '../rng';
 import type { RaiderKindId } from '../data/raiders';
+import { forestTrailAt } from './forest-relief';
 
 export type EncounterKind = 'wanderer' | 'ruins' | 'patrol';
 export interface EncounterSite {
@@ -61,6 +62,8 @@ export function buildEncounterSites(
       const distance = rng.nextRange(62, ORIGINAL_HALF_EXTENT - 18);
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
+      const trail = forestTrailAt(x, z);
+      if (trail !== null && trail.distance < trail.halfWidth + 5) continue;
       if (overlapsWater(water, x, z, 4)) continue;
       if (nearStream(STREAM, x, z, 6)) continue;
       if (lake !== null && basinDepthAt(lake, x, z) > -(LAKE_SHORE_WIDTH + 4)) continue;

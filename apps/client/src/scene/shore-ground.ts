@@ -4,6 +4,7 @@ import {
   streamWaterHalfWidthAt,
   streamPools,
   POND,
+  FOREST_TRAILS,
   type Lake,
   type Stream,
   type Terrain,
@@ -90,5 +91,19 @@ export function shoreGroundCells(
           selected.set(z * segments + x, Math.max(divisions, selected.get(z * segments + x) ?? 0));
       }
   }
+  // Contour paths need enough corners for their narrow worn tread and for
+  // feet to meet the graded ground, rather than straddling a broad triangle.
+  for (const trail of FOREST_TRAILS)
+    for (const point of trail.points) {
+      const i = Math.floor((point.x - origin) / cell);
+      const j = Math.floor((point.z - origin) / cell);
+      for (let dz = -2; dz <= 2; dz++)
+        for (let dx = -2; dx <= 2; dx++) {
+          const x = i + dx,
+            z = j + dz;
+          if (x >= 0 && z >= 0 && x < segments && z < segments)
+            selected.set(z * segments + x, Math.max(4, selected.get(z * segments + x) ?? 0));
+        }
+    }
   return selected;
 }
