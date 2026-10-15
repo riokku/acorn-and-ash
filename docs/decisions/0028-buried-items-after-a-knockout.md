@@ -2,6 +2,8 @@
 
 **Status:** accepted · **Date:** 2026-09-24
 
+The unlimited cache lifetime below is superseded by [decision 0198](0198-latest-death-recovery.md): a new death permanently removes the previous stash.
+
 ## Context
 
 The other half of the settled Knockout design, deferred by decision 0024

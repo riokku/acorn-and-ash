@@ -776,7 +776,7 @@ function CacheCompass({
     <div
       className="cache-compass"
       role="status"
-      title="Your buried belongings never expire. Make room in your backpack before digging; anything that does not fit stays safely here."
+      title="Only belongings from your last death can be recovered. Dying again permanently removes them. Make room before digging; leftovers stay here until your next death."
     >
       <span
         className="cache-compass-arrow"

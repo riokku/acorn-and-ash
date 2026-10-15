@@ -2453,7 +2453,10 @@ export class Game {
     this.health = event.health;
     if (event.knockedOut) {
       const now = performance.now();
-      this.healthNews = { text: 'Knocked out! You wake up safe.', until: now + NEWS_MS };
+      this.healthNews = {
+        text: 'Knocked out! You wake up safe. Any belongings from an earlier death are lost.',
+        until: now + NEWS_MS,
+      };
     } else if (event.dodged) {
       const now = performance.now();
       this.healthNews = { text: 'Dodged!', until: now + NEWS_MS };
@@ -2581,7 +2584,7 @@ export class Game {
         : event.kind === 'treasurePartial'
           ? 'Some treasure collected. Make room in your pack; the rest stays here.'
           : event.kind === 'buried'
-            ? 'Safe at home. Follow your recovery marker to reclaim belongings; they never expire.'
+            ? 'Safe at home. Recover your belongings before your next death; older belongings are lost.'
             : event.kind === 'partial'
               ? 'Some belongings recovered. Make room in your pack; the rest stays safely marked.'
               : 'All belongings recovered.';
