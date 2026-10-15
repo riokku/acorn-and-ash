@@ -2229,6 +2229,10 @@ describe('building', () => {
     expect(built?.lit).toBe(false);
     if (built === undefined) return;
 
+    await runInDurableObject(env.WORLD.get(env.WORLD.idFromName(client.worldId)), (instance) => {
+      const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
+      sim.inventoryOf(client.welcome().netId).log = 1;
+    });
     await walkOntoCampfire(client, built);
     client.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor(
@@ -2248,6 +2252,10 @@ describe('building', () => {
     expect(built).toBeDefined();
     if (built === undefined) return;
 
+    await runInDurableObject(env.WORLD.get(env.WORLD.idFromName(first.worldId)), (instance) => {
+      const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
+      sim.inventoryOf(first.welcome().netId).log = 1;
+    });
     await walkOntoCampfire(first, built);
     first.walk(0, 0, 0, 3, PlayerButton.Interact);
     await waitFor(

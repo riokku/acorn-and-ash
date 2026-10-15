@@ -257,9 +257,8 @@ export const ITEM_KINDS = {
     id: 'torch',
     displayName: 'Torch',
     pluralName: 'Torches',
-    // A permanent tool once made, the same as the axe and rod - no fuel to
-    // track, matching the campfire's own atmosphere-only fire (see decision
-    // 0033).
+    // A permanent tool once made, the same as the axe and rod. Cooking fires
+    // use log fuel; the handheld torch remains permanent (decision 0188).
     stackSize: 1,
     maxCarry: 1,
     extraSlots: undefined,

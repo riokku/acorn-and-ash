@@ -1,4 +1,5 @@
 import type { TreasureSpot } from '../sim/treasure';
+import type { FireRequest, FireFuelView } from '../sim/fire-fuel';
 import type { PublishedCatalog } from '../data/item-catalog';
 import type { WarmthView } from '../sim/warmth';
 import type { BuildReply } from '../sim/building';
@@ -62,6 +63,7 @@ export const ClientMessageType = {
   Gear: 0x0e,
   DigTarget: 0x0f,
   PlaceSupport: 0x10,
+  Fire: 0x11,
 } as const;
 
 /** What the server says back. */
@@ -123,6 +125,7 @@ export const ServerMessageType = {
   BuildReply: 0x46,
   Warmth: 0x47,
   ItemCatalog: 0x48,
+  FireFuel: 0x49,
   Treasure: 0x4a,
 } as const;
 
@@ -258,6 +261,7 @@ export type ChestMessage = ChestRequest & { readonly type: 'chest' };
 export type ChestStateMessage = ChestResult & { readonly type: 'chest' };
 
 export type ClientMessage =
+  | (FireRequest & { readonly type: 'fire' })
   | (ExpeditionRequest & { readonly type: 'expedition' })
   | (DecorationRequest & { readonly type: 'decoration' })
   | (GardenRequest & { readonly type: 'garden' })
@@ -708,6 +712,7 @@ export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
   | { readonly type: 'treasure'; readonly spots: readonly TreasureSpot[] }
+  | { readonly type: 'fireFuel'; readonly fires: readonly FireFuelView[] }
   | (PublishedCatalog & { readonly type: 'itemCatalog' })
   | (WildfireView & { readonly type: 'wildfire' })
   | WornMessage

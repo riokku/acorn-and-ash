@@ -7,6 +7,7 @@
  */
 
 export * from './constants';
+export * from './sim/fire-fuel';
 
 export * from './math/vec3';
 export * from './math/angles';

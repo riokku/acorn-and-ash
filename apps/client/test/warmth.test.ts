@@ -10,7 +10,7 @@ it('explains cold recovery and distinguishes campfire and indoor shelter', () =>
   ).toBe('Warming by the campfire');
   expect(
     warmthExplanation({ value: 10, status: 'warming', heat: 'indoors', secondsToDamage: null }),
-  ).toBe('Sheltered indoors');
+  ).toBe('Warming by the indoor fire');
 });
 it('compares the jacket replacing a tunic in health points and insulation ratings', () => {
   expect(equipmentComparison('winterJacket', { upperBody: 'travelerTunic' }, null)).toBe(
