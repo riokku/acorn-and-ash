@@ -111,7 +111,7 @@ test('one Craft menu fits a laptop screen and lists rope with the other things t
   await expect(entries.nth(0)).toContainText('Rope');
   await expect(entries.nth(0)).toContainText('3 reeds');
   await expect(entries.nth(0).locator('.craft-key')).toHaveText('1');
-  await expect(entries.nth(1)).toContainText('Rowboat');
+  await expect(entries.nth(1)).toContainText('Canoe');
 
   // C closes it again.
   await page.keyboard.press('KeyC');
