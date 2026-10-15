@@ -23,6 +23,7 @@ import {
   RiseFrom,
   SETTLE,
   STRIKE,
+  whirlwindTurn,
   TICK_SECONDS,
   windupTicks,
 } from '@acorn/shared';
@@ -273,7 +274,6 @@ export function movePose(move: MoveView): MovePose {
       };
 
     case ActionKind.Strike: {
-      const progress = smoothstep(STRIKE.spinStart, STRIKE.spinEnd, move.age);
       const recovery = smoothstep(STRIKE.spinEnd, STRIKE.end, move.age);
       return {
         ...NO_MOVE,
@@ -281,7 +281,7 @@ export function movePose(move: MoveView): MovePose {
         clip: 'attack2',
         legsFree: true,
         time: 0.1 + 0.15 * smoothstep(0, STRIKE.spinStart, move.age) + 0.3 * recovery,
-        whirlwindTurn: progress * STRIKE.turns,
+        whirlwindTurn: whirlwindTurn(move.age),
         whirlwindReach: smoothstep(0, STRIKE.spinStart, move.age) * (1 - recovery),
       };
     }

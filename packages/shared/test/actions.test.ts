@@ -189,22 +189,24 @@ describe('a charged strike', () => {
   it('slows you to a creep while it winds up, then frees movement through the whirlwind', () => {
     const { state, feed } = player();
     const footing: string[] = [];
-    let landedOn = -1;
-    for (let i = 0; i <= CHARGE_TICKS + STRIKE.impact; i++) {
+    const contactedAt: number[] = [];
+    for (let i = 0; i <= CHARGE_TICKS + STRIKE.spinEnd; i++) {
       const tick = feed(i < CHARGE_TICKS ? PlayerButton.Charge : 0, 0, 1);
       footing.push(tick.footing);
       if (tick.impact !== null) {
-        expect(tick.impact).toEqual({ kind: 'strike' });
-        landedOn = i;
+        expect(tick.impact).toEqual({ kind: 'strike', sweep: i - CHARGE_TICKS });
+        contactedAt.push(i - CHARGE_TICKS);
       }
     }
     expect(new Set(footing.slice(0, CHARGE_TICKS))).toEqual(new Set(['creeping']));
     expect(new Set(footing.slice(CHARGE_TICKS))).toEqual(new Set(['free']));
-    expect(landedOn).toBe(CHARGE_TICKS + STRIKE.impact);
-    expect(state.kind).toBe(ActionKind.Strike);
+    expect(contactedAt).toEqual(
+      Array.from({ length: STRIKE.spinEnd - STRIKE.spinStart }, (_, i) => STRIKE.spinStart + 1 + i),
+    );
+    expect(state.kind).toBe(ActionKind.Idle);
   });
 
-  it('hits once while moving, keeps both rotations committed, then allows a dodge', () => {
+  it('checks each swept arc while moving, keeps both rotations committed, then allows a dodge', () => {
     const { state, feed } = player();
     feed(PlayerButton.Charge);
     for (let i = 1; i < CHARGE_TICKS; i++) feed();
@@ -216,8 +218,10 @@ describe('a charged strike', () => {
       expect(state.kind).toBe(ActionKind.Strike);
       expect(tick.footing).toBe('free');
     }
-    expect(hits).toBe(1);
-    expect(feed(PlayerButton.Dodge).footing).toBe('dodging');
+    expect(hits).toBe(STRIKE.spinEnd - STRIKE.spinStart - 1);
+    const last = feed(PlayerButton.Dodge);
+    expect(last.footing).toBe('dodging');
+    expect(last.impact).toEqual({ kind: 'strike', sweep: STRIKE.spinEnd });
     expect(state.kind).toBe(ActionKind.Dodge);
   });
 
@@ -246,7 +250,7 @@ describe('a charged strike', () => {
         if (tick.impact !== null) impacts++;
       }
       expect(Math.hypot(spinning.velocity.x, spinning.velocity.z)).toBeGreaterThan(1);
-      expect(impacts).toBe(1);
+      expect(impacts).toBe(STRIKE.spinEnd - STRIKE.spinStart - 1);
     },
   );
 

@@ -143,6 +143,8 @@ import {
   TINT_COLORS,
   animalInReach,
   whirlwindTargets,
+  treesInWhirlwind,
+  type WhirlwindSweep,
   buildTestClearing,
   buildableFootprint,
   cabinCollider,
@@ -1098,6 +1100,8 @@ export class Game {
   );
   /** The skeleton a swing of ours would land on, as last worked out. */
   private aimedRaiderId: number | null = null;
+  private readonly whirlwindHits = new Set<number>();
+  private readonly whirlwindTrees = new Set<number>();
   private aimedRaider: { name: string; hitsLeft: number } | null = null;
   /** Whether any skeleton is close enough to be worth a hint about fighting it. */
   private raidersClose = false;
@@ -5578,7 +5582,10 @@ export class Game {
   private showOwnMoves(events: readonly PredictedEvent[]): void {
     for (const event of events) {
       if (event.kind === 'cast') this.setFishingPose(this.selfNetId, 'casting');
-      else if (event.kind === 'impact') this.showOwnBlow(event.impact);
+      else if (event.kind === 'began' && event.action === ActionKind.Strike) {
+        this.whirlwindHits.clear();
+        this.whirlwindTrees.clear();
+      } else if (event.kind === 'impact') this.showOwnBlow(event.impact, event);
     }
   }
 
@@ -5589,15 +5596,24 @@ export class Game {
    * the sound and the chips or fur of it, straight away, the way it feels to
    * swing. The server's word follows and settles what it actually did.
    */
-  private showOwnBlow(impact: Impact): void {
+  private showOwnBlow(impact: Impact, event: Extract<PredictedEvent, { kind: 'impact' }>): void {
     const player = this.localPlayer;
     if (player === null) return;
     const strike = impact.kind === 'strike';
-    const from = player.motion.position;
-    const aimYaw = this.aimYaw ?? player.motion.facingYaw;
+    const from = event.position;
+    const aimYaw = this.aimYaw ?? event.yaw;
     const strength = strike ? CHARGED_BLOW * (impact.dodge ? 1.35 : 1) : impact.dodge ? 1.4 : 1;
     if (strike && impact.dodge) this.showSlam(1.5);
-    if (strike && !impact.dodge && this.showOwnWhirlwind(from, strength)) return;
+    if (strike && !impact.dodge) {
+      this.showOwnWhirlwind(
+        from,
+        strength,
+        impact.sweep === undefined
+          ? undefined
+          : { age: impact.sweep, yaw: event.yaw, previousYaw: event.previousYaw },
+      );
+      return;
+    }
     if (this.aimedRaiderId !== null) {
       this.showOwnBlowOnRaider(this.aimedRaiderId, impact);
       return;
@@ -5616,12 +5632,14 @@ export class Game {
     this.camera?.shake(strike ? HIT_LANDED_SHAKE * 1.8 : HIT_LANDED_SHAKE);
   }
 
-  /** Predict the same radial targets as the server, with one light impact pause for the group. */
-  private showOwnWhirlwind(from: Readonly<Vec3>, strength: number): boolean {
-    const raiders = whirlwindTargets(from, this.raiders.targets());
+  /** Predict the same moving weapon arcs as the server, once per target for the whole attack. */
+  private showOwnWhirlwind(from: Readonly<Vec3>, strength: number, sweep?: WhirlwindSweep): void {
+    const raiders = whirlwindTargets(from, this.raiders.targets(), sweep, this.whirlwindHits);
     let landed = false;
-    for (const raider of raiders)
+    for (const raider of raiders) {
+      this.whirlwindHits.add(raider.id);
       landed = this.raiders.predictBlow(raider.id, from, false, true) !== 'missed' || landed;
+    }
     const animals = whirlwindTargets(
       from,
       this.remoteAnimals.netIds().flatMap((id) => {
@@ -5634,18 +5652,41 @@ export class Game {
           ? []
           : [{ id, x: pose.x, y: pose.y, z: pose.z }];
       }),
+      sweep,
+      this.whirlwindHits,
     );
-    for (const animal of animals) this.showBlowOnAnimal(animal.id, from, strength);
+    for (const animal of animals) {
+      this.whirlwindHits.add(animal.id);
+      this.showBlowOnAnimal(animal.id, from, strength);
+    }
     if (animals.length > 0) {
       playThreatHit();
       landed = true;
+    }
+    if (this.isEquipped('axe') && sweep !== undefined) {
+      const trees = treesInWhirlwind(
+        from,
+        sweep.yaw,
+        sweep.age,
+        this.standingProps,
+        (id) => this.isFelled(id),
+        this.whirlwindTrees,
+        sweep.previousYaw,
+      );
+      for (const tree of trees) {
+        this.whirlwindTrees.add(tree.prop.id);
+        this.showBlowOnTree(tree.prop, from, strength);
+      }
+      if (trees.length > 0) {
+        playTreeHit();
+        landed = true;
+      }
     }
     if (landed) {
       // Keep the follow-through flowing even when several creatures were hit.
       this.localCharacter?.hitStop(0.035);
       this.camera?.shake(HIT_LANDED_SHAKE * 1.3);
     }
-    return raiders.length > 0 || animals.length > 0;
   }
 
   /**

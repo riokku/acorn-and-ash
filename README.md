@@ -705,12 +705,15 @@ See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 Holding left click past a quick tap winds up a charged attack: about a
 second with your arm wound back, slowed to a creep at a third of walking
 pace. Release to sweep through two whirlwind turns. Nearby creatures
-on every side take the existing charged damage once; the second turn is
-follow-through. Charging still prevents running, jumping, dodging or blocking.
+on every side take the existing charged damage once as the weapon passes them.
+Both turns can connect with a new target reached while moving. The axe also
+strikes every nearby standing trunk in its path, including behind you. Charging
+still prevents running, jumping, dodging or blocking.
 Once released, you can walk, sprint, jump and change direction while spinning;
 movement keeps both rotations going, and dodging is available after the spin.
-Creep while charging and you turn to face the way you walk. If no creatures
-are in reach, aimed tool work still fells one tree or digs ahead as before.
+See [weapon contact sweeps](docs/decisions/0196-whirlwind-weapon-contacts.md).
+Creep while charging and you turn to face the way you walk. Light axe swings
+keep their forward tree selection, and a charged shovel still makes one aimed dig.
 Skeleton charged attacks share the whirlwind, with their usual wind-up and
 damage. See [charged whirlwind](docs/decisions/0191-charged-whirlwind.md) and
 [moving whirlwind](docs/decisions/0195-moving-whirlwind.md).
