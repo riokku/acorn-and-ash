@@ -12,9 +12,10 @@ invalid entries leave, and losing the selected target clears the cycle. The firs
 press in either direction acquires the best candidate. Peaceful wildlife and
 players cannot be selected.
 
-A gold diamond and name mark the target in the existing combat overlay; offscreen
-selection uses the overlay's directional ring. A selected raider's existing health
-bar stays named. Within the existing melee assist range, selection takes priority
+A gold diamond marks the target in the existing combat overlay; offscreen
+selection uses the overlay's directional ring. The redundant target text and
+distance above the model are omitted (decision 0195). A selected raider's existing
+health bar stays named. Within the existing melee assist range, selection takes priority
 over automatic aim assistance. Selecting alone does not turn the camera or player,
 attack, or extend weapon reach. The server still decides what each blow hits.
 

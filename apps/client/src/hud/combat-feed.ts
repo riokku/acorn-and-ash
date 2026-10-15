@@ -21,8 +21,6 @@ export interface ThreatMark {
 }
 
 export interface SelectedTargetMark {
-  readonly name: string;
-  readonly distance: number;
   readonly bearing: number;
   /** Normalized screen coordinates, or null when off screen. */
   readonly screen: { readonly x: number; readonly y: number } | null;

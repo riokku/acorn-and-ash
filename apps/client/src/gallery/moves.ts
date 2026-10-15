@@ -116,7 +116,7 @@ const DEMOS: readonly Demo[] = [
           : IDLE,
   },
   {
-    // The same wind-up, creeping along on walking legs.
+    // Creep through the wind-up, then walk freely through the spin.
     name: 'creep',
     item: 'axe',
     length: CHARGE_TICKS + STRIKE.end + 8,
@@ -126,7 +126,12 @@ const DEMOS: readonly Demo[] = [
         : age < CHARGE_TICKS + STRIKE.end
           ? { kind: ActionKind.Strike, step: 0, age: age - CHARGE_TICKS }
           : IDLE,
-    speed: (age) => (age < CHARGE_TICKS ? PLAYER_WALK_SPEED * CHARGE_WALK_SHARE : 0),
+    speed: (age) =>
+      age < CHARGE_TICKS
+        ? PLAYER_WALK_SPEED * CHARGE_WALK_SHARE
+        : age < CHARGE_TICKS + STRIKE.end
+          ? PLAYER_WALK_SPEED
+          : 0,
   },
   ...(['light', 'heavy'] as const).map((kind): Demo => ({
     name: kind === 'light' ? 'dodge-slash' : 'dodge-slam',

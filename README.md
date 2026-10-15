@@ -362,7 +362,7 @@ move does not switch animation midway through. See
 
 Every move your character makes is a real animation now, from KayKit's free
 Character Animations pack: three different swings in a row if you keep
-clicking as each one lands, a crouch and two grounded whirlwind turns for a
+clicking as each one lands, a crouch and two whirlwind turns for a
 charged strike, a tumble for a dodge, a stagger when something hits you,
 falling down when you're knocked out and getting back up, chopping at a tree
 like a woodcutter, casting, waiting and reeling at the pond, bending down to
@@ -376,7 +376,7 @@ footing. See [grounded stride contact](docs/decisions/0144-grounded-strides-fit-
 Walking and running share a contact-aligned stride phase, including during speed
 changes. Blocked movement, full-body moves and airborne poses yield their footing.
 See [aligned gait phases](docs/decisions/0150-contact-aligned-gait-phases.md).
-Charged strikes still plant your feet. Everybody else sees the same moves on you.
+Charged strikes let you move freely once released. Everybody else sees the same moves on you.
 
 Chopping and combat impact pauses consume their exact duration, including when
 a render frame runs slowly. Animation blends pause with the character and use
@@ -704,14 +704,16 @@ See [decision 0025](docs/decisions/0025-a-dodge-that-buys-you-a-moment.md).
 
 Holding left click past a quick tap winds up a charged attack: about a
 second with your arm wound back, slowed to a creep at a third of walking
-pace. Release to sweep through two grounded whirlwind turns. Nearby creatures
+pace. Release to sweep through two whirlwind turns. Nearby creatures
 on every side take the existing charged damage once; the second turn is
-follow-through. It stays a commitment: no running, jumping, dodging or blocking
-while charging, and the feet stay planted until both rotations finish.
+follow-through. Charging still prevents running, jumping, dodging or blocking.
+Once released, you can walk, sprint, jump and change direction while spinning;
+movement keeps both rotations going, and dodging is available after the spin.
 Creep while charging and you turn to face the way you walk. If no creatures
 are in reach, aimed tool work still fells one tree or digs ahead as before.
 Skeleton charged attacks share the whirlwind, with their usual wind-up and
-damage. See [charged whirlwind](docs/decisions/0191-charged-whirlwind.md).
+damage. See [charged whirlwind](docs/decisions/0191-charged-whirlwind.md) and
+[moving whirlwind](docs/decisions/0195-moving-whirlwind.md).
 See [decision 0026](docs/decisions/0026-a-charged-attack-that-finishes-the-job.md)
 for the charge itself,
 [decision 0059](docs/decisions/0059-creeping-through-a-charge.md) for

@@ -3649,8 +3649,6 @@ export class Game {
         .set(selected.x, selected.y + 1, selected.z)
         .project(camera.camera);
       feed.target = {
-        name: selected.name,
-        distance: Math.hypot(dx, dz),
         bearing: wrapAngle(camera.look.yaw - Math.atan2(-dx, -dz)),
         screen:
           point.z > -1 && point.z < 1 && Math.abs(point.x) < 0.92 && Math.abs(point.y) < 0.9
