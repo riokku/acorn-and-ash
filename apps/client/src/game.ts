@@ -2049,6 +2049,8 @@ export class Game {
       case 'wildfire':
         this.wildfireState = message;
         this.wildfireArt?.setState(message);
+        this.clearingScene?.setWildfire(message);
+        this.wildernessScene?.setWildfire(message);
         break;
       case 'lakeIce': {
         this.applyLakeIce(message.frozen);
@@ -2161,6 +2163,7 @@ export class Game {
             generation: tree.generation,
             felled: tree.felled,
             ...(tree.fall ? { fall: tree.fall } : {}),
+            ...(tree.burned ? { burned: true } : {}),
           });
         }
         this.applyTreeStates();
@@ -2919,6 +2922,8 @@ export class Game {
    */
   private applyTreeStates(): void {
     const now = this.estimatedServerTimeMs();
+    this.clearingScene?.setWildfire(this.wildfireState);
+    this.wildernessScene?.setWildfire(this.wildfireState);
     this.clearingScene?.setTreeStates(this.treeStates, now);
     this.wildernessScene?.setTreeStates(this.treeStates, now);
 

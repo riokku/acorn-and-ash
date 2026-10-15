@@ -832,6 +832,7 @@ export interface PersistedTree {
   readonly generation: number;
   /** Absent on old saves, whose wood was already awarded directly. */
   readonly fallYaw?: number | null;
+  readonly burned?: boolean;
 }
 
 /**
@@ -973,6 +974,7 @@ interface TreeState {
   felledAtMs: number;
   generation: number;
   fallYaw: number | null;
+  burned: boolean;
 }
 
 interface PlayerRuntime {
@@ -1217,6 +1219,7 @@ export class WorldSimulation {
     for (const [id, slot] of this.treeSlots) {
       const prop = this.standingAt(slot);
       if (!prop || !choppingRuleFor(PROP_KINDS[prop.kind]) || this.trees.get(id)?.felled) continue;
+      const shape = PROP_KINDS[prop.kind].shape;
       targets.push({
         id,
         kind: 'tree',
@@ -1224,7 +1227,7 @@ export class WorldSimulation {
         y: prop.y ?? 0,
         z: prop.z,
         height: propHeight(PROP_KINDS[prop.kind]) * prop.scale,
-        radius: 1,
+        radius: shape.family === 'tree' ? shape.canopyRadius * prop.scale : 1,
       });
     }
     for (const prop of this.builtProps) {
@@ -1300,8 +1303,15 @@ export class WorldSimulation {
       this.calendar().season === 'summer',
     );
     for (const target of burned) {
-      if (target.kind === 'tree') this.fellTree(target.id, this.nowMs);
-      else {
+      if (target.kind === 'tree') {
+        this.fellTree(target.id, this.nowMs);
+        const state = this.treeState(target.id);
+        state.burned = true;
+        state.fallYaw =
+          (hashSeed('burn-fall', this.seed, target.id, state.generation) / 0x100000000) *
+          Math.PI *
+          2;
+      } else {
         const prop = this.builtPropsById.get(target.id);
         if (!prop) continue;
         const stacks = [...(this.homeChests.get(prop.id) ?? [])];
@@ -1322,7 +1332,8 @@ export class WorldSimulation {
       for (const fire of this.wildfire.fires.values()) {
         if (
           (player.space === OUTDOORS &&
-            Math.hypot(position.x - fire.x, position.z - fire.z) < fire.radius + 1.2 &&
+            Math.hypot(position.x - fire.x, position.z - fire.z) <
+              (fire.kind === 'tree' ? 1 : fire.radius) + 1.2 &&
             Math.abs(position.y - fire.y) < fire.height + 1) ||
           (fire.kind === 'building' && player.space === fire.id)
         ) {
@@ -4397,14 +4408,16 @@ export class WorldSimulation {
     }
 
     this.advanceExpedition(runtime, { kind: 'chop' }, 1);
+    const burned = this.wildfire.fires.delete(`tree:${target.prop.id}`);
     this.fellTree(target.prop.id, this.nowMs);
+    state.burned = burned;
     state.fallYaw = treeFallYaw(target.prop, position);
     const landsAt = this.nowMs + treeFallTimes(target.prop).break * 1000;
-    for (const spot of treeLogSpots(target.prop, state.fallYaw)) {
+    for (const spot of burned ? [] : treeLogSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('log', 1, clear.x, clear.z, landsAt, true);
     }
-    for (const spot of treeStickSpots(target.prop, state.fallYaw)) {
+    for (const spot of burned ? [] : treeStickSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('stick', 1, clear.x, clear.z, landsAt, true);
     }
@@ -5483,6 +5496,7 @@ export class WorldSimulation {
   private growTree(treeId: number, state: TreeState): void {
     state.felled = false;
     state.fallYaw = null;
+    state.burned = false;
     state.swingsTaken = 0;
     state.generation = nextGeneration(state.generation);
     this.treeChanges.add(treeId);
@@ -5510,6 +5524,7 @@ export class WorldSimulation {
       felledAtMs: 0,
       generation: 0,
       fallYaw: null,
+      burned: false,
     };
     this.trees.set(treeId, fresh);
     return fresh;
@@ -5635,17 +5650,27 @@ export class WorldSimulation {
    * them: every one, or only the ids asked for - the trees a change just
    * touched, so one swing of an axe does not resend the whole forest.
    */
-  changedTrees(
-    only?: Iterable<number>,
-  ): Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> {
-    const changed: Array<{ treeId: number; generation: number; felled: boolean; fall?: TreeFall }> =
-      [];
+  changedTrees(only?: Iterable<number>): Array<{
+    treeId: number;
+    generation: number;
+    felled: boolean;
+    burned?: boolean;
+    fall?: TreeFall;
+  }> {
+    const changed: Array<{
+      treeId: number;
+      generation: number;
+      felled: boolean;
+      burned?: boolean;
+      fall?: TreeFall;
+    }> = [];
     for (const [treeId, state] of this.treesOf(only)) {
       if (!state.felled && state.generation === 0) continue;
       changed.push({
         treeId,
         generation: state.generation,
         felled: state.felled,
+        ...(state.burned ? { burned: true } : {}),
         ...(state.felled && state.fallYaw !== null
           ? { fall: { yaw: state.fallYaw, startedAtMs: state.felledAtMs } }
           : {}),
@@ -5669,6 +5694,7 @@ export class WorldSimulation {
         felledAtMs: state.felledAtMs,
         generation: state.generation,
         fallYaw: state.fallYaw,
+        ...(state.burned ? { burned: true } : {}),
       });
     }
     return saved;
@@ -5704,6 +5730,7 @@ export class WorldSimulation {
       state.generation = tree.generation;
       state.swingsTaken = tree.swingsTaken;
       state.fallYaw = tree.fallYaw ?? null;
+      state.burned = tree.felled && tree.burned === true;
 
       const slot = this.treeSlots.get(tree.treeId);
       const original = slot === undefined ? undefined : this.originalAt(slot);

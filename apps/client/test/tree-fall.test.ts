@@ -121,3 +121,37 @@ describe('a falling tree', () => {
     scene.dispose();
   });
 });
+
+it('keeps a burned falling trunk and stump dark, then restores fresh growth', () => {
+  let now = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const { scene, tree, up } = oneTree();
+  scene.setTreeStates(
+    new Map([
+      [
+        tree.id,
+        {
+          generation: 0,
+          felled: true,
+          burned: true,
+          fall: { yaw: 0, startedAtMs: 1000 },
+        },
+      ],
+    ]),
+    1000,
+  );
+  now = 700;
+  scene.update(0.7);
+  expect(up().normalize().y).toBeLessThan(1);
+  const meshes = scene.group.children.filter(
+    (child): child is THREE.InstancedMesh =>
+      child instanceof THREE.InstancedMesh && child.geometry.hasAttribute('treeBurn'),
+  );
+  expect(meshes.length).toBe(4);
+  for (const mesh of meshes) expect(mesh.geometry.getAttribute('treeBurn').getX(0)).toBe(1);
+  scene.setTreeStates(new Map([[tree.id, { generation: 1, felled: false }]]), 3000);
+  scene.update(0);
+  expect(up().normalize().y).toBeCloseTo(1);
+  expect(meshes[0]!.geometry.getAttribute('treeBurn').getX(0)).toBe(0);
+  scene.dispose();
+});

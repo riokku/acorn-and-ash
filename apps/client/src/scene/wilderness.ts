@@ -10,6 +10,7 @@ import {
   treeAtGeneration,
   treeFallAngle,
   treeFallTimes,
+  type WildfireView,
   type Clearing,
   type PlacedProp,
   type Terrain,
@@ -28,6 +29,7 @@ import {
   placeInstance,
   placeOneInstance,
 } from './props';
+import { createTreeBurning } from './tree-burning';
 import { treeVariant } from './prop-models';
 import { refineGroundContacts } from './ground-contact';
 import { shoreGroundCells } from './shore-ground';
@@ -96,6 +98,7 @@ export interface WildernessScene {
    * Put the forest's trees where the server says they are: felled ones as
    * stumps, grown ones back at whatever size this generation of them is.
    */
+  setWildfire(state: WildfireView): void;
   setTreeStates(states: ReadonlyMap<number, TreeAppearance>, serverNowMs?: number): void;
   /**
    * The smooth ground, for taking squares of it away where a dug tunnel comes
@@ -233,6 +236,9 @@ export function buildWildernessScene(
   const regrown = new Map<number, PlacedProp>();
   const shaking = new Map<number, TreeShake>();
   const falling = new Map<number, FallingTree>();
+  const burning = createTreeBurning((id) =>
+    felled.has(id) && !falling.has(id) ? undefined : slotOf.get(id),
+  );
   const landings: TreeLanding[] = [];
 
   /** The tree as it stands now: the one the seed laid out, or what has grown there since. */
@@ -320,7 +326,9 @@ export function buildWildernessScene(
       const tree = treeById.get(id);
       if (tree === undefined) continue;
       const grown = treeAtGeneration(clearing.seed, tree, drawn.get(id)?.generation ?? 0);
-      placeInstance(stumpParts, count++, stumpFor(grown));
+      placeInstance(stumpParts, count, stumpFor(grown));
+      for (const part of stumpParts) part.burn?.(count, drawn.get(id)?.burned ? 1 : 0);
+      count++;
     }
     for (const part of stumpParts) {
       part.mesh.count = count;
@@ -373,6 +381,7 @@ export function buildWildernessScene(
     group,
     cameraBlockers,
     cameraGround: ground.mesh,
+    setWildfire: (state) => burning.setState(state),
     setTreeStates: (states, serverNowMs = Date.now()) => {
       const touchedCells = new Set<string>();
       let stumpsChanged = false;
@@ -380,7 +389,13 @@ export function buildWildernessScene(
       for (const tree of treeById.values()) {
         const want = states.get(tree.id) ?? UNTOUCHED;
         const have = drawn.get(tree.id) ?? UNTOUCHED;
-        if (want.felled === have.felled && want.generation === have.generation) continue;
+        if (
+          want.felled === have.felled &&
+          want.generation === have.generation &&
+          want.burned === have.burned
+        )
+          continue;
+        burning.setBurned(tree.id, want.burned === true);
 
         shaking.delete(tree.id);
         falling.delete(tree.id);
@@ -438,6 +453,8 @@ export function buildWildernessScene(
         repack(position, appearanceChanged);
       }
 
+      for (const item of disposables)
+        if ('syncAppearance' in item) (item as PropPart).syncAppearance?.();
       for (const [treeId, fall] of falling) drawFall(treeId, fall);
       for (const [treeId, shake] of shaking) {
         shake.age += deltaSeconds;
@@ -451,6 +468,7 @@ export function buildWildernessScene(
         tipTree(treeId, tilt.setFromAxisAngle(shake.axis, angle));
         if (done) shaking.delete(treeId);
       }
+      burning.update();
     },
     dispose: () => {
       for (const item of disposables) item.dispose();

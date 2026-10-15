@@ -3,6 +3,12 @@ import {
   WildfireSimulation,
   FIRE_LIMIT,
   FIRE_TREE_SECONDS,
+  CHARGE_TICKS,
+  STRIKE,
+  fireLifetime,
+  treeBurnProgress,
+  treeFireHeight,
+  treeFallTimes,
   WorldSimulation,
   DEFAULT_WORLD_SEED,
   encodeWildfire,
@@ -181,7 +187,7 @@ it('slows walking by 22 percent in blizzards without affecting indoor movement',
   }
   expect(slow.velocity.z / normal.velocity.z).toBeCloseTo(BLIZZARD_SPEED);
 });
-it('burns a tree to a saved stump and hurts a nearby player', () => {
+it('burns a tree into a saved charred fall without loot and hurts a nearby player', () => {
   const sim = new WorldSimulation({
     seed: DEFAULT_WORLD_SEED,
     forestEncounters: false,
@@ -195,10 +201,29 @@ it('burns a tree to a saved stump and hurts a nearby player', () => {
   sim.tick = TICK_HZ - 1;
   sim.step(1000);
   expect(sim.healthOf(1)).toBeLessThan(HEALTH_MAX);
-  sim.tick = FIRE_TREE_SECONDS * TICK_HZ - 1;
-  sim.step(FIRE_TREE_SECONDS * 1000);
+  const lifetime = Math.ceil(fireLifetime(sim.wildfire.fires.get(`tree:${target.id}`)!));
+  sim.tick = lifetime * TICK_HZ - 1;
+  sim.step(lifetime * 1000);
   expect(sim.changedTrees().find((t) => t.treeId === target.id)?.felled).toBe(true);
   expect(sim.drainTreeChanges()).toContain(target.id);
+  const changed = sim.changedTrees().find((t) => t.treeId === target.id)!;
+  expect(changed).toMatchObject({ burned: true, fall: { startedAtMs: lifetime * 1000 } });
+  expect(Number.isFinite(changed.fall?.yaw)).toBe(true);
+  sim.tick += Math.ceil(treeFallTimes(target).break) * TICK_HZ;
+  sim.step(lifetime * 1000 + 5000);
+  expect(sim.droppedPilesList()).toEqual([]);
+  const restored = new WorldSimulation({ seed: sim.seed, forestEncounters: false });
+  sims.push(restored);
+  restored.restoreTrees(sim.persistableTrees());
+  expect(restored.changedTrees()).toEqual(sim.changedTrees());
+  expect(restored.droppedPilesList()).toEqual([]);
+  // New growth sheds the burned state instead of inheriting the old soot.
+  restored.regrowTrees(lifetime * 1000 + 3600_000);
+  expect(restored.changedTrees().find((t) => t.treeId === target.id)).toMatchObject({
+    generation: 1,
+    felled: false,
+  });
+  expect(restored.changedTrees().find((t) => t.treeId === target.id)?.burned).toBeUndefined();
 });
 it('destroys a burning home, drops chest contents, and evacuates its occupants', () => {
   const sim = new WorldSimulation({
@@ -263,4 +288,65 @@ it('produces occasional summer lightning ignitions, never winter lightning', () 
   sim.setCalendarShift(clockShiftForSeason(sim.seed, (sim.tick + 1) * 50, 'winter'));
   sim.step(21 * 18_000);
   expect(sim.wildfire.lightning).toEqual(last);
+});
+
+it('takes about 45 seconds for an ordinary tree, with bounded size-based variation', () => {
+  expect(fireLifetime({ ...tree(1), height: 14 })).toBe(FIRE_TREE_SECONDS);
+  const sizes = [2, 6, 12, 14, 20, 32, 60];
+  const lifetimes = sizes.map((height) => fireLifetime({ ...tree(1), height }));
+  expect(lifetimes).toEqual([...lifetimes].sort((a, b) => a - b));
+  expect(lifetimes[0]).toBe(30);
+  expect(lifetimes.at(-1)).toBe(75);
+  expect(fireLifetime({ ...tree(1), kind: 'building' })).toBe(90);
+});
+
+it('climbs all the way to the crown and resumes the same burn front after a save', () => {
+  const target = { ...tree(1), height: 14 };
+  const fire = new WildfireSimulation();
+  fire.ignite(target, 1000, 0, false);
+  const state = fire.fires.get('tree:1')!;
+  expect(treeBurnProgress(state, 0)).toBe(0);
+  expect(treeBurnProgress(state, 23_500)).toBe(0.5);
+  expect(treeFireHeight(0)).toBeLessThan(0.1);
+  expect(treeFireHeight(0.4)).toBe(0.5);
+  expect(treeFireHeight(0.8)).toBe(1);
+  expect(treeBurnProgress(state, 100_000)).toBe(1);
+  const restored = new WildfireSimulation();
+  restored.restore(fire.save(), [target]);
+  expect(treeBurnProgress(restored.fires.get('tree:1')!, 23_500)).toBe(0.5);
+  expect(restored.advance(42, 45_999, [target])).toEqual([]);
+  expect(restored.advance(42, 46_000, [target])).toEqual([state]);
+  expect(restored.advance(42, 47_000, [target])).toEqual([]);
+});
+
+it('burns smaller trees before their larger neighbours', () => {
+  const targets = [
+    { ...tree(1), height: 6 },
+    { ...tree(2), height: 32 },
+  ];
+  const fire = new WildfireSimulation();
+  for (const target of targets) fire.ignite(target, 0, 0, false);
+  expect(
+    fire.advance(42, Math.ceil(fireLifetime(targets[0]!)) * 1000, targets).map((t) => t.id),
+  ).toEqual([1]);
+  expect([...fire.fires.keys()]).toEqual(['tree:2']);
+  expect(fire.advance(42, 75_000, targets).map((t) => t.id)).toEqual([2]);
+});
+
+it('cannot turn an actively burning tree into usable logs by chopping it', () => {
+  const { sim, target, position } = torchWorld('spring', 'axe');
+  // Stand within blade reach but outside the hot trunk, so damage cannot interrupt charging.
+  sim.placePlayer(1, { ...position, z: position.z + 0.8 }, 0);
+  expect(sim.igniteTree(target.id, false)).toBe(true);
+  for (let tick = 0; tick < CHARGE_TICKS + STRIKE.end + 2; tick++) {
+    sim.queueInput(
+      1,
+      createInput(tick + 1, 0, 0, 0, tick < CHARGE_TICKS ? PlayerButton.Charge : 0),
+    );
+    sim.step((tick + 1) * 50);
+  }
+  expect(sim.isFelled(target.id)).toBe(true);
+  expect(sim.changedTrees().find((t) => t.treeId === target.id)?.burned).toBe(true);
+  expect(sim.wildfire.fires.has(`tree:${target.id}`)).toBe(false);
+  expect(sim.droppedPilesList()).toEqual([]);
 });

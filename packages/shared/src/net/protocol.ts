@@ -193,6 +193,7 @@ const BYTES_PER_TAKEN_PICKUP = 2;
 const BYTES_PER_TREE_STATE = 16;
 const TREE_FELLED_FLAG = 1;
 const TREE_FALL_FLAG = 2;
+const TREE_BURNED_FLAG = 4;
 const TREE_STATES_HEADER_BYTES = 4;
 const TREE_WHOLE_LIST_FLAG = 1;
 /** id(2) + kind(1) + x(2) + z(2) + yaw(2) + flags(1) */
@@ -1007,7 +1008,12 @@ export function encodeTreeStates(trees: readonly TreeState[], whole = true): Arr
     view.setUint16(offset, tree.treeId & 0xffff, true);
     view.setUint8(offset + 2, clamp(Math.round(tree.generation), 0, MAX_TREE_GENERATION));
     const fall = tree.felled ? tree.fall : undefined;
-    view.setUint8(offset + 3, (tree.felled ? TREE_FELLED_FLAG : 0) | (fall ? TREE_FALL_FLAG : 0));
+    view.setUint8(
+      offset + 3,
+      (tree.felled ? TREE_FELLED_FLAG : 0) |
+        (fall ? TREE_FALL_FLAG : 0) |
+        (tree.felled && tree.burned ? TREE_BURNED_FLAG : 0),
+    );
     view.setFloat32(offset + 4, fall?.yaw ?? 0, true);
     view.setFloat64(offset + 8, fall?.startedAtMs ?? 0, true);
     offset += BYTES_PER_TREE_STATE;
@@ -2330,6 +2336,10 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           generation: view.getUint8(offset + 2),
           felled: (view.getUint8(offset + 3) & TREE_FELLED_FLAG) !== 0,
           ...(fall ? { fall } : {}),
+          ...((view.getUint8(offset + 3) & (TREE_FELLED_FLAG | TREE_BURNED_FLAG)) ===
+          (TREE_FELLED_FLAG | TREE_BURNED_FLAG)
+            ? { burned: true }
+            : {}),
         });
         offset += stride;
       }

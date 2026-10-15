@@ -9,6 +9,7 @@ import {
   treeFallTimes,
   treeFallAngle,
   type TreeFall,
+  type WildfireView,
   type Clearing,
   type PlacedPickup,
   type PlacedProp,
@@ -27,6 +28,7 @@ import {
   placeOneInstance,
   type PropPart,
 } from './props';
+import { createTreeBurning } from './tree-burning';
 import { treeVariant } from './prop-models';
 
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
@@ -44,6 +46,7 @@ export interface ClearingScene {
    * Put the trees where the server says they are: felled ones as stumps, grown
    * ones back at whatever size this generation of them is.
    */
+  setWildfire(state: WildfireView): void;
   setTreeStates(states: ReadonlyMap<number, TreeAppearance>, serverNowMs?: number): void;
   /**
    * A blow landing on a tree: it shivers, tipping a little away along
@@ -72,6 +75,7 @@ export interface TreeAppearance {
   readonly generation: number;
   readonly felled: boolean;
   readonly fall?: TreeFall;
+  readonly burned?: boolean;
 }
 
 /**
@@ -156,6 +160,7 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
   const treeById = new Map(trees.map((tree) => [tree.id, tree]));
   /** Trees shivering from a blow, and how far into it. */
   const shaking = new Map<number, TreeShake>();
+  const burning = createTreeBurning((id) => standing.get(id));
   const falling = new Map<number, FallingTree>();
   const landings: TreeLanding[] = [];
 
@@ -201,6 +206,7 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
       const pickup = pickups.get(id);
       return pickup?.visible ? pickup : null;
     },
+    setWildfire: (state) => burning.setState(state),
     setTakenPickups: (taken) => {
       for (const [id, model] of pickups) model.visible = !taken.has(id);
     },
@@ -210,7 +216,13 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
       for (const tree of trees) {
         const want = states.get(tree.id) ?? UNTOUCHED;
         const have = drawn.get(tree.id) ?? UNTOUCHED;
-        if (want.felled === have.felled && want.generation === have.generation) continue;
+        if (
+          want.felled === have.felled &&
+          want.generation === have.generation &&
+          want.burned === have.burned
+        )
+          continue;
+        burning.setBurned(tree.id, want.burned === true);
         changed = true;
 
         const grown = treeAtGeneration(clearing.seed, tree, want.generation);
@@ -246,8 +258,10 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
         const stumpSlot = stumpSlotOf.get(tree.id);
         if (stumpSlot !== undefined) {
           for (const part of freshStumps) {
-            if (want.felled) placeOneInstance(part, stumpSlot, stumpFor(grown));
-            else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
+            if (want.felled) {
+              placeOneInstance(part, stumpSlot, stumpFor(grown));
+              part.burn?.(stumpSlot, want.burned ? 1 : 0);
+            } else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
             part.mesh.instanceMatrix.needsUpdate = true;
             // Instance uploads do not invalidate Three's cached culling bounds.
             part.mesh.boundingSphere = null;
@@ -280,6 +294,8 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
       });
     },
     update: (deltaSeconds) => {
+      for (const item of disposables)
+        if ('syncAppearance' in item) (item as PropPart).syncAppearance?.();
       for (const [treeId, fall] of falling) drawFall(treeId, fall);
       for (const [treeId, shake] of shaking) {
         shake.age += deltaSeconds;
@@ -293,6 +309,7 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
         tipTree(treeId, tilt.setFromAxisAngle(shake.axis, angle));
         if (done) shaking.delete(treeId);
       }
+      burning.update();
     },
     drainLandings: () => landings.splice(0),
     dispose: () => {

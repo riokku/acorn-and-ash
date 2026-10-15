@@ -438,6 +438,28 @@ describe('telling players how the trees stand', () => {
     expect(message.trees[0]?.fall?.startedAtMs).toBe(fall.startedAtMs);
   });
 
+  it('keeps a charred tree and its fall distinct without changing packet size', () => {
+    const tree = {
+      treeId: 3,
+      generation: 2,
+      felled: true,
+      burned: true,
+      fall: { yaw: 0.5, startedAtMs: 1234 },
+    };
+    expect(decodeServerMessage(encodeTreeStates([tree]))).toEqual({
+      type: 'treeStates',
+      whole: true,
+      trees: [tree],
+    });
+    expect(encodeTreeStates([tree]).byteLength).toBe(20);
+    const standing = decodeServerMessage(encodeTreeStates([{ ...tree, felled: false }]));
+    expect(standing).toEqual({
+      type: 'treeStates',
+      whole: true,
+      trees: [{ treeId: 3, generation: 2, felled: false }],
+    });
+  });
+
   it('rejects non-finite fall data', () => {
     const message = encodeTreeStates([
       { treeId: 3, generation: 0, felled: true, fall: { yaw: NaN, startedAtMs: 1000 } },

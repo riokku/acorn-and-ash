@@ -1,6 +1,6 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { expect, it } from 'vitest';
-import { weatherPlan, WEATHER_CYCLE_MS, type WorldSimulation } from '@acorn/shared';
+import { weatherPlan, WEATHER_CYCLE_MS, fireLifetime, type WorldSimulation } from '@acorn/shared';
 import { TestClient, sleep, waitFor } from './helpers';
 it('commits a storm reward cursor with its shared piles and cannot replay it', async () => {
   const worldId = `weather-${Date.now()}`,
@@ -61,11 +61,25 @@ it('saves fire state, broadcasts it on joining, and persists burned trees', asyn
       save(sim: WorldSimulation): void;
     };
     const sim = world.simulation;
-    sim.tick = Math.ceil(sim.tick / 20) * 20 + 55 * 20 - 1;
+    const fire = sim.wildfire.fires.get(`tree:${burnedId}`)!;
+    sim.tick = Math.ceil(fire.startedAt / 1000 + fireLifetime(fire)) * 20 - 1;
     sim.step(Date.now());
     world.announceTreeChanges(sim);
     world.save(sim);
-    expect(sim.changedTrees().find((tree) => tree.treeId === burnedId)?.felled).toBe(true);
+    expect(sim.changedTrees().find((tree) => tree.treeId === burnedId)).toMatchObject({
+      felled: true,
+      burned: true,
+      fall: { startedAtMs: expect.any(Number) },
+    });
+    const savedTree = state.storage.sql
+      .exec<{ burned: number; fall_yaw: number }>(
+        'SELECT burned, fall_yaw FROM trees WHERE tree_id = ?',
+        burnedId,
+      )
+      .one();
+    expect(savedTree.burned).toBe(1);
+    expect(Number.isFinite(savedTree.fall_yaw)).toBe(true);
+    expect(sim.droppedPilesList()).toEqual([]);
     const fireState = state.storage.sql
       .exec<{ value: string }>("SELECT value FROM world_meta WHERE key = 'wildfire'")
       .one().value;
