@@ -145,6 +145,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onTabChange: (tab) => game.setJournalTab(tab),
       onCraftTab: (tab) => game.setCraftTab(tab),
       onPickCraft: (action) => game.pickCraftEntry(action),
+      onFire: (request) => game.useFire(request),
       onGarden: (request) => game.useGarden(request),
       onExpedition: (request) => game.chooseExpedition(request),
       onToggleDecorations: () => game.toggleDecorations(),

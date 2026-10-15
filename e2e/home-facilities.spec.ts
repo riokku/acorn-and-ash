@@ -12,9 +12,9 @@ test('cooks at home, makes an improved axe and tends a persistent garden', async
       x: 0,
       z: -4.2,
       yaw: 0,
-      lit: false,
+      lit: true,
       ownerKey: 'gardener',
-      litUntilMs: null,
+      litUntilMs: Date.now() + 600_000,
     },
   ]);
   sim.addPlayer(1, undefined, 'gardener');

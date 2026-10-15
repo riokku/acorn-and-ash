@@ -1,3 +1,12 @@
+import {
+  FIRE_CAPACITY_MS,
+  logStorageCapacity,
+  logStorageSpot,
+  HOME_FACILITIES,
+  type FireRequest,
+  type FireFuelView,
+} from '@acorn/shared';
+import type { FirePanelState } from './hud/store';
 import { applyItemCatalog } from './item-catalog';
 import { characterStats, ITEM_KINDS } from './item-catalog';
 
@@ -833,6 +842,8 @@ export class Game {
   private ownCacheCompass: Compass | null = null;
   /** Whether a campfire is close enough right now to light or put out, and which. */
   private nearCampfire: 'lit' | 'unlit' | null = null;
+  private fireFuelStates = new Map<number, FireFuelView>();
+  private fireFuelReceivedAt = 0;
   /** What E would do about a rowboat right now, for the hint line. */
   private boatHint: BoatHint = null;
   private nearWorkbench = false;
@@ -1820,6 +1831,7 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.fireFuelStates.clear();
         this.options.hud.publish({ warmth: null });
         this.clearRemoteActors();
         if (this.selfNetId !== 0 && this.selfNetId !== message.netId) {
@@ -2225,6 +2237,19 @@ export class Game {
             ? `${BUILDABLE_KINDS[result.request.kind].displayName} placed.`
             : buildReplyText(result.reason),
         );
+        break;
+      }
+      case 'fireFuel': {
+        const storageChanged =
+          message.fires.some(
+            (fire) => this.fireFuelStates.get(fire.propId)?.storedLogs !== fire.storedLogs,
+          ) || message.fires.length !== this.fireFuelStates.size;
+        this.fireFuelStates = new Map(message.fires.map((fire) => [fire.propId, fire]));
+        this.fireFuelReceivedAt = performance.now();
+        for (const [id, mesh] of this.builtMeshes)
+          if ('setStoredLogs' in mesh)
+            mesh.setStoredLogs?.(this.fireFuelStates.get(id)?.storedLogs ?? 0);
+        if (storageChanged) this.refreshPlacedSolids();
         break;
       }
       case 'builtProps': {
@@ -2667,6 +2692,7 @@ export class Game {
       this.outdoors.add(this.wildfireArt.group);
       this.weatherSeed = seed;
       this.seasonShiftMs = null;
+
       this.weatherArt?.dispose();
       this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.weatherArt.group);
@@ -2913,7 +2939,7 @@ export class Game {
         // The whole list is resent whenever anything changes, including a
         // campfire lighting up or going out, so an existing mesh needs to
         // hear about it too, not just a freshly created one.
-        if ('setLit' in existing) existing.setLit(prop.lit);
+        if ('setLit' in existing) existing.setLit(this.fuelFireLit(prop.id));
         // Free boats follow the current between server updates. Occupied
         // boats are hidden here because a separate boat follows the rider.
         if (prop.kind === 'rowboat') {
@@ -2934,9 +2960,11 @@ export class Game {
       const built = createBuiltMesh(prop.kind);
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
-      if ('setLit' in built) built.setLit(prop.lit);
+      if ('setLit' in built) built.setLit(this.fuelFireLit(prop.id));
       built.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
       built.group.rotation.y = prop.yaw;
+      if ('setStoredLogs' in built)
+        built.setStoredLogs?.(this.fireFuelStates.get(prop.id)?.storedLogs ?? 0);
       if ('groundOn' in built) built.groundOn?.((x, z) => this.collision!.terrain.heightAt(x, z));
       built.group.visible = prop.occupied !== true;
       this.outdoors.add(built.group);
@@ -2992,9 +3020,10 @@ export class Game {
         prop.kind === 'rowboat' && prop.occupied !== true && mesh !== undefined
           ? { ...prop, x: mesh.position.x, z: mesh.position.z, yaw: mesh.rotation.y }
           : prop;
+      const ground = logStorageCapacity(prop.kind) > 0 ? logStorageSpot(prop) : solidProp;
       const solids = placedPropColliders(
-        solidProp,
-        this.builtGroundY(prop.kind, solidProp.x, solidProp.z),
+        { ...solidProp, storedLogs: this.fireFuelStates.get(prop.id)?.storedLogs ?? 0 },
+        this.builtGroundY(prop.kind, ground.x, ground.z),
       );
       if (solids.length > 0) {
         this.solidPlacedProps.set(prop.id, solids);
@@ -3384,13 +3413,15 @@ export class Game {
     );
     // Fires and windows animate; the `in` check skips the other
     // buildable kinds sharing this map without giving them all a no-op method.
-    for (const built of this.builtMeshes.values()) {
+    for (const [id, built] of this.builtMeshes) {
+      if ('setLit' in built) built.setLit(this.fuelFireLit(id));
       if ('update' in built && typeof built.update === 'function') built.update(deltaSeconds);
       if ('setDaylight' in built && typeof built.setDaylight === 'function')
         built.setDaylight(dayBrightness(dayProgress(weatherNow)));
     }
 
     if (this.homeInterior !== null && this.space !== OUTDOORS) {
+      this.homeInterior.setFireLit(this.fuelFireLit(this.space));
       this.homeInterior.cutAway(camera.camera.position.x, camera.camera.position.z);
       this.homeInterior.update(
         deltaSeconds,
@@ -4331,6 +4362,75 @@ export class Game {
     this.options.hud.publish({ journalTab: tab });
     if (tab === 'garden') this.connection?.sendGarden({ action: 'inspect' });
   }
+  useFire(request: FireRequest): void {
+    if (!this.connection?.sendFire(request)) this.showActionNote('Reconnect to tend the fire.');
+  }
+  private fuelRemaining(propId: number): number {
+    const fire = this.fireFuelStates.get(propId);
+    return fire === undefined
+      ? 0
+      : Math.max(
+          0,
+          fire.remainingMs - (fire.lit ? performance.now() - this.fireFuelReceivedAt : 0),
+        );
+  }
+  private fuelFireLit(propId: number): boolean {
+    const fire = this.fireFuelStates.get(propId);
+    return fire
+      ? fire.lit && this.fuelRemaining(propId) > 0
+      : this.builtProps.find((prop) => prop.id === propId)?.lit === true;
+  }
+  private firePanelState(): FirePanelState | null {
+    const position = this.localPlayer?.motion.position;
+    if (!position || !this.camera || this.localPlayer?.action.kind !== ActionKind.Idle) return null;
+    let prop: BuiltPropView | undefined,
+      mode: 'fire' | 'storage' = 'fire',
+      point: { x: number; z: number } | null;
+    if (this.space !== OUTDOORS) {
+      if (!homeFacilityInReach(this.currentHomeKind(), 'cooking', position)) return null;
+      prop = this.builtProps.find((p) => p.id === this.space);
+      const scale = homeRoomScale(this.currentHomeKind());
+      point = { x: HOME_FACILITIES.cooking.x * scale, z: HOME_FACILITIES.cooking.z * scale };
+    } else {
+      prop = nearestCampfire(position, this.builtProps) ?? undefined;
+      let gap = prop ? Math.hypot(position.x - prop.x, position.z - prop.z) : Infinity;
+      point = prop ?? null;
+      for (const home of this.builtProps) {
+        if (!logStorageCapacity(home.kind) || (home.locked && !home.yours)) continue;
+        const spot = logStorageSpot(home),
+          distance = Math.hypot(position.x - spot.x, position.z - spot.z);
+        if (distance <= 2 && distance < gap) {
+          prop = home;
+          point = spot;
+          gap = distance;
+          mode = 'storage';
+        }
+      }
+    }
+    if (!prop || !point) return null;
+    const y =
+      this.space === OUTDOORS ? (this.collision?.terrain.heightAt(point.x, point.z) ?? 0) : 0;
+    if (Math.abs(position.y - y) > 2.5) return null;
+    this.scratchProject.set(point.x, y + 1.3, point.z).project(this.camera.camera);
+    if (this.scratchProject.z < -1 || this.scratchProject.z > 1) return null;
+    return {
+      propId: prop.id,
+      mode,
+      lit: this.fuelFireLit(prop.id),
+      remainingMs: this.fuelRemaining(prop.id),
+      storedLogs: this.fireFuelStates.get(prop.id)?.storedLogs ?? 0,
+      capacity: mode === 'fire' ? FIRE_CAPACITY_MS : logStorageCapacity(prop.kind),
+      yours: prop.yours,
+      x: Math.max(
+        120,
+        Math.min(innerWidth - 120, (this.scratchProject.x * 0.5 + 0.5) * innerWidth),
+      ),
+      y: Math.max(
+        110,
+        Math.min(innerHeight - 180, (-this.scratchProject.y * 0.5 + 0.5) * innerHeight),
+      ),
+    };
+  }
   useGarden(request: GardenRequest): void {
     this.connection?.sendGarden(request);
   }
@@ -4892,7 +4992,9 @@ export class Game {
         'cooking',
         player.motion.position,
       )
-        ? 'lit'
+        ? this.fuelFireLit(this.space)
+          ? 'lit'
+          : 'unlit'
         : null;
       this.nearWorkbench = homeFacilityInReach(
         this.currentHomeKind(),
@@ -5017,7 +5119,8 @@ export class Game {
     // Same idea, only a hint: the server is the one that actually decides
     // whether a press lights it, puts it out, or does nothing at all.
     const nearbyCampfire = nearestCampfire(player.motion.position, this.builtProps);
-    this.nearCampfire = nearbyCampfire === null ? null : nearbyCampfire.lit ? 'lit' : 'unlit';
+    this.nearCampfire =
+      nearbyCampfire === null ? null : this.fuelFireLit(nearbyCampfire.id) ? 'lit' : 'unlit';
     this.boatHint = this.boatHintFor(player.motion.position, action);
 
     // A skeleton in reach beats anything else a swing could find, the same
@@ -5658,6 +5761,7 @@ export class Game {
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
               },
+      firePanel: this.firePanelState(),
       craftPending: this.craftFeedback.item,
       interactionNote:
         now < this.interactionNoteUntil
