@@ -39,10 +39,10 @@ export interface FireGlow {
 export const FIRE_LIGHT_COUNT = 6;
 
 /** Two layered waves, so the wobble doesn't read as a single metronomic pulse. */
-const FLICKER_SPEED_A = 11;
-const FLICKER_SPEED_B = 27;
+const FLICKER_SPEED_A = 5.3;
+const FLICKER_SPEED_B = 9.7;
 /** How far intensity swings from its base, as a fraction of it. */
-const FLICKER_STRENGTH = 0.22;
+const FLICKER_STRENGTH = 0.14;
 
 /** A glow's own state, as `FireLights` reads it. */
 interface Glow {
@@ -77,6 +77,8 @@ export function createFireGlow(
   // Staggered per glow, so a row of torches or lanterns doesn't pulse in lockstep.
   let elapsed = Math.random() * 100;
   let wobble = 0;
+  const preference =
+    typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   const glow: Glow = {
     anchor,
     color: new THREE.Color(color),
@@ -91,7 +93,11 @@ export function createFireGlow(
     anchor,
     brightness: 1,
     update(deltaSeconds) {
-      elapsed += deltaSeconds;
+      if (preference?.matches) {
+        wobble = 0;
+        return;
+      }
+      elapsed += Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds, 0.1)) : 0;
       wobble =
         Math.sin(elapsed * FLICKER_SPEED_A) * 0.6 + Math.sin(elapsed * FLICKER_SPEED_B + 1.7) * 0.4;
     },

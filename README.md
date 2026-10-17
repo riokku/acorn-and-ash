@@ -1532,3 +1532,13 @@ After exporting, compress each model with
 so the runtime bark texture retains its UVs. Run
 `node tools/check-pnw-trees.mjs` to check closed bark, texture coordinates,
 pivots, heights and near/distant triangle budgets.
+
+### Inspecting fire animation
+
+The shared flame is authored by `tools/art/flame.py` in Blender, with editable
+source at `assets/buildables/flame.blend`. Run `node tools/check-flame.mjs`
+after exporting and compressing it. View `/?gallery=campfire&time=0.2`,
+`/?gallery=home&time=0.2` and `/?gallery=tree-fires&at=22&time=0.2` to compare
+small fires, the indoor hearth and a rising forest fire. The `at` setting
+holds tree burn progress while its flames continue moving. Operating-system
+reduced motion pauses flames and steadies firelight.
