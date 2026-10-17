@@ -337,6 +337,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     createSeasonRig().apply({ from: season, to: season, amount: 0 }, daylight);
   const fireLights = new FireLights(scene);
 
+  if (focus === 'tree-models') {
+    scene.add(createGalleryGround([]));
+    const { showTreeModels } = await import('./tree-models');
+    showTreeModels(renderer, scene, fireLights, params);
+    return;
+  }
+
   if (focus === 'tree-fires') {
     scene.add(createGalleryGround([]));
     const { showTreeFires } = await import('./tree-fires');

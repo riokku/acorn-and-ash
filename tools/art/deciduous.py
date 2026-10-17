@@ -14,6 +14,7 @@ from mathutils import Vector, Euler, Matrix
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import hexc, lerp, make_material, Piece, tri_count  # noqa: E402
+from tree_bark import polish_bark
 
 SPECIES = {
     # wide, mossy, low-forking old tree with an enormous rounded crown
@@ -69,13 +70,15 @@ def tube(p, pts, radii, sides, colour, uv_scale=3.0):
         ring = []
         for k in range(sides + 1):
             a = k / sides * math.tau
-            rr = r * (1.08 if k % 2 == 0 else 0.92)
-            ring.append(p.vert(c + (u * math.cos(a) + v * math.sin(a)) * rr, colour(i, k),
+            rr = r * (1 + 0.035 * math.cos(a * 3) + 0.025 * math.sin(a * 5))
+            ring.append(p.vert(c + (u * math.cos(a) + v * math.sin(a)) * rr, colour(i, k % sides),
                                uv=(k / sides, travelled / uv_scale)))
         rings.append(ring)
     for i in range(len(rings) - 1):
         for k in range(sides):
             p.face([rings[i][k], rings[i][k + 1], rings[i + 1][k + 1], rings[i + 1][k]])
+    p.face(list(reversed(rings[0][:-1])))
+    p.face(rings[-1][:-1])
 
 
 def puff(p, centre, radius, squash, rng, base, tip, subdiv, jitter):
@@ -102,7 +105,7 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
     rng = random.Random(spec['seed'] + (1000 if distant else 0))
     bark, leaves = Piece(name + '_bark'), Piece(name + '_leaves')
     h, maple = spec['height'], spec['kind'] == 'maple'
-    sides = 5 if distant else 8
+    sides = 6 if distant else 12
     stations = 5 if distant else 9
 
     def bark_colour(i, k, f):
@@ -126,6 +129,11 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
              if maple else
              spec['trunk'] * (1 - 0.8 * (i / (stations - 1)) ** 1.1) * (1 + 0.5 * math.exp(-pts[i].z / 0.45))
              for i in range(stations)]
+    if not maple:
+        # One continuous trunk through the crown, rather than a second tube with
+        # a different ring orientation leaving a visible join at 86% height.
+        pts.extend(Vector((lean_at(spec, z / h), 0, z)) for z in (h * 0.93, h * 0.98))
+        radii.extend([spec['trunk'] * 0.12, 0.03])
     tube(bark, pts, radii, sides,
          lambda i, k: bark_colour(i, k, i / (stations - 1)), uv_scale=3.0)
 
@@ -142,17 +150,15 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
             a = i / spec['limbs'] * math.tau + rng.uniform(-0.3, 0.3)
             target = centre + Vector((math.cos(a) * rx * 0.6, math.sin(a) * rx * 0.6, rng.uniform(-0.4, 0.8)))
             mid = (fork_pt + target) / 2 + Vector((0, 0, 0.9))
-            limb_pts = [fork_pt, fork_pt.lerp(mid, 0.6), mid, mid.lerp(target, 0.6), target]
+            root = fork_pt - Vector((0, 0, spec['trunk'] * 0.5))
+            limb_pts = [root, fork_pt.lerp(mid, 0.6), mid, mid.lerp(target, 0.6), target]
             limb_r = [spec['trunk'] * 0.62, spec['trunk'] * 0.5, spec['trunk'] * 0.38,
                       spec['trunk'] * 0.25, spec['trunk'] * 0.12]
-            tube(bark, limb_pts, limb_r, 5 if distant else 6,
+            tube(bark, limb_pts, limb_r, 5 if distant else 8,
                  lambda i2, k, i=i: lerp(spec['bark_dark'], spec['bark'], 0.55 + 0.1 * (k % 2)),
                  uv_scale=3.0)
     else:
         # the alder's trunk carries on up through the crown, with a few short side limbs
-        cont = [Vector((lean_at(spec, z / h), 0, z)) for z in (top, h * 0.93, h * 0.98)]
-        tube(bark, [pts[-1], cont[1], cont[2]], [radii[-1], spec['trunk'] * 0.12, 0.03], sides,
-             lambda i, k: lerp(spec['bark_dark'], spec['bark'], 0.6))
         for _ in range(0 if distant else 5):
             z = rng.uniform(h * spec['clear'], h * 0.82)
             a = rng.uniform(0, math.tau)
@@ -163,7 +169,7 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
                  lambda i, k: lerp(spec['bark_dark'], spec['bark'], 0.5))
 
     # leaf puffs: sampled over the crown, favouring the outside so the crown reads as a round mass
-    subdiv = 0 if distant else 1
+    subdiv = 0 if distant else 2
     count = int(spec['puffs'] * (0.62 if distant else 1.0))
     lo, hi = spec['puff']
     placed = 0
@@ -182,11 +188,12 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
         if rng.random() < 0.25:
             base = lerp(base, spec['alt'], 0.6)
         tip = lerp(spec['mid'], spec['tip'], 0.45 + 0.55 * up)
-        puff(leaves, pos, radius, 0.74, rng, base, tip, subdiv, 0.24)
+        puff(leaves, pos, radius, 0.74, rng, base, tip, subdiv, 0.24 if distant else 0.14)
         placed += 1
 
     bark_ob = bark.finish(collection, bark_mat, shade=True)
     leaf_ob = leaves.finish(collection, leaf_mat, shade=True)
+    polish_bark(bark_ob)
     # settle the tree to its design height: the tallest leaf or twig is exactly `height` up
     tallest = max((o.matrix_world @ Vector(c)).z for o in (bark_ob, leaf_ob) for c in o.bound_box)
     scale = h / tallest

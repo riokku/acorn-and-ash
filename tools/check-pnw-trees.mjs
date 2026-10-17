@@ -43,6 +43,43 @@ for (const [species, height] of trees) {
     }
     assert(Math.abs(top - height) < 0.03, 'Authored height matches game dimensions');
     assert(Math.abs(bottom) < 0.12, 'Root pivot sits at the ground');
+    // glTF duplicates corners at UV/normal seams. Weld positions for the
+    // topology check: every bark edge must have two oppositely wound faces.
+    // This catches the old slit on odd-sided trunks as well as missing caps.
+    const bark = primitives.find((p) => p.getMaterial().getName() === 'Bark');
+    const barkUV = bark.getAttribute('TEXCOORD_0');
+    assert(barkUV, `${species}${suffix}: preserve UVs for the runtime bark texture`);
+    const uv = barkUV.getArray();
+    assert(Array.from(uv).every(Number.isFinite), 'Finite bark texture coordinates');
+    assert(Math.max(...uv) - Math.min(...uv) > 0.5, 'Bark UVs cover the texture');
+    const barkPositions = bark.getAttribute('POSITION');
+    const ids = new Map();
+    const welded = Array.from({ length: barkPositions.getCount() }, (_, vertex) => {
+      const point = barkPositions.getElement(vertex, []);
+      assert(point.every(Number.isFinite), `${species}: finite bark positions`);
+      const key = point.map((value) => value.toFixed(5)).join(',');
+      if (!ids.has(key)) ids.set(key, ids.size);
+      return ids.get(key);
+    });
+    const indices = bark.getIndices()?.getArray() ?? welded.map((_, index) => index);
+    const edges = new Map();
+    for (let index = 0; index < indices.length; index += 3) {
+      const face = [welded[indices[index]], welded[indices[index + 1]], welded[indices[index + 2]]];
+      assert.equal(new Set(face).size, 3, `${species}: non-degenerate bark triangle`);
+      for (let corner = 0; corner < 3; corner++) {
+        const a = face[corner],
+          b = face[(corner + 1) % 3];
+        const key = `${Math.min(a, b)}:${Math.max(a, b)}`;
+        const edge = edges.get(key) ?? { faces: 0, winding: 0 };
+        edge.faces++;
+        edge.winding += a < b ? 1 : -1;
+        edges.set(key, edge);
+      }
+    }
+    for (const edge of edges.values()) {
+      assert.equal(edge.faces, 2, `${species}${suffix}: sealed bark, including seam and caps`);
+      assert.equal(edge.winding, 0, `${species}${suffix}: consistent bark winding`);
+    }
     const foliage = primitives.find((p) => p.getMaterial().getName() === 'Leaves');
     const colors = foliage.getAttribute('COLOR_0').getArray();
     assert(colors[1] > colors[0], 'Evergreen foliage retains its green vertex colors');

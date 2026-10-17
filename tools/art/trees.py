@@ -15,6 +15,7 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import hexc, lerp, make_material, Piece, tri_count  # noqa: E402
+from tree_bark import polish_bark
 
 SPECIES = {
     'douglas-fir': dict(
@@ -79,21 +80,23 @@ def lean_at(spec, f):
 
 
 def trunk(p, spec, distant):
-    sides = 5 if distant else 9
+    sides = 6 if distant else 12
     h = spec['height']
     top = h * 0.93
-    stations = 5 if distant else 9
+    fractions = [0, 0.06, 0.25, 0.6, 1] if distant else [0, 0.012, 0.03, 0.065, 0.12, 0.22, 0.35, 0.5, 0.65, 0.78, 0.9, 1]
+    stations = len(fractions)
     r0 = spec['trunk']
     for s in range(stations):
-        f = s / (stations - 1)
+        f = fractions[s]
         y = f * top
         # a hair of lean so no two trunks stand like pillars, and a root flare at the foot
         lean = lean_at(spec, y / h)
         r = r0 * (1 - f) ** 1.15 * (1 + 0.6 * math.exp(-y / 0.55)) + 0.025
         for k in range(sides + 1):
             a = k / sides * math.tau
-            furrow = 0.9 if k % 2 else 1.0
-            rr = r * (1.06 if k % 2 == 0 else 0.94)
+            furrow = 0.95 + 0.05 * math.cos(a * 3)
+            # Periodic at 0/2pi: the UV seam must meet at exactly the same position.
+            rr = r * (1 + 0.035 * math.cos(a * 3) + 0.025 * math.sin(a * 5))
             col = lerp(spec['bark_dark'], spec['bark'], 0.55 + 0.45 * (1 - f) * furrow)
             p.vert((math.cos(a) * rr + lean, math.sin(a) * rr, y), col, uv=(k / sides, y / 3.0))
     ring = sides + 1
@@ -105,6 +108,8 @@ def trunk(p, spec, distant):
             c = verts[(s + 1) * ring + k + 1]
             d = verts[(s + 1) * ring + k]
             p.face([a, b, c, d])
+    p.face(list(reversed(verts[:sides])))
+    p.face(verts[(stations - 1) * ring:(stations - 1) * ring + sides])
     return top
 
 
@@ -192,6 +197,7 @@ def build_tree(name, spec, distant, collection, bark_mat, leaf_mat):
         leaves.face([ring[k], ring[(k + 1) % sides], apex])
     bark_ob = bark.finish(collection, bark_mat, shade=True)
     leaf_ob = leaves.finish(collection, leaf_mat, shade=True)
+    polish_bark(bark_ob)
     bark_ob.name, leaf_ob.name = name + '.Bark', name + '.Leaves'
     return bark_ob, leaf_ob
 
