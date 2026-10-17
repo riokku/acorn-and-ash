@@ -2,8 +2,8 @@ import * as THREE from 'three/webgpu';
 
 import { BUILDABLE_KINDS } from '@acorn/shared';
 
-import { campfireModelParts, flameModelTemplate } from './campfire-models';
-import { instantiateAnimatedModel } from './model-loading';
+import { campfireModelParts } from './campfire-models';
+import { createFlame } from './flame';
 import { createFireGlow } from './fire-light';
 
 /**
@@ -78,8 +78,7 @@ export function createCampfire(): Campfire {
     }
   }
 
-  let mixer: THREE.AnimationMixer | undefined;
-  let flameGroup: THREE.Group | undefined;
+  let flame: ReturnType<typeof createFlame> = null;
   let lit = false;
   // Made once and only ever shown or hidden: see fire-light.ts for why a
   // light coming and going is worth avoiding.
@@ -94,20 +93,11 @@ export function createCampfire(): Campfire {
 
     fireGlow.anchor.visible = lit;
     if (lit) {
-      const template = flameModelTemplate();
-      if (template === undefined) return; // No flame model loaded; stays a lit-less fire.
-      const instance = instantiateAnimatedModel(template);
-      flameGroup = instance.root;
-      mixer = instance.mixer;
-      for (const action of instance.actions) action.play();
-      group.add(flameGroup);
+      flame = createFlame();
+      if (flame) group.add(flame.root);
     } else {
-      if (flameGroup !== undefined) {
-        group.remove(flameGroup);
-        mixer?.stopAllAction();
-        flameGroup = undefined;
-        mixer = undefined;
-      }
+      flame?.dispose();
+      flame = null;
     }
   }
 
@@ -115,12 +105,12 @@ export function createCampfire(): Campfire {
     group,
     setLit,
     update: (deltaSeconds) => {
-      mixer?.update(deltaSeconds);
+      flame?.update(deltaSeconds);
       fireGlow.update(deltaSeconds);
     },
     dispose: () => {
       for (const disposable of disposables) disposable.dispose();
-      mixer?.stopAllAction();
+      flame?.dispose();
       fireGlow.dispose();
     },
   };

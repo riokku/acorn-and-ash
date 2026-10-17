@@ -9,8 +9,7 @@ import {
   LIGHTNING_INTERVAL_MS,
   type WildfireView,
 } from '@acorn/shared';
-import { flameModelTemplate } from './campfire-models';
-import { instantiateAnimatedModel } from './model-loading';
+import { createFlame } from './flame';
 import { createFireGlow } from './fire-light';
 
 const VISIBLE_FIRES = 8;
@@ -22,14 +21,11 @@ const WISPS = 36;
 export function createWildfireArt() {
   const group = new THREE.Group();
   group.name = 'wildfire';
-  const template = flameModelTemplate();
   const pools = Array.from({ length: VISIBLE_FIRES }, () => {
     const root = new THREE.Group();
-    const flames = Array.from({ length: 7 }, (_, i) => {
-      if (!template) return null;
-      const instance = instantiateAnimatedModel(template);
-      for (const action of instance.actions) action.play();
-      instance.mixer.setTime(i * 0.37);
+    const flames = Array.from({ length: 7 }, () => {
+      const instance = createFlame();
+      if (!instance) return null;
       root.add(instance.root);
       return instance;
     });
@@ -175,7 +171,7 @@ export function createWildfireArt() {
       lightning: bolt.visible,
     }),
     update(delta: number, camera: THREE.Camera, indoors: boolean, reducedMotion: boolean) {
-      const dt = Math.min(delta, 0.1);
+      const dt = Number.isFinite(delta) ? Math.max(0, Math.min(delta, 0.1)) : 0;
       seconds += reducedMotion ? 0 : dt;
       sinceState += Math.max(0, delta);
       boltAge += dt;
@@ -231,7 +227,7 @@ export function createWildfireArt() {
             (1.5 + height / pool.flames.length) * intensity,
             (isTree ? 1.8 : 1.6) * intensity,
           );
-          flame.mixer.update(reducedMotion ? 0 : dt * (0.85 + i * 0.07));
+          flame.update(dt * (0.85 + i * 0.07), reducedMotion);
         }
         for (let i = 0; i < WISPS; i++) {
           const phase = (seconds * (0.38 + (i % 4) * 0.04) + i / WISPS) % 1;
@@ -294,8 +290,7 @@ export function createWildfireArt() {
         pool.light.dispose();
         pool.treeLight.dispose();
         for (const flame of pool.flames) {
-          flame?.mixer.stopAllAction();
-          if (flame) flame.mixer.uncacheRoot(flame.root);
+          flame?.dispose();
         }
       }
       flash.dispose();

@@ -8,10 +8,9 @@ import { paintedMaterial, plainMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 import { createCanvasMaterial, fabricTriangle } from './shelter';
-import { flameModelTemplate } from './campfire-models';
+import { createFlame } from './flame';
 import { createFireGlow } from './fire-light';
 import { ellipsoid } from './critter';
-import { instantiateAnimatedModel } from './model-loading';
 
 /**
  * The room inside every cabin (see decision 0055), built in code from the
@@ -541,17 +540,12 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   fireGlow.anchor.position.set(front - 0.25, 0.55, hearth.z);
   if (!canvasHome) group.add(fireGlow.anchor);
   disposers.push(() => fireGlow.dispose());
-  let flameMixer: THREE.AnimationMixer | null = null;
-  let hearthFlame: THREE.Object3D | null = null;
-  const flameTemplate = flameModelTemplate();
-  if (!canvasHome && flameTemplate !== undefined) {
-    const flame = instantiateAnimatedModel(flameTemplate);
-    flame.root.position.set(hearth.x - 0.02, 0.06, hearth.z);
-    flame.root.scale.setScalar(0.7);
-    for (const action of flame.actions) action.play();
-    flameMixer = flame.mixer;
-    hearthFlame = flame.root;
-    group.add(flame.root);
+  const flame = canvasHome ? null : createFlame();
+  const hearthFlame = flame?.root;
+  if (hearthFlame) {
+    hearthFlame.position.set(hearth.x - 0.02, 0.06, hearth.z);
+    hearthFlame.scale.setScalar(0.7);
+    group.add(hearthFlame);
   }
 
   /* -------------------------------------------------------------------- */
@@ -940,7 +934,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     update(deltaSeconds, daylight) {
       lid.rotation.x +=
         ((chestOpen ? -0.95 : 0) - lid.rotation.x) * (1 - Math.exp(-deltaSeconds * 9));
-      flameMixer?.update(deltaSeconds);
+      flame?.update(deltaSeconds);
       fireGlow.update(deltaSeconds);
       // The fire and the lamp matter far more once the windows go dark.
       const night = 1 - daylight;
@@ -955,7 +949,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     },
     dispose() {
       for (const dispose of disposers) dispose();
-      flameMixer?.stopAllAction();
+      flame?.dispose();
     },
   };
 }
