@@ -2,7 +2,7 @@
 // slot whose image file wasn't shipped with it (we skip huge normal maps
 // when pulling assets down — see docs/decisions on the first art pass), and
 // writes an optimized, Meshopt-compressed .glb. Run with:
-// node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb>
+// node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes]
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { dedup, prune, reorder, weld } from '@gltf-transform/functions';
@@ -13,7 +13,9 @@ import { dirname, resolve } from 'node:path';
 
 const [, , inputPath, outputPath] = process.argv;
 if (!inputPath || !outputPath) {
-  console.error('usage: node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb>');
+  console.error(
+    'usage: node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes]',
+  );
   process.exit(1);
 }
 
@@ -78,7 +80,14 @@ if (strippedCount > 0) {
   console.log(`stripped ${strippedCount} normal-texture reference(s) with no source file`);
 }
 
-await document.transform(prune(), dedup(), weld(), reorder({ encoder: MeshoptEncoder }));
+// Runtime materials may supply textures absent from the authoring material.
+const keepAttributes = process.argv.includes('--keep-attributes');
+await document.transform(
+  prune({ keepAttributes }),
+  dedup(),
+  weld(),
+  reorder({ encoder: MeshoptEncoder }),
+);
 
 const meshopt = document.createExtension(EXTMeshoptCompression).setRequired(true);
 void meshopt;

@@ -1520,3 +1520,15 @@ environment (`acorn-ash-web-staging` or `acorn-ash-web-production`), choose
 Deploy the secret change, then sign in with Google. Do this independently for each
 environment. Keep the address out of public configuration files. Missing secrets,
 unverified addresses, other accounts and test sign-in all leave the editor locked.
+
+### Inspecting polished trees
+
+Open `/?gallery=tree-models&season=summer` to inspect all five forest species.
+Use the species, shape, season, distant-mesh and trunk close-up controls;
+drag to orbit and scroll to zoom. The tree builders in `tools/art/trees.py`
+and `tools/art/deciduous.py` retain their Blender sources under `assets/trees/`.
+After exporting, compress each model with
+`node tools/import-model.mjs <export.gltf> <tree.glb> --keep-attributes`
+so the runtime bark texture retains its UVs. Run
+`node tools/check-pnw-trees.mjs` to check closed bark, texture coordinates,
+pivots, heights and near/distant triangle budgets.
