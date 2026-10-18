@@ -1581,3 +1581,12 @@ then `node tools/import-model.mjs /tmp/housing-details.gltf assets/housing/cabin
 Run `node tools/check-housing-details.mjs` to validate the exported modules.
 Spring petals and autumn leaf squares no longer fall through the scene; snow and
 summer pollen remain.
+
+### Combat confirmation and the Last Bell payoff
+
+Confirmed hits on skeletons give a small stationary ivory mark and a quiet impact;
+defeating one turns the mark gold. Whirlwinds coalesce simultaneous feedback, while
+existing flinches and camera settings remain in charge of motion. Live Bonehollow
+captain defeat and expedition completion ring a bronze bell and show the next
+objective or a return-home reward reminder. Loading an existing save does not
+replay the celebration. The effects volume slider controls these sounds.

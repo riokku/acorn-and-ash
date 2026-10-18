@@ -27,6 +27,12 @@ export interface SelectedTargetMark {
 }
 
 export class CombatFeed {
+  strikeAtMs = -Infinity;
+  strikeDefeated = false;
+  confirmStrike(defeated: boolean, nowMs: number): void {
+    this.strikeAtMs = nowMs;
+    this.strikeDefeated = defeated;
+  }
   target: SelectedTargetMark | null = null;
   /** Whether to draw anything at all: playing, out of doors, with the map shut. */
   showing = false;

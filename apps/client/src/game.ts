@@ -1,3 +1,5 @@
+import { bonehollowVictory } from './hud/bonehollow-victory';
+import { playConfirmedStrike, playLastBell } from './audio/feedback';
 import { preloadHousingDetails } from './scene/housing-details';
 import { preloadSkeletonTown } from './scene/skeleton-town';
 import { SKELETON_TOWN } from '@acorn/shared';
@@ -871,6 +873,8 @@ export class Game {
   private craftMenuOpen = false;
   private expedition: ExpeditionView = { ...emptyExpedition(), offers: [0, 1, 2], notice: 'none' };
   private expeditionPendingUntil = 0;
+  private bonehollowVictoryUntil = 0;
+  private lastConfirmedStrikeAt = -Infinity;
   private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
   private craftTab: CraftTabId = 'all';
   private discoveriesFound = 0;
@@ -2081,6 +2085,15 @@ export class Game {
         break;
       }
       case 'expedition': {
+        const victory = bonehollowVictory(this.expedition, message);
+        if (victory) {
+          const now = performance.now();
+          const banner: RaidBanner = { ...victory, tone: 'victory', key: ++this.raidBannersShown };
+          this.bonehollowVictoryUntil = now + RAID_BANNER_MS;
+          this.raidBanner = { banner, until: this.bonehollowVictoryUntil };
+          this.options.hud.publish({ raidBanner: banner });
+          playLastBell();
+        }
         this.expedition = {
           cycle: message.cycle,
           completed: message.completed,
@@ -2497,6 +2510,13 @@ export class Game {
     const ours = hit.netId === this.selfNetId;
     const from = hit.netId === null || ours ? undefined : this.remotePlayers.poseOf(hit.netId);
     this.raiders.confirmHit(hit, from, ours, this.listenerPoint());
+    const now = performance.now();
+    // Whirlwinds can confirm several victims together: one quiet cue per beat.
+    if (ours && now - this.lastConfirmedStrikeAt >= 70) {
+      this.lastConfirmedStrikeAt = now;
+      playConfirmedStrike(hit.heavy, hit.hitsLeft === 0);
+      this.combatFeed.confirmStrike(hit.hitsLeft === 0, now);
+    }
   }
 
   /**
@@ -2505,6 +2525,7 @@ export class Game {
    * somebody close enough that it is everybody's fight.
    */
   private hearAboutRaid(news: RaidNews): void {
+    if (news.kind === 'encounterCleared' && performance.now() < this.bonehollowVictoryUntil) return;
     const ours = news.targetNetId === this.selfNetId;
     const me = this.listenerPoint();
     const near = me !== null && Math.hypot(news.x - me.x, news.z - me.z) < RAID_HEARD_WITHIN;
