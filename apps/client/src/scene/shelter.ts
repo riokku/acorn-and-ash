@@ -1,3 +1,4 @@
+import { housingDetails } from './housing-details';
 import * as THREE from 'three/webgpu';
 import { color, texture } from 'three/tsl';
 import { artTexture } from '../art/textures';
@@ -25,9 +26,11 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
   });
   const group = new THREE.Group();
   group.name = kind;
+  const authoredCanvas = housingDetails(kind === 'tent' ? 'Tent' : 'Teepee');
+  group.add(authoredCanvas);
   type Point = readonly [number, number, number];
   const panel = (a: Point, b: Point, c: Point, material: THREE.Material = canvas): void => {
-    builder.add(material, fabricTriangle(a, b, c));
+    if (authoredCanvas.children.length === 0) builder.add(material, fabricTriangle(a, b, c));
   };
   const line = (a: Point, b: Point, radius: number, material: THREE.Material): void => {
     const start = new THREE.Vector3(...a),

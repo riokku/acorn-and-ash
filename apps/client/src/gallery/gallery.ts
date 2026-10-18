@@ -1,3 +1,4 @@
+import { preloadHousingDetails } from '../scene/housing-details';
 import { installBvhRaycasting } from '../scene/bvh';
 import { buildClearingScene } from '../scene/clearing';
 import { SKELETON_TOWN } from '@acorn/shared';
@@ -324,6 +325,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
 
   await Promise.all([
     preloadArtTextures(),
+    preloadHousingDetails(),
     preloadSkeletonTown(),
     preloadPropModels(),
     preloadFlowerModel(),

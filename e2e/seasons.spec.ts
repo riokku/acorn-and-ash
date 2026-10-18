@@ -54,17 +54,17 @@ function drifting(page: Page) {
   );
 }
 
-test('blossom petals drift in spring and nothing else does', async ({ page }) => {
+test('spring has no falling square petals', async ({ page }) => {
   await enterWorld(page, 'season=spring');
-  await expect.poll(async () => (await drifting(page)).petals).toBeGreaterThan(30);
+  await expect.poll(async () => (await drifting(page)).petals).toBe(0);
   const air = await drifting(page);
   expect(air.leaves).toBe(0);
   expect(air.snow).toBe(0);
 });
 
-test('leaves fall in autumn and nothing else does', async ({ page }) => {
+test('autumn has no falling square leaves', async ({ page }) => {
   await enterWorld(page, 'season=autumn');
-  await expect.poll(async () => (await drifting(page)).leaves).toBeGreaterThan(30);
+  await expect.poll(async () => (await drifting(page)).leaves).toBe(0);
   const air = await drifting(page);
   expect(air.petals).toBe(0);
   expect(air.snow).toBe(0);

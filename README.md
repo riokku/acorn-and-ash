@@ -264,7 +264,7 @@ skip the front page; previews and the real game show it. See
 The painting is alive and follows the seasons. Mist drifts, the lake glints,
 smoke rises from the chimney, the cabin window glows and the camera moves very
 slowly. In autumn the leaves turn gold and red and fall, in winter the trees go
-frosty, the lake freezes and light snow falls, and in spring there is blossom.
+frosty, the lake freezes and light snow falls, and spring brings fresh green foliage.
 It uses the same calendar as the game. To look at one season, add `?season=`
 to the address, such as `?season=winter` (also `spring`, `summer`, `autumn`).
 Someone who has asked their computer for less motion gets a still picture, and
@@ -603,16 +603,11 @@ so it changes colour slowly rather than all at once: the grass turns gold in
 autumn, the sky goes pale and cold in winter, and winter puts snow on the
 ground, the grass and the trees.
 
-Each season also fills the air with its own thing: blossom petals in spring,
-drifting golden pollen on summer days, falling leaves in autumn and snowflakes
-in winter. They fade in over the last day and a half of the season before and
-fade out over the last day and a half of their own, so the first leaves fall
-while it is still summer. Wind makes the leaves come thicker, and snow falls
-more heavily when it is also raining. In winter the snow takes the place of
-the rain streaks. They are a small fixed pool that follows you, so they cost
-almost nothing; they stay outdoors only, and nothing falls if your computer
-asks for reduced motion (`art/season-fall.ts` holds the rules,
-`scene/season-fall.ts` draws them).
+Golden pollen drifts on summer days and snowflakes fall in winter. These fade
+with the season transition. Spring petals and autumn leaf squares are disabled.
+Snow falls more heavily during precipitation and replaces rain streaks in winter.
+The bounded particle pools remain outdoors only and respect reduced motion
+(`art/season-fall.ts` holds the rules, `scene/season-fall.ts` draws them).
 
 Some winters now have a three-day blizzard: heavier, wind-driven snow, reduced
 visibility and 22% slower outdoor walking. Winter ice remains throughout the
@@ -1564,3 +1559,14 @@ node tools/import-model.mjs /tmp/bonehollow.gltf assets/settlements/bonehollow.g
 pnpm exec prettier --write packages/shared/src/data/skeleton-town-solids.json
 node tools/check-skeleton-town.mjs
 ```
+
+### Woodland housing finish
+
+Inspect `/?gallery=tent`, `/?gallery=teepee`, `/?gallery=cabin`, and
+`/?gallery=largeCabin` for shaped canvas, cedar roofing and finished joinery.
+The shared Blender kit keeps entrances, storage and terrain-fitting foundations
+unchanged. Rebuild it with `blender -b --threads 2 --python tools/art/housing_details.py -- /tmp/housing-details.gltf`,
+then `node tools/import-model.mjs /tmp/housing-details.gltf assets/housing/cabin-details.glb`.
+Run `node tools/check-housing-details.mjs` to validate the exported modules.
+Spring petals and autumn leaf squares no longer fall through the scene; snow and
+summer pollen remain.

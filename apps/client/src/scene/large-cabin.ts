@@ -1,3 +1,4 @@
+import { housingDetails } from './housing-details';
 import * as THREE from 'three/webgpu';
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
@@ -11,6 +12,7 @@ export function createLargeCabin(): Cabin {
   const group = new THREE.Group();
   group.name = 'large-cabin';
   group.add(cabin.group);
+  group.add(housingDetails('Porch'));
   const builder = new ModelBuilder();
   const posts = new ModelBuilder();
   const step = new ModelBuilder();

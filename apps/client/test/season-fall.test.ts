@@ -5,16 +5,11 @@ import { SEASONS } from '@acorn/shared';
 import { FALL_OF_SEASON, fallFor, rainShareFor } from '../src/art/season-fall';
 
 describe('what drifts through the air', () => {
-  it('has a different thing for every season', () => {
-    const kinds = SEASONS.map((season) => FALL_OF_SEASON[season]);
-    expect(new Set(kinds).size).toBe(SEASONS.length);
-  });
-
-  it('is petals in spring, pollen in summer, leaves in autumn and snow in winter', () => {
+  it('keeps pollen and snow while leaving spring and autumn clear', () => {
     expect(FALL_OF_SEASON).toEqual({
-      spring: 'petals',
+      spring: null,
       summer: 'pollen',
-      autumn: 'leaves',
+      autumn: null,
       winter: 'snow',
     });
   });
@@ -25,7 +20,7 @@ describe('fallFor', () => {
     expect(fallFor({ from: 'autumn', to: 'winter', amount: 0 })).toEqual({
       petals: 0,
       pollen: 0,
-      leaves: 1,
+      leaves: 0,
       snow: 0,
     });
   });
@@ -39,21 +34,23 @@ describe('fallFor', () => {
     });
   });
 
-  it('trades one for the other halfway through, with leaves still falling as the first snow comes', () => {
+  it('introduces snow without reintroducing square leaves', () => {
     const halfway = fallFor({ from: 'autumn', to: 'winter', amount: 0.5 });
-    expect(halfway.leaves).toBeCloseTo(0.5);
+    expect(halfway.leaves).toBe(0);
     expect(halfway.snow).toBeCloseTo(0.5);
     expect(halfway.petals).toBe(0);
     expect(halfway.pollen).toBe(0);
   });
 
-  it('always adds up to exactly one pool, so the air is never empty or crowded between seasons', () => {
+  it('never draws the removed petals or leaves, including seasonal transitions', () => {
     for (const from of SEASONS) {
       const to = SEASONS[(SEASONS.indexOf(from) + 1) % SEASONS.length]!;
       for (let step = 0; step <= 10; step++) {
         const amounts = fallFor({ from, to, amount: step / 10 });
         const total = amounts.petals + amounts.pollen + amounts.leaves + amounts.snow;
-        expect(total).toBeCloseTo(1);
+        expect(total).toBeLessThanOrEqual(1);
+        expect(amounts.petals).toBe(0);
+        expect(amounts.leaves).toBe(0);
       }
     }
   });

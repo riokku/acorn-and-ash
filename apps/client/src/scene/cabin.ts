@@ -1,3 +1,4 @@
+import { housingDetails } from './housing-details';
 import { createLogsModel } from './ground-items';
 import * as THREE from 'three/webgpu';
 
@@ -125,6 +126,7 @@ export function createCabin(logCapacity = 20): Cabin {
   addChimney(builder, supports, cobbles, stone);
 
   const model = builder.build();
+  model.group.add(housingDetails('Cabin'));
   const base = supports.build();
   const woodpile = createLogsModel(logCapacity, true);
   woodpile.show(0);
