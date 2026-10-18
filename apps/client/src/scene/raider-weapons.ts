@@ -141,6 +141,7 @@ function buildWeapon(kind: RaiderKindId): CharacterWeapon {
         parts: blade({ length: 0.46, grip: 0.11, width: 0.055, guard: 0.12, steel: STEEL }),
         length: 0.46,
       };
+    case 'captain':
     case 'sentinel':
       return {
         parts: blade({ length: 1.14, grip: 0.22, width: 0.14, guard: 0.35, steel: 0x8ea79c }),

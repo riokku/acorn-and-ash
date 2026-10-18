@@ -13,7 +13,7 @@ export function creatureClothingDrop(
 ): (typeof BASIC_CLOTHING)[number] | null {
   if (kind === 'curiousRaccoon') return null;
   const tier =
-    kind === 'sentinel' || kind === 'woodlandGuardian'
+    kind === 'sentinel' || kind === 'captain' || kind === 'woodlandGuardian'
       ? 'boss'
       : source === 'raider' || kind === 'maskedRaccoon'
         ? 'threat'

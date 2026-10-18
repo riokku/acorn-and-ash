@@ -10,7 +10,7 @@ export const TOWN_DISTRICTS = [
   { name: 'gate', x: 0, z: 17, lineup: ['minion', 'warrior', 'minion'] },
   { name: 'market', x: -14, z: -1, lineup: ['rogue', 'minion', 'rogue'] },
   { name: 'graveyard', x: 14, z: -2, lineup: ['minion', 'mage', 'minion'] },
-  { name: 'hall', x: 0, z: -18, lineup: ['warrior', 'sentinel', 'mage', 'warrior'] },
+  { name: 'hall', x: 0, z: -18, lineup: ['warrior', 'captain', 'mage', 'warrior'] },
 ] as const satisfies readonly {
   name: string;
   x: number;

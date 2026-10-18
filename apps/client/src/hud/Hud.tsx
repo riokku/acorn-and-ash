@@ -1,3 +1,4 @@
+import { BonehollowTrail } from './BonehollowTrail';
 import { FirePanel } from './FirePanel';
 import type { FireRequest } from '@acorn/shared';
 import { characterStats, ITEM_KINDS } from '../item-catalog';
@@ -180,6 +181,13 @@ export function Hud({
     <>
       {/* First, so it sits under everything else: it is part of the world, not a panel. */}
       <CombatOverlay feed={combatFeed} />
+      {showingWorld &&
+      !state.inventoryOpen &&
+      !state.characterOpen &&
+      !state.craftMenuOpen &&
+      !state.buildMenuOpen ? (
+        <BonehollowTrail state={state} />
+      ) : null}
       {showingWorld &&
       !state.inventoryOpen &&
       !state.characterOpen &&

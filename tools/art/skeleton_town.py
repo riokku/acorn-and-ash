@@ -103,20 +103,20 @@ house('Apothecary',-23,-13,yaw=math.pi/2,roof=False)
 house('CryptHouse',23,-16,yaw=-math.pi/2)
 house('BellHall',0,-26,w=9,d=5,roof=False)
 # Central bell scaffold; open below, so the square stays traversable.
-for side in [-1,1]:box('BellTower.post',side*2,3.5,-24,.35,7,.35,trim)
-box('BellTower.crossbar',0,6.8,-24,4.6,.35,.4,trim)
-orb('BellTower.bell',0,5.6,-24,.68,.8,.68,iron)
-box('BellTower.chain',0,6.3,-24,.07,.9,.07,iron,solid=False)
-skull('BellTower.crown',0,7.15,-24,.5)
+for side in [-1,1]:box('BellTower.post',side*2,5.8,-24,.45,11.6,.45,trim)
+box('BellTower.crossbar',0,11.5,-24,4.9,.45,.5,trim)
+orb('BellTower.clapper',0,8.9,-24,.22,.4,.22,iron)
+box('BellTower.chain',0,10.8,-24,.09,1.2,.09,iron,solid=False)
+skull('BellTower.crown',0,12,-24,.7)
 # Bone gate: broad exits on either side, and a clear ten-metre central road.
 for side in [-1,1]:
-    box('Gate.pillar',side*5,1.7,28,1,3.4,1,stone)
-    box('Gate.cap',side*5,3.5,28,1.3,.25,1.3,bone)
-    skull('Gate.skull',side*5,4.05,28,.55)
-box('Gate.arch',0,3.2,28,10,.25,.35,trim)
-box('Gate.sign',0,2.85,28,3.8,.55,.12,wood,solid=False)
+    box('Gate.pillar',side*5,2.6,28,1,5.2,1,stone)
+    box('Gate.cap',side*5,5.3,28,1.3,.25,1.3,bone)
+    skull('Gate.skull',side*5,5.85,28,.55)
+box('Gate.arch',0,5,28,10,.3,.4,trim)
+box('Gate.sign',0,4.65,28,3.8,.55,.12,wood,solid=False)
 # The Blender text is part of the model, keeping the town readable without a HUD.
-bpy.ops.object.text_add(location=(-1.65,-28.09,2.65),rotation=(math.pi/2,0,0))
+bpy.ops.object.text_add(location=(-1.65,-28.09,4.45),rotation=(math.pi/2,0,0))
 t=bpy.context.object;t.name='Gate.name';t.data.body='BONEHOLLOW';t.data.size=.43;t.data.resolution_u=1;t.data.extrude=.005;t.data.materials.append(bone)
 bpy.ops.object.convert(target='MESH');modules.setdefault('Gate',[]).append(bpy.context.object)
 # Abandoned market stalls with staggered awnings.
@@ -165,6 +165,48 @@ for name,mat in [('TownWatch',iron),('TownScavenger',cloth)]:
     box(name+'.band',0,0,.02,.48,.07,.42,trim,solid=False)
     if name=='TownWatch':box(name+'.crest',0,.24,0,.07,.28,.35,iron,solid=False)
     else:orb(name+'.badge',0,.07,.22,.07,.07,.025,bone)
+
+# The Last Bell: a hollow bronze casting, visible above the ruined hall.
+bronze=material('Bell bronze',(.35,.22,.09))
+soul=material('Soul lantern glass',(.06,.65,.54),2.3)
+vertices=[];faces=[]
+profile=[(8.9,1.14),(9.05,1.1),(9.4,.78),(9.9,.63),(10.3,.38),(10.4,.08)]
+for yy,r in profile:
+    for i in range(16):
+        a=i*math.tau/16;vertices.append((math.cos(a)*r,24-math.sin(a)*r,yy))
+for ring in range(len(profile)-1):
+    for i in range(16):
+        j=(i+1)%16;faces.append((ring*16+i,ring*16+j,(ring+1)*16+j,(ring+1)*16+i))
+mesh=bpy.data.meshes.new('Last bell');mesh.from_pydata(vertices,[],faces);mesh.update()
+ob=bpy.data.objects.new('LastBell',mesh);bpy.context.collection.objects.link(ob);ob.data.materials.append(bronze)
+modules['LastBell']=[ob]
+# Watch towers frame the approach without closing the central road.
+for side,name in [(-1,'WestWatchtower'),(1,'EastWatchtower')]:
+    cx=side*14;cz=26
+    for dx in [-1.5,1.5]:
+        for dz in [-1.5,1.5]:box(name+'.pier',cx+dx,3.7,cz+dz,.55,7.4,.55,stone)
+    for yy in [2.5,5.5,7.1]:
+        box(name+'.beam',cx,yy,cz+1.5,3.5,.22,.3,trim)
+        box(name+'.beam',cx,yy,cz-1.5,3.5,.22,.3,trim)
+    box(name+'.platform',cx,6.5,cz,3.5,.2,3.5,wood)
+    for dx in [-1.1,0,1.1]:box(name+'.battlement',cx+dx,7.6,cz+1.5,.6,.9,.5,stone)
+    skull(name+'.crest',cx,8.3,cz+1.5,.55)
+    box(name+'.banner',cx,5.5,cz+1.72,1.15,2,.06,cloth,solid=False)
+# Spectral lamps and watch standards guide the way to the captain's arena.
+for i,(x,z) in enumerate([(-4,21),(4,21),(-5,-14),(5,-14)]):
+    name='SoulLanterns'
+    box(name+'.post',x,1.3,z,.18,2.6,.18,trim)
+    box(name+'.base',x,2.6,z,.6,.15,.6,iron)
+    orb(name+'.glass',x,2.95,z,.25,.4,.25,soul)
+    box(name+'.cap',x,3.32,z,.62,.15,.62,iron)
+for side in [-1,1]:
+    x=side*4.7
+    box('HallStandards.post',x,2.5,-21,.18,5,.18,trim)
+    box('HallStandards.banner',x,3.25,-20.9,1.1,2.7,.05,cloth,solid=False)
+    skull('HallStandards.crest',x,4.9,-21,.4)
+# A monument at the gate repeats the watch's warning from the home board.
+box('WarningStone.base',-3.3,.9,30,1.6,1.8,.5,stone)
+skull('WarningStone.seal',-3.3,1.5,30.28,.26)
 # Join each module for compact scene traversal, preserving material slots.
 for name,objects in modules.items():
     bpy.ops.object.select_all(action='DESELECT')

@@ -1,3 +1,4 @@
+import { preloadWornGearModels } from './worn-gear-models';
 import type { RaiderKindId } from '@acorn/shared';
 
 import { loadAnimatedModel, type AnimatedModel } from './model-loading';
@@ -17,6 +18,7 @@ const MODEL_URLS: Record<RaiderKindId, string> = {
   rogue: rogueUrl,
   warrior: warriorUrl,
   sentinel: warriorUrl,
+  captain: warriorUrl,
   mage: mageUrl,
 };
 
@@ -25,7 +27,7 @@ let preloadPromise: Promise<void> | null = null;
 
 /** Fetches every skeleton up front. Safe to call as often as you like. */
 export function preloadRaiderModels(): Promise<void> {
-  preloadPromise ??= loadAll();
+  preloadPromise ??= Promise.all([loadAll(), preloadWornGearModels()]).then(() => {});
   return preloadPromise;
 }
 
@@ -37,7 +39,7 @@ export function raiderModelTemplate(kind: RaiderKindId): AnimatedModel | undefin
 async function loadAll(): Promise<void> {
   await Promise.all(
     (Object.entries(MODEL_URLS) as Array<[RaiderKindId, string]>)
-      .filter(([kind]) => kind !== 'sentinel')
+      .filter(([kind]) => kind !== 'sentinel' && kind !== 'captain')
       .map(async ([kind, url]) => {
         try {
           templates.set(kind, await loadAnimatedModel(url));
@@ -49,5 +51,8 @@ async function loadAll(): Promise<void> {
       }),
   );
   const warrior = templates.get('warrior');
-  if (warrior !== undefined) templates.set('sentinel', warrior);
+  if (warrior !== undefined) {
+    templates.set('sentinel', warrior);
+    templates.set('captain', warrior);
+  }
 }

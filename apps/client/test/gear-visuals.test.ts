@@ -1,7 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { beforeEach, expect, it, vi } from 'vitest';
-vi.mock('../src/scene/worn-gear-models', () => ({ wornGearModelTemplate: vi.fn() }));
-import { wornGearModelTemplate } from '../src/scene/worn-gear-models';
+vi.mock('../src/scene/worn-gear-models', () => ({
+  wornGearModelTemplate: vi.fn(),
+  createWatchCaptainHelm: vi.fn(),
+}));
+import { wornGearModelTemplate, createWatchCaptainHelm } from '../src/scene/worn-gear-models';
 import { createGearVisuals } from '../src/scene/gear-visuals';
 
 function part(name: string, x = 0.2, bone = new THREE.Bone()) {
@@ -95,4 +98,29 @@ it('fits a low-poly cap to the head and keeps it attached through animation and 
   expect(extraMeshes(root, [head.mesh])).toHaveLength(2);
   visuals.dispose();
   expect(extraMeshes(root, [head.mesh])).toHaveLength(0);
+});
+
+it('attaches the Last Watch helm to the animated head without disposing shared assets', () => {
+  const root = new THREE.Group();
+  const head = new THREE.Bone();
+  head.name = 'head';
+  root.add(head);
+  const helm = new THREE.Group();
+  const geometry = new THREE.BoxGeometry();
+  const material = new THREE.MeshStandardMaterial();
+  helm.add(new THREE.Mesh(geometry, material));
+  const disposeGeometry = vi.spyOn(geometry, 'dispose');
+  const disposeMaterial = vi.spyOn(material, 'dispose');
+  vi.mocked(createWatchCaptainHelm).mockReturnValue(helm);
+  const visuals = createGearVisuals(root, undefined, 1);
+  visuals.setWorn({ helm: 'watchCaptainHelm' });
+  expect(helm.parent).toBe(head);
+  head.position.x = 2;
+  root.updateMatrixWorld(true);
+  expect(helm.getWorldPosition(new THREE.Vector3()).x).toBe(2);
+  visuals.setWorn({});
+  expect(helm.parent).toBeNull();
+  visuals.dispose();
+  expect(disposeGeometry).not.toHaveBeenCalled();
+  expect(disposeMaterial).not.toHaveBeenCalled();
 });

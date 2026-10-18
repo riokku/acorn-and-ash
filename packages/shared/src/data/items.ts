@@ -57,7 +57,8 @@ export type ItemId =
   | 'winterJacket'
   | 'woolCap'
   | 'linenShirt'
-  | 'workTrousers';
+  | 'workTrousers'
+  | 'watchCaptainHelm';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -478,6 +479,19 @@ export const ITEM_KINDS = {
     keepOnKnockout: false,
     equippable: false,
   },
+  watchCaptainHelm: {
+    id: 'watchCaptainHelm',
+    displayName: 'Last Watch helm',
+    pluralName: 'Last Watch helms',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x86b4ad,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
   knightHelmet: {
     id: 'knightHelmet',
     displayName: "Knight's helmet",
@@ -795,6 +809,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'woolCap',
   'linenShirt',
   'workTrousers',
+  'watchCaptainHelm',
 ];
 
 export function itemIndex(id: ItemId): number {

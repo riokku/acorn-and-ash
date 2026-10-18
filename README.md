@@ -1547,6 +1547,17 @@ map. Its gate, market, graveyard and bell hall house thirteen skeletons in four
 independent groups. Bring equipment: residents remain active during daylight.
 The surrounding wilderness encounters keep their existing behaviour.
 
+Accept **The Last Bell of Bonehollow** from any home expedition board. Find the
+settlement, help defeat six watch skeletons, then defeat the Captain of the Last
+Bell at the northern hall. He attacks in two combinations followed by a charged
+whirlwind, with longer combinations below half health. Return home to claim the
+rare Last Watch helm (+10 Protection, +5 Vitality, +10 Warmth), three forest stews
+and six iron ore. Progress survives reconnecting; the helm is kept on knockout.
+The board always offers this outing alongside two rotating expeditions.
+Watchtowers, spectral lanterns and the enlarged bronze bell mark the approach.
+`/?gallery=skeleton-town&view=captain` gives a close look at the captain and helm.
+Inspect the player reward with `/?gallery=winter-gear&gear=last-watch-helm`.
+
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include
 `&view=gateway`, `&view=market`, `&view=graveyard` and `&view=bell-hall`.

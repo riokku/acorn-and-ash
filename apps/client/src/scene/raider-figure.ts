@@ -1,3 +1,4 @@
+import { createWatchCaptainHelm } from './worn-gear-models';
 import { townHeadwear } from './skeleton-town';
 import { inSkeletonTown } from '@acorn/shared';
 import { dressSentinel } from './sentinel-art';
@@ -175,6 +176,15 @@ export class RaiderFigure {
       weapon: raiderWeapon(kind),
     });
     if (kind === 'sentinel') dressSentinel(character);
+    if (kind === 'captain') {
+      const helm = createWatchCaptainHelm();
+      const head = character.group.getObjectByName('head');
+      if (helm && head) {
+        helm.scale.setScalar(1 / 0.6);
+        helm.position.y = 0.68;
+        head.add(helm);
+      }
+    }
     return new RaiderFigure(kind, character, parent, bursts);
   }
 

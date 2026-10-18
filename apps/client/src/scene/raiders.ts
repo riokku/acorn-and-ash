@@ -142,7 +142,8 @@ export class RaiderCrowd {
   }
 
   setMaximumHits(id: number, maxHits: number): void {
-    if (this.kinds.get(id) === 'sentinel') this.maximumHits.set(id, maxHits);
+    if (this.kinds.get(id) === 'sentinel' || this.kinds.get(id) === 'captain')
+      this.maximumHits.set(id, maxHits);
   }
 
   /** The raiders in a snapshot - only ever those - and nobody else's. */

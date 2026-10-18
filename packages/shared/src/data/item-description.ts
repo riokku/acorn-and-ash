@@ -5,6 +5,8 @@ import { ITEM_KINDS, type ItemId } from './items';
 import { cookedItemFor } from '../sim/cooking';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  watchCaptainHelm:
+    'The bronze-crested helm of Bonehollow’s fallen watch. Complete The Last Bell of Bonehollow and claim it at your home board. Wear it from the character screen (Z). Kept through knockout.',
   sentinelTrophy:
     'A personal reward for your first ruin sentinel victory. Place this carved crown inside or outside your home. Kept through knockout.',
   guardianTrophy:
