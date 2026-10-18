@@ -1,3 +1,4 @@
+import { createSkeletonTown } from './skeleton-town';
 import * as THREE from 'three/webgpu';
 import type { EncounterSite, Terrain } from '@acorn/shared';
 import { ModelBuilder, placed, plankGeometry, stoneGeometry } from '../art/shapes';
@@ -11,6 +12,7 @@ export function createEncounterLandmarks(sites: readonly EncounterSite[], terrai
   const wood = paintedMaterial('wood', { tint: 0x9a8060, roughness: 1 });
   const cloth = paintedMaterial('burlap', { tint: 0xa4d9cf, roughness: 1 });
   for (const site of sites) {
+    if (site.townDistrict) continue;
     const y = terrain.heightAt(site.x, site.z);
     if (site.kind === 'ruins') {
       for (const dx of [-2.1, 2.1])
@@ -93,5 +95,6 @@ export function createEncounterLandmarks(sites: readonly EncounterSite[], terrai
   }
   const model = builder.build();
   model.group.name = 'forest-encounter-landmarks';
+  if (sites.some((site) => site.townDistrict)) model.group.add(createSkeletonTown(terrain));
   return model;
 }

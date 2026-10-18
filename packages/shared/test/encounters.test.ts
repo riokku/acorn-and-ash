@@ -200,7 +200,7 @@ describe('exploration skeleton encounters', () => {
       wilderness = buildWilderness(seed, terrain);
     const colliders = [...clearing.colliders, ...wilderness.colliders];
     const sites = buildEncounterSites(seed, terrain, colliders, clearing.water);
-    expect(sites).toHaveLength(6);
+    expect(sites.filter((site) => !site.townDistrict)).toHaveLength(6);
     expect(buildEncounterSites(seed, terrain, colliders, clearing.water)).toEqual(sites);
     expect(new Set(sites.map((s) => s.kind)).size).toBe(3);
     expect(sites.every((s) => Math.hypot(s.x, s.z) >= 62)).toBe(true);

@@ -1,3 +1,4 @@
+import { TOWN_DISTRICTS } from '../world/skeleton-town';
 import { sentinelToughness } from '../data/raiders';
 /**
  * Skeleton raids (see decision 0063).
@@ -866,7 +867,9 @@ export class RaidDirector {
 
   private wakeEncounters(night: boolean): void {
     if (this.tick % TICK_HZ !== 0) return;
-    let active = [...this.raids.values()].filter((raid) => raid.encounter !== undefined).length;
+    let active = [...this.raids.values()].filter(
+      (raid) => raid.encounter !== undefined && !raid.encounter.townDistrict,
+    ).length;
     for (const site of this.encounterSites) {
       const existing = [...this.raids.values()].find((raid) => raid.encounter?.id === site.id);
       if (existing !== undefined) {
@@ -880,12 +883,21 @@ export class RaidDirector {
           this.giveUp(existing);
         continue;
       }
-      if (active >= ENCOUNTER_RULES.maxActive) continue;
+      if (site.townDistrict) {
+        const townActive = [...this.raids.values()].filter(
+          (raid) => raid.encounter?.townDistrict,
+        ).length;
+        if (townActive >= TOWN_DISTRICTS.length) continue;
+      } else if (active >= ENCOUNTER_RULES.maxActive) continue;
       // Keep one exploration slot available for a night patrol.
       if (
+        !site.townDistrict &&
         site.kind !== 'patrol' &&
         [...this.raids.values()].filter(
-          (raid) => raid.encounter !== undefined && raid.encounter.kind !== 'patrol',
+          (raid) =>
+            raid.encounter !== undefined &&
+            !raid.encounter.townDistrict &&
+            raid.encounter.kind !== 'patrol',
         ).length >= 2
       )
         continue;
@@ -921,7 +933,10 @@ export class RaidDirector {
             Math.hypot(c.x - site.x, c.z - site.z) < Math.hypot(c.halfX, c.halfZ) + 2,
         );
       if (blocked) continue;
-      if (this.startRaid(0, ENCOUNTER_LINEUPS[site.kind], night, site) !== null) active++;
+      const lineup = site.townDistrict
+        ? TOWN_DISTRICTS.find((district) => district.name === site.townDistrict)!.lineup
+        : ENCOUNTER_LINEUPS[site.kind];
+      if (this.startRaid(0, lineup, night, site) !== null && !site.townDistrict) active++;
     }
   }
 
@@ -944,7 +959,13 @@ export class RaidDirector {
     const phase = this.tick / TICK_HZ;
     const index = Math.floor(phase / (site.kind === 'patrol' ? 9 : 14));
     const angle = site.yaw + (index * Math.PI) / 2 + (raider.id % 3) * 0.3;
-    const radius = site.kind === 'ruins' ? 0.9 : site.kind === 'wanderer' ? 2.5 : 5;
+    const radius = site.townDistrict
+      ? 2.2
+      : site.kind === 'ruins'
+        ? 0.9
+        : site.kind === 'wanderer'
+          ? 2.5
+          : 5;
     const spot = {
       x: site.x + Math.cos(angle) * radius,
       y: 0,

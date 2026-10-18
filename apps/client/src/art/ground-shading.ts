@@ -1,3 +1,4 @@
+import { townPathCoverage } from '@acorn/shared';
 /**
  * How the ground looks at any spot, worked out once from the world itself
  * rather than painted by hand (see decision 0053).
@@ -183,6 +184,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         (1 - smoothstep(1.4, 2.4, slope));
       // Steep hillsides lose their grass too, and rock and snow have none.
       const floor = Math.max(
+        townPathCoverage(x, z),
         forestTrailCoverage(x, z),
         sand,
         clamp01(

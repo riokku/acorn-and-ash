@@ -1,3 +1,5 @@
+import { townHeadwear } from './skeleton-town';
+import { inSkeletonTown } from '@acorn/shared';
 import { dressSentinel } from './sentinel-art';
 import * as THREE from 'three/webgpu';
 
@@ -78,6 +80,8 @@ export class RaiderFigure {
   readonly bar: RaiderHealthBar;
   private readonly eyes: THREE.MeshStandardMaterial[] = [];
   private readonly bones: THREE.MeshStandardMaterial[] = [];
+  private readonly townHat: THREE.Object3D | null;
+  private townResident: boolean | null = null;
   private readonly eyeColor = new THREE.Color();
   private readonly eyeIntensity: number = 1;
   private readonly trail = new WeaponTrail(TRAIL_COLOR);
@@ -113,6 +117,12 @@ export class RaiderFigure {
     private readonly bursts: ImpactBursts,
   ) {
     this.character = character;
+    const head = character.group.getObjectByName('head');
+    this.townHat = character.group.getObjectByName('bonehollow-headwear') ?? townHeadwear(kind);
+    if (this.townHat && head) {
+      head.add(this.townHat);
+      this.townHat.visible = false;
+    }
     character.group.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
       const material = child.material;
@@ -189,6 +199,8 @@ export class RaiderFigure {
     volume: number,
   ): MovePose | null {
     const group = this.character.group;
+    this.townResident ??= inSkeletonTown(at.x, at.z, 12);
+    if (this.townHat) this.townHat.visible = this.townResident;
     group.position.set(at.x, at.y, at.z);
     group.rotation.y = at.yaw;
     this.lastFrame = frame;
