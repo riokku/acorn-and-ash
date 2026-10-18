@@ -88,6 +88,7 @@ export function CombatOverlay({ feed }: { readonly feed: CombatFeed }): React.JS
 function worthDrawing(feed: CombatFeed, now: number): boolean {
   if (!feed.showing) return false;
   return (
+    now - feed.strikeAtMs < 320 ||
     feed.target !== null ||
     feed.threats.length > 0 ||
     now - feed.hurtAtMs < Math.max(HURT_FLASH_MS, HURT_ARC_MS) ||
@@ -102,6 +103,24 @@ function drawCombat(
   height: number,
   now: number,
 ): void {
+  const strikeAge = now - feed.strikeAtMs;
+  if (strikeAge >= 0 && strikeAge < 320) {
+    // Small stationary confirmation, no extra camera motion or screen flash.
+    context.save();
+    context.globalAlpha = 1 - strikeAge / 320;
+    context.strokeStyle = feed.strikeDefeated ? '#e5bd73' : '#eee8d4';
+    context.lineWidth = feed.strikeDefeated ? 3 : 2;
+    const x = width / 2,
+      y = height * 0.46;
+    context.beginPath();
+    for (const dx of [-1, 1])
+      for (const dy of [-1, 1]) {
+        context.moveTo(x + dx * 5, y + dy * 5);
+        context.lineTo(x + dx * 10, y + dy * 10);
+      }
+    context.stroke();
+    context.restore();
+  }
   if (feed.health > 0 && feed.health <= LOW_HEALTH) {
     redEdges(context, width, height, 0.14 + 0.16 * heartbeat(now));
   }

@@ -261,7 +261,10 @@ export function createGearVisuals(
     else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
       buildSkin(slot, item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
-    for (const object of objects) object.userData.gearItem = item;
+    for (const object of objects)
+      object.traverse((part) => {
+        part.userData.gearItem = item;
+      });
     return objects;
   };
 

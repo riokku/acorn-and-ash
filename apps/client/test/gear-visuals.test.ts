@@ -115,6 +115,7 @@ it('attaches the Last Watch helm to the animated head without disposing shared a
   const visuals = createGearVisuals(root, undefined, 1);
   visuals.setWorn({ helm: 'watchCaptainHelm' });
   expect(helm.parent).toBe(head);
+  expect(helm.children[0]!.userData.gearItem).toBe('watchCaptainHelm');
   head.position.x = 2;
   root.updateMatrixWorld(true);
   expect(helm.getWorldPosition(new THREE.Vector3()).x).toBe(2);

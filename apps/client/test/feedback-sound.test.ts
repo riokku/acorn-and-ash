@@ -54,7 +54,13 @@ vi.mock('../src/audio/sound', () => ({
   soundContext: audio.getContext,
   noiseBuffer: () => null,
 }));
-import { playCollection, playPickupRefused, playTreeLanding } from '../src/audio/feedback';
+import {
+  playCollection,
+  playPickupRefused,
+  playTreeLanding,
+  playConfirmedStrike,
+  playLastBell,
+} from '../src/audio/feedback';
 
 beforeEach(() => {
   audio.peaks.length = 0;
@@ -83,6 +89,8 @@ describe('feedback audio', () => {
   it('keeps muted effects and distant landings silent without creating voices', () => {
     audio.volume.mockReturnValue(0);
     playPickupRefused();
+    playConfirmedStrike(true, true);
+    playLastBell();
     playTreeLanding(1);
     playCollection('log', true);
     audio.volume.mockReturnValue(1);
@@ -105,4 +113,17 @@ describe('feedback audio', () => {
       expect(voice.disconnect).toHaveBeenCalled();
     }
   });
+});
+
+it('keeps confirmed impacts restrained and releases every bell voice', () => {
+  playConfirmedStrike(false, false);
+  const light = audio.peaks[0]!;
+  audio.peaks.length = 0;
+  playConfirmedStrike(true, true);
+  expect(audio.peaks[0]).toBeGreaterThan(light);
+  playLastBell();
+  for (const voice of audio.ended) {
+    voice.onended?.();
+    expect(voice.disconnect).toHaveBeenCalled();
+  }
 });

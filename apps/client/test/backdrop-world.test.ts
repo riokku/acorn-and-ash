@@ -36,15 +36,15 @@ function showing(world: BackdropWorld, kind: FallKind): number {
 }
 
 describe('what falls in each season', () => {
-  const expected: Record<SeasonId, FallKind> = {
-    spring: 'petals',
+  const expected: Record<SeasonId, FallKind | null> = {
+    spring: null,
     summer: 'pollen',
-    autumn: 'leaves',
+    autumn: null,
     winter: 'snow',
   };
 
   for (const season of SEASONS) {
-    it(`has ${expected[season]} in the air in ${season}, and nothing else`, () => {
+    it(`has ${expected[season] ?? 'no falling particles'} in the air in ${season}, and nothing else`, () => {
       const world = worldIn(season);
       for (const kind of Object.keys(FALL_COUNTS) as FallKind[]) {
         if (kind === expected[season]) expect(showing(world, kind)).toBeGreaterThan(10);
@@ -65,7 +65,8 @@ describe('what falls in each season', () => {
       reducedMotion: false,
     });
     expect(showing(early, 'snow')).toBeLessThan(showing(late, 'snow'));
-    expect(showing(early, 'leaves')).toBeGreaterThan(showing(late, 'leaves'));
+    expect(showing(early, 'leaves')).toBe(0);
+    expect(showing(late, 'leaves')).toBe(0);
   });
 
   it('agrees with how much of each there is in the game itself', () => {

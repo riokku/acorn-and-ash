@@ -98,3 +98,32 @@ function envelope(gain: GainNode, start: number, duration: number, volume: numbe
   gain.gain.linearRampToValueAtTime(volume * effectsVolume(), start + 0.008);
   gain.gain.exponentialRampToValueAtTime(0.00001, start + duration);
 }
+
+/** Brief low body beneath the existing bone/armour sound; only a confirmed own hit. */
+export function playConfirmedStrike(heavy: boolean, defeated: boolean): void {
+  if (effectsVolume() <= 0) return;
+  const context = soundContext();
+  if (!context) return;
+  tone(
+    context,
+    context.currentTime,
+    heavy ? 135 : 230,
+    defeated ? 48 : 90,
+    defeated ? 0.24 : heavy ? 0.14 : 0.07,
+    heavy ? 0.12 : 0.06,
+  );
+}
+
+/** A restrained bronze bell with a long tail for the Last Bell victory. */
+export function playLastBell(): void {
+  if (effectsVolume() <= 0) return;
+  const context = soundContext();
+  if (!context) return;
+  const at = context.currentTime;
+  for (const [pitch, volume, duration] of [
+    [196, 0.13, 2.8],
+    [392, 0.065, 2.1],
+    [531, 0.035, 1.4],
+  ] as const)
+    tone(context, at, pitch, pitch * 0.995, duration, volume);
+}
