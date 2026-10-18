@@ -24,7 +24,18 @@ const names = document
   .getRoot()
   .listNodes()
   .map((n) => n.getName());
-for (const required of ['Gate', 'BellHall', 'Graves', 'Market', 'TownWatch', 'TownScavenger'])
+for (const required of [
+  'Gate',
+  'BellHall',
+  'Graves',
+  'Market',
+  'TownWatch',
+  'TownScavenger',
+  'LastBell',
+  'WestWatchtower',
+  'EastWatchtower',
+  'SoulLanterns',
+])
   assert(names.includes(required), required);
 const solids = JSON.parse(
   await readFile(
@@ -36,8 +47,23 @@ assert(solids.length > 100 && solids.length < 400, 'Bounded collision footprint'
 for (const solid of solids) {
   assert(Object.values(solid).every(Number.isFinite));
   assert(solid.halfX > 0 && solid.halfY > 0 && solid.halfZ > 0);
-  assert(Math.abs(solid.x) < 30 && Math.abs(solid.z) < 30, 'Buildings fit the level shelf');
+  assert(Math.abs(solid.x) < 32 && Math.abs(solid.z) < 32, 'Buildings fit the level shelf');
 }
 console.log(
   `Bonehollow: ${total} triangles across modules; ${solids.length} shared collision boxes`,
 );
+
+const helm = await new NodeIO()
+  .registerExtensions(ALL_EXTENSIONS)
+  .registerDependencies({ 'meshopt.decoder': MeshoptDecoder })
+  .read(fileURLToPath(new URL('../assets/gear/last-watch-helm.glb', import.meta.url)));
+let helmTriangles = 0;
+for (const mesh of helm.getRoot().listMeshes()) {
+  for (const primitive of mesh.listPrimitives()) {
+    helmTriangles += primitive.getIndices().getCount() / 3;
+    for (const semantic of ['POSITION', 'NORMAL'])
+      assert(Array.from(primitive.getAttribute(semantic).getArray()).every(Number.isFinite));
+  }
+}
+assert(helmTriangles > 0 && helmTriangles <= 2000, 'Last Watch helm prop budget');
+console.log(`Last Watch helm: ${helmTriangles} triangles`);

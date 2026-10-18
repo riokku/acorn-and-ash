@@ -4,7 +4,9 @@ import type { HomeKind } from '../data/housing';
 import { cabinDoorstep, type HomePlacement } from '../world/home';
 import { hashSeed } from '../rng';
 
+export const BONEHOLLOW_EXPEDITION_ID = 8;
 export type ExpeditionEvent =
+  | { readonly kind: 'bonehollow'; readonly step: 'arrival' | 'watch' | 'captain' }
   | { readonly kind: 'gather'; readonly item: ItemId }
   | { readonly kind: 'chop' | 'fish' | 'defeat' }
   | { readonly kind: 'visit'; readonly site: DiscoveryKind };
@@ -141,6 +143,37 @@ export const EXPEDITIONS: readonly ExpeditionDefinition[] = [
       { item: 'stick', count: 8 },
     ],
   },
+  {
+    id: BONEHOLLOW_EXPEDITION_ID,
+    name: 'The Last Bell of Bonehollow',
+    hint: 'The watch’s last warning points southeast to Bonehollow. Enter through the skull gate, break the watch in the market and graveyard, then face the captain at the northern bell hall. His third attack is a whirlwind: retreat during the charge, then punish the recovery. Bring food and a weapon.',
+    tier: 0,
+    objectives: [
+      {
+        kind: 'bonehollow',
+        step: 'arrival',
+        goal: 1,
+        label: 'Find Bonehollow in the southeast forest',
+      },
+      {
+        kind: 'bonehollow',
+        step: 'watch',
+        goal: 6,
+        label: 'Help defeat six Bonehollow watch skeletons',
+      },
+      {
+        kind: 'bonehollow',
+        step: 'captain',
+        goal: 1,
+        label: 'Defeat the Captain of the Last Bell',
+      },
+    ],
+    rewards: [
+      { item: 'watchCaptainHelm', count: 1 },
+      { item: 'forestStew', count: 3 },
+      { item: 'ironOre', count: 6 },
+    ],
+  },
 ];
 export interface ExpeditionState {
   cycle: number;
@@ -210,9 +243,11 @@ export function expeditionOffers(
   owner: string,
 ): number[] {
   const tier = home === 'largeCabin' ? 3 : home === 'cabin' ? 2 : home === 'teepee' ? 1 : 0;
-  const eligible = EXPEDITIONS.filter((def) => def.tier <= tier).map((def) => def.id);
+  const eligible = EXPEDITIONS.filter(
+    (def) => def.id !== BONEHOLLOW_EXPEDITION_ID && def.tier <= tier,
+  ).map((def) => def.id);
   const start = hashSeed(seed, 'expeditions', owner, state.cycle) % eligible.length;
-  return [0, 1, 2].map((i) => eligible[(start + i) % eligible.length]!);
+  return [eligible[start]!, eligible[(start + 1) % eligible.length]!, BONEHOLLOW_EXPEDITION_ID];
 }
 export function progressExpedition(
   state: ExpeditionState,
@@ -227,6 +262,7 @@ export function progressExpedition(
     if (
       goal.kind !== event.kind ||
       ('item' in goal && (!('item' in event) || goal.item !== event.item)) ||
+      ('step' in goal && (!('step' in event) || goal.step !== event.step)) ||
       ('site' in goal && (!('site' in event) || goal.site !== event.site))
     )
       return;

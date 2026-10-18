@@ -1,5 +1,5 @@
 import { TOWN_DISTRICTS } from '../world/skeleton-town';
-import { sentinelToughness } from '../data/raiders';
+import { sentinelToughness, captainAttackPlan } from '../data/raiders';
 /**
  * Skeleton raids (see decision 0063).
  *
@@ -150,6 +150,7 @@ export interface RaidHost {
     position: Readonly<Vec3>,
     facingYaw: number,
     kind: RaiderKindId,
+    townDistrict?: string,
   ): void;
   dropLoot(item: ItemId, count: number, position: Readonly<Vec3>, facingYaw: number): void;
   /** Public bonus loot belongs to the creature, once, rather than to each contributor. */
@@ -238,6 +239,7 @@ interface RaiderRuntime {
   /** This attack's plan: a charged strike, or a combo this many swings long. */
   plannedStrike: boolean;
   plannedSwings: number;
+  attackNumber: number;
   /** Whether this attack has actually begun. */
   attackBegun: boolean;
   /** When it last had a turn to attack (or turned up), so the one kept waiting longest goes next. */
@@ -532,7 +534,7 @@ export class RaidDirector {
     const encounterRaid = this.raids.get(raider.raidId);
     if (encounterRaid?.encounter !== undefined && encounterRaid.targetNetId === 0)
       this.engageEncounter(encounterRaid, attackerNetId);
-    if (raider.kind === 'sentinel') this.listChanged = true;
+    if (raider.kind === 'sentinel' || raider.kind === 'captain') this.listChanged = true;
     const hitsLeft = Math.max(0, Math.ceil(this.maxHitsOf(raider.id) - raider.damageTaken));
     const heavy = weight > RAIDER_BLOW_WEIGHT.swing;
 
@@ -578,6 +580,7 @@ export class RaidDirector {
           raider.motion.position,
           raider.motion.facingYaw,
           raider.kind,
+          encounterRaid?.encounter?.townDistrict,
         );
       }
       this.defeat(raider);
@@ -661,8 +664,8 @@ export class RaidDirector {
   maxHitsOf(id: number): number {
     const raider = this.raiders.get(id);
     if (!raider) return 0;
-    return raider.kind === 'sentinel'
-      ? sentinelToughness(raider.contributorKeys.size)
+    return raider.kind === 'sentinel' || raider.kind === 'captain'
+      ? sentinelToughness(raider.contributorKeys.size) + (raider.kind === 'captain' ? 4 : 0)
       : RAIDER_KINDS[raider.kind].toughness;
   }
 
@@ -821,6 +824,7 @@ export class RaidDirector {
       targetNetId: null,
       plannedStrike: false,
       plannedSwings: 1,
+      attackNumber: 0,
       attackBegun: false,
       lastTurnTick: this.tick,
       circleDirection: rng.nextFloat() < 0.5 ? 1 : -1,
@@ -1243,12 +1247,21 @@ export class RaidDirector {
         ) {
           // Straight after an attack: roll back out of reach, or stand
           // firm and size the player up.
-          if (raider.rng.nextFloat() < 0.35 && raider.action.dodgeCooldown === 0) {
+          if (
+            raider.kind !== 'captain' &&
+            raider.rng.nextFloat() < 0.35 &&
+            raider.action.dodgeCooldown === 0
+          ) {
             const away = directionTo(there, here);
             raider.pauseTicks = 6;
             return this.dodgeInput(raider, away.x, away.z, facing);
           }
-          raider.pauseTicks = 8 + raider.rng.nextInt(10);
+          raider.pauseTicks =
+            raider.kind === 'captain'
+              ? raider.plannedStrike
+                ? 28
+                : 16
+              : 8 + raider.rng.nextInt(10);
         }
         if (raider.pauseTicks > 0) {
           raider.pauseTicks -= 1;
@@ -1308,6 +1321,15 @@ export class RaidDirector {
   private planAttack(raider: RaiderRuntime): void {
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];
     raider.attackBegun = false;
+    if (raider.kind === 'captain') {
+      const plan = captainAttackPlan(
+        raider.attackNumber++,
+        1 - raider.damageTaken / this.maxHitsOf(raider.id),
+      );
+      raider.plannedStrike = plan.strike;
+      raider.plannedSwings = plan.swings;
+      return;
+    }
     raider.plannedStrike = raider.rng.nextFloat() < kind.strikeChance;
     // Mostly the full combo, sometimes cut short to keep the player guessing.
     raider.plannedSwings =

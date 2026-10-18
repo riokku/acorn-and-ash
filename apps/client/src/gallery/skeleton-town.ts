@@ -49,7 +49,8 @@ export async function showSkeletonTown(
   const toolbar = document.createElement('div');
   toolbar.style.cssText =
     'position:fixed;top:12px;left:12px;padding:12px;border-radius:8px;background:#18221de8;color:white;font:14px system-ui;z-index:10';
-  toolbar.textContent = 'Bonehollow · 13 skeleton residents · drag to orbit · scroll to zoom ';
+  toolbar.textContent =
+    'The Last Bell of Bonehollow · captain + 12 watch · drag to orbit · scroll to zoom ';
   const select = document.createElement('select');
   select.setAttribute('aria-label', 'Town viewpoint');
   for (const [name, dx, dz, d] of [
@@ -57,7 +58,8 @@ export async function showSkeletonTown(
     ['Gateway', 0, 20, 12],
     ['Market', -13, 1, 18],
     ['Graveyard', 19, -1, 19],
-    ['Bell hall', 0, -22, 25],
+    ['Bell hall', 0, -22, 30],
+    ['Captain', -0.9, -18, 6],
   ] as const) {
     const option = document.createElement('option');
     option.textContent = name;

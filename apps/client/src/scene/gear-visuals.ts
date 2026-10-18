@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/shared';
 
 import { plainMaterial } from '../art/materials';
-import { wornGearModelTemplate } from './worn-gear-models';
+import { wornGearModelTemplate, createWatchCaptainHelm } from './worn-gear-models';
 import { woodenShieldParts } from './gear-models';
 import { woolCapGeometry } from './basic-clothing';
 
@@ -194,6 +194,23 @@ export function createGearVisuals(
   };
 
   const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
+    if (item === 'watchCaptainHelm') {
+      const head = model.getObjectByName('head');
+      const helm = createWatchCaptainHelm();
+      if (head && helm) {
+        // The ranger's swept fringe needs extra clearance at the brow.
+        const ranger = skinned.some((mesh) => mesh.name.startsWith('Ranger_Head'));
+        helm.scale.set(
+          heldScale * (ranger ? 1.5 : 1.35),
+          heldScale,
+          heldScale * (ranger ? 1.65 : 1.35),
+        );
+        helm.position.y = 0.56;
+        head.add(helm);
+        into.push(helm);
+      }
+      return;
+    }
     if (item === 'woolCap') {
       const heads = skinned.filter((mesh) => /_Head(?:_\d+)?$/.test(mesh.name));
       const source = heads[0];

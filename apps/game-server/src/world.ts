@@ -393,7 +393,7 @@ export class World extends DurableObject<WorldEnv> {
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     for (const raider of simulation.raidersList())
-      if (raider.kind === 'sentinel')
+      if (raider.kind === 'sentinel' || raider.kind === 'captain')
         server.send(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
@@ -975,7 +975,7 @@ export class World extends DurableObject<WorldEnv> {
       }
       this.broadcast(encodeRaiders(simulation.raidersList()));
       for (const raider of simulation.raidersList())
-        if (raider.kind === 'sentinel')
+        if (raider.kind === 'sentinel' || raider.kind === 'captain')
           this.broadcast(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     }
     for (const hit of simulation.drainRaiderHits()) this.broadcast(encodeRaiderHit(hit));

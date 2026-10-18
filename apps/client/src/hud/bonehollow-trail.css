@@ -1,0 +1,49 @@
+.bonehollow-trail {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(380px, 45vw);
+  padding: 12px 20px;
+  text-align: center;
+  pointer-events: none;
+  color: #e7e1c8;
+  background: linear-gradient(90deg, transparent, #101d20e8 15%, #101d20e8 85%, transparent);
+  border-block: 1px solid #759b8155;
+  text-shadow: 0 2px 4px #000;
+  animation: bonehollow-arrival 1.2s ease-out;
+}
+.bonehollow-kicker {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #adcbbb;
+}
+.bonehollow-trail h2 {
+  margin: 2px 0 6px;
+  font-size: 24px;
+  letter-spacing: 0.07em;
+}
+.bonehollow-trail p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.bonehollow-trail small {
+  display: block;
+  margin-top: 6px;
+  color: #e5b97f;
+}
+@keyframes bonehollow-arrival {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bonehollow-trail {
+    animation: none;
+  }
+}

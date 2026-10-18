@@ -2487,7 +2487,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     case ServerMessageType.RaiderVitals: {
       if (view.byteLength !== 4) return null;
       const maxHits = view.getUint8(3);
-      if (![24, 32, 40, 48].includes(maxHits)) return null;
+      if (![24, 28, 32, 36, 40, 44, 48, 52].includes(maxHits)) return null;
       return { type: 'raiderVitals', id: view.getUint16(1, true), maxHits };
     }
     case ServerMessageType.Raiders: {

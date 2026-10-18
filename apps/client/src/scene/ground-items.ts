@@ -1,3 +1,4 @@
+import { createWatchCaptainHelm } from './worn-gear-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { createSentinelTrophy } from './sentinel-art';
 import { createForageModel, createMealModel } from './forest-food';
@@ -158,6 +159,18 @@ function createPartsModel(item: ItemId, model: PartsModel): GroundModel {
  * bundle in its own colour until it has a model of its own.
  */
 export function createPileModel(item: ItemId): GroundModel {
+  if (item === 'watchCaptainHelm') {
+    const group = createWatchCaptainHelm();
+    if (group)
+      return {
+        item,
+        group,
+        show: (count) => {
+          group.visible = count > 0;
+        },
+        dispose() {},
+      };
+  }
   if (item === 'sentinelTrophy') {
     const model = createSentinelTrophy();
     model.group.scale.setScalar(0.55);

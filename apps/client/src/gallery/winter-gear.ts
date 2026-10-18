@@ -20,15 +20,18 @@ export async function showWinterGear(
   const kind: CharacterId =
     asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'ranger';
   const basic = params.get('gallery') === 'basic-clothing';
-  const worn = basic
-    ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
-    : ({
-        upperBody: 'winterJacket',
-        helm: 'bearHat',
-        lowerBody: 'travelerTrousers',
-        feet: 'leatherBoots',
-        hands: 'leatherGloves',
-      } as const);
+  const lastWatch = params.get('gear') === 'last-watch-helm';
+  const worn = lastWatch
+    ? ({ helm: 'watchCaptainHelm' } as const)
+    : basic
+      ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
+      : ({
+          upperBody: 'winterJacket',
+          helm: 'bearHat',
+          lowerBody: 'travelerTrousers',
+          feet: 'leatherBoots',
+          hands: 'leatherGloves',
+        } as const);
   const actor = createCharacter(kind, 0x82955e);
   actor.setGear(params.has('before') ? {} : worn);
   actor.group.rotation.y = params.has('back') ? -0.18 : Math.PI - 0.18;
@@ -46,15 +49,17 @@ export async function showWinterGear(
   const caption = document.createElement('p');
   caption.textContent = params.has('before')
     ? 'Plain clothes · Warmth 0'
-    : basic
-      ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
-      : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
+    : lastWatch
+      ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
+      : basic
+        ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
+        : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
   caption.style.cssText =
     'position:absolute;left:0;right:0;bottom:24px;text-align:center;color:#f1efdc;font:18px Georgia;pointer-events:none';
   document.body.append(caption);
   const memory = new MoveMemory();
   const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 50);
-  camera.position.set(1.3, 1.2, 2.4);
+  camera.position.set(1.3, lastWatch ? 1.4 : 1.2, lastWatch ? 3 : 2.4);
   camera.lookAt(0, 0.6, 0);
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);

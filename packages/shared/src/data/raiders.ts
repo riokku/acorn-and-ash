@@ -13,7 +13,7 @@
 import type { ItemId } from './items';
 import type { WindupPace } from './moves';
 
-export type RaiderKindId = 'minion' | 'rogue' | 'warrior' | 'mage' | 'sentinel';
+export type RaiderKindId = 'minion' | 'rogue' | 'warrior' | 'mage' | 'sentinel' | 'captain';
 
 export interface RaiderKind {
   readonly id: RaiderKindId;
@@ -116,6 +116,21 @@ export const RAIDER_KINDS = {
     weight: 2,
     loot: { item: 'bone', count: 1 },
   },
+  captain: {
+    id: 'captain',
+    displayName: 'Captain of the Last Bell',
+    toughness: 28,
+    swingDamage: 16,
+    strikeDamage: 30,
+    runSpeed: 3.6,
+    windup: 2,
+    comboLength: 2,
+    strikeChance: 0.5,
+    dodgeChance: 0,
+    steadfast: true,
+    weight: 0,
+    loot: { item: 'bone', count: 4 },
+  },
   sentinel: {
     id: 'sentinel',
     displayName: 'Ruin Sentinel',
@@ -140,6 +155,7 @@ export const RAIDER_KIND_ORDER: readonly RaiderKindId[] = [
   'warrior',
   'mage',
   'sentinel',
+  'captain',
 ];
 
 export function raiderKindIndex(id: RaiderKindId): number {
@@ -221,4 +237,10 @@ export const RAID = {
 /** Each actual helper adds eight blows, capped at four fighters. */
 export function sentinelToughness(contributors: number): number {
   return 24 + 8 * (Math.min(4, Math.max(1, Math.floor(contributors))) - 1);
+}
+
+/** A learnable rhythm: two sword combinations, then a charged whirlwind.
+ * Below half health the combinations gain one swing; windups stay readable. */
+export function captainAttackPlan(turn: number, healthFraction: number) {
+  return { strike: turn % 3 === 2, swings: healthFraction <= 0.5 ? 3 : 2 };
 }

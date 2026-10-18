@@ -1,4 +1,4 @@
-import { SKELETON_TOWN } from '../world/skeleton-town';
+import { inSkeletonTown, SKELETON_TOWN } from '../world/skeleton-town';
 import {
   createTreasures,
   nearestTreasure,
@@ -1822,10 +1822,16 @@ export class WorldSimulation {
         fighters: () => this.fighters,
         strikePlayer: (netId, damage, impactTick) =>
           this.raiderStrikesPlayer(netId, damage, impactTick),
-        defeated: (netId, raiderId, position, facingYaw, kind) => {
+        defeated: (netId, raiderId, position, facingYaw, kind, townDistrict) => {
           const runtime = this.players.get(netId);
           if (runtime === undefined) return;
           this.advanceExpedition(runtime, { kind: 'defeat' }, 1);
+          if (townDistrict)
+            this.advanceExpedition(
+              runtime,
+              { kind: 'bonehollow', step: kind === 'captain' ? 'captain' : 'watch' },
+              1,
+            );
           if (kind === 'sentinel') {
             const owner = this.rewardOwnerKey(runtime);
             if (runtime.sentinelVictories === 0)
@@ -2618,7 +2624,11 @@ export class WorldSimulation {
         lastProcessed.seq = runtime.lastProcessedSeq;
         if (runtime.boatId !== null) this.carryBoat(runtime, position, facing.yaw);
         // A room has its own coordinates, nowhere on the map.
-        if (runtime.space === OUTDOORS) this.exploreAround(runtime, position.x, position.z);
+        if (runtime.space === OUTDOORS) {
+          this.exploreAround(runtime, position.x, position.z);
+          if (runtime.health > 0 && inSkeletonTown(position.x, position.z))
+            this.advanceExpedition(runtime, { kind: 'bonehollow', step: 'arrival' }, 1);
+        }
 
         // Catches the meter crossing a whole point on its own, if eating did
         // not already say something this tick.
