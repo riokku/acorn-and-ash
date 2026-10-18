@@ -11,6 +11,7 @@ import {
 import {
   attribute,
   positionLocal,
+  normalLocal,
   vec3,
   uniform,
   texture,
@@ -18,6 +19,7 @@ import {
   smoothstep as nodeSmoothstep,
 } from 'three/tsl';
 
+import { seasonUniforms } from '../art/season-uniforms';
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
 import { realModelPartsFor } from './prop-models';
@@ -155,6 +157,8 @@ function groundPart(part: PropPart, footprint: PropFootprint, terrain?: Terrain)
       : new THREE.MeshStandardNodeMaterial({
           name: source.name,
           color: source.color,
+          // Low boughs share the root grounding band; retain their painted needles.
+          vertexColors: source.vertexColors,
           map: source.map,
           normalMap: source.normalMap,
           normalScale: source.normalScale,
@@ -244,11 +248,19 @@ function burnablePart(part: PropPart, height: number): PropPart {
       ? source.clone()
       : new THREE.MeshStandardNodeMaterial().copy(source);
   // Keep the live seasonal colour, rather than freezing the cloned foliage's tint.
-  const base = material.colorNode
+  let base = material.colorNode
     ? vec3(material.colorNode as THREE.Node<'vec3'>)
     : source.map
       ? texture(source.map).rgb.mul(uniform(source.color))
       : uniform(source.color).rgb;
+  if (/leaves/i.test(source.name) && source.vertexColors && geometry.hasAttribute('color')) {
+    // Snow lies over the painted needles instead of multiplying green into white.
+    // Apply vertex colour here once, before snow and char, rather than afterwards.
+    material.vertexColors = false;
+    base = base.mul(attribute('color', 'vec3'));
+    const snow = seasonUniforms.snow.mul(nodeSmoothstep(0.05, 0.65, normalLocal.y));
+    base = mix(base, vec3(0.79, 0.85, 0.89), snow.mul(0.9));
+  }
   const localHeight = positionLocal.y.add(part.offset.elements[13]!).div(height).clamp(0, 1);
   const front = attribute('treeBurn', 'float').mul(1.2).sub(0.1);
   const char = nodeSmoothstep(localHeight.sub(0.08), localHeight.add(0.08), front);
