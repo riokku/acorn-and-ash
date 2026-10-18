@@ -1,3 +1,4 @@
+import { preloadHousingDetails } from './scene/housing-details';
 import { preloadSkeletonTown } from './scene/skeleton-town';
 import { SKELETON_TOWN } from '@acorn/shared';
 import { nearestTreasure, type TreasureSpot } from '@acorn/shared';
@@ -2708,6 +2709,7 @@ export class Game {
       // covers every place the game ever draws a flower.
       await Promise.all(
         [
+          preloadHousingDetails(),
           preloadSkeletonTown(),
           preloadPropModels(),
           preloadDugWalls(),
