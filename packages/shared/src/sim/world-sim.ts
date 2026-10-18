@@ -1,3 +1,4 @@
+import { SKELETON_TOWN } from '../world/skeleton-town';
 import {
   createTreasures,
   nearestTreasure,
@@ -5329,6 +5330,7 @@ export class WorldSimulation {
   /** Everything a new piece has to keep clear of: every tree, rock and stump, and everything built. */
   private protectedBuildSites(): ProtectedBuildSite[] {
     return [
+      SKELETON_TOWN,
       ...WOODLAND_ENCOUNTERS,
       ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
       ...this.encounterSites.map((site) => ({ x: site.x, z: site.z, radius: 12, name: site.kind })),

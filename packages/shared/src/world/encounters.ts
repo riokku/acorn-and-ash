@@ -1,3 +1,4 @@
+import { SKELETON_TOWN, TOWN_DISTRICTS, townColliders, type TownDistrict } from './skeleton-town';
 import { surfaceCollider } from '../collision/solid-surface';
 import { stonePositions } from './stone-shape';
 import { ORIGINAL_HALF_EXTENT } from '../constants';
@@ -17,6 +18,7 @@ export interface EncounterSite {
   readonly x: number;
   readonly z: number;
   readonly yaw: number;
+  readonly townDistrict?: TownDistrict;
 }
 export const ENCOUNTER_RULES = {
   noticeRadius: 10,
@@ -82,12 +84,23 @@ export function buildEncounterSites(
       break;
     }
   }
+  sites.push(
+    ...TOWN_DISTRICTS.map((district, index) => ({
+      id: 100 + index,
+      kind: 'ruins' as const,
+      townDistrict: district.name,
+      x: SKELETON_TOWN.x + district.x,
+      z: SKELETON_TOWN.z + district.z,
+      yaw: 0,
+    })),
+  );
   return sites;
 }
 
 /** Broken corner pillars leave the entire center and entrances walkable. */
 export function encounterColliders(sites: readonly EncounterSite[], terrain: Terrain): Collider[] {
   return sites.flatMap<Collider>((site) => {
+    if (site.townDistrict) return site.townDistrict === 'gate' ? townColliders(terrain) : [];
     const y = terrain.heightAt(site.x, site.z);
     if (site.kind !== 'ruins') {
       const dx = site.kind === 'patrol' ? 2.8 : -2.8;

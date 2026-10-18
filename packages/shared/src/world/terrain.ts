@@ -1,3 +1,4 @@
+import { SKELETON_TOWN, townGroundHeight } from './skeleton-town';
 /**
  * The ground the player walks on.
  */
@@ -84,7 +85,11 @@ export function wildernessHeightAt(
   const hills = hillsHeightAt(seed, x, z) + mountainHeightAt(seed, x, z);
   const weight = wildernessHillWeight(Math.hypot(x, z), Math.max(Math.abs(x), Math.abs(z)));
   const relief = hills + (forestReliefHeightAt(seed, x, z, hills) - hills) * weight;
-  const ground = shapeWater(lake, stream, x, z, relief);
+  const townLevel =
+    Math.abs(x - SKELETON_TOWN.x) < 44 && Math.abs(z - SKELETON_TOWN.z) < 44
+      ? hillsHeightAt(seed, SKELETON_TOWN.x, SKELETON_TOWN.z)
+      : relief;
+  const ground = shapeWater(lake, stream, x, z, townGroundHeight(x, z, relief, townLevel));
   if (forestTrailAt(x, z) === null) return ground;
   // Water keeps the final say at its banks; the trails stay on dry ground.
   if (lakeDepthAt(lake, x, z) > -8 || (stream !== null && nearStream(stream, x, z, 8)))

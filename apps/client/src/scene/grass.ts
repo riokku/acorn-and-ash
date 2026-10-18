@@ -1,3 +1,4 @@
+import { inSkeletonTown } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 import {
   attribute,
@@ -205,7 +206,8 @@ export function createGrass(
         // The lake's own shore, which on an island is the island's beach.
         lakeDepthAt(LAKE, x, z) > -0.35 ||
         // The stream's water and its bed.
-        nearStream(STREAM, x, z, 0.2)
+        nearStream(STREAM, x, z, 0.2) ||
+        inSkeletonTown(x, z, -4)
       )
         continue;
       const y = terrain.heightAt(x, z);

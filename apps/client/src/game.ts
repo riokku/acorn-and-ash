@@ -1,3 +1,5 @@
+import { preloadSkeletonTown } from './scene/skeleton-town';
+import { SKELETON_TOWN } from '@acorn/shared';
 import { nearestTreasure, type TreasureSpot } from '@acorn/shared';
 import {
   FIRE_CAPACITY_MS,
@@ -2706,6 +2708,7 @@ export class Game {
       // covers every place the game ever draws a flower.
       await Promise.all(
         [
+          preloadSkeletonTown(),
           preloadPropModels(),
           preloadDugWalls(),
           preloadMineSupport(),
@@ -2756,6 +2759,7 @@ export class Game {
       );
       this.discoverySites = buildDiscoverySites(encounterSites);
       this.protectedBuildSites = [
+        SKELETON_TOWN,
         ...WOODLAND_ENCOUNTERS,
         ...this.discoverySites.map((site) => ({
           x: site.x,
@@ -4560,9 +4564,12 @@ export class Game {
   }
 
   private updateDiscoveryMarkers(): void {
-    this.mapFeed.discoveries = this.discoverySites
-      .filter((site) => discoveryKnown(this.discoveriesFound, site.id))
-      .map((site) => ({ x: site.x, z: site.z, name: site.name }));
+    this.mapFeed.discoveries = [
+      { ...SKELETON_TOWN, name: 'Bonehollow · Skeleton town' },
+      ...this.discoverySites
+        .filter((site) => discoveryKnown(this.discoveriesFound, site.id))
+        .map((site) => ({ x: site.x, z: site.z, name: site.name })),
+    ];
   }
 
   private handleCraftMenuInput(controls: Controls): void {

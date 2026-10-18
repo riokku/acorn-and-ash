@@ -1,3 +1,4 @@
+import { inSkeletonTown } from './skeleton-town';
 /**
  * The generated wilderness: trees and rocks scattered beyond the hand-built
  * clearing's own ring of trees.
@@ -173,6 +174,7 @@ export function buildWilderness(
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !blocksForestTrail(prop) &&
+      !inSkeletonTown(prop.x, prop.z, 2) &&
       !(prop.kind === 'pine' && (prop.y ?? 0) > MOUNTAINS.treeLine) &&
       // Newly cut banks can be steeper than the original wooded hill. Drop
       // those candidates after numbering too, without moving any other tree.

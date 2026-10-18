@@ -1,3 +1,7 @@
+import { installBvhRaycasting } from '../scene/bvh';
+import { buildClearingScene } from '../scene/clearing';
+import { SKELETON_TOWN } from '@acorn/shared';
+import { preloadSkeletonTown } from '../scene/skeleton-town';
 import { createForestWeather } from '../scene/forest-weather';
 import { DAY_LENGTH_MS } from '@acorn/shared';
 import { createRiverExhibit } from './river';
@@ -20,6 +24,8 @@ import {
   POND as CLEARING_POND,
   DEFAULT_WORLD_SEED,
   buildTestClearing,
+  createWildernessTerrain,
+  buildWilderness,
   pondGroundHeight,
   dayBrightness,
   isHomeKind,
@@ -318,6 +324,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
 
   await Promise.all([
     preloadArtTextures(),
+    preloadSkeletonTown(),
     preloadPropModels(),
     preloadFlowerModel(),
     preloadCampfireModels(),
@@ -336,6 +343,36 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   if (season !== undefined)
     createSeasonRig().apply({ from: season, to: season, amount: 0 }, daylight);
   const fireLights = new FireLights(scene);
+
+  if (focus === 'skeleton-town') {
+    installBvhRaycasting();
+    const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
+    const ground = createGalleryGround(
+      [],
+      (x, z) => terrain.heightAt(x + SKELETON_TOWN.x, z + SKELETON_TOWN.z),
+      110,
+      160,
+      [],
+      SKELETON_TOWN,
+    );
+    ground.position.set(SKELETON_TOWN.x, 0, SKELETON_TOWN.z);
+    scene.add(ground);
+    const props = buildWilderness(DEFAULT_WORLD_SEED, terrain).props.filter(
+      (p) => Math.hypot(p.x - SKELETON_TOWN.x, p.z - SKELETON_TOWN.z) < 62,
+    );
+    scene.add(
+      buildClearingScene(
+        { ...buildTestClearing(DEFAULT_WORLD_SEED), props, pickups: [], water: [] },
+        terrain,
+      ).group,
+    );
+    daylight.sun.position.set(SKELETON_TOWN.x + 28, 60, SKELETON_TOWN.z + 18);
+    daylight.sun.target.position.set(SKELETON_TOWN.x, 0, SKELETON_TOWN.z);
+    daylight.sun.target.updateMatrixWorld();
+    const { showSkeletonTown } = await import('./skeleton-town');
+    await showSkeletonTown(renderer, scene, fireLights, params);
+    return;
+  }
 
   if (focus === 'tree-models') {
     scene.add(createGalleryGround([]));
@@ -634,6 +671,7 @@ function createGalleryGround(
   size = 80,
   segments = 160,
   water: readonly WaterCircle[] = POND,
+  origin = { x: 0, z: 0 },
 ): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
   geometry.rotateX(-Math.PI / 2);
@@ -644,7 +682,7 @@ function createGalleryGround(
   const tint = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
     position.setY(i, heightAt(position.getX(i), position.getZ(i)));
-    const shade = shader.shadeAt(position.getX(i), position.getZ(i), 0);
+    const shade = shader.shadeAt(position.getX(i) + origin.x, position.getZ(i) + origin.z, 0);
     floor[i] = shade.floor;
     tint.set(shade.tint, i * 3);
   }

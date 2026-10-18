@@ -1542,3 +1542,23 @@ after exporting and compressing it. View `/?gallery=campfire&time=0.2`,
 small fires, the indoor hearth and a rising forest fire. The `at` setting
 holds tree burn progress while its flames continue moving. Operating-system
 reduced motion pauses flames and steadies firelight.
+
+### Exploring Bonehollow
+
+Bonehollow is a ruined skeleton settlement in the southeast forest, marked on the
+map. Its gate, market, graveyard and bell hall house thirteen skeletons in four
+independent groups. Bring equipment: residents remain active during daylight.
+The surrounding wilderness encounters keep their existing behaviour.
+
+Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
+use the district selector, drag to orbit and scroll to zoom. Direct views include
+`&view=gateway`, `&view=market`, `&view=graveyard` and `&view=bell-hall`.
+The editable model is `assets/settlements/bonehollow.blend`. To rebuild the model
+and matching shared collision boxes:
+
+```sh
+blender --background --threads 2 --python tools/art/skeleton_town.py -- /tmp/bonehollow.gltf
+node tools/import-model.mjs /tmp/bonehollow.gltf assets/settlements/bonehollow.glb
+pnpm exec prettier --write packages/shared/src/data/skeleton-town-solids.json
+node tools/check-skeleton-town.mjs
+```
