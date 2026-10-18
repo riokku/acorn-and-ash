@@ -1524,6 +1524,8 @@ unverified addresses, other accounts and test sign-in all leave the editor locke
 ### Inspecting polished trees
 
 Open `/?gallery=tree-models&season=summer` to inspect all five forest species.
+Evergreens retain their painted green needles, including low branches and distant
+meshes. Winter snow settles on upper branch faces and clears with the seasonal thaw.
 Use the species, shape, season, distant-mesh and trunk close-up controls;
 drag to orbit and scroll to zoom. The tree builders in `tools/art/trees.py`
 and `tools/art/deciduous.py` retain their Blender sources under `assets/trees/`.
