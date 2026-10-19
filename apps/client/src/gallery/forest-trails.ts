@@ -1,3 +1,5 @@
+import { buildEncounterSites, buildDiscoverySites, buildDiscoveryLeads } from '@acorn/shared';
+import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
@@ -41,12 +43,39 @@ export function showForestTrails(
     { groundHeightAt: terrain.heightAt },
   );
   scene.add(forest.group, home.group, grass.mesh, river.group, lake.group);
+  const sites = buildDiscoverySites(
+    buildEncounterSites(
+      DEFAULT_WORLD_SEED,
+      terrain,
+      [...clearing.colliders, ...wilderness.siteColliders],
+      clearing.water,
+      LAKE,
+    ),
+  );
+  const leads = buildDiscoveryLeads(
+    sites,
+    terrain,
+    [...clearing.colliders, ...wilderness.colliders],
+    [...clearing.water, ...LAKE.basin],
+  );
+  const landmarks = createEncounterLandmarks(params.has('before') ? [] : leads, terrain);
+  scene.add(landmarks.group);
+  document.body.dataset.discoveryLeads = String(leads.length);
+  const lead = leads[0];
+  const lx = lead?.markerX ?? 0,
+    lz = lead?.markerZ ?? 0,
+    ly = terrain.heightAt(lx, lz);
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 700);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.minDistance = 4;
+  controls.minDistance = params.get('view') === 'clue' ? 1 : 4;
   controls.maxDistance = 180;
   controls.maxPolarAngle = Math.PI * 0.48;
   const views = {
+    clue: {
+      label: 'Discovery cairn',
+      target: [lx, ly + 0.35, lz],
+      eye: [lx + 1, ly + 1.2, lz + 1.6],
+    },
     cedar: { label: 'Cedar bench', target: [111, 13, 43], eye: [82, 30, 82] },
     overlook: { label: 'Lake overlook', target: [174, 17, -80], eye: [149, 35, -40] },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
@@ -68,7 +97,10 @@ export function showForestTrails(
     nav.append(button);
   }
   const hint = document.createElement('span');
-  hint.textContent = 'Drag to look around · scroll to zoom';
+  hint.textContent =
+    params.get('view') === 'clue'
+      ? (lead?.hint ?? 'No suitable clue location')
+      : 'Drag to look around · scroll to zoom';
   nav.append(hint);
   document.body.append(nav);
   const asked = params.get('view');
@@ -102,6 +134,7 @@ export function showForestTrails(
       cancelAnimationFrame(pending);
       controls.dispose();
       window.removeEventListener('resize', resize);
+      landmarks.dispose();
       grass.dispose();
       forest.dispose();
       home.dispose();

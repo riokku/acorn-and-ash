@@ -127,3 +127,5 @@ export * from './data/treasure';
 export * from './sim/treasure';
 
 export * from './world/skeleton-town';
+
+export * from './data/discovery-leads';

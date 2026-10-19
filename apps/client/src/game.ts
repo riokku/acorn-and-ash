@@ -1,3 +1,4 @@
+import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@acorn/shared';
 import { bonehollowVictory } from './hud/bonehollow-victory';
 import { playConfirmedStrike, playLastBell } from './audio/feedback';
 import { preloadHousingDetails } from './scene/housing-details';
@@ -879,6 +880,7 @@ export class Game {
   private craftTab: CraftTabId = 'all';
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
+  private discoveryLeads: readonly DiscoveryLead[] = [];
   private discoverySites: readonly DiscoverySite[] = [];
   private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
@@ -2781,9 +2783,21 @@ export class Game {
         LAKE,
       );
       this.discoverySites = buildDiscoverySites(encounterSites);
+      this.discoveryLeads = buildDiscoveryLeads(
+        this.discoverySites,
+        terrain,
+        [...clearing.colliders, ...wilderness.colliders],
+        [...clearing.water, ...LAKE.basin],
+      );
       this.protectedBuildSites = [
         SKELETON_TOWN,
         ...WOODLAND_ENCOUNTERS,
+        ...this.discoveryLeads.map((lead) => ({
+          x: lead.markerX,
+          z: lead.markerZ,
+          radius: 1,
+          name: 'trail cairn',
+        })),
         ...this.discoverySites.map((site) => ({
           x: site.x,
           z: site.z,
@@ -2800,11 +2814,14 @@ export class Game {
       this.animalTracks = createAnimalTracks(seed, terrain, [
         ...clearing.colliders,
         ...wilderness.colliders,
-        ...encounterColliders(encounterSites, terrain),
+        ...encounterColliders([...encounterSites, ...this.discoveryLeads], terrain),
         ...discoveryColliders(this.discoverySites, terrain),
       ]);
       this.outdoors.add(this.animalTracks.group);
-      this.encounterLandmarks = createEncounterLandmarks(encounterSites, terrain);
+      this.encounterLandmarks = createEncounterLandmarks(
+        [...encounterSites, ...this.discoveryLeads],
+        terrain,
+      );
       this.outdoors.add(this.encounterLandmarks.group);
 
       this.clearing = clearing;
@@ -2861,7 +2878,7 @@ export class Game {
         [
           ...clearing.colliders,
           ...wilderness.colliders,
-          ...encounterColliders(encounterSites, terrain),
+          ...encounterColliders([...encounterSites, ...this.discoveryLeads], terrain),
           ...discoveryColliders(this.discoverySites, terrain),
           ...streamRockColliders(STREAM, terrain),
         ],
@@ -6011,7 +6028,14 @@ export class Game {
                     player.motion.position.z - track.z,
                   ) < 2.2,
               );
-              return track === undefined ? null : woodlandTrackHint(track.kind);
+              return track === undefined
+                ? discoveryLeadHint(
+                    this.discoveryLeads,
+                    player.motion.position.x,
+                    player.motion.position.z,
+                    this.discoveriesFound,
+                  )
+                : woodlandTrackHint(track.kind);
             })()
           : null,
       nearbyDiscovery: this.nearbyDiscoveryName(),

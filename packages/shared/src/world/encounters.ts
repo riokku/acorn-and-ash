@@ -104,10 +104,11 @@ export function encounterColliders(sites: readonly EncounterSite[], terrain: Ter
     const y = terrain.heightAt(site.x, site.z);
     if (site.kind !== 'ruins') {
       const dx = site.kind === 'patrol' ? 2.8 : -2.8;
+      const y = terrain.heightAt(site.x + dx, site.z + 2.7);
       const rocks = Array.from({ length: 3 }, (_, i) =>
         surfaceCollider(
           site.x + dx,
-          y + 0.105 + i * 0.19,
+          y - 0.025 + i * 0.19,
           site.z + 2.7,
           stonePositions(0.34 - i * 0.075, 0.21, site.id * 10 + i),
         ),
