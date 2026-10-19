@@ -20,6 +20,8 @@ export interface WarmthEnvironment {
   readonly blizzard: boolean;
   readonly insulation: number;
   readonly heat: HeatSource;
+  /** Authoritative gear multiplier, applied only at a lit heat source. */
+  readonly heatRecovery?: number;
 }
 export interface WarmthView {
   readonly value: number;
@@ -62,7 +64,18 @@ export function advanceWarmth(
         : environment.heat === 'indoors'
           ? 1
           : 0.5;
-  const value = Math.min(WARMTH_MAX, Math.max(0, state.value + rate * TICK_SECONDS));
+  const value = Math.min(
+    WARMTH_MAX,
+    Math.max(
+      0,
+      state.value +
+        rate *
+          TICK_SECONDS *
+          (environment.heat !== null
+            ? Math.min(1.25, Math.max(1, environment.heatRecovery ?? 1))
+            : 1),
+    ),
+  );
   if (value > 0 || shortfall === 0) return { state: { value, coldTicks: 0 }, damage: 0 };
   const coldTicks = state.coldTicks + 1;
   if (coldTicks >= COLD_GRACE_TICKS + COLD_DAMAGE_INTERVAL_TICKS)

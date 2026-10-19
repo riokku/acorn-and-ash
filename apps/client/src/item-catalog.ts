@@ -1,3 +1,4 @@
+import { withEquipmentSpecialty } from '@acorn/shared';
 import {
   ITEM_KINDS as DEFAULT_ITEMS,
   ITEM_ORDER,
@@ -34,7 +35,7 @@ export function applyItemCatalog(value: PublishedCatalog): void {
 }
 export function itemDescription(item: ItemId): string {
   const view = catalogItem(item, published.overrides);
-  return `${view.description}${view.rarity === 'common' ? '' : ` Rarity: ${view.rarity}.`}`;
+  return `${withEquipmentSpecialty(item, view.description)}${view.rarity === 'common' ? '' : ` Rarity: ${view.rarity}.`}`;
 }
 export function characterStats(
   worn: Readonly<WornGear>,

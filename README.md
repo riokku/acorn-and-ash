@@ -1600,3 +1600,13 @@ have discovered its destination; claim rewards by inspecting the actual site.
 Animal tracking and immediate interactions retain priority. Cairns avoid water,
 steep ground and existing trees, and share their collision with the server.
 Inspect `/?gallery=forest-trails&view=clue` (add `&before` to compare).
+
+### Equipment specialties
+
+The traveler's tunic from the forgotten camp reduces hunger drain by 15% while
+worn. A crafted winter jacket recovers warmth 25% faster beside a lit campfire or
+fueled home fire; exposure and cold grace periods are unchanged. A hunting knife
+found in buried treasure gives one extra meat when used as the active weapon for
+a meat-bearing animal's finishing blow, if inventory space permits. Off-hand and
+carried items grant no specialty. These fixed properties remain visible in item
+tooltips and the admin player-facing preview even with custom descriptions.

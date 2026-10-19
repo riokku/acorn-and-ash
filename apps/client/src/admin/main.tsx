@@ -1,3 +1,4 @@
+import { withEquipmentSpecialty } from '@acorn/shared';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -396,7 +397,7 @@ function Editor(): React.JSX.Element {
               <h3>
                 {item.displayName} <span className={`rarity ${item.rarity}`}>{item.rarity}</span>
               </h3>
-              <p>{item.description}</p>
+              <p>{withEquipmentSpecialty(selected, item.description)}</p>
               <div className="bonus-preview">
                 {allowedBonuses(selected)
                   .filter((stat) => (item.bonuses[stat] ?? 0) > 0)
