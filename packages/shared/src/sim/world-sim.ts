@@ -1,3 +1,8 @@
+import {
+  equipmentHungerRate,
+  equipmentHeatRecovery,
+  huntingYield,
+} from '../data/equipment-specialties';
 import { buildDiscoveryLeads, type DiscoveryLead } from '../data/discovery-leads';
 import { inSkeletonTown, SKELETON_TOWN } from '../world/skeleton-town';
 import {
@@ -2357,7 +2362,11 @@ export class WorldSimulation {
         }
         if (hadMeal && (this.tick % TICK_HZ === 0 || runtime.meal.item === null))
           this.mealChanges.set(runtime.netId, { ...runtime.meal });
-        runtime.hunger = drainHunger(runtime.hunger, TICK_SECONDS, this.hungerDrainPerSecond);
+        runtime.hunger = drainHunger(
+          runtime.hunger,
+          TICK_SECONDS,
+          this.hungerDrainPerSecond * equipmentHungerRate(runtime.worn),
+        );
 
         scratch.position.x = position.x;
         scratch.position.y = position.y;
@@ -5012,7 +5021,10 @@ export class WorldSimulation {
     // same reason a felled tree still falls with no room for the logs. A
     // threat with nothing to pay out - the masked raccoon, for now - still
     // counts as caught, just with nothing added.
-    const added = item === undefined ? 0 : addItem(runtime.inventory, item, 1);
+    const added =
+      item === undefined
+        ? 0
+        : addItem(runtime.inventory, item, huntingYield(this.equippedItemOf(runtime.netId), item));
     this.catchEvents.push({ netId: runtime.netId, item: item ?? null, added });
   }
 
@@ -6009,6 +6021,7 @@ export class WorldSimulation {
       winter: calendar.season === 'winter',
       blizzard: runtime.space === OUTDOORS && this.weather().kind === 'blizzard',
       insulation: characterStats(runtime.worn, undefined, this.equipmentBonuses).warmth,
+      heatRecovery: equipmentHeatRecovery(runtime.worn),
       heat,
     };
   }

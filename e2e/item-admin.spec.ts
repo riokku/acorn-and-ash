@@ -209,3 +209,37 @@ test(
     await expect(page.getByRole('link', { name: 'Manage items' })).toHaveCount(0);
   },
 );
+
+test(
+  'equipment specialties remain visible when an admin edits flavor text',
+  { tag: '@real-drawing' },
+  async ({ page }) => {
+    const html = await readFile(new URL('../apps/client/dist/admin.html', import.meta.url), 'utf8');
+    await page.route('**/admin/items', (route) =>
+      route.fulfill({ contentType: 'text/html', body: html }),
+    );
+    await page.route('**/api/admin/items', (route) =>
+      route.fulfill({
+        json: {
+          draft: { revision: 0, overrides: {} },
+          published: { revision: 0, overrides: {} },
+          history: [],
+        },
+      }),
+    );
+    await page.goto('/admin/items');
+    await page.getByRole('searchbox', { name: 'Find an item' }).fill('travelerTunic');
+    await page
+      .getByRole('navigation', { name: 'Items' })
+      .getByRole('button')
+      .filter({ has: page.locator('small', { hasText: /^travelerTunic$/ }) })
+      .click();
+    await expect(page.locator('.item-preview')).toContainText('15%');
+    await page
+      .getByRole('textbox', { name: 'Description', exact: true })
+      .fill('A family keepsake.');
+    await expect(page.locator('.item-preview')).toContainText('A family keepsake.');
+    await expect(page.locator('.item-preview')).toContainText('15%');
+    await expect(page.locator('.item-preview')).toContainText('forgotten camp');
+  },
+);

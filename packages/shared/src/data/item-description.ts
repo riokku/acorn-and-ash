@@ -1,3 +1,4 @@
+import { EQUIPMENT_SPECIALTIES } from './equipment-specialties';
 import { isMealItem, MEAL_BENEFITS } from '../sim/meals';
 import { blueprintHome } from './housing';
 import { BUILDABLE_KINDS } from './buildables';
@@ -73,5 +74,7 @@ export function defaultItemDescription(item: ItemId): string {
       return `${DESCRIPTIONS[item]} Restores ${kind.restoresHunger} hunger. ${MEAL_BENEFITS[item]} for 10 active minutes. Can be eaten at full hunger; replaces your previous meal benefit. Pauses while disconnected.`;
     return `${DESCRIPTIONS[item] === undefined ? '' : `${DESCRIPTIONS[item]} `}Restores ${kind.restoresHunger} hunger. Click to eat.${cooked !== null ? ' Equip beside a lit campfire or home cooker and press E to roast it.' : ''}`;
   }
-  return DESCRIPTIONS[item] ?? 'A useful find from the woods.';
+  const description = DESCRIPTIONS[item] ?? 'A useful find from the woods.';
+  const specialty = EQUIPMENT_SPECIALTIES[item];
+  return specialty ? `${description} ${specialty}` : description;
 }
