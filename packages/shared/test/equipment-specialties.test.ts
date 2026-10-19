@@ -66,7 +66,10 @@ it('accelerates recovery at a lit heat source without changing exposure or grace
   ).toBe(100);
 });
 it('pays the hunting bonus once on a real catch, never for an off-hand knife', () => {
-  const target = ANIMAL_DENS.find((den) => ANIMAL_KINDS[den.kind].catchItem === 'meat')!;
+  const target = ANIMAL_DENS.find((den) => {
+    const kind = ANIMAL_KINDS[den.kind];
+    return 'catchItem' in kind && kind.catchItem === 'meat';
+  })!;
   for (const active of [true, false]) {
     const sim = world();
     sim.wearGear(1, 'huntingKnife', active ? 'mainHand' : 'offHand');
