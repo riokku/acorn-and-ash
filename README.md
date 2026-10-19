@@ -1590,3 +1590,13 @@ existing flinches and camera settings remain in charge of motion. Live Bonehollo
 captain defeat and expedition completion ring a bronze bell and show the next
 objective or a return-home reward reminder. Loading an existing save does not
 replay the celebration. The effects volume slider controls these sounds.
+
+### Discovery cairns
+
+Small weathered cairns hint at the forgotten camp, logging site, mushroom grove
+and mossy shrine from the surrounding woods. Approach one to read a direction,
+potential reward and relevant guard warning. The hint fades out of use once you
+have discovered its destination; claim rewards by inspecting the actual site.
+Animal tracking and immediate interactions retain priority. Cairns avoid water,
+steep ground and existing trees, and share their collision with the server.
+Inspect `/?gallery=forest-trails&view=clue` (add `&before` to compare).

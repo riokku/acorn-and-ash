@@ -64,11 +64,12 @@ export function createEncounterLandmarks(sites: readonly EncounterSite[], terrai
         );
     } else {
       const dx = site.kind === 'patrol' ? 2.8 : -2.8;
+      const y = terrain.heightAt(site.x + dx, site.z + 2.7);
       for (let i = 0; i < 3; i++)
         builder.add(
           i === 0 ? moss : stone,
           stoneGeometry(0.34 - i * 0.075, 0.21, site.id * 10 + i),
-          placed(site.x + dx, y + 0.105 + i * 0.19, site.z + 2.7),
+          placed(site.x + dx, y - 0.025 + i * 0.19, site.z + 2.7),
         );
       if (site.kind === 'patrol') {
         builder.add(

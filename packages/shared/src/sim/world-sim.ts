@@ -1,3 +1,4 @@
+import { buildDiscoveryLeads, type DiscoveryLead } from '../data/discovery-leads';
 import { inSkeletonTown, SKELETON_TOWN } from '../world/skeleton-town';
 import {
   createTreasures,
@@ -1178,6 +1179,7 @@ export class WorldSimulation {
    */
   readonly wilderness: Wilderness;
   readonly encounterSites: readonly EncounterSite[];
+  readonly discoveryLeads: readonly DiscoveryLead[];
   readonly discoverySites: readonly DiscoverySite[];
   readonly collision: CollisionWorld;
   /**
@@ -1749,6 +1751,12 @@ export class WorldSimulation {
       LAKE,
     );
     this.discoverySites = buildDiscoverySites(this.encounterSites);
+    const discoveryLeads = (this.discoveryLeads = buildDiscoveryLeads(
+      this.discoverySites,
+      terrain,
+      [...this.clearing.colliders, ...this.wilderness.colliders],
+      [...this.clearing.water, ...LAKE.basin],
+    ));
     for (const spot of discoveryForageSpots(this.discoverySites))
       this.patches.push(freshPatch(this.seed, spot));
     for (const spot of REED_PATCHES) this.patches.push(freshPatch(this.seed, spot));
@@ -1769,7 +1777,7 @@ export class WorldSimulation {
       [
         ...this.clearing.colliders,
         ...this.wilderness.colliders,
-        ...encounterColliders(this.encounterSites, terrain),
+        ...encounterColliders([...this.encounterSites, ...discoveryLeads], terrain),
         ...discoveryColliders(this.discoverySites, terrain),
         ...streamRockColliders(STREAM, terrain),
       ],
@@ -5343,6 +5351,12 @@ export class WorldSimulation {
       SKELETON_TOWN,
       ...WOODLAND_ENCOUNTERS,
       ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
+      ...this.discoveryLeads.map((lead) => ({
+        x: lead.markerX,
+        z: lead.markerZ,
+        radius: 1,
+        name: 'trail cairn',
+      })),
       ...this.encounterSites.map((site) => ({ x: site.x, z: site.z, radius: 12, name: site.kind })),
     ];
   }
