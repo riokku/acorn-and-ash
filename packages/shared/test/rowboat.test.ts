@@ -70,12 +70,12 @@ function berthBeside(spot: { x: number; z: number }, depth = BERTH_DEPTH): Berth
 const first = REED_PATCHES[0]!;
 
 describe('what a rowboat is', () => {
-  it('costs six logs and two rope, and is the last buildable in the menu order', () => {
+  it('costs six logs and two rope, and retains its stable buildable wire index', () => {
     expect(BUILDABLE_KINDS.rowboat.costs).toEqual([
       { item: 'log', amount: 6 },
       { item: 'rope', amount: 2 },
     ]);
-    expect(BUILDABLE_KIND_ORDER.at(-1)).toBe('rowboat');
+    expect(BUILDABLE_KIND_ORDER[20]).toBe('rowboat');
     expect(ITEM_KINDS.rope.displayName).toBe('Rope');
   });
 
