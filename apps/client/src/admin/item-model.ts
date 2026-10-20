@@ -1,3 +1,4 @@
+import { preloadSkeletonTown } from '../scene/skeleton-town';
 import * as THREE from 'three/webgpu';
 import { gearSlotsOf, type ItemId } from '@acorn/shared';
 import { heldItemParts } from '../scene/character';
@@ -95,6 +96,7 @@ export async function createItemModel(item: ItemId): Promise<ItemModel> {
       instance.mixer.uncacheRoot(instance.root);
     }
   }
+  if (item === 'lastBellTrophy') await preloadSkeletonTown();
   if (item === 'flower') await preloadFlowerModel();
   const source =
     item === 'bag'

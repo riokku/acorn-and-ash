@@ -1,3 +1,4 @@
+import { createLastBellTrophy } from './skeleton-town';
 import { createFishDisplay } from './fish-display';
 import { createSentinelTrophy } from './sentinel-art';
 import * as THREE from 'three/webgpu';
@@ -9,6 +10,7 @@ import { createGuardianTrophy } from './guardian-trophy';
 export function createHomeDecoration(kind: DecorationKind) {
   if (kind === 'fishDisplay' || kind === 'goldenFishDisplay')
     return createFishDisplay(kind === 'goldenFishDisplay');
+  if (kind === 'lastBellTrophy') return createLastBellTrophy();
   if (kind === 'sentinelTrophy') return createSentinelTrophy();
   if (kind === 'lantern') return createLantern();
   if (kind === 'fernLantern') return createLantern('fern');

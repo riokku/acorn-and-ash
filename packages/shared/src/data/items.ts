@@ -58,7 +58,8 @@ export type ItemId =
   | 'woolCap'
   | 'linenShirt'
   | 'workTrousers'
-  | 'watchCaptainHelm';
+  | 'watchCaptainHelm'
+  | 'lastBellTrophy';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -455,6 +456,18 @@ export const ITEM_KINDS = {
     keepOnKnockout: true,
     equippable: false,
   },
+  lastBellTrophy: {
+    id: 'lastBellTrophy',
+    displayName: 'Last Bell keepsake',
+    pluralName: 'Last Bell keepsakes',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xb58b4b,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
   reed: {
     id: 'reed',
     displayName: 'Reed',
@@ -810,6 +823,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'linenShirt',
   'workTrousers',
   'watchCaptainHelm',
+  'lastBellTrophy',
 ];
 
 export function itemIndex(id: ItemId): number {

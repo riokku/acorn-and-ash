@@ -14,6 +14,7 @@ type IconId = ItemId | BuildableKindId;
  * plain square.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
+  lastBellTrophy: <path d="M4 19L7 15V10A5 5 0 0 1 17 10V15L20 19ZM10 21H14M12 3V1" />,
   watchCaptainHelm: <path d="M4 21V11Q4 5 10 4V1H14V4Q20 5 20 11V21L15 18V12H9V18ZM7 10H17V8H7Z" />,
   refinedAxe: (
     <>

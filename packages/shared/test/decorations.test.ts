@@ -132,3 +132,25 @@ it('round-trips bounded decoration requests/state and rejects malformed, duplica
     decodeServerMessage(encodeDecorationState({ pieces: [piece], reason: null }).slice(0, -1)),
   ).toBeNull();
 });
+it('places the earned Last Bell, saves it, and reclaims exactly one keepsake', () => {
+  const sim = room();
+  const request = { ...place, kind: 'lastBellTrophy' as const };
+  expect(sim.requestDecoration(1, request).reason).toBe('materials');
+  sim.inventoryOf(1).lastBellTrophy = 1;
+  expect(sim.requestDecoration(1, request).reason).toBeNull();
+  expect(sim.inventoryOf(1).lastBellTrophy ?? 0).toBe(0);
+  const piece = sim.decorationsList()[0]!;
+  expect(sim.requestDecoration(1, request).reason).not.toBeNull();
+  expect(sim.decorationsList()).toHaveLength(1);
+  const restored = room();
+  restored.restoreDecorations(sim.decorationsList());
+  expect(restored.decorationsList()).toEqual([piece]);
+  expect(
+    decodeServerMessage(encodeDecorationState({ pieces: [piece], reason: null })),
+  ).not.toBeNull();
+  expect(restored.requestDecoration(2, { ...piece, action: 'reclaim' }).reason).toBe('private');
+  expect(restored.requestDecoration(1, { ...piece, action: 'reclaim' }).reason).toBeNull();
+  expect(restored.inventoryOf(1).lastBellTrophy).toBe(1);
+  expect(restored.requestDecoration(1, { ...piece, action: 'reclaim' }).reason).toBe('missing');
+  expect(restored.inventoryOf(1).lastBellTrophy).toBe(1);
+});

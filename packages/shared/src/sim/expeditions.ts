@@ -170,6 +170,7 @@ export const EXPEDITIONS: readonly ExpeditionDefinition[] = [
     ],
     rewards: [
       { item: 'watchCaptainHelm', count: 1 },
+      { item: 'lastBellTrophy', count: 1 },
       { item: 'forestStew', count: 3 },
       { item: 'ironOre', count: 6 },
     ],

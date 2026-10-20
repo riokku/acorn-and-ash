@@ -51,7 +51,7 @@ it('always offers the adventure, preserves progress and keeps old wire IDs', () 
   progressExpedition(state, { kind: 'bonehollow', step: 'captain' });
   expect(expeditionComplete(state)).toBe(true);
   expect(RAIDER_KIND_ORDER.slice(0, 5)).toEqual(['minion', 'rogue', 'warrior', 'mage', 'sentinel']);
-  expect(ITEM_ORDER.at(-1)).toBe('watchCaptainHelm');
+  expect(ITEM_ORDER.slice(-2)).toEqual(['watchCaptainHelm', 'lastBellTrophy']);
   expect(
     decodeServerMessage(encodeRaiders([{ id: 18000, kind: 'captain', hitsLeft: 28 }])),
   ).not.toBeNull();
@@ -109,8 +109,16 @@ it('counts only real town contributors and pays the helm once on claiming at hom
   sim.removePlayer(1);
   sim.addPlayer(1, saved, 'owner');
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0, 7);
+  sim.inventoryOf(1).log = 60;
+  const fullPack = { ...sim.inventoryOf(1) };
+  expect(sim.requestExpedition(1, { action: 'claim' }).notice).toBe('full');
+  expect(sim.inventoryOf(1)).toEqual(fullPack);
+  expect(sim.expeditionStateOf(1).progress).toEqual([1, 6, 1]);
+  delete sim.inventoryOf(1).log;
   expect(sim.requestExpedition(1, { action: 'claim' }).notice).toBe('claimed');
   expect(sim.inventoryOf(1).watchCaptainHelm).toBe(1);
+  expect(sim.inventoryOf(1).lastBellTrophy).toBe(1);
   expect(sim.requestExpedition(1, { action: 'claim' }).notice).toBe('unfinished');
   expect(sim.inventoryOf(1).watchCaptainHelm).toBe(1);
+  expect(sim.inventoryOf(1).lastBellTrophy).toBe(1);
 });
