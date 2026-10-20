@@ -131,3 +131,5 @@ export * from './world/skeleton-town';
 export * from './data/discovery-leads';
 
 export * from './data/equipment-specialties';
+
+export * from './sim/woodland-events';

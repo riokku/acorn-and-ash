@@ -1614,3 +1614,13 @@ found in buried treasure gives one extra meat when used as the active weapon for
 a meat-bearing animal's finishing blow, if inventory space permits. Off-hand and
 carried items grant no specialty. These fixed properties remain visible in item
 tooltips and the admin player-facing preview even with custom descriptions.
+
+### Woodland mushroom flushes
+
+On the second and fifth days of spring and autumn, a shared mushroom flush can
+appear around either the forgotten camp or mushroom grove. Up to three extra
+clusters grow on clear ground for that game day. Nearby players see a short
+foraging hint; use the normal gathering interaction to collect them for cooking.
+These are ordinary mushrooms, with no exclusive reward or countdown. Harvests
+persist across reconnects and do not refill through ordinary patch regrowth.
+The next scheduled flush chooses its landmark and positions from the world seed.
