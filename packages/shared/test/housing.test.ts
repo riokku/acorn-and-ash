@@ -31,6 +31,7 @@ const sims: WorldSimulation[] = [];
 afterEach(() => {
   for (const sim of sims.splice(0)) sim.dispose();
 });
+// Keep the largest upgraded plot clear of the protected trail cairn northeast of spawn.
 function world(kind?: HomeKind, skills = 7): WorldSimulation {
   const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
   sims.push(sim);
@@ -39,7 +40,7 @@ function world(kind?: HomeKind, skills = 7): WorldSimulation {
       {
         id: 7,
         kind,
-        x: 0,
+        x: -2,
         z: -4.2,
         yaw: 0,
         lit: false,
@@ -58,7 +59,7 @@ function world(kind?: HomeKind, skills = 7): WorldSimulation {
   return sim;
 }
 function build(sim: WorldSimulation, kind: HomeKind): void {
-  sim.requestBuild(1, { kind, x: 0, z: -4.2, yaw: 0 });
+  sim.requestBuild(1, { kind, x: -2, z: -4.2, yaw: 0 });
   sim.queueInput(1, createInput(1, 0, 0, 0));
   sim.step(Date.now());
 }
@@ -144,7 +145,7 @@ describe('housing knowledge and safe upgrades', () => {
       {
         id: 8,
         kind: 'campfire',
-        x: 3.1,
+        x: 1.1,
         z: -4.2,
         yaw: 0,
         lit: false,

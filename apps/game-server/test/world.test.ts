@@ -1,4 +1,4 @@
-import { encodeBuild } from '@acorn/shared';
+import { encodeBuild, isMushroomFlush } from '@acorn/shared';
 import { finishRareCatch } from './helpers';
 import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
@@ -1116,7 +1116,9 @@ describe('patches running out', () => {
     expect(patches.filter((patch) => patch.item === 'stick')).toHaveLength(STICK_PATCHES.length);
     expect(patches.filter((patch) => patch.item === 'flower')).toHaveLength(FLOWER_PATCHES.length);
     for (const patch of patches) {
-      expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
+      expect(patch.remaining).toBeGreaterThanOrEqual(
+        isMushroomFlush(patch.id) ? 0 : GATHER_PATCH_MIN_COUNT,
+      );
       expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
     }
     client.close();
