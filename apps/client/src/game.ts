@@ -1,3 +1,4 @@
+import { mushroomFlushHint } from '@acorn/shared';
 import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@acorn/shared';
 import { bonehollowVictory } from './hud/bonehollow-victory';
 import { playConfirmedStrike, playLastBell } from './audio/feedback';
@@ -6029,6 +6030,12 @@ export class Game {
                     player.motion.position.z - track.z,
                   ) < 2.2,
               );
+              const flush = mushroomFlushHint(
+                this.gatherPatches,
+                player.motion.position.x,
+                player.motion.position.z,
+              );
+              if (flush) return flush;
               return track === undefined
                 ? discoveryLeadHint(
                     this.discoveryLeads,

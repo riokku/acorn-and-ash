@@ -1,3 +1,4 @@
+import { isMushroomFlush } from '../src/sim/woodland-events';
 import { colliderTopAt } from '../src/collision/solid-surface';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -1208,9 +1209,13 @@ describe('gathering sticks', () => {
     expect(patchNamed(sim, 1).remaining).toBe(before - 2);
   });
 
-  it('starts every patch with somewhere from two to six', () => {
+  it('starts ordinary patches with two to six and event patches dormant', () => {
     const sim = createWorld();
     for (const patch of sim.gatherPatchesList()) {
+      if (isMushroomFlush(patch.id)) {
+        expect(patch.remaining).toBe(0);
+        continue;
+      }
       expect(patch.remaining).toBeGreaterThanOrEqual(GATHER_PATCH_MIN_COUNT);
       expect(patch.remaining).toBeLessThanOrEqual(GATHER_PATCH_MAX_COUNT);
     }
@@ -1401,7 +1406,7 @@ describe('a picked-clean patch growing back', () => {
         expect(Math.hypot(prop.x - grown.x, prop.z - grown.z)).toBeGreaterThan(radius);
       }
       for (const other of sim.gatherPatchesList()) {
-        if (other.id === grown.id) continue;
+        if (other.id === grown.id || other.remaining === 0) continue;
         expect(Math.hypot(other.x - grown.x, other.z - grown.z)).toBeGreaterThanOrEqual(
           PATCH_SPACING,
         );

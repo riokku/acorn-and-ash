@@ -1,4 +1,11 @@
 import {
+  MUSHROOM_FLUSH_IDS,
+  isMushroomFlush,
+  woodlandDay,
+  mushroomFlushSite,
+  mushroomFlushSpot,
+} from './woodland-events';
+import {
   equipmentHungerRate,
   equipmentHeatRecovery,
   huntingYield,
@@ -1649,6 +1656,7 @@ export class WorldSimulation {
   private readonly digRefusals: { netId: number; reason: DigRefusalReason }[] = [];
   /** Every stick and flower patch: where it is now and how many it has left (see decision 0061). */
   private readonly patches: GatherPatch[];
+  private woodlandEventDay = -1;
   /** Patches gathered from, grown back or moved since this was last asked, by id. */
   private readonly patchChanges = new Set<number>();
   /** Everything lying where somebody dropped it, oldest first. */
@@ -1764,6 +1772,16 @@ export class WorldSimulation {
     ));
     for (const spot of discoveryForageSpots(this.discoverySites))
       this.patches.push(freshPatch(this.seed, spot));
+    for (const id of MUSHROOM_FLUSH_IDS)
+      this.patches.push({
+        id,
+        item: 'mushroom',
+        x: 0,
+        z: 0,
+        remaining: 0,
+        generation: 0,
+        emptiedAtMs: 0,
+      });
     for (const spot of REED_PATCHES) this.patches.push(freshPatch(this.seed, spot));
     const rockSpots = buildMountainRockSpots(
       this.seed,
@@ -2323,6 +2341,7 @@ export class WorldSimulation {
     this.nowMs = nowMs;
     this.revealLandedLogs(nowMs);
     this.tick += 1;
+    this.updateWoodlandEvents();
     this.updateLakeIce();
     this.updateWildfire();
     for (const plots of this.homeGardens.values())
@@ -3395,6 +3414,43 @@ export class WorldSimulation {
     return this.pickupRefusals.splice(0);
   }
 
+  /** Refresh only when the saved game calendar enters a different day. */
+  private updateWoodlandEvents(): void {
+    const calendar = this.calendar(),
+      day = woodlandDay(calendar);
+    if (day === this.woodlandEventDay) return;
+    this.woodlandEventDay = day;
+    const site = mushroomFlushSite(this.seed, calendar, this.discoverySites);
+    const footprints = this.buildFootprints(undefined, true);
+    for (const patch of this.patches.filter((p) => isMushroomFlush(p.id))) {
+      if (site === null) {
+        if (patch.remaining > 0) {
+          patch.remaining = 0;
+          this.patchChanges.add(patch.id);
+        }
+        continue;
+      }
+      if (patch.generation >= day) continue;
+      patch.remaining = 0;
+      const spot = mushroomFlushSpot(this.seed, day, patch.id, site, (x, z) => {
+        const height = this.collision.terrain.heightAt(x, z);
+        return (
+          this.patchSpotIsClear(patch.id, x, z, footprints) &&
+          Math.abs(this.collision.terrain.heightAt(x + 0.6, z) - height) < 0.3 &&
+          Math.abs(this.collision.terrain.heightAt(x, z + 0.6) - height) < 0.3
+        );
+      });
+      if (spot) {
+        patch.x = spot.x;
+        patch.z = spot.z;
+        patch.remaining = 3;
+      }
+      patch.generation = day;
+      patch.emptiedAtMs = 0;
+      this.patchChanges.add(patch.id);
+    }
+  }
+
   /**
    * Bring back every picked-clean patch whose time is up, each at a fresh
    * spot with a fresh count.
@@ -3403,6 +3459,7 @@ export class WorldSimulation {
    * anything picked clean long enough ago comes back at once.
    */
   regrowPatches(nowMs: number): void {
+    this.updateWoodlandEvents();
     for (const patch of this.patches) {
       if (!this.patchIsDueBack(patch, nowMs)) continue;
       const generation = patch.generation + 1;
@@ -3418,6 +3475,12 @@ export class WorldSimulation {
    * them is.
    */
   private movePatch(patch: GatherPatch, generation: number, nowMs = this.nowMs): boolean {
+    // A building can cover a flush, but cannot move it into ordinary regrowth.
+    if (isMushroomFlush(patch.id)) {
+      patch.remaining = 0;
+      this.patchChanges.add(patch.id);
+      return false;
+    }
     // Mature reeds come back somewhere else round the shore.
     if (isReedPatch(patch.id)) {
       const footprints = this.buildFootprints(undefined, true);
@@ -3474,7 +3537,7 @@ export class WorldSimulation {
 
   /** Whether a picked-clean patch is due back: mature reeds on their own, longer timer. */
   private patchIsDueBack(patch: Readonly<GatherPatch>, nowMs: number): boolean {
-    if (patch.remaining > 0) return false;
+    if (isMushroomFlush(patch.id) || patch.remaining > 0) return false;
     if (!isReedPatch(patch.id)) {
       return patchIsDue(this.seed, patch, nowMs, this.patchRegrowMinSeconds);
     }
@@ -6382,6 +6445,7 @@ export class WorldSimulation {
    * sticks.
    */
   restorePatches(saved: Iterable<PersistedPatch>): void {
+    this.woodlandEventDay = -1;
     for (const row of saved) {
       const patch = this.patches.find((candidate) => candidate.id === row.id);
       if (patch === undefined) continue;
