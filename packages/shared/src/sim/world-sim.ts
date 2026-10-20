@@ -1,3 +1,4 @@
+import { nearAdventureLake, nearMountainSpring } from './regional-adventures';
 import {
   MUSHROOM_FLUSH_IDS,
   isMushroomFlush,
@@ -2662,6 +2663,12 @@ export class WorldSimulation {
         // A room has its own coordinates, nowhere on the map.
         if (runtime.space === OUTDOORS) {
           this.exploreAround(runtime, position.x, position.z);
+          if (runtime.health > 0) {
+            if (nearMountainSpring(position.x, position.z))
+              this.advanceExpedition(runtime, { kind: 'region', region: 'spring' }, 1);
+            if (nearAdventureLake(position.x, position.z))
+              this.advanceExpedition(runtime, { kind: 'region', region: 'lake' }, 1);
+          }
           if (runtime.health > 0 && inSkeletonTown(position.x, position.z))
             this.advanceExpedition(runtime, { kind: 'bonehollow', step: 'arrival' }, 1);
         }
@@ -3372,7 +3379,19 @@ export class WorldSimulation {
     const offered =
       patch.item === 'mushroom' && forestWeather(this.seed, this.nowMs).mushroomsAbundant ? 2 : 1;
     const gathered = addItem(runtime.inventory, patch.item, offered);
-    this.advanceExpedition(runtime, { kind: 'gather', item: patch.item }, gathered);
+    this.advanceExpedition(
+      runtime,
+      {
+        kind: 'gather',
+        item: patch.item,
+        ...(isMountainPatch(patch.id)
+          ? { region: 'mountain' as const }
+          : nearAdventureLake(patch.x, patch.z)
+            ? { region: 'lake' as const }
+            : {}),
+      },
+      gathered,
+    );
 
     patch.remaining -= 1;
     if (patch.remaining === 0) patch.emptiedAtMs = this.nowMs;
@@ -5550,6 +5569,8 @@ export class WorldSimulation {
   /** The line comes in, with or without a fish, and everybody hears how. */
   private endCast(runtime: PlayerRuntime, end: CastEnd): void {
     const castNumber = runtime.cast?.castNumber ?? 0;
+    const lakeCatch =
+      runtime.cast !== null && nearAdventureLake(runtime.cast.float.x, runtime.cast.float.z);
     runtime.cast = null;
     runtime.reel = null;
     this.reelChanges.delete(runtime.netId);
@@ -5560,7 +5581,11 @@ export class WorldSimulation {
       const added = addItem(runtime.inventory, end.item);
       recordFish(runtime.fishRecords, end.item, this.seed, castNumber, this.tick);
       this.fishRecordChanges.add(runtime.netId);
-      this.advanceExpedition(runtime, { kind: 'fish' }, 1);
+      this.advanceExpedition(
+        runtime,
+        { kind: 'fish', ...(lakeCatch ? { region: 'lake' as const } : {}) },
+        1,
+      );
       this.fishingEvents.push({ kind: 'caught', netId: runtime.netId, item: end.item, added });
       return;
     }

@@ -7,8 +7,9 @@ import { hashSeed } from '../rng';
 export const BONEHOLLOW_EXPEDITION_ID = 8;
 export type ExpeditionEvent =
   | { readonly kind: 'bonehollow'; readonly step: 'arrival' | 'watch' | 'captain' }
-  | { readonly kind: 'gather'; readonly item: ItemId }
-  | { readonly kind: 'chop' | 'fish' | 'defeat' }
+  | { readonly kind: 'gather'; readonly item: ItemId; readonly region?: 'mountain' | 'lake' }
+  | { readonly kind: 'chop' | 'fish' | 'defeat'; readonly region?: 'lake' }
+  | { readonly kind: 'region'; readonly region: 'spring' | 'lake' }
   | { readonly kind: 'visit'; readonly site: DiscoveryKind };
 export type ExpeditionObjective = ExpeditionEvent & {
   readonly goal: number;
@@ -175,6 +176,48 @@ export const EXPEDITIONS: readonly ExpeditionDefinition[] = [
       { item: 'ironOre', count: 6 },
     ],
   },
+  {
+    id: 9,
+    name: 'Where the river begins',
+    hint: 'Follow the river uphill, taking the trails beside its waterfalls to the mountain spring. Gather loose stone on the lower slopes and iron ore above the pines. Bring food, and warm clothing in winter.',
+    tier: 0,
+    objectives: [
+      { kind: 'region', region: 'spring', goal: 1, label: 'Reach the mountain spring' },
+      {
+        kind: 'gather',
+        item: 'stone',
+        region: 'mountain',
+        goal: 6,
+        label: 'Gather mountain stone',
+      },
+      {
+        kind: 'gather',
+        item: 'ironOre',
+        region: 'mountain',
+        goal: 3,
+        label: 'Gather mountain iron ore',
+      },
+    ],
+    rewards: [
+      { item: 'winterJacket', count: 1 },
+      { item: 'forestStew', count: 2 },
+    ],
+  },
+  {
+    id: 10,
+    name: 'A supper by the lake',
+    hint: 'Follow the river downstream to the large lake northeast of home. Explore its shore, gather lakeside reeds and catch fish with your rod. Winter ice prevents fishing; choose this outing in open-water seasons.',
+    tier: 0,
+    objectives: [
+      { kind: 'region', region: 'lake', goal: 1, label: 'Explore the large lake shore' },
+      { kind: 'gather', item: 'reed', region: 'lake', goal: 6, label: 'Gather lakeside reeds' },
+      { kind: 'fish', region: 'lake', goal: 3, label: 'Catch fish in the large lake' },
+    ],
+    rewards: [
+      { item: 'leatherBoots', count: 1 },
+      { item: 'berryTea', count: 2 },
+    ],
+  },
 ];
 export interface ExpeditionState {
   cycle: number;
@@ -264,6 +307,9 @@ export function progressExpedition(
       goal.kind !== event.kind ||
       ('item' in goal && (!('item' in event) || goal.item !== event.item)) ||
       ('step' in goal && (!('step' in event) || goal.step !== event.step)) ||
+      ('region' in goal &&
+        goal.region !== undefined &&
+        (!('region' in event) || goal.region !== event.region)) ||
       ('site' in goal && (!('site' in event) || goal.site !== event.site))
     )
       return;

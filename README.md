@@ -1624,3 +1624,21 @@ foraging hint; use the normal gathering interaction to collect them for cooking.
 These are ordinary mushrooms, with no exclusive reward or countdown. Harvests
 persist across reconnects and do not refill through ordinary patch regrowth.
 The next scheduled flush chooses its landmark and positions from the world seed.
+
+### Regional adventures
+
+Two additional outings rotate through every home expedition board, including tents:
+
+- **Where the river begins:** follow the river uphill to the mountain spring,
+  gather six mountain stone and three mountain iron ore. Claim a winter jacket
+  and two forest stews at home. Mountain resources count when freshly gathered
+  from their mountain patches, not when taken from storage or another player.
+- **A supper by the lake:** explore the large northeastern lake, gather six reeds
+  from its shore and catch three fish there. Claim leather boots and two berry teas.
+  The opening pond and upstream river do not count. Choose an open-water season;
+  winter ice prevents fishing.
+
+Arrival can count from a safe bank or trail. Objectives can be done in any order,
+progress saves across sessions, and rewards use the existing atomic home-board
+claim. Bonehollow stays pinned as the third offer; these trips join the other two
+rotating choices. Existing active outings and save IDs remain valid.
