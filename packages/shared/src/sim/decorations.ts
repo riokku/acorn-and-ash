@@ -17,6 +17,7 @@ export const DECORATION_KINDS = [
   'sentinelTrophy',
   'fishDisplay',
   'goldenFishDisplay',
+  'lastBellTrophy',
 ] as const;
 export type DecorationKind = (typeof DECORATION_KINDS)[number];
 export const DECORATION_REASONS = [

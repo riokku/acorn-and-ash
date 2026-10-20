@@ -563,6 +563,7 @@ function createBuiltMesh(
     case 'moonLantern':
     case 'flowerPlanter':
     case 'trailPennant':
+    case 'lastBellTrophy':
     case 'sentinelTrophy':
     case 'fishDisplay':
     case 'goldenFishDisplay':

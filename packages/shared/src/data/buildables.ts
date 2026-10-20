@@ -26,6 +26,7 @@ export type BuildableKindId =
   | 'moonLantern'
   | 'flowerPlanter'
   | 'trailPennant'
+  | 'lastBellTrophy'
   | 'sentinelTrophy'
   | 'fishDisplay'
   | 'goldenFishDisplay'
@@ -317,6 +318,16 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x9ea997,
   },
+  lastBellTrophy: {
+    id: 'lastBellTrophy',
+    displayName: 'Last Bell keepsake',
+    costs: [{ item: 'lastBellTrophy', amount: 1 }],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0xb58b4b,
+  },
   rowboat: {
     id: 'rowboat',
     displayName: 'Canoe',
@@ -360,6 +371,7 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'fishDisplay',
   'goldenFishDisplay',
   'rowboat',
+  'lastBellTrophy',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

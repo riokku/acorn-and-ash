@@ -1,3 +1,4 @@
+import { createLastBellTrophy } from './skeleton-town';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { createSentinelTrophy } from './sentinel-art';
@@ -171,8 +172,8 @@ export function createPileModel(item: ItemId): GroundModel {
         dispose() {},
       };
   }
-  if (item === 'sentinelTrophy') {
-    const model = createSentinelTrophy();
+  if (item === 'lastBellTrophy' || item === 'sentinelTrophy') {
+    const model = item === 'lastBellTrophy' ? createLastBellTrophy() : createSentinelTrophy();
     model.group.scale.setScalar(0.55);
     return {
       ...model,

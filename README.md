@@ -1552,7 +1552,11 @@ settlement, help defeat six watch skeletons, then defeat the Captain of the Last
 Bell at the northern hall. He attacks in two combinations followed by a charged
 whirlwind, with longer combinations below half health. Return home to claim the
 rare Last Watch helm (+10 Protection, +5 Vitality, +10 Warmth), three forest stews
-and six iron ore. Progress survives reconnecting; the helm is kept on knockout.
+and six iron ore, plus a bronze Last Bell keepsake. Place the keepsake inside or
+outside your home from Build, move it, or reclaim it to your pack. Both the helm
+and keepsake survive knockout. Progress and placed displays survive reconnecting.
+Previously completed outings can be repeated to earn the keepsake.
+Inspect the display at `/?gallery=winter-gear&gear=last-bell`.
 The board always offers this outing alongside two rotating expeditions.
 Watchtowers, spectral lanterns and the enlarged bronze bell mark the approach.
 `/?gallery=skeleton-town&view=captain` gives a close look at the captain and helm.

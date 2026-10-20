@@ -1,3 +1,4 @@
+import { createLastBellTrophy } from '../scene/skeleton-town';
 import { characterStats } from '../item-catalog';
 import * as THREE from 'three/webgpu';
 import { CHARACTER_KINDS, type CharacterId } from '@acorn/shared';
@@ -33,9 +34,14 @@ export async function showWinterGear(
           hands: 'leatherGloves',
         } as const);
   const actor = createCharacter(kind, 0x82955e);
-  actor.setGear(params.has('before') ? {} : worn);
+  actor.setGear(params.has('before') || params.get('gear') === 'last-bell' ? {} : worn);
   actor.group.rotation.y = params.has('back') ? -0.18 : Math.PI - 0.18;
   scene.add(actor.group);
+  if (params.get('gear') === 'last-bell' && !params.has('before')) {
+    const trophy = createLastBellTrophy();
+    trophy.group.position.set(0.65, 0, 0);
+    scene.add(trophy.group);
+  }
   let heads = 0;
   actor.group.traverse((object) => {
     if (object.userData.gearItem === (basic ? 'woolCap' : 'bearHat')) heads++;
@@ -49,11 +55,13 @@ export async function showWinterGear(
   const caption = document.createElement('p');
   caption.textContent = params.has('before')
     ? 'Plain clothes · Warmth 0'
-    : lastWatch
-      ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
-      : basic
-        ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
-        : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
+    : params.get('gear') === 'last-bell'
+      ? 'Last Bell keepsake · earned at Bonehollow, displayed at home'
+      : lastWatch
+        ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
+        : basic
+          ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
+          : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
   caption.style.cssText =
     'position:absolute;left:0;right:0;bottom:24px;text-align:center;color:#f1efdc;font:18px Georgia;pointer-events:none';
   document.body.append(caption);

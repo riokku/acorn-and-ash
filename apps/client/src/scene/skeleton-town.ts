@@ -68,3 +68,19 @@ export function townHeadwear(kind: RaiderKindId): THREE.Object3D | null {
   group.visible = false;
   return group;
 }
+
+/** A home-sized copy of the existing Blender bell, resting with its rim on the ground. */
+export function createLastBellTrophy() {
+  const group = new THREE.Group();
+  group.name = 'last-bell-keepsake';
+  const bell = template?.getObjectByName('LastBell')?.clone(true);
+  if (bell) {
+    group.add(bell);
+    const bounds = new THREE.Box3().setFromObject(group);
+    const center = bounds.getCenter(new THREE.Vector3());
+    bell.position.sub(new THREE.Vector3(center.x, bounds.min.y, center.z));
+    group.scale.setScalar(0.72 / (bounds.max.x - bounds.min.x));
+  }
+  // Geometry and materials belong to the cached town template.
+  return { group, dispose() {} };
+}
