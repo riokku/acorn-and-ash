@@ -1642,3 +1642,8 @@ Arrival can count from a safe bank or trail. Objectives can be done in any order
 progress saves across sessions, and rewards use the existing atomic home-board
 claim. Bonehollow stays pinned as the third offer; these trips join the other two
 rotating choices. Existing active outings and save IDs remain valid.
+
+Dug terrain includes a sealed, dark-earth underside and perimeter so seams cannot
+reveal the sky below the world. Rebuilt ground around dig mouths participates in
+camera collision from both sides. Inspect pits and tunnels in `/?gallery=dug-ground`
+and `/?gallery=dug-ramp`; orbit low around the opening and look up from within it.
