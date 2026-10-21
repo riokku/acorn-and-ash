@@ -69,6 +69,7 @@ docs/decisions/     Short decision records
    - Hits are checked with up to about 150 ms of lag compensation.
 4. **Interest management.** The world is split into 32 m chunks. Each player only receives entities within about 100 m.
 5. **Network messages.** Use compact binary encoding. Clients send inputs 10–15 times per second, bundled. Cloudflare bills incoming WebSocket messages at 20:1.
+   Compatibility tests must assert fixed IDs or fixed prefixes/ranges, never the current tail or exact total length of an append-only catalog. Appending a new item must not invalidate older compatibility tests. Run the complete shared test suite when extending shared catalogs; feature-only tests can miss older assumptions.
 6. **World lifecycle.** A world wakes when the first player connects and runs its tick loop only while players are connected. It saves every 30 s and when the last player leaves. After that, it **clears all timers**, because timers prevent hibernation and cost money.
 7. **Durable Object limits.**
    - 128 MB memory per object.

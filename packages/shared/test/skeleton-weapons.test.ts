@@ -26,7 +26,8 @@ it('only drops each skeleton’s own weapon, deterministically at its 2–5% rat
 
 it('appends weapon wire ids and equips each matching drop with its power bonus', () => {
   const items = [...new Set(Object.values(SKELETON_WEAPON_DROPS).map((drop) => drop.item))];
-  expect(ITEM_ORDER.slice(-5)).toEqual(items);
+  // Check the assigned wire IDs, not the tail: future items append after these.
+  expect(ITEM_ORDER.slice(52, 57)).toEqual(items);
   expect(itemIndex('lastBellTrophy')).toBe(51);
   const sim = new WorldSimulation({ seed: 123, forestEncounters: false });
   try {

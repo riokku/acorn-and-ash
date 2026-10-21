@@ -51,7 +51,8 @@ it('always offers the adventure, preserves progress and keeps old wire IDs', () 
   progressExpedition(state, { kind: 'bonehollow', step: 'captain' });
   expect(expeditionComplete(state)).toBe(true);
   expect(RAIDER_KIND_ORDER.slice(0, 5)).toEqual(['minion', 'rogue', 'warrior', 'mage', 'sentinel']);
-  expect(ITEM_ORDER.slice(-2)).toEqual(['watchCaptainHelm', 'lastBellTrophy']);
+  // These IDs stay fixed when later releases append more items.
+  expect(ITEM_ORDER.slice(50, 52)).toEqual(['watchCaptainHelm', 'lastBellTrophy']);
   expect(
     decodeServerMessage(encodeRaiders([{ id: 18000, kind: 'captain', hitsLeft: 28 }])),
   ).not.toBeNull();
