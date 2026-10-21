@@ -115,7 +115,7 @@ import {
 } from '../data/discoveries';
 import { recipeFor } from '../data/recipes';
 import { createRng, hashSeed } from '../rng';
-import { creatureClothingDrop } from './creature-loot';
+import { creatureClothingDrop, skeletonBagDrop } from './creature-loot';
 import {
   blueprintDropChance,
   BLUEPRINT_MAX_MISSES,
@@ -1897,6 +1897,8 @@ export class WorldSimulation {
           this.blueprintProgressChanges.add(netId);
         },
         dropBonusLoot: (raiderId, kind, position, facingYaw) => {
+          const bag = skeletonBagDrop(this.seed, kind, raiderId, this.tick);
+          if (bag !== null) this.dropPile(bag, 1, position, facingYaw, this.nowMs);
           const clothing = creatureClothingDrop(this.seed, 'raider', kind, raiderId, this.tick);
           if (clothing !== null) this.dropPile(clothing, 1, position, facingYaw, this.nowMs);
         },

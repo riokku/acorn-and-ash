@@ -15,7 +15,7 @@ import {
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { flowerModelParts } from './flower-models';
-import { createStickPatchModel } from './pickup-models';
+import { createSatchel, createStickPatchModel } from './pickup-models';
 import {
   createReedPatchModel,
   createReedPileModel,
@@ -187,6 +187,16 @@ export function createPileModel(item: ItemId): GroundModel {
   if (item === 'trailRation' || item === 'forestStew' || item === 'berryTea')
     return createMealModel(item);
   if (blueprintHome(item) !== null) return createBlueprintModel(item);
+  if (item === 'bag') {
+    const model = createSatchel();
+    return {
+      ...model,
+      item,
+      show: (count) => {
+        model.group.visible = count > 0;
+      },
+    };
+  }
   if (item === 'stick') return createSticksModel(item);
   if (item === 'flower') return createFlowerModel(item);
   if (item === 'bone') return createBonesModel(item);

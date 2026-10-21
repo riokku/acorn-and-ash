@@ -1659,3 +1659,10 @@ Roasted fish retain those shapes with toasted colors. Inspect the models at
 Wildfire flames fade smoothly into their bases instead of showing flat opaque
 edges against burning trees. Inspect a frozen close-up at
 `/?gallery=tree-fires&at=22&close&still`; omit `still` to watch the flame animation.
+
+Skeletons have an independent 25% chance to drop an inventory bag in addition to
+normal loot. A bag can be collected with a full pack and provides the existing
+four-slot upgrade; multiple bags do not stack capacity. Harvestable mature reeds
+now grow along both banks throughout the river, avoiding falls, deep water and
+slough basins. River beds use the usual regrowth timer and new IDs after the
+existing pond and lake beds, so old worlds gain them without moving saved beds.
