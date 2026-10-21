@@ -1,3 +1,4 @@
+import { wornWeapon } from './gear-models';
 import { createLastBellTrophy } from './skeleton-town';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { ITEM_KINDS } from '../item-catalog';
@@ -7,6 +8,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   GATHER_PATCH_MAX_COUNT,
+  skeletonWeaponKind,
   blueprintHome,
   type DroppedPileView,
   type GatherPatchView,
@@ -160,6 +162,29 @@ function createPartsModel(item: ItemId, model: PartsModel): GroundModel {
  * bundle in its own colour until it has a model of its own.
  */
 export function createPileModel(item: ItemId): GroundModel {
+  if (skeletonWeaponKind(item) !== null) {
+    const group = new THREE.Group();
+    const parts = wornWeapon(item)!.parts;
+    let restHeight = 0;
+    for (const part of parts) {
+      part.geometry.computeBoundingBox();
+      restHeight = Math.max(restHeight, part.geometry.boundingBox!.max.z);
+    }
+    for (const part of parts) {
+      const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.y = restHeight + 0.01;
+      group.add(mesh);
+    }
+    return {
+      item,
+      group,
+      show: (count) => {
+        group.visible = count > 0;
+      },
+      dispose() {},
+    };
+  }
   if (item === 'watchCaptainHelm') {
     const group = createWatchCaptainHelm();
     if (group)

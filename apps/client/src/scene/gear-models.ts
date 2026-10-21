@@ -1,11 +1,11 @@
 import * as THREE from 'three/webgpu';
 
-import type { ItemId } from '@acorn/shared';
+import { skeletonWeaponKind, type ItemId } from '@acorn/shared';
 
 import { plainMaterial } from '../art/materials';
 import { ModelBuilder, placed } from '../art/shapes';
 import type { ModelPart } from './model-loading';
-import { blade, partsOf } from './raider-weapons';
+import { blade, partsOf, raiderWeapon } from './raider-weapons';
 
 /**
  * Simple stand-ins for the things a character can wear or hold, until the
@@ -40,6 +40,8 @@ export function wornWeapon(item: ItemId): WornWeapon | undefined {
       length: 0.42,
     };
   }
+  const skeleton = skeletonWeaponKind(item);
+  if (skeleton !== null) built = raiderWeapon(skeleton);
   if (built !== undefined) weapons.set(item, built);
   return built;
 }

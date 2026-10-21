@@ -279,6 +279,40 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   leatherGloves: (
     <path d="M6 22V12L4 8L6 7L8 10V3H10V9V2H12V9V3H14V10V5H16V14L18 12L20 14L16 20V22Z" />
   ),
+  rustySword: (
+    <g transform="rotate(35 12 12)">
+      <rect x="10.8" y="1" width="2.4" height="14" rx="0.8" />
+      <rect x="7" y="15" width="10" height="2" />
+      <rect x="11" y="17" width="2" height="5" />
+    </g>
+  ),
+  raiderGreatsword: (
+    <g transform="rotate(35 12 12)">
+      <rect x="10.8" y="1" width="2.4" height="14" rx="0.8" />
+      <rect x="7" y="15" width="10" height="2" />
+      <rect x="11" y="17" width="2" height="5" />
+    </g>
+  ),
+  watchGreatsword: (
+    <g transform="rotate(35 12 12)">
+      <rect x="10.8" y="1" width="2.4" height="14" rx="0.8" />
+      <rect x="7" y="15" width="10" height="2" />
+      <rect x="11" y="17" width="2" height="5" />
+    </g>
+  ),
+  raiderDagger: (
+    <g transform="rotate(35 12 12)">
+      <path d="M12 3L14.5 12H9.5Z" />
+      <rect x="9" y="12" width="6" height="1.6" />
+      <rect x="10.8" y="13.6" width="2.4" height="7" rx="1" />
+    </g>
+  ),
+  boneStaff: (
+    <g transform="rotate(35 12 12)">
+      <rect x="11" y="7" width="2" height="16" />
+      <path d="M12 1L16 5L12 9L8 5Z" />
+    </g>
+  ),
   ironSword: (
     <g transform="rotate(35 12 12)">
       <rect x="10.8" y="1" width="2.4" height="14" rx="0.8" />

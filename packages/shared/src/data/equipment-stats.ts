@@ -27,6 +27,12 @@ export type EquipmentBonuses = Readonly<Partial<Record<ItemId, EquipmentBonus>>>
 export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>> = {
   axe: { power: 10 },
   ironSword: { power: 50 },
+  rustySword: { power: 25 },
+  raiderDagger: { power: 25 },
+  raiderGreatsword: { power: 45 },
+  boneStaff: { power: 35 },
+  watchGreatsword: { power: 55 },
+
   huntingKnife: { power: 25 },
   refinedAxe: { power: 25 },
   shovel: { power: 5 },
