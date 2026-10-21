@@ -1652,6 +1652,10 @@ The toolbar automatically fills empty slots with carried tools (including torche
 and food. Gathered materials, clothing and building supplies stay in the inventory;
 players can still drag items onto the toolbar to pin them manually.
 
+Fish held by characters and shown in the admin item viewer use distinct low-poly
+perch, trout and golden carp silhouettes, with fins, gills and species markings.
+Roasted fish retain those shapes with toasted colors. Inspect the models at
+`/?gallery=fish` (perch/trout above, golden carp/roasted trout below).
 Wildfire flames fade smoothly into their bases instead of showing flat opaque
 edges against burning trees. Inspect a frozen close-up at
 `/?gallery=tree-fires&at=22&close&still`; omit `still` to watch the flame animation.
