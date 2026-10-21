@@ -57,6 +57,16 @@ const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
     "Sturdy traveler's trousers. Wear them on your lower body from the character screen (Z).",
   leatherBoots: 'Hard-wearing leather boots. Wear them on your feet from the character screen (Z).',
   leatherGloves: 'Soft leather gloves. Wear them on your hands from the character screen (Z).',
+  rustySword:
+    'A weathered sword carried by skeleton minions. Equip in your main hand from the character screen.',
+  raiderDagger:
+    'A quick-looking blade carried by skeleton rogues. Equip in your main hand from the character screen.',
+  raiderGreatsword:
+    'The broad blade carried by skeleton warriors. Equip in your main hand from the character screen.',
+  boneStaff:
+    'A glowing staff carried by skeleton mages. Used for melee attacks; it does not cast spells. Equip in your main hand from the character screen.',
+  watchGreatsword:
+    'The heavy blade carried by ruin sentinels and the Captain of the Last Bell. Equip in your main hand from the character screen.',
   ironSword:
     'An iron sword. Wear it in your main hand and you swing it. Increases the damage of your attacks.',
   huntingKnife: 'A short hunting knife. Wear it in either hand; in your main hand you swing it.',

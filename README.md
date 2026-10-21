@@ -1666,3 +1666,8 @@ four-slot upgrade; multiple bags do not stack capacity. Harvestable mature reeds
 now grow along both banks throughout the river, avoiding falls, deep water and
 slough basins. River beds use the usual regrowth timer and new IDs after the
 existing pond and lake beds, so old worlds gain them without moving saved beds.
+
+Skeletons can also drop the weapon they visibly carry: minions and rogues have a
+5% chance, warriors and mages 3%, and sentinels and captains 2%. These independent
+bonus drops do not replace bones, bags or clothing. Equip recovered weapons in the
+main-hand slot from the character screen; the mage's staff uses melee attacks.

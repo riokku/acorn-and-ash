@@ -59,7 +59,12 @@ export type ItemId =
   | 'linenShirt'
   | 'workTrousers'
   | 'watchCaptainHelm'
-  | 'lastBellTrophy';
+  | 'lastBellTrophy'
+  | 'rustySword'
+  | 'raiderDagger'
+  | 'raiderGreatsword'
+  | 'boneStaff'
+  | 'watchGreatsword';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -609,6 +614,71 @@ export const ITEM_KINDS = {
     equippable: false,
     gearSlots: ['hands'],
   },
+  rustySword: {
+    id: 'rustySword',
+    displayName: 'Rusty sword',
+    pluralName: 'Rusty swords',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8d7963,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
+  raiderDagger: {
+    id: 'raiderDagger',
+    displayName: 'Raider dagger',
+    pluralName: 'Raider daggers',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0xb4bcc4,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
+  raiderGreatsword: {
+    id: 'raiderGreatsword',
+    displayName: 'Raider greatsword',
+    pluralName: 'Raider greatswords',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8d7963,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
+  boneStaff: {
+    id: 'boneStaff',
+    displayName: 'Bone staff',
+    pluralName: 'Bone staves',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x987447,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
+  watchGreatsword: {
+    id: 'watchGreatsword',
+    displayName: 'Watch greatsword',
+    pluralName: 'Watch greatswords',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x8ea79c,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
   ironSword: {
     id: 'ironSword',
     displayName: 'Iron sword',
@@ -824,6 +894,11 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'workTrousers',
   'watchCaptainHelm',
   'lastBellTrophy',
+  'rustySword',
+  'raiderDagger',
+  'raiderGreatsword',
+  'boneStaff',
+  'watchGreatsword',
 ];
 
 export function itemIndex(id: ItemId): number {

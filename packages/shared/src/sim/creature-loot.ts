@@ -4,6 +4,7 @@ import {
   BASIC_CLOTHING,
   CLOTHING_DROP_CHANCE,
   SKELETON_BAG_DROP_CHANCE,
+  SKELETON_WEAPON_DROPS,
 } from '../data/creature-loot';
 import { createRng, hashSeed } from '../rng';
 
@@ -35,4 +36,12 @@ export function skeletonBagDrop(
 ): 'bag' | null {
   const rng = createRng(hashSeed(seed, 'skeleton-bag', kind, id, tick));
   return rng.nextFloat() < SKELETON_BAG_DROP_CHANCE ? 'bag' : null;
+}
+
+/** Independent of bag/clothing rolls, so adding weapon loot cannot reroll existing rewards. */
+export function skeletonWeaponDrop(seed: number, kind: RaiderKindId, id: number, tick: number) {
+  const drop = SKELETON_WEAPON_DROPS[kind];
+  return createRng(hashSeed(seed, 'skeleton-weapon', kind, id, tick)).nextFloat() < drop.chance
+    ? drop.item
+    : null;
 }
