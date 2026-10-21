@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { expect, it, vi } from 'vitest';
 import { createUnderground } from '../src/scene/underground-shell';
 import { createDigScene } from '../src/scene/digging';
+import { FollowCamera } from '../src/camera/follow-camera';
 import { installBvhRaycasting } from '../src/scene/bvh';
 
 it('closes every horizontal and downward view under sloping terrain without covering openings', () => {
@@ -84,5 +85,27 @@ it('includes rebuilt ground and its underside in camera collision, replacing sta
     scene.dispose();
     material.dispose();
     loader.mockRestore();
+  }
+});
+
+it('keeps the full-size earth enclosure within the camera range from the playable boundary', () => {
+  const geometry = new THREE.PlaneGeometry(940, 940, 8, 8).rotateX(-Math.PI / 2);
+  const shell = createUnderground(geometry, 940);
+  shell.updateMatrixWorld(true);
+  const camera = new FollowCamera(1).camera;
+  const ray = new THREE.Raycaster();
+  ray.far = camera.far;
+  for (const x of [-308, 308])
+    for (const z of [-308, 308])
+      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 16) {
+        ray.set(
+          new THREE.Vector3(x, -10, z),
+          new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)),
+        );
+        expect(ray.intersectObject(shell, true).length).toBeGreaterThan(0);
+      }
+  for (const mesh of shell.children as THREE.Mesh[]) {
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
   }
 });

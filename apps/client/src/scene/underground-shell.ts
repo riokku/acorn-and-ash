@@ -1,20 +1,12 @@
 import * as THREE from 'three/webgpu';
-import { Fn, cameraProjectionMatrix, modelViewMatrix, positionLocal, vec4, min } from 'three/tsl';
-
-/** Keep the earth backdrop at the far plane instead of clipping it into a sky-shaped gap. */
-function earthMaterial(color: number, side: THREE.Side) {
-  const material = new THREE.MeshBasicNodeMaterial({ color, side, fog: false });
-  material.vertexNode = Fn(() => {
-    const clip = cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(positionLocal, 1)).toVar();
-    return vec4(clip.xy, min(clip.z, clip.w.mul(0.999999)), clip.w);
-  })();
-  return material;
-}
 
 /** Close the terrain's underside at its perimeter; cracks in dug lining must see earth, not sky. */
 export function createUnderground(geometry: THREE.BufferGeometry, size: number): THREE.Group {
   const group = new THREE.Group();
-  const under = new THREE.Mesh(geometry, earthMaterial(0x4a3524, THREE.BackSide));
+  const under = new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({ color: 0x4a3524, side: THREE.BackSide, fog: false }),
+  );
   const positions = geometry.getAttribute('position');
   let bottom = -40;
   for (let i = 0; i < positions.count; i++) bottom = Math.min(bottom, positions.getY(i) - 20);
@@ -46,8 +38,10 @@ export function createUnderground(geometry: THREE.BufferGeometry, size: number):
   triangle([h, bottom, -h], [-h, bottom, h], [h, bottom, h]);
   const enclosure = new THREE.BufferGeometry();
   enclosure.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  const shell = new THREE.Mesh(enclosure, earthMaterial(0x1c140d, THREE.DoubleSide));
-  under.frustumCulled = shell.frustumCulled = false;
+  const shell = new THREE.Mesh(
+    enclosure,
+    new THREE.MeshBasicMaterial({ color: 0x1c140d, side: THREE.DoubleSide, fog: false }),
+  );
   group.add(under, shell);
   return group;
 }

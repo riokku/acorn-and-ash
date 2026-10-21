@@ -497,7 +497,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     if (made.update !== undefined) updaters.push(made.update);
   }
 
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 300);
+  const camera = new THREE.PerspectiveCamera(
+    50,
+    window.innerWidth / window.innerHeight,
+    0.05,
+    1500,
+  );
   const target = new THREE.Vector3(0, 0.6, 0);
   let distance = 17;
   let height = 8;
