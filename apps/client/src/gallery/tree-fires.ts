@@ -48,7 +48,8 @@ export function showTreeFires(
     radius: PROP_KINDS.pine.shape.canopyRadius * tree.scale,
   }));
   const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
-  const target = new THREE.Vector3(0, 10, 0);
+  const close = params.has('close');
+  const target = new THREE.Vector3(0, close ? 7 : 10, 0);
   const resize = () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -88,7 +89,8 @@ export function showTreeFires(
     clearing.setTreeStates(states, state.now);
     clearing.update(delta);
     art.setState(state);
-    camera.position.set(18, 16, 42);
+    if (close) camera.position.set(3, 7, 7);
+    else camera.position.set(18, 16, 42);
     camera.lookAt(target);
     art.update(delta, camera, false, matchMedia('(prefers-reduced-motion: reduce)').matches);
     lights.update(camera.position);

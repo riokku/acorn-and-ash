@@ -14,7 +14,10 @@ afterEach(() => {
 });
 function template() {
   const root = new THREE.Group();
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  const mesh = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(
+    new THREE.BoxGeometry(),
+    new THREE.MeshBasicMaterial(),
+  );
   mesh.name = 'fire';
   root.add(mesh);
   vi.mocked(flameModelTemplate).mockReturnValue({
@@ -70,4 +73,34 @@ it('relighting a campfire releases its old flame without disposing shared art', 
   expect(fire.group.getObjectByName('fire')).toBeUndefined();
   expect(geometry).not.toHaveBeenCalled();
   expect(material).not.toHaveBeenCalled();
+});
+
+it('softens wildfire instances without changing or disposing the shared campfire flame', () => {
+  const mesh = template();
+  const source = new THREE.MeshStandardMaterial({
+    color: 0xff9900,
+    emissive: 0xff4400,
+    emissiveIntensity: 1.6,
+  });
+  mesh.material = source;
+  const sourceDispose = vi.spyOn(source, 'dispose');
+  const soft = createFlame({ softBase: true })!;
+  const ordinary = createFlame()!;
+  const material = (soft.root.getObjectByName('fire') as THREE.Mesh)
+    .material as THREE.MeshStandardNodeMaterial;
+  expect(material).not.toBe(source);
+  expect(material.opacityNode).not.toBeNull();
+  expect(material.transparent).toBe(true);
+  expect(material.depthWrite).toBe(false);
+  expect(material.emissiveIntensity).toBe(source.emissiveIntensity);
+  expect(material.color.equals(source.color)).toBe(true);
+  expect((ordinary.root.getObjectByName('fire') as THREE.Mesh).material).toBe(source);
+  expect(source.transparent).toBe(false);
+  expect(source.depthWrite).toBe(true);
+  const ownedDispose = vi.spyOn(material, 'dispose');
+  soft.dispose();
+  soft.dispose();
+  ordinary.dispose();
+  expect(ownedDispose).toHaveBeenCalledTimes(1);
+  expect(sourceDispose).not.toHaveBeenCalled();
 });
