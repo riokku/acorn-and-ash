@@ -2,8 +2,8 @@ import { ITEM_KINDS } from '../item-catalog';
 import type { WornGear } from '@acorn/shared';
 import { equipmentDetail, equipmentComparison } from './equipment-stats';
 import {
+  MAX_PACK_SLOTS,
   PACK_ITEMS,
-  hasItem,
   inventoryFromEntries,
   packSlots,
   packStacks,
@@ -337,13 +337,10 @@ function PackSlot({
  */
 function footnote(pack: Inventory): string {
   const rule = 'A slot holds up to 10 of one thing. Tools take a slot each.';
-  const carried = PACK_ITEMS.find((item) => hasItem(pack, item));
-  if (carried !== undefined) {
-    const kind = ITEM_KINDS[carried];
-    return `${rule} Your ${kind.displayName.toLowerCase()} adds ${kind.extraSlots ?? 0}.`;
-  }
+  if (packSlots(pack) >= MAX_PACK_SLOTS)
+    return `${rule} Maximum capacity: ${MAX_PACK_SLOTS} slots.`;
   const findable = PACK_ITEMS[0];
   if (findable === undefined) return rule;
   const kind = ITEM_KINDS[findable];
-  return `${rule} Find a ${kind.displayName.toLowerCase()} for ${kind.extraSlots ?? 0} more.`;
+  return `${rule} Each ${kind.displayName.toLowerCase()} adds ${kind.extraSlots ?? 0} slots, up to ${MAX_PACK_SLOTS} total.`;
 }

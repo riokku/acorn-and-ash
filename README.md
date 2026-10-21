@@ -205,7 +205,9 @@ close after confirmed placement; repeatable pieces stay available. See
 [decision 0136](docs/decisions/0136-outdoor-placement-results.md).
 
 Your pack has six slots to start with. The bag, a few steps from where you
-start, adds four more, for ten. A slot holds up to ten of one thing - logs,
+start, adds four more, for ten. Each additional bag adds four slots up to a
+maximum of 24 (the final upgrade adds two). Bags persist through knockout and
+rejoining; extra bags stay on the ground at the cap. A slot holds up to ten of one thing - logs,
 sticks, flowers, meat or one kind of fish - so fourteen logs take two slots.
 A tool takes a whole slot, and you only ever carry one of each. The bag
 itself never takes a slot. How much fits in a slot, what the bag adds, and
@@ -1661,8 +1663,8 @@ edges against burning trees. Inspect a frozen close-up at
 `/?gallery=tree-fires&at=22&close&still`; omit `still` to watch the flame animation.
 
 Skeletons have an independent 25% chance to drop an inventory bag in addition to
-normal loot. A bag can be collected with a full pack and provides the existing
-four-slot upgrade; multiple bags do not stack capacity. Harvestable mature reeds
+normal loot. Bags can be collected with a full pack and add four slots each,
+up to 24 total. Harvestable mature reeds
 now grow along both banks throughout the river, avoiding falls, deep water and
 slough basins. River beds use the usual regrowth timer and new IDs after the
 existing pond and lake beds, so old worlds gain them without moving saved beds.

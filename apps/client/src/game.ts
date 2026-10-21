@@ -1,3 +1,4 @@
+import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { mushroomFlushHint } from '@acorn/shared';
 import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@acorn/shared';
 import { bonehollowVictory } from './hud/bonehollow-victory';
@@ -4754,6 +4755,8 @@ export class Game {
       return 'Finish your current action first';
     const pack = inventoryFromEntries(this.carrying);
     const kind = ITEM_KINDS[target.item];
+    if (roomFor(pack, target.item) === 0 && isPack(target.item))
+      return `Maximum inventory capacity reached · ${MAX_PACK_SLOTS} slots`;
     if (roomFor(pack, target.item) === 0)
       return kind.maxCarry === 1 &&
         this.carrying.some((entry) => entry.item === target.item && entry.count > 0)

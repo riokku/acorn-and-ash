@@ -24,6 +24,7 @@ export interface PackStack {
 
 /** Slots everybody has before finding any pack at all. */
 export const BASE_PACK_SLOTS = 6;
+export const MAX_PACK_SLOTS = 24;
 
 export function createInventory(): Inventory {
   return {};
@@ -39,15 +40,14 @@ export function hasItem(inventory: Inventory, item: ItemId): boolean {
 
 /**
  * How many slots this player has: the six everybody starts with, plus
- * whatever the biggest pack they carry adds. Only one pack counts - you wear
- * one on your back, not a pile of them.
+ * every collected bag, up to the inventory cap.
  */
 export function packSlots(inventory: Inventory): number {
   let extra = 0;
   for (const item of PACK_ITEMS) {
-    if (hasItem(inventory, item)) extra = Math.max(extra, ITEM_KINDS[item].extraSlots ?? 0);
+    extra += countOf(inventory, item) * (ITEM_KINDS[item].extraSlots ?? 0);
   }
-  return BASE_PACK_SLOTS + extra;
+  return Math.min(MAX_PACK_SLOTS, BASE_PACK_SLOTS + extra);
 }
 
 /** Slots this many of one item take up: one per stack, full or not. A pack takes none. */
@@ -77,7 +77,12 @@ export function roomFor(inventory: Inventory, item: ItemId): number {
   const count = countOf(inventory, item);
   const underLimit =
     kind.maxCarry === undefined ? Number.POSITIVE_INFINITY : Math.max(0, kind.maxCarry - count);
-  if (isPack(item)) return underLimit;
+  if (isPack(item)) {
+    const extra = kind.extraSlots ?? 0;
+    return extra > 0
+      ? Math.min(underLimit, Math.ceil((MAX_PACK_SLOTS - packSlots(inventory)) / extra))
+      : 0;
+  }
 
   const topUp = slotsFor(item, count) * kind.stackSize - count;
   const emptySlots = Math.max(0, packSlots(inventory) - slotsUsed(inventory));

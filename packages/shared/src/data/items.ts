@@ -253,13 +253,12 @@ export const ITEM_KINDS = {
     displayName: 'Bag',
     pluralName: 'Bags',
     stackSize: 1,
-    maxCarry: 1,
-    // Six slots become ten - see decision 0060.
+    maxCarry: 5,
+    // Five upgrades take the starting six slots to the 24-slot cap.
     extraSlots: 4,
     placeholderColor: 0x5f6b45,
     restoresHunger: undefined,
-    // Never lose the four extra slots everything else you carry may be
-    // sitting in.
+    // Capacity upgrades stay through knockout.
     keepOnKnockout: true,
     equippable: false,
   },
