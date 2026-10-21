@@ -7,7 +7,7 @@
  * are what rope is twisted from, and rope is what a rowboat is lashed together
  * with. A bed holds a few, gathered by hand like sticks and flowers; cut
  * clean, it is gone for fifteen to twenty-five minutes and comes back at a
- * different place along the shore of the same water, so every pond and lake
+ * different place along the bank of the same water, so every pond, lake and river
  * always has some.
  *
  * Built from the waters alone, so the first beds and every place a bed can
@@ -31,7 +31,15 @@ import {
   STICK_PATCHES,
   type GatherSpot,
 } from './clearing';
-import { LAKE } from './lake';
+import { LAKE, lakeDepthAt } from './lake';
+import {
+  STREAM,
+  streamPointAt,
+  streamFallGradientAt,
+  streamWaterHalfWidthAt,
+  streamWaterDepthAt,
+  streamPools,
+} from './stream';
 import type { WaterCircle } from './water';
 
 /**
@@ -49,8 +57,8 @@ const EDGE_TOLERANCE = 0.02;
 
 /** A body of water that reeds grow beside, and how its beds are laid out. */
 export interface ReedWater {
-  readonly name: 'lake' | 'pond';
-  /** The circles that make the water's outline, islands included. */
+  readonly name: 'lake' | 'pond' | 'river';
+  /** The circles that make a lake or pond outline; empty for the sampled riverbanks. */
   readonly circles: readonly WaterCircle[];
   /** How far apart the beds a world starts with stand along the bank, in metres. */
   readonly startSpacing: number;
@@ -97,6 +105,15 @@ export const REED_WATERS: readonly ReedWater[] = [
       ...FLOWER_PATCHES,
     ],
   },
+  {
+    name: 'river',
+    circles: [],
+    startSpacing: 20,
+    shoreSpacing: 4,
+    bedSpacing: 12,
+    minMove: 8,
+    keepClearOf: [],
+  },
 ];
 
 /** How far inside a water's outline this spot is, in metres: negative on dry land beyond it. */
@@ -113,6 +130,7 @@ function outlineDepthAt(circles: readonly WaterCircle[], x: number, z: number): 
  * `spacing` apart and clear of everything the water keeps clear of.
  */
 function edgeSpots(water: ReedWater, spacing: number): Array<{ x: number; z: number }> {
+  if (water.name === 'river') return riverBankSpots(spacing);
   const spots: Array<{ x: number; z: number }> = [];
   for (const circle of water.circles) {
     const radius = circle.radius - REED_PATCH_DEPTH;
@@ -127,6 +145,33 @@ function edgeSpots(water: ReedWater, spacing: number): Array<{ x: number; z: num
       if (water.keepClearOf.some((place) => Math.hypot(place.x - x, place.z - z) < PATCH_SPACING)) {
         continue;
       }
+      if (spots.some((spot) => Math.hypot(spot.x - x, spot.z - z) < spacing)) continue;
+      spots.push({ x, z });
+    }
+  }
+  return spots;
+}
+
+/** Follow both banks from the spring outlet to the lake, leaving the falling water clear. */
+function riverBankSpots(spacing: number): Array<{ x: number; z: number }> {
+  const spots: Array<{ x: number; z: number }> = [];
+  for (let row = 2; row < STREAM.count - 2; row++) {
+    const along = (row / (STREAM.count - 1)) * STREAM.length;
+    if (streamFallGradientAt(STREAM, along) > 0.12) continue;
+    const before = streamPointAt(STREAM, row - 1),
+      here = streamPointAt(STREAM, row),
+      after = streamPointAt(STREAM, row + 1);
+    const length = Math.hypot(after.x - before.x, after.z - before.z);
+    const tx = (after.x - before.x) / length,
+      tz = (after.z - before.z) / length;
+    for (const side of row % 2 === 0 ? [-1, 1] : [1, -1]) {
+      const across = side * (streamWaterHalfWidthAt(STREAM, along, side) - 0.2);
+      const x = here.x - tz * across,
+        z = here.z + tx * across;
+      // Stay in reachable channel shallows, outside the spring/slough basins and lake beds.
+      const depth = streamWaterDepthAt(STREAM, x, z);
+      if (depth <= 0 || depth > 0.6 || lakeDepthAt(LAKE, x, z) > -3) continue;
+      if (streamPools(STREAM).some((pool) => lakeDepthAt(pool, x, z) > 0)) continue;
       if (spots.some((spot) => Math.hypot(spot.x - x, spot.z - z) < spacing)) continue;
       spots.push({ x, z });
     }

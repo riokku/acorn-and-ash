@@ -10,3 +10,6 @@ export const CLOTHING_DROP_CHANCE = {
   threat: 0.3,
   boss: 0.5,
 } as const;
+
+/** A separate roll, so finding a bag never replaces bones or clothing. */
+export const SKELETON_BAG_DROP_CHANCE = 0.25;
