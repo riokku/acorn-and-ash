@@ -164,10 +164,8 @@ describe('slots', () => {
   it('lets a bag be picked up into a pack that is already full', () => {
     const pack = createInventory();
     fillEverySlot(pack);
-    expect(roomFor(pack, 'bag')).toBe(1);
+    expect(roomFor(pack, 'bag')).toBe(5);
     expect(addItem(pack, 'bag')).toBe(1);
-    // ...and only one: it is a pack, not a pile of them.
-    expect(addItem(pack, 'bag')).toBe(0);
     // Four new slots, and the axe fits in one of them.
     expect(packSlots(pack)).toBe(10);
     expect(roomFor(pack, 'axe')).toBe(1);
@@ -205,4 +203,26 @@ describe('slots', () => {
     expect(countOf(restored, 'log')).toBe(4);
     expect(inventoryEntries(restored)).toEqual(entries);
   });
+});
+
+it('adds capacity for every bag even when full, caps at 24, and preserves upgrades in saves', () => {
+  const pack = createInventory();
+  for (const capacity of [10, 14, 18, 22, 24]) {
+    addItem(pack, 'log', 1000);
+    expect(slotsUsed(pack)).toBe(packSlots(pack));
+    expect(addItem(pack, 'bag')).toBe(1);
+    expect(packSlots(pack)).toBe(capacity);
+    expect(packSlots(inventoryFromEntries(inventoryEntries(pack)))).toBe(capacity);
+  }
+  expect(countOf(pack, 'bag')).toBe(5);
+  expect(roomFor(pack, 'bag')).toBe(0);
+  expect(addItem(pack, 'bag')).toBe(0);
+  expect(packStacks(pack).some((stack) => stack.item === 'bag')).toBe(false);
+});
+
+it('limits bulk bag pickups and keeps legacy one-bag saves at ten slots', () => {
+  const pack = createInventory();
+  expect(addItem(pack, 'bag', 20)).toBe(5);
+  expect(packSlots(pack)).toBe(24);
+  expect(packSlots(inventoryFromEntries([{ item: 'bag', count: 1 }]))).toBe(10);
 });

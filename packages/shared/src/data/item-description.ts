@@ -1,3 +1,4 @@
+import { MAX_PACK_SLOTS } from '../sim/inventory';
 import { EQUIPMENT_SPECIALTIES } from './equipment-specialties';
 import { isMealItem, MEAL_BENEFITS } from '../sim/meals';
 import { blueprintHome } from './housing';
@@ -79,7 +80,7 @@ export function defaultItemDescription(item: ItemId): string {
     return `Learn to permanently unlock the ${BUILDABLE_KINDS[home].displayName.toLowerCase()} upgrade in this world. Materials are still required.`;
   const kind = ITEM_KINDS[item];
   if (kind.extraSlots !== undefined)
-    return `Adds ${kind.extraSlots} pack slots. Your bag stays with you.`;
+    return `Each bag adds ${kind.extraSlots} pack slots, up to ${MAX_PACK_SLOTS} total. Bags stay with you.`;
   if (kind.restoresHunger !== undefined) {
     const cooked = cookedItemFor(item);
     if (isMealItem(item))

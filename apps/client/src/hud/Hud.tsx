@@ -1,3 +1,4 @@
+import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { BonehollowTrail } from './BonehollowTrail';
 import { FirePanel } from './FirePanel';
 import type { FireRequest } from '@acorn/shared';
@@ -1100,6 +1101,7 @@ function pickupHint(state: HudState, item: ItemId): string {
   const name = kind.displayName.toLowerCase();
   const pack = inventoryFromEntries(state.carrying);
   if (roomFor(pack, item) > 0) return `Right-click or press E to pick up the ${name}`;
+  if (isPack(item)) return `Maximum inventory capacity reached · ${MAX_PACK_SLOTS} slots`;
   if (kind.maxCarry === 1 && hasItem(pack, item)) return `You can only carry one ${name}`;
   return `Your pack is full · no room for the ${name}`;
 }
@@ -1114,6 +1116,7 @@ function pileHint(state: HudState, pile: NonNullable<HudState['nearbyPile']>): s
   if (roomFor(pack, pile.item) > 0)
     return `Right-click or press E to pick up ${amountOf(pile.item, pile.count)}`;
   const name = kind.displayName.toLowerCase();
+  if (isPack(pile.item)) return `Maximum inventory capacity reached · ${MAX_PACK_SLOTS} slots`;
   if (kind.maxCarry === 1 && hasItem(pack, pile.item)) return `You can only carry one ${name}`;
   return `Your pack is full · no room for ${amountOf(pile.item, pile.count)}`;
 }

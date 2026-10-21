@@ -57,6 +57,28 @@ it('wires bag rewards into skeleton loot and allows a full pack to collect the c
     expect(inventory.bag).toBe(1);
     expect(packSlots(inventory)).toBe(capacity + 4);
     expect(sim.droppedPilesList().some((p) => p.id === pile.id)).toBe(false);
+    // A bag at the cap remains available for another player.
+    inventory.bag = 5;
+    const nextId = Array.from({ length: 100 }, (_, i) => i + 20).find(
+      (id) => skeletonBagDrop(seed, 'minion', id, sim.tick) === 'bag',
+    )!;
+    host.dropBonusLoot(
+      nextId,
+      'minion',
+      { x: 8, y: sim.collision.terrain.heightAt(8, 8), z: 8 },
+      0,
+    );
+    const extra = sim.droppedPilesList().find((p) => p.item === 'bag')!;
+    sim.placePlayer(
+      1,
+      { x: extra.x, y: sim.collision.terrain.heightAt(extra.x, extra.z), z: extra.z },
+      0,
+    );
+    sim.requestLoot(1, { kind: 'pile', id: extra.id });
+    sim.step(50);
+    expect(inventory.bag).toBe(5);
+    expect(packSlots(inventory)).toBe(24);
+    expect(sim.droppedPilesList().find((p) => p.id === extra.id)?.count).toBe(1);
   } finally {
     sim.dispose();
   }
