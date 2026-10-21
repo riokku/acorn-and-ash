@@ -4,11 +4,11 @@
  * Pure and client-only: the server has no notion of slots at all, only of
  * equipping one item id at a time, so nothing here is ever sent over the
  * network. A slot with nothing pinned to it keeps showing whatever wire
- * order would put there, the same as before this existed - see decision
+ * order would put there among tools and food - see decision
  * 0050 and decision 0040's own note that manual placement was a follow-up.
  */
 
-import { ITEM_ORDER, isPack, type ItemId } from '@acorn/shared';
+import { ITEM_ORDER, TOOL_ITEMS, isFood, isPack, type ItemId } from '@acorn/shared';
 
 const STORAGE_KEY = 'acorn.hotbarLayout';
 export const HOTBAR_SIZE = 6;
@@ -62,7 +62,7 @@ export function clearSlot(pins: HotbarPins, slotIndex: number): HotbarPins {
 
 /**
  * What each of the six slots actually shows right now: a pin if it has one,
- * otherwise the next carried item that nothing else has claimed, in wire
+ * otherwise the next carried tool (including torches) or food that nothing else has claimed, in wire
  * order - the same thing `Hotbar` renders and a hotbar-key press equips, so
  * the two can never disagree about what a given slot means. A pack never
  * fills a slot on its own: it has its own button at the end of the bar
@@ -78,7 +78,10 @@ export function resolveHotbarSlots(
   const autoOrder = carrying
     .filter((entry) => entry.count > 0)
     .map((entry) => entry.item)
-    .filter((item) => !pinned.has(item) && !isPack(item));
+    .filter(
+      (item) =>
+        !pinned.has(item) && (TOOL_ITEMS.includes(item) || item === 'torch' || isFood(item)),
+    );
 
   let autoIndex = 0;
   return pins.map((pin) => {

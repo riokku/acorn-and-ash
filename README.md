@@ -1647,3 +1647,7 @@ Dug terrain includes a sealed, dark-earth underside and perimeter so seams canno
 reveal the sky below the world. Rebuilt ground around dig mouths participates in
 camera collision from both sides. Inspect pits and tunnels in `/?gallery=dug-ground`
 and `/?gallery=dug-ramp`; orbit low around the opening and look up from within it.
+
+The toolbar automatically fills empty slots with carried tools (including torches)
+and food. Gathered materials, clothing and building supplies stay in the inventory;
+players can still drag items onto the toolbar to pin them manually.
