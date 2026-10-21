@@ -12,19 +12,52 @@ import {
 const NOTHING_PINNED: HotbarPins = [null, null, null, null, null, null];
 
 describe('resolving what a hotbar slot shows', () => {
-  it('falls back to wire order when nothing has been pinned', () => {
+  it('automatically fills slots with tools and food, skipping gathered materials', () => {
     const carrying = [
       { item: 'axe' as const, count: 1 },
       { item: 'log' as const, count: 4 },
+      { item: 'reed' as const, count: 2 },
+      { item: 'flower' as const, count: 3 },
+      { item: 'berry' as const, count: 2 },
     ];
     expect(resolveHotbarSlots(carrying, NOTHING_PINNED)).toEqual([
       'axe',
-      'log',
+      'berry',
       null,
       null,
       null,
       null,
     ]);
+  });
+
+  it('includes improved tools, shovels, torches and cooked food', () => {
+    expect(
+      resolveHotbarSlots(
+        [
+          { item: 'refinedAxe', count: 1 },
+          { item: 'refinedRod', count: 1 },
+          { item: 'shovel', count: 1 },
+          { item: 'torch', count: 1 },
+          { item: 'roastedMeat', count: 2 },
+          { item: 'forestStew', count: 1 },
+        ],
+        NOTHING_PINNED,
+      ),
+    ).toEqual(['refinedAxe', 'refinedRod', 'shovel', 'torch', 'roastedMeat', 'forestStew']);
+  });
+
+  it('does not automatically add clothing, blueprints or construction supplies', () => {
+    expect(
+      resolveHotbarSlots(
+        [
+          { item: 'woolCap', count: 1 },
+          { item: 'cabinBlueprint', count: 1 },
+          { item: 'mineSupport', count: 3 },
+          { item: 'rope', count: 2 },
+        ],
+        NOTHING_PINNED,
+      ),
+    ).toEqual(NOTHING_PINNED);
   });
 
   it('shows a pinned item in its own slot, wherever it falls in wire order', () => {
