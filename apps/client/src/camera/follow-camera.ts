@@ -72,7 +72,8 @@ export class FollowCamera {
   private outdoorLook: CameraLook | null = null;
 
   constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 400);
+    // Include the full terrain enclosure so far clipping cannot expose sky below a dig.
+    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 1500);
     this.raycaster.far = RESTING_DISTANCE;
     // three-mesh-bvh only needs the first hit, which is much faster.
     this.raycaster.firstHitOnly = true;

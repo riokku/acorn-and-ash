@@ -143,6 +143,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   earthLayers.wrapT = THREE.ClampToEdgeWrapping;
   earthLayers.anisotropy = 4;
   const wallMaterial = new THREE.MeshStandardMaterial({
+    side: THREE.DoubleSide,
     map: earthLayers,
     // A faint glow of its own, so the inside of a hole is dark earth at night rather than black.
     emissive: new THREE.Color(0xffffff),
@@ -154,6 +155,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
   });
   /** The grass or bare rock that caps a hole's mouth, and tunnel floors and roofs, are flat colours. */
   const capMaterial = new THREE.MeshStandardMaterial({
+    side: THREE.DoubleSide,
     vertexColors: true,
     roughness: 1,
     metalness: 0,
@@ -683,6 +685,11 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     const previousSkin = skins.get(chunk);
     if (previousSkin !== undefined) {
       group.remove(previousSkin);
+      for (const blocker of [previousSkin, ...previousSkin.children]) {
+        const index = blockers.indexOf(blocker as THREE.Mesh);
+        if (index >= 0) blockers.splice(index, 1);
+      }
+      previousSkin.geometry.disposeBoundsTree?.();
       previousSkin.geometry.dispose();
       skins.delete(chunk);
     }
@@ -700,7 +707,11 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       // The same piece seen from below, in dark earth, so seams never show sky.
-      mesh.add(new THREE.Mesh(geometry, undersideMaterial));
+      const underside = new THREE.Mesh(geometry, undersideMaterial);
+      mesh.add(underside);
+      geometry.computeBoundsTree();
+      // Both faces must stop the camera: the ground mesh no longer contains these cells.
+      blockers.push(mesh, underside);
       group.add(mesh);
       skins.set(chunk, mesh);
     }
@@ -708,6 +719,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
     const previous = chunks.get(chunk);
     if (previous !== undefined) {
       group.remove(previous);
+      previous.geometry.disposeBoundsTree?.();
       previous.geometry.dispose();
       blockers.splice(blockers.indexOf(previous), 1);
       chunks.delete(chunk);
@@ -743,7 +755,7 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
       dirty.clear();
     },
     pickables() {
-      return [...blockers, ...skins.values()];
+      return [...chunks.values(), ...skins.values()];
     },
     isOpenNear(x, z) {
       const ix = Math.floor(x / VOXEL);
@@ -759,9 +771,15 @@ export function createDigScene(terrain: Terrain, ground: GroundPatches): DigScen
         : 0;
     },
     dispose() {
-      for (const mesh of chunks.values()) mesh.geometry.dispose();
+      for (const mesh of chunks.values()) {
+        mesh.geometry.disposeBoundsTree?.();
+        mesh.geometry.dispose();
+      }
       chunks.clear();
-      for (const mesh of skins.values()) mesh.geometry.dispose();
+      for (const mesh of skins.values()) {
+        mesh.geometry.disposeBoundsTree?.();
+        mesh.geometry.dispose();
+      }
       skins.clear();
       wallMaterial.dispose();
       capMaterial.dispose();

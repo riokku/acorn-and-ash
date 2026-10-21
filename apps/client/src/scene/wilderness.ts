@@ -1,3 +1,4 @@
+import { createUnderground } from './underground-shell';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -478,38 +479,6 @@ export function buildWildernessScene(
       }
     },
   };
-}
-
-/** The colour of earth seen through a crack, dark enough to read as the inside of the ground. */
-const UNDERGROUND_COLOR = 0x4a3524;
-
-/**
- * Keeps holes from showing the sky through their seams (decision 0114): the
- * ground drawn again from below, and a floor far down, both in dark earth. The
- * ground is one surface with nothing under it, so a ray slipping through a
- * crack in the lining of a hole would otherwise come out through the
- * underside and see the sky.
- */
-function createUnderground(geometry: THREE.BufferGeometry, size: number): THREE.Group {
-  const group = new THREE.Group();
-  const under = new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({
-      color: UNDERGROUND_COLOR,
-      roughness: 1,
-      metalness: 0,
-      side: THREE.BackSide,
-    }),
-  );
-  under.frustumCulled = false;
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0x1c140d }),
-  );
-  floor.position.y = -40;
-  floor.frustumCulled = false;
-  group.add(under, floor);
-  return group;
 }
 
 /**
