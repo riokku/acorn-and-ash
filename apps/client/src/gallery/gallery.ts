@@ -1,3 +1,4 @@
+import { heldItemParts } from '../scene/character';
 import { preloadHousingDetails } from '../scene/housing-details';
 import { installBvhRaycasting } from '../scene/bvh';
 import { buildClearingScene } from '../scene/clearing';
@@ -137,7 +138,22 @@ function smallAnimalExhibit(
   };
 }
 
+function createFishStudy() {
+  const group = new THREE.Group();
+  for (const [i, item] of (['perch', 'trout', 'goldenCarp', 'roastedTrout'] as const).entries()) {
+    const fish = new THREE.Group();
+    for (const part of heldItemParts(item) ?? [])
+      fish.add(new THREE.Mesh(part.geometry, part.material));
+    fish.scale.setScalar(3);
+    fish.rotation.y = Math.PI / 2;
+    fish.position.set(i % 2 === 0 ? -0.8 : 0.8, i < 2 ? 1.25 : 0.45, 0);
+    group.add(fish);
+  }
+  return { group };
+}
+
 const EXHIBITS: readonly Exhibit[] = [
+  { name: 'fish', x: 0, z: 0, view: 4, alone: true, create: createFishStudy },
   { name: 'mountain-spring', x: 0, z: 0, view: 15, alone: true, create: createRiverExhibit },
   { name: 'river-banks', x: 0, z: 0, view: 24, alone: true, create: createRiverExhibit },
   { name: 'fish-display', x: 26, z: 20, view: 2.2, create: () => createFishDisplay() },

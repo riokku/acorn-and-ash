@@ -1,3 +1,4 @@
+import { createFishParts } from './fish-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { CanoePaddling } from './canoe-paddling';
 import { StandingFootContact, type FootGroundHeight } from './standing-foot-contact';
@@ -357,39 +358,6 @@ const TORCH_LIGHT_DISTANCE = 6;
 /** Near the top of the torch model, in its own local space (see TARGET_HEIGHTS.torch in item-models.ts). */
 const TORCH_FLAME_HEIGHT = 0.72;
 
-/**
- * A fish placeholder: one shared body-and-tail shape, tinted per species -
- * nobody has a real fish model yet, so this stands in for perch, trout and
- * golden carp alike the same way a stem and a sphere stand in for a flower.
- */
-const FISH_BODY_GEOMETRY = new THREE.SphereGeometry(0.08, 8, 6).scale(0.8, 0.6, 1.6);
-const FISH_TAIL_GEOMETRY = new THREE.ConeGeometry(0.07, 0.09, 4)
-  .rotateX(Math.PI / 2)
-  .scale(0.3, 1, 1)
-  .translate(0, 0, 0.16);
-
-function fishHeldParts(color: number, roasted = false): ModelPart[] {
-  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true });
-  const parts: ModelPart[] = [
-    { geometry: FISH_BODY_GEOMETRY, material },
-    { geometry: FISH_TAIL_GEOMETRY, material },
-  ];
-  if (roasted) {
-    const char = new THREE.MeshStandardMaterial({
-      color: 0x4a2b20,
-      roughness: 0.9,
-      flatShading: true,
-    });
-    for (const z of [-0.045, 0.035]) {
-      parts.push({
-        geometry: new THREE.BoxGeometry(0.13, 0.012, 0.018).rotateY(0.45).translate(0, 0.055, z),
-        material: char,
-      });
-    }
-  }
-  return parts;
-}
-
 /** A meat placeholder: a rounded chunk with a bone end, the same "two simple shapes" idiom as the fish. */
 const MEAT_BODY_GEOMETRY = new THREE.IcosahedronGeometry(0.1, 0);
 const MEAT_BONE_GEOMETRY = new THREE.CylinderGeometry(0.02, 0.025, 0.14, 5).translate(0, -0.1, 0);
@@ -444,12 +412,12 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
   trailRation: forestHeldParts('trailRation'),
   forestStew: forestHeldParts('forestStew'),
   berryTea: forestHeldParts('berryTea'),
-  perch: fishHeldParts(ITEM_KINDS.perch.placeholderColor),
-  trout: fishHeldParts(ITEM_KINDS.trout.placeholderColor),
-  goldenCarp: fishHeldParts(ITEM_KINDS.goldenCarp.placeholderColor),
-  roastedPerch: fishHeldParts(ITEM_KINDS.roastedPerch.placeholderColor, true),
-  roastedTrout: fishHeldParts(ITEM_KINDS.roastedTrout.placeholderColor, true),
-  roastedGoldenCarp: fishHeldParts(ITEM_KINDS.roastedGoldenCarp.placeholderColor, true),
+  perch: createFishParts('perch'),
+  trout: createFishParts('trout'),
+  goldenCarp: createFishParts('goldenCarp'),
+  roastedPerch: createFishParts('perch', true),
+  roastedTrout: createFishParts('trout', true),
+  roastedGoldenCarp: createFishParts('goldenCarp', true),
   meat: [
     {
       geometry: MEAT_BODY_GEOMETRY,

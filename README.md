@@ -1651,3 +1651,8 @@ and `/?gallery=dug-ramp`; orbit low around the opening and look up from within i
 The toolbar automatically fills empty slots with carried tools (including torches)
 and food. Gathered materials, clothing and building supplies stay in the inventory;
 players can still drag items onto the toolbar to pin them manually.
+
+Fish held by characters and shown in the admin item viewer use distinct low-poly
+perch, trout and golden carp silhouettes, with fins, gills and species markings.
+Roasted fish retain those shapes with toasted colors. Inspect the models at
+`/?gallery=fish` (perch/trout above, golden carp/roasted trout below).
