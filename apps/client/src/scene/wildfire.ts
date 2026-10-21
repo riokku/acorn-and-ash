@@ -24,7 +24,7 @@ export function createWildfireArt() {
   const pools = Array.from({ length: VISIBLE_FIRES }, () => {
     const root = new THREE.Group();
     const flames = Array.from({ length: 7 }, () => {
-      const instance = createFlame();
+      const instance = createFlame({ softBase: true });
       if (!instance) return null;
       root.add(instance.root);
       return instance;
