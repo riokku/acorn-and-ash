@@ -121,6 +121,27 @@ describe('housing knowledge and safe upgrades', () => {
       expect(sim.drainHomeBuildFeedback()[0]?.reason).toBeNull();
     });
   }
+  it('identifies an indoor obstruction without spending supplies or changing the home', () => {
+    const sim = world('teepee');
+    sim.restoreDecorations([{ id: 1, homeId: 7, kind: 'lantern', x: -2.5, z: 2, yaw: 0 }]);
+    const before = { ...sim.inventoryOf(1) };
+    build(sim, 'cabin');
+    expect(sim.builtPropsList()[0]?.kind).toBe('teepee');
+    expect(sim.inventoryOf(1)).toEqual(before);
+    expect(sim.drainHomeBuildFeedback()[0]?.reason).toBe('furnishings');
+    expect(sim.drainBuildReplies()[0]?.reason).toBe('furnishings');
+    sim.restoreDecorations([]);
+    build(sim, 'cabin');
+    expect(sim.builtPropsList()[0]?.kind).toBe('cabin');
+  });
+  it('asks a builder standing in the enlarged footprint to step away', () => {
+    const sim = world('teepee');
+    sim.placePlayer(1, { x: -2, y: 0, z: -1.1 }, 0);
+    const before = { ...sim.inventoryOf(1) };
+    build(sim, 'cabin');
+    expect(sim.drainBuildReplies()[0]?.reason).toBe('onPlayer');
+    expect(sim.inventoryOf(1)).toEqual(before);
+  });
   it('refuses an unlearned upgrade without spending materials', () => {
     const sim = world('tent', 0);
     const before = { ...sim.inventoryOf(1) };
@@ -157,6 +178,7 @@ describe('housing knowledge and safe upgrades', () => {
     build(sim, 'teepee');
     expect(sim.inventoryOf(1)).toEqual(before);
     expect(sim.drainHomeBuildFeedback()[0]?.reason).toBe('blocked');
+    expect(sim.drainBuildReplies()[0]?.reason).toBe('tooClose');
   });
   it('occasionally drops the next unlearned blueprint when a skeleton is defeated, alongside its normal bones', () => {
     const sim = world(undefined, 1);

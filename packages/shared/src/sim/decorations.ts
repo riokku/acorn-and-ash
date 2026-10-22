@@ -144,3 +144,21 @@ export const LANTERN_PALETTES = {
   fern: { glass: 0xc3e2ab, emissive: 0x86bd75, light: 0xb1d99e },
   moonlight: { glass: 0xcfdef0, emissive: 0x8eb5d9, light: 0xb8d3ed },
 } as const;
+
+/** First furnishing that would obstruct the upgraded room's built-in layout. */
+export function homeUpgradeObstruction(
+  kind: HomeKind,
+  homeId: number,
+  decorations: readonly HomeDecoration[],
+): HomeDecoration | null {
+  const furnishings = decorations.filter((piece) => piece.homeId === homeId);
+  return (
+    furnishings.find(
+      (piece) =>
+        checkDecorationSpot(kind, piece, furnishings, {
+          x: piece.x + BUILDABLE_KINDS[piece.kind].footprintRadius + PLAYER_RADIUS + 0.2,
+          z: piece.z,
+        }) !== null,
+    ) ?? null
+  );
+}

@@ -1,3 +1,4 @@
+import { homeUpgradeObstruction } from './decorations';
 import { nearAdventureLake, nearMountainSpring } from './regional-adventures';
 import {
   MUSHROOM_FLUSH_IDS,
@@ -5334,29 +5335,21 @@ export class WorldSimulation {
           return refuse('moved');
         if ([...this.players.values()].some((player) => player.space === home.id))
           return refuse('occupied');
-        const furnishings = this.decorations.filter((piece) => piece.homeId === home.id);
-        if (
-          furnishings.some(
-            (piece) =>
-              checkDecorationSpot(kind, piece, furnishings, {
-                x: piece.x + BUILDABLE_KINDS[piece.kind].footprintRadius + PLAYER_RADIUS + 0.2,
-                z: piece.z,
-              }) !== null,
-          )
-        )
-          return refuse('blocked');
+        if (homeUpgradeObstruction(kind, home.id, this.decorations) !== null)
+          return refuse('furnishings');
         const piece = buildableFootprint(kind, home.x, home.z, home.yaw);
-        if (
-          checkBuildSpot(
-            piece,
-            position,
-            BUILD_REACH + BUILD_REACH_SLACK,
-            this.keepOutWater,
-            this.buildFootprints(home.id, true),
-            true,
-          ) !== null
-        )
-          return refuse('blocked');
+        const clearance = checkBuildSpot(
+          piece,
+          position,
+          BUILD_REACH + BUILD_REACH_SLACK,
+          this.keepOutWater,
+          this.buildFootprints(home.id, true),
+          true,
+        );
+        if (clearance !== null) {
+          refuse('blocked'); // Legacy home feedback; build replies retain the specific cause.
+          return clearance.reason;
+        }
         for (const other of this.players.values()) {
           if (other.space !== OUTDOORS || other === runtime) continue;
           const at = other.entity.get(Position);

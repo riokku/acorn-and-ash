@@ -1976,6 +1976,8 @@ export class Game {
           moved: 'Upgrade your existing home in place.',
           occupied: 'Everyone must leave the home before upgrading.',
           blocked: 'The larger home needs more clear space around it.',
+          furnishings:
+            'Move or pack up furniture inside your home before upgrading; it overlaps the new room layout.',
           player: 'Someone is standing where the larger home will go.',
           busy: 'Wait a moment before building.',
           area: 'This home boundary needs more room away from other homes and protected sites.',
@@ -4006,6 +4008,7 @@ export class Game {
       terrain: this.collision!.terrain,
       protectedSites: this.protectedBuildSites,
       homeSkills: this.homeSkills,
+      decorations: this.decorations,
       yaw: placing.yaw,
       mouse: this.groundUnderPointer(camera),
       player: player.motion.position,
@@ -4333,6 +4336,7 @@ export class Game {
   /** Every tree, rock and stump, as the same footprints the server checks a build against. */
   private sceneryFootprints(): Footprint[] {
     return [
+      ...this.treasures.map((spot) => roundFootprint(spot.x, spot.z, 0.7, 'buried treasure')),
       ...this.standingProps.map((prop) =>
         roundFootprint(
           prop.x,
