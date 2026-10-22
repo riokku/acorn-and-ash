@@ -14,6 +14,8 @@ import { ITEM_KINDS } from '../item-catalog';
 
 import {
   BUILDABLE_KINDS,
+  homeUpgradeObstruction,
+  type HomeDecoration,
   combineHomeSupplies,
   inventoryFromEntries,
   inventoryEntries,
@@ -48,6 +50,7 @@ export interface PlacementInputs {
   readonly protectedSites?: readonly ProtectedBuildSite[];
   readonly enforceHomeArea?: boolean;
   readonly homeSkills?: number;
+  readonly decorations?: readonly HomeDecoration[];
   /** Which way the mouse wheel has turned it. A fence snapped onto another ignores this. */
   readonly yaw: number;
   /** The spot on the ground under the mouse, or null if it points at the sky. */
@@ -138,6 +141,15 @@ function refusalFor(
       return 'Upgrade your home one tier at a time';
     if (!knowsHome(inputs.homeSkills ?? 0, inputs.kind))
       return `Learn the ${buildable.displayName.toLowerCase()} blueprint first · found on skeletons`;
+  }
+  if (isHomeKind(inputs.kind)) {
+    const home = inputs.built.find((prop) => prop.yours && isHomeKind(prop.kind));
+    const obstruction =
+      home === undefined
+        ? null
+        : homeUpgradeObstruction(inputs.kind, home.id, inputs.decorations ?? []);
+    if (obstruction !== null)
+      return `Move or pack up the ${BUILDABLE_KINDS[obstruction.kind].displayName.toLowerCase()} inside your home before upgrading`;
   }
   const missing = missingCosts(inputs.kind, availableSupplies(inputs));
   if (missing !== null) return `Need ${missing}`;

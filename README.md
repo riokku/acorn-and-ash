@@ -1673,3 +1673,10 @@ Skeletons can also drop the weapon they visibly carry: minions and rogues have a
 5% chance, warriors and mages 3%, and sentinels and captains 2%. These independent
 bonus drops do not replace bones, bags or clothing. Equip recovered weapons in the
 main-hand slot from the character screen; the mage's staff uses melee attacks.
+
+Home upgrade previews check existing indoor decorations against the next home's
+built-in layout. A conflicting furnishing is named in the preview; move or pack
+it up inside before retrying. Outdoor clearance failures retain their specific
+reason, including standing in the larger footprint, rather than always reporting
+that the home needs more space. Buried treasure is included in preview clearance
+just as it is on the server. A refused upgrade spends no supplies.

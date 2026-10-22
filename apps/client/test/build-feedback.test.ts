@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { BuildFeedback } from '../src/hud/build-feedback';
+import { BuildFeedback, buildReplyText } from '../src/hud/build-feedback';
 import { encodeBuildReply, decodeServerMessage } from '@acorn/shared';
 const request = { kind: 'tent' as const, x: 0.004, z: -4.204, yaw: -Math.PI / 2 };
 it('matches the packed command through centimetre rounding and angle wrapping', () => {
@@ -21,4 +21,12 @@ it('rejects duplicates, unrelated outcomes and timeout-based retries', () => {
   expect(f.begin(request, 10000)).toBe(true);
   expect(f.clear()).toBe(true);
   expect(f.request).toBeNull();
+});
+
+it('explains indoor upgrade conflicts separately from outdoor clearance and round-trips the reason', () => {
+  expect(buildReplyText('furnishings')).toContain('inside your home');
+  expect(buildReplyText('onPlayer')).toContain('where you are standing');
+  expect(decodeServerMessage(encodeBuildReply({ request, reason: 'furnishings' }))).toMatchObject({
+    reason: 'furnishings',
+  });
 });

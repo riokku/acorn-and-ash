@@ -237,3 +237,23 @@ it('uses private chest supplies for upgrades only', () => {
     }).affordable,
   ).toBe(false);
 });
+
+it('flags interior conflicts before showing a green cabin upgrade preview', () => {
+  const inputs: PlacementInputs = {
+    ...BASE,
+    kind: 'cabin',
+    homeSkills: 7,
+    carrying: [
+      { item: 'log', count: 40 },
+      { item: 'stick', count: 24 },
+      { item: 'bone', count: 8 },
+    ],
+    built: [built({ id: 7, kind: 'teepee', x: 0, z: -4.2, yours: true })],
+    decorations: [{ id: 1, homeId: 7, kind: 'lantern', x: -2.5, z: 2, yaw: 0 }],
+  };
+  expect(planPlacement(inputs).refusal).toContain('lantern inside your home');
+  expect(planPlacement({ ...inputs, decorations: [] }).refusal).toBeNull();
+  expect(
+    planPlacement({ ...inputs, decorations: [{ ...inputs.decorations![0]!, homeId: 99 }] }).refusal,
+  ).toBeNull();
+});

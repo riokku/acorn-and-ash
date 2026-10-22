@@ -52,6 +52,7 @@ export const BUILD_REPLY_REASONS = [
   'tooFarOut',
   'frozen',
   'tooClose',
+  'furnishings',
 ] as const;
 export type BuildReplyReason = (typeof BUILD_REPLY_REASONS)[number];
 export interface BuildReply {

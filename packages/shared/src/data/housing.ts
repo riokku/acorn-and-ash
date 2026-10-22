@@ -69,6 +69,7 @@ export const HOME_BUILD_REASONS = [
   'busy',
   'area',
   'ground',
+  'furnishings',
 ] as const;
 export type HomeBuildReason = (typeof HOME_BUILD_REASONS)[number];
 export interface HomeBuildFeedback {

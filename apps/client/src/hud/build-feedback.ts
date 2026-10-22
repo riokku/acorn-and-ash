@@ -51,6 +51,8 @@ export function buildReplyText(reason: BuildReplyReason): string {
     moved: 'Upgrade your existing home in place.',
     occupied: 'Everyone must leave the home before upgrading.',
     blocked: 'Choose a spot with more clear space.',
+    furnishings:
+      'Move or pack up furniture inside your home before upgrading; it overlaps the new room layout.',
     player: 'Someone is standing where this will go.',
     busy: 'Finish your current action before building.',
     area: 'Choose a spot inside your building area and away from protected sites.',
