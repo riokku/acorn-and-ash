@@ -150,12 +150,21 @@ test('places, rotates, moves and packs up decorations in a private home', async 
         ? 'test-results/decorated-home.png'
         : '/workspace/acorn-decorated-home.png',
     });
-    await menu();
-    await page
-      .locator('.decor-owned')
-      .filter({ hasText: 'Cedar bench' })
-      .getByRole('button', { name: 'Pack up', exact: true })
-      .click();
+    const bench = sim.decorationsList()[0]!;
+    const point = await page.evaluate(
+      ({ x, z }) => window.acornDebug?.screenPoint(x, 0.45, z),
+      bench,
+    );
+    expect(point).not.toBeNull();
+    await page.mouse.click(point!.x, point!.y, { button: 'right' });
+    const objectMenu = page.getByRole('dialog', { name: 'Manage placed object' });
+    await expect(objectMenu).toBeVisible();
+    await expect(objectMenu.getByRole('heading')).toHaveText('Cedar bench');
+    await objectMenu.getByRole('button', { name: 'Pack up…', exact: true }).click();
+    expect(sim.decorationsList()).toHaveLength(6);
+    await objectMenu.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await objectMenu.getByRole('button', { name: 'Pack up…', exact: true }).click();
+    await objectMenu.getByRole('button', { name: 'Confirm pack up', exact: true }).click();
     await expect.poll(() => sim.decorationsList().length).toBe(5);
     await expect(page.locator('.interaction-note')).toHaveText('Cedar bench packed up.');
     expect(sim.inventoryOf(1).log).toBe(11);

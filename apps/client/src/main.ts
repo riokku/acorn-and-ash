@@ -149,6 +149,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onGarden: (request) => game.useGarden(request),
       onExpedition: (request) => game.chooseExpedition(request),
       onToggleDecorations: () => game.toggleDecorations(),
+      onPlacedObjectAction: (action) => game.placedObjectAction(action),
       onMoveDecoration: (id) => game.moveDecoration(id),
       onReclaimDecoration: (id) => game.reclaimDecoration(id),
     },

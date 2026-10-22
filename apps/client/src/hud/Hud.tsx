@@ -1,4 +1,5 @@
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
+import { PlacedObjectMenu } from './PlacedObjectMenu';
 import { BonehollowTrail } from './BonehollowTrail';
 import { FirePanel } from './FirePanel';
 import type { FireRequest } from '@acorn/shared';
@@ -83,6 +84,7 @@ interface HudProps {
   readonly onFire?: (request: FireRequest) => void;
   readonly onExpedition?: (request: ExpeditionRequest) => void;
   readonly onToggleDecorations?: () => void;
+  readonly onPlacedObjectAction?: (action: 'close' | 'move' | 'reclaim') => void;
   readonly onMoveDecoration?: (id: number) => void;
   readonly onReclaimDecoration?: (id: number) => void;
   readonly onGardenUse?: (request: GardenRequest) => void;
@@ -148,6 +150,7 @@ export function Hud({
   onCraftTabChange,
   onGardenUse,
   onToggleDecorations,
+  onPlacedObjectAction,
   onMoveDecoration,
   onReclaimDecoration,
 }: HudProps): React.JSX.Element {
@@ -182,6 +185,14 @@ export function Hud({
     <>
       {/* First, so it sits under everything else: it is part of the world, not a panel. */}
       <CombatOverlay feed={combatFeed} />
+      {showingWorld && state.placedObject ? (
+        <PlacedObjectMenu
+          key={`${state.placedObject.indoor}-${state.placedObject.id}`}
+          target={state.placedObject}
+          pending={state.decorationPending ?? false}
+          onAction={onPlacedObjectAction}
+        />
+      ) : null}
       {showingWorld &&
       !state.inventoryOpen &&
       !state.characterOpen &&

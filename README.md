@@ -1680,3 +1680,12 @@ it up inside before retrying. Outdoor clearance failures retain their specific
 reason, including standing in the larger footprint, rather than always reporting
 that the home needs more space. Buried treasure is included in preview clearance
 just as it is on the server. A refused upgrade spends no supplies.
+
+Right-click a placed object to manage it. Owners can **Move** decorations without
+paying again or **Pack up** indoor/outdoor decorations for all their original
+building materials. Other structures offer **Dismantle**, returning half their
+current building costs (rounded down). The menu lists the refund and asks for
+confirmation; homes require typing `DISMANTLE`. Empty storage and indoor
+furnishings, harvest crops, let remaining fire fuel burn out, and have everyone
+leave before removing a home. Full inventories refuse reclamation without
+changing the object. Movement and refunds are validated and saved by the server.
