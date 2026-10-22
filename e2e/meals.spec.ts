@@ -82,6 +82,8 @@ test('prepares at full hunger, shows one benefit, replaces it and clears expiry'
     await expect(page.locator('.inventory-panel')).toBeVisible();
     await page.keyboard.up('KeyI');
     await page.getByRole('button', { name: /Trail ration, 2/ }).click();
+    await expect.poll(() => sim.equippedItemOf(1)).toBe('trailRation');
+    await page.getByRole('button', { name: /Trail ration, 2/ }).click();
     await expect.poll(() => sim.mealStateOf(1).item).toBe('trailRation');
     await expect(page.locator('.meal-benefit')).toContainText('Trail ration');
     await expect(page.locator('.meal-benefit')).toHaveAttribute(
@@ -92,8 +94,12 @@ test('prepares at full hunger, shows one benefit, replaces it and clears expiry'
     await page.getByRole('button', { name: /Roasted meat, 1/ }).click();
     expect(sim.inventoryOf(1).roastedMeat).toBe(1);
     await page.getByRole('button', { name: /Forest stew, 1/ }).click();
+    await expect.poll(() => sim.equippedItemOf(1)).toBe('forestStew');
+    await page.getByRole('button', { name: /Forest stew, 1/ }).click();
     await expect.poll(() => sim.mealStateOf(1).item).toBe('forestStew');
     await expect(page.locator('.meal-benefit')).toHaveAttribute('title', /Restores 2 health/);
+    await page.getByRole('button', { name: /Berry tea, 1/ }).click();
+    await expect.poll(() => sim.equippedItemOf(1)).toBe('berryTea');
     await page.getByRole('button', { name: /Berry tea, 1/ }).click();
     await expect.poll(() => sim.mealStateOf(1).item).toBe('berryTea');
     await expect(page.locator('.meal-benefit')).toHaveCount(1);
@@ -119,6 +125,23 @@ test('prepares at full hunger, shows one benefit, replaces it and clears expiry'
     sim.step(Date.now());
     sendWorld!(shared.encodeMeal(sim.mealStateOf(1)));
     await expect(page.locator('.meal-benefit')).toHaveCount(0);
+    // The same real toolbar path must hold a raw fish before consuming it.
+    const hungry = sim.persistablePlayers()[0]!;
+    sim.removePlayer(1);
+    sim.addPlayer(1, { ...hungry, hunger: 40 }, 'trail-cook');
+    shared.addItem(sim.inventoryOf(1), 'perch', 2);
+    sendWorld!(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+    sendWorld!(shared.encodeEquipped(sim.equippedList()));
+    sendWorld!(shared.encodeHunger({ netId: 1, hunger: 40, ate: null }));
+    const fish = page.locator('.hotbar-slot[data-item="perch"]');
+    await fish.click();
+    await expect.poll(() => sim.equippedItemOf(1)).toBe('perch');
+    expect(sim.inventoryOf(1).perch).toBe(2);
+    expect(sim.hungerOf(1)).toBe(40);
+    await expect(fish).toHaveClass(/hotbar-slot-equipped/);
+    await fish.click();
+    await expect.poll(() => sim.inventoryOf(1).perch).toBe(1);
+    expect(sim.hungerOf(1)).toBe(80);
     expect(errors).toEqual([]);
   } finally {
     sim.dispose();

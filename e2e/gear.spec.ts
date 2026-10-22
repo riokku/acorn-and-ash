@@ -25,6 +25,9 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   sim.addPlayer(2, undefined, 'gear-friend');
   sim.giveTestGear(1, [
     'bag',
+    'bag',
+    'rustySword',
+    'rod',
     'knightHelmet',
     'mageHat',
     'travelerTunic',
@@ -52,6 +55,10 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
       if (typeof message === 'string') return;
       const request = decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(encodePong(request.clientTimeMs, Date.now()));
+      if (request?.type === 'useItem') {
+        sim.useItem(1, request.item);
+        sendState();
+      }
       if (request?.type === 'gear') {
         const change =
           request.action === 'wear'
@@ -106,8 +113,28 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await expect(page.getByTestId('character-stats')).toContainText('Protection8%');
   await expect(page.getByTestId('character-stats')).toContainText('Warmth5');
 
-  // Right-click wears too, in the slot it fits.
-  await page.getByTestId('pack-slot-ironSword').click({ button: 'right' });
+  // A pinned dropped sword stays usable after it leaves the pack for the main hand.
+  await page.getByTestId('pack-slot-rustySword').dragTo(page.locator('.hotbar-slot').first());
+  const sword = page.locator('.hotbar-slot[data-item="rustySword"]');
+  await sword.click();
+  await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'rustySword');
+  await expect(sword).not.toHaveClass(/hotbar-slot-unavailable/);
+  await page.locator('.hotbar-slot[data-item="rod"]').click();
+  await expect.poll(() => sim.equippedItemOf(1)).toBe('rod');
+  await sword.click();
+  await expect.poll(() => sim.equippedItemOf(1)).toBe('rustySword');
+
+  await page.locator('.hotbar-slot[data-item="rod"]').click();
+  await expect.poll(() => sim.equippedItemOf(1)).toBe('rod');
+  await page.keyboard.press('KeyZ');
+  await expect(panel).toBeHidden();
+  await page.keyboard.press('Digit1');
+  await expect.poll(() => sim.equippedItemOf(1)).toBe('rustySword');
+  await page.keyboard.press('KeyZ');
+  await expect(panel).toBeVisible();
+
+  // Ordinary pack clicks equip weapons too, using their main-hand gear slot.
+  await page.getByTestId('pack-slot-ironSword').click();
   await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'ironSword');
   await expect(page.getByTestId('character-stats')).toContainText('Attack power150%');
 

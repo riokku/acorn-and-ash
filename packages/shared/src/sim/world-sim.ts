@@ -6358,21 +6358,7 @@ export class WorldSimulation {
     return this.cookingEvents.splice(0);
   }
 
-  /**
-   * Select one item from the pack as this player's equipped item - what
-   * shows in their hand, and what everyone nearby is now told they are
-   * holding - and, if it is food, eat it on the spot too.
-   *
-   * Unlike the interact button's own fallback to eating, eating this way
-   * does not wait for the pack to be a last resort, and eats exactly the
-   * item asked for rather than whichever common fish comes first. Only
-   * food actually gets eaten; equipping a tool just shows it held, the same
-   * as picking one up already did before this existed. Refuses outright for
-   * anything not marked `equippable` (materials, the bag) or not actually
-   * in the pack. Not tied to reach or the tick loop, the same as crafting:
-   * settled the moment it arrives. Returns whether anything actually
-   * changed - equipping, eating, or both.
-   */
+  /** Select food/tools first; using an already-held food deliberately eats it. */
   useItem(netId: number, item: ItemId): boolean {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return false;
@@ -6394,8 +6380,7 @@ export class WorldSimulation {
       this.equipEvents.push(netId);
       changed = true;
     }
-    const savingForFire = cookedItemFor(item) !== null && this.nearCookingFireOf(netId);
-    if (isFood(item) && (runtime.hunger < HUNGER_MAX || isMealItem(item)) && !savingForFire) {
+    if (!changed && isFood(item) && (runtime.hunger < HUNGER_MAX || isMealItem(item))) {
       this.eatItem(runtime, item);
       changed = true;
     }

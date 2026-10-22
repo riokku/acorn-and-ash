@@ -8,7 +8,7 @@
  * 0050 and decision 0040's own note that manual placement was a follow-up.
  */
 
-import { ITEM_ORDER, TOOL_ITEMS, isFood, isPack, type ItemId } from '@acorn/shared';
+import { ITEM_ORDER, TOOL_ITEMS, isFood, isPack, isWeapon, type ItemId } from '@acorn/shared';
 
 const STORAGE_KEY = 'acorn.hotbarLayout';
 export const HOTBAR_SIZE = 6;
@@ -67,13 +67,16 @@ export function clearSlot(pins: HotbarPins, slotIndex: number): HotbarPins {
  * the two can never disagree about what a given slot means. A pack never
  * fills a slot on its own: it has its own button at the end of the bar
  * (see decision 0060), and there is nothing to do with it from a number key.
- * An uncarried pin reserves its slot but stays empty until that item is carried.
+ * A pinned weapon can also come from the worn main hand. Other uncarried pins
+ * reserve their slots but stay empty until that item is carried.
  */
 export function resolveHotbarSlots(
   carrying: readonly { readonly item: ItemId; readonly count: number }[],
   pins: HotbarPins,
+  mainHand?: ItemId,
 ): readonly (ItemId | null)[] {
   const carried = new Set(carrying.filter((entry) => entry.count > 0).map((entry) => entry.item));
+  if (mainHand !== undefined && isWeapon(mainHand)) carried.add(mainHand);
   const pinned = new Set(pins.filter((pin): pin is ItemId => pin !== null));
   const autoOrder = carrying
     .filter((entry) => entry.count > 0)

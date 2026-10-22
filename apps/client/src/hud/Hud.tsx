@@ -48,6 +48,7 @@ import {
   inventoryFromEntries,
   isDiscardable,
   isFood,
+  isWeapon,
   roomFor,
   type BuildableKindId,
   type ItemId,
@@ -1250,7 +1251,7 @@ function Hotbar({
   onToggleInventory: () => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element {
-  const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots);
+  const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots, state.worn.mainHand);
   return (
     <div className="hotbar">
       {resolved.map((item, index) => (
@@ -1259,6 +1260,7 @@ function Hotbar({
           slotNumber={index + 1}
           item={item}
           count={state.carrying.find((entry) => entry.item === item)?.count ?? 0}
+          worn={item !== null && item === state.worn.mainHand}
           equipped={item !== null && item === state.equippedItem}
           onUseItem={onUseItem}
           onAssign={(dropped) => onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))}
@@ -1279,6 +1281,7 @@ function HotbarSlot({
   slotNumber,
   item,
   count,
+  worn,
   equipped,
   onUseItem,
   onAssign,
@@ -1287,17 +1290,18 @@ function HotbarSlot({
   slotNumber: number;
   item: ItemId | null;
   count: number;
+  worn: boolean;
   equipped: boolean;
   onUseItem: (item: ItemId) => void;
   onAssign: (item: ItemId) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
 }): React.JSX.Element {
   const kind = item === null ? null : ITEM_KINDS[item];
-  const usable = kind !== null && kind.equippable;
+  const usable = kind !== null && (kind.equippable || isWeapon(kind.id));
   const classes = ['hotbar-slot'];
   if (usable) classes.push('hotbar-slot-usable');
   if (equipped) classes.push('hotbar-slot-equipped');
-  if (item !== null && count === 0) classes.push('hotbar-slot-unavailable');
+  if (item !== null && count === 0 && !worn) classes.push('hotbar-slot-unavailable');
 
   const label =
     kind === null ? (
@@ -1307,7 +1311,9 @@ function HotbarSlot({
         <strong>{kind.displayName}</strong>
         <span className="item-tooltip-detail">{itemDescription(kind.id)}</span>
         <span className="item-tooltip-action">
-          {count > 0 ? itemUseHint(kind.id) : 'Not in your pack · find more to use this slot'}
+          {count > 0 || worn
+            ? itemUseHint(kind.id)
+            : 'Not in your pack · find more to use this slot'}
         </span>
       </>
     );

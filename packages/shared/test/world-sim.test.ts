@@ -962,7 +962,7 @@ describe('equipping', () => {
     expect(sim.hungerOf(1)).toBe(HUNGER_MAX);
   });
 
-  it('still eats food the same as before, and equips it too', () => {
+  it('holds food on the first use and eats it on the second', () => {
     const sim = createWorld();
     sim.addPlayer(
       1,
@@ -977,10 +977,37 @@ describe('equipping', () => {
       ),
     );
     expect(sim.useItem(1, 'perch')).toBe(true);
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(2);
+    expect(sim.hungerOf(1)).toBe(50);
+    expect(sim.equippedItemOf(1)).toBe('perch');
+    expect(sim.useItem(1, 'perch')).toBe(true);
 
     expect(sim.equippedItemOf(1)).toBe('perch');
     expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
     expect(sim.hungerOf(1)).toBe(90);
+  });
+
+  it('selecting a different food never eats it, and full hunger does not waste ordinary fish', () => {
+    const sim = createWorld();
+    sim.addPlayer(
+      1,
+      withItems(
+        1,
+        [
+          { item: 'bag', count: 1 },
+          { item: 'perch', count: 1 },
+          { item: 'trout', count: 1 },
+        ],
+        null,
+        100,
+      ),
+    );
+    sim.useItem(1, 'perch');
+    expect(sim.useItem(1, 'perch')).toBe(false);
+    sim.useItem(1, 'trout');
+    expect(sim.equippedItemOf(1)).toBe('trout');
+    expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+    expect(countOf(sim.inventoryOf(1), 'trout')).toBe(1);
   });
 
   it('refuses to equip an item the pack does not actually hold', () => {
@@ -1088,6 +1115,7 @@ describe('equipping', () => {
         50,
       ),
     );
+    sim.useItem(1, 'perch');
     sim.useItem(1, 'perch');
     expect(countOf(sim.inventoryOf(1), 'perch')).toBe(0);
     expect(sim.equippedItemOf(1)).toBeNull();
@@ -4708,12 +4736,25 @@ describe('building', () => {
       expect(countOf(sim.inventoryOf(1), 'roastedPerch')).toBe(1);
     });
 
+    it('can deliberately eat held raw fish on a second click even beside a lit fire', () => {
+      const sim = createWorld();
+      buildAndStandNextToIt(sim, 1, 0);
+      sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
+      sim.step(tickClock());
+      addItem(sim.inventoryOf(1), 'perch', 2);
+      sim.useItem(1, 'perch');
+      expect(countOf(sim.inventoryOf(1), 'perch')).toBe(2);
+      sim.useItem(1, 'perch');
+      expect(countOf(sim.inventoryOf(1), 'perch')).toBe(1);
+      expect(sim.hungerOf(1)).toBeGreaterThan(30);
+      expect(sim.drainCookingEvents()).toEqual([]);
+    });
+
     it('cooks one held raw food over a lit campfire without putting the fire out', () => {
       const sim = createWorld();
       buildAndStandNextToIt(sim, 1);
 
-      // Light first, then choose the food: selecting food away from a lit fire
-      // deliberately keeps the old "select food = eat it" behaviour.
+      // Select food without eating it, then use the lit fire to cook it.
       sim.queueInput(1, createInput(2, 0, 0, FACE_OUT, PlayerButton.Interact));
       sim.step(tickClock());
       sim.queueInput(1, createInput(3, 0, 0, FACE_OUT, 0));

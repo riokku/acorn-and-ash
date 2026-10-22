@@ -40,11 +40,16 @@ describe('one meal benefit at a time', () => {
       roastedMeat: 1,
     });
     expect(sim.useItem(1, 'trailRation')).toBe(true);
+    expect(sim.mealStateOf(1).item).toBeNull();
+    expect(sim.inventoryOf(1).trailRation).toBe(2);
+    expect(sim.useItem(1, 'trailRation')).toBe(true);
     expect(sim.mealStateOf(1)).toEqual(startMeal('trailRation'));
     expect(sim.inventoryOf(1).trailRation).toBe(1);
     expect(sim.hungerOf(1)).toBe(100);
     sim.useItem(1, 'forestStew');
+    sim.useItem(1, 'forestStew');
     expect(sim.mealStateOf(1).item).toBe('forestStew');
+    sim.useItem(1, 'berryTea');
     sim.useItem(1, 'berryTea');
     expect(sim.mealStateOf(1).item).toBe('berryTea');
     sim.useItem(1, 'roastedMeat');
@@ -54,6 +59,7 @@ describe('one meal benefit at a time', () => {
   it('saves remaining active ticks and pauses a disconnected character while others play', () => {
     const sim = world();
     sim.inventoryOf(1).trailRation = 1;
+    sim.useItem(1, 'trailRation');
     sim.useItem(1, 'trailRation');
     sim.step(1000);
     const saved = sim.persistablePlayers()[0]!;

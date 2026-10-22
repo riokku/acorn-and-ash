@@ -1716,3 +1716,12 @@ while a world sleeps; trunks wait for nearby players to clear before expanding.
 Chopping an immature tree drops neither logs nor sticks. Existing mature trees
 remain mature. Inspect stages with `/?gallery=tree-models&kind=pine&growth=0`
 (sapling), `growth=127` (half grown) or `growth=255` (mature regrowth).
+
+Click a weapon in the pack or a pinned toolbar slot to equip it in the main-hand
+gear slot. Worn weapons stay available in their pinned slots, so choosing a tool
+and then drawing the weapon again works without moving gear back to the pack.
+Weapon changes retain the normal server checks for combat, ownership and space.
+Food now takes two uses: first hold it, then click or press its toolbar number
+again to eat it. With raw food held, interact with a lit cooking fire to cook;
+a second toolbar use deliberately eats it even beside a fire. At full hunger,
+ordinary food is retained, while prepared meals can still grant their benefit.
