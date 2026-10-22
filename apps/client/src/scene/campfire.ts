@@ -10,7 +10,7 @@ import { createFireGlow } from './fire-light';
  * A campfire: real logs-and-base art once it has loaded (see
  * campfire-models.ts), or a placeholder cylinder-and-logs shape until then.
  * Lighting it adds an animated flame on top, playing for as long as it's lit;
- * putting it out (by hand, or once it burns down) removes the flame again.
+ * putting it out hides the prepared flame so relighting reuses its resources.
  * A lit fire also casts real, flickering light on everything nearby - not
  * just an animated flame that looks lit without lighting anything.
  */
@@ -78,7 +78,11 @@ export function createCampfire(): Campfire {
     }
   }
 
-  let flame: ReturnType<typeof createFlame> = null;
+  const flame = createFlame();
+  if (flame) {
+    flame.root.visible = false;
+    group.add(flame.root);
+  }
   let lit = false;
   // Made once and only ever shown or hidden: see fire-light.ts for why a
   // light coming and going is worth avoiding.
@@ -92,13 +96,7 @@ export function createCampfire(): Campfire {
     lit = nextLit;
 
     fireGlow.anchor.visible = lit;
-    if (lit) {
-      flame = createFlame();
-      if (flame) group.add(flame.root);
-    } else {
-      flame?.dispose();
-      flame = null;
-    }
+    if (flame) flame.root.visible = lit;
   }
 
   return {

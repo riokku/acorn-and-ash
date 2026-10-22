@@ -23,6 +23,7 @@ import { createGroundMaterial } from '../art/materials';
 import type { TreeAppearance, TreeLanding } from './clearing';
 import {
   HIDDEN_INSTANCE,
+  expandFallingTreeBounds,
   type PropPart,
   blockerGeometry,
   createCameraBlockers,
@@ -276,17 +277,18 @@ export function buildWildernessScene(
 
   /** Whether something changed that the near and distant meshes have not caught up with. */
   let dirty = false;
+  const changedTrees = new Set<number>();
   let sinceDetailUpdate = 1;
   let lastX = Number.POSITIVE_INFINITY,
     lastZ = Number.POSITIVE_INFINITY;
 
   /** Sort every standing tree into the detailed or distant meshes by how far it is. */
-  const repack = (position: { x: number; z: number }, appearanceChanged: boolean): void => {
+  const repack = (position: { x: number; z: number }): void => {
     for (const draw of treeDraws) {
       let near = 0,
         far = 0;
-      let nearChanged = appearanceChanged,
-        farChanged = appearanceChanged;
+      let nearChanged = false,
+        farChanged = false;
       for (const prop of draw.props) {
         // Down, and finished falling: only its stump is left.
         if (felled.has(prop.id) && !falling.has(prop.id)) continue;
@@ -295,7 +297,7 @@ export function buildWildernessScene(
         const parts = isNear ? draw.near : draw.far;
         const index = isNear ? near++ : far++;
         const slot = slotOf.get(prop.id);
-        if (appearanceChanged || slot?.parts !== parts || slot.index !== index) {
+        if (changedTrees.has(prop.id) || slot?.parts !== parts || slot.index !== index) {
           placeInstance(parts, index, shown);
           if (isNear) nearChanged = true;
           else farChanged = true;
@@ -355,7 +357,7 @@ export function buildWildernessScene(
         else placeOneInstance(part, slot.index, fall.tree, rotation);
         part.mesh.instanceMatrix.needsUpdate = true;
         // A crown can now move beyond the bounds of its standing instances.
-        part.mesh.boundingSphere = null;
+        expandFallingTreeBounds(part, fall.tree);
       }
     }
     if (done) {
@@ -408,6 +410,7 @@ export function buildWildernessScene(
         drawn.set(tree.id, want);
         touchedCells.add(cellKey(tree));
         stumpsChanged = true;
+        changedTrees.add(tree.id);
         dirty = true;
 
         if (want.felled && want.fall !== undefined) {
@@ -447,11 +450,11 @@ export function buildWildernessScene(
       const moved = Math.hypot(position.x - lastX, position.z - lastZ) >= 4;
       if (dirty || (sinceDetailUpdate >= 0.5 && moved)) {
         sinceDetailUpdate = 0;
-        const appearanceChanged = dirty;
         dirty = false;
         lastX = position.x;
         lastZ = position.z;
-        repack(position, appearanceChanged);
+        repack(position);
+        changedTrees.clear();
       }
 
       for (const item of disposables)

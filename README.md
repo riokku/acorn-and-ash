@@ -1697,3 +1697,14 @@ Cabin log stores reuse the existing timber bench model as a low shelf that stays
 visible and solid when empty. Right-click the shelf to open log storage; walking
 nearby no longer opens it. Close the panel or walk away to dismiss it. Small and
 large cabins still hold 20 and 50 logs, with every stored log shown on the shelf.
+
+Cabin windows now follow the fireplace: burning fuel lights the glass and its
+outdoor glow; putting the fire out or exhausting fuel leaves dull glass. The
+small and large cabin share this behavior. The desk lamp has been removed from
+home interiors. Inspect the difference in the gallery with
+`/?gallery=cabin&time=0.02` and add `&unlit` to put its fireplace out.
+Fire and tree-impact effects rehearse behind the initial loading screen so their
+first shaders and buffers are prepared before play. Campfires reuse their flame
+instances when relit. Falling trees keep a conservative rotation bound instead
+of repeatedly rescanning whole batches; unaffected distant tree transforms are
+retained when a nearby tree falls.

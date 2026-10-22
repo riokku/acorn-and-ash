@@ -56,6 +56,7 @@ export function createLargeCabin(): Cabin {
       cabin.groundOn?.(heightAt);
       for (const fit of [...groundPosts, ...groundSteps]) fit(heightAt);
     },
+    setLit: (lit) => cabin.setLit?.(lit),
     setDaylight: (brightness) => cabin.setDaylight?.(brightness),
     update: (deltaSeconds) => cabin.update?.(deltaSeconds),
     dispose() {

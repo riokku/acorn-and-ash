@@ -21,6 +21,7 @@ import { createSatchel } from './pickup-models';
 import { createPond } from './pond';
 import {
   HIDDEN_INSTANCE,
+  expandFallingTreeBounds,
   blockerGeometry,
   createCameraBlockers,
   createPropMeshes,
@@ -181,7 +182,7 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
       else placeOneInstance(part, slot.index, fall.tree, rotation);
       part.mesh.instanceMatrix.needsUpdate = true;
       // A crown can now move beyond the bounds of its standing instances.
-      part.mesh.boundingSphere = null;
+      expandFallingTreeBounds(part, fall.tree);
     }
     if (done) falling.delete(treeId);
   };

@@ -5,6 +5,7 @@ import {
   buildTestClearing,
   createFlatTerrain,
   treeFallTimes,
+  treeAtGeneration,
 } from '@acorn/shared';
 import { installBvhRaycasting } from '../src/scene/bvh';
 import { buildWildernessScene, type WildernessScene } from '../src/scene/wilderness';
@@ -197,4 +198,44 @@ it('keeps soot with its forest tree when detail slots are repacked and when it f
   expect(meshes[0]!.geometry.getAttribute('treeBurn').getX(0)).toBe(0);
   scene.dispose();
   clock.mockRestore();
+});
+
+it('keeps unaffected distant GPU batches unchanged when a nearby tree falls and settles', () => {
+  let now = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const { props, scene, meshes } = forestOfTwoPines();
+  try {
+    scene.update(1, { x: 0, z: 0 });
+    const distant = meshes.slice(2, 4);
+    const versions = distant.map((mesh) => mesh.instanceMatrix.version);
+    const tree = props[0]!;
+    scene.setTreeStates(
+      new Map([[tree.id, { generation: 0, felled: true, fall: { yaw: 0, startedAtMs: 1000 } }]]),
+      1000,
+    );
+    scene.update(0.1, { x: 0, z: 0 });
+    now = treeFallTimes(tree).break * 1000 + 1;
+    scene.update(0.1, { x: 0, z: 0 });
+    scene.update(0.1, { x: 0, z: 0 });
+    expect(distant.map((mesh) => mesh.instanceMatrix.version)).toEqual(versions);
+    expect(distant.map((mesh) => mesh.count)).toEqual([1, 1]);
+  } finally {
+    scene.dispose();
+    clock.mockRestore();
+  }
+});
+
+it('still updates a regrown tree when it keeps the same detail slot', () => {
+  const { props, scene, meshes } = forestOfTwoPines();
+  try {
+    scene.update(1, { x: 0, z: 0 });
+    scene.setTreeStates(new Map([[props[0]!.id, { generation: 1, felled: false }]]));
+    scene.update(0.1, { x: 0, z: 0 });
+    const matrix = new THREE.Matrix4();
+    meshes[0]!.getMatrixAt(0, matrix);
+    const scale = new THREE.Vector3().setFromMatrixColumn(matrix, 0).length();
+    expect(scale).toBeCloseTo(treeAtGeneration(1, props[0]!, 1).scale);
+  } finally {
+    scene.dispose();
+  }
 });

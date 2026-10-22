@@ -57,7 +57,7 @@ it('staggered fires animate independently, freeze for accessibility, and bound r
   a.dispose();
   b.dispose();
 });
-it('relighting a campfire releases its old flame without disposing shared art', () => {
+it('relighting reuses the prepared flame without cloning or disposing shared art', () => {
   const mesh = template();
   const geometry = vi.spyOn(mesh.geometry, 'dispose');
   const material = vi.spyOn(mesh.material, 'dispose');
@@ -66,9 +66,11 @@ it('relighting a campfire releases its old flame without disposing shared art', 
   const old = fire.group.getObjectByName('fire')!;
   expect(old).toBeDefined();
   fire.setLit(false);
-  expect(fire.group.getObjectByName('fire')).toBeUndefined();
+  expect(fire.group.getObjectByName('fire')).toBe(old);
+  expect(old.parent?.visible).toBe(false);
   fire.setLit(true);
-  expect(fire.group.getObjectByName('fire')).not.toBe(old);
+  expect(fire.group.getObjectByName('fire')).toBe(old);
+  expect(old.parent?.visible).toBe(true);
   fire.dispose();
   expect(fire.group.getObjectByName('fire')).toBeUndefined();
   expect(geometry).not.toHaveBeenCalled();

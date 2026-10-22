@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   smoothstep,
   propHeight,
+  PROP_KINDS,
   type PlacedProp,
   type PropKind,
   type Terrain,
@@ -378,4 +379,13 @@ export function createCameraBlockers(geometries: THREE.BufferGeometry[]): THREE.
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
   mesh.matrixAutoUpdate = false;
   return mesh;
+}
+
+const fallEnvelope = new THREE.Sphere();
+/** Keep the whole rotation envelope in bounds without rescanning every tree instance per frame. */
+export function expandFallingTreeBounds(part: PropPart, tree: PlacedProp): void {
+  if (part.mesh.boundingSphere === null) part.mesh.computeBoundingSphere();
+  fallEnvelope.center.set(tree.x, tree.y ?? 0, tree.z);
+  fallEnvelope.radius = (propHeight(PROP_KINDS[tree.kind]) + 1) * tree.scale;
+  part.mesh.boundingSphere!.union(fallEnvelope);
 }
