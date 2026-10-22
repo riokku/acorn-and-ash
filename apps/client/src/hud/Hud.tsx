@@ -1316,6 +1316,7 @@ function HotbarSlot({
     <Tooltip label={label}>
       <div
         className={classes.join(' ')}
+        data-item={item ?? undefined}
         draggable={item !== null}
         onDragStart={(event) => {
           if (item === null) return;

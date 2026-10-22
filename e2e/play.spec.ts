@@ -1102,19 +1102,12 @@ async function chopUntilFelled(
   throw new Error(`tree ${tree.id} never came down`);
 }
 
-/**
- * Press the hotbar key for whichever slot this item currently sorts to,
- * making it the active item. Finding a tool is no longer enough to swing,
- * cast or eat with it - it has to be made active first, the same as
- * `equip(page, 'axe')` proves it visually in the dedicated equip test above.
- * The bag has a button of its own rather than a numbered slot (see
- * decision 0060), so it is left out of the count.
- */
+/** Equip through the displayed toolbar, including its filtering and manual pins. */
 async function equip(page: Page, item: string): Promise<void> {
-  const slot =
-    (await page.evaluate(() => window.acornDebug?.carrying() ?? []))
-      .filter((entry) => entry.item !== 'bag')
-      .findIndex((entry) => entry.item === item) + 1;
+  const displayed = page.locator(`.hotbar-slot[data-item="${item}"]`);
+  await expect(displayed).toBeVisible();
+  const slot = await displayed.locator('.hotbar-slot-key').textContent();
+  expect(slot).toMatch(/^[1-6]$/);
   await page.keyboard.press(`Digit${slot}`);
   await expect
     .poll(async () => page.evaluate(() => window.acornDebug?.equippedItem() ?? null))
