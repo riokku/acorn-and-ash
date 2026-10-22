@@ -254,3 +254,15 @@ describe('solid placed props', () => {
     expect(resolveCapsule(at, PLAYER_RADIUS, PLAYER_HEIGHT, sim.collision)).toBe(true);
   });
 });
+
+it('keeps the empty cabin shelf solid and raises stored logs above it', () => {
+  for (const kind of ['cabin', 'largeCabin'] as const) {
+    const empty = placedPropColliders({ kind, x: 0, z: 0, yaw: 0, storedLogs: 0 }, 0);
+    const full = placedPropColliders({ kind, x: 0, z: 0, yaw: 0, storedLogs: 20 }, 0);
+    expect(empty).toHaveLength(1);
+    expect(empty[0]?.standable).toBe(true);
+    expect(full.length).toBeGreaterThan(empty.length);
+    expect(full[0]).toEqual(empty[0]);
+    expect(full.slice(1).every((c) => c.shape === 'box' && c.y - c.halfY >= 0.41)).toBe(true);
+  }
+});

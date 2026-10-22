@@ -1,4 +1,5 @@
 import { housingDetails } from './housing-details';
+import { createHomeDecoration } from './home-decoration';
 import { createLogsModel } from './ground-items';
 import * as THREE from 'three/webgpu';
 
@@ -130,9 +131,16 @@ export function createCabin(logCapacity = 20): Cabin {
   const base = supports.build();
   const woodpile = createLogsModel(logCapacity, true);
   woodpile.show(0);
-  woodpile.group.name = 'cabin-log-storage';
-  woodpile.group.position.x = -2.9;
-  model.group.add(base.group, woodpile.group);
+  const shelf = createHomeDecoration('cedarBench');
+  shelf.group.rotation.y = Math.PI / 2;
+  shelf.group.scale.set(((logCapacity > 20 ? 10 : 5) * 0.28) / 1.7, 0.85, 0.95 / 0.46);
+  const storage = new THREE.Group();
+  storage.name = 'cabin-log-storage';
+  storage.userData.logStorage = true;
+  storage.position.x = -2.9;
+  woodpile.group.position.y = 0.42;
+  storage.add(shelf.group, woodpile.group);
+  model.group.add(base.group, storage);
   const groundSupports = base.group.children.map((part) =>
     groundBuildingSupport(part as THREE.Mesh, 0.09, (part as THREE.Mesh).material === stone),
   );
@@ -148,7 +156,7 @@ export function createCabin(logCapacity = 20): Cabin {
     setStoredLogs: (count) => woodpile.show(count),
     groundOn(heightAt) {
       for (const fit of groundSupports) fit(heightAt);
-      groundLooseBuildingPart(woodpile.group, heightAt);
+      groundLooseBuildingPart(storage, heightAt);
     },
     setDaylight(brightness) {
       const night = 1 - Math.max(0, Math.min(1, brightness));
@@ -164,6 +172,7 @@ export function createCabin(logCapacity = 20): Cabin {
       model.dispose();
       base.dispose();
       woodpile.dispose();
+      shelf.dispose();
     },
   };
 }

@@ -4544,6 +4544,11 @@ export class Game {
       ? fire.lit && this.fuelRemaining(propId) > 0
       : this.builtProps.find((prop) => prop.id === propId)?.lit === true;
   }
+  private selectedLogStorage: number | null = null;
+  closeLogStorage(): void {
+    this.selectedLogStorage = null;
+    this.options.hud.publish({ firePanel: null });
+  }
   private firePanelState(): FirePanelState | null {
     const position = this.localPlayer?.motion.position;
     if (!position || !this.camera || this.localPlayer?.action.kind !== ActionKind.Idle) return null;
@@ -4551,24 +4556,24 @@ export class Game {
       mode: 'fire' | 'storage' = 'fire',
       point: { x: number; z: number } | null;
     if (this.space !== OUTDOORS) {
+      this.selectedLogStorage = null;
       if (!homeFacilityInReach(this.currentHomeKind(), 'cooking', position)) return null;
       prop = this.builtProps.find((p) => p.id === this.space);
       const scale = homeRoomScale(this.currentHomeKind());
       point = { x: HOME_FACILITIES.cooking.x * scale, z: HOME_FACILITIES.cooking.z * scale };
     } else {
       prop = nearestCampfire(position, this.builtProps) ?? undefined;
-      let gap = prop ? Math.hypot(position.x - prop.x, position.z - prop.z) : Infinity;
       point = prop ?? null;
-      for (const home of this.builtProps) {
-        if (!logStorageCapacity(home.kind) || (home.locked && !home.yours)) continue;
-        const spot = logStorageSpot(home),
-          distance = Math.hypot(position.x - spot.x, position.z - spot.z);
-        if (distance <= 2 && distance < gap) {
+      const home = this.builtProps.find(
+        (home) => home.id === this.selectedLogStorage && logStorageCapacity(home.kind) > 0,
+      );
+      if (home) {
+        const spot = logStorageSpot(home);
+        if (Math.hypot(position.x - spot.x, position.z - spot.z) <= 2) {
           prop = home;
           point = spot;
-          gap = distance;
           mode = 'storage';
-        }
+        } else this.selectedLogStorage = null;
       }
     }
     if (!prop || !point) return null;
@@ -4825,7 +4830,9 @@ export class Game {
     const hit = hits[0];
     if (!hit) return false;
     let id: number | undefined;
+    let storageHit = false;
     for (let object: THREE.Object3D | null = hit.object; object; object = object.parent) {
+      if (!indoor && object.userData.logStorage === true) storageHit = true;
       if (indoor && typeof object.userData.decorationId === 'number') {
         id = object.userData.decorationId;
         break;
@@ -4837,6 +4844,17 @@ export class Game {
       ? this.decorations.find((piece) => piece.id === id && piece.homeId === this.space)
       : this.builtProps.find((piece) => piece.id === id);
     if (!piece || id === undefined) return false;
+    if (storageHit && !indoor && logStorageCapacity(piece.kind) > 0) {
+      const spot = logStorageSpot(piece);
+      if (Math.hypot(spot.x - this.motionOrOrigin().x, spot.z - this.motionOrOrigin().z) > 2) {
+        this.showActionNote('Move closer to use the log shelf.');
+        return true;
+      }
+      this.selectedLogStorage = id;
+      this.options.hud.publish({ placedObject: null, firePanel: this.firePanelState() });
+      return true;
+    }
+    this.closeLogStorage();
     if (Math.hypot(piece.x - this.motionOrOrigin().x, piece.z - this.motionOrOrigin().z) > 6) {
       this.showActionNote('Move closer to manage this object.');
       return true;

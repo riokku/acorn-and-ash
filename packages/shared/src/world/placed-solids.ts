@@ -17,27 +17,34 @@ export interface PlacedSolidProp {
 /** Solid parts only: foliage, flames, rugs and inset path stones stay walkable. */
 export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Collider[] {
   const { x, z, yaw, kind } = prop;
-  if (logStorageCapacity(kind) > 0 && (prop.storedLogs ?? 0) > 0) {
+  if (logStorageCapacity(kind) > 0) {
     const spot = logStorageSpot(prop),
       columns = kind === 'largeCabin' ? 10 : 5,
       scale = kind === 'largeCabin' ? 1.2 : 1;
     const count = Math.min(logStorageCapacity(kind), prop.storedLogs ?? 0);
-    return Array.from({ length: Math.ceil(count / columns) }, (_, row) => {
-      const filled = Math.min(columns, count - row * columns);
-      const localZ = (((filled - columns) * 0.28) / 2) * scale;
-      return {
-        ...box(
-          spot.x + Math.sin(yaw) * localZ,
-          groundY + 0.17 + row * 0.26,
-          spot.z + Math.cos(yaw) * localZ,
-          0.42 * scale,
-          0.17,
-          ((filled - 1) * 0.14 + 0.17) * scale,
-          -yaw,
-        ),
-        standable: true,
-      };
-    });
+    const shelf = {
+      ...box(spot.x, groundY + 0.21, spot.z, 0.49 * scale, 0.21, columns * 0.14 * scale, -yaw),
+      standable: true,
+    };
+    return [
+      shelf,
+      ...Array.from({ length: Math.ceil(count / columns) }, (_, row) => {
+        const filled = Math.min(columns, count - row * columns);
+        const localZ = (((filled - columns) * 0.28) / 2) * scale;
+        return {
+          ...box(
+            spot.x + Math.sin(yaw) * localZ,
+            groundY + 0.59 + row * 0.26,
+            spot.z + Math.cos(yaw) * localZ,
+            0.42 * scale,
+            0.17,
+            ((filled - 1) * 0.14 + 0.17) * scale,
+            -yaw,
+          ),
+          standable: true,
+        };
+      }),
+    ];
   }
   if (isHomeKind(kind) || kind === 'gardenPath' || kind === 'wovenRug') return [];
   const slab = (

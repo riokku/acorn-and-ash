@@ -11,7 +11,7 @@ import {
 import {
   attribute,
   positionLocal,
-  normalLocal,
+  normalWorld,
   vec3,
   uniform,
   texture,
@@ -253,12 +253,22 @@ function burnablePart(part: PropPart, height: number): PropPart {
     : source.map
       ? texture(source.map).rgb.mul(uniform(source.color))
       : uniform(source.color).rgb;
-  if (/leaves/i.test(source.name) && source.vertexColors && geometry.hasAttribute('color')) {
+  if (/leaves|needles|foliage/i.test(source.name)) {
     // Snow lies over the painted needles instead of multiplying green into white.
     // Apply vertex colour here once, before snow and char, rather than afterwards.
     material.vertexColors = false;
-    base = base.mul(attribute('color', 'vec3'));
-    const snow = seasonUniforms.snow.mul(nodeSmoothstep(0.05, 0.65, normalLocal.y));
+    if (source.vertexColors && geometry.hasAttribute('color'))
+      base = base.mul(attribute('color', 'vec3'));
+    // Double-sided needle sheets must stay green when viewed from underneath.
+    // World normals include the visible face's orientation, unlike normalLocal.
+    const patch = positionLocal.x
+      .mul(1.7)
+      .sin()
+      .mul(positionLocal.z.mul(2.1).cos())
+      .add(positionLocal.y.mul(1.3).sin().mul(0.45));
+    const snow = seasonUniforms.snow
+      .mul(nodeSmoothstep(0.2, 0.8, normalWorld.y))
+      .mul(nodeSmoothstep(-0.15, 0.5, patch));
     base = mix(base, vec3(0.79, 0.85, 0.89), snow.mul(0.9));
   }
   const localHeight = positionLocal.y.add(part.offset.elements[13]!).div(height).clamp(0, 1);

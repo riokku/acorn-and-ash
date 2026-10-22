@@ -1689,3 +1689,11 @@ confirmation; homes require typing `DISMANTLE`. Empty storage and indoor
 furnishings, harvest crops, let remaining fire fuel burn out, and have everyone
 leave before removing a home. Full inventories refuse reclamation without
 changing the object. Movement and refunds are validated and saved by the server.
+
+Snow on firs and other evergreen foliage now follows the visible branch surface,
+with uneven patches on upward-facing needles and green undersides. Inspect near
+and distant trees at `/?gallery=tree-models&kind=pine&season=winter`.
+Cabin log stores reuse the existing timber bench model as a low shelf that stays
+visible and solid when empty. Right-click the shelf to open log storage; walking
+nearby no longer opens it. Close the panel or walk away to dismiss it. Small and
+large cabins still hold 20 and 50 logs, with every stored log shown on the shelf.

@@ -101,6 +101,23 @@ test('stores visible firewood, withdraws it, and fuels a cabin and outdoor fire'
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
     const storage = page.getByTestId('log-storage');
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120_000,
+    });
+    await expect(storage).toBeHidden();
+    const openStorage = async () => {
+      await expect.poll(() => page.evaluate(() => window.acornDebug?.space())).toBe(0);
+      await expect(async () => {
+        const point = await page.evaluate(
+          ({ x, z }) => window.acornDebug?.screenPoint(x, 0.39, z),
+          pile,
+        );
+        expect(point).not.toBeNull();
+        await page.mouse.click(point!.x, point!.y, { button: 'right' });
+        await expect(storage).toBeVisible({ timeout: 1500 });
+      }).toPass({ timeout: 15000 });
+    };
+    await openStorage();
     await expect(storage).toContainText('0 / 20 logs');
     await storage.getByRole('button', { name: 'Store all', exact: true }).click();
     await expect(storage).toContainText('12 / 20 logs');
@@ -138,7 +155,8 @@ test('stores visible firewood, withdraws it, and fuels a cabin and outdoor fire'
     await expect(fire).toContainText('0:00 remaining');
     await expect(fire.getByRole('button', { name: 'Light', exact: true })).toBeDisabled();
     moveTo(0, outside.x, outside.z);
-    await expect(storage).toBeVisible();
+    await expect(storage).toBeHidden();
+    await openStorage();
     await storage.getByRole('button', { name: 'Take 1', exact: true }).click();
     await expect(storage).toContainText('6 / 20 logs');
     moveTo(0, -10, 3.5);
