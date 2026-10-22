@@ -1,3 +1,4 @@
+import type { BuildableKindId } from '@acorn/shared';
 import type { WarmthView } from '@acorn/shared';
 import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
 import { emptyExpedition, type ExpeditionView } from '@acorn/shared';
@@ -45,6 +46,15 @@ export interface FirePanelState {
   readonly y: number;
 }
 export interface HudState {
+  readonly placedObject?: {
+    id: number;
+    kind: BuildableKindId;
+    yours: boolean;
+    indoor: boolean;
+    home: boolean;
+    canMove: boolean;
+    refund: string;
+  } | null;
   readonly firePanel?: FirePanelState | null;
   /** Owner-only UI capability returned by the authenticated web session. */
   readonly canEditItems?: boolean;

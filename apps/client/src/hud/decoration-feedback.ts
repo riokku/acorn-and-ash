@@ -43,7 +43,8 @@ export class DecorationFeedback {
     const name = BUILDABLE_KINDS[this.pending.request.kind].displayName.toLowerCase();
     return now - this.pending.sentAt >= 8000
       ? `Still waiting for the ${name}. Check your connection.`
-      : this.pending.request.action === 'reclaim'
+      : this.pending.request.action === 'reclaim' ||
+          this.pending.request.action === 'reclaimOutdoor'
         ? `Waiting for the ${name} to be packed up.`
         : `Waiting for the ${name} placement to be confirmed.`;
   }

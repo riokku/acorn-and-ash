@@ -1,3 +1,4 @@
+import { placedObjectRefund } from '@acorn/shared';
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { mushroomFlushHint } from '@acorn/shared';
 import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@acorn/shared';
@@ -1466,8 +1467,12 @@ export class Game {
   private decorationRefusal(reason: DecorationState['reason']): string | null {
     if (reason === null) return null;
     return {
+      occupied: 'Everyone must leave before this can be dismantled.',
+      contents:
+        'Empty storage, pack up indoor decorations, harvest crops and let the fire fuel burn out first.',
+      unsupported: 'This structure cannot be moved. Dismantle it to rebuild elsewhere.',
       unavailable: 'Enter your home to decorate',
-      private: 'Only the homeowner can decorate',
+      private: 'Only the owner can change this object',
       materials: 'Gather the listed materials first',
       blocked: 'Keep furniture, doorways, beds and stations clear',
       tooFar: 'Move closer to that spot',
@@ -1488,6 +1493,7 @@ export class Game {
     const pieces = this.decorations.filter((piece) => piece.homeId === this.space);
     for (const piece of pieces) {
       const model = createHomeDecoration(piece.kind);
+      model.group.userData.decorationId = piece.id;
       model.group.position.set(piece.x, 0, piece.z);
       model.group.rotation.y = piece.yaw;
       this.homeInterior.group.add(model.group);
@@ -2045,9 +2051,11 @@ export class Game {
             const action =
               result.request.action === 'place'
                 ? 'placed'
-                : result.request.action === 'move'
+                : result.request.action === 'move' || result.request.action === 'moveOutdoor'
                   ? 'moved'
-                  : 'packed up';
+                  : isDecorationKind(result.request.kind)
+                    ? 'packed up'
+                    : 'dismantled';
             this.showActionNote(`${BUILDABLE_KINDS[result.request.kind].displayName} ${action}.`);
           } else this.showActionNote(this.decorNote!);
           this.pendingDecorationPreview = null;
@@ -3055,6 +3063,10 @@ export class Game {
         if ('setLit' in existing) existing.setLit(this.fuelFireLit(prop.id));
         // Free boats follow the current between server updates. Occupied
         // boats are hidden here because a separate boat follows the rider.
+        if (prop.kind !== 'rowboat') {
+          existing.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
+          existing.group.rotation.y = prop.yaw;
+        }
         if (prop.kind === 'rowboat') {
           if (prop.occupied === true) this.floatingBoats.delete(prop.id);
           else {
@@ -3381,8 +3393,9 @@ export class Game {
         !this.mapOpen &&
         !this.craftMenuOpen &&
         !this.buildMenuOpen
-      )
-        this.lootAt(rightPoint, camera);
+      ) {
+        if (!this.openPlacedObject(rightPoint, camera)) this.lootAt(rightPoint, camera);
+      }
     }
 
     // Read ahead of anything below that might forget taps for a produced
@@ -3927,13 +3940,18 @@ export class Game {
     if (spot === null || refusal !== null) return;
 
     const request: BuildRequest = { kind: placing.kind, x: spot.x, z: spot.z, yaw: spot.yaw };
-    if (this.space !== OUTDOORS && isDecorationKind(request.kind)) {
+    if ((this.space !== OUTDOORS || this.decorMoveId !== 0) && isDecorationKind(request.kind)) {
       if (this.decorationFeedback.request !== null) return;
       const decoration = {
         ...request,
         kind: request.kind,
         id: this.decorMoveId,
-        action: this.decorMoveId === 0 ? ('place' as const) : ('move' as const),
+        action:
+          this.space === OUTDOORS
+            ? ('moveOutdoor' as const)
+            : this.decorMoveId === 0
+              ? ('place' as const)
+              : ('move' as const),
       };
       if (!this.submitAction('decorate', () => this.connection?.sendDecoration(decoration))) return;
       this.decorationFeedback.begin(decoration, performance.now());
@@ -3960,6 +3978,8 @@ export class Game {
     const clearing = this.clearing;
     if (placing === null || clearing === null) return;
 
+    if (this.decorationFeedback.request !== null && placing === this.pendingDecorationPreview)
+      return;
     const submitted = this.buildFeedback.request;
     if (submitted !== null && placing === this.pendingBuildPreview) return;
 
@@ -4013,9 +4033,15 @@ export class Game {
       mouse: this.groundUnderPointer(camera),
       player: player.motion.position,
       snap: !(this.controls?.isShiftHeld() ?? false),
-      carrying: this.carrying,
+      carrying:
+        this.decorMoveId !== 0
+          ? BUILDABLE_KINDS[placing.kind].costs.map((cost) => ({
+              item: cost.item,
+              count: cost.amount,
+            }))
+          : this.carrying,
       storedSupplies: this.homeStoredSupplies,
-      built: this.builtProps,
+      built: this.builtProps.filter((prop) => prop.id !== this.decorMoveId),
       pending: this.pendingPlacements.map((pending) => pending.request),
       scenery: this.sceneryFootprints(),
       water: this.keepOutWater,
@@ -4777,6 +4803,88 @@ export class Game {
     return (
       this.collision !== null && groundItemReachable(this.collision, position, target, heightOffset)
     );
+  }
+
+  private selectedPlacedObject: { id: number; indoor: boolean } | null = null;
+  private openPlacedObject(point: { x: number; y: number }, camera: FollowCamera): boolean {
+    this.clickNdc.set(
+      (point.x / window.innerWidth) * 2 - 1,
+      (-point.y / window.innerHeight) * 2 + 1,
+    );
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    const indoor = this.space !== OUTDOORS;
+    const roots = indoor
+      ? this.decorModels.map((model) => model.group)
+      : [...this.builtMeshes.values()].map((model) => model.group);
+    for (const root of roots) root.updateWorldMatrix(true, true);
+    const hits = this.clickRaycaster.intersectObjects(roots, true).filter((hit) => {
+      for (let object: THREE.Object3D | null = hit.object; object; object = object.parent)
+        if (!object.visible) return false;
+      return true;
+    });
+    const hit = hits[0];
+    if (!hit) return false;
+    let id: number | undefined;
+    for (let object: THREE.Object3D | null = hit.object; object; object = object.parent) {
+      if (indoor && typeof object.userData.decorationId === 'number') {
+        id = object.userData.decorationId;
+        break;
+      }
+      if (!indoor)
+        for (const [key, model] of this.builtMeshes) if (model.group === object) id = key;
+    }
+    const piece = indoor
+      ? this.decorations.find((piece) => piece.id === id && piece.homeId === this.space)
+      : this.builtProps.find((piece) => piece.id === id);
+    if (!piece || id === undefined) return false;
+    if (Math.hypot(piece.x - this.motionOrOrigin().x, piece.z - this.motionOrOrigin().z) > 6) {
+      this.showActionNote('Move closer to manage this object.');
+      return true;
+    }
+    this.selectedPlacedObject = { id, indoor };
+    const yours = indoor
+      ? this.homeHere()?.yours === true
+      : this.builtProps.find((prop) => prop.id === id)?.yours === true;
+    this.options.hud.publish({
+      placedObject: {
+        id,
+        kind: piece.kind,
+        yours,
+        indoor,
+        home: isHomeKind(piece.kind),
+        canMove: isDecorationKind(piece.kind),
+        refund:
+          placedObjectRefund(piece.kind)
+            .map((cost) => `${cost.amount} ${ITEM_KINDS[cost.item].displayName.toLowerCase()}`)
+            .join(', ') || 'No materials',
+      },
+    });
+    return true;
+  }
+  placedObjectAction(action: 'close' | 'move' | 'reclaim'): void {
+    const selected = this.selectedPlacedObject;
+    this.options.hud.publish({ placedObject: null });
+    this.selectedPlacedObject = null;
+    if (!selected || action === 'close' || this.decorationFeedback.request !== null) return;
+    if (selected.indoor) {
+      if (action === 'move') this.moveDecoration(selected.id);
+      else this.reclaimDecoration(selected.id);
+      return;
+    }
+    const prop = this.builtProps.find((prop) => prop.id === selected.id && prop.yours);
+    if (!prop) return;
+    if (action === 'move') {
+      if (!isDecorationKind(prop.kind)) return;
+      this.startPlacing(prop.kind);
+      this.decorMoveId = prop.id;
+      if (this.placing !== null) this.placing.yaw = prop.yaw;
+    } else {
+      const request = { ...prop, action: 'reclaimOutdoor' as const };
+      if (!this.submitAction('pack up this object', () => this.connection?.sendDecoration(request)))
+        return;
+      this.decorationFeedback.begin(request, performance.now());
+      this.beginDecorationFeedback(null);
+    }
   }
 
   private lootAt(point: { x: number; y: number }, camera: FollowCamera): void {

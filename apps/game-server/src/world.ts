@@ -560,9 +560,20 @@ export class World extends DurableObject<WorldEnv> {
         this.ctx.storage.transactionSync(() => {
           this.savePlayer(simulation, attachment);
           this.writeMeta('home-decorations', JSON.stringify(result.pieces));
+          if (decoded.action === 'moveOutdoor') {
+            const prop = simulation.builtPropsList().find((prop) => prop.id === decoded.id);
+            if (prop) this.writeBuiltProp(prop, attachment.playerKey);
+          }
+          if (decoded.action === 'reclaimOutdoor') {
+            this.ctx.storage.sql.exec('DELETE FROM built_props WHERE id = ?', decoded.id);
+            this.ctx.storage.sql.exec('DELETE FROM home_chests WHERE home_id = ?', decoded.id);
+            this.ctx.storage.sql.exec('DELETE FROM home_gardens WHERE home_id = ?', decoded.id);
+          }
         });
         this.sendPacks(simulation, new Set([attachment.netId]));
         this.broadcast(encodeDecorationState(result));
+        if (decoded.action === 'moveOutdoor' || decoded.action === 'reclaimOutdoor')
+          this.broadcastBuiltProps(simulation);
       } else this.trySend(ws, encodeDecorationState(result));
       this.trySend(ws, encodeDecorationReply(decoded, result.reason));
       return;
@@ -2666,7 +2677,7 @@ export class World extends DurableObject<WorldEnv> {
   private writeBuiltProp(prop: BuiltProp, ownerKey: string | null): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO built_props (id, kind_index, x, z, yaw, built_at_ms, owner_key) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET kind_index = excluded.kind_index',
+        'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET kind_index = excluded.kind_index, x = excluded.x, z = excluded.z, yaw = excluded.yaw',
       prop.id,
       buildableKindIndex(prop.kind),
       prop.x,

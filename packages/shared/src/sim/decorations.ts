@@ -31,6 +31,9 @@ export const DECORATION_REASONS = [
   'missing',
   'packFull',
   'recipe',
+  'occupied',
+  'contents',
+  'unsupported',
 ] as const;
 export type DecorationReason = (typeof DECORATION_REASONS)[number];
 export const MAX_HOME_DECORATIONS = 16;
@@ -44,8 +47,8 @@ export interface HomeDecoration {
   readonly yaw: number;
 }
 export interface DecorationRequest {
-  readonly action: 'place' | 'move' | 'reclaim';
-  readonly kind: DecorationKind;
+  readonly action: 'place' | 'move' | 'reclaim' | 'moveOutdoor' | 'reclaimOutdoor';
+  readonly kind: BuildableKindId;
   readonly id: number;
   readonly x: number;
   readonly z: number;
@@ -161,4 +164,45 @@ export function homeUpgradeObstruction(
         }) !== null,
     ) ?? null
   );
+}
+
+/** Stable request kind IDs: existing indoor IDs stay intact. Append new kinds only. */
+export const DECORATION_REQUEST_KINDS: readonly BuildableKindId[] = [
+  'cedarBench',
+  'timberTable',
+  'wovenRug',
+  'lantern',
+  'guardianTrophy',
+  'fernLantern',
+  'moonLantern',
+  'flowerPlanter',
+  'trailPennant',
+  'sentinelTrophy',
+  'fishDisplay',
+  'goldenFishDisplay',
+  'lastBellTrophy',
+  'campfire',
+  'cabin',
+  'flowerBed',
+  'fence',
+  'gardenPath',
+  'tent',
+  'teepee',
+  'largeCabin',
+  'rowboat',
+];
+export const DECORATION_ACTIONS = [
+  'place',
+  'move',
+  'reclaim',
+  'moveOutdoor',
+  'reclaimOutdoor',
+] as const;
+export function placedObjectRefund(kind: BuildableKindId) {
+  return BUILDABLE_KINDS[kind].costs
+    .map((cost) => ({
+      item: cost.item,
+      amount: isDecorationKind(kind) ? cost.amount : Math.floor(cost.amount / 2),
+    }))
+    .filter((cost) => cost.amount > 0);
 }

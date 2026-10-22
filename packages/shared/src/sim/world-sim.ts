@@ -1,3 +1,4 @@
+import { placedObjectRefund } from './decorations';
 import { homeUpgradeObstruction } from './decorations';
 import { nearAdventureLake, nearMountainSpring } from './regional-adventures';
 import {
@@ -1469,6 +1470,10 @@ export class WorldSimulation {
     this.decoratedRooms.clear();
   }
   requestDecoration(netId: number, request: DecorationRequest): DecorationState {
+    if (request.action === 'moveOutdoor' || request.action === 'reclaimOutdoor')
+      return this.requestOutdoorObject(netId, request);
+    if (!isDecorationKind(request.kind))
+      return { pieces: this.decorationsList(), reason: 'unavailable' };
     const runtime = this.players.get(netId),
       home = runtime === undefined ? undefined : this.builtPropsById.get(runtime.space);
     const result = (reason: DecorationState['reason']): DecorationState => ({
@@ -1495,6 +1500,8 @@ export class WorldSimulation {
     if (request.action !== 'place' && (old === undefined || old.kind !== request.kind))
       return result('missing');
     if (request.action === 'reclaim') {
+      const at = runtime.entity.get(Position);
+      if (at === undefined || Math.hypot(at.x - old!.x, at.z - old!.z) > 6) return result('tooFar');
       const copy = { ...runtime.inventory };
       for (const cost of BUILDABLE_KINDS[old!.kind].costs)
         if (addItem(copy, cost.item, cost.amount) !== cost.amount) return result('packFull');
@@ -1560,6 +1567,87 @@ export class WorldSimulation {
       this.nextDecorationId++;
     } else this.decorations[this.decorations.indexOf(old!)] = piece;
     this.decoratedRooms.delete(home.id);
+    return result(null);
+  }
+  private requestOutdoorObject(netId: number, request: DecorationRequest): DecorationState {
+    const result = (reason: DecorationState['reason']): DecorationState => ({
+      pieces: this.decorationsList(),
+      reason,
+    });
+    const runtime = this.players.get(netId);
+    const prop = this.builtPropsById.get(request.id);
+    if (!runtime || runtime.space !== OUTDOORS || !prop || prop.kind !== request.kind)
+      return result('missing');
+    if (runtime.playerKey === null || this.builtPropOwner(prop.id) !== runtime.playerKey)
+      return result('private');
+    if (
+      runtime.health <= 0 ||
+      runtime.action.kind !== ActionKind.Idle ||
+      runtime.cast !== null ||
+      runtime.pendingBuild !== null
+    )
+      return result('busy');
+    const position = runtime.entity.get(Position);
+    if (!position || Math.hypot(position.x - prop.x, position.z - prop.z) > 6)
+      return result('tooFar');
+    if (
+      prop.rower !== undefined ||
+      [...this.players.values()].some((other) => other.space === prop.id)
+    )
+      return result('occupied');
+    if (request.action === 'moveOutdoor') {
+      if (!isDecorationKind(prop.kind)) return result('unsupported');
+      const piece = buildableFootprint(prop.kind, request.x, request.z, request.yaw);
+      const home = this.homeOf(runtime.playerKey);
+      const others = this.builtProps.filter(
+        (other) => isHomeKind(other.kind) && other.id !== home?.id,
+      );
+      if (
+        ![request.x, request.z, request.yaw].every(Number.isFinite) ||
+        !buildGroundIsLevel(piece, this.collision.terrain) ||
+        checkPieceBuildArea(piece, home, others, this.protectedBuildSites()) !== null ||
+        checkBuildSpot(
+          piece,
+          position,
+          BUILD_REACH + BUILD_REACH_SLACK,
+          this.keepOutWater,
+          this.buildFootprints(prop.id, true),
+          true,
+        ) !== null
+      )
+        return result('blocked');
+      if (
+        [...this.players.values()].some((other) => {
+          const at = other.entity.get(Position);
+          return (
+            other !== runtime &&
+            other.space === OUTDOORS &&
+            at !== undefined &&
+            Math.hypot(at.x - piece.x, at.z - piece.z) < piece.radius + PLAYER_RADIUS
+          );
+        })
+      )
+        return result('blocked');
+      Object.assign(prop, { x: request.x, z: request.z, yaw: request.yaw });
+      this.updatePlacedSolid(prop);
+      this.movePatchesFrom(piece);
+      return result(null);
+    }
+    if (request.action !== 'reclaimOutdoor') return result('unsupported');
+    if (
+      (prop.storedLogs ?? 0) > 0 ||
+      this.fireFuelRemainingMs(prop.id) > 0 ||
+      prop.lit ||
+      (this.homeChests.get(prop.id) ?? []).some((slot) => slot !== null) ||
+      (this.homeGardens.get(prop.id) ?? []).some((plot) => plot.crop !== null) ||
+      this.decorations.some((piece) => piece.homeId === prop.id)
+    )
+      return result('contents');
+    const copy = { ...runtime.inventory };
+    for (const cost of placedObjectRefund(prop.kind))
+      if (addItem(copy, cost.item, cost.amount) !== cost.amount) return result('packFull');
+    Object.assign(runtime.inventory, copy);
+    this.removeAbandonedBuild(prop);
     return result(null);
   }
   private addHomeSolid(prop: BuiltProp): void {

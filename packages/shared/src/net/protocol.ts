@@ -30,6 +30,8 @@ import {
   DECORATION_KINDS,
   DECORATION_REASONS,
   MAX_WORLD_DECORATIONS,
+  DECORATION_ACTIONS,
+  DECORATION_REQUEST_KINDS,
   type DecorationRequest,
   type DecorationState,
   type HomeDecoration,
@@ -734,8 +736,8 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
 
   if (type === ClientMessageType.Decoration) {
     if (data.byteLength !== 19) return null;
-    const action = ['place', 'move', 'reclaim'][view.getUint8(1)],
-      kind = DECORATION_KINDS[view.getUint8(2)];
+    const action = DECORATION_ACTIONS[view.getUint8(1)],
+      kind = DECORATION_REQUEST_KINDS[view.getUint8(2)];
     const id = view.getUint32(3, true),
       x = view.getFloat32(7, true),
       z = view.getFloat32(11, true),
@@ -744,8 +746,8 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
       action === undefined ||
       kind === undefined ||
       ![x, z, yaw].every(Number.isFinite) ||
-      Math.abs(x) > 20 ||
-      Math.abs(z) > 20 ||
+      Math.abs(x) > (action === 'moveOutdoor' || action === 'reclaimOutdoor' ? 1000 : 20) ||
+      Math.abs(z) > (action === 'moveOutdoor' || action === 'reclaimOutdoor' ? 1000 : 20) ||
       Math.abs(yaw) > Math.PI * 100 ||
       (action === 'place') !== (id === 0)
     )
@@ -2091,8 +2093,8 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     }
     case ServerMessageType.DecorationReply: {
       if (data.byteLength !== 8) return null;
-      const action = (['place', 'move', 'reclaim'] as const)[view.getUint8(1)];
-      const kind = DECORATION_KINDS[view.getUint8(2)];
+      const action = DECORATION_ACTIONS[view.getUint8(1)];
+      const kind = DECORATION_REQUEST_KINDS[view.getUint8(2)];
       const reasonIndex = view.getUint8(3);
       if (action === undefined || kind === undefined || reasonIndex > DECORATION_REASONS.length)
         return null;
@@ -2643,8 +2645,8 @@ export function encodeDecorationReply(
   const buffer = new ArrayBuffer(8),
     view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.DecorationReply);
-  view.setUint8(1, ['place', 'move', 'reclaim'].indexOf(request.action));
-  view.setUint8(2, DECORATION_KINDS.indexOf(request.kind));
+  view.setUint8(1, DECORATION_ACTIONS.indexOf(request.action));
+  view.setUint8(2, DECORATION_REQUEST_KINDS.indexOf(request.kind));
   view.setUint8(3, reason === null ? 0 : DECORATION_REASONS.indexOf(reason) + 1);
   view.setUint32(4, request.id, true);
   return buffer;
@@ -2654,8 +2656,8 @@ export function encodeDecorationRequest(request: DecorationRequest): ArrayBuffer
   const buffer = new ArrayBuffer(19),
     view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Decoration);
-  view.setUint8(1, ['place', 'move', 'reclaim'].indexOf(request.action));
-  view.setUint8(2, DECORATION_KINDS.indexOf(request.kind));
+  view.setUint8(1, DECORATION_ACTIONS.indexOf(request.action));
+  view.setUint8(2, DECORATION_REQUEST_KINDS.indexOf(request.kind));
   view.setUint32(3, request.id, true);
   view.setFloat32(7, request.x, true);
   view.setFloat32(11, request.z, true);
