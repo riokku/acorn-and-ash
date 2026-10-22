@@ -84,6 +84,7 @@ interface HudProps {
   readonly onFire?: (request: FireRequest) => void;
   readonly onExpedition?: (request: ExpeditionRequest) => void;
   readonly onToggleDecorations?: () => void;
+  readonly onCloseLogStorage?: () => void;
   readonly onPlacedObjectAction?: (action: 'close' | 'move' | 'reclaim') => void;
   readonly onMoveDecoration?: (id: number) => void;
   readonly onReclaimDecoration?: (id: number) => void;
@@ -150,6 +151,7 @@ export function Hud({
   onCraftTabChange,
   onGardenUse,
   onToggleDecorations,
+  onCloseLogStorage,
   onPlacedObjectAction,
   onMoveDecoration,
   onReclaimDecoration,
@@ -206,7 +208,12 @@ export function Hud({
       !state.craftMenuOpen &&
       !state.buildMenuOpen &&
       state.firePanel ? (
-        <FirePanel fire={state.firePanel} state={state} onRequest={onFire} />
+        <FirePanel
+          fire={state.firePanel}
+          state={state}
+          onRequest={onFire}
+          onClose={onCloseLogStorage}
+        />
       ) : null}
       <div
         className="hud-panel"

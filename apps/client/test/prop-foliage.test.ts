@@ -25,9 +25,7 @@ it.each([
       const parts = createPropMeshes(PROP_KINDS.birch, 1, distant);
       const drawn = parts[0]!;
       expect(drawn.mesh.geometry.getAttribute('propGroundWeight').getX(0)).toBeDefined();
-      expect((drawn.mesh.material as THREE.MeshStandardNodeMaterial).vertexColors).toBe(
-        name !== 'Leaves',
-      );
+      expect((drawn.mesh.material as THREE.MeshStandardNodeMaterial).vertexColors).toBe(false);
       expect(drawn.mesh.geometry.getAttribute('color').getY(0)).toBeCloseTo(0.4);
       drawn.burn?.(0, 0.5);
       expect(drawn.mesh.geometry.getAttribute('treeBurn').getX(0)).toBe(0.5);

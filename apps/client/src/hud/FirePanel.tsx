@@ -12,10 +12,12 @@ export function FirePanel({
   fire,
   state,
   onRequest,
+  onClose,
 }: {
   fire: FirePanelState;
   state: HudState;
   onRequest?: (request: FireRequest) => void;
+  onClose?: () => void;
 }): React.JSX.Element {
   const logs = state.carrying.find((entry) => entry.item === 'log')?.count ?? 0;
   const available = state.connection === 'connected' && onRequest !== undefined;
@@ -33,6 +35,11 @@ export function FirePanel({
       style={{ left: fire.x, top: fire.y }}
       aria-label={storage ? 'Cabin log storage' : 'Fire fuel'}
     >
+      {storage ? (
+        <button type="button" aria-label="Close log storage" onClick={onClose}>
+          Close
+        </button>
+      ) : null}
       <strong>{storage ? 'Log storage' : fire.lit ? 'Fire burning' : 'Fire out'}</strong>
       <span>{storage ? `${fire.storedLogs} / ${fire.capacity} logs` : `${time} remaining`}</span>
       <meter

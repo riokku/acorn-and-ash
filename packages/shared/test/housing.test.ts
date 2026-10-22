@@ -109,12 +109,16 @@ describe('housing knowledge and safe upgrades', () => {
   ] as const) {
     it(`upgrades ${from} to ${to} without losing its identity, lock or chest`, () => {
       const sim = world(from);
-      const before = sim.collision.colliders.length;
+      const oldShape = cabinCollider({ kind: from, x: -2, z: -4.2, yaw: 0 });
+      const oldCollider = sim.collision.colliders.find(
+        (c) => c.shape === 'box' && c.x === oldShape.x && c.z === oldShape.z,
+      );
+      expect(oldCollider).toBeDefined();
       sim.restoreChest(7, [{ item: 'bone', count: 3 }, ...Array(9).fill(null)]);
       build(sim, to);
       expect(sim.builtPropsList()[0]).toMatchObject({ id: 7, kind: to, locked: true });
       expect(sim.builtPropOwner(7)).toBe('owner');
-      expect(sim.collision.colliders).toHaveLength(before);
+      expect(sim.collision.colliders).not.toContain(oldCollider);
       const at = homeSpot(HOME_WAKE_SPOT, to);
       sim.placePlayer(1, { ...at, y: 0 }, at.yaw, 7);
       expect(sim.requestChest(1, { action: 'open' }).slots[0]).toEqual({ item: 'bone', count: 3 });

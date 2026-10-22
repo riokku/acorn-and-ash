@@ -43,6 +43,7 @@ export function mountHud(
     onFire?: (request: FireRequest) => void;
     onGarden?: (request: GardenRequest) => void;
     onToggleDecorations?: () => void;
+    onCloseLogStorage?: () => void;
     onPlacedObjectAction?: (action: 'close' | 'move' | 'reclaim') => void;
     onMoveDecoration?: (id: number) => void;
     onReclaimDecoration?: (id: number) => void;
@@ -86,6 +87,7 @@ export function mountHud(
         onGardenUse={journalActions?.onGarden}
         onExpedition={journalActions?.onExpedition}
         onToggleDecorations={journalActions?.onToggleDecorations}
+        onCloseLogStorage={journalActions?.onCloseLogStorage}
         onPlacedObjectAction={journalActions?.onPlacedObjectAction}
         onMoveDecoration={journalActions?.onMoveDecoration}
         onReclaimDecoration={journalActions?.onReclaimDecoration}
