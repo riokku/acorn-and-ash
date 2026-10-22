@@ -73,6 +73,7 @@ interface FallingTree extends TreeLanding {
 
 /** What the server says about one tree that is not as the seed left it. */
 export interface TreeAppearance {
+  readonly growth?: number;
   readonly generation: number;
   readonly felled: boolean;
   readonly fall?: TreeFall;
@@ -193,7 +194,7 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
     const slot = standing.get(treeId);
     const state = drawn.get(treeId) ?? UNTOUCHED;
     if (tree === undefined || slot === undefined || state.felled) return;
-    const grown = treeAtGeneration(clearing.seed, tree, state.generation);
+    const grown = treeAtGeneration(clearing.seed, tree, state.generation, state.growth);
     for (const part of slot.parts) {
       placeOneInstance(part, slot.index, grown, tilt);
       part.mesh.instanceMatrix.needsUpdate = true;
@@ -220,13 +221,14 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
         if (
           want.felled === have.felled &&
           want.generation === have.generation &&
+          want.growth === have.growth &&
           want.burned === have.burned
         )
           continue;
         burning.setBurned(tree.id, want.burned === true);
         changed = true;
 
-        const grown = treeAtGeneration(clearing.seed, tree, want.generation);
+        const grown = treeAtGeneration(clearing.seed, tree, want.generation, want.growth);
         shaking.delete(tree.id);
         falling.delete(tree.id);
 
@@ -248,7 +250,9 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
             yaw: want.fall.yaw,
             landed:
               serverNowMs - want.fall.startedAtMs >=
-              treeFallTimes(treeAtGeneration(clearing.seed, tree, want.generation)).fall * 1000,
+              treeFallTimes(treeAtGeneration(clearing.seed, tree, want.generation, want.growth))
+                .fall *
+                1000,
             axis: new THREE.Vector3(Math.cos(want.fall.yaw), 0, -Math.sin(want.fall.yaw)),
             beganAt: performance.now() - Math.max(0, serverNowMs - want.fall.startedAtMs),
           };
@@ -344,7 +348,7 @@ function blockersFor(
 ): THREE.BufferGeometry[] {
   return clearing.props.map((prop) => {
     const state = states.get(prop.id);
-    const grown = treeAtGeneration(clearing.seed, prop, state?.generation ?? 0);
+    const grown = treeAtGeneration(clearing.seed, prop, state?.generation ?? 0, state?.growth);
     const here: PlacedProp = state?.felled === true ? stumpFor(grown) : grown;
     return blockerGeometry(PROP_KINDS[here.kind], here);
   });

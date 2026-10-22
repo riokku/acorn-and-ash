@@ -668,7 +668,7 @@ export interface GameDebug {
   /** Trees the server says are down. */
   felledTrees(): number[];
   /** How many times each changed tree has grown back. */
-  treeGenerations(): Array<{ id: number; generation: number }>;
+  treeGenerations(): Array<{ id: number; generation: number; growth: number; scale: number }>;
   /** Every tree in the clearing, with what it takes to fell it. */
   trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
   /** The tree a swing would land on right now, if any. */
@@ -1597,7 +1597,12 @@ export class Game {
       nearGatherSpot: () => this.nearGatherSpot,
       felledTrees: () => [...this.treeStates].filter(([, state]) => state.felled).map(([id]) => id),
       treeGenerations: () =>
-        [...this.treeStates].map(([id, state]) => ({ id, generation: state.generation })),
+        [...this.treeStates].map(([id, state]) => ({
+          id,
+          generation: state.generation,
+          growth: state.growth ?? 255,
+          scale: this.standingProps.find((tree) => tree.id === id)?.scale ?? 0,
+        })),
       trees: () =>
         [...(this.clearing?.props ?? []), ...this.wildernessProps]
           .map((prop) => ({
@@ -2195,6 +2200,7 @@ export class Game {
         for (const tree of message.trees) {
           this.treeStates.set(tree.treeId, {
             generation: tree.generation,
+            ...(tree.growth !== undefined ? { growth: tree.growth } : {}),
             felled: tree.felled,
             ...(tree.fall ? { fall: tree.fall } : {}),
             ...(tree.burned ? { burned: true } : {}),
@@ -3005,7 +3011,7 @@ export class Game {
       const original = slot === undefined ? undefined : standing[slot];
       if (slot === undefined || original === undefined) continue;
 
-      const grown = treeAtGeneration(clearing.seed, original, state.generation);
+      const grown = treeAtGeneration(clearing.seed, original, state.generation, state.growth);
       standing[slot] = grown;
       // Colliders are laid out the same way: the clearing's, then the forest's.
       replaceCollider(

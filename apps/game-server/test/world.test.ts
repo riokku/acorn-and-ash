@@ -1508,6 +1508,8 @@ describe('a world played before trees grew back', () => {
       expect(columns).toContain('generation');
       expect(columns).toContain('fall_yaw');
       expect(columns).toContain('burned');
+      expect(columns).toContain('growth_started_at_ms');
+      expect(columns).toContain('growth');
 
       // The old stump is treated as freshly cut rather than as felled in 1970,
       // so it waits its turn instead of coming back the instant anybody joins.
@@ -1530,6 +1532,46 @@ describe('a world played before trees grew back', () => {
 });
 
 describe('trees growing back', () => {
+  it('round-trips a sapling growth clock through SQLite and keeps legacy trees mature', async () => {
+    const stub = env.WORLD.get(env.WORLD.idFromName(nextWorldId()));
+    await runInDurableObject(stub, (instance) => {
+      const storage = instance as unknown as {
+        writeTree(tree: {
+          treeId: number;
+          swingsTaken: number;
+          felled: boolean;
+          felledAtMs: number;
+          generation: number;
+          growth?: number;
+          growthStartedAtMs?: number;
+        }): void;
+        loadTrees(): Array<{ treeId: number; growth?: number; growthStartedAtMs?: number }>;
+      };
+      const sapling = {
+        treeId: 17,
+        swingsTaken: 0,
+        felled: false,
+        felledAtMs: 1000,
+        generation: 1,
+        growth: 64,
+        growthStartedAtMs: 2000,
+      };
+      storage.writeTree(sapling);
+      expect(storage.loadTrees().find((t) => t.treeId === 17)).toMatchObject(sapling);
+      storage.writeTree({
+        treeId: 18,
+        swingsTaken: 0,
+        felled: false,
+        felledAtMs: 0,
+        generation: 1,
+      });
+      expect(storage.loadTrees().find((t) => t.treeId === 18)?.growth).toBe(255);
+      expect(storage.loadTrees().find((t) => t.treeId === 18)?.growthStartedAtMs).toBeUndefined();
+      storage.writeTree({ ...sapling, growth: 127 });
+      expect(storage.loadTrees().find((t) => t.treeId === 17)?.growth).toBe(127);
+    });
+  });
+
   function theOak(seed: number) {
     const tree = buildTestClearing(seed).props.find((prop) => prop.kind === 'oak');
     if (tree === undefined) throw new Error('no oak in the clearing');

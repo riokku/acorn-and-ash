@@ -191,13 +191,14 @@ function encodeName(name: string): Uint8Array {
 
 const BYTES_PER_INVENTORY_ENTRY = 3;
 const BYTES_PER_TAKEN_PICKUP = 2;
-/** treeId(2) + generation(1) + flags(1) + fall yaw(4) + fall start milliseconds(8) */
-const BYTES_PER_TREE_STATE = 16;
+/** treeId(2) + generation(1) + flags(1) + fall yaw(4) + fall start milliseconds(8) + growth(1) */
+const BYTES_PER_TREE_STATE = 17;
 const TREE_FELLED_FLAG = 1;
 const TREE_FALL_FLAG = 2;
 const TREE_BURNED_FLAG = 4;
 const TREE_STATES_HEADER_BYTES = 4;
 const TREE_WHOLE_LIST_FLAG = 1;
+const TREE_GROWTH_LIST_FLAG = 2;
 /** id(2) + kind(1) + x(2) + z(2) + yaw(2) + flags(1) */
 const BYTES_PER_BUILT_PROP = 10;
 /** Only a campfire ever sets this, but the bit costs nothing on anything else. */
@@ -1000,7 +1001,7 @@ export function encodeTreeStates(trees: readonly TreeState[], whole = true): Arr
   const buffer = new ArrayBuffer(TREE_STATES_HEADER_BYTES + count * BYTES_PER_TREE_STATE);
   const view = new DataView(buffer);
   view.setUint8(0, ServerMessageType.TreeStates);
-  view.setUint8(1, whole ? TREE_WHOLE_LIST_FLAG : 0);
+  view.setUint8(1, TREE_GROWTH_LIST_FLAG | (whole ? TREE_WHOLE_LIST_FLAG : 0));
   view.setUint16(2, count, true);
 
   let offset = TREE_STATES_HEADER_BYTES;
@@ -1018,6 +1019,7 @@ export function encodeTreeStates(trees: readonly TreeState[], whole = true): Arr
     );
     view.setFloat32(offset + 4, fall?.yaw ?? 0, true);
     view.setFloat64(offset + 8, fall?.startedAtMs ?? 0, true);
+    view.setUint8(offset + 16, clamp(Math.round(tree.growth ?? 255), 0, 255));
     offset += BYTES_PER_TREE_STATE;
   }
   return buffer;
@@ -2303,25 +2305,24 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
     }
     case ServerMessageType.TreeStates: {
       if (data.byteLength < 2) return null;
-      // Older servers sent a one-byte count straight after the type, and every
-      // one was the whole list. The lengths of the two layouts can never match,
-      // so the size says which one this is.
+      // The header flags growth records. Older layouts have either this header
+      // with 16-byte records, or a one-byte count and 16-/4-byte records.
+      const currentCount =
+        data.byteLength >= TREE_STATES_HEADER_BYTES ? view.getUint16(2, true) : -1;
+      const headerStride =
+        (view.getUint8(1) & TREE_GROWTH_LIST_FLAG) !== 0 ? BYTES_PER_TREE_STATE : 16;
       const current =
         data.byteLength >= TREE_STATES_HEADER_BYTES &&
-        data.byteLength ===
-          TREE_STATES_HEADER_BYTES + view.getUint16(2, true) * BYTES_PER_TREE_STATE;
+        data.byteLength === TREE_STATES_HEADER_BYTES + currentCount * headerStride;
       const whole = current ? (view.getUint8(1) & TREE_WHOLE_LIST_FLAG) !== 0 : true;
-      const count = current ? view.getUint16(2, true) : view.getUint8(1);
+      const count = current ? currentCount : view.getUint8(1);
       const start = current ? TREE_STATES_HEADER_BYTES : 2;
-      // Servers before the fall timings only sent the four-byte standing/stump state.
-      const stride =
-        current || data.byteLength === 2 + count * BYTES_PER_TREE_STATE ? BYTES_PER_TREE_STATE : 4;
+      const stride = current ? headerStride : data.byteLength === 2 + count * 16 ? 16 : 4;
       if (data.byteLength !== start + count * stride) return null;
       const trees: TreeState[] = [];
       let offset = start;
       for (let i = 0; i < count; i++) {
-        const hasFall =
-          stride === BYTES_PER_TREE_STATE && (view.getUint8(offset + 3) & TREE_FALL_FLAG) !== 0;
+        const hasFall = stride >= 16 && (view.getUint8(offset + 3) & TREE_FALL_FLAG) !== 0;
         const fall = hasFall
           ? {
               yaw: view.getFloat32(offset + 4, true),
@@ -2336,6 +2337,9 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         trees.push({
           treeId: view.getUint16(offset, true),
           generation: view.getUint8(offset + 2),
+          ...(stride === 17 && view.getUint8(offset + 16) < 255
+            ? { growth: view.getUint8(offset + 16) }
+            : {}),
           felled: (view.getUint8(offset + 3) & TREE_FELLED_FLAG) !== 0,
           ...(fall ? { fall } : {}),
           ...((view.getUint8(offset + 3) & (TREE_FELLED_FLAG | TREE_BURNED_FLAG)) ===

@@ -239,3 +239,28 @@ it('still updates a regrown tree when it keeps the same detail slot', () => {
     scene.dispose();
   }
 });
+
+it('updates sapling size in both detail levels and the camera blockers as it grows', () => {
+  const { props, scene, meshes } = forestOfTwoPines();
+  try {
+    for (const growth of [0, 127, 255]) {
+      scene.setTreeStates(
+        new Map(props.map((tree) => [tree.id, { generation: 1, felled: false, growth }])),
+      );
+      scene.update(0.1, { x: 0, z: 0 });
+      const matrix = new THREE.Matrix4();
+      for (const [meshIndex, tree] of [
+        [0, props[0]!],
+        [2, props[1]!],
+      ] as const) {
+        meshes[meshIndex]!.getMatrixAt(0, matrix);
+        expect(new THREE.Vector3().setFromMatrixColumn(matrix, 0).length()).toBeCloseTo(
+          treeAtGeneration(1, tree, 1, growth).scale,
+        );
+      }
+      expect(blockerHeightAt(scene, 10)).toBeGreaterThan(0);
+    }
+  } finally {
+    scene.dispose();
+  }
+});

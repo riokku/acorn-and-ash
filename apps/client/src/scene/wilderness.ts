@@ -328,7 +328,12 @@ export function buildWildernessScene(
     for (const id of felled) {
       const tree = treeById.get(id);
       if (tree === undefined) continue;
-      const grown = treeAtGeneration(clearing.seed, tree, drawn.get(id)?.generation ?? 0);
+      const grown = treeAtGeneration(
+        clearing.seed,
+        tree,
+        drawn.get(id)?.generation ?? 0,
+        drawn.get(id)?.growth,
+      );
       placeInstance(stumpParts, count, stumpFor(grown));
       for (const part of stumpParts) part.burn?.(count, drawn.get(id)?.burned ? 1 : 0);
       count++;
@@ -395,6 +400,7 @@ export function buildWildernessScene(
         if (
           want.felled === have.felled &&
           want.generation === have.generation &&
+          want.growth === have.growth &&
           want.burned === have.burned
         )
           continue;
@@ -402,7 +408,7 @@ export function buildWildernessScene(
 
         shaking.delete(tree.id);
         falling.delete(tree.id);
-        const grown = treeAtGeneration(clearing.seed, tree, want.generation);
+        const grown = treeAtGeneration(clearing.seed, tree, want.generation, want.growth);
         if (want.generation > 0) regrown.set(tree.id, grown);
         else regrown.delete(tree.id);
         if (want.felled) felled.add(tree.id);

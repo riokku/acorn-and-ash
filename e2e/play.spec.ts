@@ -42,7 +42,7 @@ declare global {
       nearGatherSpot(): string | null;
       toasts(): Array<{ item: string; count: number }>;
       felledTrees(): number[];
-      treeGenerations(): Array<{ id: number; generation: number }>;
+      treeGenerations(): Array<{ id: number; generation: number; growth: number; scale: number }>;
       trees(): Array<{ id: number; kind: string; x: number; z: number; swingsToFell: number }>;
       aimedTree(): { name: string; swingsLeft: number } | null;
       aimedAnimal(): { name: string; hitsLeft?: number } | null;

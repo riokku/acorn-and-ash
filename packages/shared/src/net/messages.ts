@@ -337,6 +337,8 @@ export interface PickupsTakenMessage {
 
 /** One tree that is not as the seed left it. */
 export interface TreeState {
+  /** 0 = sapling, 255 (or absent) = mature. */
+  readonly growth?: number;
   readonly treeId: number;
   /** How many times this spot has grown back. It decides the tree's size. */
   readonly generation: number;
@@ -351,8 +353,8 @@ export interface TreeState {
  *
  * The clearing and the forest come from the seed, so a tree nobody has touched
  * is not in here at all. A tree that has grown back is, because its size is not
- * the one the seed gave it: both ends work that size out from the generation
- * rather than it being sent.
+ * the one the seed gave it. Both ends work the mature size out from the generation,
+ * then apply the growth byte (absent on older servers means mature).
  *
  * `whole` says what the list is. True: every tree that has ever changed, sent
  * on arrival, and anything not in it stands as the seed made it. False: only

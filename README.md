@@ -1708,3 +1708,11 @@ first shaders and buffers are prepared before play. Campfires reuse their flame
 instances when relit. Falling trees keep a conservative rotation bound instead
 of repeatedly rescanning whole batches; unaffected distant tree transforms are
 retained when a nearby tree falls.
+
+Regrown trees now begin at 18% of their mature height and gradually grow to a
+seeded, varied full size over roughly 24–36 real minutes. The existing stump wait
+still applies before a sapling appears. Growth survives logout and catches up
+while a world sleeps; trunks wait for nearby players to clear before expanding.
+Chopping an immature tree drops neither logs nor sticks. Existing mature trees
+remain mature. Inspect stages with `/?gallery=tree-models&kind=pine&growth=0`
+(sapling), `growth=127` (half grown) or `growth=255` (mature regrowth).
