@@ -1862,6 +1862,14 @@ describe('hunger', () => {
     const before = client.inventory().find((entry) => entry.item === item)?.count ?? 0;
 
     client.useItem(item);
+    await waitFor('the fish held', () =>
+      client
+        .equipped()
+        .some((entry) => entry.netId === client.welcome().netId && entry.item === item),
+    );
+    expect(client.inventory().find((entry) => entry.item === item)?.count).toBe(before);
+    expect(client.hunger().some((event) => event.ate === item)).toBe(false);
+    client.useItem(item);
     await waitFor('a meal', () => client.hunger().some((event) => event.ate === item));
 
     const after = client.inventory().find((entry) => entry.item === item)?.count ?? 0;

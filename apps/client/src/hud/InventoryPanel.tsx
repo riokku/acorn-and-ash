@@ -10,6 +10,7 @@ import {
   slotsUsed,
   blueprintHome,
   isGear,
+  isWeapon,
   type GearSlot,
   type Inventory,
   type ItemId,
@@ -270,7 +271,8 @@ function PackSlot({
 }): React.JSX.Element {
   const kind = ITEM_KINDS[item];
   const classes = ['inventory-item'];
-  if (kind.equippable || blueprintHome(item) !== null) classes.push('inventory-item-usable');
+  if (kind.equippable || isWeapon(item) || blueprintHome(item) !== null)
+    classes.push('inventory-item-usable');
   if (equipped) classes.push('inventory-item-equipped');
 
   return (
@@ -303,11 +305,11 @@ function PackSlot({
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            if (kind.equippable || blueprintHome(item) !== null) onUseItem(item);
+            if (kind.equippable || isWeapon(item) || blueprintHome(item) !== null) onUseItem(item);
           }
         }}
         onClick={() => {
-          if (kind.equippable || blueprintHome(item) !== null) onUseItem(item);
+          if (kind.equippable || isWeapon(item) || blueprintHome(item) !== null) onUseItem(item);
         }}
         onContextMenu={(event) => {
           event.preventDefault();

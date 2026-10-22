@@ -37,6 +37,7 @@ import {
   fishRecordsFromSaved,
   type FishRecords,
   type GearRequest,
+  isWeapon,
   type ReelView,
   type WornGear,
 } from '@acorn/shared';
@@ -1421,6 +1422,10 @@ export class Game {
    * player can see what they pinned, but there is nothing yet to equip.
    */
   useItem(item: ItemId): void {
+    if (isWeapon(item)) {
+      this.changeGear({ action: 'wear', item, slot: 'mainHand' });
+      return;
+    }
     const home = blueprintHome(item);
     if (home !== null && knowsHome(this.homeSkills, home)) {
       this.craftingNews = {
@@ -4702,14 +4707,18 @@ export class Game {
 
   /**
    * Turn a hotbar slot picked this frame into a request to equip whatever
-   * item is shown there - eating it too, if it is food, exactly as the
+   * item is shown there - eating food only if already held, exactly as the
    * server's own `useItem` does. Only reached once neither menu is open, so
    * this never fires alongside a craft or a build off the very same key.
    * Resolved through `resolveHotbarSlots` so a key press always agrees with
    * whatever that same slot is showing on screen, pinned or not.
    */
   private handleHotbarInput(controls: Controls): void {
-    const resolved = resolveHotbarSlots(this.carrying, this.options.hud.getSnapshot().hotbarSlots);
+    const resolved = resolveHotbarSlots(
+      this.carrying,
+      this.options.hud.getSnapshot().hotbarSlots,
+      this.worn.get(this.selfNetId)?.mainHand,
+    );
     for (const index of controls.takeHotbarTaps()) {
       const item = resolved[index];
       if (item !== undefined && item !== null) this.useItem(item);

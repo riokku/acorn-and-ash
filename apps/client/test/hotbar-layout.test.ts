@@ -175,3 +175,17 @@ describe('reading and writing the layout in storage', () => {
     expect(readHotbarLayout(storage)).toEqual(NOTHING_PINNED);
   });
 });
+
+it('keeps an explicitly pinned weapon available while worn, without auto-filling weapons', () => {
+  const pins = ['rustySword', null, null, null, null, null] as const;
+  expect(resolveHotbarSlots([{ item: 'rod', count: 1 }], pins, 'rustySword')).toEqual([
+    'rustySword',
+    'rod',
+    null,
+    null,
+    null,
+    null,
+  ]);
+  expect(resolveHotbarSlots([], NOTHING_PINNED, 'rustySword')).toEqual(NOTHING_PINNED);
+  expect(resolveHotbarSlots([], pins)).toEqual(NOTHING_PINNED);
+});

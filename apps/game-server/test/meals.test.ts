@@ -21,6 +21,7 @@ it('saves preparation with the eaten item, keeps it private and pauses the disco
     Object.assign(sim.inventoryOf(id), { trailRation: 1, berryTea: 1 });
   });
   owner.useItem('trailRation');
+  owner.useItem('trailRation');
   await waitFor('ration benefit', () => lastMeal(owner)?.item === 'trailRation');
   expect(lastMeal(owner)?.ticksLeft).toBeGreaterThan(MAX_MEAL_TICKS - 40);
   await runInDurableObject(stub, (_instance, state) => {
@@ -41,6 +42,7 @@ it('saves preparation with the eaten item, keeps it private and pauses the disco
         .toArray(),
     ).toHaveLength(0);
   });
+  owner.useItem('berryTea');
   owner.useItem('berryTea');
   await waitFor('replacement', () => lastMeal(owner)?.item === 'berryTea');
   owner.close();
