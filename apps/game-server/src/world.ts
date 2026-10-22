@@ -1449,8 +1449,7 @@ export class World extends DurableObject<WorldEnv> {
    * nobody was here comes back at once.
    */
   private announceRegrowth(simulation: WorldSimulation, nowMs: number): void {
-    const grown = simulation.regrowTrees(nowMs);
-    if (grown.length === 0) return;
+    simulation.regrowTrees(nowMs);
 
     this.announceTreeChanges(simulation);
   }
@@ -2191,6 +2190,8 @@ export class World extends DurableObject<WorldEnv> {
     this.addColumn('trees', 'generation', 'INTEGER NOT NULL DEFAULT 0');
     this.addColumn('trees', 'fall_yaw', 'REAL');
     this.addColumn('trees', 'burned', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('trees', 'growth_started_at_ms', 'INTEGER');
+    this.addColumn('trees', 'growth', 'INTEGER NOT NULL DEFAULT 255');
     // A player saved before this release has no hunger on record. The default
     // above starts them full, same as anybody arriving fresh.
     this.addColumn('players', 'hunger', 'REAL NOT NULL DEFAULT 100');
@@ -2565,8 +2566,10 @@ export class World extends DurableObject<WorldEnv> {
         generation: number;
         fall_yaw: number | null;
         burned: number;
+        growth_started_at_ms: number | null;
+        growth: number;
       }>(
-        'SELECT tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned FROM trees',
+        'SELECT tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned, growth_started_at_ms, growth FROM trees',
       )
       .toArray()
       .map((row) => ({
@@ -2577,16 +2580,20 @@ export class World extends DurableObject<WorldEnv> {
         generation: row.generation,
         fallYaw: row.fall_yaw,
         burned: row.burned !== 0,
+        growth: row.growth,
+        ...(row.growth_started_at_ms !== null
+          ? { growthStartedAtMs: row.growth_started_at_ms }
+          : {}),
       }));
   }
 
   private writeTree(tree: PersistedTree): void {
     this.ctx.storage.sql.exec(
-      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
+      'INSERT INTO trees (tree_id, swings_taken, felled, felled_at_ms, generation, fall_yaw, burned, growth_started_at_ms, growth, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tree_id) DO UPDATE SET ' +
         'swings_taken = excluded.swings_taken, felled = excluded.felled, ' +
         'felled_at_ms = excluded.felled_at_ms, generation = excluded.generation, ' +
-        'fall_yaw = excluded.fall_yaw, burned = excluded.burned, updated_at = excluded.updated_at',
+        'fall_yaw = excluded.fall_yaw, burned = excluded.burned, growth_started_at_ms = excluded.growth_started_at_ms, growth = excluded.growth, updated_at = excluded.updated_at',
       tree.treeId,
       tree.swingsTaken,
       tree.felled ? 1 : 0,
@@ -2594,6 +2601,8 @@ export class World extends DurableObject<WorldEnv> {
       tree.generation,
       tree.fallYaw ?? null,
       tree.burned ? 1 : 0,
+      tree.growthStartedAtMs ?? null,
+      tree.growth ?? 255,
       Date.now(),
     );
   }

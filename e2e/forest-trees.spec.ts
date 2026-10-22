@@ -204,16 +204,30 @@ test('a tree out in the forest can be chopped down and grows back', async ({ pag
   // Later, with nobody standing on the spot, it comes back at a size of its own.
   // (A tree will not grow back through somebody standing at its foot, so step away first.)
   sim.placePlayer(1, { x: x + 15, y: terrain.heightAt(x + 15, z), z }, yaw);
-  sim.regrowTrees(Date.now() + 3 * 60 * 60 * 1000);
-  announce();
-  await expect
-    .poll(() => page.evaluate(() => window.acornDebug?.felledTrees()))
-    .not.toContain(tree.id);
-  expect(
-    (await page.evaluate(() => window.acornDebug?.treeGenerations() ?? [])).find(
+  const felledAt = sim.persistableTrees().find((t) => t.treeId === tree.id)!.felledAtMs;
+  const startsAt = shared.regrowDueAtMs(SEED, tree.id, 0, felledAt);
+  const duration = shared.treeGrowthDurationMs(SEED, tree.id, 1);
+  for (const [elapsed, growth] of [
+    [0, 0],
+    [duration / 2, 127],
+    [duration, 255],
+  ]) {
+    sim.regrowTrees(startsAt + elapsed!);
+    announce();
+    const expected = shared.treeAtGeneration(SEED, tree, 1, growth);
+    await expect
+      .poll(async () =>
+        (await page.evaluate(() => window.acornDebug?.treeGenerations() ?? [])).find(
+          (entry) => entry.id === tree.id,
+        ),
+      )
+      .toMatchObject({ generation: 1, growth });
+    const observed = (await page.evaluate(() => window.acornDebug?.treeGenerations() ?? [])).find(
       (entry) => entry.id === tree.id,
-    )?.generation,
-  ).toBe(1);
+    );
+    expect(observed?.scale).toBeCloseTo(expected.scale);
+  }
+  expect(await page.evaluate(() => window.acornDebug?.felledTrees())).not.toContain(tree.id);
 
   expect(errors).toEqual([]);
   clearInterval(stepping);

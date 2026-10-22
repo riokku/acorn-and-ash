@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { PROP_KINDS, type PropKindId } from '@acorn/shared';
+import { PROP_KINDS, treeAtGeneration, type PropKindId } from '@acorn/shared';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import type { RendererSetup } from '../scene/renderer';
 import type { FireLights } from '../scene/fire-light';
@@ -17,17 +17,21 @@ export function showTreeModels(
   const chosen = kinds.find((kind) => kind === requested);
   const variant = Math.max(0, Math.min(2, Math.floor(Number(params.get('variant')) || 0)));
   const close = params.has('close');
+  const growth = params.has('growth')
+    ? Math.max(0, Math.min(255, Number(params.get('growth')) || 0))
+    : undefined;
   const displayed: readonly PropKindId[] = chosen ? [chosen] : kinds;
   displayed.forEach((kind, index) => {
     const parts = createPropMeshes(PROP_KINDS[kind], 1, params.has('distant'), undefined, variant);
-    placeInstance(parts, 0, {
+    const tree = {
       id: index + 1,
       kind,
       x: (index - (displayed.length - 1) / 2) * 10,
       z: 0,
       scale: 1,
       rotationY: 0,
-    });
+    };
+    placeInstance(parts, 0, growth === undefined ? tree : treeAtGeneration(1, tree, 1, growth));
     for (const part of parts) {
       if (params.has('bark') && !part.mesh.geometry.getAttribute('uv')) continue;
       scene.add(part.mesh);
@@ -55,19 +59,33 @@ export function showTreeModels(
   for (const [key, label, values] of [
     ['variant', 'Shape', ['0', '1', '2']],
     ['season', 'Season', ['spring', 'summer', 'autumn', 'winter']],
+    ['growth', 'Growth', ['', '0', '127', '255']],
   ] as const) {
     const control = document.createElement('select');
     control.setAttribute('aria-label', label);
     for (const value of values) {
       const option = document.createElement('option');
       option.value = value;
-      option.textContent = key === 'variant' ? `Shape ${Number(value) + 1}` : value;
-      option.selected = value === (params.get(key) ?? (key === 'variant' ? '0' : 'summer'));
+      const growthNames: Record<string, string> = {
+        '': 'Original tree',
+        '0': 'Sapling',
+        '127': 'Half grown',
+        '255': 'Mature regrowth',
+      };
+      option.textContent =
+        key === 'growth'
+          ? growthNames[value]!
+          : key === 'variant'
+            ? `Shape ${Number(value) + 1}`
+            : value;
+      option.selected =
+        value === (params.get(key) ?? (key === 'variant' ? '0' : key === 'growth' ? '' : 'summer'));
       control.append(option);
     }
     control.onchange = () => {
       const url = new URL(location.href);
-      url.searchParams.set(key, control.value);
+      if (control.value) url.searchParams.set(key, control.value);
+      else url.searchParams.delete(key);
       location.href = url.href;
     };
     toolbar.append(control);

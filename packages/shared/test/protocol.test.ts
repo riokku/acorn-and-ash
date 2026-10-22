@@ -438,7 +438,7 @@ describe('telling players how the trees stand', () => {
     expect(message.trees[0]?.fall?.startedAtMs).toBe(fall.startedAtMs);
   });
 
-  it('keeps a charred tree and its fall distinct without changing packet size', () => {
+  it('keeps a charred tree and its fall distinct', () => {
     const tree = {
       treeId: 3,
       generation: 2,
@@ -451,12 +451,40 @@ describe('telling players how the trees stand', () => {
       whole: true,
       trees: [tree],
     });
-    expect(encodeTreeStates([tree]).byteLength).toBe(20);
+    expect(encodeTreeStates([tree]).byteLength).toBe(21);
     const standing = decodeServerMessage(encodeTreeStates([{ ...tree, felled: false }]));
     expect(standing).toEqual({
       type: 'treeStates',
       whole: true,
       trees: [{ treeId: 3, generation: 2, felled: false }],
+    });
+  });
+
+  it('carries sapling size even during its fall, and treats old packets as mature', () => {
+    const tree = {
+      treeId: 3,
+      generation: 2,
+      growth: 64,
+      felled: true,
+      fall: { yaw: 1, startedAtMs: 1234 },
+    };
+    const encoded = encodeTreeStates([tree], false);
+    expect(decodeServerMessage(encoded)).toEqual({
+      type: 'treeStates',
+      whole: false,
+      trees: [tree],
+    });
+    // The previous 16-byte record has no growth byte.
+    const old = encoded.slice(0, 20);
+    new DataView(old).setUint8(1, 0);
+    expect(decodeServerMessage(old)).toEqual({
+      type: 'treeStates',
+      whole: false,
+      trees: [{ treeId: 3, generation: 2, felled: true, fall: tree.fall }],
+    });
+    const standing = { ...tree, felled: false };
+    expect(decodeServerMessage(encodeTreeStates([standing]))).toMatchObject({
+      trees: [{ growth: 64, felled: false }],
     });
   });
 

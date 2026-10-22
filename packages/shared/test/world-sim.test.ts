@@ -41,7 +41,7 @@ import { ITEM_KINDS, type ItemId } from '../src/data/items';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { ANIMAL_DENS } from '../src/world/animals';
 import { DAY_LENGTH_MS } from '../src/sim/day-night';
-import { regrowDueAtMs, treeAtGeneration } from '../src/sim/regrowth';
+import { regrowDueAtMs, treeAtGeneration, treeGrowthDurationMs } from '../src/sim/regrowth';
 import { TREE_BREAK_SECONDS } from '../src/sim/tree-fall';
 import { patchRegrowDelayMs } from '../src/sim/gathering';
 import { overlapsWater } from '../src/world/water';
@@ -2480,7 +2480,7 @@ describe('trees in the wilderness', () => {
     expect(later.drainTreeChanges()).toEqual([]);
   });
 
-  it('grows a forest tree back at its own size once its time is up', () => {
+  it('grows a forest tree back as a sapling once its time is up', () => {
     const sim = createWorld();
     sim.addPlayer(1, withAxe(1));
     const tree = loneForestTree(sim, 'birch');
@@ -2496,7 +2496,7 @@ describe('trees in the wilderness', () => {
     expect(sim.generationOf(tree.id)).toBe(1);
     expect(sim.drainTreeChanges()).toEqual([tree.id]);
     // It can be chopped again, at whatever size it came back.
-    const grown = treeAtGeneration(sim.seed, tree, 1);
+    const grown = treeAtGeneration(sim.seed, tree, 1, 0);
     const beside = {
       x: tree.x,
       y: 0,
@@ -2705,6 +2705,82 @@ describe('trees growing back', () => {
     expect(sim.regrowTrees(dueAt)).toEqual([{ treeId: tree.id, generation: MAX_TREE_GENERATION }]);
     expect(sim.isFelled(tree.id)).toBe(false);
     expect(sim.generationOf(tree.id)).toBe(MAX_TREE_GENERATION);
+  });
+
+  it('grows the rendered and solid tree together, survives a reload, and matures while asleep', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, dueAt } = fell(sim, 1, 'birch');
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    sim.regrowTrees(dueAt);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBe(0);
+    const index = sim.clearing.indexById.get(tree.id)!;
+    const sapling = sim.collision.colliders[index];
+    const duration = treeGrowthDurationMs(sim.seed, tree.id, 1);
+    sim.drainTreeChanges();
+    sim.regrowTrees(dueAt + duration / 2);
+    expect(sim.drainTreeChanges()).toContain(tree.id);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBe(127);
+    const halfway = sim.collision.colliders[index];
+    if (sapling?.shape !== 'cylinder' || halfway?.shape !== 'cylinder')
+      throw new Error('expected trees');
+    expect(halfway.height).toBeGreaterThan(sapling.height);
+    const later = createWorld();
+    later.restoreTrees(sim.persistableTrees());
+    expect(later.collision.colliders[index]).toEqual(halfway);
+    later.regrowTrees(dueAt + duration);
+    expect(later.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBeUndefined();
+    expect(later.collision.colliders[index]).not.toEqual(halfway);
+  });
+
+  it('waits before expanding a sapling through a player', () => {
+    const sim = createWorld();
+    const tree = findTree(sim, 'birch');
+    const start = 1_700_000_000_000;
+    sim.restoreTrees([
+      {
+        treeId: tree.id,
+        generation: 1,
+        felled: false,
+        swingsTaken: 0,
+        felledAtMs: 0,
+        growth: 0,
+        growthStartedAtMs: start,
+      },
+    ]);
+    sim.addPlayer(1, withAxe(1));
+    sim.placePlayer(1, { x: tree.x, y: 0, z: tree.z }, 0);
+    const half = start + treeGrowthDurationMs(sim.seed, tree.id, 1) / 2;
+    sim.regrowTrees(half);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBe(0);
+    sim.placePlayer(1, { x: 0, y: 0, z: 25 }, 0);
+    sim.regrowTrees(half);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBe(127);
+  });
+
+  it.each([0, 254, 255])('drops wood only at full maturity (growth %i)', (growth) => {
+    const sim = createWorld();
+    const tree = findTree(sim, 'birch');
+    sim.restoreTrees([
+      {
+        treeId: tree.id,
+        generation: 1,
+        felled: false,
+        swingsTaken: 0,
+        felledAtMs: 0,
+        growth,
+        growthStartedAtMs: 1,
+      },
+    ]);
+    sim.addPlayer(1, withAxe(1));
+    fell(sim, 1, 'birch');
+    // Pending wood becomes visible when the tree lands.
+    sim.step(tickClock() + 30_000);
+    const wood = sim.droppedPilesList().filter((p) => p.item === 'log' || p.item === 'stick');
+    expect(wood.length > 0).toBe(growth === 255);
+    expect(sim.changedTrees().find((t) => t.treeId === tree.id)?.growth).toBe(
+      growth === 255 ? undefined : growth,
+    );
   });
 
   it('leaves untouched trees out of storage entirely', () => {

@@ -1,17 +1,4 @@
-/**
- * Trees growing back.
- *
- * Two things here have to be worked out the same way by the server and by every
- * browser, without either sending them: how long a felled tree takes to return,
- * and how big it is when it does. Both come from the world seed, the tree's id
- * and how many times that spot has grown back before, so the only thing that
- * ever travels is that count.
- *
- * Time is passed in rather than read. A world with nobody in it stops ticking
- * entirely, so regrowth cannot be counted in ticks: a tree felled at midnight
- * has to be back when somebody logs in at one, having counted nothing in
- * between. The caller supplies real time; this file stays deterministic.
- */
+/** Deterministic real-time regrowth and mature sizes, shared by server and browser. */
 
 import {
   REGROW_CLEARANCE,
@@ -114,7 +101,38 @@ export function treeAtGeneration(
   worldSeed: number,
   tree: PlacedProp,
   generation: number,
+  growth = 255,
 ): PlacedProp {
   if (generation <= 0) return tree;
-  return { ...tree, scale: regrownScale(worldSeed, tree.id, generation, tree.scale) };
+  return {
+    ...tree,
+    scale:
+      regrownScale(worldSeed, tree.id, generation, tree.scale) * (0.18 + (0.82 * growth) / 255),
+  };
+}
+
+/** About half an hour, with independent-looking variation between trees (24–36 minutes). */
+export function treeGrowthDurationMs(
+  worldSeed: number,
+  treeId: number,
+  generation: number,
+  minSeconds = REGROW_MIN_SECONDS,
+): number {
+  return Math.round(
+    minSeconds * 400 + regrowDelayMs(worldSeed, treeId, generation, minSeconds) * 0.4,
+  );
+}
+
+/** Real-time growth, in 255 small steps; old trees without a start time are mature. */
+export function treeGrowth(
+  worldSeed: number,
+  treeId: number,
+  generation: number,
+  startedAtMs: number | undefined,
+  nowMs: number,
+  minSeconds = REGROW_MIN_SECONDS,
+): number {
+  if (startedAtMs === undefined) return 255;
+  const duration = treeGrowthDurationMs(worldSeed, treeId, generation, minSeconds);
+  return Math.max(0, Math.min(255, Math.floor(((nowMs - startedAtMs) / duration) * 255)));
 }

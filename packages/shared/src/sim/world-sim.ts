@@ -389,7 +389,7 @@ import {
   type FireRequest,
   type FireFuelView,
 } from './fire-fuel';
-import { regrowDueAtMs, spotIsClear, treeAtGeneration } from './regrowth';
+import { regrowDueAtMs, spotIsClear, treeAtGeneration, treeGrowth } from './regrowth';
 import {
   PlayerButton,
   createPlayerMotion,
@@ -849,6 +849,10 @@ export interface PersistedTree {
   readonly felledAtMs: number;
   /** How many times this spot has grown back. It decides the tree's size. */
   readonly generation: number;
+  /** Absent on old saves, whose trees remain fully grown. */
+  readonly growthStartedAtMs?: number;
+  /** Current size, retained when a young tree falls. Absent means mature (255). */
+  readonly growth?: number;
   /** Absent on old saves, whose wood was already awarded directly. */
   readonly fallYaw?: number | null;
   readonly burned?: boolean;
@@ -988,6 +992,8 @@ interface TreeSlot {
 
 /** Everything the world knows about one tree. */
 interface TreeState {
+  growthStartedAtMs?: number;
+  growth: number;
   swingsTaken: number;
   felled: boolean;
   felledAtMs: number;
@@ -4613,16 +4619,17 @@ export class WorldSimulation {
     }
 
     this.advanceExpedition(runtime, { kind: 'chop' }, 1);
+    const mature = state.growth === 255;
     const burned = this.wildfire.fires.delete(`tree:${target.prop.id}`);
     this.fellTree(target.prop.id, this.nowMs);
     state.burned = burned;
     state.fallYaw = treeFallYaw(target.prop, position);
     const landsAt = this.nowMs + treeFallTimes(target.prop).break * 1000;
-    for (const spot of burned ? [] : treeLogSpots(target.prop, state.fallYaw)) {
+    for (const spot of burned || !mature ? [] : treeLogSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('log', 1, clear.x, clear.z, landsAt, true);
     }
-    for (const spot of burned ? [] : treeStickSpots(target.prop, state.fallYaw)) {
+    for (const spot of burned || !mature ? [] : treeStickSpots(target.prop, state.fallYaw)) {
       const clear = this.reachableLogSpot(spot, position);
       this.addPile('stick', 1, clear.x, clear.z, landsAt, true);
     }
@@ -5716,7 +5723,16 @@ export class WorldSimulation {
    * Both the thing you bump into and the thing reach is measured against have
    * to agree it is a tree again, and agree about how big.
    */
-  private growTree(treeId: number, state: TreeState): void {
+  private growTree(treeId: number, state: TreeState, startedAtMs: number, nowMs: number): void {
+    state.growthStartedAtMs = startedAtMs;
+    state.growth = treeGrowth(
+      this.seed,
+      treeId,
+      nextGeneration(state.generation),
+      startedAtMs,
+      nowMs,
+      this.regrowMinSeconds,
+    );
     state.felled = false;
     state.fallYaw = null;
     state.burned = false;
@@ -5728,7 +5744,7 @@ export class WorldSimulation {
     const original = slot === undefined ? undefined : this.originalAt(slot);
     if (slot === undefined || original === undefined) return;
 
-    const grown = treeAtGeneration(this.seed, original, state.generation);
+    const grown = treeAtGeneration(this.seed, original, state.generation, state.growth);
     this.standIn(slot, grown);
     replaceCollider(
       this.collision,
@@ -5743,6 +5759,7 @@ export class WorldSimulation {
     if (existing !== undefined) return existing;
     const fresh: TreeState = {
       swingsTaken: 0,
+      growth: 255,
       felled: false,
       felledAtMs: 0,
       generation: 0,
@@ -5768,7 +5785,33 @@ export class WorldSimulation {
     }
 
     for (const [treeId, state] of this.trees) {
-      if (!state.felled) continue;
+      if (!state.felled) {
+        if (state.growth === 255) continue;
+        const growth = treeGrowth(
+          this.seed,
+          treeId,
+          state.generation,
+          state.growthStartedAtMs,
+          nowMs,
+          this.regrowMinSeconds,
+        );
+        if (growth <= state.growth) continue;
+        const slot = this.treeSlots.get(treeId);
+        const original = slot === undefined ? undefined : this.originalAt(slot);
+        if (slot === undefined || original === undefined) continue;
+        const grown = treeAtGeneration(this.seed, original, state.generation, growth);
+        const footprint = colliderFootprintRadius(colliderForProp(grown, this.collision.terrain));
+        if (!spotIsClear(grown.x, grown.z, footprint, players)) continue;
+        state.growth = growth;
+        this.standIn(slot, grown);
+        replaceCollider(
+          this.collision,
+          slot.colliderIndex,
+          colliderForProp(grown, this.collision.terrain),
+        );
+        this.treeChanges.add(treeId);
+        continue;
+      }
       const dueAt = regrowDueAtMs(
         this.seed,
         treeId,
@@ -5784,12 +5827,24 @@ export class WorldSimulation {
 
       // The same tree `growTree` is about to put here, so the room it asks for
       // is the room it will take.
-      const grown = treeAtGeneration(this.seed, original, nextGeneration(state.generation));
+      const grown = treeAtGeneration(
+        this.seed,
+        original,
+        nextGeneration(state.generation),
+        treeGrowth(
+          this.seed,
+          treeId,
+          nextGeneration(state.generation),
+          dueAt,
+          nowMs,
+          this.regrowMinSeconds,
+        ),
+      );
       const footprint = colliderFootprintRadius(colliderForProp(grown, this.collision.terrain));
       // Somebody is standing here: it waits rather than growing through them.
       if (!spotIsClear(grown.x, grown.z, footprint, players)) continue;
 
-      this.growTree(treeId, state);
+      this.growTree(treeId, state, dueAt, nowMs);
     }
 
     return this.regrowthEvents.splice(0);
@@ -5876,6 +5931,7 @@ export class WorldSimulation {
   changedTrees(only?: Iterable<number>): Array<{
     treeId: number;
     generation: number;
+    growth?: number;
     felled: boolean;
     burned?: boolean;
     fall?: TreeFall;
@@ -5883,6 +5939,7 @@ export class WorldSimulation {
     const changed: Array<{
       treeId: number;
       generation: number;
+      growth?: number;
       felled: boolean;
       burned?: boolean;
       fall?: TreeFall;
@@ -5892,6 +5949,7 @@ export class WorldSimulation {
       changed.push({
         treeId,
         generation: state.generation,
+        ...(state.growth < 255 ? { growth: state.growth } : {}),
         felled: state.felled,
         ...(state.burned ? { burned: true } : {}),
         ...(state.felled && state.fallYaw !== null
@@ -5916,6 +5974,10 @@ export class WorldSimulation {
         felled: state.felled,
         felledAtMs: state.felledAtMs,
         generation: state.generation,
+        ...(state.growth < 255 ? { growth: state.growth } : {}),
+        ...(state.growthStartedAtMs !== undefined
+          ? { growthStartedAtMs: state.growthStartedAtMs }
+          : {}),
         fallYaw: state.fallYaw,
         ...(state.burned ? { burned: true } : {}),
       });
@@ -5951,6 +6013,8 @@ export class WorldSimulation {
     for (const tree of trees) {
       const state = this.treeState(tree.treeId);
       state.generation = tree.generation;
+      state.growth = tree.growth ?? 255;
+      state.growthStartedAtMs = tree.growthStartedAtMs;
       state.swingsTaken = tree.swingsTaken;
       state.fallYaw = tree.fallYaw ?? null;
       state.burned = tree.felled && tree.burned === true;
@@ -5958,7 +6022,7 @@ export class WorldSimulation {
       const slot = this.treeSlots.get(tree.treeId);
       const original = slot === undefined ? undefined : this.originalAt(slot);
       if (slot !== undefined && original !== undefined && tree.generation > 0) {
-        const grown = treeAtGeneration(this.seed, original, tree.generation);
+        const grown = treeAtGeneration(this.seed, original, tree.generation, state.growth);
         this.standIn(slot, grown);
         replaceCollider(
           this.collision,

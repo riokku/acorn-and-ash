@@ -13,6 +13,8 @@ import {
   regrownScale,
   spotIsClear,
   treeAtGeneration,
+  treeGrowth,
+  treeGrowthDurationMs,
 } from '../src/sim/regrowth';
 import type { PlacedProp } from '../src/world/clearing';
 
@@ -138,5 +140,25 @@ describe('making room before it grows', () => {
       { x: 0.2, y: 0, z: 0.2 },
     ];
     expect(spotIsClear(0, 0, footprint, players)).toBe(false);
+  });
+});
+
+describe('sapling growth', () => {
+  it('starts small, grows steadily and stops at its varied mature height', () => {
+    const start = 1_700_000_000_000;
+    const duration = treeGrowthDurationMs(SEED, oak.id, 1);
+    expect(duration).toBeGreaterThanOrEqual(24 * 60_000);
+    expect(duration).toBeLessThanOrEqual(36 * 60_000);
+    expect(treeGrowth(SEED, oak.id, 1, start, start - 1)).toBe(0);
+    expect(treeGrowth(SEED, oak.id, 1, start, start)).toBe(0);
+    const half = treeGrowth(SEED, oak.id, 1, start, start + duration / 2);
+    expect(half).toBe(127);
+    const mature = treeAtGeneration(SEED, oak, 1);
+    expect(treeAtGeneration(SEED, oak, 1, 0).scale).toBeCloseTo(mature.scale * 0.18);
+    expect(treeAtGeneration(SEED, oak, 1, half).scale).toBeGreaterThan(mature.scale * 0.5);
+    expect(treeGrowth(SEED, oak.id, 1, start, start + duration - 1)).toBe(254);
+    expect(treeGrowth(SEED, oak.id, 1, start, start + duration)).toBe(255);
+    expect(treeGrowth(SEED, oak.id, 1, start, start + duration * 100)).toBe(255);
+    expect(treeGrowth(SEED, oak.id, 1, undefined, start)).toBe(255);
   });
 });
