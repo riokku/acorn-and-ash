@@ -46,24 +46,27 @@ describe('the room inside a home', () => {
     expect(fromCorner).toBe(fromFront - 1);
   });
 
-  it('brightens the fire and the lamp at night', () => {
+  it('uses the fireplace for cabin firelight and has no desk lamp', () => {
     const scene = new THREE.Scene();
     scene.add(room.group);
     const fireLights = new FireLights(scene);
-    // The light the lamp has been given: the only one reaching 5 m.
-    const lampLight = (daylight: number): number => {
+    const light = (daylight: number): number => {
       room.update(0.016, daylight);
       fireLights.update(new THREE.Vector3());
       let intensity = 0;
       scene.traverse((child) => {
-        if (child instanceof THREE.PointLight && child.distance === 5) intensity = child.intensity;
+        if (child instanceof THREE.PointLight) intensity += child.intensity;
       });
       return intensity;
     };
-    const lampAtNoon = lampLight(1);
-    const lampAtMidnight = lampLight(0);
-    expect(lampAtNoon).toBeGreaterThan(0);
-    expect(lampAtMidnight).toBeGreaterThan(lampAtNoon);
+    room.setFireLit(false);
+    expect(light(0)).toBe(0);
+    room.setFireLit(true);
+    const noon = light(1);
+    expect(noon).toBeGreaterThan(0);
+    expect(light(0)).toBeGreaterThan(noon);
+    room.setFireLit(false);
+    expect(light(0)).toBe(0);
     scene.remove(room.group);
   });
 });

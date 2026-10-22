@@ -715,38 +715,22 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
       placed(behind - 0.02, y, chair.z),
     );
   }
-  // An oil lamp on the table, and a mug.
-  tableModel
-    .add(
-      materials.brass,
-      new THREE.CylinderGeometry(0.07, 0.09, 0.05, 12),
-      placed(table.x + 0.05, table.height + 0.025, table.z - 0.25),
-    )
-    .add(
-      materials.brass,
-      new THREE.CylinderGeometry(0.045, 0.07, 0.08, 12),
-      placed(table.x + 0.05, table.height + 0.09, table.z - 0.25),
-    )
-    .add(
-      materials.lampGlass,
-      new THREE.CylinderGeometry(0.035, 0.05, 0.16, 12),
-      placed(table.x + 0.05, table.height + 0.21, table.z - 0.25),
-    )
-    .add(
-      materials.stone,
-      new THREE.CylinderGeometry(0.045, 0.04, 0.1, 10),
-      placed(table.x + 0.12, table.height + 0.05, table.z + 0.3),
-    );
+  // A mug remains on the desk; the hearth supplies the cabin's firelight.
+  tableModel.add(
+    materials.stone,
+    new THREE.CylinderGeometry(0.045, 0.04, 0.1, 10),
+    placed(table.x + 0.12, table.height + 0.05, table.z + 0.3),
+  );
   const tableGroup = keep(tableModel.build());
   if (kind !== 'tent') group.add(tableGroup);
   // A steady flame behind glass: no flicker.
-  const lampGlow = createFireGlow(0xffb866, 1, 5, 0);
-  lampGlow.anchor.position.set(
+  const lampGlow = kind === 'tent' ? createFireGlow(0xffb866, 1, 5, 0) : null;
+  lampGlow?.anchor.position.set(
     table.x + 0.05,
     kind === 'tent' ? 0.5 : table.height + 0.32,
     table.z - 0.25,
   );
-  group.add(lampGlow.anchor);
+  if (lampGlow) group.add(lampGlow.anchor);
   if (kind === 'tent') {
     const lantern = new ModelBuilder();
     const x = table.x + 0.05,
@@ -764,7 +748,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     );
     group.add(keep(lantern.build()));
   }
-  disposers.push(() => lampGlow.dispose());
+  disposers.push(() => lampGlow?.dispose());
 
   /* -------------------------------------------------------------------- */
   /* Shelf, woodbox, herbs and the rug                                    */
@@ -939,7 +923,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
       // The fire and the lamp matter far more once the windows go dark.
       const night = 1 - daylight;
       fireGlow.brightness = 0.75 + night * 0.6;
-      lampGlow.brightness = 1.2 + night * 3.2;
+      if (lampGlow) lampGlow.brightness = 1.2 + night * 3.2;
       windowGlass.emissive.setRGB(
         0.5 + daylight * 0.36,
         0.56 + daylight * 0.36,

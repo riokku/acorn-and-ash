@@ -508,7 +508,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     made.group.position.set(exhibit.x, 0, exhibit.z);
     made.group.rotation.y = exhibit.yaw ?? 0;
     made.setDaylight?.(dayBrightness(Number.isFinite(time) ? time : 0.42));
-    if ('setLit' in made && typeof made.setLit === 'function') made.setLit(true);
+    if ('setLit' in made && typeof made.setLit === 'function') made.setLit(!params.has('unlit'));
     scene.add(made.group);
     if (made.update !== undefined) updaters.push(made.update);
   }
@@ -626,6 +626,7 @@ function showHomeInside(
   const inside = createHomeInterior(
     requested !== null && isHomeKind(requested) ? requested : 'cabin',
   );
+  inside.setFireLit(!params.has('unlit'));
   if (requested === 'largeCabin')
     inside.setGardenPlots([
       { crop: 'berry', growTicks: 0 },

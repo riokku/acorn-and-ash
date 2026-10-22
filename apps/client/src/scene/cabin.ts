@@ -26,6 +26,7 @@ import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from 
 export interface Cabin {
   readonly group: THREE.Group;
   setStoredLogs?(count: number): void;
+  setLit?(lit: boolean): void;
   setDaylight?(brightness: number): void;
   update?(deltaSeconds: number): void;
   groundOn?(heightAt: GroundHeight): void;
@@ -65,12 +66,11 @@ export function createCabin(logCapacity = 20): Cabin {
   const cobbles = paintedMaterial('cobbles', { tint: 0xf1e6d6, roughness: 1 });
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const soil = paintedMaterial('soil', { roughness: 1 });
-  // Somebody's home, so the lamp inside is always on: a soft glow by day
-  // that reads as a warm window at night.
+  // Exterior windows reflect the actual fireplace, including paused or exhausted fuel.
   const glass = plainMaterial(0xffd79a, {
     roughness: 0.3,
     emissive: 0xffb45c,
-    emissiveIntensity: 0.9,
+    emissiveIntensity: 0,
   }).clone();
   const iron = plainMaterial(0x2b2622, { roughness: 0.6 });
 
@@ -150,7 +150,18 @@ export function createCabin(logCapacity = 20): Cabin {
     (WINDOW.bottom + WINDOW.top) / 2,
     DEPTH / 2 + 0.18,
   );
+  glow.anchor.visible = false;
   model.group.add(glow.anchor);
+  let fireLit = false;
+  let daylight = 1;
+  const updateWindow = () => {
+    const night = 1 - Math.max(0, Math.min(1, daylight));
+    glass.color.set(fireLit ? 0xffd79a : 0x58636a);
+    glass.emissiveIntensity = fireLit ? 0.35 + night * 1.2 : 0;
+    glow.anchor.visible = fireLit;
+    glow.brightness = fireLit ? 0.15 + night * 0.85 : 0;
+  };
+  updateWindow();
   return {
     group: model.group,
     setStoredLogs: (count) => woodpile.show(count),
@@ -158,10 +169,15 @@ export function createCabin(logCapacity = 20): Cabin {
       for (const fit of groundSupports) fit(heightAt);
       groundLooseBuildingPart(storage, heightAt);
     },
+    setLit(lit) {
+      if (lit !== fireLit) {
+        fireLit = lit;
+        updateWindow();
+      }
+    },
     setDaylight(brightness) {
-      const night = 1 - Math.max(0, Math.min(1, brightness));
-      glass.emissiveIntensity = 0.35 + night * 1.2;
-      glow.brightness = 0.15 + night * 0.85;
+      daylight = brightness;
+      updateWindow();
     },
     update(deltaSeconds) {
       glow.update(deltaSeconds);

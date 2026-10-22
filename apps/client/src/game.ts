@@ -1,3 +1,5 @@
+import { rehearseEffects } from './scene/effect-rehearsal';
+import { createFlame } from './scene/flame';
 import { placedObjectRefund } from '@acorn/shared';
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { mushroomFlushHint } from '@acorn/shared';
@@ -962,6 +964,7 @@ export class Game {
   /** The clearing's ground, which is flat at zero everywhere a piece can be placed. */
 
   private enteringWorld = false;
+  private warmEffectsOnNextFrame = false;
   private firstWorldFrame: (() => void) | null = null;
   private lastRenderedAt = 0;
   private setup: RendererSetup | null = null;
@@ -2943,6 +2946,7 @@ export class Game {
       // Warm the outdoor view before hiding it for a room. Keep Space
       // messages queued during preparation so the latest server destination
       // still wins if it changes while either view is drawing.
+      this.warmEffectsOnNextFrame = true;
       await this.waitForWorldFrame();
       while (this.pendingSpace !== null) {
         const arrived = this.pendingSpace;
@@ -3060,7 +3064,7 @@ export class Game {
         // The whole list is resent whenever anything changes, including a
         // campfire lighting up or going out, so an existing mesh needs to
         // hear about it too, not just a freshly created one.
-        if ('setLit' in existing) existing.setLit(this.fuelFireLit(prop.id));
+        if ('setLit' in existing) existing.setLit?.(this.fuelFireLit(prop.id));
         // Free boats follow the current between server updates. Occupied
         // boats are hidden here because a separate boat follows the rider.
         if (prop.kind !== 'rowboat') {
@@ -3085,7 +3089,7 @@ export class Game {
       const built = createBuiltMesh(prop.kind);
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
-      if ('setLit' in built) built.setLit(this.fuelFireLit(prop.id));
+      if ('setLit' in built) built.setLit?.(this.fuelFireLit(prop.id));
       built.group.position.set(prop.x, this.builtGroundY(prop.kind, prop.x, prop.z), prop.z);
       built.group.rotation.y = prop.yaw;
       if ('setStoredLogs' in built)
@@ -3557,7 +3561,7 @@ export class Game {
     // Fires and windows animate; the `in` check skips the other
     // buildable kinds sharing this map without giving them all a no-op method.
     for (const [id, built] of this.builtMeshes) {
-      if ('setLit' in built) built.setLit(this.fuelFireLit(id));
+      if ('setLit' in built) built.setLit?.(this.fuelFireLit(id));
       if ('update' in built && typeof built.update === 'function') built.update(deltaSeconds);
       if ('setDaylight' in built && typeof built.setDaylight === 'function')
         built.setDaylight(dayBrightness(dayProgress(weatherNow)));
@@ -3581,7 +3585,25 @@ export class Game {
     // character, chest, build menu, map, journal). Only the home screen, where
     // the world is hidden behind a painting, saves drawing work.
     if (this.playing || this.firstWorldFrame !== null || now - this.lastRenderedAt >= 1000) {
-      setup.renderer.render(this.scene, camera.camera);
+      if (this.warmEffectsOnNextFrame) {
+        this.warmEffectsOnNextFrame = false;
+        const flame = createFlame();
+        if (flame) this.scene.add(flame.root);
+        try {
+          rehearseEffects(
+            [
+              this.treeLandingEffects.group,
+              ...(this.wildfireArt ? [this.wildfireArt.group] : []),
+              ...(flame ? [flame.root] : []),
+            ],
+            () => setup.renderer.render(this.scene, camera.camera),
+          );
+        } finally {
+          flame?.dispose();
+        }
+        // Replace the rehearsal image before the loading curtain can disappear.
+        setup.renderer.render(this.scene, camera.camera);
+      } else setup.renderer.render(this.scene, camera.camera);
       this.lastRenderedAt = now;
       const drawnAt = performance.now();
       if (this.spaceTransition.afterRender(drawnAt, drawnAt - now)) {
