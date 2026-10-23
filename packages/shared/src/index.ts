@@ -136,3 +136,4 @@ export * from './sim/woodland-events';
 
 export * from './world/high-plains';
 export * from './world/zones';
+export * from './world/sunreach-survey';

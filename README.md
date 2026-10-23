@@ -1742,3 +1742,12 @@ stable. New rocks are solid and grounded, and the pass stays clear of scenery.
 Inspect `/?gallery=high-plains` and use the viewpoint buttons for the dunes,
 pass and wildlife. Seasonal snow and blizzards still apply; clear plains have a
 longer horizon than the dense forest.
+
+Sunreach's **The Sunreach Survey** is always available at your home expedition
+board alongside Bonehollow and a rotating everyday outing. Follow the northwest
+pass to the ranger outpost, inspect its notes with E, follow the cairn clue into
+Amber Dunes, and use a held shovel to uncover the survey vault. Clues and progress
+are personal and saved. Return home for a bag, refined axe, leather boots and a
+Sunreach survey pennant that can be placed indoors or around your home. The
+pennant reuses the existing trail flag figure. Inspect the trail with
+`?gallery=high-plains&view=survey` or `&view=vault`.

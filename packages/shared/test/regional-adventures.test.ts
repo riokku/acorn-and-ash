@@ -26,7 +26,10 @@ function outing(id: number) {
   return sim;
 }
 it('keeps old IDs, offers both regional trips from a tent, and preserves scoped progress', () => {
-  expect(EXPEDITIONS.map((d) => d.id)).toEqual(Array.from({ length: 11 }, (_, i) => i));
+  // Existing mission IDs are a fixed prefix; new expeditions append safely.
+  expect(EXPEDITIONS.slice(0, 11).map((d) => d.id)).toEqual(
+    Array.from({ length: 11 }, (_, i) => i),
+  );
   const offered = new Set<number>();
   for (let cycle = 0; cycle < 100; cycle++)
     for (const id of expeditionOffers('tent', { ...emptyExpedition(), cycle }, 42, 'owner'))

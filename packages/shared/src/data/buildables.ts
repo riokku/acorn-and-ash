@@ -26,6 +26,7 @@ export type BuildableKindId =
   | 'moonLantern'
   | 'flowerPlanter'
   | 'trailPennant'
+  | 'sunreachPennant'
   | 'lastBellTrophy'
   | 'sentinelTrophy'
   | 'fishDisplay'
@@ -68,6 +69,16 @@ export interface BuildableKind {
 }
 
 export const BUILDABLE_KINDS = {
+  sunreachPennant: {
+    id: 'sunreachPennant',
+    displayName: 'Sunreach survey pennant',
+    costs: [{ item: 'sunreachPennant', amount: 1 }],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0x689584,
+  },
   campfire: {
     id: 'campfire',
     displayName: 'Campfire',
@@ -372,6 +383,7 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'goldenFishDisplay',
   'rowboat',
   'lastBellTrophy',
+  'sunreachPennant',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

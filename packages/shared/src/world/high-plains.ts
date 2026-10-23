@@ -1,3 +1,4 @@
+import { nearSurveySite } from './sunreach-survey';
 /** Sunreach: a dry upland reached on foot through Windbreak Pass. */
 import { smoothstep, lerp } from '../math/vec3';
 import { createRng, hashSeed } from '../rng';
@@ -106,6 +107,7 @@ export function buildHighPlainsRocks(seed: number, terrain: Terrain): PlacedProp
       z = rng.nextRange(-289, -135);
     const scale = rng.nextRange(0.8, 3.8);
     if (highPlainsWeight(x, z) < 0.38 || plainsPassAt(x, z).distance < 7 + scale * 1.2) continue;
+    if (nearSurveySite(x, z, scale * 1.2)) continue;
     if (PLAINS_DENS.some((den) => Math.hypot(x - den.x, z - den.z) < 7 + scale * 1.2)) continue;
     if (rocks.some((rock) => Math.hypot(x - rock.x, z - rock.z) < (scale + rock.scale) * 0.9))
       continue;

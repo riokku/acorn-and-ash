@@ -64,7 +64,8 @@ export type ItemId =
   | 'raiderDagger'
   | 'raiderGreatsword'
   | 'boneStaff'
-  | 'watchGreatsword';
+  | 'watchGreatsword'
+  | 'sunreachPennant';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -112,6 +113,18 @@ export interface ItemKind {
 }
 
 export const ITEM_KINDS = {
+  sunreachPennant: {
+    id: 'sunreachPennant',
+    displayName: 'Sunreach survey pennant',
+    pluralName: 'Sunreach survey pennants',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x689584,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
   refinedAxe: {
     id: 'refinedAxe',
     displayName: 'Refined axe',
@@ -898,6 +911,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'raiderGreatsword',
   'boneStaff',
   'watchGreatsword',
+  'sunreachPennant',
 ];
 
 export function itemIndex(id: ItemId): number {

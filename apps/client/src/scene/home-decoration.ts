@@ -8,6 +8,7 @@ import type { DecorationKind } from '@acorn/shared';
 import { createLantern } from './lantern';
 import { createGuardianTrophy } from './guardian-trophy';
 export function createHomeDecoration(kind: DecorationKind) {
+  if (kind === 'sunreachPennant') return createHomeDecoration('trailPennant');
   if (kind === 'fishDisplay' || kind === 'goldenFishDisplay')
     return createFishDisplay(kind === 'goldenFishDisplay');
   if (kind === 'lastBellTrophy') return createLastBellTrophy();

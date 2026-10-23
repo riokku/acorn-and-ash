@@ -1,3 +1,4 @@
+import { createHomeDecoration } from './home-decoration';
 import { wornWeapon } from './gear-models';
 import { createLastBellTrophy } from './skeleton-town';
 import { createWatchCaptainHelm } from './worn-gear-models';
@@ -196,6 +197,16 @@ export function createPileModel(item: ItemId): GroundModel {
         },
         dispose() {},
       };
+  }
+  if (item === 'sunreachPennant') {
+    const model = createHomeDecoration('sunreachPennant');
+    return {
+      ...model,
+      item,
+      show: (count: number) => {
+        model.group.visible = count > 0;
+      },
+    };
   }
   if (item === 'lastBellTrophy' || item === 'sentinelTrophy') {
     const model = item === 'lastBellTrophy' ? createLastBellTrophy() : createSentinelTrophy();

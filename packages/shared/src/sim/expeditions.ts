@@ -5,7 +5,9 @@ import { cabinDoorstep, type HomePlacement } from '../world/home';
 import { hashSeed } from '../rng';
 
 export const BONEHOLLOW_EXPEDITION_ID = 8;
+export const SUNREACH_EXPEDITION_ID = 11;
 export type ExpeditionEvent =
+  | { readonly kind: 'sunreach'; readonly step: 'outpost' | 'cairn' | 'vault' }
   | { readonly kind: 'bonehollow'; readonly step: 'arrival' | 'watch' | 'captain' }
   | { readonly kind: 'gather'; readonly item: ItemId; readonly region?: 'mountain' | 'lake' }
   | { readonly kind: 'chop' | 'fish' | 'defeat'; readonly region?: 'lake' }
@@ -218,6 +220,28 @@ export const EXPEDITIONS: readonly ExpeditionDefinition[] = [
       { item: 'berryTea', count: 2 },
     ],
   },
+  {
+    id: SUNREACH_EXPEDITION_ID,
+    name: 'The Sunreach Survey',
+    hint: 'Walk northwest through Windbreak Pass. Just beyond its upper end, search the broken ranger outpost west of the trail for notes. Follow their clues into Amber Dunes and toward Crown Mesa. Bring a shovel, food and a weapon; coyotes patrol the plains. Inspect each clue with E. Progress is personal and saved.',
+    tier: 0,
+    objectives: [
+      {
+        kind: 'sunreach',
+        step: 'outpost',
+        goal: 1,
+        label: 'Read the ranger’s notes at the outpost',
+      },
+      { kind: 'sunreach', step: 'cairn', goal: 1, label: 'Follow the clue to the dune cairn' },
+      { kind: 'sunreach', step: 'vault', goal: 1, label: 'Dig up the survey vault with a shovel' },
+    ],
+    rewards: [
+      { item: 'bag', count: 1 },
+      { item: 'sunreachPennant', count: 1 },
+      { item: 'refinedAxe', count: 1 },
+      { item: 'leatherBoots', count: 1 },
+    ],
+  },
 ];
 export interface ExpeditionState {
   cycle: number;
@@ -288,10 +312,11 @@ export function expeditionOffers(
 ): number[] {
   const tier = home === 'largeCabin' ? 3 : home === 'cabin' ? 2 : home === 'teepee' ? 1 : 0;
   const eligible = EXPEDITIONS.filter(
-    (def) => def.id !== BONEHOLLOW_EXPEDITION_ID && def.tier <= tier,
+    (def) =>
+      def.id !== BONEHOLLOW_EXPEDITION_ID && def.id !== SUNREACH_EXPEDITION_ID && def.tier <= tier,
   ).map((def) => def.id);
   const start = hashSeed(seed, 'expeditions', owner, state.cycle) % eligible.length;
-  return [eligible[start]!, eligible[(start + 1) % eligible.length]!, BONEHOLLOW_EXPEDITION_ID];
+  return [eligible[start]!, SUNREACH_EXPEDITION_ID, BONEHOLLOW_EXPEDITION_ID];
 }
 export function progressExpedition(
   state: ExpeditionState,
