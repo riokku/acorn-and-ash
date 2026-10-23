@@ -79,7 +79,7 @@ function attackLength(raider: RaiderKindId): number {
     const swing = LIGHT_COMBO[step - 1];
     ticks += step === swings ? (swing?.end ?? 0) : (swing?.chain ?? 0);
   }
-  return ticks + 12;
+  return ticks + Math.round(RAIDER_KINDS[raider].recoverySeconds / TICK_SECONDS);
 }
 
 const DEMOS: readonly Demo[] = [
@@ -92,7 +92,12 @@ const DEMOS: readonly Demo[] = [
   },
   {
     name: 'strike',
-    length: () => CHARGE_TICKS + STRIKE.end + 10,
+    length: (raider) =>
+      CHARGE_TICKS +
+      STRIKE.end +
+      Math.round(
+        (raider === 'captain' ? 1.4 : RAIDER_KINDS[raider].recoverySeconds) / TICK_SECONDS,
+      ),
     move: (_, age) =>
       age < CHARGE_TICKS
         ? { kind: ActionKind.Charge, step: 0, age }

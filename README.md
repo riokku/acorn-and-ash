@@ -1759,3 +1759,12 @@ hostile creature recovering from an attack; repeatedly staggering a skeleton doe
 not create that bonus. These join the tunic's slower hunger drain, jacket's faster
 fire-side warmth recovery and hunting knife's extra meat yield. Traits remain
 visible in item descriptions, including with custom admin flavor text.
+
+Creature fights reward reading their movement. Coyotes stalk briefly from
+mid-range, crouch before biting and commit to their original target and direction.
+Sidestepping behind a bite avoids it; another player cannot accidentally inherit
+that bite. Skeletons commit late in their wind-ups and leave a reliable pause
+after attacking (heavier enemies generally recover longer), allowing dodges and
+iron-sword counters. Flinch escapes and group turn-taking remain in place.
+Inspect held coyote poses in `?gallery=high-plains&view=tactics&pose=windup`
+(or `pose=bite` / `pose=recovery`).

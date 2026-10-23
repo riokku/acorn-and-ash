@@ -966,3 +966,59 @@ it('rewards an iron-sword counter during actual attack recovery, never a repeate
   scene.director.blowLands(1, fighter.position, 0, SWING_1, 0, 150, undefined, 0, 'ironSword');
   expect(enemy.damageTaken).toBeCloseTo(3.3);
 });
+
+it.each(['rogue', 'warrior', 'sentinel'] as const)(
+  'leaves a guaranteed %s opening after a completed attack',
+  (kind) => {
+    const scene = arena();
+    const fighter = scene.addFighter(1);
+    const raid = scene.director.startRaid(1, [kind])!;
+    const id = scene.director.raidersOf(raid)[0]!;
+    scene.inFrontOf(fighter, id);
+    const internals = scene.director as unknown as {
+      raiders: Map<number, { attackRecovery: boolean }>;
+    };
+    const enemy = internals.raiders.get(id)!;
+    for (let i = 0; i < 600 && !enemy.attackRecovery; i++) scene.step();
+    expect(enemy.attackRecovery).toBe(true);
+    beginAction(fighter.action, ActionKind.Swing);
+    fighter.aimYaw = Math.atan2(
+      -scene.director.positionOf(id)!.x,
+      -scene.director.positionOf(id)!.z,
+    );
+    for (let tick = 0; tick < Math.round(RAIDER_KINDS[kind].recoverySeconds * TICK_HZ); tick++) {
+      scene.step();
+      expect(enemy.attackRecovery).toBe(true);
+      expect(scene.director.actionOf(id)!.kind).not.toBe(ActionKind.Dodge);
+    }
+    scene.step();
+    expect(enemy.attackRecovery).toBe(false);
+  },
+);
+
+it('commits a skeleton’s late wind-up and swing direction when the player sidesteps behind it', () => {
+  const scene = arena();
+  const fighter = scene.addFighter(1);
+  const raid = scene.director.startRaid(1, ['warrior'])!;
+  const id = scene.director.raidersOf(raid)[0]!;
+  scene.inFrontOf(fighter, id);
+  const internals = scene.director as unknown as { raiders: Map<number, { aimYaw: number }> };
+  const enemy = internals.raiders.get(id)!;
+  let committed = false;
+  for (let tick = 0; tick < 600; tick++) {
+    scene.step();
+    const action = scene.director.actionOf(id)!;
+    if (action.kind === ActionKind.Windup && action.age >= WINDUP_TICKS[action.step]! - 3) {
+      committed = true;
+      break;
+    }
+  }
+  expect(committed).toBe(true);
+  const yaw = enemy.aimYaw,
+    at = scene.director.positionOf(id)!;
+  fighter.position.x = at.x + Math.sin(yaw) * 1.2;
+  fighter.position.z = at.z + Math.cos(yaw) * 1.2;
+  for (let tick = 0; tick < 6; tick++) scene.step();
+  const delta = Math.atan2(Math.sin(enemy.aimYaw - yaw), Math.cos(enemy.aimYaw - yaw));
+  expect(Math.abs(delta)).toBeLessThan(0.15);
+});

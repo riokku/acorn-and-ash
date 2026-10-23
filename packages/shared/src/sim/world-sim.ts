@@ -1,3 +1,4 @@
+import { directionalBiteHits, stalkingDirection } from './animal-tactics';
 import { equipmentDodgeCooldown, equipmentOpeningPower } from '../data/equipment-specialties';
 import {
   SUNREACH_REMNANTS,
@@ -1154,6 +1155,9 @@ interface AnimalRuntime {
    * `threat` to read a duration from.
    */
   attackState: 'none' | 'windup' | 'cooldown';
+  attackTargetNetId: number | null;
+  circleUntilMs: number;
+  circled: boolean;
   /** When the current `attackState` resolves, in real time. Meaningless while `attackState` is 'none'. */
   attackStateEndsAtMs: number;
   /** Swings landed on a threat since it last came back from being defeated. */
@@ -2043,6 +2047,9 @@ export class WorldSimulation {
       caught: false,
       respawnAtMs: 0,
       attackState: 'none',
+      attackTargetNetId: null,
+      circleUntilMs: 0,
+      circled: false,
       attackStateEndsAtMs: 0,
       hitsTaken: 0,
       trailX: new Float32Array(ANIMAL_TRAIL_TICKS),
@@ -3060,6 +3067,8 @@ export class WorldSimulation {
           runtime.trailCount = 0;
           runtime.engaged = false;
           runtime.attackState = 'none';
+          runtime.attackTargetNetId = null;
+          runtime.circled = false;
           runtime.damageHelpers.clear();
           runtime.targetX = runtime.denX;
           runtime.targetZ = runtime.denZ;
@@ -3207,6 +3216,8 @@ export class WorldSimulation {
     ) {
       runtime.engaged = false;
       runtime.attackState = 'none';
+      runtime.attackTargetNetId = null;
+      runtime.circled = false;
       const direction = towardDirection(position.x, position.z, runtime.denX, runtime.denZ);
       velocity.x = direction.x * kind.wanderSpeed;
       velocity.z = direction.z * kind.wanderSpeed;
@@ -3223,8 +3234,32 @@ export class WorldSimulation {
       if (this.nowMs < runtime.attackStateEndsAtMs) return;
 
       if (runtime.attackState === 'windup') {
-        if (nearestPlayer !== null && nearestDistance <= threat.attackRadius) {
-          this.damagePlayer(nearestPlayer, threat.damage);
+        if (threat.attackArcCosine === undefined) {
+          if (nearestPlayer !== null && nearestDistance <= threat.attackRadius)
+            this.damagePlayer(nearestPlayer, threat.damage);
+        } else {
+          // A committed bite never snaps round or transfers to a bystander mid-windup.
+          const victim =
+            runtime.attackTargetNetId === null
+              ? undefined
+              : this.players.get(runtime.attackTargetNetId);
+          const at = victim?.entity.get(Position);
+          if (
+            victim !== undefined &&
+            at !== undefined &&
+            victim.space === OUTDOORS &&
+            victim.health > 0 &&
+            Math.abs(at.y - position.y) < 1.4 &&
+            directionalBiteHits(
+              position,
+              facing.yaw,
+              at,
+              threat.attackRadius,
+              threat.attackArcCosine,
+            )
+          ) {
+            this.damagePlayer(victim, threat.damage);
+          }
         }
         runtime.attackState = 'cooldown';
         runtime.attackStateEndsAtMs = this.nowMs + threat.attackCooldownSeconds * 1000;
@@ -3232,6 +3267,8 @@ export class WorldSimulation {
       }
       // Cooldown just ended: free to close the distance or wind up again.
       runtime.attackState = 'none';
+      runtime.attackTargetNetId = null;
+      runtime.circled = false;
     }
 
     // Bolder in the dark, unless the nearest player is lit - see decision
@@ -3255,11 +3292,14 @@ export class WorldSimulation {
       detection,
     );
 
+    if (!runtime.engaged) runtime.circled = false;
+    let lookingAtTarget = false;
     let direction: Direction2D;
     let speed: number;
     if (runtime.engaged && nearestPosition !== null) {
       if (nearestDistance <= threat.attackRadius) {
         runtime.attackState = 'windup';
+        runtime.attackTargetNetId = nearestPlayer?.netId ?? null;
         runtime.attackStateEndsAtMs = this.nowMs + threat.windupSeconds * 1000;
         velocity.x = 0;
         velocity.z = 0;
@@ -3269,8 +3309,24 @@ export class WorldSimulation {
         );
         return;
       }
-      direction = towardDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
-      speed = threat.chaseSpeed;
+      const circle = threat.circle;
+      if (circle !== undefined && !runtime.circled && nearestDistance <= circle.noticeRadius) {
+        runtime.circled = true;
+        runtime.circleUntilMs = this.nowMs + circle.seconds * 1000;
+      }
+      if (circle !== undefined && runtime.circled && this.nowMs < runtime.circleUntilMs) {
+        direction = stalkingDirection(
+          position,
+          nearestPosition,
+          circle.radius,
+          runtime.id % 2 === 0 ? 1 : -1,
+        );
+        speed = circle.speed;
+        lookingAtTarget = true;
+      } else {
+        direction = towardDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
+        speed = threat.chaseSpeed;
+      }
     } else if (kind.preysOn !== undefined) {
       ({ direction, speed } = this.stepHunt(runtime, kind, position));
     } else {
@@ -3284,7 +3340,9 @@ export class WorldSimulation {
     position.z += velocity.z * TICK_SECONDS;
     this.resolveWoodlandAnimal(runtime, position);
     position.y = this.collision.terrain.heightAt(position.x, position.z);
-    if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
+    if (lookingAtTarget && nearestPosition !== null) {
+      facing.yaw = Math.atan2(position.x - nearestPosition.x, position.z - nearestPosition.z);
+    } else if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
   }
 
   /** Amble toward a fresh point near the den once the last one is reached - calm prey and a calm threat alike. */

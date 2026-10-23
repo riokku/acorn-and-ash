@@ -1056,6 +1056,8 @@ export class Game {
   /** The props as they stand: a regrown tree is a different size from the seeded one. */
   private standingProps: readonly PlacedProp[] = [];
   private collision: CollisionWorld | null = null;
+  private readonly creatureGroundHeight = (x: number, z: number): number =>
+    this.collision?.terrain.heightAt(x, z) ?? 0;
   private readonly characterGroundHeight = (x: number, z: number, referenceY: number): number =>
     footGroundHeightAt(this.collision, x, z, referenceY);
   private aimedTree: { name: string; swingsLeft: number } | null = null;
@@ -6105,6 +6107,8 @@ export class Game {
           alert: (pose.action & 4) !== 0,
           windup: (pose.action & 3) === 1,
           attacking: (pose.action & 3) === 2 && pose.actionAge < 5,
+          recovering: (pose.action & 3) === 2 && pose.actionAge >= 5,
+          groundHeight: this.creatureGroundHeight,
           defeated: (pose.action & 8) !== 0,
           hurt: this.animalJolts.has(animalId),
         });

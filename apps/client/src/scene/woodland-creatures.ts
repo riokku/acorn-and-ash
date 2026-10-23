@@ -10,6 +10,8 @@ export interface WoodlandPose {
   readonly alert?: boolean;
   readonly windup?: boolean;
   readonly attacking?: boolean;
+  readonly recovering?: boolean;
+  readonly groundHeight?: (x: number, z: number) => number;
   readonly hurt?: boolean;
   readonly defeated?: boolean;
 }

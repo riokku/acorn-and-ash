@@ -72,6 +72,7 @@ export * from './sim/day-night';
 export * from './sim/seasons';
 export * from './sim/burying';
 export * from './sim/animals';
+export * from './sim/animal-tactics';
 export * from './sim/exploring';
 export * from './sim/raids';
 export * from './sim/world-sim';

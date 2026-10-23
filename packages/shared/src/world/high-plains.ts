@@ -23,7 +23,7 @@ export const PLAINS_DENS = [
   { id: 1103, kind: 'jackrabbit', x: -266, z: -218 },
   { id: 1104, kind: 'jackrabbit', x: -207, z: -251 },
   { id: 1105, kind: 'jackrabbit', x: -264, z: -264 },
-  { id: 1106, kind: 'coyote', x: -258, z: -192 },
+  { id: 1106, kind: 'coyote', x: -258, z: -200 },
   { id: 1107, kind: 'coyote', x: -228, z: -262 },
   { id: 1108, kind: 'coyote', x: -280, z: -242 },
 ] as const;

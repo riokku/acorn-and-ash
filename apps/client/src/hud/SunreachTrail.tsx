@@ -29,6 +29,9 @@ export function SunreachTrail({ state }: { state: HudState }) {
               ? 'Search the broken ranger outpost just beyond the pass. Press E to read the notes.'
               : SUNREACH_SURVEY[next - 1]!.clue}
       </p>
+      {active && !interaction && next >= 0 ? (
+        <small>Coyotes circle, crouch, then bite. Dodge past the shoulder and counter.</small>
+      ) : null}
       {interaction ? (
         <small>{interaction.ready ? `E · ${interaction.hint}` : interaction.hint}</small>
       ) : null}
