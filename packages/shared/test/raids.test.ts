@@ -944,3 +944,25 @@ it('applies weapon power without promoting a light hit into a heavy stagger', ()
     Math.ceil(RAIDER_KINDS.warrior.toughness - 1.5),
   );
 });
+
+it('rewards an iron-sword counter during actual attack recovery, never a repeated flinch', () => {
+  const scene = arena();
+  const fighter = scene.addFighter(1);
+  const raid = scene.director.startRaid(1, ['minion'])!;
+  const id = scene.director.raidersOf(raid)[0]!;
+  scene.inFrontOf(fighter, id);
+  // Observe the authoritative window while driving normal AI/actions, not an invented recovery.
+  const internals = scene.director as unknown as {
+    raiders: Map<number, { attackRecovery: boolean; damageTaken: number }>;
+  };
+  const enemy = internals.raiders.get(id)!;
+  for (let i = 0; i < 400 && !enemy.attackRecovery; i++) scene.step();
+  expect(enemy.attackRecovery).toBe(true);
+  scene.inFrontOf(fighter, id);
+  scene.director.blowLands(1, fighter.position, 0, SWING_1, 0, 150, undefined, 0, 'ironSword');
+  expect(enemy.damageTaken).toBeCloseTo(1.8);
+  expect(enemy.attackRecovery).toBe(false);
+  scene.inFrontOf(fighter, id);
+  scene.director.blowLands(1, fighter.position, 0, SWING_1, 0, 150, undefined, 0, 'ironSword');
+  expect(enemy.damageTaken).toBeCloseTo(3.3);
+});
