@@ -1,3 +1,4 @@
+import { highPlainsWeight } from '@acorn/shared';
 import { inSkeletonTown } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
 import {
@@ -88,6 +89,8 @@ export function createGrass(
   const geometry = bladeClump();
   const roots = new Float32Array(MAX_CLUMPS * 3);
   const looks = new Float32Array(MAX_CLUMPS * 4);
+  const biomes = new Float32Array(MAX_CLUMPS);
+  geometry.setAttribute('grassBiome', new THREE.InstancedBufferAttribute(biomes, 1));
   geometry.setAttribute('grassRoot', new THREE.InstancedBufferAttribute(roots, 3));
   geometry.setAttribute('grassLook', new THREE.InstancedBufferAttribute(looks, 4));
   const clock = uniform(0);
@@ -140,7 +143,17 @@ export function createGrass(
     .mul(tint)
     .mul(bladeTone.mul(0.24).add(0.88))
     .mul(seasonUniforms.blades);
-  material.colorNode = mix(bladeColour, vec3(0.82, 0.87, 0.9), seasonUniforms.snow.mul(0.8));
+  const dryBlade = mix(
+    vec3(0.32, 0.26, 0.1),
+    vec3(0.72, 0.57, 0.27),
+    tip.mul(0.7).add(shade.mul(0.2)),
+  );
+  const regionalBlade = mix(
+    bladeColour,
+    dryBlade.mul(bladeTone.mul(0.24).add(0.88)),
+    attribute('grassBiome', 'float'),
+  );
+  material.colorNode = mix(regionalBlade, vec3(0.82, 0.87, 0.9), seasonUniforms.snow.mul(0.8));
   const mesh = new THREE.InstancedMesh(geometry, material, MAX_CLUMPS);
   mesh.name = 'wind-grass';
   mesh.count = 0;
@@ -340,12 +353,14 @@ export function createGrass(
           mesh.setMatrixAt(count, matrix);
           roots.set([x, y, z], count * 3);
           looks.set([clump.tone, clump.lean, clump.leanAngle, clump.sway], count * 4);
+          biomes[count] = highPlainsWeight(x, z);
           count++;
         }
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
     geometry.getAttribute('grassRoot').needsUpdate = true;
     geometry.getAttribute('grassLook').needsUpdate = true;
+    geometry.getAttribute('grassBiome').needsUpdate = true;
     lastX = position.x;
     lastZ = position.z;
     changed = false;

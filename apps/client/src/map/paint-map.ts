@@ -1,3 +1,4 @@
+import { highPlainsWeight, highPlainsSand } from '@acorn/shared';
 /**
  * The world, painted as a page of a field journal (see decision 0054).
  *
@@ -124,6 +125,8 @@ export function paintWorldMap(world: MapWorld, size: number = MAP_IMAGE_SIZE): R
       const lush = 1 - smoothstep(0, 5, ground.waterGap);
       const grass = mixRgb(GRASS, GRASS_LUSH, lush * 0.6);
       let land = mixRgb(grass, FLOOR, ground.floor);
+      land = mixRgb(land, hex(0xad9757), highPlainsWeight(x, z) * 0.65);
+      land = mixRgb(land, hex(0xc2ad7d), highPlainsSand(x, z) * 0.85);
       land = mixRgb(land, MOUNTAIN_ROCK, ground.rock);
       land = mixRgb(land, SNOW, ground.snow);
       // Sunny and shady patches, from the same tint the 3D ground uses.

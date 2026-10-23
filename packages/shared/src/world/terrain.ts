@@ -1,3 +1,4 @@
+import { highPlainsHeightAt } from './high-plains';
 import { SKELETON_TOWN, townGroundHeight } from './skeleton-town';
 /**
  * The ground the player walks on.
@@ -89,7 +90,9 @@ export function wildernessHeightAt(
     Math.abs(x - SKELETON_TOWN.x) < 44 && Math.abs(z - SKELETON_TOWN.z) < 44
       ? hillsHeightAt(seed, SKELETON_TOWN.x, SKELETON_TOWN.z)
       : relief;
-  const ground = shapeWater(lake, stream, x, z, townGroundHeight(x, z, relief, townLevel));
+  const upland = highPlainsHeightAt(seed, x, z, townGroundHeight(x, z, relief, townLevel));
+  // Water retains final authority over beds and banks, including the pass approach.
+  const ground = shapeWater(lake, stream, x, z, upland);
   if (forestTrailAt(x, z) === null) return ground;
   // Water keeps the final say at its banks; the trails stay on dry ground.
   if (lakeDepthAt(lake, x, z) > -8 || (stream !== null && nearStream(stream, x, z, 8)))

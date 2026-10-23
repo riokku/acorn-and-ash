@@ -3151,7 +3151,9 @@ export class WorldSimulation {
     runtime: AnimalRuntime,
     position: { x: number; y: number; z: number },
   ): void {
-    if (!WOODLAND_ENCOUNTERS.some((site) => site.kind === runtime.kind)) return;
+    const body = (ANIMAL_KINDS[runtime.kind] as AnimalKind).collider;
+    if (body === undefined && !WOODLAND_ENCOUNTERS.some((site) => site.kind === runtime.kind))
+      return;
     position.x = Math.max(
       -PLAYABLE_HALF_EXTENT + 0.5,
       Math.min(PLAYABLE_HALF_EXTENT - 0.5, position.x),
@@ -3163,8 +3165,8 @@ export class WorldSimulation {
     const small = runtime.kind === 'curiousRaccoon';
     resolveCapsule(
       position,
-      small ? 0.17 : runtime.kind === 'elk' ? 0.35 : 0.45,
-      small ? 0.5 : runtime.kind === 'elk' ? 1.8 : 2.8,
+      body?.radius ?? (small ? 0.17 : runtime.kind === 'elk' ? 0.35 : 0.45),
+      body?.height ?? (small ? 0.5 : runtime.kind === 'elk' ? 1.8 : 2.8),
       this.collision,
     );
   }
@@ -3180,11 +3182,13 @@ export class WorldSimulation {
     nearestPosition: Readonly<Vec3> | null,
     nearestDistance: number,
   ): void {
+    const leash = threat.leashRadius ?? (runtime.kind === 'woodlandGuardian' ? 18 : undefined);
     if (
-      runtime.kind === 'woodlandGuardian' &&
-      (Math.hypot(position.x - runtime.denX, position.z - runtime.denZ) > 18 ||
-        (nearestPosition !== null &&
-          Math.hypot(nearestPosition.x - runtime.denX, nearestPosition.z - runtime.denZ) > 18))
+      leash !== undefined &&
+      (Math.hypot(position.x - runtime.denX, position.z - runtime.denZ) > leash ||
+        ((runtime.engaged || runtime.kind === 'woodlandGuardian') &&
+          nearestPosition !== null &&
+          Math.hypot(nearestPosition.x - runtime.denX, nearestPosition.z - runtime.denZ) > leash))
     ) {
       runtime.engaged = false;
       runtime.attackState = 'none';
@@ -3226,7 +3230,15 @@ export class WorldSimulation {
         this.isPlayerLit(nearestPlayer, nearestPosition)
       );
     const detection = nightDetection(kind, boldInTheDark);
-    runtime.engaged = shouldFlee(runtime.engaged, nearestDistance, detection);
+    const targetInRange =
+      leash === undefined ||
+      nearestPosition === null ||
+      Math.hypot(nearestPosition.x - runtime.denX, nearestPosition.z - runtime.denZ) <= leash;
+    runtime.engaged = shouldFlee(
+      runtime.engaged,
+      targetInRange ? nearestDistance : Infinity,
+      detection,
+    );
 
     let direction: Direction2D;
     let speed: number;
@@ -3244,6 +3256,8 @@ export class WorldSimulation {
       }
       direction = towardDirection(position.x, position.z, nearestPosition.x, nearestPosition.z);
       speed = threat.chaseSpeed;
+    } else if (kind.preysOn !== undefined) {
+      ({ direction, speed } = this.stepHunt(runtime, kind, position));
     } else {
       direction = this.wanderStep(runtime, kind, position);
       speed = kind.wanderSpeed;

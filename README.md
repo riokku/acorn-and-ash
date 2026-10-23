@@ -1725,3 +1725,20 @@ Food now takes two uses: first hold it, then click or press its toolbar number
 again to eat it. With raw food held, interact with a lit cooking fire to cook;
 a second toolbar use deliberately eats it even beside a fire. At full hunger,
 ordinary food is retained, while prepared meals can still grant their benefit.
+
+Sunreach High Plains is the second named outdoor zone, on the northwestern
+frontier of the existing world. Walk northwest from home and follow the cleared
+Windbreak Pass into golden steppe, Amber Dunes and Crown Mesa. Travel stays in
+the same world without loading or transferring your character. The zone name
+appears below the minimap; explored landmarks also appear on the main map.
+
+Plains jackrabbits flee quickly and provide meat. Sunreach coyotes are a modest
+step up from the basic forest threat: four hits, 28 damage, a clear 0.8-second
+wind-up and a 40-metre pursuit leash. They hunt jackrabbits while calm. This first
+pass reuses the existing rabbit and fox figures at adjusted scales, pending
+new Blender art. The existing home clearing, lake, river and Bonehollow keep
+their terrain; forest IDs outside the new region and exploration saves remain
+stable. New rocks are solid and grounded, and the pass stays clear of scenery.
+Inspect `/?gallery=high-plains` and use the viewpoint buttons for the dunes,
+pass and wildlife. Seasonal snow and blizzards still apply; clear plains have a
+longer horizon than the dense forest.

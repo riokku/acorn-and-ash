@@ -133,3 +133,6 @@ export * from './data/discovery-leads';
 export * from './data/equipment-specialties';
 
 export * from './sim/woodland-events';
+
+export * from './world/high-plains';
+export * from './world/zones';

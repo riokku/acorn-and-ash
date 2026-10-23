@@ -71,3 +71,17 @@ describe('outdoor light readability', () => {
     expect(scene.children).toEqual(lights);
   });
 });
+
+it('opens the plains horizon gradually while retaining blizzard and tunnel visibility', () => {
+  const scene = new THREE.Scene(),
+    rig = addDaylight(scene);
+  const fog = scene.fog as THREE.Fog;
+  const normal = fog.far;
+  for (let i = 0; i < 200; i++) rig.update(0.5, 0, false, 1);
+  expect(fog.far).toBeGreaterThan(normal + 55);
+  for (let i = 0; i < 200; i++) rig.update(0.5, 1, true, 1);
+  expect(fog.far).toBeLessThan(50);
+  rig.setUnderground(1);
+  rig.update(0.5, 0, false, 1);
+  expect(fog.far).toBe(22);
+});

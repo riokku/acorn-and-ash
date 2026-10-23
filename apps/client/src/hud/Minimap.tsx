@@ -1,3 +1,4 @@
+import { worldZoneAt } from '@acorn/shared';
 import { useEffect, useRef, useState } from 'react';
 
 import { type FogCache, drawMinimap, fitCanvas } from '../map/draw-map';
@@ -33,17 +34,24 @@ export function Minimap({
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState(1);
+  const [zone, setZone] = useState(() => worldZoneAt(feed.player.x, feed.player.z).name);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
   useEffect(() => {
     let frame = 0;
+    let lastZone = worldZoneAt(feed.player.x, feed.player.z).id;
     const draw = (): void => {
       frame = requestAnimationFrame(draw);
       const canvas = canvasRef.current;
       const context = canvas?.getContext('2d');
       if (canvas === null || canvas === undefined || context === null || context === undefined) {
         return;
+      }
+      const currentZone = worldZoneAt(feed.player.x, feed.player.z);
+      if (currentZone.id !== lastZone) {
+        lastZone = currentZone.id;
+        setZone(currentZone.name);
       }
       const dpr = fitCanvas(canvas, MINIMAP_SIZE, MINIMAP_SIZE);
       drawMinimap(
@@ -75,6 +83,9 @@ export function Minimap({
         onClick={onOpenMap}
         title="Open the map (M)"
       />
+      <div className="minimap-zone" data-testid="world-zone">
+        {zone}
+      </div>
       {season === undefined ? null : <SeasonRing view={season} />}
       <div className="minimap-buttons">
         <button type="button" aria-label="Zoom the minimap in" onClick={() => zoomBy(1)}>
