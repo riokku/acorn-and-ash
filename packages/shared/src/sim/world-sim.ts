@@ -1,3 +1,4 @@
+import { equipmentDodgeCooldown, equipmentOpeningPower } from '../data/equipment-specialties';
 import {
   SUNREACH_REMNANTS,
   SUNREACH_NOTES,
@@ -4334,7 +4335,10 @@ export class WorldSimulation {
       digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot and no line in the water.
       canSit: grounded && runtime.cast === null,
-      dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
+      dodgeCooldown: equipmentDodgeCooldown(
+        runtime.worn,
+        mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
+      ),
     };
   }
 
@@ -4384,6 +4388,7 @@ export class WorldSimulation {
       characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses).power,
       whirlwind ? runtime.whirlwindHits : undefined,
       previousYaw,
+      this.equippedItemOf(runtime.netId),
     );
     if (whirlwind) {
       const animals = whirlwindTargets(
@@ -5187,6 +5192,10 @@ export class WorldSimulation {
     ) {
       animal.hitsTaken +=
         ((dodgeWeight ?? (charged ? 2 : 1)) *
+          equipmentOpeningPower(
+            this.equippedItemOf(runtime.netId),
+            animal.attackState === 'cooldown',
+          ) *
           characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses)
             .power) /
         100;

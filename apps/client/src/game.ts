@@ -1,3 +1,4 @@
+import { equipmentDodgeCooldown } from '@acorn/shared';
 import {
   SUNREACH_SURVEY,
   SUNREACH_REMNANTS,
@@ -5756,7 +5757,10 @@ export class Game {
       // that rules it out (see decision 0102). Standing on something is
       // checked by the caller, which knows the footing.
       canSit: this.fishingPhase === null,
-      dodgeCooldown: mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
+      dodgeCooldown: equipmentDodgeCooldown(
+        this.worn.get(this.selfNetId) ?? {},
+        mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
+      ),
     };
   }
 

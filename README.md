@@ -1751,3 +1751,11 @@ are personal and saved. Return home for a bag, refined axe, leather boots and a
 Sunreach survey pennant that can be placed indoors or around your home. The
 pennant reuses the existing trail flag figure. Inspect the trail with
 `?gallery=high-plains&view=survey` or `&view=vault`.
+
+Equipment offers playstyle choices as well as stats. **Leather boots** shorten
+dodge cooldown by 15% while worn, stacking with a trail ration without changing
+roll distance or immunity. An active **iron sword** deals 20% extra damage to a
+hostile creature recovering from an attack; repeatedly staggering a skeleton does
+not create that bonus. These join the tunic's slower hunger drain, jacket's faster
+fire-side warmth recovery and hunting knife's extra meat yield. Traits remain
+visible in item descriptions, including with custom admin flavor text.

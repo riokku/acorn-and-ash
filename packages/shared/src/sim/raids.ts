@@ -1,3 +1,4 @@
+import { equipmentOpeningPower } from '../data/equipment-specialties';
 import { TOWN_DISTRICTS } from '../world/skeleton-town';
 import { sentinelToughness, captainAttackPlan } from '../data/raiders';
 /**
@@ -242,6 +243,7 @@ interface RaiderRuntime {
   attackNumber: number;
   /** Whether this attack has actually begun. */
   attackBegun: boolean;
+  attackRecovery: boolean;
   /** When it last had a turn to attack (or turned up), so the one kept waiting longest goes next. */
   lastTurnTick: number;
   /** Circling: which way round (1 or -1), and for how much longer before thinking again. */
@@ -476,6 +478,7 @@ export class RaidDirector {
     power = 100,
     alreadyHit?: Set<number>,
     previousYaw = aimYaw,
+    held: ItemId | null = null,
   ): boolean {
     const targets =
       impact.kind === 'strike' && impact.dodge !== true
@@ -491,7 +494,14 @@ export class RaidDirector {
     for (const id of targets) {
       alreadyHit?.add(id);
       const raider = this.raiders.get(id);
-      if (raider !== undefined) this.hitRaider(raider, attackerNetId, position, impact, power);
+      if (raider !== undefined)
+        this.hitRaider(
+          raider,
+          attackerNetId,
+          position,
+          impact,
+          power * equipmentOpeningPower(held, raider.mode === 'recover' && raider.attackRecovery),
+        );
     }
     return targets.length > 0;
   }
@@ -826,6 +836,7 @@ export class RaidDirector {
       plannedSwings: 1,
       attackNumber: 0,
       attackBegun: false,
+      attackRecovery: false,
       lastTurnTick: this.tick,
       circleDirection: rng.nextFloat() < 0.5 ? 1 : -1,
       circleTicks: 0,
@@ -1391,6 +1402,7 @@ export class RaidDirector {
         // That attack is over.
         this.releaseTurn(raider);
         this.setMode(raider, 'recover');
+        raider.attackRecovery = true;
         return this.standStill(raider, facing);
       default:
         return this.standStill(raider);
@@ -1696,6 +1708,7 @@ export class RaidDirector {
   }
 
   private setMode(raider: RaiderRuntime, mode: RaiderMode): void {
+    raider.attackRecovery = false;
     raider.mode = mode;
     raider.modeTicks = 0;
   }

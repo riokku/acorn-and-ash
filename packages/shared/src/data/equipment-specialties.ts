@@ -3,6 +3,11 @@ import type { WornGear } from './gear';
 
 /** Fixed item identities, separate from the admin-editable base stat bonuses. */
 export const EQUIPMENT_SPECIALTIES: Partial<Record<ItemId, string>> = {
+  leatherBoots:
+    'Sure footing: dodge cooldown is 15% shorter while worn. Stacks with a trail ration; roll distance and invulnerability stay the same. Earn a pair from The Sunreach Survey or A supper by the lake.',
+  ironSword:
+    'Duelist: deal 20% more damage when striking a hostile creature during its recovery after an attack. Must be the active weapon. Find one in buried treasure.',
+
   travelerTunic:
     'Trail comfort: hunger drains 15% more slowly while worn. Find it at the forgotten camp.',
   winterJacket:
@@ -18,6 +23,15 @@ export function equipmentHeatRecovery(worn: Readonly<WornGear>): number {
 }
 export function huntingYield(held: ItemId | null, catchItem: ItemId | undefined): number {
   return catchItem === 'meat' && held === 'huntingKnife' ? 2 : 1;
+}
+
+/** Apply after food so both browser prediction and the server use the same rounded ticks. */
+export function equipmentDodgeCooldown(worn: Readonly<WornGear>, normal: number): number {
+  return worn.feet === 'leatherBoots' ? Math.max(1, Math.round(normal * 0.85)) : normal;
+}
+/** The opening belongs to the attack recovery, never to a player-created flinch. */
+export function equipmentOpeningPower(held: ItemId | null, recovering: boolean): number {
+  return held === 'ironSword' && recovering ? 1.2 : 1;
 }
 
 /** Keep mechanical rules visible even when an admin supplies custom flavor text. */
