@@ -49,7 +49,20 @@ export function showForestTrails(
   const wildlife = PLAINS_DENS.map((den) => {
     const model = createCritterFor(den.kind, den.id);
     model.group.position.set(den.x, terrain.heightAt(den.x, den.z), den.z);
-    model.update(0.016, { speed: 0 });
+    for (let frame = 0; frame < 60; frame++)
+      model.update(1 / 60, { speed: 0, groundHeight: terrain.heightAt });
+    if (den.kind === 'coyote' && params.get('pose')) {
+      const pose = params.get('pose');
+      for (let frame = 0; frame < 60; frame++)
+        model.update(1 / 60, {
+          speed: 0,
+          alert: true,
+          windup: pose === 'windup',
+          attacking: pose === 'bite',
+          recovering: pose === 'recovery',
+          groundHeight: terrain.heightAt,
+        });
+    }
     scene.add(model.group);
     return model;
   });
@@ -89,7 +102,7 @@ export function showForestTrails(
     },
     survey: {
       label: 'Ranger outpost',
-      target: [-203, terrain.heightAt(-203, -192) + 0.5, -192],
+      target: [-203, terrain.heightAt(-203, -192) + 0.5, -200],
       eye: [-195, 25, -182],
     },
     vault: {
@@ -97,10 +110,15 @@ export function showForestTrails(
       target: [-245, terrain.heightAt(-245, -213) + 0.2, -213],
       eye: [-242, 23, -209],
     },
+    tactics: {
+      label: 'Coyote tells',
+      target: [-258, terrain.heightAt(-258, -200) + 0.35, -200],
+      eye: [-255.5, terrain.heightAt(-255.5, -202.2) + 1, -202.2],
+    },
     wildlife: {
       label: 'Plains wildlife',
-      target: [-258, terrain.heightAt(-258, -192) + 0.5, -192],
-      eye: [-253, terrain.heightAt(-253, -187) + 2.5, -187],
+      target: [-258, terrain.heightAt(-258, -200) + 0.5, -200],
+      eye: [-253, terrain.heightAt(-253, -195) + 2.5, -195],
     },
     plains: { label: 'Sunreach High Plains', target: [-216, 20, -202], eye: [-163, 49, -143] },
     pass: { label: 'Windbreak Pass', target: [-143, 9, -142], eye: [-109, 22, -114] },
@@ -116,7 +134,15 @@ export function showForestTrails(
   const choose = (name: keyof typeof views) => {
     document.body.dataset.galleryReady = 'false';
     if (scene.fog instanceof THREE.Fog) {
-      const plainsView = ['plains', 'pass', 'dunes', 'wildlife', 'survey', 'vault'].includes(name);
+      const plainsView = [
+        'plains',
+        'pass',
+        'dunes',
+        'wildlife',
+        'survey',
+        'vault',
+        'tactics',
+      ].includes(name);
       scene.fog.near = plainsView ? 85 : 55;
       scene.fog.far = plainsView ? 240 : 120;
     }

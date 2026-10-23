@@ -36,7 +36,7 @@ import {
   TICK_SECONDS,
 } from '../constants';
 import { resolveCapsule, type CollisionWorld } from '../collision/capsule';
-import { DODGE, DODGE_ATTACKS, STRIKE } from '../data/moves';
+import { DODGE, DODGE_ATTACKS, STRIKE, WINDUP_TICKS, CHARGE_TICKS } from '../data/moves';
 import type { ItemId } from '../data/items';
 import {
   RAID,
@@ -1251,7 +1251,14 @@ export class RaidDirector {
         return this.attack(raider, target, distance, facing);
 
       case 'recover':
+        if (raider.attackRecovery && raider.modeTicks === 1) {
+          raider.pauseTicks = Math.round(
+            (raider.kind === 'captain' && raider.plannedStrike ? 1.4 : kind.recoverySeconds) *
+              TICK_HZ,
+          );
+        }
         if (
+          !raider.attackRecovery &&
           raider.pauseTicks <= 0 &&
           raider.modeTicks === 1 &&
           raider.action.kind === ActionKind.Idle
@@ -1384,25 +1391,29 @@ export class RaidDirector {
       // Creeping in along its aim while it draws back, so the blow goes
       // where its body is turned.
       case ActionKind.Windup:
-        raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.windup * TICK_SECONDS);
+        // The last 150 ms commit to the advertised direction.
+        if (action.age < WINDUP_TICKS[action.step]! - 3)
+          raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.windup * TICK_SECONDS);
         return distance > 1.3 ? this.creep(raider) : this.standStill(raider);
       case ActionKind.Charge:
-        raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.charge * TICK_SECONDS);
+        if (action.age < CHARGE_TICKS - 5)
+          raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.charge * TICK_SECONDS);
         return distance > 1.6 ? this.creep(raider) : this.standStill(raider);
       case ActionKind.Swing: {
-        raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.swing * TICK_SECONDS);
+        if (action.age < 2)
+          raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.swing * TICK_SECONDS);
         // A fresh click early in each swing queues the next, up to the plan.
         const more = action.step < raider.plannedSwings && action.age === 1;
         return { ...this.standStill(raider), buttons: more ? PlayerButton.Swing : 0 };
       }
       case ActionKind.Strike:
-        raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.swing * TICK_SECONDS);
         return this.standStill(raider);
       case ActionKind.Idle:
         // That attack is over.
         this.releaseTurn(raider);
         this.setMode(raider, 'recover');
         raider.attackRecovery = true;
+        raider.dodgeAtTick = -1;
         return this.standStill(raider, facing);
       default:
         return this.standStill(raider);
@@ -1415,6 +1426,7 @@ export class RaidDirector {
    * chance of it is the raider's `dodgeChance`, decided once per swing.
    */
   private noticeSwings(raider: RaiderRuntime): void {
+    if (raider.mode === 'recover' && raider.attackRecovery) return;
     if (ATTACKING_KINDS.has(raider.action.kind)) return;
     if (raider.action.dodgeCooldown > 0 || raider.dodgeAtTick >= 0) return;
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];

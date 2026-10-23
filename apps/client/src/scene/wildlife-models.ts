@@ -14,7 +14,7 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
       return model;
     }
     case 'coyote': {
-      const model = animateSmallAnimal(createFox(), 'fox', phaseSeed);
+      const model = animateSmallAnimal(createFox(), 'coyote', phaseSeed);
       model.group.scale.setScalar(1.45);
       return model;
     }

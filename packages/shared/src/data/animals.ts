@@ -25,6 +25,15 @@ export type AnimalKindId =
  * can hurt you - absent on prey, which only ever flees.
  */
 export interface ThreatBehavior {
+  /** Stalk in an arc before closing, once per approach; point-blank threats still telegraph immediately. */
+  readonly circle?: {
+    readonly seconds: number;
+    readonly speed: number;
+    readonly radius: number;
+    readonly noticeRadius: number;
+  };
+  /** Lock the intended victim and bite direction during wind-up. Absent for radial attacks. */
+  readonly attackArcCosine?: number;
   /** Maximum pursuit distance from its den; absent for older unrestricted threats. */
   readonly leashRadius?: number;
   /** How fast it closes the distance once it has noticed you, in m/s. */
@@ -206,6 +215,8 @@ export const ANIMAL_KINDS = {
     preyChaseSpeed: 7,
     threat: {
       leashRadius: 40,
+      circle: { seconds: 1.1, speed: 2.1, radius: 2.8, noticeRadius: 6 },
+      attackArcCosine: 0.4,
       chaseSpeed: 5.6,
       attackRadius: 1.65,
       windupSeconds: 0.8,

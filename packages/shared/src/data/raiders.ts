@@ -35,6 +35,8 @@ export interface RaiderKind {
   readonly runSpeed: number;
   /** How long it draws back before the first swing of a combo: see `WINDUP_TICKS`. */
   readonly windup: WindupPace;
+  /** A guaranteed pause after finishing an attack, before circling again. */
+  readonly recoverySeconds: number;
   /** The most swings of the light combo it throws in one go. */
   readonly comboLength: 1 | 2 | 3;
   /** The chance an attack is a charged strike rather than the light combo. */
@@ -66,6 +68,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.15,
     dodgeChance: 0.2,
     steadfast: false,
+    recoverySeconds: 0.65,
     weight: 4,
     loot: { item: 'bone', count: 1 },
   },
@@ -82,6 +85,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.1,
     dodgeChance: 0.5,
     steadfast: false,
+    recoverySeconds: 0.55,
     weight: 3,
     loot: { item: 'bone', count: 1 },
   },
@@ -97,6 +101,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.3,
     dodgeChance: 0.1,
     steadfast: true,
+    recoverySeconds: 1.05,
     weight: 2,
     loot: { item: 'bone', count: 2 },
   },
@@ -113,6 +118,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.35,
     dodgeChance: 0.35,
     steadfast: false,
+    recoverySeconds: 0.8,
     weight: 2,
     loot: { item: 'bone', count: 1 },
   },
@@ -128,6 +134,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.5,
     dodgeChance: 0,
     steadfast: true,
+    recoverySeconds: 0.8,
     weight: 0,
     loot: { item: 'bone', count: 4 },
   },
@@ -143,6 +150,7 @@ export const RAIDER_KINDS = {
     strikeChance: 0.5,
     dodgeChance: 0,
     steadfast: true,
+    recoverySeconds: 1.2,
     weight: 0,
     loot: { item: 'bone', count: 0 },
   },

@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { expect, it, vi } from 'vitest';
 import { animateSmallAnimal } from '../src/scene/animal-motion';
 
-function animal(kind: 'rabbit' | 'maskedRaccoon' | 'fox', phaseSeed = 0) {
+function animal(kind: 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote', phaseSeed = 0) {
   const group = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.6), new THREE.MeshBasicMaterial());
   mesh.position.y = 0.15;
@@ -14,7 +14,7 @@ function animal(kind: 'rabbit' | 'maskedRaccoon' | 'fox', phaseSeed = 0) {
   return { model: animateSmallAnimal({ group, dispose }, kind, phaseSeed), mesh, dispose };
 }
 
-it.each(['rabbit', 'maskedRaccoon', 'fox'] as const)(
+it.each(['rabbit', 'maskedRaccoon', 'fox', 'coyote'] as const)(
   'keeps %s movement animation frame-rate independent',
   (kind) => {
     const poses = [30, 60, 144].map((fps) => {
@@ -32,7 +32,7 @@ it.each(['rabbit', 'maskedRaccoon', 'fox'] as const)(
   },
 );
 
-it.each(['rabbit', 'maskedRaccoon', 'fox'] as const)(
+it.each(['rabbit', 'maskedRaccoon', 'fox', 'coyote'] as const)(
   'animates %s while preserving its world position and settling softly to idle',
   (kind) => {
     const { model, mesh, dispose } = animal(kind);
@@ -64,4 +64,31 @@ it('stagger small-animal motion by identity instead of making a group hop togeth
     5,
   );
   animals.forEach(({ model }) => model.dispose());
+});
+
+it('crouches and bites smoothly without moving the coyote’s world root, then settles after recovery', () => {
+  const { model } = animal('coyote');
+  model.group.position.set(12, 3, -8);
+  for (let i = 0; i < 60; i++) model.update(1 / 60, { speed: 0, windup: true });
+  const motion = model.group.children[0]!;
+  expect(motion.scale.y).toBeLessThan(0.9);
+  for (let i = 0; i < 15; i++) model.update(1 / 60, { speed: 0, attacking: true });
+  expect(motion.position.z).toBeLessThan(-0.1);
+  expect(model.group.position.toArray()).toEqual([12, 3, -8]);
+  for (let i = 0; i < 180; i++) model.update(1 / 60, { speed: 0 });
+  expect(Math.abs(motion.position.z)).toBeLessThan(0.00001);
+  expect(Math.abs(motion.rotation.x)).toBeLessThan(0.00001);
+  model.dispose();
+});
+
+it('fits a small creature to sloping ground without translating its root or sampling every frame', () => {
+  const { model } = animal('coyote');
+  model.group.position.set(4, 2, -6);
+  const groundHeight = vi.fn((x: number, z: number) => x * 0.2 + z * 0.3);
+  for (let frame = 0; frame < 120; frame++) model.update(1 / 60, { speed: 0, groundHeight });
+  expect(model.group.position.toArray()).toEqual([4, 2, -6]);
+  expect(model.group.rotation.x).toBeCloseTo(-Math.atan(0.3), 5);
+  expect(model.group.rotation.z).toBeCloseTo(Math.atan(0.2), 5);
+  expect(groundHeight.mock.calls.length).toBeLessThan(90);
+  model.dispose();
 });
