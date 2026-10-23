@@ -117,6 +117,7 @@ export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Col
       ];
     case 'flowerPlanter':
       return [{ ...post(0.32, 0.38), standable: true }];
+    case 'sunreachPennant':
     case 'trailPennant':
       return [post(0.05, 1.45)];
     case 'cedarBench':

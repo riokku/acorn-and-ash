@@ -1,3 +1,11 @@
+import { equipmentDodgeCooldown } from '@acorn/shared';
+import {
+  SUNREACH_SURVEY,
+  SUNREACH_REMNANTS,
+  SUNREACH_NOTES,
+  surveyInteraction,
+} from '@acorn/shared';
+import { createSurveyScenery } from './scene/sunreach-survey';
 import { rehearseEffects } from './scene/effect-rehearsal';
 import { createFlame } from './scene/flame';
 import { placedObjectRefund } from '@acorn/shared';
@@ -566,6 +574,7 @@ function createBuiltMesh(
     case 'fernLantern':
     case 'moonLantern':
     case 'flowerPlanter':
+    case 'sunreachPennant':
     case 'trailPennant':
     case 'lastBellTrophy':
     case 'sentinelTrophy':
@@ -869,6 +878,7 @@ export class Game {
   private discoveryLeads: readonly DiscoveryLead[] = [];
   private discoverySites: readonly DiscoverySite[] = [];
   private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
+  private surveyScenery: ReturnType<typeof createSurveyScenery> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
   private receivedDiscoveryState = false;
   /** Gameplay is active once the world is ready, unless another tab takes over. */
@@ -1724,6 +1734,7 @@ export class Game {
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
+    this.surveyScenery?.dispose();
     this.animalTracks?.dispose();
     for (const model of this.decorModels) model.dispose();
     this.decorModels.length = 0;
@@ -2797,6 +2808,7 @@ export class Game {
       );
       this.protectedBuildSites = [
         SKELETON_TOWN,
+        ...SUNREACH_SURVEY.map((site) => ({ ...site, radius: 6 })),
         ...WOODLAND_ENCOUNTERS,
         ...this.discoveryLeads.map((lead) => ({
           x: lead.markerX,
@@ -2815,13 +2827,18 @@ export class Game {
       this.buildBoundary = createBuildBoundary(terrain);
       this.outdoors.add(this.buildBoundary.group);
       this.updateDiscoveryMarkers();
+      this.surveyScenery = createSurveyScenery(terrain);
+      this.outdoors.add(this.surveyScenery.group);
       this.discoveryLandmarks = createDiscoveryLandmarks(this.discoverySites, terrain);
       this.outdoors.add(this.discoveryLandmarks.group);
       this.animalTracks = createAnimalTracks(seed, terrain, [
         ...clearing.colliders,
         ...wilderness.colliders,
-        ...encounterColliders([...encounterSites, ...this.discoveryLeads], terrain),
-        ...discoveryColliders(this.discoverySites, terrain),
+        ...encounterColliders(
+          [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS],
+          terrain,
+        ),
+        ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
       ]);
       this.outdoors.add(this.animalTracks.group);
       this.encounterLandmarks = createEncounterLandmarks(
@@ -2884,8 +2901,11 @@ export class Game {
         [
           ...clearing.colliders,
           ...wilderness.colliders,
-          ...encounterColliders([...encounterSites, ...this.discoveryLeads], terrain),
-          ...discoveryColliders(this.discoverySites, terrain),
+          ...encounterColliders(
+            [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS],
+            terrain,
+          ),
+          ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
           ...streamRockColliders(STREAM, terrain),
         ],
         PLAYABLE_HALF_EXTENT,
@@ -4529,6 +4549,12 @@ export class Game {
   private nearbyDiscoveryName(): string | null {
     const player = this.localPlayer;
     if (this.space !== OUTDOORS || player === null) return null;
+    const survey = surveyInteraction(
+      this.expedition,
+      player.motion.position,
+      this.equipped.get(this.selfNetId) ?? null,
+    );
+    if (survey !== null) return survey.hint;
     return (
       this.discoverySites.find(
         (site) =>
@@ -5731,7 +5757,10 @@ export class Game {
       // that rules it out (see decision 0102). Standing on something is
       // checked by the caller, which knows the footing.
       canSit: this.fishingPhase === null,
-      dodgeCooldown: mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
+      dodgeCooldown: equipmentDodgeCooldown(
+        this.worn.get(this.selfNetId) ?? {},
+        mealCooldown(this.currentMeal(), DODGE.cooldown, 'trailRation'),
+      ),
     };
   }
 

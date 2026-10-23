@@ -1,3 +1,4 @@
+import { SunreachTrail } from './SunreachTrail';
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { PlacedObjectMenu } from './PlacedObjectMenu';
 import { BonehollowTrail } from './BonehollowTrail';
@@ -201,7 +202,10 @@ export function Hud({
       !state.characterOpen &&
       !state.craftMenuOpen &&
       !state.buildMenuOpen ? (
-        <BonehollowTrail state={state} />
+        <>
+          <BonehollowTrail state={state} />
+          <SunreachTrail state={state} />
+        </>
       ) : null}
       {showingWorld &&
       !state.inventoryOpen &&

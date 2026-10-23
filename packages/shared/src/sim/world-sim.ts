@@ -1,3 +1,10 @@
+import { equipmentDodgeCooldown, equipmentOpeningPower } from '../data/equipment-specialties';
+import {
+  SUNREACH_REMNANTS,
+  SUNREACH_NOTES,
+  SUNREACH_SURVEY,
+  surveyInteraction,
+} from '../world/sunreach-survey';
 import { placedObjectRefund } from './decorations';
 import { homeUpgradeObstruction } from './decorations';
 import { nearAdventureLake, nearMountainSpring } from './regional-adventures';
@@ -1896,8 +1903,11 @@ export class WorldSimulation {
       [
         ...this.clearing.colliders,
         ...this.wilderness.colliders,
-        ...encounterColliders([...this.encounterSites, ...discoveryLeads], terrain),
-        ...discoveryColliders(this.discoverySites, terrain),
+        ...encounterColliders(
+          [...this.encounterSites, ...discoveryLeads, ...SUNREACH_REMNANTS],
+          terrain,
+        ),
+        ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
         ...streamRockColliders(STREAM, terrain),
       ],
       PLAYABLE_HALF_EXTENT,
@@ -2688,6 +2698,11 @@ export class WorldSimulation {
           } else {
             this.tryEat(runtime);
           }
+        } else if (
+          wantsToInteract &&
+          this.tryInspectSurvey(runtime, scratch.position, wantsToToggleCampfire)
+        ) {
+          // Personal clues claim E, including the shovel requirement.
         } else if (wantsToToggleCampfire && this.tryInspectDiscovery(runtime, scratch.position)) {
           // A deliberate inspect claims the button, including a guarded/full refusal.
         } else if (wantsToInteract) {
@@ -4320,7 +4335,10 @@ export class WorldSimulation {
       digging: canAttack && toolKind(held) === 'shovel',
       // Anywhere there is ground underfoot and no line in the water.
       canSit: grounded && runtime.cast === null,
-      dodgeCooldown: mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
+      dodgeCooldown: equipmentDodgeCooldown(
+        runtime.worn,
+        mealCooldown(runtime.meal, DODGE.cooldown, 'trailRation'),
+      ),
     };
   }
 
@@ -4370,6 +4388,7 @@ export class WorldSimulation {
       characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses).power,
       whirlwind ? runtime.whirlwindHits : undefined,
       previousYaw,
+      this.equippedItemOf(runtime.netId),
     );
     if (whirlwind) {
       const animals = whirlwindTargets(
@@ -5173,6 +5192,10 @@ export class WorldSimulation {
     ) {
       animal.hitsTaken +=
         ((dodgeWeight ?? (charged ? 2 : 1)) *
+          equipmentOpeningPower(
+            this.equippedItemOf(runtime.netId),
+            animal.attackState === 'cooldown',
+          ) *
           characterStats(runtime.worn, this.equippedItemOf(runtime.netId), this.equipmentBonuses)
             .power) /
         100;
@@ -5551,6 +5574,7 @@ export class WorldSimulation {
       SKELETON_TOWN,
       ...WOODLAND_ENCOUNTERS,
       ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
+      ...SUNREACH_SURVEY.map((site) => ({ ...site, radius: 6 })),
       ...this.discoveryLeads.map((lead) => ({
         x: lead.markerX,
         z: lead.markerZ,
@@ -6735,8 +6759,15 @@ export class WorldSimulation {
     }
     if (!expeditionComplete(state)) return result('unfinished');
     const copy = { ...runtime.inventory };
-    for (const reward of EXPEDITIONS[state.active!]!.rewards)
-      if (addItem(copy, reward.item, reward.count) !== reward.count) return result('full');
+    for (const reward of EXPEDITIONS[state.active!]!.rewards) {
+      // A permanent tool or a fully expanded pack must never trap an outing.
+      const limit = ITEM_KINDS[reward.item].maxCarry;
+      const count = Math.min(
+        reward.count,
+        limit === undefined ? reward.count : Math.max(0, limit - (copy[reward.item] ?? 0)),
+      );
+      if (count > 0 && addItem(copy, reward.item, count) !== count) return result('full');
+    }
     Object.assign(runtime.inventory, copy);
     state.active = null;
     state.progress = [0, 0, 0];
@@ -6833,6 +6864,37 @@ export class WorldSimulation {
       runtime.discoveriesFound |= 1 << site.id;
       this.discoveryChanges.set(runtime.netId, 'none');
     }
+  }
+
+  private tryInspectSurvey(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    fresh: boolean,
+  ): boolean {
+    if (runtime.space !== OUTDOORS || runtime.health <= 0 || runtime.cast !== null) return false;
+    const interaction = surveyInteraction(
+      runtime.expedition,
+      position,
+      this.equippedItemOf(runtime.netId),
+    );
+    if (
+      interaction === null ||
+      Math.abs(position.y - this.collision.terrain.heightAt(position.x, position.z)) > 2.5
+    )
+      return false;
+    if (interaction.ready && fresh) {
+      this.advanceExpedition(
+        runtime,
+        { kind: 'sunreach', step: (['outpost', 'cairn', 'vault'] as const)[interaction.index]! },
+        1,
+      );
+      this.gestureEvents.push({
+        netId: runtime.netId,
+        gesture: interaction.index === 2 ? Gesture.Dig : Gesture.Reach,
+        item: interaction.index === 2 ? 'shovel' : null,
+      });
+    }
+    return true;
   }
 
   private tryInspectDiscovery(runtime: PlayerRuntime, position: Readonly<Vec3>): boolean {

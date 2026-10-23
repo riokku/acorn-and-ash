@@ -9,6 +9,8 @@ import { cookedItemFor } from '../sim/cooking';
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
   watchCaptainHelm:
     'The bronze-crested helm of Bonehollow’s fallen watch. Complete The Last Bell of Bonehollow and claim it at your home board. Wear it from the character screen (Z). Kept through knockout.',
+  sunreachPennant:
+    'Recovered through The Sunreach Survey. Place this ranger pennant at home from Build. Kept through a knockout.',
   lastBellTrophy:
     'A bronze keepsake of The Last Bell of Bonehollow. Claim it at your home board after completing the expedition, then place it inside or outside your home from Build. Kept through knockout.',
   sentinelTrophy:

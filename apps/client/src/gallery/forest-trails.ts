@@ -1,3 +1,4 @@
+import { createSurveyScenery } from '../scene/sunreach-survey';
 import { PLAINS_DENS } from '@acorn/shared';
 import { createCritterFor } from '../scene/wildlife-models';
 import { buildEncounterSites, buildDiscoverySites, buildDiscoveryLeads } from '@acorn/shared';
@@ -68,7 +69,8 @@ export function showForestTrails(
     [...clearing.water, ...LAKE.basin],
   );
   const landmarks = createEncounterLandmarks(params.has('before') ? [] : leads, terrain);
-  scene.add(landmarks.group);
+  const survey = createSurveyScenery(terrain);
+  scene.add(landmarks.group, survey.group);
   document.body.dataset.discoveryLeads = String(leads.length);
   const lead = leads[0];
   const lx = lead?.markerX ?? 0,
@@ -84,6 +86,16 @@ export function showForestTrails(
       label: 'Discovery cairn',
       target: [lx, ly + 0.35, lz],
       eye: [lx + 1, ly + 1.2, lz + 1.6],
+    },
+    survey: {
+      label: 'Ranger outpost',
+      target: [-203, terrain.heightAt(-203, -192) + 0.5, -192],
+      eye: [-195, 25, -182],
+    },
+    vault: {
+      label: 'Survey vault',
+      target: [-245, terrain.heightAt(-245, -213) + 0.2, -213],
+      eye: [-242, 23, -209],
     },
     wildlife: {
       label: 'Plains wildlife',
@@ -104,7 +116,7 @@ export function showForestTrails(
   const choose = (name: keyof typeof views) => {
     document.body.dataset.galleryReady = 'false';
     if (scene.fog instanceof THREE.Fog) {
-      const plainsView = ['plains', 'pass', 'dunes', 'wildlife'].includes(name);
+      const plainsView = ['plains', 'pass', 'dunes', 'wildlife', 'survey', 'vault'].includes(name);
       scene.fog.near = plainsView ? 85 : 55;
       scene.fog.far = plainsView ? 240 : 120;
     }
@@ -158,6 +170,7 @@ export function showForestTrails(
       controls.dispose();
       window.removeEventListener('resize', resize);
       landmarks.dispose();
+      survey.dispose();
       for (const model of wildlife) model.dispose();
       grass.dispose();
       forest.dispose();

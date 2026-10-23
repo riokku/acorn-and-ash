@@ -1,3 +1,4 @@
+import { nearSurveySite } from './sunreach-survey';
 import { plainsPassAt, buildHighPlainsRocks, PLAINS_DENS, plainsAllowsTree } from './high-plains';
 import { PROP_KINDS } from '../data/props';
 import { inSkeletonTown } from './skeleton-town';
@@ -176,6 +177,7 @@ export function buildWilderness(
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !blocksForestTrail(prop) &&
+      !nearSurveySite(prop.x, prop.z, PROP_KINDS[prop.kind].colliderRadius * prop.scale) &&
       !PLAINS_DENS.some(
         (den) =>
           Math.hypot(prop.x - den.x, prop.z - den.z) <
