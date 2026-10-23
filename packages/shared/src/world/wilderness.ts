@@ -1,3 +1,5 @@
+import { plainsPassAt, buildHighPlainsRocks, PLAINS_DENS, plainsAllowsTree } from './high-plains';
+import { PROP_KINDS } from '../data/props';
 import { inSkeletonTown } from './skeleton-town';
 /**
  * The generated wilderness: trees and rocks scattered beyond the hand-built
@@ -174,6 +176,15 @@ export function buildWilderness(
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !blocksForestTrail(prop) &&
+      !PLAINS_DENS.some(
+        (den) =>
+          Math.hypot(prop.x - den.x, prop.z - den.z) <
+          7 + PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+      ) &&
+      plainsPassAt(prop.x, prop.z).distance >
+        3.5 + PROP_KINDS[prop.kind].colliderRadius * prop.scale &&
+      (PROP_KINDS[prop.kind].shape.family !== 'tree' ||
+        plainsAllowsTree(seed, prop.id, prop.x, prop.z)) &&
       !inSkeletonTown(prop.x, prop.z, 2) &&
       !(prop.kind === 'pine' && (prop.y ?? 0) > MOUNTAINS.treeLine) &&
       // Newly cut banks can be steeper than the original wooded hill. Drop
@@ -184,7 +195,7 @@ export function buildWilderness(
       ),
   );
   const onIslands = buildIslandProps(seed, lake, terrain, nextId);
-  const standing = [...kept, ...onIslands];
+  const standing = [...kept, ...onIslands, ...buildHighPlainsRocks(seed, terrain)];
   return {
     props: standing,
     colliders: standing.map((prop) => colliderForProp(prop, terrain)),

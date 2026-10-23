@@ -4377,3 +4377,17 @@ body {
   outline: 2px solid #ffe5a2;
   outline-offset: 2px;
 }
+
+.minimap-zone {
+  position: absolute;
+  top: calc(100% + 42px);
+  width: 100%;
+  text-align: center;
+  color: #f4e9c5;
+  font:
+    600 13px Fraunces,
+    Georgia,
+    serif;
+  text-shadow: 0 2px 5px #182019;
+  pointer-events: none;
+}

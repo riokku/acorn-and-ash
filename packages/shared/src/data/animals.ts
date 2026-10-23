@@ -11,13 +11,22 @@ import { CHOP_REACH, PLAYER_SPRINT_SPEED, PLAYER_WALK_SPEED } from '../constants
 import type { ItemId } from './items';
 
 export type AnimalKindId =
-  'rabbit' | 'maskedRaccoon' | 'fox' | 'elk' | 'curiousRaccoon' | 'woodlandGuardian';
+  | 'rabbit'
+  | 'maskedRaccoon'
+  | 'fox'
+  | 'elk'
+  | 'curiousRaccoon'
+  | 'woodlandGuardian'
+  | 'jackrabbit'
+  | 'coyote';
 
 /**
  * How a threat fights, once it has closed in. Present only on a kind that
  * can hurt you - absent on prey, which only ever flees.
  */
 export interface ThreatBehavior {
+  /** Maximum pursuit distance from its den; absent for older unrestricted threats. */
+  readonly leashRadius?: number;
   /** How fast it closes the distance once it has noticed you, in m/s. */
   readonly chaseSpeed: number;
   /** Close enough to actually take a swing, once it has caught up. */
@@ -68,6 +77,7 @@ export interface AnimalKind {
   /** How fast it closes in once it has noticed prey, in m/s. Meaningless without `preysOn`. */
   readonly preyChaseSpeed?: number;
   /** Triangle budget for the art that eventually replaces the placeholder. */
+  readonly collider?: { readonly radius: number; readonly height: number };
   readonly triangleBudget: number;
   /** Placeholder colour, as 0xRRGGBB. */
   readonly placeholderColor: number;
@@ -166,5 +176,42 @@ export const ANIMAL_KINDS = {
     preyChaseSpeed: 6.8,
     triangleBudget: 5000,
     placeholderColor: 0xc9622a,
+  },
+  jackrabbit: {
+    id: 'jackrabbit',
+    displayName: 'Plains jackrabbit',
+    wanderSpeed: 1.2,
+    fleeSpeed: 6.8,
+    alertRadius: 8,
+    safeRadius: 13,
+    leashRadius: 11,
+    catchItem: 'meat',
+    collider: { radius: 0.18, height: 0.5 },
+    triangleBudget: 5000,
+    placeholderColor: 0xb7a17a,
+  },
+  coyote: {
+    id: 'coyote',
+    displayName: 'Sunreach coyote',
+    wanderSpeed: 1.15,
+    alertRadius: 9,
+    safeRadius: 17,
+    leashRadius: 17,
+    catchItem: 'meat',
+    collider: { radius: 0.35, height: 0.9 },
+    triangleBudget: 5000,
+    placeholderColor: 0x9c896c,
+    preysOn: ['jackrabbit'],
+    preyDetectionRadius: 13,
+    preyChaseSpeed: 7,
+    threat: {
+      leashRadius: 40,
+      chaseSpeed: 5.6,
+      attackRadius: 1.65,
+      windupSeconds: 0.8,
+      attackCooldownSeconds: 1.65,
+      damage: 28,
+      hitsToDefeat: 4,
+    },
   },
 } as const satisfies Record<AnimalKindId, AnimalKind>;

@@ -1,3 +1,5 @@
+import { PLAINS_DENS } from '@acorn/shared';
+import { createCritterFor } from '../scene/wildlife-models';
 import { buildEncounterSites, buildDiscoverySites, buildDiscoveryLeads } from '@acorn/shared';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
@@ -43,6 +45,13 @@ export function showForestTrails(
     { groundHeightAt: terrain.heightAt },
   );
   scene.add(forest.group, home.group, grass.mesh, river.group, lake.group);
+  const wildlife = PLAINS_DENS.map((den) => {
+    const model = createCritterFor(den.kind, den.id);
+    model.group.position.set(den.x, terrain.heightAt(den.x, den.z), den.z);
+    model.update(0.016, { speed: 0 });
+    scene.add(model.group);
+    return model;
+  });
   const sites = buildDiscoverySites(
     buildEncounterSites(
       DEFAULT_WORLD_SEED,
@@ -76,6 +85,14 @@ export function showForestTrails(
       target: [lx, ly + 0.35, lz],
       eye: [lx + 1, ly + 1.2, lz + 1.6],
     },
+    wildlife: {
+      label: 'Plains wildlife',
+      target: [-258, terrain.heightAt(-258, -192) + 0.5, -192],
+      eye: [-253, terrain.heightAt(-253, -187) + 2.5, -187],
+    },
+    plains: { label: 'Sunreach High Plains', target: [-216, 20, -202], eye: [-163, 49, -143] },
+    pass: { label: 'Windbreak Pass', target: [-143, 9, -142], eye: [-109, 22, -114] },
+    dunes: { label: 'Amber Dunes', target: [-233, 21, -213], eye: [-207, 30, -174] },
     cedar: { label: 'Cedar bench', target: [111, 13, 43], eye: [82, 30, 82] },
     overlook: { label: 'Lake overlook', target: [174, 17, -80], eye: [149, 35, -40] },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
@@ -85,6 +102,12 @@ export function showForestTrails(
   nav.style.cssText =
     'position:fixed;top:16px;left:16px;padding:12px;border-radius:10px;background:#18291fe8;color:#f9efca;font:14px system-ui;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
   const choose = (name: keyof typeof views) => {
+    document.body.dataset.galleryReady = 'false';
+    if (scene.fog instanceof THREE.Fog) {
+      const plainsView = ['plains', 'pass', 'dunes', 'wildlife'].includes(name);
+      scene.fog.near = plainsView ? 85 : 55;
+      scene.fog.far = plainsView ? 240 : 120;
+    }
     const view = views[name];
     controls.target.fromArray(view.target);
     camera.position.fromArray(view.eye);
@@ -135,6 +158,7 @@ export function showForestTrails(
       controls.dispose();
       window.removeEventListener('resize', resize);
       landmarks.dispose();
+      for (const model of wildlife) model.dispose();
       grass.dispose();
       forest.dispose();
       home.dispose();

@@ -1,3 +1,4 @@
+import { PLAINS_LANDMARKS, HIGH_PLAINS, isExploredAt } from '@acorn/shared';
 /**
  * Drawing the minimap and the big map onto their canvases (see decision
  * 0054): the painted world, the parchment over what is still unexplored,
@@ -254,6 +255,11 @@ export function drawBigMap(
     const at = place(discovery.x, discovery.z);
     drawDiscovery(context, at.x, at.y);
     drawLabel(context, discovery.name, at.x, at.y + 17);
+  }
+  for (const landmark of [HIGH_PLAINS, ...PLAINS_LANDMARKS]) {
+    if (!isExploredAt(feed.explored, landmark.x, landmark.z)) continue;
+    const at = place(landmark.x, landmark.z);
+    drawLabel(context, landmark.name, at.x, at.y + (landmark === HIGH_PLAINS ? -22 : 0));
   }
   const you = place(feed.player.x, feed.player.z);
   drawYou(context, you.x, you.y, arrowTurn(feed.player.facingYaw, 0), 1.25);

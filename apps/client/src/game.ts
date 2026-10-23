@@ -38,6 +38,7 @@ import {
   type FishRecords,
   type GearRequest,
   isWeapon,
+  highPlainsWeight,
   type ReelView,
   type WornGear,
 } from '@acorn/shared';
@@ -76,7 +77,7 @@ import { createForestWeather } from './scene/forest-weather';
 import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
-import { createWoodlandCreature, type WoodlandCreature } from './scene/woodland-creatures';
+import { type WoodlandCreature } from './scene/woodland-creatures';
 import { createGuardianTrophy } from './scene/guardian-trophy';
 import {
   WOODLAND_ENCOUNTERS,
@@ -325,10 +326,7 @@ import { createFlowerBed, type FlowerBed } from './scene/flower-bed';
 import { createLantern, type Lantern } from './scene/lantern';
 import { createFence, type Fence } from './scene/fence';
 import { createGardenPath, type GardenPath } from './scene/garden-path';
-import { createCritter, type Critter } from './scene/critter';
-import { animateSmallAnimal } from './scene/animal-motion';
-import { createRaccoon, type Raccoon } from './scene/raccoon';
-import { createFox, type Fox } from './scene/fox';
+import { createCritterFor } from './scene/wildlife-models';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -577,25 +575,6 @@ function createBuiltMesh(
   }
 }
 
-/** The existing wildlife figure and its movement controller. */
-function createCritterFor(
-  kind: AnimalKindId,
-  phaseSeed = 0,
-): Critter | Raccoon | Fox | WoodlandCreature {
-  switch (kind) {
-    case 'rabbit':
-      return animateSmallAnimal(createCritter(), 'rabbit', phaseSeed);
-    case 'maskedRaccoon':
-      return animateSmallAnimal(createRaccoon(), 'maskedRaccoon', phaseSeed);
-    case 'fox':
-      return animateSmallAnimal(createFox(), 'fox', phaseSeed);
-    case 'elk':
-    case 'curiousRaccoon':
-    case 'woodlandGuardian':
-      return createWoodlandCreature(kind);
-  }
-}
-
 /** A den never moves or changes kind, so this is all a client ever needs to tell them apart. */
 function animalKindOf(animalId: number): AnimalKindId | undefined {
   return ANIMAL_DENS.find((den) => den.id === animalId)?.kind;
@@ -820,7 +799,7 @@ export class Game {
   private characterOpen = false;
   private gearNotice: { text: string; key: number } | null = null;
   private readonly remoteAnimals = createRemotePlayback();
-  private readonly critters = new Map<number, Critter | Raccoon | Fox | WoodlandCreature>();
+  private readonly critters = new Map<number, WoodlandCreature>();
   private readonly builtMeshes = new Map<
     number,
     | Campfire
@@ -3324,7 +3303,7 @@ export class Game {
     this.critters.delete(animalId);
   }
 
-  private critterFor(animalId: number): Critter | Raccoon | Fox | WoodlandCreature {
+  private critterFor(animalId: number): WoodlandCreature {
     const existing = this.critters.get(animalId);
     if (existing !== undefined) return existing;
 
@@ -3532,7 +3511,13 @@ export class Game {
     const season = seasonMix(this.currentCalendar());
     this.seasons.apply(season, this.daylight, weather.kind === 'blizzard');
     this.updateUnderground(deltaSeconds);
-    this.daylight?.update(dayProgress(weatherNow), this.weatherCloud, weather.kind === 'blizzard');
+    const outdoorPosition = this.space === OUTDOORS ? this.localPlayer?.motion.position : undefined;
+    this.daylight?.update(
+      dayProgress(weatherNow),
+      this.weatherCloud,
+      weather.kind === 'blizzard',
+      outdoorPosition === undefined ? 0 : highPlainsWeight(outdoorPosition.x, outdoorPosition.z),
+    );
     const snow = seasonUniforms.snow.value > 0.5 && this.space === OUTDOORS;
     if (this.localPlayer !== null) {
       const motion = this.localPlayer.motion;

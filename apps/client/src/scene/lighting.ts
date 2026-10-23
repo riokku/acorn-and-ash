@@ -57,7 +57,7 @@ export interface DaylightRig {
   /** Tint the sky and sunlight for the time of year, from the next `update` on. */
   setSeason(look: SeasonalLight): void;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
-  update(progress: number, cloud?: number, blizzard?: boolean): void;
+  update(progress: number, cloud?: number, blizzard?: boolean, openPlains?: number): void;
   /**
    * Inside a home (see decision 0055): no sky and no fog behind the room,
    * just a dark backdrop, while the daylight itself carries on through the
@@ -107,9 +107,12 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   let weatherFogNear = FOG_NEAR;
   let weatherFogFar = FOG_FAR;
 
-  function update(progress: number, cloud = lastCloud, blizzard = false): void {
-    weatherFogNear += ((blizzard ? 10 : FOG_NEAR) - weatherFogNear) * 0.025;
-    weatherFogFar += ((blizzard ? 48 : FOG_FAR) - weatherFogFar) * 0.025;
+  function update(progress: number, cloud = lastCloud, blizzard = false, openPlains = 0): void {
+    // The ground apron extends 170 m beyond the playable bounds; keep the
+    // expanded horizon within it, including the camera's six-metre offset.
+    const plains = THREE.MathUtils.clamp(openPlains, 0, 1);
+    weatherFogNear += ((blizzard ? 10 : FOG_NEAR + plains * 30) - weatherFogNear) * 0.025;
+    weatherFogFar += ((blizzard ? 48 : FOG_FAR + plains * 60) - weatherFogFar) * 0.025;
     // Keep the same fog node in both spaces. Removing it indoors invalidates
     // material programs when the forest comes back. Far beyond the room it
     // has no visible effect, without changing shader structure.

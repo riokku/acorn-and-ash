@@ -1,3 +1,4 @@
+import { highPlainsWeight, highPlainsSand, plainsPassAt } from '@acorn/shared';
 import { townPathCoverage } from '@acorn/shared';
 /**
  * How the ground looks at any spot, worked out once from the world itself
@@ -183,7 +184,11 @@ export function createGroundShader(context: GroundContext): GroundShader {
         smoothstep(MOUNTAINS.snowLine - 2 + wander, MOUNTAINS.snowLine + 5 + wander, height) *
         (1 - smoothstep(1.4, 2.4, slope));
       // Steep hillsides lose their grass too, and rock and snow have none.
+      const plains = highPlainsWeight(x, z);
+      const duneSand = highPlainsSand(x, z);
       const floor = Math.max(
+        plains * 0.25 + duneSand * 0.65,
+        (1 - smoothstep(2, 3.5, plainsPassAt(x, z).distance)) * 0.55,
         townPathCoverage(x, z),
         forestTrailCoverage(x, z),
         sand,
@@ -202,7 +207,10 @@ export function createGroundShader(context: GroundContext): GroundShader {
         light * (1 + warmth * 0.4) * (1 + shore * 0.05),
         light * (1 - warmth) * (1 - shore * 0.04),
       ];
-      return { floor, rock, snow, bank: [sand, wet], tint };
+      tint[0] *= 1 + plains * 0.08;
+      tint[1] *= 1 - plains * 0.02;
+      tint[2] *= 1 - plains * 0.16;
+      return { floor, rock, snow, bank: [Math.max(sand, duneSand), wet], tint };
     },
   };
 }
