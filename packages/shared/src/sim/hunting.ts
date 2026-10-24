@@ -75,6 +75,7 @@ export function whirlwindTargets<T extends WhirlwindCandidate>(
   candidates: readonly T[],
   sweep?: WhirlwindSweep,
   alreadyHit?: ReadonlySet<number>,
+  reach = CHOP_REACH,
 ): T[] {
   const found = new Map<number, T>();
   for (const candidate of candidates) {
@@ -83,7 +84,7 @@ export function whirlwindTargets<T extends WhirlwindCandidate>(
     const dx = candidate.x - position.x,
       dz = candidate.z - position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance - (candidate.radius ?? 0) > CHOP_REACH + 1e-6) continue;
+    if (distance - (candidate.radius ?? 0) > reach + 1e-6) continue;
     if (sweep !== undefined) {
       const turn = Math.PI * 2;
       // The extended right hand starts on the rider's right; positive model

@@ -1,3 +1,4 @@
+import { HOLLOW_KING, hollowKingAttack, hollowKingToughness } from '../data/world-boss';
 import { equipmentOpeningPower } from '../data/equipment-specialties';
 import { TOWN_DISTRICTS } from '../world/skeleton-town';
 import { sentinelToughness, captainAttackPlan } from '../data/raiders';
@@ -134,6 +135,7 @@ export interface RaidFighter {
 
 /** What a raid needs from the world it is in. */
 export interface RaidHost {
+  nowMs?(): number;
   readonly collision: CollisionWorld;
   readonly water: readonly WaterCircle[];
   /** Every player in the world right now. */
@@ -154,7 +156,8 @@ export interface RaidHost {
     townDistrict?: string,
   ): void;
   dropLoot(item: ItemId, count: number, position: Readonly<Vec3>, facingYaw: number): void;
-  /** Public bonus loot belongs to the creature, once, rather than to each contributor. */
+  /** Personal reward for each recent, distinct contributor. */
+  rewardWorldBoss?(ownerKey: string, position: Readonly<Vec3>): void;
   dropBonusLoot?(id: number, kind: RaiderKindId, position: Readonly<Vec3>, facingYaw: number): void;
 }
 
@@ -232,6 +235,7 @@ interface RaiderRuntime {
   damageTaken: number;
   readonly contributors: Set<number>;
   readonly contributorKeys: Set<string>;
+  readonly contributorLastHit: Map<string, number>;
   mode: RaiderMode;
   /** Ticks since `mode` last changed. */
   modeTicks: number;
@@ -300,6 +304,8 @@ interface Turn {
 }
 
 interface PendingBlow {
+  readonly raiderId: number;
+  readonly reach: number;
   readonly targetNetId: number;
   readonly damage: number;
   readonly impactTick: number;
@@ -341,6 +347,7 @@ export class RaidDirector {
   private draws = 0;
   private listChanged = false;
   private tick = 0;
+  private bossRestUntilMs = 0;
   private readonly encounterRestUntil = new Map<number, number>();
   private readonly encounterSites: readonly EncounterSite[];
 
@@ -352,6 +359,16 @@ export class RaidDirector {
   ) {
     this.intervalMinSeconds = options.intervalMinSeconds ?? RAID.intervalSeconds.min;
     this.encounterSites = options.encounterSites ?? [];
+  }
+
+  worldBossRestUntilMs(): number {
+    return this.bossRestUntilMs;
+  }
+  restoreWorldBossRestUntilMs(deadline: number): void {
+    if (Number.isFinite(deadline) && deadline >= 0) this.bossRestUntilMs = deadline;
+  }
+  private clockMs(): number {
+    return this.host.nowMs?.() ?? this.tick * TICK_SECONDS * 1000;
   }
 
   encounterRestState(): [number, number][] {
@@ -528,6 +545,13 @@ export class RaidDirector {
       return;
     }
 
+    const king = raider.kind === 'hollowKing';
+    if (
+      king &&
+      (raider.action.kind === ActionKind.Rise ||
+        Math.abs(position.y - raider.motion.position.y) > 2.5)
+    )
+      return;
     const weight = impact.dodge
       ? impact.kind === 'strike'
         ? DODGE_ATTACKS.heavy.damage
@@ -537,14 +561,19 @@ export class RaidDirector {
         : impact.step === 3
           ? RAIDER_BLOW_WEIGHT.finisher
           : RAIDER_BLOW_WEIGHT.swing;
-    raider.damageTaken += (weight * power) / 100;
+    raider.damageTaken +=
+      ((weight * power) / 100) *
+      (king ? (raider.attackRecovery ? HOLLOW_KING.exposed : HOLLOW_KING.armor) : 1);
     raider.contributors.add(attackerNetId);
     const attacker = this.fighterById.get(attackerNetId) ?? this.findFighter(attackerNetId);
-    raider.contributorKeys.add(attacker?.rewardKey ?? `session:${attackerNetId}`);
+    const ownerKey = attacker?.rewardKey ?? `session:${attackerNetId}`;
+    raider.contributorKeys.add(ownerKey);
+    raider.contributorLastHit.set(ownerKey, this.tick);
     const encounterRaid = this.raids.get(raider.raidId);
     if (encounterRaid?.encounter !== undefined && encounterRaid.targetNetId === 0)
       this.engageEncounter(encounterRaid, attackerNetId);
-    if (raider.kind === 'sentinel' || raider.kind === 'captain') this.listChanged = true;
+    if (raider.kind === 'sentinel' || raider.kind === 'captain' || raider.kind === 'hollowKing')
+      this.listChanged = true;
     const hitsLeft = Math.max(0, Math.ceil(this.maxHitsOf(raider.id) - raider.damageTaken));
     const heavy = weight > RAIDER_BLOW_WEIGHT.swing;
 
@@ -560,12 +589,11 @@ export class RaidDirector {
     const steady =
       (kind.steadfast && ATTACKING_KINDS.has(raider.action.kind)) ||
       this.tick - raider.staggeredAtTick < POISE_TICKS;
-    const shrugged = hitsLeft > 0 && impact.kind !== 'strike' && !heavy && steady;
+    const shrugged = hitsLeft > 0 && (king || (impact.kind !== 'strike' && !heavy && steady));
     const steadfastBlock =
       hitsLeft > 0 &&
-      kind.steadfast &&
-      impact.kind !== 'strike' &&
-      ATTACKING_KINDS.has(raider.action.kind);
+      (king ||
+        (kind.steadfast && impact.kind !== 'strike' && ATTACKING_KINDS.has(raider.action.kind)));
 
     if (!shrugged && !steadfastBlock) {
       raider.motion.velocity.x = (awayX / away) * shove;
@@ -575,6 +603,10 @@ export class RaidDirector {
     }
 
     if (hitsLeft === 0) {
+      if (king)
+        for (const [key, lastHit] of raider.contributorLastHit)
+          if (this.tick - lastHit <= HOLLOW_KING.rewardRecentTicks)
+            this.host.rewardWorldBoss?.(key, raider.motion.position);
       for (const netId of raider.contributors) {
         const fighter = this.fighterById.get(netId) ?? this.findFighter(netId);
         if (
@@ -674,6 +706,7 @@ export class RaidDirector {
   maxHitsOf(id: number): number {
     const raider = this.raiders.get(id);
     if (!raider) return 0;
+    if (raider.kind === 'hollowKing') return hollowKingToughness(raider.contributorKeys.size);
     return raider.kind === 'sentinel' || raider.kind === 'captain'
       ? sentinelToughness(raider.contributorKeys.size) + (raider.kind === 'captain' ? 4 : 0)
       : RAIDER_KINDS[raider.kind].toughness;
@@ -829,6 +862,7 @@ export class RaidDirector {
       damageTaken: 0,
       contributors: new Set(),
       contributorKeys: new Set(),
+      contributorLastHit: new Map(),
       mode: 'march',
       modeTicks: 0,
       targetNetId: null,
@@ -883,7 +917,8 @@ export class RaidDirector {
   private wakeEncounters(night: boolean): void {
     if (this.tick % TICK_HZ !== 0) return;
     let active = [...this.raids.values()].filter(
-      (raid) => raid.encounter !== undefined && !raid.encounter.townDistrict,
+      (raid) =>
+        raid.encounter !== undefined && !raid.encounter.townDistrict && !raid.encounter.worldBoss,
     ).length;
     for (const site of this.encounterSites) {
       const existing = [...this.raids.values()].find((raid) => raid.encounter?.id === site.id);
@@ -903,32 +938,38 @@ export class RaidDirector {
           (raid) => raid.encounter?.townDistrict,
         ).length;
         if (townActive >= TOWN_DISTRICTS.length) continue;
-      } else if (active >= ENCOUNTER_RULES.maxActive) continue;
+      } else if (!site.worldBoss && active >= ENCOUNTER_RULES.maxActive) continue;
       // Keep one exploration slot available for a night patrol.
       if (
         !site.townDistrict &&
+        !site.worldBoss &&
         site.kind !== 'patrol' &&
         [...this.raids.values()].filter(
           (raid) =>
             raid.encounter !== undefined &&
             !raid.encounter.townDistrict &&
+            !raid.encounter.worldBoss &&
             raid.encounter.kind !== 'patrol',
         ).length >= 2
       )
         continue;
       if (
         (site.kind === 'patrol' && !night) ||
-        this.tick < (this.encounterRestUntil.get(site.id) ?? 0)
+        (site.worldBoss
+          ? this.clockMs() < this.bossRestUntilMs
+          : this.tick < (this.encounterRestUntil.get(site.id) ?? 0))
       )
         continue;
       const nearby = [...this.fighterById.values()].some(
         (f) =>
           isFightable(f) &&
-          Math.hypot(f.position.x - site.x, f.position.z - site.z) < ENCOUNTER_RULES.wakeRadius,
+          Math.hypot(f.position.x - site.x, f.position.z - site.z) <
+            (site.wakeRadius ?? ENCOUNTER_RULES.wakeRadius),
       );
       if (!nearby) continue;
       // A new camp must never appear on somebody standing in it, nor in a built home.
       if (
+        !site.worldBoss &&
         [...this.fighterById.values()].some(
           (f) => f.outdoors && Math.hypot(f.position.x - site.x, f.position.z - site.z) < 14,
         )
@@ -948,10 +989,13 @@ export class RaidDirector {
             Math.hypot(c.x - site.x, c.z - site.z) < Math.hypot(c.halfX, c.halfZ) + 2,
         );
       if (blocked) continue;
-      const lineup = site.townDistrict
-        ? TOWN_DISTRICTS.find((district) => district.name === site.townDistrict)!.lineup
-        : ENCOUNTER_LINEUPS[site.kind];
-      if (this.startRaid(0, lineup, night, site) !== null && !site.townDistrict) active++;
+      const lineup = site.worldBoss
+        ? (['hollowKing'] as const)
+        : site.townDistrict
+          ? TOWN_DISTRICTS.find((district) => district.name === site.townDistrict)!.lineup
+          : ENCOUNTER_LINEUPS[site.kind];
+      if (this.startRaid(0, lineup, night, site) !== null && !site.townDistrict && !site.worldBoss)
+        active++;
     }
   }
 
@@ -971,6 +1015,12 @@ export class RaidDirector {
   }
 
   private walkEncounter(raider: RaiderRuntime, site: EncounterSite): PlayerInput {
+    if (site.worldBoss) {
+      const at = { x: site.x, y: this.host.collision.terrain.heightAt(site.x, site.z), z: site.z };
+      return distanceTo(raider.motion.position, at) > 0.8
+        ? this.goToward(raider, at, 2)
+        : this.standStill(raider);
+    }
     const phase = this.tick / TICK_HZ;
     const index = Math.floor(phase / (site.kind === 'patrol' ? 9 : 14));
     const angle = site.yaw + (index * Math.PI) / 2 + (raider.id % 3) * 0.3;
@@ -1007,7 +1057,9 @@ export class RaidDirector {
           const close = raid.raiderIds.some((id) => {
             const at = this.raiders.get(id)?.motion.position;
             return (
-              at !== undefined && distanceTo(at, fighter.position) < ENCOUNTER_RULES.noticeRadius
+              at !== undefined &&
+              distanceTo(at, fighter.position) <
+                (raid.encounter!.noticeRadius ?? ENCOUNTER_RULES.noticeRadius)
             );
           });
           if (close) {
@@ -1023,8 +1075,38 @@ export class RaidDirector {
         fighter === undefined ||
         !isFightable(fighter) ||
         Math.hypot(fighter.position.x - site.x, fighter.position.z - site.z) >
-          ENCOUNTER_RULES.leashRadius
+          (site.leashRadius ?? ENCOUNTER_RULES.leashRadius)
       ) {
+        if (site.worldBoss) {
+          const replacement = [...this.fighterById.values()].find(
+            (f) =>
+              isFightable(f) &&
+              Math.hypot(f.position.x - site.x, f.position.z - site.z) <
+                (site.leashRadius ?? ENCOUNTER_RULES.leashRadius),
+          );
+          if (replacement) {
+            raid.targetNetId = replacement.netId;
+            return;
+          }
+          raid.lostTicks++;
+          if (raid.lostTicks < 5 * TICK_HZ) return;
+          for (const id of raid.raiderIds) {
+            const king = this.raiders.get(id);
+            if (!king) continue;
+            king.damageTaken = 0;
+            king.contributors.clear();
+            king.contributorKeys.clear();
+            king.contributorLastHit.clear();
+            king.attackNumber = 0;
+            king.attackBegun = false;
+            king.whirlwindHits.clear();
+            beginAction(king.action, ActionKind.Idle);
+          }
+          for (let index = this.pendingBlows.length - 1; index >= 0; index--)
+            if (raid.raiderIds.includes(this.pendingBlows[index]!.raiderId))
+              this.pendingBlows.splice(index, 1);
+          this.listChanged = true;
+        }
         raid.targetNetId = 0;
         for (const id of raid.raiderIds) {
           const raider = this.raiders.get(id);
@@ -1035,6 +1117,7 @@ export class RaidDirector {
         }
         return;
       }
+      raid.lostTicks = 0;
       raid.lastSeenX = fighter.position.x;
       raid.lastSeenZ = fighter.position.z;
       return;
@@ -1086,10 +1169,10 @@ export class RaidDirector {
 
   private endRaid(raid: Raid, x: number, z: number): void {
     this.raids.delete(raid.id);
-    if (raid.encounter !== undefined)
+    if (raid.encounter !== undefined && !raid.encounter.worldBoss)
       this.encounterRestUntil.set(
         raid.encounter.id,
-        this.tick + ENCOUNTER_RULES.restSeconds * TICK_HZ,
+        this.tick + (raid.encounter.restSeconds ?? ENCOUNTER_RULES.restSeconds) * TICK_HZ,
       );
     const foughtOff = raid.beaten === raid.size;
     if (raid.encounter !== undefined && raid.targetNetId === 0 && !foughtOff) return;
@@ -1129,6 +1212,11 @@ export class RaidDirector {
         );
         this.despawn(raider);
       }
+      return;
+    }
+
+    if (raider.kind === 'hollowKing' && raider.action.kind === ActionKind.Rise) {
+      this.move(raider, this.standStill(raider));
       return;
     }
 
@@ -1176,7 +1264,7 @@ export class RaidDirector {
       if (
         raid?.encounter !== undefined &&
         Math.hypot(fighter.position.x - raid.encounter.x, fighter.position.z - raid.encounter.z) >
-          ENCOUNTER_RULES.leashRadius
+          (raid.encounter.leashRadius ?? ENCOUNTER_RULES.leashRadius)
       )
         continue;
       const distance = distanceTo(here, fighter.position);
@@ -1259,8 +1347,11 @@ export class RaidDirector {
       case 'recover':
         if (raider.attackRecovery && raider.modeTicks === 1) {
           raider.pauseTicks = Math.round(
-            (raider.kind === 'captain' && raider.plannedStrike ? 1.4 : kind.recoverySeconds) *
-              TICK_HZ,
+            (raider.kind === 'hollowKing' && raider.plannedStrike
+              ? HOLLOW_KING.spinRecoverySeconds
+              : raider.kind === 'captain' && raider.plannedStrike
+                ? 1.4
+                : kind.recoverySeconds) * TICK_HZ,
           );
         }
         if (
@@ -1345,6 +1436,15 @@ export class RaidDirector {
   private planAttack(raider: RaiderRuntime): void {
     const kind: RaiderKind = RAIDER_KINDS[raider.kind];
     raider.attackBegun = false;
+    if (raider.kind === 'hollowKing') {
+      const plan = hollowKingAttack(
+        raider.attackNumber++,
+        1 - raider.damageTaken / this.maxHitsOf(raider.id),
+      );
+      raider.plannedStrike = plan.strike;
+      raider.plannedSwings = plan.swings;
+      return;
+    }
     if (raider.kind === 'captain') {
       const plan = captainAttackPlan(
         raider.attackNumber++,
@@ -1375,7 +1475,7 @@ export class RaidDirector {
     const action = raider.action;
 
     if (!raider.attackBegun) {
-      if (distance > RAID.attackRange) {
+      if (distance > (raider.kind === 'hollowKing' ? HOLLOW_KING.attackRange : RAID.attackRange)) {
         // A player who keeps running is let go, and somebody else may try.
         if (raider.modeTicks > 5 * TICK_HZ && distance > RAID.standoff + 4) {
           this.releaseTurn(raider);
@@ -1402,6 +1502,11 @@ export class RaidDirector {
           raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.windup * TICK_SECONDS);
         return distance > 1.3 ? this.creep(raider) : this.standStill(raider);
       case ActionKind.Charge:
+        if (raider.kind === 'hollowKing')
+          return {
+            ...this.standStill(raider),
+            buttons: action.age < HOLLOW_KING.chargeTicks ? PlayerButton.Charge : 0,
+          };
         if (action.age < CHARGE_TICKS - 5)
           raider.aimYaw = rotateToward(raider.aimYaw, facing, AIM_TRACKING.charge * TICK_SECONDS);
         return distance > 1.6 ? this.creep(raider) : this.standStill(raider);
@@ -1642,8 +1747,9 @@ export class RaidDirector {
       if (!isFightable(fighter)) continue;
       candidates.push({ id: fighter.netId, ...fighter.position });
     }
+    const king = raider.kind === 'hollowKing';
     const hits =
-      impact.kind === 'strike' && impact.dodge !== true
+      king && impact.kind === 'strike'
         ? whirlwindTargets(
             raider.motion.position,
             candidates,
@@ -1651,10 +1757,31 @@ export class RaidDirector {
               ? undefined
               : { age: impact.sweep, yaw: raider.motion.facingYaw, previousYaw },
             raider.whirlwindHits,
+            HOLLOW_KING.reach,
           )
-        : [animalInReach(raider.motion.position, raider.aimYaw, candidates)].filter(
-            (target) => target !== null,
-          );
+        : king
+          ? candidates.filter((target) => {
+              const dx = target.x - raider.motion.position.x,
+                dz = target.z - raider.motion.position.z;
+              const distance = Math.hypot(dx, dz);
+              return (
+                distance <= HOLLOW_KING.reach &&
+                (distance < 0.01 ||
+                  (-Math.sin(raider.aimYaw) * dx - Math.cos(raider.aimYaw) * dz) / distance >= 0.25)
+              );
+            })
+          : impact.kind === 'strike' && impact.dodge !== true
+            ? whirlwindTargets(
+                raider.motion.position,
+                candidates,
+                impact.sweep === undefined
+                  ? undefined
+                  : { age: impact.sweep, yaw: raider.motion.facingYaw, previousYaw },
+                raider.whirlwindHits,
+              )
+            : [animalInReach(raider.motion.position, raider.aimYaw, candidates)].filter(
+                (target) => target !== null,
+              );
     const damage =
       impact.kind === 'strike'
         ? kind.strikeDamage
@@ -1665,7 +1792,12 @@ export class RaidDirector {
       if (impact.kind === 'strike' && !impact.dodge) raider.whirlwindHits.add(hit.id);
       this.pendingBlows.push({
         targetNetId: hit.id,
-        damage,
+        raiderId: raider.id,
+        reach: king ? HOLLOW_KING.reach : RAID.reach,
+        damage:
+          king && raider.damageTaken / this.maxHitsOf(raider.id) >= 0.5
+            ? Math.round(damage * 1.25)
+            : damage,
         impactTick: this.tick,
         x: raider.motion.position.x,
         z: raider.motion.position.z,
@@ -1682,7 +1814,7 @@ export class RaidDirector {
       if (target === undefined || !target.outdoors) continue;
       const dx = target.position.x - blow.x;
       const dz = target.position.z - blow.z;
-      const reach = RAID.reach + BLOW_SETTLE_SLACK;
+      const reach = blow.reach + BLOW_SETTLE_SLACK;
       if (dx * dx + dz * dz > reach * reach) continue;
       this.host.strikePlayer(blow.targetNetId, blow.damage, blow.impactTick);
     }
@@ -1732,6 +1864,10 @@ export class RaidDirector {
   }
 
   private defeat(raider: RaiderRuntime): void {
+    if (raider.kind === 'hollowKing') {
+      this.bossRestUntilMs = this.clockMs() + HOLLOW_KING.respawnSeconds * 1000;
+      this.listChanged = true;
+    }
     this.releaseTurn(raider);
     this.setMode(raider, 'down');
     raider.dodgeAtTick = -1;

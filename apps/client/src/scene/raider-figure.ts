@@ -1,3 +1,4 @@
+import { HOLLOW_KING } from '@acorn/shared';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { townHeadwear } from './skeleton-town';
 import { inSkeletonTown } from '@acorn/shared';
@@ -118,6 +119,7 @@ export class RaiderFigure {
     private readonly bursts: ImpactBursts,
   ) {
     this.character = character;
+    if (kind === 'hollowKing') character.group.scale.setScalar(HOLLOW_KING.scale);
     const head = character.group.getObjectByName('head');
     this.townHat = character.group.getObjectByName('bonehollow-headwear') ?? townHeadwear(kind);
     if (this.townHat && head) {
@@ -141,6 +143,7 @@ export class RaiderFigure {
 
     this.bar = new RaiderHealthBar(RAIDER_KINDS[kind].displayName);
     this.bar.sprite.position.set(0, BAR_HEIGHT, 0);
+    if (kind === 'hollowKing') this.bar.sprite.scale.multiplyScalar(1 / HOLLOW_KING.scale);
     character.group.add(this.bar.sprite);
 
     this.glintMaterial = new THREE.SpriteMaterial({
@@ -176,7 +179,7 @@ export class RaiderFigure {
       weapon: raiderWeapon(kind),
     });
     if (kind === 'sentinel') dressSentinel(character);
-    if (kind === 'captain') {
+    if (kind === 'captain' || kind === 'hollowKing') {
       const helm = createWatchCaptainHelm();
       const head = character.group.getObjectByName('head');
       if (helm && head) {
@@ -213,6 +216,11 @@ export class RaiderFigure {
     if (this.townHat) this.townHat.visible = this.townResident;
     group.position.set(at.x, at.y, at.z);
     group.rotation.y = at.yaw;
+    if (this.kind === 'hollowKing')
+      frame = {
+        ...frame,
+        locomotion: { ...frame.locomotion, speed: frame.locomotion.speed / HOLLOW_KING.scale },
+      };
     this.lastFrame = frame;
     this.swoosh.update(frame.move, volume);
     this.noticeNewMove(frame.move, volume);
@@ -248,7 +256,7 @@ export class RaiderFigure {
       playBoneClatter(volume);
     }
     // The same beat's pause the player's own swing gets, on both ends of it.
-    this.character.hitStop(strength > 1 ? 0.12 : 0.06);
+    if (this.kind !== 'hollowKing') this.character.hitStop(strength > 1 ? 0.12 : 0.06);
   }
 
   /** Gave up, or went out of sight: sink back into the earth rather than vanish. */
@@ -269,7 +277,7 @@ export class RaiderFigure {
     const sink = smoothstep(0, DEPART_SECONDS, this.departing);
     const group = this.character.group;
     group.position.y = this.departFrom - DEPART_DEPTH * sink;
-    group.scale.setScalar(1 - 0.3 * sink);
+    group.scale.setScalar((this.kind === 'hollowKing' ? HOLLOW_KING.scale : 1) * (1 - 0.3 * sink));
     if (this.lastFrame !== null) this.character.update(deltaSeconds, this.lastFrame);
     this.trail.update(deltaSeconds, null, null);
     this.glint.visible = false;

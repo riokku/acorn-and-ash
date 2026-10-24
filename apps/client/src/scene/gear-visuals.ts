@@ -194,7 +194,7 @@ export function createGearVisuals(
   };
 
   const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
-    if (item === 'watchCaptainHelm') {
+    if (item === 'watchCaptainHelm' || item === 'kingCrown') {
       const head = model.getObjectByName('head');
       const helm = createWatchCaptainHelm();
       if (head && helm) {

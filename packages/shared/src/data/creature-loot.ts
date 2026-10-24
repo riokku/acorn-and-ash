@@ -23,6 +23,7 @@ export const SKELETON_WEAPON_DROPS = {
   mage: { item: 'boneStaff', chance: 0.03 },
   sentinel: { item: 'watchGreatsword', chance: 0.02 },
   captain: { item: 'watchGreatsword', chance: 0.02 },
+  hollowKing: { item: 'watchGreatsword', chance: 0.02 },
 } as const satisfies Record<RaiderKindId, { item: ItemId; chance: number }>;
 
 export function skeletonWeaponKind(item: ItemId): RaiderKindId | null {

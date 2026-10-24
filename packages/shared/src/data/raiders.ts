@@ -13,7 +13,8 @@
 import type { ItemId } from './items';
 import type { WindupPace } from './moves';
 
-export type RaiderKindId = 'minion' | 'rogue' | 'warrior' | 'mage' | 'sentinel' | 'captain';
+export type RaiderKindId =
+  'minion' | 'rogue' | 'warrior' | 'mage' | 'sentinel' | 'captain' | 'hollowKing';
 
 export interface RaiderKind {
   readonly id: RaiderKindId;
@@ -56,6 +57,22 @@ export interface RaiderKind {
 }
 
 export const RAIDER_KINDS = {
+  hollowKing: {
+    id: 'hollowKing',
+    displayName: 'The Hollow King',
+    toughness: 220,
+    swingDamage: 65,
+    strikeDamage: 95,
+    runSpeed: 3.2,
+    windup: 3,
+    comboLength: 2,
+    strikeChance: 0.5,
+    dodgeChance: 0,
+    steadfast: true,
+    recoverySeconds: 1.8,
+    weight: 0,
+    loot: { item: 'bone', count: 6 },
+  },
   minion: {
     id: 'minion',
     displayName: 'Skeleton Minion',
@@ -164,6 +181,7 @@ export const RAIDER_KIND_ORDER: readonly RaiderKindId[] = [
   'mage',
   'sentinel',
   'captain',
+  'hollowKing',
 ];
 
 export function raiderKindIndex(id: RaiderKindId): number {

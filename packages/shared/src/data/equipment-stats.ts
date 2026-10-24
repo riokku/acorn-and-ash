@@ -39,6 +39,7 @@ export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>
   rod: { power: 5 },
   refinedRod: { power: 10 },
   torch: { power: 5 },
+  kingCrown: { protection: 12, vitality: 10, warmth: 20 },
   watchCaptainHelm: { protection: 10, vitality: 5, warmth: 10 },
   knightHelmet: { protection: 8, warmth: 5 },
   bearHat: { protection: 2, vitality: 15, warmth: 25 },

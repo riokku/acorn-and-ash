@@ -40,7 +40,12 @@ export function catalogItem(item: ItemId, overrides: ItemOverrides = {}): Catalo
     displayName: kind.displayName,
     pluralName: kind.pluralName,
     description: defaultItemDescription(item),
-    rarity: item === 'watchCaptainHelm' ? 'rare' : 'common',
+    rarity:
+      item === 'kingCrown' || item === 'firstBellRelic'
+        ? 'epic'
+        : item === 'watchCaptainHelm'
+          ? 'rare'
+          : 'common',
     bonuses: EQUIPMENT_BONUSES[item] ?? {},
     ...overrides[item],
   };

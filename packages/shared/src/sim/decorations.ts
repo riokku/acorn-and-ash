@@ -19,6 +19,7 @@ export const DECORATION_KINDS = [
   'goldenFishDisplay',
   'lastBellTrophy',
   'sunreachPennant',
+  'firstBellRelic',
 ] as const;
 export type DecorationKind = (typeof DECORATION_KINDS)[number];
 export const DECORATION_REASONS = [
@@ -192,6 +193,7 @@ export const DECORATION_REQUEST_KINDS: readonly BuildableKindId[] = [
   'largeCabin',
   'rowboat',
   'sunreachPennant',
+  'firstBellRelic',
 ];
 export const DECORATION_ACTIONS = [
   'place',

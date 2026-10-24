@@ -139,6 +139,7 @@ export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Col
     }
     case 'guardianTrophy':
       return [post(0.4, 1.3)];
+    case 'firstBellRelic':
     case 'lastBellTrophy':
     case 'sentinelTrophy':
       return [post(0.36, 0.8)];

@@ -12,7 +12,7 @@ export function createEncounterLandmarks(sites: readonly EncounterSite[], terrai
   const wood = paintedMaterial('wood', { tint: 0x9a8060, roughness: 1 });
   const cloth = paintedMaterial('burlap', { tint: 0xa4d9cf, roughness: 1 });
   for (const site of sites) {
-    if (site.townDistrict) continue;
+    if (site.townDistrict || site.worldBoss) continue;
     const y = terrain.heightAt(site.x, site.z);
     if (site.kind === 'ruins') {
       for (const dx of [-2.1, 2.1])

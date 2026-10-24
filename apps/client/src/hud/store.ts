@@ -46,6 +46,11 @@ export interface FirePanelState {
   readonly y: number;
 }
 export interface HudState {
+  readonly worldBoss?: {
+    readonly health: number;
+    readonly maxHealth: number;
+    readonly awakening: boolean;
+  } | null;
   readonly placedObject?: {
     id: number;
     kind: BuildableKindId;

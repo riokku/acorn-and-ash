@@ -7,6 +7,10 @@ import { ITEM_KINDS, type ItemId } from './items';
 import { cookedItemFor } from '../sim/cooking';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  kingCrown:
+    'A royal helm earned by helping defeat the Hollow King at Crownbreaker Hold. Wear it on your head. Kept through a knockout.',
+  firstBellRelic:
+    'A personal keepsake from the Hollow King. Place the ancient bell at home from Build/Trophies. Kept through a knockout.',
   watchCaptainHelm:
     'The bronze-crested helm of Bonehollow’s fallen watch. Complete The Last Bell of Bonehollow and claim it at your home board. Wear it from the character screen (Z). Kept through knockout.',
   sunreachPennant:

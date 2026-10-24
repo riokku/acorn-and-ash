@@ -15,6 +15,8 @@ type IconId = ItemId | BuildableKindId;
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   sunreachPennant: <path d="M5 22V2H19L15 7L19 12H7V22Z" />,
+  kingCrown: <path d="M3 6L7 11L12 3L17 11L21 6L19 20H5ZM6 16H18V18H6Z" />,
+  firstBellRelic: <path d="M4 19L7 15V10A5 5 0 0 1 17 10V15L20 19ZM10 21H14M12 3V1" />,
   lastBellTrophy: <path d="M4 19L7 15V10A5 5 0 0 1 17 10V15L20 19ZM10 21H14M12 3V1" />,
   watchCaptainHelm: <path d="M4 21V11Q4 5 10 4V1H14V4Q20 5 20 11V21L15 18V12H9V18ZM7 10H17V8H7Z" />,
   refinedAxe: (

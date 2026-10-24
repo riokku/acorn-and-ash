@@ -1,4 +1,4 @@
-import type { RaidNews } from '@acorn/shared';
+import { inKingsHold, type RaidNews } from '@acorn/shared';
 
 import type { RaidBanner } from './store';
 
@@ -17,6 +17,13 @@ export function raidBannerFor(
   bearingDegrees: number | null,
   key: number,
 ): RaidBanner {
+  if (news.kind === 'encounterCleared' && inKingsHold(news.x, news.z, 8))
+    return {
+      key,
+      tone: 'victory',
+      title: 'The Hollow King has fallen',
+      detail: 'Contributors can collect their personal rewards',
+    };
   switch (news.kind) {
     case 'incoming': {
       const many = news.count === 1 ? 'skeleton' : 'skeletons';

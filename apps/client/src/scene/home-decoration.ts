@@ -11,6 +11,7 @@ export function createHomeDecoration(kind: DecorationKind) {
   if (kind === 'sunreachPennant') return createHomeDecoration('trailPennant');
   if (kind === 'fishDisplay' || kind === 'goldenFishDisplay')
     return createFishDisplay(kind === 'goldenFishDisplay');
+  if (kind === 'firstBellRelic') return createLastBellTrophy();
   if (kind === 'lastBellTrophy') return createLastBellTrophy();
   if (kind === 'sentinelTrophy') return createSentinelTrophy();
   if (kind === 'lantern') return createLantern();

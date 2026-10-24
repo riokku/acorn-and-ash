@@ -96,7 +96,7 @@ export async function createItemModel(item: ItemId): Promise<ItemModel> {
       instance.mixer.uncacheRoot(instance.root);
     }
   }
-  if (item === 'lastBellTrophy') await preloadSkeletonTown();
+  if (item === 'lastBellTrophy' || item === 'firstBellRelic') await preloadSkeletonTown();
   if (item === 'flower') await preloadFlowerModel();
   const source =
     item === 'bag'
