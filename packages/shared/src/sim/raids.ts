@@ -986,7 +986,13 @@ export class RaidDirector {
       y: 0,
       z: site.z + Math.sin(angle) * radius,
     };
-    if (distanceTo(raider.motion.position, spot) < 0.6) return this.standStill(raider);
+    if (distanceTo(raider.motion.position, spot) < 0.6)
+      return this.standStill(
+        raider,
+        site.kind === 'patrol'
+          ? Math.atan2(site.x - spot.x, site.z - spot.z) + Math.sin(phase * 0.8 + raider.id) * 0.25
+          : undefined,
+      );
     if (overlapsWater(this.host.water, spot.x, spot.z, PLAYER_RADIUS))
       return this.standStill(raider);
     return this.goToward(raider, spot, site.kind === 'patrol' ? 2 : 1.1);
