@@ -1982,7 +1982,8 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   expect(built.map((piece) => piece.kind).sort()).toEqual(['campfire', 'tent']);
   const carriedAfter = await page.evaluate(() => window.acornDebug?.carrying() ?? []);
   expect(carriedAfter.find((entry) => entry.item === 'log')).toBeUndefined();
-  expect(carriedAfter.find((entry) => entry.item === 'axe')?.count).toBe(1);
+  // Equipping a weapon moves it from the pack into the main-hand slot.
+  expect(await page.evaluate(() => window.acornDebug?.equippedItem())).toBe('axe');
 
   // The Phase 1 promise, for a campfire this time: log out, come back, it is
   // still there.
