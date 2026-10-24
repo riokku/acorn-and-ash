@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { ItemId } from '@acorn/shared';
 import { createItemModel, type ItemModel } from './item-model';
 
-/** One renderer for the whole editor, redrawn only when the model, view or canvas changes. */
+/** One renderer for the whole editor, redrawn on demand, with continuous frames only for a visible enchanted item. */
 export class ItemStage {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(35, 1, 0.01, 100);
@@ -145,6 +145,8 @@ export class ItemStage {
       this.pivot.rotation.set(this.pitch, this.yaw, 0);
       this.renderer.render(this.scene, this.camera);
       this.canvas.dataset.yaw = this.yaw.toFixed(3);
+      if (this.model?.animated && this.canvas.clientWidth > 0 && this.canvas.clientHeight > 0)
+        this.redraw();
     });
   }
   private listen<K extends keyof HTMLElementEventMap>(

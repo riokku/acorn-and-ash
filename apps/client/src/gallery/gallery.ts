@@ -454,6 +454,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showBodies(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'kings-requiem') {
+    scene.add(createGalleryGround([]));
+    const { showKingsRequiem } = await import('./kings-requiem');
+    showKingsRequiem(renderer, scene, params);
+    return;
+  }
+
   if (focus === 'raiders') {
     const slope = Math.max(-0.3, Math.min(0.3, Number(params.get('slope') ?? 0))) || 0;
     scene.add(createGalleryGround([], (x) => x * slope));
