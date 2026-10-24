@@ -1,3 +1,5 @@
+import { streamWaterDepthAt } from '../world/stream';
+import { wildlifeCover, wildlifePauseMs, fleePastCover } from './wildlife-habitat';
 import { LOOT_INTENT_TICKS } from './loot-intent';
 import { directionalBiteHits, stalkingDirection } from './animal-tactics';
 import { equipmentDodgeCooldown, equipmentOpeningPower } from '../data/equipment-specialties';
@@ -1147,6 +1149,8 @@ interface AnimalRuntime {
   targetZ: number;
   /** How many wander targets it has drawn before, so the next one is a fresh hash. */
   decisionSeq: number;
+  idleUntilMs: number;
+  cover: { x: number; z: number } | null;
   /** Caught, or a threat defeated, and waiting out `ANIMAL_RESPAWN_SECONDS` before it is back at its den. */
   caught: boolean;
   /** When it is due back, in real time. Meaningless unless `caught`. */
@@ -2046,6 +2050,20 @@ export class WorldSimulation {
       targetX: den.x,
       targetZ: den.z,
       decisionSeq: 0,
+      idleUntilMs: 0,
+      cover: (ANIMAL_KINDS[den.kind] as AnimalKind).seeksRockShelter
+        ? wildlifeCover(
+            den,
+            this.wilderness.props
+              .filter((prop) => prop.kind === 'boulder' || prop.kind === 'mossyRock')
+              .map((prop) => ({
+                x: prop.x,
+                z: prop.z,
+                radius: PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+              })),
+            (x, z) => this.animalSpotClear(den.kind, x, z),
+          )
+        : null,
       caught: false,
       respawnAtMs: 0,
       attackState: 'none',
@@ -3053,6 +3071,8 @@ export class WorldSimulation {
 
   /** Amble, react to the nearest player, or wait out a catch - whichever this tick calls for. */
   private stepAnimals(): void {
+    const weather = this.weather().kind;
+    const wet = weather === 'rain' || weather === 'storm' || weather === 'blizzard';
     this.world
       .query(AnimalTag, Position, Velocity, Facing, NetworkId)
       .updateEach(([position, velocity, facing, networkId]) => {
@@ -3076,6 +3096,7 @@ export class WorldSimulation {
           runtime.attackState = 'none';
           runtime.attackTargetNetId = null;
           runtime.circled = false;
+          runtime.idleUntilMs = 0;
           runtime.damageHelpers.clear();
           runtime.targetX = runtime.denX;
           runtime.targetZ = runtime.denZ;
@@ -3140,8 +3161,18 @@ export class WorldSimulation {
               -(nearestPosition.z - position.z),
             );
         } else if (runtime.engaged && alarmPosition !== null) {
-          direction = fleeDirection(position.x, position.z, alarmPosition.x, alarmPosition.z);
+          direction = fleePastCover(
+            position,
+            fleeDirection(position.x, position.z, alarmPosition.x, alarmPosition.z),
+            runtime.cover,
+          );
           speed = kind.fleeSpeed ?? 0;
+        } else if (wet && kind.seeksRockShelter && runtime.cover !== null) {
+          direction = towardDirection(position.x, position.z, runtime.cover.x, runtime.cover.z);
+          speed =
+            Math.hypot(position.x - runtime.cover.x, position.z - runtime.cover.z) > 0.5
+              ? kind.wanderSpeed
+              : 0;
         } else if (kind.preysOn !== undefined) {
           ({ direction, speed } = this.stepHunt(runtime, kind, position));
         } else {
@@ -3157,7 +3188,8 @@ export class WorldSimulation {
         position.y = this.collision.terrain.heightAt(position.x, position.z);
         // Standing still keeps whichever way it was last facing, rather than
         // snapping to face the den the instant it stops.
-        if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
+        if (speed > 0 && Math.hypot(direction.x, direction.z) > 0.001)
+          facing.yaw = Math.atan2(-direction.x, -direction.z);
       });
 
     // Every animal's path, for a blow to look back over (see `landBlow`).
@@ -3349,7 +3381,26 @@ export class WorldSimulation {
     position.y = this.collision.terrain.heightAt(position.x, position.z);
     if (lookingAtTarget && nearestPosition !== null) {
       facing.yaw = Math.atan2(position.x - nearestPosition.x, position.z - nearestPosition.z);
-    } else if (speed > 0) facing.yaw = Math.atan2(-direction.x, -direction.z);
+    } else if (speed > 0 && Math.hypot(direction.x, direction.z) > 0.001)
+      facing.yaw = Math.atan2(-direction.x, -direction.z);
+  }
+
+  private animalSpotClear(kindId: AnimalKindId, x: number, z: number): boolean {
+    const body = (ANIMAL_KINDS[kindId] as AnimalKind).collider ?? { radius: 0.35, height: 1.8 };
+    const terrain = this.collision.terrain;
+    const y = terrain.heightAt(x, z);
+    if (overlapsWater(this.keepOutWater, x, z, body.radius) || streamWaterDepthAt(STREAM, x, z) > 0)
+      return false;
+    if (
+      [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ].some(([dx, dz]) => Math.abs(terrain.heightAt(x + dx!, z + dz!) - y) > 0.6)
+    )
+      return false;
+    return !resolveCapsule({ x, y, z }, body.radius, body.height, this.collision);
   }
 
   /** Amble toward a fresh point near the den once the last one is reached - calm prey and a calm threat alike. */
@@ -3358,18 +3409,31 @@ export class WorldSimulation {
     kind: AnimalKind,
     position: Readonly<Vec3>,
   ): Direction2D {
+    if (this.nowMs < runtime.idleUntilMs) return { x: 0, z: 0 };
     if (hasReachedTarget(position.x, position.z, runtime.targetX, runtime.targetZ)) {
       runtime.decisionSeq += 1;
-      const next = wanderTarget(
-        this.seed,
-        runtime.id,
-        runtime.decisionSeq,
-        runtime.denX,
-        runtime.denZ,
-        kind.leashRadius,
-      );
-      runtime.targetX = next.x;
-      runtime.targetZ = next.z;
+      runtime.targetX = position.x;
+      runtime.targetZ = position.z;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const next = wanderTarget(
+          this.seed,
+          runtime.id,
+          runtime.decisionSeq + attempt * 65536,
+          runtime.denX,
+          runtime.denZ,
+          kind.leashRadius,
+        );
+        if (!this.animalSpotClear(runtime.kind, next.x, next.z)) continue;
+        runtime.targetX = next.x;
+        runtime.targetZ = next.z;
+        break;
+      }
+      if (kind.restSeconds !== undefined && runtime.decisionSeq > 1) {
+        runtime.idleUntilMs =
+          this.nowMs +
+          wildlifePauseMs(this.seed, runtime.id, runtime.decisionSeq, kind.restSeconds);
+        return { x: 0, z: 0 };
+      }
     }
     return towardDirection(position.x, position.z, runtime.targetX, runtime.targetZ);
   }

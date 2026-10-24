@@ -140,3 +140,4 @@ export * from './world/zones';
 export * from './world/sunreach-survey';
 
 export * from './sim/loot-intent';
+export * from './sim/wildlife-habitat';

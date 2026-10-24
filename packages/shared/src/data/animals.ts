@@ -55,6 +55,9 @@ export interface AnimalKind {
   readonly displayName: string;
   /** How fast it ambles about near its den, in m/s. */
   readonly wanderSpeed: number;
+  /** Calm animals pause at the end of a wander before picking another route. */
+  readonly restSeconds?: readonly [number, number];
+  readonly seeksRockShelter?: boolean;
   /**
    * How fast it runs once startled, in m/s. Faster than a walking player,
    * slower than a sprint. Only prey flees - absent on anything with `threat`.
@@ -102,6 +105,7 @@ export const ANIMAL_KINDS = {
     safeRadius: 8,
     leashRadius: 7,
     catchItem: 'meat',
+    restSeconds: [4, 7],
     triangleBudget: 5000,
     placeholderColor: 0x9d8162,
   },
@@ -112,6 +116,7 @@ export const ANIMAL_KINDS = {
     alertRadius: 4,
     safeRadius: 6,
     leashRadius: 4,
+    restSeconds: [2, 4],
     triangleBudget: 5000,
     placeholderColor: 0x8d8981,
   },
@@ -142,6 +147,9 @@ export const ANIMAL_KINDS = {
     safeRadius: 11,
     leashRadius: 9,
     catchItem: 'meat',
+    restSeconds: [2, 4],
+    seeksRockShelter: true,
+    collider: { radius: 0.16, height: 0.45 },
     triangleBudget: 5000,
     placeholderColor: 0xbfa88f,
   },
@@ -152,6 +160,8 @@ export const ANIMAL_KINDS = {
     alertRadius: 8,
     safeRadius: 12,
     leashRadius: 10,
+    restSeconds: [1.5, 3],
+    collider: { radius: 0.2, height: 0.55 },
     triangleBudget: 3000,
     placeholderColor: 0x4a4038,
     threat: {
@@ -183,6 +193,9 @@ export const ANIMAL_KINDS = {
     // Faster than a rabbit's fleeSpeed (6), so a chase can actually end in a
     // catch, but not by so much that "sometimes" becomes "always".
     preyChaseSpeed: 6.8,
+    restSeconds: [1.5, 3],
+    seeksRockShelter: true,
+    collider: { radius: 0.21, height: 0.6 },
     triangleBudget: 5000,
     placeholderColor: 0xc9622a,
   },
@@ -196,6 +209,8 @@ export const ANIMAL_KINDS = {
     leashRadius: 11,
     catchItem: 'meat',
     collider: { radius: 0.18, height: 0.5 },
+    restSeconds: [2, 4],
+    seeksRockShelter: true,
     triangleBudget: 5000,
     placeholderColor: 0xb7a17a,
   },
@@ -208,6 +223,7 @@ export const ANIMAL_KINDS = {
     leashRadius: 17,
     catchItem: 'meat',
     collider: { radius: 0.35, height: 0.9 },
+    restSeconds: [1.5, 3],
     triangleBudget: 5000,
     placeholderColor: 0x9c896c,
     preysOn: ['jackrabbit'],

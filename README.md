@@ -1774,3 +1774,9 @@ cooldown is about to end. They remain tied to the clicked item and still require
 reach and backpack space. Holding E can gather repeatedly; eating requires a new
 press, so finishing a patch cannot consume the food in your hand. Context prompts
 match the actual inspection, pickup and cooking priority.
+
+Wildlife follows quieter routines between encounters: rabbits pause to forage,
+foxes sniff and elk graze between wander destinations. Small prey seeks a clear
+spot beside nearby rock during rain, storms and blizzards. Danger interrupts these
+pauses immediately. Wandering prefers dry, walkable ground, and small animals
+collide with solid rocks and trees rather than passing through them.
