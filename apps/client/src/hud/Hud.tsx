@@ -1,3 +1,4 @@
+import { surveyInteraction } from '@acorn/shared';
 import { SunreachTrail } from './SunreachTrail';
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { PlacedObjectMenu } from './PlacedObjectMenu';
@@ -1023,13 +1024,6 @@ export function hint(state: HudState): string {
     return 'Rowing · move to steer, Shift to pull harder · press E to climb out here';
   if (state.boat === 'tooFar')
     return 'Rowing · move to steer, Shift to pull harder · row up to a shore to climb out';
-  // A held raw food beside a lit campfire is deliberately saved for cooking
-  // even while hungry, so say what E will really do before the hunger nudge.
-  const cookingNow = campfireCookingHint(state);
-  if (cookingNow !== null) return cookingNow;
-  // Empty is a clear nudge, so it beats everything but an actual bite: there
-  // is nothing worse than being hungry yet, but it should not go unnoticed.
-  if (state.hunger <= 0) return hungerHint(state);
   // Asked for a menu, so resolving it beats whatever else is going on - it
   // stays open until a pick closes it or its own key does. Only one is ever
   // open at once, so the order between them here never actually matters.
@@ -1043,6 +1037,16 @@ export function hint(state: HudState): string {
         ? 'Follow a lead · C to close'
         : craftMenuHint();
   if (state.charging) return 'Charging a heavy swing · release to strike';
+  const survey =
+    state.expedition === undefined
+      ? null
+      : surveyInteraction(state.expedition, state.position, state.equippedItem);
+  if (survey !== null)
+    return survey.ready ? `Press E to ${survey.hint.toLowerCase()}` : survey.hint;
+  if (state.nearbyDiscovery === 'The elk grove')
+    return 'Press E to sketch the elk · give it room to settle';
+  if (state.nearbyDiscovery !== null)
+    return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
   if (state.nearbyItem !== null) return pickupHint(state, state.nearbyItem);
   // The same order the server tries a press of E in: something lying in the
   // clearing to be found, then something dropped, then a patch.
@@ -1056,10 +1060,8 @@ export function hint(state: HudState): string {
   if (state.nearTreasure === 'shovel')
     return 'Press E to dig up treasure · leftovers stay safely here';
   if (state.nearTreasure === 'needsShovel') return 'Buried treasure · equip a shovel to dig it up';
-  if (state.nearbyDiscovery === 'The elk grove')
-    return 'Press E to sketch the elk · give it room to settle';
-  if (state.nearbyDiscovery !== null)
-    return `Press E to inspect ${state.nearbyDiscovery.toLowerCase()}`;
+  const cookingNow = campfireCookingHint(state);
+  if (cookingNow !== null) return cookingNow;
   if (state.nearCampfire === 'unlit')
     return state.firePanel?.remainingMs === 0
       ? 'Add a log to light the fire · E or use the fuel meter'
@@ -1085,6 +1087,8 @@ export function hint(state: HudState): string {
   if (state.restingNearby !== null && eatsInstead) return 'Press E to eat';
   if (state.restingNearby === 'chair') return 'Press E to sit down';
   if (state.restingNearby === 'bed') return 'Press E to lie down';
+  // Hunger remains on its meter; never promise eating when E will collect, inspect or cook.
+  if (state.hunger <= 0) return hungerHint(state);
   // Trees take an axe to chop or a torch to ignite; the tool must be equipped.
   // Other items can swing at an animal (see decision 0056), unless the rod
   // faces water and casts instead.
