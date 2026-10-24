@@ -713,7 +713,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
         const mesh = new THREE.Mesh(part.geometry, part.material);
         // Slide along the handle itself so the grip also fits a turned or steadied wrist.
         mesh.position.y = -gripInset;
-        mesh.castShadow = true;
+        mesh.castShadow = !part.effect;
+        mesh.frustumCulled = !part.effect;
         held.add(mesh);
       }
       held.rotation.copy(grips.carry.rotation);

@@ -41,7 +41,7 @@ export function catalogItem(item: ItemId, overrides: ItemOverrides = {}): Catalo
     pluralName: kind.pluralName,
     description: defaultItemDescription(item),
     rarity:
-      item === 'kingCrown' || item === 'firstBellRelic'
+      item === 'kingCrown' || item === 'firstBellRelic' || item === 'kingsRequiem'
         ? 'epic'
         : item === 'watchCaptainHelm'
           ? 'rare'

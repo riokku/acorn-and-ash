@@ -43,6 +43,12 @@ it('saves a defeated king’s real-time rest and personal relic before hibernati
   await waitFor('personal relic delivered', () =>
     player.droppedPiles().some((p) => p.item === 'firstBellRelic'),
   );
+  expect(
+    player
+      .droppedPiles()
+      .filter((p) => p.item === 'kingsRequiem')
+      .map((p) => p.count),
+  ).toEqual([1]);
   await runInDurableObject(stub, (_instance, state) => {
     const saved = state.storage.sql
       .exec<{ value: string }>("SELECT value FROM world_meta WHERE key = 'worldBossRestUntilMs'")
@@ -66,6 +72,12 @@ it('saves a defeated king’s real-time rest and personal relic before hibernati
   await waitFor('personal relic restored', () =>
     returning.droppedPiles().some((p) => p.item === 'firstBellRelic'),
   );
+  expect(
+    returning
+      .droppedPiles()
+      .filter((p) => p.item === 'kingsRequiem')
+      .map((p) => p.count),
+  ).toEqual([1]);
   await runInDurableObject(stub, (instance) => {
     const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
     expect(sim.worldBossRestUntilMs()).toBe(deadline);

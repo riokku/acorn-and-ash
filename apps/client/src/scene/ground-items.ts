@@ -168,11 +168,13 @@ export function createPileModel(item: ItemId): GroundModel {
     const parts = wornWeapon(item)!.parts;
     let restHeight = 0;
     for (const part of parts) {
+      if (part.effect) continue;
       part.geometry.computeBoundingBox();
       restHeight = Math.max(restHeight, part.geometry.boundingBox!.max.z);
     }
     for (const part of parts) {
       const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.frustumCulled = !part.effect;
       mesh.rotation.x = Math.PI / 2;
       mesh.position.y = restHeight + 0.01;
       group.add(mesh);

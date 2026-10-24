@@ -67,7 +67,8 @@ export type ItemId =
   | 'watchGreatsword'
   | 'sunreachPennant'
   | 'kingCrown'
-  | 'firstBellRelic';
+  | 'firstBellRelic'
+  | 'kingsRequiem';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -115,6 +116,19 @@ export interface ItemKind {
 }
 
 export const ITEM_KINDS = {
+  kingsRequiem: {
+    id: 'kingsRequiem',
+    displayName: 'King’s Requiem',
+    pluralName: 'King’s Requiems',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    restoresHunger: undefined,
+    placeholderColor: 0xb48af4,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['mainHand'],
+  },
   kingCrown: {
     id: 'kingCrown',
     displayName: 'Crown of the Hollow King',
@@ -941,6 +955,7 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'sunreachPennant',
   'kingCrown',
   'firstBellRelic',
+  'kingsRequiem',
 ];
 
 export function itemIndex(id: ItemId): number {

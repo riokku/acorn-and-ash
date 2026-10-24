@@ -6,7 +6,7 @@ import { ITEM_ORDER, itemFromIndex, itemIndex } from '../src/data/items';
 import { characterStats } from '../src/data/equipment-stats';
 import { WorldSimulation } from '../src/sim/world-sim';
 
-it('only drops each skeleton’s own weapon, deterministically at its 2–5% rate', () => {
+it('only drops each skeleton’s own weapon, deterministically at its configured rate', () => {
   for (const kind of RAIDER_KIND_ORDER) {
     const expected = SKELETON_WEAPON_DROPS[kind];
     const rolls = Array.from({ length: 10000 }, (_, tick) =>
@@ -19,15 +19,25 @@ it('only drops each skeleton’s own weapon, deterministically at its 2–5% rat
     expect(Math.abs(rolls.filter(Boolean).length / rolls.length - expected.chance)).toBeLessThan(
       0.008,
     );
-    expect(expected.chance).toBeGreaterThanOrEqual(0.02);
-    expect(expected.chance).toBeLessThanOrEqual(0.05);
+    if (kind === 'hollowKing') expect(expected.chance).toBe(1);
+    else {
+      expect(expected.chance).toBeGreaterThanOrEqual(0.02);
+      expect(expected.chance).toBeLessThanOrEqual(0.05);
+    }
   }
 });
 
 it('appends weapon wire ids and equips each matching drop with its power bonus', () => {
   const items = [...new Set(Object.values(SKELETON_WEAPON_DROPS).map((drop) => drop.item))];
   // Check the assigned wire IDs, not the tail: future items append after these.
-  expect(ITEM_ORDER.slice(52, 57)).toEqual(items);
+  expect(ITEM_ORDER.slice(52, 57)).toEqual([
+    'rustySword',
+    'raiderDagger',
+    'raiderGreatsword',
+    'boneStaff',
+    'watchGreatsword',
+  ]);
+  expect(itemIndex('kingsRequiem')).toBe(60);
   expect(itemIndex('lastBellTrophy')).toBe(51);
   const sim = new WorldSimulation({ seed: 123, forestEncounters: false });
   try {

@@ -7,6 +7,8 @@ import { ITEM_KINDS, type ItemId } from './items';
 import { cookedItemFor } from '../sim/cooking';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  kingsRequiem:
+    'An epic greatsword claimed from the Hollow King. Violet soul ribbons coil around cold, luminous steel; motes of the First Bell rise along its blade. Wield it in your main hand. Every recent contributor earns a personal sword on victory. Survives knockout.',
   kingCrown:
     'A royal helm earned by helping defeat the Hollow King at Crownbreaker Hold. Wear it on your head. Kept through a knockout.',
   firstBellRelic:

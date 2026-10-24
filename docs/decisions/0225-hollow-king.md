@@ -10,7 +10,7 @@ Crownbreaker Hold sits southeast of Bonehollow at (246, 212). Existing ruined ma
 
 The encounter targets 3–5 prepared players without enforcing a group gate. Ancient armor reduces ordinary blows; actual attack recovery allows stronger counters. Long cleave wind-ups and a two-second whirlwind charge give time to dodge or retreat. At half health, longer combinations and more frequent whirlwinds raise the pressure without shortening the warnings. Armor prevents repeated stagger or knockback from locking the boss in place.
 
-Recent damage contributors receive personal crown, greatsword, stew and decorative First Bell relic piles. Credit uses stable owner identity, includes recently fallen or disconnected helpers and excludes spectators. An uncollected personal relic persists through hibernation; at most one outstanding relic pile exists per owner. The crown and relic survive knockout. A full wipe heals the king after five seconds with no living group member in the arena. He walks back rather than teleporting.
+Recent damage contributors receive personal crown, King’s Requiem greatsword, stew and decorative First Bell relic piles. Credit uses stable owner identity, includes recently fallen or disconnected helpers and excludes spectators. An uncollected personal relic persists through hibernation; at most one outstanding relic pile exists per owner. The crown and relic survive knockout. A full wipe heals the king after five seconds with no living group member in the arena. He walks back rather than teleporting.
 
 Defeat starts a saved 30-minute real-time respawn deadline immediately, including the crumble animation and time while the world sleeps. It uses existing world metadata and needs no background timer. Normal encounter rest remains tick-based.
 

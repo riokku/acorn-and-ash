@@ -1789,3 +1789,10 @@ Recent contributors each receive personal rewards, including a wearable crown
 and a First Bell relic to display at home. A full wipe resets him; victory starts
 a saved 30-minute real-time respawn. Inspect the existing-art boss arrangement in
 `?gallery=raiders&kind=hollowKing&demo=attack`.
+
+The Hollow King carries **King’s Requiem**, an epic greatsword with +85% base
+attack power and animated violet/cyan enchantment. Each recent contributor
+receives a personal sword on victory, and it survives knockout. Its soul ribbons,
+travelling blade light and rising sparks follow the weapon in the king’s hand,
+the player’s hand, on the ground and in the admin preview. Inspect it at
+`?gallery=kings-requiem` (`&before` shows the original watch greatsword).

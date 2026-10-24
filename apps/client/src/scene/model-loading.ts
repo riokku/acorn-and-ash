@@ -4,6 +4,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 export interface ModelPart {
+  /** Additive visual effects do not cast shadows or determine the physical resting height. */
+  readonly effect?: boolean;
   readonly geometry: THREE.BufferGeometry;
   readonly material: THREE.Material;
 }
