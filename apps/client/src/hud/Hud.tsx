@@ -1,3 +1,4 @@
+import { WorldBossBar } from './WorldBossBar';
 import { surveyInteraction } from '@acorn/shared';
 import { SunreachTrail } from './SunreachTrail';
 import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
@@ -438,10 +439,11 @@ export function Hud({
           <span>{Math.ceil(state.meal.ticksLeft / TICK_HZ / 60)} min</span>
         </div>
       ) : null}
-      {showingWorld && state.raidBanner !== null ? (
+      {showingWorld && state.worldBoss ? <WorldBossBar boss={state.worldBoss} /> : null}
+      {showingWorld && state.raidBanner !== null && !state.worldBoss ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
       ) : null}
-      {showingWorld && state.raidBanner === null && state.raidersInSight > 0 ? (
+      {showingWorld && !state.worldBoss && state.raidBanner === null && state.raidersInSight > 0 ? (
         <RaidTracker count={state.raidersInSight} />
       ) : null}
       {state.ready && state.playing && !state.mapOpen && state.chestSlots === null ? (
@@ -1205,6 +1207,8 @@ function fightHint(state: HudState): string | null {
   }
   const raider = state.aimedRaider;
   if (raider === null) return 'Face a skeleton and left click to fight · Ctrl to roll';
+  if (raider.name === 'The Hollow King')
+    return 'Dodge his wind-up · strike while he recovers · keep clear of the whirlwind';
   const name = raider.name.toLowerCase();
   const hits = raider.hitsLeft === 1 ? '1 hit left' : `${raider.hitsLeft} hits left`;
   return `Left click to fight the ${name} · ${hits} · Ctrl to roll`;

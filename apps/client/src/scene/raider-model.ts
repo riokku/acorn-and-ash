@@ -19,6 +19,7 @@ const MODEL_URLS: Record<RaiderKindId, string> = {
   warrior: warriorUrl,
   sentinel: warriorUrl,
   captain: warriorUrl,
+  hollowKing: warriorUrl,
   mage: mageUrl,
 };
 
@@ -39,7 +40,7 @@ export function raiderModelTemplate(kind: RaiderKindId): AnimatedModel | undefin
 async function loadAll(): Promise<void> {
   await Promise.all(
     (Object.entries(MODEL_URLS) as Array<[RaiderKindId, string]>)
-      .filter(([kind]) => kind !== 'sentinel' && kind !== 'captain')
+      .filter(([kind]) => kind !== 'sentinel' && kind !== 'captain' && kind !== 'hollowKing')
       .map(async ([kind, url]) => {
         try {
           templates.set(kind, await loadAnimatedModel(url));
@@ -54,5 +55,6 @@ async function loadAll(): Promise<void> {
   if (warrior !== undefined) {
     templates.set('sentinel', warrior);
     templates.set('captain', warrior);
+    templates.set('hollowKing', warrior);
   }
 }

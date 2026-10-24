@@ -1780,3 +1780,12 @@ foxes sniff and elk graze between wander destinations. Small prey seeks a clear
 spot beside nearby rock during rain, storms and blizzards. Danger interrupts these
 pauses immediately. Wandering prefers dry, walkable ground, and small animals
 collide with solid rocks and trees rather than passing through them.
+
+Beyond Bonehollow, cairns lead southeast to Crownbreaker Hold (246, 212).
+The Hollow King is a giant armored skeleton intended for 3–5 prepared players:
+dodge his broad cleaves, leave the whirlwind's reach during its long charge,
+and counter during recovery. At half health his combinations become more dangerous.
+Recent contributors each receive personal rewards, including a wearable crown
+and a First Bell relic to display at home. A full wipe resets him; victory starts
+a saved 30-minute real-time respawn. Inspect the existing-art boss arrangement in
+`?gallery=raiders&kind=hollowKing&demo=attack`.

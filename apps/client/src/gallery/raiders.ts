@@ -1,3 +1,4 @@
+import { preloadWornGearModels } from '../scene/worn-gear-models';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -151,7 +152,7 @@ export async function showRaiders(
   fireLights: FireLights,
   params: URLSearchParams,
 ): Promise<void> {
-  await Promise.all([preloadRaiderModels(), preloadCharacterAnimations()]);
+  await Promise.all([preloadRaiderModels(), preloadCharacterAnimations(), preloadWornGearModels()]);
   const slope = Math.max(-0.3, Math.min(0.3, Number(params.get('slope') ?? 0))) || 0;
   const groundHeight = (x: number) => x * slope;
   if (params.get('demo') === 'network') {
@@ -164,9 +165,10 @@ export async function showRaiders(
   const raiders =
     askedKind !== null && askedKind in RAIDER_KINDS
       ? [askedKind as RaiderKindId]
-      : RAIDER_KIND_ORDER;
+      : RAIDER_KIND_ORDER.filter((kind) => kind !== 'hollowKing');
   const strip = Number(params.get('strip') ?? 0);
-  const spacing = Number(params.get('spacing') ?? 1.8);
+  const giant = askedKind === 'hollowKing';
+  const spacing = Number(params.get('spacing') ?? (giant ? 6 : 1.8));
   const turn = Number(params.get('turn') ?? 0.5);
 
   const bursts = new ImpactBursts();
@@ -183,7 +185,7 @@ export async function showRaiders(
     const figure = RaiderFigure.create(raider, scene, bursts);
     if (figure === null) return;
     const label = createNameplate(frozen ? `${demo.name} @${age}` : `${raider} ${demo.name}`);
-    label.sprite.position.set(x, 1.95, z);
+    label.sprite.position.set(x, raider === 'hollowKing' ? 6.1 : 1.95, z);
     label.sprite.scale.multiplyScalar(0.55);
     scene.add(label.sprite);
     showings.push({ demo, raider, figure, memory: new MoveMemory(), x, z, age, frozen });
@@ -216,8 +218,10 @@ export async function showRaiders(
   const columns = strip > 1 ? strip : raiders.length;
   const rows = strip > 1 ? 1 : demos.length;
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 300);
-  const target = new THREE.Vector3(0, 0.7, ((rows - 1) * spacing * 1.2) / 2);
-  const distance = Number(params.get('distance') ?? Math.max(columns, rows) * spacing * 1.1 + 2.5);
+  const target = new THREE.Vector3(0, giant ? 3 : 0.7, ((rows - 1) * spacing * 1.2) / 2);
+  const distance = Number(
+    params.get('distance') ?? (Math.max(columns, rows) * spacing * 1.1 + 2.5) * (giant ? 1.2 : 1),
+  );
   const height = Number(params.get('height') ?? distance * 0.3);
   const angle = Number(params.get('angle') ?? 0);
   camera.position.set(

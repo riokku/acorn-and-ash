@@ -65,7 +65,9 @@ export type ItemId =
   | 'raiderGreatsword'
   | 'boneStaff'
   | 'watchGreatsword'
-  | 'sunreachPennant';
+  | 'sunreachPennant'
+  | 'kingCrown'
+  | 'firstBellRelic';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -113,6 +115,31 @@ export interface ItemKind {
 }
 
 export const ITEM_KINDS = {
+  kingCrown: {
+    id: 'kingCrown',
+    displayName: 'Crown of the Hollow King',
+    pluralName: 'Crowns of the Hollow King',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xbba15f,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['helm'],
+  },
+  firstBellRelic: {
+    id: 'firstBellRelic',
+    displayName: 'First Bell relic',
+    pluralName: 'First Bell relics',
+    stackSize: 1,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0xb58b4b,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
   sunreachPennant: {
     id: 'sunreachPennant',
     displayName: 'Sunreach survey pennant',
@@ -912,6 +939,8 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'boneStaff',
   'watchGreatsword',
   'sunreachPennant',
+  'kingCrown',
+  'firstBellRelic',
 ];
 
 export function itemIndex(id: ItemId): number {

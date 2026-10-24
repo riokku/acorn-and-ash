@@ -30,7 +30,7 @@ export function preloadWornGearModels(): Promise<void> {
   return pending;
 }
 export function wornGearModelTemplate(item: ItemId): AnimatedModel | undefined {
-  return templates.get(item);
+  return templates.get(item === 'kingCrown' ? 'watchCaptainHelm' : item);
 }
 
 /** A rigid head-bone attachment shares the same exported helm for player and captain. */

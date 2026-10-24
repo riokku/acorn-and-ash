@@ -4391,3 +4391,44 @@ body {
   text-shadow: 0 2px 5px #182019;
   pointer-events: none;
 }
+
+.world-boss {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 72vw);
+  display: grid;
+  gap: 5px;
+  padding: 12px 20px;
+  text-align: center;
+  color: #efe4c2;
+  background: #171b16e8;
+  border: 1px solid #a69458;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 4px 24px #0007;
+}
+.world-boss small {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #c8ba86;
+}
+.world-boss strong {
+  font-size: 23px;
+}
+.world-boss > span {
+  font-size: 12px;
+}
+.world-boss-health {
+  height: 10px;
+  background: #312c25;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.world-boss-health > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #8e3a35, #b75d47);
+  transition: width 150ms linear;
+}

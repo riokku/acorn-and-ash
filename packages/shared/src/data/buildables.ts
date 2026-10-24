@@ -26,6 +26,7 @@ export type BuildableKindId =
   | 'moonLantern'
   | 'flowerPlanter'
   | 'trailPennant'
+  | 'firstBellRelic'
   | 'sunreachPennant'
   | 'lastBellTrophy'
   | 'sentinelTrophy'
@@ -69,6 +70,16 @@ export interface BuildableKind {
 }
 
 export const BUILDABLE_KINDS = {
+  firstBellRelic: {
+    id: 'firstBellRelic',
+    displayName: 'First Bell relic',
+    costs: [{ item: 'firstBellRelic', amount: 1 }],
+    footprintRadius: 0.38,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0xb58b4b,
+  },
   sunreachPennant: {
     id: 'sunreachPennant',
     displayName: 'Sunreach survey pennant',
@@ -384,6 +395,7 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'rowboat',
   'lastBellTrophy',
   'sunreachPennant',
+  'firstBellRelic',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

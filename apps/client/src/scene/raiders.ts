@@ -120,7 +120,7 @@ export class RaiderCrowd {
   rehearse(at: FlatPoint): void {
     if (this.rehearsal !== 'over' || this.spares.size > 0) return;
     for (const kind of RAIDER_KIND_ORDER) {
-      for (let n = 0; n < LARGEST_GROUP; n++) {
+      for (let n = 0; n < (kind === 'hollowKing' ? 1 : LARGEST_GROUP); n++) {
         const figure = RaiderFigure.create(kind, this.parent, this.bursts);
         if (figure === null) continue;
         figure.showEverythingAt(at.x, -REHEARSAL_DEPTH, at.z);
@@ -142,7 +142,11 @@ export class RaiderCrowd {
   }
 
   setMaximumHits(id: number, maxHits: number): void {
-    if (this.kinds.get(id) === 'sentinel' || this.kinds.get(id) === 'captain')
+    if (
+      this.kinds.get(id) === 'sentinel' ||
+      this.kinds.get(id) === 'captain' ||
+      this.kinds.get(id) === 'hollowKing'
+    )
       this.maximumHits.set(id, maxHits);
   }
 
@@ -190,7 +194,7 @@ export class RaiderCrowd {
     const steady =
       (RAIDER_KINDS[kind].steadfast && ATTACKING.has(action.kind)) ||
       this.clock - (this.staggeredAt.get(id) ?? -Infinity) < POISE_SECONDS;
-    const shrugged = light && steady && left - weight > 0;
+    const shrugged = kind === 'hollowKing' || (light && steady && left - weight > 0);
     this.show(id, from, strike ? 1.8 : heavy ? 1.4 : 1, shrugged, null);
     return shrugged ? 'shrugged' : 'hit';
   }
@@ -240,6 +244,21 @@ export class RaiderCrowd {
   }
 
   /** What kind of raider this is, and how many blows it still needs, if known. */
+  worldBossNear(at: FlatPoint): { health: number; maxHealth: number; awakening: boolean } | null {
+    for (const [id, kind] of this.kinds) {
+      if (kind !== 'hollowKing') continue;
+      const pose = this.positions.poseOf(id);
+      const health = this.hitsLeft.get(id) ?? RAIDER_KINDS[kind].toughness;
+      if (!pose || health <= 0 || Math.hypot(pose.x - at.x, pose.z - at.z) > 60) continue;
+      return {
+        health,
+        maxHealth: this.maximumHits.get(id) ?? RAIDER_KINDS[kind].toughness,
+        awakening: unpackActionByte(pose.action, this.action).kind === ActionKind.Rise,
+      };
+    }
+    return null;
+  }
+
   describe(id: number): { kind: RaiderKindId; hitsLeft: number } | null {
     const kind = this.kinds.get(id);
     if (kind === undefined) return null;

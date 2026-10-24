@@ -1,3 +1,4 @@
+import { CROWNBREAKER_HOLD, KING_REMNANTS } from '../world/hollow-king';
 import { streamWaterDepthAt } from '../world/stream';
 import { wildlifeCover, wildlifePauseMs, fleePastCover } from './wildlife-habitat';
 import { LOOT_INTENT_TICKS } from './loot-intent';
@@ -1914,7 +1915,7 @@ export class WorldSimulation {
         ...this.clearing.colliders,
         ...this.wilderness.colliders,
         ...encounterColliders(
-          [...this.encounterSites, ...discoveryLeads, ...SUNREACH_REMNANTS],
+          [...this.encounterSites, ...discoveryLeads, ...SUNREACH_REMNANTS, ...KING_REMNANTS],
           terrain,
         ),
         ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
@@ -2010,6 +2011,31 @@ export class WorldSimulation {
             runtime.blueprintMisses = Math.min(BLUEPRINT_MAX_MISSES, runtime.blueprintMisses + 1);
           }
           this.blueprintProgressChanges.add(netId);
+        },
+        nowMs: () => this.nowMs,
+        rewardWorldBoss: (ownerKey, position) => {
+          const rewards: { item: ItemId; count: number }[] = [
+            { item: 'kingCrown', count: 1 },
+            { item: 'watchGreatsword', count: 1 },
+            { item: 'forestStew', count: 2 },
+          ];
+          if (
+            !this.droppedPiles.some(
+              (pile) => pile.ownerKey === ownerKey && pile.item === 'firstBellRelic',
+            )
+          )
+            rewards.unshift({ item: 'firstBellRelic', count: 1 });
+          rewards.forEach((reward, index) =>
+            this.addPile(
+              reward.item,
+              reward.count,
+              position.x + Math.cos(index * 1.6) * 0.8,
+              position.z + Math.sin(index * 1.6) * 0.8,
+              this.nowMs,
+              false,
+              ownerKey,
+            ),
+          );
         },
         dropBonusLoot: (raiderId, kind, position, facingYaw) => {
           const weapon = skeletonWeaponDrop(this.seed, kind, raiderId, this.tick);
@@ -3997,7 +4023,11 @@ export class WorldSimulation {
   ): void {
     if (this.droppedPiles.length >= MAX_DROPPED_PILES) {
       const removable = this.droppedPiles.findIndex(
-        (pile) => !(pile.item === 'sentinelTrophy' && pile.ownerKey !== undefined),
+        (pile) =>
+          !(
+            (pile.item === 'sentinelTrophy' || pile.item === 'firstBellRelic') &&
+            pile.ownerKey !== undefined
+          ),
       );
       const oldest = removable < 0 ? undefined : this.droppedPiles.splice(removable, 1)[0];
       if (oldest !== undefined) {
@@ -5702,6 +5732,13 @@ export class WorldSimulation {
   private protectedBuildSites(): ProtectedBuildSite[] {
     return [
       SKELETON_TOWN,
+      CROWNBREAKER_HOLD,
+      ...KING_REMNANTS.map((site) => ({
+        x: site.x - 2.8,
+        z: site.z + 2.7,
+        radius: 1.5,
+        name: 'stronghold cairn',
+      })),
       ...WOODLAND_ENCOUNTERS,
       ...this.discoverySites.map((site) => ({ x: site.x, z: site.z, radius: 8, name: site.kind })),
       ...SUNREACH_SURVEY.map((site) => ({ ...site, radius: 6 })),
@@ -7077,6 +7114,12 @@ export class WorldSimulation {
     return true;
   }
 
+  worldBossRestUntilMs(): number {
+    return this.raids.worldBossRestUntilMs();
+  }
+  restoreWorldBossRestUntilMs(deadline: number): void {
+    this.raids.restoreWorldBossRestUntilMs(deadline);
+  }
   encounterRestState(): [number, number][] {
     return this.raids.encounterRestState();
   }
@@ -7114,10 +7157,16 @@ export class WorldSimulation {
     );
     rows.sort((a, b) => a.droppedAtMs - b.droppedAtMs);
     const permanent = rows.filter(
-      (row) => row.item === 'sentinelTrophy' && row.ownerKey !== undefined,
+      (row) =>
+        (row.item === 'sentinelTrophy' || row.item === 'firstBellRelic') &&
+        row.ownerKey !== undefined,
     );
     const ordinary = rows.filter(
-      (row) => !(row.item === 'sentinelTrophy' && row.ownerKey !== undefined),
+      (row) =>
+        !(
+          (row.item === 'sentinelTrophy' || row.item === 'firstBellRelic') &&
+          row.ownerKey !== undefined
+        ),
     );
     const available = Math.max(0, MAX_DROPPED_PILES - permanent.length);
     const retained = [...permanent, ...(available === 0 ? [] : ordinary.slice(-available))];

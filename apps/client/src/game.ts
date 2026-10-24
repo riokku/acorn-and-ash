@@ -1,3 +1,4 @@
+import { CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
 import { canBufferLoot } from '@acorn/shared';
 import { equipmentDodgeCooldown } from '@acorn/shared';
 import {
@@ -577,6 +578,7 @@ function createBuiltMesh(
     case 'flowerPlanter':
     case 'sunreachPennant':
     case 'trailPennant':
+    case 'firstBellRelic':
     case 'lastBellTrophy':
     case 'sentinelTrophy':
     case 'fishDisplay':
@@ -2811,6 +2813,13 @@ export class Game {
       );
       this.protectedBuildSites = [
         SKELETON_TOWN,
+        CROWNBREAKER_HOLD,
+        ...KING_REMNANTS.map((site) => ({
+          x: site.x - 2.8,
+          z: site.z + 2.7,
+          radius: 1.5,
+          name: 'stronghold cairn',
+        })),
         ...SUNREACH_SURVEY.map((site) => ({ ...site, radius: 6 })),
         ...WOODLAND_ENCOUNTERS,
         ...this.discoveryLeads.map((lead) => ({
@@ -2838,14 +2847,14 @@ export class Game {
         ...clearing.colliders,
         ...wilderness.colliders,
         ...encounterColliders(
-          [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS],
+          [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS, ...KING_REMNANTS],
           terrain,
         ),
         ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
       ]);
       this.outdoors.add(this.animalTracks.group);
       this.encounterLandmarks = createEncounterLandmarks(
-        [...encounterSites, ...this.discoveryLeads],
+        [...encounterSites, ...this.discoveryLeads, ...KING_REMNANTS],
         terrain,
       );
       this.outdoors.add(this.encounterLandmarks.group);
@@ -2905,7 +2914,7 @@ export class Game {
           ...clearing.colliders,
           ...wilderness.colliders,
           ...encounterColliders(
-            [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS],
+            [...encounterSites, ...this.discoveryLeads, ...SUNREACH_REMNANTS, ...KING_REMNANTS],
             terrain,
           ),
           ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
@@ -4691,6 +4700,7 @@ export class Game {
   private updateDiscoveryMarkers(): void {
     this.mapFeed.discoveries = [
       { ...SKELETON_TOWN, name: 'Bonehollow · Skeleton town' },
+      { ...CROWNBREAKER_HOLD, name: 'Crownbreaker Hold · World boss' },
       ...this.discoverySites
         .filter((site) => discoveryKnown(this.discoveriesFound, site.id))
         .map((site) => ({ x: site.x, z: site.z, name: site.name })),
@@ -6199,7 +6209,16 @@ export class Game {
       aimedTree: this.aimedTree,
       aimedAnimal: this.aimedAnimal,
       aimedRaider: this.aimedRaider,
-      raidersInSight: this.space === OUTDOORS ? this.raiders.markers().length : 0,
+      raidersInSight:
+        this.space === OUTDOORS
+          ? this.raiders
+              .markers()
+              .filter((marker) => this.raiders.describe(marker.id)?.kind !== 'hollowKing').length
+          : 0,
+      worldBoss:
+        this.space === OUTDOORS && player !== null
+          ? this.raiders.worldBossNear(player.motion.position)
+          : null,
       raidersClose: this.raidersClose,
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,

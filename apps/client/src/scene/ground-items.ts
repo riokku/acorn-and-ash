@@ -186,7 +186,7 @@ export function createPileModel(item: ItemId): GroundModel {
       dispose() {},
     };
   }
-  if (item === 'watchCaptainHelm') {
+  if (item === 'watchCaptainHelm' || item === 'kingCrown') {
     const group = createWatchCaptainHelm();
     if (group)
       return {
@@ -208,8 +208,11 @@ export function createPileModel(item: ItemId): GroundModel {
       },
     };
   }
-  if (item === 'lastBellTrophy' || item === 'sentinelTrophy') {
-    const model = item === 'lastBellTrophy' ? createLastBellTrophy() : createSentinelTrophy();
+  if (item === 'firstBellRelic' || item === 'lastBellTrophy' || item === 'sentinelTrophy') {
+    const model =
+      item === 'lastBellTrophy' || item === 'firstBellRelic'
+        ? createLastBellTrophy()
+        : createSentinelTrophy();
     model.group.scale.setScalar(0.55);
     return {
       ...model,

@@ -1,3 +1,4 @@
+import { HOLLOW_KING_SITE } from './hollow-king';
 import { SKELETON_TOWN, TOWN_DISTRICTS, townColliders, type TownDistrict } from './skeleton-town';
 import { surfaceCollider } from '../collision/solid-surface';
 import { stonePositions } from './stone-shape';
@@ -19,6 +20,11 @@ export interface EncounterSite {
   readonly z: number;
   readonly yaw: number;
   readonly townDistrict?: TownDistrict;
+  readonly worldBoss?: boolean;
+  readonly noticeRadius?: number;
+  readonly wakeRadius?: number;
+  readonly leashRadius?: number;
+  readonly restSeconds?: number;
 }
 export const ENCOUNTER_RULES = {
   noticeRadius: 10,
@@ -94,12 +100,14 @@ export function buildEncounterSites(
       yaw: 0,
     })),
   );
+  sites.push(HOLLOW_KING_SITE);
   return sites;
 }
 
 /** Broken corner pillars leave the entire center and entrances walkable. */
 export function encounterColliders(sites: readonly EncounterSite[], terrain: Terrain): Collider[] {
   return sites.flatMap<Collider>((site) => {
+    if (site.worldBoss) return [];
     if (site.townDistrict) return site.townDistrict === 'gate' ? townColliders(terrain) : [];
     const y = terrain.heightAt(site.x, site.z);
     if (site.kind !== 'ruins') {

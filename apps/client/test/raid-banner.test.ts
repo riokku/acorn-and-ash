@@ -60,3 +60,13 @@ describe('which way something is, in words', () => {
     expect(directionWords(-150)).toBe('behind you');
   });
 });
+
+it('celebrates the world boss and explains contributor rewards', () => {
+  expect(
+    raidBannerFor({ ...news('encounterCleared', 1), x: 246, z: 212 }, null, null, 8),
+  ).toMatchObject({
+    tone: 'victory',
+    title: 'The Hollow King has fallen',
+    detail: 'Contributors can collect their personal rewards',
+  });
+});

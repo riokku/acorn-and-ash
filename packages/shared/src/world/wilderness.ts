@@ -1,3 +1,4 @@
+import { inKingsHold, KING_REMNANTS } from './hollow-king';
 import { nearSurveySite } from './sunreach-survey';
 import { plainsPassAt, buildHighPlainsRocks, PLAINS_DENS, plainsAllowsTree } from './high-plains';
 import { PROP_KINDS } from '../data/props';
@@ -177,6 +178,13 @@ export function buildWilderness(
       basinDepthAt(lake, prop.x, prop.z) <= -LAKE_PROP_CLEARANCE &&
       !nearStream(stream, prop.x, prop.z, STREAM_PROP_CLEARANCE + PROP_STREAM_MARGIN) &&
       !blocksForestTrail(prop) &&
+      !inKingsHold(prop.x, prop.z, 4) &&
+      !KING_REMNANTS.some(
+        (site) =>
+          site.kind === 'wanderer' &&
+          Math.hypot(prop.x - (site.x - 2.8), prop.z - (site.z + 2.7)) <
+            1.5 + PROP_KINDS[prop.kind].colliderRadius * prop.scale,
+      ) &&
       !nearSurveySite(prop.x, prop.z, PROP_KINDS[prop.kind].colliderRadius * prop.scale) &&
       !PLAINS_DENS.some(
         (den) =>

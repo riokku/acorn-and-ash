@@ -393,7 +393,7 @@ export class World extends DurableObject<WorldEnv> {
     // Any skeletons already out there, so they show up with the right look.
     server.send(encodeRaiders(simulation.raidersList()));
     for (const raider of simulation.raidersList())
-      if (raider.kind === 'sentinel' || raider.kind === 'captain')
+      if (raider.kind === 'sentinel' || raider.kind === 'captain' || raider.kind === 'hollowKing')
         server.send(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     server.send(encodeHunger({ netId, hunger: simulation.hungerOf(netId), ate: null }));
     server.send(
@@ -972,21 +972,25 @@ export class World extends DurableObject<WorldEnv> {
    * somebody is here to fight it.
    */
   private savedEncounterRest = '[]';
+  private savedBossRestUntilMs = 0;
 
   private announceRaids(simulation: WorldSimulation): void {
     if (simulation.drainRaidersChanged()) {
       const rest = JSON.stringify(simulation.encounterRestState());
-      if (rest !== this.savedEncounterRest) {
+      const bossRest = simulation.worldBossRestUntilMs();
+      if (rest !== this.savedEncounterRest || bossRest !== this.savedBossRestUntilMs) {
         this.ctx.storage.transactionSync(() => {
           this.writeMeta('encounterRest', rest);
+          this.writeMeta('worldBossRestUntilMs', String(bossRest));
           this.writeMeta('tick', String(simulation.tick));
           this.writeMeta('wildfire', simulation.wildfire.save());
         });
         this.savedEncounterRest = rest;
+        this.savedBossRestUntilMs = bossRest;
       }
       this.broadcast(encodeRaiders(simulation.raidersList()));
       for (const raider of simulation.raidersList())
-        if (raider.kind === 'sentinel' || raider.kind === 'captain')
+        if (raider.kind === 'sentinel' || raider.kind === 'captain' || raider.kind === 'hollowKing')
           this.broadcast(encodeRaiderVitals(raider.id, simulation.raids.maxHitsOf(raider.id)));
     }
     for (const hit of simulation.drainRaiderHits()) this.broadcast(encodeRaiderHit(hit));
@@ -1937,6 +1941,9 @@ export class World extends DurableObject<WorldEnv> {
     simulation.initializeTreasures(savedTreasure);
     if (savedTreasure === null)
       this.writeMeta('buried-treasure-v1', JSON.stringify(simulation.savedTreasures()));
+    const bossRest = Number(this.readMeta('worldBossRestUntilMs') ?? 0);
+    simulation.restoreWorldBossRestUntilMs(bossRest);
+    this.savedBossRestUntilMs = simulation.worldBossRestUntilMs();
     const encounterRest = this.readMeta('encounterRest');
     this.savedEncounterRest = encounterRest ?? '[]';
     if (encounterRest !== null) {
@@ -3148,6 +3155,7 @@ export class World extends DurableObject<WorldEnv> {
     this.writeMeta('tick', String(simulation.tick));
     this.writeMeta('wildfire', simulation.wildfire.save());
     this.writeMeta('encounterRest', JSON.stringify(simulation.encounterRestState()));
+    this.writeMeta('worldBossRestUntilMs', String(simulation.worldBossRestUntilMs()));
     // Trees are written the moment they change; this only catches anything left over.
     for (const tree of simulation.persistableTrees(simulation.drainTreeChanges())) {
       this.writeTree(tree);

@@ -77,7 +77,7 @@ export const DODGE = {
  * How quickly a raider draws back before a combo's first swing (see
  * `ActionKind.Windup`), as its `step`: steady, quick or heavy.
  */
-export const WindupPace = { Steady: 0, Quick: 1, Heavy: 2 } as const;
+export const WindupPace = { Steady: 0, Quick: 1, Heavy: 2, Titanic: 3 } as const;
 export type WindupPace = (typeof WindupPace)[keyof typeof WindupPace];
 
 /**
@@ -86,7 +86,7 @@ export type WindupPace = (typeof WindupPace)[keyof typeof WindupPace];
  * from: the quickest still gives the swing as long again as it takes to
  * land, the rest well over half a second all told.
  */
-export const WINDUP_TICKS: readonly [number, number, number] = [10, 7, 13];
+export const WINDUP_TICKS: readonly [number, number, number, number] = [10, 7, 13, 26];
 
 /** Taking a hit: a flinch that stops whatever you were doing. A dodge gets you out of it. */
 export const FLINCH = { planted: 4, end: 12 } as const;

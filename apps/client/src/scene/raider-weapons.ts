@@ -141,6 +141,7 @@ function buildWeapon(kind: RaiderKindId): CharacterWeapon {
         parts: blade({ length: 0.46, grip: 0.11, width: 0.055, guard: 0.12, steel: STEEL }),
         length: 0.46,
       };
+    case 'hollowKing':
     case 'captain':
     case 'sentinel':
       return {
