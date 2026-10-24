@@ -1,3 +1,4 @@
+import { LOOT_INTENT_TICKS } from './loot-intent';
 import { directionalBiteHits, stalkingDirection } from './animal-tactics';
 import { equipmentDodgeCooldown, equipmentOpeningPower } from '../data/equipment-specialties';
 import {
@@ -1061,6 +1062,7 @@ interface PlayerRuntime {
    */
   pendingBuild: BuildRequest | null;
   pendingLoot: LootRequest | null;
+  pendingLootExpiresAtTick: number;
   /** Their line in the water, if they have one out. */
   cast: Cast | null;
   lastProcessedSeq: number;
@@ -2162,6 +2164,7 @@ export class WorldSimulation {
       pickupRefused: false,
       pendingBuild: null,
       pendingLoot: null,
+      pendingLootExpiresAtTick: 0,
       cast: null,
       reel: null,
       fishRecords: fishRecordsFromSaved(saved?.fishRecords),
@@ -2366,7 +2369,8 @@ export class WorldSimulation {
       request.id > 65535
     )
       return;
-    runtime.pendingLoot = request;
+    runtime.pendingLoot = { ...request };
+    runtime.pendingLootExpiresAtTick = this.tick + LOOT_INTENT_TICKS;
   }
 
   /** Ask to build something at a particular spot, next tick. */
@@ -2673,15 +2677,17 @@ export class WorldSimulation {
         // picked out for.
         if (runtime.space === OUTDOORS && runtime.health > 0)
           this.findDiscoveries(runtime, scratch.position);
+        if (this.tick > runtime.pendingLootExpiresAtTick) runtime.pendingLoot = null;
         const loot = runtime.pendingLoot;
-        runtime.pendingLoot = null;
         if (loot !== null) {
           if (
             runtime.space === OUTDOORS &&
             isFreeToInteract(runtime.action) &&
             runtime.cast === null &&
-            runtime.health > 0
+            runtime.health > 0 &&
+            (loot.kind !== 'patch' || runtime.swingCooldownTicks === 0)
           ) {
+            runtime.pendingLoot = null;
             runtime.pickupRefused = false;
             if (loot.kind === 'pickup') this.tryPickup(runtime, scratch.position, loot.id);
             if (loot.kind === 'pile') this.tryPickUpPile(runtime, scratch.position, loot.id);
@@ -2702,7 +2708,7 @@ export class WorldSimulation {
           } else if (!hungryWithFood && place !== null && this.isRestingPlaceFree(runtime, place)) {
             this.settleInto(runtime, scratch, place);
             aim.yaw = scratch.facingYaw;
-          } else {
+          } else if (wantsToToggleCampfire) {
             this.tryEat(runtime);
           }
         } else if (
@@ -2741,7 +2747,7 @@ export class WorldSimulation {
                   this.nowMs,
                   wantsToToggleCampfire,
                 );
-                if (!nearCampfire) this.tryEat(runtime);
+                if (!nearCampfire && wantsToToggleCampfire) this.tryEat(runtime);
               }
             }
           }
@@ -2926,6 +2932,7 @@ export class WorldSimulation {
     spot: PlacedSpot,
   ): void {
     runtime.space = space;
+    runtime.pendingLoot = null;
     runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
     // A line out comes in, and whatever they were in the middle of is let
     // go: neither survives a doorway.
@@ -5356,6 +5363,7 @@ export class WorldSimulation {
       : remaining;
 
     if (knockedOut) {
+      runtime.pendingLoot = null;
       runtime.warmth = warmthFromSaved(null);
       // Only this death's belongings can be reclaimed, even when there is
       // nothing new to bury. Stable ownership also covers a reconnect.

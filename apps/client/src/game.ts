@@ -1,3 +1,4 @@
+import { canBufferLoot } from '@acorn/shared';
 import { equipmentDodgeCooldown } from '@acorn/shared';
 import {
   SUNREACH_SURVEY,
@@ -4835,7 +4836,11 @@ export class Game {
       return 'Blocked by terrain · move around it';
     if (
       this.localPlayer !== null &&
-      (!isFreeToInteract(this.localPlayer.action) || this.fishingPhase !== null)
+      (!canBufferLoot(
+        this.localPlayer.action,
+        toolKind(this.equipped.get(this.selfNetId) ?? null) === 'shovel',
+      ) ||
+        this.fishingPhase !== null)
     )
       return 'Finish your current action first';
     const pack = inventoryFromEntries(this.carrying);
@@ -5394,6 +5399,7 @@ export class Game {
       targetItem !== undefined && roomFor(inventoryFromEntries(this.carrying), targetItem) === 0;
     this.gatheringFocus.setTarget(
       isFreeToInteract(action) &&
+        this.nearbyDiscoveryName() === null &&
         this.playing &&
         !this.inventoryOpen &&
         !this.mapOpen &&

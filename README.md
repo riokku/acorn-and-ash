@@ -1768,3 +1768,9 @@ after attacking (heavier enemies generally recover longer), allowing dodges and
 iron-sword counters. Flinch escapes and group turn-taking remain in place.
 Inspect held coyote poses in `?gallery=high-plains&view=tactics&pose=windup`
 (or `pose=bite` / `pose=recovery`).
+
+Pickup clicks have a short 250 ms grace period when an action or gathering
+cooldown is about to end. They remain tied to the clicked item and still require
+reach and backpack space. Holding E can gather repeatedly; eating requires a new
+press, so finishing a patch cannot consume the food in your hand. Context prompts
+match the actual inspection, pickup and cooking priority.

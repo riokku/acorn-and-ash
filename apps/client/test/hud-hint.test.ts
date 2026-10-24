@@ -1,4 +1,12 @@
-import { HEALTH_MAX, HUNGER_MAX, calendarAt, clockShiftForSeason } from '@acorn/shared';
+import {
+  HEALTH_MAX,
+  HUNGER_MAX,
+  calendarAt,
+  clockShiftForSeason,
+  emptyExpedition,
+  SUNREACH_SURVEY,
+  SUNREACH_EXPEDITION_ID,
+} from '@acorn/shared';
 import { describe, expect, it } from 'vitest';
 
 import { curtainMessage, hint } from '../src/hud/Hud';
@@ -725,4 +733,39 @@ it('explains the shovel requirement and preserves recovery priority beside treas
   expect(hint({ ...BASE_STATE, nearTreasure: 'shovel', nearBuriedCache: true })).toBe(
     'Press E to recover belongings · leftovers stay safely here',
   );
+});
+
+it('matches inspection and loot priority before cooking or eating', () => {
+  const state = {
+    ...BASE_STATE,
+    hunger: 0,
+    equippedItem: 'perch' as const,
+    carrying: [{ item: 'perch' as const, count: 1 }],
+    nearCampfire: 'lit' as const,
+  };
+  expect(hint({ ...state, nearbyPile: { item: 'log', count: 2 } })).toBe(
+    'Right-click or press E to pick up 2 logs',
+  );
+  expect(hint({ ...state, nearbyItem: 'stick', nearbyDiscovery: 'The forgotten camp' })).toBe(
+    'Press E to inspect the forgotten camp',
+  );
+  expect(hint({ ...state, craftMenuOpen: true, journalTab: 'discoveries' })).toBe(
+    'Follow a lead · C to close',
+  );
+});
+
+it('shows a survey tool requirement directly instead of asking to inspect an instruction', () => {
+  const state = {
+    ...BASE_STATE,
+    position: { ...SUNREACH_SURVEY[2], y: 20 },
+    expedition: {
+      ...emptyExpedition(),
+      active: SUNREACH_EXPEDITION_ID,
+      progress: [1, 1, 0],
+      offers: [0, 11, 8],
+      notice: 'none' as const,
+    },
+  };
+  expect(hint(state)).toBe('Equip a shovel to open the survey vault.');
+  expect(hint({ ...state, equippedItem: 'shovel' })).toBe('Press E to dig up the survey vault');
 });
