@@ -34,7 +34,7 @@ it('remembers a clicked pickup through the end of a brief action, collecting it 
   const { sim, axe, step } = setup();
   const action = sim.actionOf(1)!;
   beginAction(action, ActionKind.Flinch);
-  action.age = 10;
+  for (let tick = 0; tick < 10; tick++) step();
   sim.requestLoot(1, { kind: 'pickup', id: axe.id });
   step();
   expect(sim.inventoryOf(1).axe).toBeUndefined();
@@ -49,7 +49,7 @@ it.each(['expire', 'outOfReach', 'reconnect'] as const)(
     const { sim, axe, step } = setup();
     const action = sim.actionOf(1)!;
     beginAction(action, ActionKind.Flinch);
-    action.age = reason === 'expire' ? 0 : 10;
+    if (reason !== 'expire') for (let tick = 0; tick < 10; tick++) step();
     sim.requestLoot(1, { kind: 'pickup', id: axe.id });
     if (reason === 'outOfReach') sim.placePlayer(1, { x: 20, y: 0, z: 20 }, 0);
     if (reason === 'reconnect') sim.handOver(1);

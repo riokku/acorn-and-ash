@@ -18,8 +18,9 @@ test('requires a shovel for treasure and preserves a partial find', async ({ pag
     facingYaw: 0,
     hunger: 100,
     equippedItem: 'axe',
+    worn: [{ slot: 'mainHand', item: 'axe' }],
     items: [
-      { item: 'axe', count: 1 },
+      { item: 'stone', count: 10 },
       { item: 'shovel', count: 1 },
       { item: 'rod', count: 1 },
       { item: 'torch', count: 1 },
@@ -39,6 +40,7 @@ test('requires a shovel for treasure and preserves a partial find', async ({ pag
     refresh = () => {
       send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
       send(shared.encodeEquipped(sim.equippedList()));
+      send(shared.encodeWorn(sim.wornList()));
       send(shared.encodeTreasure(sim.treasureSpots()));
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
@@ -52,6 +54,11 @@ test('requires a shovel for treasure and preserves a partial find', async ({ pag
       if (request?.type === 'ping') send(shared.encodePong(request.clientTimeMs, Date.now()));
       if (request?.type === 'useItem') {
         sim.useItem(1, request.item);
+        refresh();
+      }
+      if (request?.type === 'gear' && request.action === 'wear') {
+        const change = sim.wearGear(1, request.item, request.slot);
+        if (!change.ok) send(shared.encodeGearRefused(change.reason));
         refresh();
       }
       if (request?.type === 'input') {
