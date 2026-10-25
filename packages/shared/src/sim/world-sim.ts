@@ -1,3 +1,4 @@
+import { stepWildlifeAwareness, wildlifeNoticeRadius } from './wildlife-awareness';
 import { CROWNBREAKER_HOLD, KING_REMNANTS } from '../world/hollow-king';
 import { streamWaterDepthAt } from '../world/stream';
 import { wildlifeCover, wildlifePauseMs, fleePastCover } from './wildlife-habitat';
@@ -1153,6 +1154,8 @@ interface AnimalRuntime {
   readonly denZ: number;
   /** Aware of, and reacting to, the nearest player - fleeing for prey, chasing for a threat. */
   engaged: boolean;
+  awareness: number;
+  attentive: boolean;
   /** Where it is ambling toward, while calm. Meaningless while engaged. */
   targetX: number;
   targetZ: number;
@@ -2081,6 +2084,8 @@ export class WorldSimulation {
       denX: den.x,
       denZ: den.z,
       engaged: false,
+      awareness: 0,
+      attentive: false,
       // Starting already "arrived" makes the first tick draw a real wander
       // target rather than needing a special case for a fresh spawn.
       targetX: den.x,
@@ -3148,6 +3153,8 @@ export class WorldSimulation {
           runtime.caught = false;
           runtime.trailCount = 0;
           runtime.engaged = false;
+          runtime.awareness = 0;
+          runtime.attentive = false;
           runtime.attackState = 'none';
           runtime.attackTargetNetId = null;
           runtime.circled = false;
@@ -3173,12 +3180,11 @@ export class WorldSimulation {
           return;
         }
 
-        const nearestPlayer = this.nearestPlayerRuntime(position);
-        const nearestPosition = nearestPlayer?.entity.get(Position) ?? null;
-        const nearestDistance =
-          nearestPosition === null ? Infinity : horizontalDistance(position, nearestPosition);
-
         if (kind.threat !== undefined) {
+          const nearestPlayer = this.nearestPlayerRuntime(position);
+          const nearestPosition = nearestPlayer?.entity.get(Position) ?? null;
+          const nearestDistance =
+            nearestPosition === null ? Infinity : horizontalDistance(position, nearestPosition);
           this.stepThreatAnimal(
             runtime,
             kind,
@@ -3193,27 +3199,49 @@ export class WorldSimulation {
           return;
         }
 
-        // A fox hunting a rabbit is exactly as alarming to that rabbit as a
-        // player would be, so fleeing weighs whichever of the two is nearer.
+        // Compare every player's approach: a quiet observer must not mask a
+        // slightly more distant runner. Threats retain their combat detection.
+        const approach = this.mostNoticeablePlayer(position, kind, runtime.engaged);
+        const playerPosition = approach?.player.entity.get(Position) ?? null;
+        const playerDistance =
+          playerPosition === null ? Infinity : horizontalDistance(position, playerPosition);
         const nearestPredator = this.nearestPredatorRuntime(runtime.kind, position);
         const predatorPosition = nearestPredator?.entity.get(Position) ?? null;
         const predatorDistance =
           predatorPosition === null ? Infinity : horizontalDistance(position, predatorPosition);
-        const fleeFromPlayer = nearestDistance <= predatorDistance;
-        const alarmDistance = Math.min(nearestDistance, predatorDistance);
-        const alarmPosition = fleeFromPlayer ? nearestPosition : predatorPosition;
-
-        runtime.engaged = shouldFlee(runtime.engaged, alarmDistance, kind);
+        const predatorAlarm = shouldFlee(runtime.engaged, predatorDistance, kind);
+        const awareness =
+          kind.fleeSpeed === undefined
+            ? {
+                awareness: 0,
+                attentive: false,
+                fleeing: shouldFlee(runtime.engaged, playerDistance, kind),
+              }
+            : stepWildlifeAwareness(
+                runtime.awareness,
+                runtime.engaged,
+                playerDistance,
+                approach?.speed ?? 0,
+                kind,
+                TICK_SECONDS,
+              );
+        runtime.awareness = predatorAlarm ? 0 : awareness.awareness;
+        runtime.attentive = awareness.attentive;
+        runtime.engaged = predatorAlarm || awareness.fleeing;
+        const alarmPosition =
+          predatorAlarm && (predatorDistance < playerDistance || !awareness.fleeing)
+            ? predatorPosition
+            : playerPosition;
 
         let direction: Direction2D;
         let speed: number;
-        if (runtime.kind === 'curiousRaccoon' && runtime.engaged && nearestPosition !== null) {
+        if (runtime.kind === 'curiousRaccoon' && runtime.engaged && playerPosition !== null) {
           direction = towardDirection(position.x, position.z, runtime.denX, runtime.denZ);
           speed = Math.hypot(position.x - runtime.denX, position.z - runtime.denZ) > 1.2 ? 0.85 : 0;
           if (speed === 0)
             facing.yaw = Math.atan2(
-              -(nearestPosition.x - position.x),
-              -(nearestPosition.z - position.z),
+              -(playerPosition.x - position.x),
+              -(playerPosition.z - position.z),
             );
         } else if (runtime.engaged && alarmPosition !== null) {
           direction = fleePastCover(
@@ -3222,6 +3250,18 @@ export class WorldSimulation {
             runtime.cover,
           );
           speed = kind.fleeSpeed ?? 0;
+        } else if (runtime.attentive && playerPosition !== null) {
+          direction = { x: 0, z: 0 };
+          speed = 0;
+          const targetYaw = Math.atan2(
+            -(playerPosition.x - position.x),
+            -(playerPosition.z - position.z),
+          );
+          const turn = Math.atan2(
+            Math.sin(targetYaw - facing.yaw),
+            Math.cos(targetYaw - facing.yaw),
+          );
+          facing.yaw += Math.max(-0.12, Math.min(0.12, turn));
         } else if (wet && kind.seeksRockShelter && runtime.cover !== null) {
           direction = towardDirection(position.x, position.z, runtime.cover.x, runtime.cover.z);
           speed =
@@ -3491,6 +3531,35 @@ export class WorldSimulation {
       }
     }
     return towardDirection(position.x, position.z, runtime.targetX, runtime.targetZ);
+  }
+
+  /** Most noticeable outdoor source, normalized by how far its movement carries. */
+  private mostNoticeablePlayer(
+    from: Readonly<Vec3>,
+    kind: AnimalKind,
+    fleeing: boolean,
+  ): { player: PlayerRuntime; speed: number } | null {
+    let best: { player: PlayerRuntime; speed: number } | null = null;
+    let bestScore = Infinity;
+    for (const player of this.players.values()) {
+      if (player.space !== OUTDOORS || isDown(player.action)) continue;
+      const at = player.entity.get(Position);
+      const velocity = player.entity.get(Velocity);
+      if (at === undefined || velocity === undefined) continue;
+      const speed = Math.hypot(velocity.x, velocity.z);
+      const distance = horizontalDistance(from, at);
+      const score =
+        fleeing || kind.fleeSpeed === undefined
+          ? distance
+          : distance < 1.8
+            ? distance - 100
+            : distance / wildlifeNoticeRadius(kind, speed);
+      if (score < bestScore) {
+        bestScore = score;
+        best = { player, speed };
+      }
+    }
+    return best;
   }
 
   /** The nearest connected player to a point, as their whole runtime, or null in an empty world. */
@@ -7528,7 +7597,7 @@ export class WorldSimulation {
           flags: SnapshotFlag.Animal | (speedSquared > 0.04 ? SnapshotFlag.Moving : 0),
           action: animal?.caught
             ? 8
-            : (animal?.engaged ? 4 : 0) |
+            : (animal?.engaged || animal?.attentive ? 4 : 0) |
               (animal?.attackState === 'windup' ? 1 : animal?.attackState === 'cooldown' ? 2 : 0),
           actionAge:
             animal?.attackState === 'cooldown'
