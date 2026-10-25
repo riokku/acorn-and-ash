@@ -88,7 +88,12 @@ it('counts only real town contributors and pays the helm once on claiming at hom
   sim.queueInput(1, createInput(2, 0, 0, 0, 0));
   sim.step(3050);
   expect(sim.expeditionStateOf(1).progress).toEqual([1, 0, 0]);
-  const residents = sim.raidersList();
+  // Approach guards can now be awake nearby too; this expedition counts the town.
+  const positions = new Map(sim.snapshotFor(1).map((entity) => [entity.netId, entity]));
+  const residents = sim.raidersList().filter((raider) => {
+    const p = positions.get(raider.id);
+    return p && Math.abs(p.x - SKELETON_TOWN.x) < 26 && Math.abs(p.z - SKELETON_TOWN.z) < 26;
+  });
   expect(residents).toHaveLength(13);
   const captain = residents.find((r) => r.kind === 'captain')!;
   for (const r of residents) sim.raids.placeRaider(r.id, { ...at, x: at.x + 45 }, 0);
