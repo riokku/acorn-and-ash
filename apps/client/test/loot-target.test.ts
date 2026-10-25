@@ -158,3 +158,38 @@ it('preserves candidate priority when a visible child belongs to overlapping tar
   expect(lootUnderRay(ray(), [parent, child], [])).toBe(parent);
   expect(lootUnderRay(ray(), [child, parent], [])).toBe(child);
 });
+
+it('retains nearly coincident hover targets but releases removed, hidden or clearly farther items', () => {
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 0, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const near = loot(71, 0),
+    previous = loot(72, -0.02),
+    caster = new THREE.Raycaster();
+  const query = (targets = [near, previous], blockers: THREE.Object3D[] = []) =>
+    lootUnderCursor(
+      caster,
+      { x: 400, y: 400 },
+      { width: 800, height: 800 },
+      camera,
+      targets,
+      blockers,
+      previous.request,
+    );
+  expect(query()).toBe(previous);
+  expect(query([previous, near])).toBe(previous);
+  expect(query([near])).toBe(near);
+  previous.object.visible = false;
+  expect(query()).toBe(near);
+  previous.object.visible = true;
+  previous.object.position.z = -0.3;
+  expect(query()).toBe(near);
+  previous.object.position.z = -0.02;
+  const blocker = box(2);
+  blocker.visible = false;
+  expect(query(undefined, [blocker])).toBeNull();
+  expect(caster.far).toBe(Infinity);
+  previous.object.position.x = 5;
+  expect(query()).toBe(near);
+});

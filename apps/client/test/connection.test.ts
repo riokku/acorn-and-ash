@@ -142,6 +142,7 @@ describe('staying connected to the world', () => {
 
   it.each([
     ['craft', (c: WorldConnection) => c.sendCraft('rope')],
+    ['loot', (c: WorldConnection) => c.sendLoot({ kind: 'pile', id: 7 })],
     ['useItem', (c: WorldConnection) => c.sendUseItem('axe')],
     ['build', (c: WorldConnection) => c.sendBuild({ kind: 'tent', x: 0, z: -4, yaw: 0 })],
     [
