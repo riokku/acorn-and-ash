@@ -130,6 +130,7 @@ describe('nearby grass cover', { timeout: 15_000 }, () => {
       let maxTone = -Infinity;
       let maxLean = -Infinity;
       let minBladeShare = Infinity;
+      let maxBladeShare = -Infinity;
       for (let i = 0; i < grass.mesh.count; i++) {
         grass.mesh.getMatrixAt(i, matrix);
         matrix.decompose(position, spin, size);
@@ -144,12 +145,15 @@ describe('nearby grass cover', { timeout: 15_000 }, () => {
         maxTone = Math.max(maxTone, looks.getX(i));
         maxLean = Math.max(maxLean, looks.getY(i));
         minBladeShare = Math.min(minBladeShare, looks.getW(i));
+        maxBladeShare = Math.max(maxBladeShare, looks.getW(i));
       }
       expect(tallest).toBeLessThanOrEqual(1.8001);
       expect(minTone).toBeGreaterThanOrEqual(0);
       expect(maxTone).toBeLessThanOrEqual(1);
       expect(maxLean).toBeLessThanOrEqual(0.12);
-      expect(minBladeShare).toBeGreaterThan(0.5);
+      // Sheltered clumps now bend less, while all response stays positive and bounded.
+      expect(minBladeShare).toBeGreaterThan(0.2);
+      expect(maxBladeShare).toBeLessThanOrEqual(1.5);
       const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
       const share = (values: number[], test: (value: number) => boolean) =>
         values.filter(test).length / values.length;
