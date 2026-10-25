@@ -70,3 +70,18 @@ it('celebrates the world boss and explains contributor rewards', () => {
     detail: 'Contributors can collect their personal rewards',
   });
 });
+
+it('does not confuse clearing an approach watchpost with defeating the king', () => {
+  const cleared: RaidNews = {
+    kind: 'encounterCleared',
+    raidId: 1,
+    targetNetId: 1,
+    count: 3,
+    x: 217,
+    z: 187,
+  };
+  expect(raidBannerFor(cleared, null, null, 1).title).toBe('The glade is quiet again');
+  expect(raidBannerFor({ ...cleared, x: 246, z: 212 }, null, null, 2).title).toBe(
+    'The Hollow King has fallen',
+  );
+});

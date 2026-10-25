@@ -47,6 +47,7 @@ export interface FirePanelState {
   readonly y: number;
 }
 export interface HudState {
+  readonly strongholdApproach?: { title: string; detail: string } | null;
   readonly allies?: readonly (AllyView & { name: string; self: boolean })[];
   readonly worldBoss?: {
     readonly health: number;

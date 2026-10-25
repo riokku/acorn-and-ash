@@ -1,5 +1,5 @@
 import { highPlainsWeight, highPlainsSand, plainsPassAt } from '@acorn/shared';
-import { townPathCoverage } from '@acorn/shared';
+import { kingsRoadCoverage, townPathCoverage } from '@acorn/shared';
 /**
  * How the ground looks at any spot, worked out once from the world itself
  * rather than painted by hand (see decision 0053).
@@ -190,6 +190,7 @@ export function createGroundShader(context: GroundContext): GroundShader {
         plains * 0.25 + duneSand * 0.65,
         (1 - smoothstep(2, 3.5, plainsPassAt(x, z).distance)) * 0.55,
         townPathCoverage(x, z),
+        kingsRoadCoverage(x, z),
         forestTrailCoverage(x, z),
         sand,
         clamp01(

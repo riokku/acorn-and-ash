@@ -1803,3 +1803,10 @@ ally is nearby when you are knocked out, they have 15 seconds to reach you: hold
 being hit or releasing E interrupts the rescue. Your buried belongings stay where
 you fell. Solo knockouts retain the usual quick return home. The Hollow King’s
 cleave and full-circle whirlwind also have distinct ground and text warnings.
+
+The **King’s Road** now leads from Bonehollow’s southern edge through two ruined
+watchposts to **the Last Muster**, a broad gathering point outside the Hollow
+King’s aggression range. Scouts give way to a mixed armored guard; both groups
+can be escaped and neither is a mandatory gate. Cairns, pennants, worn earth and
+brief location cues mark the route. Inspect the real scenery at
+`/?gallery=crownbreaker`, or add `&view=muster` for the ground-level reveal.

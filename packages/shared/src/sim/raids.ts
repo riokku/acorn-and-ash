@@ -1,3 +1,4 @@
+import { KING_APPROACH_LINEUPS } from '../world/kings-road';
 import { HOLLOW_KING, hollowKingAttack, hollowKingToughness } from '../data/world-boss';
 import { equipmentOpeningPower } from '../data/equipment-specialties';
 import { TOWN_DISTRICTS } from '../world/skeleton-town';
@@ -918,7 +919,10 @@ export class RaidDirector {
     if (this.tick % TICK_HZ !== 0) return;
     let active = [...this.raids.values()].filter(
       (raid) =>
-        raid.encounter !== undefined && !raid.encounter.townDistrict && !raid.encounter.worldBoss,
+        raid.encounter !== undefined &&
+        !raid.encounter.townDistrict &&
+        !raid.encounter.worldBoss &&
+        !raid.encounter.strongholdStage,
     ).length;
     for (const site of this.encounterSites) {
       const existing = [...this.raids.values()].find((raid) => raid.encounter?.id === site.id);
@@ -938,17 +942,20 @@ export class RaidDirector {
           (raid) => raid.encounter?.townDistrict,
         ).length;
         if (townActive >= TOWN_DISTRICTS.length) continue;
-      } else if (!site.worldBoss && active >= ENCOUNTER_RULES.maxActive) continue;
+      } else if (!site.worldBoss && !site.strongholdStage && active >= ENCOUNTER_RULES.maxActive)
+        continue;
       // Keep one exploration slot available for a night patrol.
       if (
         !site.townDistrict &&
         !site.worldBoss &&
+        !site.strongholdStage &&
         site.kind !== 'patrol' &&
         [...this.raids.values()].filter(
           (raid) =>
             raid.encounter !== undefined &&
             !raid.encounter.townDistrict &&
             !raid.encounter.worldBoss &&
+            !raid.encounter.strongholdStage &&
             raid.encounter.kind !== 'patrol',
         ).length >= 2
       )
@@ -993,8 +1000,15 @@ export class RaidDirector {
         ? (['hollowKing'] as const)
         : site.townDistrict
           ? TOWN_DISTRICTS.find((district) => district.name === site.townDistrict)!.lineup
-          : ENCOUNTER_LINEUPS[site.kind];
-      if (this.startRaid(0, lineup, night, site) !== null && !site.townDistrict && !site.worldBoss)
+          : site.strongholdStage
+            ? KING_APPROACH_LINEUPS[site.strongholdStage]
+            : ENCOUNTER_LINEUPS[site.kind];
+      if (
+        this.startRaid(0, lineup, night, site) !== null &&
+        !site.townDistrict &&
+        !site.worldBoss &&
+        !site.strongholdStage
+      )
         active++;
     }
   }
@@ -1185,8 +1199,8 @@ export class RaidDirector {
       raidId: raid.id,
       targetNetId: raid.targetNetId,
       count: raid.beaten,
-      x,
-      z,
+      x: raid.encounter?.worldBoss ? raid.encounter.x : x,
+      z: raid.encounter?.worldBoss ? raid.encounter.z : z,
     });
   }
 

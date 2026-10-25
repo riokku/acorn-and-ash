@@ -254,7 +254,7 @@ export class RaiderCrowd {
       if (kind !== 'hollowKing') continue;
       const pose = this.positions.poseOf(id);
       const health = this.hitsLeft.get(id) ?? RAIDER_KINDS[kind].toughness;
-      if (!pose || health <= 0 || Math.hypot(pose.x - at.x, pose.z - at.z) > 60) continue;
+      if (!pose || health <= 0 || Math.hypot(pose.x - at.x, pose.z - at.z) > 32) continue;
       return {
         health,
         maxHealth: this.maximumHits.get(id) ?? RAIDER_KINDS[kind].toughness,

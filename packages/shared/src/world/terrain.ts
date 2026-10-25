@@ -1,3 +1,4 @@
+import { kingsRoadAt, kingsRoadHeight } from './kings-road';
 import { CROWNBREAKER_HOLD, kingsHoldGround } from './hollow-king';
 import { highPlainsHeightAt } from './high-plains';
 import { SKELETON_TOWN, townGroundHeight } from './skeleton-town';
@@ -95,12 +96,18 @@ export function wildernessHeightAt(
     Math.abs(x - CROWNBREAKER_HOLD.x) < 42 && Math.abs(z - CROWNBREAKER_HOLD.z) < 42
       ? hillsHeightAt(seed, CROWNBREAKER_HOLD.x, CROWNBREAKER_HOLD.z)
       : relief;
-  const upland = highPlainsHeightAt(
-    seed,
-    x,
-    z,
-    kingsHoldGround(x, z, townGroundHeight(x, z, relief, townLevel), kingLevel),
-  );
+  const settled = kingsHoldGround(x, z, townGroundHeight(x, z, relief, townLevel), kingLevel);
+  const roadGround =
+    kingsRoadAt(x, z) === null
+      ? settled
+      : kingsRoadHeight(
+          x,
+          z,
+          settled,
+          hillsHeightAt(seed, SKELETON_TOWN.x, SKELETON_TOWN.z),
+          hillsHeightAt(seed, CROWNBREAKER_HOLD.x, CROWNBREAKER_HOLD.z),
+        );
+  const upland = highPlainsHeightAt(seed, x, z, roadGround);
   // Water retains final authority over beds and banks, including the pass approach.
   const ground = shapeWater(lake, stream, x, z, upland);
   if (forestTrailAt(x, z) === null) return ground;

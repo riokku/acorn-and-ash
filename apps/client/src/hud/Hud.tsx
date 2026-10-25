@@ -440,6 +440,13 @@ export function Hud({
           <span>{Math.ceil(state.meal.ticksLeft / TICK_HZ / 60)} min</span>
         </div>
       ) : null}
+      {showingWorld && state.strongholdApproach && !state.worldBoss ? (
+        <aside className="stronghold-approach" role="status" key={state.strongholdApproach.title}>
+          <small>BEYOND BONEHOLLOW</small>
+          <strong>{state.strongholdApproach.title}</strong>
+          <span>{state.strongholdApproach.detail}</span>
+        </aside>
+      ) : null}
       {showingWorld ? <Allies allies={state.allies ?? []} /> : null}
       {showingWorld && state.worldBoss ? <WorldBossBar boss={state.worldBoss} /> : null}
       {showingWorld && state.raidBanner !== null && !state.worldBoss ? (
