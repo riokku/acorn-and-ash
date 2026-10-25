@@ -7,7 +7,12 @@ export function WorldBossBar({
 }): React.JSX.Element {
   const fraction = Math.max(0, Math.min(1, boss.health / boss.maxHealth));
   return (
-    <aside className="world-boss" data-testid="world-boss" aria-label="The Hollow King encounter">
+    <aside
+      data-attack={boss.attack ?? 'none'}
+      className="world-boss"
+      data-testid="world-boss"
+      aria-label="The Hollow King encounter"
+    >
       <small>WORLD BOSS · 3–5 PREPARED PLAYERS</small>
       <strong>The Hollow King</strong>
       <div
@@ -23,9 +28,13 @@ export function WorldBossBar({
       <span>
         {boss.awakening
           ? 'The king awakens…'
-          : fraction <= 0.5
-            ? 'Enraged · beware the whirlwind'
-            : 'Ancient armor · counter after his attacks'}
+          : boss.attack === 'whirlwind'
+            ? 'WHIRLWIND · clear the entire circle!'
+            : boss.attack === 'cleave'
+              ? 'CLEAVE · get behind him or dodge!'
+              : fraction <= 0.5
+                ? 'Enraged · beware the whirlwind'
+                : 'Ancient armor · counter after his attacks'}
       </span>
     </aside>
   );

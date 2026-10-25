@@ -17,6 +17,12 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     hungerEmptyAfterSeconds: Infinity,
   });
   sim.addPlayer(1, undefined, 'king-visitor');
+  sim.addPlayer(2, undefined, 'king-helper');
+  sim.placePlayer(
+    2,
+    { x: start.x + 1.8, y: sim.collision.terrain.heightAt(start.x + 1.8, start.z), z: start.z },
+    0,
+  );
   sim.giveTestGear(1, ['kingsRequiem']);
   expect(sim.inventoryOf(1).kingsRequiem).toBe(1);
   sim.placePlayer(1, { ...start, y: sim.collision.terrain.heightAt(start.x, start.z) }, Math.PI);
@@ -35,6 +41,7 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
       send(shared.encodeEquipped(sim.equippedList()));
     };
     const refresh = () => {
+      send(shared.encodeAllies(sim.alliesOf(1)));
       send(shared.encodeRaiders(sim.raidersList()));
       send(shared.encodeRaiderVitals(king!.id, sim.raids.maxHitsOf(king!.id)));
       send(
@@ -44,6 +51,17 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     send(shared.encodeWelcome(1, sim.seed, 0, Date.now()));
     send(shared.encodeSpace(0, start.x, start.z, Math.PI));
     equipment();
+    send(
+      shared.encodeRoster(
+        [1, 2].map((netId) => ({
+          netId,
+          name: netId === 1 ? 'King challenger' : 'Rowan',
+          character: shared.DEFAULT_CHARACTER,
+          color: shared.DEFAULT_TINT_COLOR,
+          skin: shared.DEFAULT_SKIN_TONE,
+        })),
+      ),
+    );
     refresh();
     socket.onMessage((message) => {
       if (typeof message === 'string') return;
@@ -80,6 +98,14 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
       .poll(() => page.evaluate(() => window.acornDebug?.equippedItem()))
       .toBe('kingsRequiem');
     expect(sim.wornOf(1).mainHand).toBe('kingsRequiem');
+    (
+      sim as unknown as { raiderStrikesPlayer(id: number, damage: number, tick: number): void }
+    ).raiderStrikesPlayer(2, 1000, sim.tick);
+    await expect(page.getByTestId('allies')).toContainText('Hold E');
+    await page.keyboard.down('KeyE');
+    await expect.poll(() => sim.healthOf(2)).toBe(35);
+    await page.keyboard.up('KeyE');
+    await expect(page.getByTestId('allies')).not.toContainText('Needs help');
     await page.evaluate(({ x, z }) => window.acornDebug?.faceTowards(x, z), hold);
     await drawnScreenshot(page, testInfo.outputPath('crownbreaker-hold.png'));
     expect(errors).toEqual([]);

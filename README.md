@@ -1796,3 +1796,10 @@ receives a personal sword on victory, and it survives knockout. Its soul ribbons
 travelling blade light and rising sparks follow the weapon in the king’s hand,
 the player’s hand, on the ground and in the admin preview. Inspect it at
 `?gallery=kings-requiem` (`&before` shows the original watch greatsword).
+
+Nearby outdoor adventurers now share compact health and rescue indicators. If an
+ally is nearby when you are knocked out, they have 15 seconds to reach you: hold
+**E** within arm’s reach for three seconds to help you up with 35% health. Moving,
+being hit or releasing E interrupts the rescue. Your buried belongings stay where
+you fell. Solo knockouts retain the usual quick return home. The Hollow King’s
+cleave and full-circle whirlwind also have distinct ground and text warnings.

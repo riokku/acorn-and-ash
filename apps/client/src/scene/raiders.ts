@@ -244,7 +244,14 @@ export class RaiderCrowd {
   }
 
   /** What kind of raider this is, and how many blows it still needs, if known. */
-  worldBossNear(at: FlatPoint): { health: number; maxHealth: number; awakening: boolean } | null {
+  worldBossNear(
+    at: FlatPoint,
+  ): {
+    health: number;
+    maxHealth: number;
+    awakening: boolean;
+    attack: 'cleave' | 'whirlwind' | null;
+  } | null {
     for (const [id, kind] of this.kinds) {
       if (kind !== 'hollowKing') continue;
       const pose = this.positions.poseOf(id);
@@ -254,6 +261,12 @@ export class RaiderCrowd {
         health,
         maxHealth: this.maximumHits.get(id) ?? RAIDER_KINDS[kind].toughness,
         awakening: unpackActionByte(pose.action, this.action).kind === ActionKind.Rise,
+        attack:
+          this.action.kind === ActionKind.Charge || this.action.kind === ActionKind.Strike
+            ? 'whirlwind'
+            : this.action.kind === ActionKind.Windup || this.action.kind === ActionKind.Swing
+              ? 'cleave'
+              : null,
       };
     }
     return null;
