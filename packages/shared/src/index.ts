@@ -15,6 +15,7 @@ export * from './math/angles';
 export * from './rng';
 
 export * from './world/terrain';
+export * from './world/kings-road';
 export * from './world/pond';
 export * from './world/mountains';
 export * from './world/forest-relief';

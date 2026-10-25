@@ -412,10 +412,11 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     return;
   }
 
-  if (focus === 'forest-trails' || focus === 'high-plains') {
+  if (focus === 'forest-trails' || focus === 'high-plains' || focus === 'crownbreaker') {
+    if (focus === 'crownbreaker' && !params.has('view')) params.set('view', 'stronghold');
     if (focus === 'high-plains' && !params.has('view')) params.set('view', 'plains');
     const { showForestTrails } = await import('./forest-trails');
-    showForestTrails(renderer, scene, fireLights, params);
+    await showForestTrails(renderer, scene, fireLights, params);
     return;
   }
 

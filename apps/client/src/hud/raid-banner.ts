@@ -1,4 +1,4 @@
-import { inKingsHold, type RaidNews } from '@acorn/shared';
+import { CROWNBREAKER_HOLD, type RaidNews } from '@acorn/shared';
 
 import type { RaidBanner } from './store';
 
@@ -17,7 +17,10 @@ export function raidBannerFor(
   bearingDegrees: number | null,
   key: number,
 ): RaidBanner {
-  if (news.kind === 'encounterCleared' && inKingsHold(news.x, news.z, 8))
+  if (
+    news.kind === 'encounterCleared' &&
+    Math.hypot(news.x - CROWNBREAKER_HOLD.x, news.z - CROWNBREAKER_HOLD.z) < 1
+  )
     return {
       key,
       tone: 'victory',

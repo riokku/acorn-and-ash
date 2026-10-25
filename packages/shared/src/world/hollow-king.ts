@@ -27,6 +27,8 @@ export const KING_REMNANTS: readonly EncounterSite[] = [
   ),
   { id: 8010, kind: 'wanderer', x: 212.8, z: 183.3, yaw: 0 },
   { id: 8011, kind: 'wanderer', x: 227.8, z: 195.3, yaw: 0 },
+  { id: 8012, kind: 'patrol', x: 189, z: 163, yaw: 0 },
+  { id: 8013, kind: 'patrol', x: 223, z: 192, yaw: 0 },
 ];
 export function inKingsHold(x: number, z: number, margin = 0): boolean {
   return (

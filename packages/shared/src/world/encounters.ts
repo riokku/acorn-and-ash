@@ -1,3 +1,4 @@
+import { KING_APPROACH } from './kings-road';
 import { HOLLOW_KING_SITE } from './hollow-king';
 import { SKELETON_TOWN, TOWN_DISTRICTS, townColliders, type TownDistrict } from './skeleton-town';
 import { surfaceCollider } from '../collision/solid-surface';
@@ -20,6 +21,7 @@ export interface EncounterSite {
   readonly z: number;
   readonly yaw: number;
   readonly townDistrict?: TownDistrict;
+  readonly strongholdStage?: 'scouts' | 'watch';
   readonly worldBoss?: boolean;
   readonly noticeRadius?: number;
   readonly wakeRadius?: number;
@@ -72,6 +74,7 @@ export function buildEncounterSites(
       const z = Math.sin(angle) * distance;
       const trail = forestTrailAt(x, z);
       if (trail !== null && trail.distance < trail.halfWidth + 5) continue;
+      if (KING_APPROACH.some((site) => Math.hypot(site.x - x, site.z - z) < 24)) continue;
       if (overlapsWater(water, x, z, 4)) continue;
       if (nearStream(STREAM, x, z, 6)) continue;
       if (lake !== null && basinDepthAt(lake, x, z) > -(LAKE_SHORE_WIDTH + 4)) continue;
@@ -100,7 +103,7 @@ export function buildEncounterSites(
       yaw: 0,
     })),
   );
-  sites.push(HOLLOW_KING_SITE);
+  sites.push(...KING_APPROACH, HOLLOW_KING_SITE);
   return sites;
 }
 

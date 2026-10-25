@@ -1,3 +1,15 @@
+import {
+  ActionKind,
+  KING_APPROACH,
+  KING_APPROACH_LINEUPS,
+  KING_REMNANTS,
+  CROWNBREAKER_HOLD,
+} from '@acorn/shared';
+import { preloadRaiderModels } from '../scene/raider-model';
+import { preloadCharacterAnimations } from '../scene/character-animations';
+import { RaiderFigure } from '../scene/raider-figure';
+import { ImpactBursts } from '../scene/impact-bursts';
+import { MoveMemory } from '../scene/character-driver';
 import { createSurveyScenery } from '../scene/sunreach-survey';
 import { PLAINS_DENS } from '@acorn/shared';
 import { createCritterFor } from '../scene/wildlife-models';
@@ -23,12 +35,14 @@ import type { FireLights } from '../scene/fire-light';
 import { installBvhRaycasting } from '../scene/bvh';
 
 /** Actual map terrain and forest, with viewpoints for reviewing the walking routes. */
-export function showForestTrails(
+export async function showForestTrails(
   renderer: RendererSetup['renderer'],
   scene: THREE.Scene,
   lights: FireLights,
   params: URLSearchParams,
-): void {
+): Promise<void> {
+  const stronghold = params.get('view') === 'stronghold' || params.get('view') === 'muster';
+  if (stronghold) await Promise.all([preloadRaiderModels(), preloadCharacterAnimations()]);
   installBvhRaycasting();
   const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
   const clearing = buildTestClearing(DEFAULT_WORLD_SEED, terrain);
@@ -81,7 +95,34 @@ export function showForestTrails(
     [...clearing.colliders, ...wilderness.colliders],
     [...clearing.water, ...LAKE.basin],
   );
-  const landmarks = createEncounterLandmarks(params.has('before') ? [] : leads, terrain);
+  const landmarks = createEncounterLandmarks(
+    stronghold
+      ? [...KING_REMNANTS, ...(params.has('before') ? [] : KING_APPROACH)]
+      : params.has('before')
+        ? []
+        : leads,
+    terrain,
+  );
+  const bursts = new ImpactBursts();
+  scene.add(bursts.group);
+  const figures = stronghold
+    ? [
+        ...(params.has('before')
+          ? []
+          : KING_APPROACH.flatMap((site) =>
+              KING_APPROACH_LINEUPS[site.strongholdStage!].map((kind, i) => ({
+                kind,
+                x: site.x + (i - 1) * 1.5,
+                z: site.z,
+              })),
+            )),
+        { kind: 'hollowKing' as const, x: CROWNBREAKER_HOLD.x, z: CROWNBREAKER_HOLD.z },
+      ].map((at) => ({
+        at,
+        figure: RaiderFigure.create(at.kind, scene, bursts),
+        memory: new MoveMemory(),
+      }))
+    : [];
   const survey = createSurveyScenery(terrain);
   scene.add(landmarks.group, survey.group);
   document.body.dataset.discoveryLeads = String(leads.length);
@@ -95,6 +136,16 @@ export function showForestTrails(
   controls.maxDistance = 180;
   controls.maxPolarAngle = Math.PI * 0.48;
   const views = {
+    stronghold: {
+      label: 'The King’s Road',
+      target: [218, terrain.heightAt(218, 187) + 1, 187],
+      eye: [184, terrain.heightAt(184, 160) + 24, 147],
+    },
+    muster: {
+      label: 'The Last Muster',
+      target: [246, terrain.heightAt(246, 212) + 2, 212],
+      eye: [225, terrain.heightAt(225, 188) + 2.3, 188],
+    },
     clue: {
       label: 'Discovery cairn',
       target: [lx, ly + 0.35, lz],
@@ -173,6 +224,17 @@ export function showForestTrails(
   };
   const draw = () => {
     pending = 0;
+    for (const { at, figure, memory } of figures)
+      figure?.draw(
+        1 / 60,
+        { ...at, y: terrain.heightAt(at.x, at.z), yaw: 0.75 },
+        {
+          move: memory.view(ActionKind.Idle, 0, 0, false, 'forward'),
+          locomotion: { speed: 0, airborne: false },
+          groundHeight: terrain.heightAt,
+        },
+        0,
+      );
     forest.update(0, camera.position);
     grass.update(0, controls.target, true);
     lights.update(camera.position);
@@ -195,6 +257,8 @@ export function showForestTrails(
       cancelAnimationFrame(pending);
       controls.dispose();
       window.removeEventListener('resize', resize);
+      for (const { figure } of figures) figure?.dispose();
+      bursts.dispose();
       landmarks.dispose();
       survey.dispose();
       for (const model of wildlife) model.dispose();

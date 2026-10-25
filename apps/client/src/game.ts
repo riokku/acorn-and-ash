@@ -1,5 +1,5 @@
 import type { AllyView } from '@acorn/shared';
-import { CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
+import { kingsRoadBeat, KING_MUSTER, CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
 import { canBufferLoot } from '@acorn/shared';
 import { equipmentDodgeCooldown } from '@acorn/shared';
 import {
@@ -4710,6 +4710,7 @@ export class Game {
     this.mapFeed.discoveries = [
       { ...SKELETON_TOWN, name: 'Bonehollow · Skeleton town' },
       { ...CROWNBREAKER_HOLD, name: 'Crownbreaker Hold · World boss' },
+      { ...KING_MUSTER, name: 'The Last Muster · Gather before the king' },
       ...this.discoverySites
         .filter((site) => discoveryKnown(this.discoveriesFound, site.id))
         .map((site) => ({ x: site.x, z: site.z, name: site.name })),
@@ -6240,6 +6241,10 @@ export class Game {
               self: ally.netId === this.selfNetId,
             }))
           : [],
+      strongholdApproach:
+        this.space === OUTDOORS && player !== null
+          ? kingsRoadBeat(player.motion.position.x, player.motion.position.z)
+          : null,
       worldBoss:
         this.space === OUTDOORS && player !== null
           ? this.raiders.worldBossNear(player.motion.position)
