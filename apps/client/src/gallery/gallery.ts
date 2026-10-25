@@ -331,6 +331,11 @@ const SCENERY: readonly { kind: PropKindId; x: number; z: number; scale: number 
 export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const focus = params.get('gallery') ?? '';
+  if (focus === 'meal-preparation') {
+    const { showMealPreparation } = await import('./meal-preparation');
+    showMealPreparation(canvas, params);
+    return;
+  }
   const time = Number(params.get('time') ?? '0.42');
   const spin = params.has('spin');
 

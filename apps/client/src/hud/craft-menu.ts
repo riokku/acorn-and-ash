@@ -13,6 +13,7 @@ import {
   BUILDABLE_KINDS,
   BUILDABLE_KIND_ORDER,
   MEAL_BENEFITS,
+  DISCOVERIES,
   RECIPE_ITEMS,
   canCraft,
   isGear,
@@ -257,6 +258,10 @@ function craftedEntries(state: CraftMenuState): CraftEntry[] {
         statusLabel: label,
         shortfalls,
         locked: false,
+        supplyNote:
+          isMealItem(item) && needsDiscovery
+            ? `Learn this recipe at ${DISCOVERIES.find((site) => site.id === recipe.discoveryId)?.name ?? 'its woodland discovery'}.`
+            : undefined,
         benefitNote: isMealItem(item)
           ? `${MEAL_BENEFITS[item]} · 10 active minutes · replaces your previous meal`
           : undefined,

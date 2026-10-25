@@ -1,3 +1,4 @@
+import { mealWarmthBonus } from './meals';
 import { AnimalTrailHistory, type FreshAnimalTrack } from './animal-tracks';
 import {
   buildForageHabitats,
@@ -6752,7 +6753,9 @@ export class WorldSimulation {
     return {
       winter: calendar.season === 'winter',
       blizzard: runtime.space === OUTDOORS && this.weather().kind === 'blizzard',
-      insulation: characterStats(runtime.worn, undefined, this.equipmentBonuses).warmth,
+      insulation:
+        characterStats(runtime.worn, undefined, this.equipmentBonuses).warmth +
+        mealWarmthBonus(runtime.meal),
       heatRecovery: equipmentHeatRecovery(runtime.worn),
       heat,
     };

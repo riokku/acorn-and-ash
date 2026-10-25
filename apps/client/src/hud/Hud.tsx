@@ -1,3 +1,4 @@
+import { MealPreparation, mealPlan } from './MealPreparation';
 import { KingStorm } from './KingStorm';
 import { KingVictory } from './KingVictory';
 import { Allies } from './Allies';
@@ -223,6 +224,14 @@ export function Hud({
           state={state}
           onRequest={onFire}
           onClose={onCloseLogStorage}
+          onOpenMeals={
+            onCraftTabChange && onJournalTabChange
+              ? () => {
+                  onCraftTabChange('food');
+                  onJournalTabChange('craft');
+                }
+              : undefined
+          }
         />
       ) : null}
       <div
@@ -871,23 +880,28 @@ function buildGroup(kind: BuildableKindId, indoors = false): string {
  * The title, the page tabs and the category pills stay put while the list
  * scrolls, so a small screen never hides the way to another category.
  */
-function CraftPanel({
+export function CraftPanel({
   state,
   onPick,
   onTabChange,
   navigation,
+  guidedMeals = true,
 }: {
   state: HudState;
   /** Clicking an entry does the same as pressing its number. */
   onPick?: (action: CraftAction) => void;
   onTabChange?: (tab: CraftTabId) => void;
   navigation: React.ReactNode;
+  guidedMeals?: boolean;
 }): React.JSX.Element {
   const entries = craftMenuEntries(state);
   const tab = shownTab(entries, state.craftTab);
   const shown = entriesOnTab(entries, tab);
   const renderEntry = (entry: CraftEntry, index: number): React.JSX.Element => {
     const pending = entry.action.kind === 'craft' && state.craftPending != null;
+    const craftedItem = entry.action.kind === 'craft' ? entry.action.item : null;
+    const plan =
+      guidedMeals && tab === 'food' && craftedItem !== null ? mealPlan(craftedItem) : null;
     const awaitingThis = entry.action.kind === 'craft' && state.craftPending === entry.action.item;
     const pick = (): void => {
       if (!entry.locked && !pending) onPick?.(entry.action);
@@ -898,10 +912,11 @@ function CraftPanel({
         : colorOf(BUILDABLE_KINDS[entry.icon.buildable].placeholderColor);
     return (
       <div
-        className="hud-journal-entry hud-journal-entry-pickable"
+        className={`hud-journal-entry hud-journal-entry-pickable${plan ? ' meal-recipe' : ''}`}
         key={`${entry.action.kind}-${'item' in entry.action ? entry.action.item : entry.action.buildable}`}
         aria-disabled={entry.locked || pending || undefined}
         aria-busy={awaitingThis || undefined}
+        data-meal-recipe={plan ? craftedItem : undefined}
         onClick={pick}
         role="button"
         tabIndex={0}
@@ -933,8 +948,15 @@ function CraftPanel({
             ) : null}
             {entry.displayName}
           </div>
+          {plan && <div className="meal-recipe-purpose">{plan.purpose}</div>}
           {entry.benefitNote && <div className="hud-journal-supply-note">{entry.benefitNote}</div>}
           {entry.supplyNote && <div className="hud-journal-supply-note">{entry.supplyNote}</div>}
+          {plan && <div className="meal-recipe-route">{plan.route}</div>}
+          {plan && entry.action.kind === 'craft' && (
+            <div className="meal-recipe-packed">
+              {state.carrying.find((row) => row.item === craftedItem)?.count ?? 0} packed
+            </div>
+          )}
           <div className="hud-journal-ingredients">
             {entry.costs.map((cost) => {
               const costKind = ITEM_KINDS[cost.item];
@@ -955,7 +977,11 @@ function CraftPanel({
                     className="hud-journal-ingredient-icon"
                   />
                   {/* What is missing says how much of it there is: 2/6 logs. */}
-                  {short === undefined ? cost.amount : `${short.have}/${cost.amount}`}{' '}
+                  {plan
+                    ? `${state.carrying.find((row) => row.item === cost.item)?.count ?? 0}/${cost.amount}`
+                    : short === undefined
+                      ? cost.amount
+                      : `${short.have}/${cost.amount}`}{' '}
                   {name.toLowerCase()}
                 </span>
               );
@@ -971,7 +997,11 @@ function CraftPanel({
                 : 'hud-journal-status hud-journal-status-blocked'
           }
         >
-          {awaitingThis ? 'Waiting for confirmation' : entry.statusLabel}
+          {awaitingThis
+            ? 'Waiting for confirmation'
+            : plan && entry.ready
+              ? 'Prepare 1'
+              : entry.statusLabel}
         </span>
       </div>
     );
@@ -996,6 +1026,7 @@ function CraftPanel({
         ))}
       </nav>
       <div className="craft-list">
+        {guidedMeals && tab === 'food' ? <MealPreparation state={state} /> : null}
         {CRAFT_GROUPS.map((group) => {
           const items = shown.filter((entry) => entry.group === group.id);
           return items.length === 0 ? null : (
