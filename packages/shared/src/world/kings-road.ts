@@ -1,3 +1,4 @@
+import { SKELETON_TOWN } from './skeleton-town';
 import { lerp, smoothstep } from '../math/vec3';
 import type { EncounterSite } from './encounters';
 
@@ -93,7 +94,10 @@ export function kingsRoadHeight(
 ): number {
   const road = kingsRoadAt(x, z);
   if (!road) return ground;
-  const weight = 1 - smoothstep(road.distance, road.halfWidth, road.halfWidth + 3);
+  const townEdge = Math.max(Math.abs(x - SKELETON_TOWN.x), Math.abs(z - SKELETON_TOWN.z));
+  const weight =
+    (1 - smoothstep(road.distance, road.halfWidth, road.halfWidth + 3)) *
+    smoothstep(townEdge, 30, 40);
   const level = lerp(start, end, road.progress) + Math.sin(road.progress * Math.PI) * 0.8;
   return lerp(ground, level, weight);
 }
