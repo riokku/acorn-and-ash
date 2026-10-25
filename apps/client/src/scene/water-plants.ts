@@ -1,3 +1,5 @@
+import { positionLocal, uv, vec3 } from 'three/tsl';
+import { forestWind, windGustNode } from '../art/forest-wind';
 import * as THREE from 'three/webgpu';
 
 import { plainMaterial } from '../art/materials';
@@ -22,6 +24,27 @@ export interface WaterPlantMaterials {
   readonly cattail: THREE.Material;
 }
 
+const breezeMaterials = new WeakMap<THREE.Material, THREE.Material>();
+function reedMaterial(source: THREE.Material): THREE.Material {
+  const cached = breezeMaterials.get(source);
+  if (cached) return cached;
+  const material = new THREE.MeshStandardNodeMaterial().copy(source as THREE.MeshStandardMaterial);
+  const tip = uv().y.clamp(0, 1);
+  const bend = windGustNode(positionLocal.xz).mul(tip.mul(tip)).mul(0.16);
+  material.positionNode = positionLocal.add(
+    vec3(bend.mul(forestWind.direction.x), 0, bend.mul(forestWind.direction.y)),
+  );
+  breezeMaterials.set(source, material);
+  return material;
+}
+/** UV height survives model merging and keeps blades/stalk/head connected. */
+function reedWeights(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const positions = geometry.getAttribute('position'),
+    texcoords = geometry.getAttribute('uv');
+  for (let i = 0; i < positions.count; i++) texcoords.setY(i, Math.max(0, positions.getY(i)) / 1.5);
+  return geometry;
+}
+
 /** The painted colours the plants wear: plain, shared materials, so there is nothing of their own to free. */
 export function waterPlantMaterials(): WaterPlantMaterials {
   return {
@@ -30,9 +53,9 @@ export function waterPlantMaterials(): WaterPlantMaterials {
     petal: plainMaterial(0xfbeef0, { roughness: 0.6, flatShading: true }),
     petalPink: plainMaterial(0xf4b9c8, { roughness: 0.6, flatShading: true }),
     heart: plainMaterial(0xf2c94c, { roughness: 0.6, flatShading: true }),
-    reed: plainMaterial(0x5d7a35, { roughness: 0.9, flatShading: true }),
-    reedPale: plainMaterial(0x8a9a4a, { roughness: 0.9, flatShading: true }),
-    cattail: plainMaterial(0x6b4a2e, { roughness: 1, flatShading: true }),
+    reed: reedMaterial(plainMaterial(0x5d7a35, { roughness: 0.9, flatShading: true })),
+    reedPale: reedMaterial(plainMaterial(0x8a9a4a, { roughness: 0.9, flatShading: true })),
+    cattail: reedMaterial(plainMaterial(0x6b4a2e, { roughness: 1, flatShading: true })),
   };
 }
 
@@ -115,7 +138,7 @@ export function addReedClump(
     blade.translate(0, height / 2, 0);
     builder.add(
       random() < 0.3 ? materials.reedPale : materials.reed,
-      blade,
+      reedWeights(blade),
       placed(bx, at.y, bz, { ...lean, y: spin }, { x: 1, y: 1, z: 0.25 }),
     );
     if (i % 3 === 0) {
@@ -123,10 +146,10 @@ export function addReedClump(
       const stalk = new THREE.CylinderGeometry(0.008, 0.012, stalkHeight, 4);
       stalk.translate(0, stalkHeight / 2, 0);
       const stalkMatrix = placed(bx + 0.03, at.y, bz, lean);
-      builder.add(materials.reed, stalk, stalkMatrix);
+      builder.add(materials.reed, reedWeights(stalk), stalkMatrix);
       const head = new THREE.CapsuleGeometry(0.028, 0.14, 2, 6);
       head.translate(0, stalkHeight - 0.12, 0);
-      builder.add(materials.cattail, head, stalkMatrix);
+      builder.add(materials.cattail, reedWeights(head), stalkMatrix);
     }
   }
 }

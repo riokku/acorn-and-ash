@@ -85,3 +85,13 @@ it('opens the plains horizon gradually while retaining blizzard and tunnel visib
   rig.update(0.5, 0, false, 1);
   expect(fog.far).toBe(22);
 });
+
+it('eases the horizon over elapsed time consistently at 30 and 120 fps', () => {
+  const fogAfter = (fps: number) => {
+    const scene = new THREE.Scene(),
+      rig = addDaylight(scene);
+    for (let i = 0; i < fps * 2; i++) rig.update(0.5, 0, false, 1, 1 / fps);
+    return (scene.fog as THREE.Fog).far;
+  };
+  expect(fogAfter(30)).toBeCloseTo(fogAfter(120), 6);
+});

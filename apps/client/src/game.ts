@@ -1,3 +1,4 @@
+import { advanceForestWind } from './art/forest-wind';
 import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
 import { forageHabitatHint } from '@acorn/shared';
 import { isPickedPlant } from './scene/harvesting-motion';
@@ -3716,6 +3717,7 @@ export class Game {
         forestActive,
       );
     }
+    advanceForestWind(deltaSeconds, weather.wind, this.reducedMotion.matches);
     this.weatherCloud +=
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
     const season = seasonMix(this.currentCalendar());
@@ -3727,6 +3729,7 @@ export class Game {
       this.weatherCloud,
       weather.kind === 'blizzard',
       outdoorPosition === undefined ? 0 : highPlainsWeight(outdoorPosition.x, outdoorPosition.z),
+      deltaSeconds,
     );
     const snow = seasonUniforms.snow.value > 0.5 && this.space === OUTDOORS;
     if (this.localPlayer !== null) {
