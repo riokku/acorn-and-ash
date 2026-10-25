@@ -12,6 +12,7 @@ export interface ForestListener extends ForestPoint {
   readonly cameraYaw: number;
   readonly stridePhase?: number | null;
   readonly snow?: boolean;
+  readonly precipitation?: number;
   readonly frozenWater?: boolean;
 }
 
@@ -108,9 +109,18 @@ export class ForestAtmosphere {
     this.birdIn -= delta;
     this.rustleIn -= delta;
     if (this.birdIn <= 0) {
-      this.birdIn = (listener.night ? 30 : 9) + this.random() * (listener.night ? 30 : 13);
+      this.birdIn =
+        ((listener.night ? 30 : 9) + this.random() * (listener.night ? 30 : 13)) *
+        (1 + Math.max(0, Math.min(1, listener.precipitation ?? 0)) * 2 + (listener.snow ? 0.5 : 0));
       const tree = trees[Math.floor(this.random() * trees.length)];
-      if (tree !== undefined && !listener.night) this.spatial('bird', tree, listener, 0.48, 32);
+      if (tree !== undefined && !listener.night)
+        this.spatial(
+          'bird',
+          tree,
+          listener,
+          0.48 * (1 - Math.max(0, Math.min(1, listener.precipitation ?? 0)) * 0.7),
+          32,
+        );
     }
     let nearest: ForestPoint | undefined;
     let nearestDistance = 16;

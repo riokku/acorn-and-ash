@@ -282,6 +282,7 @@ import { createRemotePlayback } from './net/remote-playback';
 import { GatheringFocus } from './scene/gathering-focus';
 import { ForestAtmosphere } from './audio/forest-atmosphere';
 import { ForestAudio } from './audio/forest-sounds';
+import { WorldAmbience } from './audio/world-ambience';
 import { createForestEnvironment, type ForestEnvironment } from './audio/forest-environment';
 import { TreeLandingEffects } from './scene/tree-landing';
 import { PickupNoticeShelf } from './hud/pickup-notice';
@@ -1045,6 +1046,9 @@ export class Game {
   private groundItems: GroundItems | null = null;
   private readonly forestAudio = new ForestAudio();
   private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
+  private readonly worldAmbience = new WorldAmbience();
+  private ambienceCover = 0;
+  private ambienceCoverIn = 0;
   private forestEnvironment: ForestEnvironment | null = null;
   private wildernessProps: readonly PlacedProp[] = [];
   /** Where each forest tree sits in `wildernessProps` (and so in the walkable world). */
@@ -1309,6 +1313,7 @@ export class Game {
     if (!playing) this.closeChest();
     this.syncGameplayControls();
     this.forestAudio.update(playing && !document.hidden);
+    this.worldAmbience.setActive(playing && !document.hidden);
     setImpactSoundsActive(playing && !document.hidden);
     if (!playing) {
       // Nothing should keep walking, swinging or charging under the curtain.
@@ -1752,6 +1757,7 @@ export class Game {
     this.clearingScene?.dispose();
     this.gatheringFocus.dispose();
     this.forestAudio.dispose();
+    this.worldAmbience.dispose();
     this.groundItems?.dispose();
     this.wildernessScene?.dispose();
     this.lakeScene?.dispose();
@@ -3472,6 +3478,7 @@ export class Game {
 
   private readonly handleForestVisibility = (): void => {
     this.forestAudio.update(this.playing && !document.hidden);
+    this.worldAmbience.setActive(this.playing && !document.hidden);
     setImpactSoundsActive(this.playing && !document.hidden);
   };
 
@@ -3594,6 +3601,7 @@ export class Game {
           indoors: this.space !== OUTDOORS,
           active: forestActive,
           night: isNight(dayProgress(this.estimatedServerTimeMs())),
+          precipitation: this.currentWeather().precipitation,
           cameraYaw: camera.look.yaw,
         },
         this.forestEnvironment,
@@ -3683,6 +3691,31 @@ export class Game {
     for (const model of this.decorModels) if ('update' in model) model.update(deltaSeconds);
     const weatherNow = this.estimatedServerTimeMs();
     const weather = this.currentWeather();
+    if (this.localPlayer) {
+      const point = this.space === OUTDOORS ? this.localPlayer.motion.position : this.outdoorFocus;
+      this.ambienceCoverIn -= deltaSeconds;
+      if (this.ambienceCoverIn <= 0) {
+        this.ambienceCoverIn = 0.25;
+        this.ambienceCover = Math.min(
+          1,
+          (this.forestEnvironment?.treesNear(point.x, point.z).length ?? 0) / 24,
+        );
+      }
+      this.worldAmbience.update(
+        deltaSeconds,
+        {
+          x: point.x,
+          z: point.z,
+          cameraYaw: camera.look.yaw,
+          wind: weather.wind,
+          cover: this.ambienceCover,
+          indoors: this.space !== OUTDOORS,
+          frozen: this.lakeFrozen,
+          underground: this.undergroundDark,
+        },
+        forestActive,
+      );
+    }
     this.weatherCloud +=
       (weather.precipitation - this.weatherCloud) * Math.min(1, deltaSeconds * 0.5);
     const season = seasonMix(this.currentCalendar());
