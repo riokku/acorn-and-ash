@@ -270,6 +270,12 @@ export class RaiderCrowd {
     return null;
   }
 
+  defeatedKingAt(id: number): { x: number; y: number; z: number } | null {
+    if (this.kinds.get(id) !== 'hollowKing' || (this.hitsLeft.get(id) ?? 1) > 0) return null;
+    const pose = this.positions.poseOf(id);
+    return pose ? { x: pose.x, y: pose.y, z: pose.z } : null;
+  }
+
   describe(id: number): { kind: RaiderKindId; hitsLeft: number } | null {
     const kind = this.kinds.get(id);
     if (kind === undefined) return null;

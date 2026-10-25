@@ -1,3 +1,4 @@
+import { KingVictory } from './KingVictory';
 import { Allies } from './Allies';
 import { WorldBossBar } from './WorldBossBar';
 import { surveyInteraction } from '@acorn/shared';
@@ -448,8 +449,13 @@ export function Hud({
         </aside>
       ) : null}
       {showingWorld ? <Allies allies={state.allies ?? []} /> : null}
-      {showingWorld && state.worldBoss ? <WorldBossBar boss={state.worldBoss} /> : null}
-      {showingWorld && state.raidBanner !== null && !state.worldBoss ? (
+      {showingWorld && state.kingVictory ? (
+        <KingVictory key={state.kingVictory.key} victory={state.kingVictory} />
+      ) : null}
+      {showingWorld && !state.kingVictory && state.worldBoss ? (
+        <WorldBossBar boss={state.worldBoss} />
+      ) : null}
+      {showingWorld && !state.kingVictory && state.raidBanner !== null && !state.worldBoss ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
       ) : null}
       {showingWorld && !state.worldBoss && state.raidBanner === null && state.raidersInSight > 0 ? (

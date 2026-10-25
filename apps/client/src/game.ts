@@ -1,3 +1,6 @@
+import { KingVictoryEffect, KING_VICTORY_SECONDS } from './scene/king-victory';
+import { playKingVictory } from './audio/king-victory';
+import type { KingVictoryView } from './hud/KingVictory';
 import type { AllyView } from '@acorn/shared';
 import { kingsRoadBeat, KING_MUSTER, CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
 import { canBufferLoot } from '@acorn/shared';
@@ -360,7 +363,7 @@ import { planPlacement, type PlacementPlan } from './building/placement';
 import type { BoatHint, FishingPhase, HudStore, RaidBanner } from './hud/store';
 import { compassTo, compassToOwnCache, type Compass } from './hud/cache-compass';
 import { CombatFeed, type ThreatMark } from './hud/combat-feed';
-import { raidBannerFor } from './hud/raid-banner';
+import { raidBannerFor, isKingVictoryNews } from './hud/raid-banner';
 import { SignOutCountdown } from './hud/sign-out';
 import {
   expeditionBoardClaimsInteract,
@@ -1119,6 +1122,10 @@ export class Game {
   private raidersClose = false;
   private raidBanner: { banner: RaidBanner; until: number } | null = null;
   private raidBannersShown = 0;
+  private kingVictory: KingVictoryView | null = null;
+  private kingVictoryEffect: KingVictoryEffect | null = null;
+  private stopKingVictorySound: (() => void) | null = null;
+  private lastKingVictoryAt = -Infinity;
   private allies: readonly AllyView[] = [];
   /** What the combat overlay draws, every frame: see `updateCombatFeed`. */
   readonly combatFeed = new CombatFeed();
@@ -1764,6 +1771,8 @@ export class Game {
     this.rowingBoats.dispose();
     for (const mound of this.buriedCacheMeshes.values()) mound.dispose();
     this.buriedCacheMeshes.clear();
+    this.clearKingVictory();
+    this.kingVictoryEffect?.dispose();
     this.raiders.dispose();
     this.bursts.dispose();
     this.treeLandingEffects.dispose();
@@ -2543,6 +2552,10 @@ export class Game {
     const ours = hit.netId === this.selfNetId;
     const from = hit.netId === null || ours ? undefined : this.remotePlayers.poseOf(hit.netId);
     this.raiders.confirmHit(hit, from, ours, this.listenerPoint());
+    if (hit.hitsLeft === 0) {
+      const king = this.raiders.defeatedKingAt(hit.raiderId);
+      if (king) this.startKingVictory(king);
+    }
     const now = performance.now();
     // Whirlwinds can confirm several victims together: one quiet cue per beat.
     if (ours && now - this.lastConfirmedStrikeAt >= 70) {
@@ -2558,11 +2571,20 @@ export class Game {
    * somebody close enough that it is everybody's fight.
    */
   private hearAboutRaid(news: RaidNews): void {
-    if (news.kind === 'encounterCleared' && performance.now() < this.bonehollowVictoryUntil) return;
+    if (
+      news.kind === 'encounterCleared' &&
+      !isKingVictoryNews(news) &&
+      performance.now() < this.bonehollowVictoryUntil
+    )
+      return;
     const ours = news.targetNetId === this.selfNetId;
     const me = this.listenerPoint();
     const near = me !== null && Math.hypot(news.x - me.x, news.z - me.z) < RAID_HEARD_WITHIN;
     if (!ours && !near) return;
+    if (isKingVictoryNews(news)) {
+      this.startKingVictory({ ...news, y: this.collision?.terrain.heightAt(news.x, news.z) ?? 0 });
+      return;
+    }
     const banner = raidBannerFor(
       news,
       ours ? null : (this.roster.get(news.targetNetId)?.name ?? 'Somebody'),
@@ -2576,6 +2598,33 @@ export class Game {
     else if (news.kind === 'gaveUp') playRaidOver();
     // Same reasoning as `hearFromTheWater`: straight to the HUD.
     this.options.hud.publish({ raidBanner: banner });
+  }
+
+  private startKingVictory(at: { x: number; y: number; z: number }): void {
+    const now = performance.now(),
+      listener = this.listenerPoint();
+    if (
+      !listener ||
+      !this.kingVictoryEffect ||
+      now - this.lastKingVictoryAt < 30000 ||
+      Math.hypot(at.x - listener.x, at.z - listener.z) > 60 ||
+      document.hidden
+    )
+      return;
+    this.lastKingVictoryAt = now;
+    this.kingVictory = { key: ++this.raidBannersShown, startedAt: now };
+    this.kingVictoryEffect.start(at, this.reducedMotion.matches);
+    this.stopKingVictorySound?.();
+    this.stopKingVictorySound = playKingVictory();
+    this.options.hud.publish({ kingVictory: this.kingVictory, raidBanner: null });
+  }
+
+  private clearKingVictory(): void {
+    this.kingVictory = null;
+    this.kingVictoryEffect?.clear();
+    this.stopKingVictorySound?.();
+    this.stopKingVictorySound = null;
+    this.options.hud.publish({ kingVictory: null });
   }
 
   private currentRaidBanner(now = performance.now()): RaidBanner | null {
@@ -2945,6 +2994,9 @@ export class Game {
       // Drawn once out of sight while loading, so the first raid turns up
       // without the game freezing to learn how to draw a skeleton.
       this.raiders.rehearse(SPAWN_POSITION);
+      this.kingVictoryEffect?.dispose();
+      this.kingVictoryEffect = new KingVictoryEffect();
+      this.outdoors.add(this.kingVictoryEffect.group);
 
       this.localCharacter = createCharacter(
         this.options.identity.character,
@@ -3528,6 +3580,11 @@ export class Game {
       this.listenerPoint(),
       this.targeting.id ?? this.aimedRaiderId,
     );
+    if (this.kingVictory) {
+      const age = (now - this.kingVictory.startedAt) / 1000;
+      if (age >= KING_VICTORY_SECONDS) this.clearKingVictory();
+      else this.kingVictoryEffect?.update(age);
+    }
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
     for (const landing of [
@@ -3630,6 +3687,7 @@ export class Game {
           rehearseEffects(
             [
               this.treeLandingEffects.group,
+              ...(this.kingVictoryEffect ? [this.kingVictoryEffect.group] : []),
               ...(this.wildfireArt ? [this.wildfireArt.group] : []),
               ...(flame ? [flame.root] : []),
             ],
@@ -6063,6 +6121,7 @@ export class Game {
 
   /** A new connection or space has no useful actor history from the old one. */
   private clearRemoteActors(): void {
+    this.clearKingVictory();
     for (const id of this.remotePlayers.netIds()) this.removeRemote(id);
     for (const id of this.remoteAnimals.netIds()) this.removeCritter(id);
     this.remotePlayers.clear();
@@ -6250,6 +6309,7 @@ export class Game {
           ? this.raiders.worldBossNear(player.motion.position)
           : null,
       raidersClose: this.raidersClose,
+      kingVictory: this.kingVictory,
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,
       homeSkills: this.homeSkills,

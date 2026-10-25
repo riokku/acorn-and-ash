@@ -39,7 +39,7 @@ let musicVolumeScale = 1;
 let sfxVolumeScale = 1;
 let impactSoundsActive = true;
 const impactVoices = new Map<string, HTMLAudioElement[]>();
-const activeSwooshes = new Set<() => void>();
+const activeEffects = new Set<() => void>();
 
 /**
  * Starts the background loop, once. Call this from a real click or key
@@ -67,7 +67,7 @@ export function setMusicVolume(scale: number): void {
 /** From the Settings menu. Applies to every sound effect played from here on. */
 export function setSfxVolume(scale: number): void {
   sfxVolumeScale = scale;
-  if (scale <= 0) for (const cancel of activeSwooshes) cancel();
+  if (scale <= 0) for (const cancel of activeEffects) cancel();
   for (const [url, clips] of impactVoices) {
     const level = TOOK_DAMAGE_URLS.includes(url) ? DAMAGE_VOLUME : SFX_VOLUME;
     for (const clip of clips) clip.volume = level * scale;
@@ -92,7 +92,7 @@ export function setImpactSoundsActive(active: boolean): void {
   impactSoundsActive = active;
   if (!active) {
     for (const voices of impactVoices.values()) for (const voice of voices) voice.pause();
-    for (const cancel of activeSwooshes) cancel();
+    for (const cancel of activeEffects) cancel();
   }
 }
 
@@ -157,6 +157,14 @@ export function soundContext(): AudioContext | null {
   return effectsContext;
 }
 
+/** Register a sustained effect so muting or hiding the world cancels its scheduled tail. */
+export function registerSustainedEffect(cancel: () => void): () => void {
+  activeEffects.add(cancel);
+  return () => {
+    activeEffects.delete(cancel);
+  };
+}
+
 /** Half a second of hiss, made once, for anything made on the spot from noise. */
 export function noiseBuffer(context: AudioContext): AudioBuffer {
   effectsNoise ??= makeNoise(context, 0.6);
@@ -210,7 +218,7 @@ export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): (()
   const release = () => {
     if (ended) return;
     ended = true;
-    activeSwooshes.delete(cancel);
+    activeEffects.delete(cancel);
     source.disconnect();
     filter.disconnect();
     gain.disconnect();
@@ -221,7 +229,7 @@ export function playSwoosh(peakInSeconds: number, strength = 1, volume = 1): (()
     release();
   };
   source.onended = release;
-  activeSwooshes.add(cancel);
+  activeEffects.add(cancel);
   return cancel;
 }
 
