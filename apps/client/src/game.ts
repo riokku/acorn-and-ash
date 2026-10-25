@@ -1,4 +1,5 @@
 import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
+import { forageHabitatHint } from '@acorn/shared';
 import { isPickedPlant } from './scene/harvesting-motion';
 import { KingStormEffect } from './scene/king-storm';
 import type { KingStormView } from '@acorn/shared';
@@ -6431,6 +6432,12 @@ export class Game {
                 player.motion.position.z,
               );
               if (fresh) return fresh;
+              const habitat = forageHabitatHint(
+                this.gatherPatches,
+                player.motion.position.x,
+                player.motion.position.z,
+              );
+              if (habitat) return habitat;
               const track = this.animalTracks?.tracks.find(
                 (track) =>
                   Math.hypot(

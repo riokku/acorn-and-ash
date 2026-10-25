@@ -1,4 +1,10 @@
 import { AnimalTrailHistory, type FreshAnimalTrack } from './animal-tracks';
+import {
+  buildForageHabitats,
+  forageRegrowSpot,
+  forageHabitatCount,
+  type ForageHabitat,
+} from './foraging-habitats';
 import { stepWildlifeAwareness, wildlifeNoticeRadius } from './wildlife-awareness';
 import { CROWNBREAKER_HOLD, KING_REMNANTS } from '../world/hollow-king';
 import { streamWaterDepthAt } from '../world/stream';
@@ -1854,6 +1860,7 @@ export class WorldSimulation {
   /** Every player, as a raid sees them - refreshed each tick, reused between them. */
   private readonly fighters: RaidFighter[] = [];
   /** Where each mountain pile of stone or ore first lay; it comes back near here once picked clean. */
+  private readonly forageHomes = new Map<number, ForageHabitat>();
   private readonly mountainRockHomes = new Map<number, GatherSpot>();
   /** Ground dug out below the surface (decision 0114, step 4); shared with `collision`. */
   readonly dug: DugGrid;
@@ -2068,6 +2075,20 @@ export class WorldSimulation {
         encounterSites: options.forestEncounters === true ? this.encounterSites : [],
       },
     );
+    const habitatFootprints = this.buildFootprints(undefined, true);
+    for (const home of buildForageHabitats(
+      this.seed,
+      this.discoverySites,
+      [...this.clearing.props, ...this.wilderness.props],
+      terrain,
+      (x, z) => this.patchSpotIsClear(-1, x, z, habitatFootprints),
+    )) {
+      this.forageHomes.set(home.id, home);
+      this.patches.push({
+        ...freshPatch(this.seed, home),
+        remaining: forageHabitatCount(this.seed, home.id, 0),
+      });
+    }
   }
 
   private spawnAnimal(den: AnimalDen, terrain: Terrain): void {
@@ -3882,7 +3903,9 @@ export class WorldSimulation {
       if (!this.patchIsDueBack(patch, nowMs)) continue;
       const generation = patch.generation + 1;
       if (!this.movePatch(patch, generation, nowMs)) continue;
-      patch.remaining = patchCount(this.seed, patch.id, generation);
+      patch.remaining = this.forageHomes.has(patch.id)
+        ? forageHabitatCount(this.seed, patch.id, generation)
+        : patchCount(this.seed, patch.id, generation);
       patch.emptiedAtMs = 0;
     }
   }
@@ -3893,6 +3916,28 @@ export class WorldSimulation {
    * them is.
    */
   private movePatch(patch: GatherPatch, generation: number, nowMs = this.nowMs): boolean {
+    const home = this.forageHomes.get(patch.id);
+    if (home) {
+      const footprints = this.buildFootprints(undefined, true, { x: home.x, z: home.z, reach: 8 });
+      const spot = forageRegrowSpot(this.seed, home, generation, (x, z) => {
+        const y = this.collision.terrain.heightAt(x, z);
+        return (
+          this.patchSpotIsClear(patch.id, x, z, footprints) &&
+          Math.abs(this.collision.terrain.heightAt(x + 0.8, z) - y) < 0.3 &&
+          Math.abs(this.collision.terrain.heightAt(x, z + 0.8) - y) < 0.3
+        );
+      });
+      patch.generation = generation;
+      if (spot) {
+        patch.x = spot.x;
+        patch.z = spot.z;
+      } else {
+        patch.remaining = 0;
+        patch.emptiedAtMs = nowMs;
+      }
+      this.patchChanges.add(patch.id);
+      return spot !== null;
+    }
     // A building can cover a flush, but cannot move it into ordinary regrowth.
     if (isMushroomFlush(patch.id)) {
       patch.remaining = 0;
@@ -7068,13 +7113,31 @@ export class WorldSimulation {
         row.generation >= 0 &&
         Number.isFinite(row.emptiedAtMs) &&
         // A bed of reeds can only stand at the edge of the water it belongs to.
-        (!isReedPatch(row.id) || isReedSpotFor(row.id, row.x, row.z));
+        (!isReedPatch(row.id) || isReedSpotFor(row.id, row.x, row.z)) &&
+        (!this.forageHomes.has(row.id) ||
+          Math.hypot(
+            row.x - this.forageHomes.get(row.id)!.x,
+            row.z - this.forageHomes.get(row.id)!.z,
+          ) <= 1.5);
       if (!sensible) continue;
       patch.x = row.x;
       patch.z = row.z;
       patch.remaining = row.remaining;
       patch.generation = row.generation;
       patch.emptiedAtMs = row.emptiedAtMs;
+    }
+    // Existing worlds may already have a home where a newly introduced colony lives.
+    // Validate after patch rows load, so saved counts cannot put it back inside a cabin.
+    if (this.builtProps.length > 0) {
+      const buildings = this.builtProps.map((built) =>
+        buildableFootprint(built.kind, built.x, built.z, built.yaw),
+      );
+      for (const patch of this.patches) {
+        if (!this.forageHomes.has(patch.id) || patch.remaining === 0) continue;
+        const here = roundFootprint(patch.x, patch.z, PATCH_CLEARANCE, 'colony');
+        if (buildings.some((building) => footprintGap(here, building) < 0))
+          this.movePatch(patch, patch.generation + 1);
+      }
     }
   }
 

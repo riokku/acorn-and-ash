@@ -432,6 +432,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showWinterGear(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'forage-habitats') {
+    const terrain = createFlatTerrain();
+    scene.add(createGalleryGround([], () => 0, 14, 40));
+    const { showForagingHabitats } = await import('./foraging-habitats');
+    await showForagingHabitats(renderer, scene, fireLights, params, terrain);
+    return;
+  }
   if (focus === 'fresh-tracks') {
     const { showFreshTracks, trackGalleryGround } = await import('./fresh-tracks');
     scene.add(createGalleryGround([], trackGalleryGround, 12, 40));
