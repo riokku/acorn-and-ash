@@ -13,7 +13,11 @@ export interface LootTarget {
 }
 
 /** Transforms and lists are prepared once for this pointer query, never cached across frames. */
-function prepareLoot(candidates: readonly LootTarget[], blockers: readonly THREE.Object3D[]) {
+function prepareLoot(
+  candidates: readonly LootTarget[],
+  blockers: readonly THREE.Object3D[],
+  preferred?: LootRequest,
+) {
   const objects: THREE.Object3D[] = [];
   const owners = new Map<THREE.Object3D, { target: LootTarget; index: number }>();
   const preparedBlockers = new Set<THREE.Object3D>();
@@ -22,31 +26,54 @@ function prepareLoot(candidates: readonly LootTarget[], blockers: readonly THREE
     objects.push(candidate.object);
     if (!owners.has(candidate.object)) owners.set(candidate.object, { target: candidate, index });
   }
-  return (raycaster: THREE.Raycaster): LootTarget | null => {
-    const hit = raycaster.intersectObjects(objects, true).find((entry) => visible(entry.object));
-    if (hit === undefined) return null;
-    const previousFar = raycaster.far;
-    try {
-      raycaster.far = Math.min(previousFar, Math.max(0, hit.distance - 0.02));
-      // Collision proxies are intentionally invisible. Stop at the first
-      // blocker: the result is occluded regardless of any later intersection.
-      for (const blocker of blockers) {
-        if (!preparedBlockers.has(blocker)) {
-          blocker.updateWorldMatrix(true, true);
-          preparedBlockers.add(blocker);
-        }
-        if (raycaster.intersectObject(blocker, true).length > 0) return null;
-      }
-    } finally {
-      raycaster.far = previousFar;
-    }
+  const ownerOf = (leaf: THREE.Object3D): LootTarget | undefined => {
     let chosen: { target: LootTarget; index: number } | undefined;
-    for (let object: THREE.Object3D | null = hit.object; object !== null; object = object.parent) {
+    for (let object: THREE.Object3D | null = leaf; object !== null; object = object.parent) {
       const owner = owners.get(object);
       if (owner !== undefined && (chosen === undefined || owner.index < chosen.index))
         chosen = owner;
     }
-    return chosen?.target ?? null;
+    return chosen?.target;
+  };
+  return (raycaster: THREE.Raycaster): LootTarget | null => {
+    const hits = raycaster.intersectObjects(objects, true);
+    let hit = hits.find((entry) => visible(entry.object));
+    if (hit === undefined) return null;
+    const nearest = hit;
+    // Keep the current tooltip through nearly coincident/bobbing surfaces.
+    // A clearly nearer object still wins, and scenery is checked anew below.
+    if (preferred) {
+      const nearestDistance = hit.distance;
+      hit =
+        hits.find((entry) => {
+          if (entry.distance > nearestDistance + 0.04 || !visible(entry.object)) return false;
+          const owner = ownerOf(entry.object);
+          return owner?.request.kind === preferred.kind && owner.request.id === preferred.id;
+        }) ?? hit;
+    }
+    const previousFar = raycaster.far;
+    try {
+      for (const choice of hit === nearest ? [hit] : [hit, nearest]) {
+        raycaster.far = Math.min(previousFar, Math.max(0, choice.distance - 0.02));
+        let blocked = false;
+        // Collision proxies are intentionally invisible. A preference never
+        // bypasses scenery; a visible nearer candidate can still be selected.
+        for (const blocker of blockers) {
+          if (!preparedBlockers.has(blocker)) {
+            blocker.updateWorldMatrix(true, true);
+            preparedBlockers.add(blocker);
+          }
+          if (raycaster.intersectObject(blocker, true).length > 0) {
+            blocked = true;
+            break;
+          }
+        }
+        if (!blocked) return ownerOf(choice.object) ?? null;
+      }
+      return null;
+    } finally {
+      raycaster.far = previousFar;
+    }
   };
 }
 
@@ -75,7 +102,7 @@ const CURSOR_SAMPLES = [
 ] as const;
 
 /** A small CSS-pixel tolerance keeps thin/bobbing loot from flickering under a cursor.
- * A direct hit always wins; every nearby sample still respects real scenery occlusion.
+ * A direct hit wins over offset samples; every nearby sample still respects real scenery occlusion.
  */
 export function lootUnderCursor(
   raycaster: THREE.Raycaster,
@@ -84,12 +111,13 @@ export function lootUnderCursor(
   camera: THREE.Camera,
   candidates: readonly LootTarget[],
   blockers: readonly THREE.Object3D[],
+  preferred?: LootRequest,
 ): LootTarget | null {
   const setRay = (x: number, y: number) => {
     cursor.set((x / viewport.width) * 2 - 1, -(y / viewport.height) * 2 + 1);
     raycaster.setFromCamera(cursor, camera);
   };
-  const pick = prepareLoot(candidates, blockers);
+  const pick = prepareLoot(candidates, blockers, preferred);
   try {
     for (const [x, y] of CURSOR_SAMPLES) {
       const sampleX = point.x + x,

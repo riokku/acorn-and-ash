@@ -4960,6 +4960,7 @@ export class Game {
         ...(this.digScene?.cameraBlockers ?? []),
         ...this.homeCameraBlockers,
       ],
+      this.hoveredLoot?.request,
     );
   }
 
@@ -5126,12 +5127,11 @@ export class Game {
     if (target === null) return;
     const problem = this.lootProblem(target);
     if (problem !== null) {
-      this.interactionNote = problem;
-      this.interactionNoteUntil = performance.now() + 2800;
+      this.showActionNote(problem);
       return;
     }
     this.aimYaw = yawTowards(this.motionOrOrigin(), target);
-    this.connection?.sendLoot(target.request);
+    this.submitAction('pick up this item', () => this.connection?.sendLoot(target.request));
   }
 
   /** Turn the character toward a clicked target, keeping the camera heading. */

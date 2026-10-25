@@ -285,11 +285,12 @@ export class WorldConnection {
    * 0061). Sent straight away, the same as using an item: rare and
    * deliberate, nothing the input bundle needs to batch up.
    */
-  sendLoot(request: LootRequest): void {
-    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
+  sendLoot(request: LootRequest): boolean {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     // Flush preceding movement so reach is judged after the walk that led here.
     this.flush();
     this.socket.send(encodeLoot(request));
+    return true;
   }
 
   sendChest(request: ChestRequest): void {
