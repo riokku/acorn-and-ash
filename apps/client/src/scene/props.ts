@@ -1,3 +1,4 @@
+import { forestWind, windGustNode } from '../art/forest-wind';
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -16,6 +17,7 @@ import {
   vec3,
   uniform,
   texture,
+  vec2,
   mix,
   smoothstep as nodeSmoothstep,
 } from 'three/tsl';
@@ -244,6 +246,9 @@ function burnablePart(part: PropPart, height: number): PropPart {
   const progress = new THREE.InstancedBufferAttribute(new Float32Array(part.mesh.count), 1);
   progress.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('treeBurn', progress);
+  const roots = new THREE.InstancedBufferAttribute(new Float32Array(part.mesh.count * 4), 4);
+  roots.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('treeWindRoot', roots);
   const material =
     source instanceof THREE.MeshStandardNodeMaterial
       ? source.clone()
@@ -273,6 +278,26 @@ function burnablePart(part: PropPart, height: number): PropPart {
     base = mix(base, vec3(0.79, 0.85, 0.89), snow.mul(0.9));
   }
   const localHeight = positionLocal.y.add(part.offset.elements[13]!).div(height).clamp(0, 1);
+  // Both LODs use the same world-space root and local wind direction. The
+  // squared height keeps the grounded base fixed and the crown restrained.
+  if (height > 1) {
+    geometry.boundingBox?.expandByVector(new THREE.Vector3(height * 0.025, 0, height * 0.025));
+    const root = attribute('treeWindRoot', 'vec4');
+    const wind = forestWind.direction;
+    const localDirection = vec2(
+      wind.x.mul(root.z).sub(wind.y.mul(root.w)),
+      wind.x.mul(root.w).add(wind.y.mul(root.z)),
+    );
+    const bend = windGustNode(root.xy)
+      .mul(localHeight.mul(localHeight))
+      .mul(height * 0.025);
+    const basePosition = material.positionNode
+      ? vec3(material.positionNode as THREE.Node<'vec3'>)
+      : positionLocal;
+    material.positionNode = basePosition.add(
+      vec3(localDirection.x.mul(bend), 0, localDirection.y.mul(bend)),
+    );
+  }
   const front = attribute('treeBurn', 'float').mul(1.2).sub(0.1);
   const char = nodeSmoothstep(localHeight.sub(0.08), localHeight.add(0.08), front);
   material.colorNode = mix(base, base.mul(0.12).add(vec3(0.018, 0.012, 0.009)), char);
@@ -282,6 +307,8 @@ function burnablePart(part: PropPart, height: number): PropPart {
     ...part,
     ground(index, prop, tilt) {
       part.ground?.(index, prop, tilt);
+      roots.setXYZW(index, prop.x, prop.z, Math.cos(prop.rotationY), Math.sin(prop.rotationY));
+      roots.needsUpdate = true;
       geometry.boundingBox = groundedGeometry.boundingBox;
       geometry.boundingSphere = groundedGeometry.boundingSphere;
     },

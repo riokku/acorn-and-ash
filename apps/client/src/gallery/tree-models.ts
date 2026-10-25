@@ -1,3 +1,4 @@
+import { advanceForestWind, forestWind } from '../art/forest-wind';
 import * as THREE from 'three/webgpu';
 import { PROP_KINDS, treeAtGeneration, type PropKindId } from '@acorn/shared';
 import { createPropMeshes, placeInstance } from '../scene/props';
@@ -143,7 +144,22 @@ export function showTreeModels(
   addEventListener('resize', resize);
   resize();
   let frames = 0;
+  let last = performance.now();
+  const windPreview = params.has('wind');
+  if (windPreview) {
+    forestWind.seconds.value = Number(params.get('at')) || 0;
+    forestWind.strength.value = params.has('before') ? 0 : 0.8;
+    toolbar.append(' · Shared breeze');
+  }
   renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    if (windPreview && !params.has('still') && !params.has('before'))
+      advanceForestWind(
+        (now - last) / 1000,
+        0.8,
+        matchMedia('(prefers-reduced-motion: reduce)').matches,
+      );
+    last = now;
     camera.position.set(
       Math.sin(angle) * distance,
       target.y + elevation * distance,

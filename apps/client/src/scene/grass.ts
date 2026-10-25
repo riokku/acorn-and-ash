@@ -1,3 +1,4 @@
+import { forestWind, windGustNode } from '../art/forest-wind';
 import { highPlainsWeight } from '@acorn/shared';
 import { inSkeletonTown } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
@@ -93,8 +94,7 @@ export function createGrass(
   geometry.setAttribute('grassBiome', new THREE.InstancedBufferAttribute(biomes, 1));
   geometry.setAttribute('grassRoot', new THREE.InstancedBufferAttribute(roots, 3));
   geometry.setAttribute('grassLook', new THREE.InstancedBufferAttribute(looks, 4));
-  const clock = uniform(0);
-  const windStrength = uniform(1);
+
   const viewer = uniform(new THREE.Vector3());
   // Where the clump is rooted in the ground, and what is particular to it: how
   // dry it looks, which way and how far it leans, and how much it sways.
@@ -107,12 +107,12 @@ export function createGrass(
   // How far up its own blade a point is, and how light or dark that blade is.
   const tip = attribute('grassTip', 'float');
   const bladeTone = attribute('grassBlade', 'float');
-  const gust = sin(root.x.mul(0.11).add(root.z.mul(0.08)).sub(clock.mul(0.9)))
-    .mul(0.5)
-    .add(0.5);
-  const flutter = sin(root.x.mul(0.7).add(root.z.mul(0.4)).add(clock.mul(2.3))).mul(0.035);
+  const gust = windGustNode(root.xz);
+  const flutter = sin(root.x.mul(0.7).add(root.z.mul(0.4)).add(forestWind.seconds.mul(2.3)))
+    .mul(0.025)
+    .mul(forestWind.strength);
   const tipSquared = tip.mul(tip);
-  const bend = gust.mul(0.13).add(0.035).add(flutter).mul(tipSquared).mul(windStrength).mul(sway);
+  const bend = gust.mul(0.3).add(flutter).mul(tipSquared).mul(sway);
   const lean = vec3(cos(leanAngle), 0, sin(leanAngle)).mul(leanAmount.mul(tipSquared));
   const distance = root.xz.sub(viewer.xz).length();
   const fade = float(1).sub(smoothstep(REACH - FADE_BAND, REACH, distance));
@@ -127,7 +127,13 @@ export function createGrass(
   material.positionNode = root
     .add(offset.mul(vec3(1, fade.mul(float(1).sub(seasonUniforms.blizzard.mul(0.7))), 1)))
     .add(lean.mul(fade))
-    .add(vec3(bend.mul(fade), 0, bend.mul(0.45).mul(fade)));
+    .add(
+      vec3(
+        bend.mul(fade).mul(forestWind.direction.x),
+        0,
+        bend.mul(fade).mul(forestWind.direction.y),
+      ),
+    );
   const shade = sin(root.x.mul(0.16).add(root.z.mul(0.21)))
     .mul(0.5)
     .add(0.5);
@@ -172,7 +178,6 @@ export function createGrass(
   let initialized = false;
   let lastX = Infinity,
     lastZ = Infinity;
-  let elapsed = 0;
   interface Clump {
     x: number;
     y: number;
@@ -260,7 +265,7 @@ export function createGrass(
         tone,
         lean: leanRoll * leanRoll * 0.12,
         leanAngle,
-        sway: 0.6 + size * 0.5,
+        sway: (0.6 + size * 0.5) * (1 - shade.floor * 0.65),
         threshold,
         biome: highPlainsWeight(x, z),
       });
@@ -414,10 +419,7 @@ export function createGrass(
       isHole = next;
       changed = true;
     },
-    update(deltaSeconds, position, reducedMotion, wind = 0.15) {
-      windStrength.value += (1 + wind - windStrength.value) * Math.min(1, deltaSeconds * 0.5);
-      if (!reducedMotion) elapsed += deltaSeconds;
-      clock.value = elapsed;
+    update(_deltaSeconds, position, _reducedMotion, _wind = 0.15) {
       viewer.value.set(position.x, 0, position.z);
       if (density <= 0) return;
       // A sudden turn or relocation must not force all missing tiles into one frame.
