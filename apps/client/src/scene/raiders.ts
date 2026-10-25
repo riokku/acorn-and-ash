@@ -244,9 +244,7 @@ export class RaiderCrowd {
   }
 
   /** What kind of raider this is, and how many blows it still needs, if known. */
-  worldBossNear(
-    at: FlatPoint,
-  ): {
+  worldBossNear(at: FlatPoint): {
     health: number;
     maxHealth: number;
     awakening: boolean;
