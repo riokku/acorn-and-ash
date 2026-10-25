@@ -13,11 +13,13 @@ export function FirePanel({
   state,
   onRequest,
   onClose,
+  onOpenMeals,
 }: {
   fire: FirePanelState;
   state: HudState;
   onRequest?: (request: FireRequest) => void;
   onClose?: () => void;
+  onOpenMeals?: () => void;
 }): React.JSX.Element {
   const logs = state.carrying.find((entry) => entry.item === 'log')?.count ?? 0;
   const available = state.connection === 'connected' && onRequest !== undefined;
@@ -104,6 +106,11 @@ export function FirePanel({
           </>
         )}
       </div>
+      {!storage && onOpenMeals ? (
+        <button type="button" className="fire-prepare-meals" onClick={onOpenMeals}>
+          Prepare meals
+        </button>
+      ) : null}
       <small>
         {storage && !fire.yours
           ? "This is another player's log pile."

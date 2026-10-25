@@ -4849,3 +4849,71 @@ body {
   font-size: 20px;
   line-height: 1;
 }
+
+.meal-preparation {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid #b5a27855;
+  border-radius: 12px;
+  background: #53613b12;
+  color: #51482f;
+}
+.meal-preparation-heading {
+  font-size: 17px;
+  font-weight: 700;
+}
+.meal-preparation p {
+  margin: 8px 0;
+  line-height: 1.45;
+}
+.meal-preparation-active {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #53613b13;
+  line-height: 1.45;
+}
+.meal-preparation-rule,
+.meal-preparation-fire {
+  font-size: 12px;
+}
+.meal-recipe-purpose {
+  margin: 4px 0;
+  color: #526435;
+  font-weight: 700;
+  font-size: 12px;
+}
+.meal-recipe-route {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6c614b;
+}
+.meal-recipe-packed {
+  margin: 6px 0;
+  color: #526435;
+  font-size: 12px;
+}
+.fire-prepare-meals {
+  width: 100%;
+  margin-top: 6px;
+}
+.meal-gallery {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #e8dfc6;
+  overflow: auto;
+}
+.meal-gallery .craft-panel {
+  position: relative;
+  top: auto;
+  left: auto;
+  bottom: auto;
+  right: auto;
+  transform: none;
+  height: calc(100dvh - 48px);
+  width: min(720px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  pointer-events: auto;
+}

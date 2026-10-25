@@ -8,6 +8,8 @@ import {
   advanceMeal,
   mealFromSaved,
   mealCooldown,
+  mealWarmthBonus,
+  clockShiftForSeason,
   MEAL_ITEMS,
   TICK_HZ,
   DODGE,
@@ -138,4 +140,23 @@ describe('one meal benefit at a time', () => {
       decodeServerMessage(encodeMeal({ item: 'berryTea', ticksLeft: MAX_MEAL_TICKS + 1 })),
     ).toBeNull();
   });
+});
+
+it('gives active berry tea modest winter insulation and removes it immediately on expiry', () => {
+  expect(mealWarmthBonus(startMeal('berryTea'))).toBe(10);
+  expect(mealWarmthBonus(startMeal('forestStew'))).toBe(0);
+  expect(mealWarmthBonus({ item: 'berryTea', ticksLeft: 0 })).toBe(0);
+  const sim = world({
+    warmth: { value: 50, coldTicks: 0 },
+    meal: { item: 'berryTea', ticksLeft: 2 },
+  });
+  sim.setCalendarShift(clockShiftForSeason(sim.seed, 0, 'winter'));
+  sim.setTestWeather('storm');
+  sim.step(1000);
+  const tea = sim.warmthStateOf(1).value;
+  expect(50 - tea).toBeCloseTo(0.025, 6);
+  expect(tea).toBeLessThan(50); // Tea alone still leaves the player exposed.
+  sim.step(1050);
+  expect(sim.mealStateOf(1)).toEqual(NO_MEAL);
+  expect(tea - sim.warmthStateOf(1).value).toBeCloseTo(0.03, 6);
 });

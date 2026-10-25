@@ -649,6 +649,14 @@ it waits rather than growing through them. Inspect the reused plant models at
 `?gallery=forage-habitats` (`&before` compares). See
 [learnable foraging habitats](docs/decisions/0234-learnable-foraging-habitats.md).
 
+The Food page now helps pack for an outing: compare meal roles, ingredient routes,
+current supplies, packed servings and the active benefit. Fire panels include
+**Prepare meals**, opening this page directly. Preparing packs food; eating starts
+the ten-minute benefit and replaces any other special meal. Berry tea also adds
+10 warmth during its active benefit, alongside its existing gathering bonus; warm
+clothes and shelter still matter. Preview at `?gallery=meal-preparation`.
+See [meal preparation](docs/decisions/0235-meal-preparation.md).
+
 ### Wildlife
 
 Rabbits, jackrabbits, foxes and elk now leave fresh ground tracks along their actual

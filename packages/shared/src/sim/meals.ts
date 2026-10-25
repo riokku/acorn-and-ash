@@ -30,7 +30,7 @@ export function mealFromSaved(value: unknown): MealState {
 export const MEAL_BENEFITS: Record<MealItem, string> = {
   trailRation: 'Dodge recovers 25% faster',
   forestStew: 'Restores 2 health every 10 seconds',
-  berryTea: 'Hand gathering recovers 25% faster',
+  berryTea: 'Hand gathering recovers 25% faster · +10 warmth',
 };
 export function startMeal(item: MealItem): MealState {
   return { item, ticksLeft: MAX_MEAL_TICKS };
@@ -45,4 +45,9 @@ export function mealCooldown(state: MealState, normal: number, item: MealItem): 
   return state.item === item && state.ticksLeft > 0
     ? Math.max(1, Math.round(normal * 0.75))
     : normal;
+}
+
+/** A little warmth for an outing; clothing and shelter still supply the rest. */
+export function mealWarmthBonus(state: MealState): number {
+  return state.item === 'berryTea' && state.ticksLeft > 0 ? 10 : 0;
 }
