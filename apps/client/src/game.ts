@@ -3693,6 +3693,7 @@ export class Game {
       this.weatherCloud,
       weather.kind === 'blizzard',
       outdoorPosition === undefined ? 0 : highPlainsWeight(outdoorPosition.x, outdoorPosition.z),
+      deltaSeconds,
     );
     const snow = seasonUniforms.snow.value > 0.5 && this.space === OUTDOORS;
     if (this.localPlayer !== null) {
