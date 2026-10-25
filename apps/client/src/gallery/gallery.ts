@@ -432,6 +432,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showWinterGear(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'harvesting') {
+    scene.add(createGalleryGround([], () => 0, 6, 40));
+    const { showHarvesting } = await import('./harvesting');
+    await showHarvesting(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'footing') {
     const { showFooting, galleryLedgeHeight } = await import('./footing');
     scene.add(createGalleryGround([], galleryLedgeHeight, 4, 160));

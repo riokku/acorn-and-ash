@@ -1,3 +1,4 @@
+import { HarvestingReach } from './harvesting-reach';
 import { createFishParts } from './fish-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { CanoePaddling } from './canoe-paddling';
@@ -88,6 +89,7 @@ export interface Character {
    * the fish being eaten - or null to leave the hand as it is.
    */
   playGesture(gesture: Gesture, item: ItemId | null): void;
+  reachForCollection(point: THREE.Vector3 | null): void;
   /** Where their line is at, or null with no line out. */
   setFishing(pose: FishingPose | null): void;
   /** Where the body settles when they sit or lie down, or null when there is nowhere. */
@@ -636,6 +638,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   rest.add(spin);
   group.add(rest);
   const footContact = StandingFootContact.forRig(model, group);
+  const harvestReach = HarvestingReach.forRig(model);
 
   // Materials are shared with the template by default - cloned per instance
   // so tinting one player's colour in below never bleeds into another's.
@@ -813,7 +816,12 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       showHeld();
     },
     setGear: gear.setWorn,
+    reachForCollection: (point) => {
+      if (point === null) harvestReach?.cancel();
+      else harvestReach?.start(point);
+    },
     playGesture: (gesture, item) => {
+      if (gesture !== Gesture.PickUp) harvestReach?.cancel();
       const playing = animatorFor();
       if (playing === null) return;
       playing.playGesture(gesture);
@@ -846,10 +854,11 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       // The dig swing brings the shovel out for as long as it plays.
       if (frame.move.digging === true && frame.move.kind === ActionKind.Swing)
         digging = Math.max(digging, DIG_SHOW_SECONDS);
+      harvestReach?.restore();
       footContact?.restore();
       paddling?.restore();
       const pose = playing.update(deltaSeconds, frame.move, frame.locomotion);
-      handsFree = pose.handsFree;
+      handsFree = pose.handsFree || harvestReach?.active === true;
       const bites = playing.eating;
       if (bites === null) eating = null;
       showHeld();
@@ -891,6 +900,12 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       // Fit the grounded gait while preserving its animated step height.
       // Whole-body moves, airborne poses and seats retain their own footing.
       footContact?.apply(deltaSeconds, frame.groundHeight, grounded ? playing.groundedWeight : 0);
+      harvestReach?.update(
+        deltaSeconds,
+        frame.move.kind === ActionKind.Idle &&
+          !frame.locomotion.airborne &&
+          frame.locomotion.speed < 3,
+      );
       torchFlame?.update(deltaSeconds, heldItems.get('torch')?.group.visible === true);
       return pose;
     },
@@ -1090,6 +1105,7 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     setEquippedItem: () => {},
     setGear: () => {},
     playGesture: () => {},
+    reachForCollection: () => {},
     setFishing: () => {},
     setRestSpot: () => {},
     hitStop: () => {},

@@ -635,6 +635,12 @@ a separate test world). Storm lightning begins within 18 seconds; ignition is
 probabilistic. These controls are ignored in production. See
 [decision 0113](docs/decisions/0113-blizzards-and-wildfires.md).
 
+Plant gathering now bends and lifts the picked flower, reed, berry or mushroom toward
+the character's hand, with a soft rustle. Picking stays immediate and can be interrupted
+by moving or fighting. Reduced motion skips the detached-plant effect. Inspect the
+animation at `?gallery=harvesting` (`&at=0.32` freezes it, `&before` compares the old
+presentation). See [tactile harvesting](docs/decisions/0232-tactile-harvesting.md).
+
 ### Wildlife
 
 A few rabbits - soft-furred, long-eared, with a powder-puff tail - live at fixed spots
