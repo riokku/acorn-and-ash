@@ -638,8 +638,10 @@ probabilistic. These controls are ignored in production. See
 ### Wildlife
 
 A few rabbits - soft-furred, long-eared, with a powder-puff tail - live at fixed spots
-out in the wilderness. Left alone they amble about near home; get too close
-and one bolts, curving away for as long as you keep following. See
+out in the wilderness. Left alone they amble about near home. Walk and pause to
+approach quietly; sprinting is noticed farther away. Prey stops and turns to watch
+before bolting, while point-blank surprises and predators still startle it immediately.
+Backing off lets suspicion fade. See [quiet stalking](docs/decisions/0231-quiet-stalking.md) and
 [decision 0018](docs/decisions/0018-a-rabbit-that-flees.md).
 
 Catch one with the same swing that fells a tree - an axe, and a rabbit within
@@ -649,7 +651,7 @@ ready to catch again, a minute later. See
 [decision 0019](docs/decisions/0019-catching-wildlife.md).
 
 A fox lives out there too, with real modeled art rather than a placeholder
-shape. To you, it is just another rabbit: it flees the moment you get close
+shape. Like a rabbit, it watches an approach before fleeing if you get too close
 and pays out meat the same way if you catch it. Left alone, though, it
 roams wider than a rabbit does and sometimes chases one down itself - if it
 catches one, that rabbit is gone until it respawns at its den, same as if
