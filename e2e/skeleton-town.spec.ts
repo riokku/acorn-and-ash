@@ -59,7 +59,14 @@ test('enters Bonehollow with thirteen independently patrolling residents', async
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
-    await expect(page.getByTestId('raid-tracker')).toHaveText(/13 skeletons left/);
+    const nearby = sim.snapshotFor(1).filter(shared.isRaiderEntity);
+    expect(
+      nearby.filter(
+        (entity) => Math.abs(entity.x - town.x) < 26 && Math.abs(entity.z - town.z) < 26,
+      ),
+    ).toHaveLength(13);
+    // The tracker includes awake approach guards nearby as well as townspeople.
+    await expect(page.getByTestId('raid-tracker')).toContainText(`${nearby.length} skeletons left`);
     await page.evaluate(({ x, z }) => window.acornDebug?.faceTowards(x, z), town);
     await page.keyboard.down('KeyW');
     await expect.poll(() => sim.outdoorPositionOf(1)!.z).toBeLessThan(town.z + 31);
