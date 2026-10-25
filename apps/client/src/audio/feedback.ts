@@ -30,8 +30,9 @@ export function playCollection(item: ItemId, depleted: boolean, volume = 1): voi
     noise(context, start, 0.045, 1800, volume * 0.065);
   } else if (item === 'berry' || item === 'mushroom') {
     tone(context, start, item === 'berry' ? 520 : 330, 280, 0.065, volume * 0.055);
-    noise(context, start, 0.035, 1100, volume * 0.035);
+    noise(context, start, 0.11, 1700, volume * 0.06);
   } else if (item === 'flower') {
+    noise(context, start, 0.13, 2600, volume * 0.065);
     tone(context, start, 660, 760, 0.18, volume * 0.065);
     tone(context, start + 0.025, 990, 1050, 0.16, volume * 0.025);
   } else {

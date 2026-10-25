@@ -1,3 +1,4 @@
+import { HarvestingMotion, type GatheringHand } from './harvesting-motion';
 import { createHomeDecoration } from './home-decoration';
 import { wornWeapon } from './gear-models';
 import { createLastBellTrophy } from './skeleton-town';
@@ -9,6 +10,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   GATHER_PATCH_MAX_COUNT,
+  type CollectedEvent,
   skeletonWeaponKind,
   blueprintHome,
   type DroppedPileView,
@@ -42,6 +44,9 @@ export interface GroundItems {
   /** A patch highlights the last visible piece, which is the next one gathering removes. */
   target(kind: 'patch' | 'pile', id: number): THREE.Object3D | null;
   patchObject(id: number): THREE.Object3D | null;
+  collect(event: CollectedEvent, hand: GatheringHand): THREE.Vector3 | null;
+  update(seconds: number, reducedMotion?: boolean): void;
+  clearHarvesting(): void;
   dispose(): void;
 }
 
@@ -67,6 +72,9 @@ interface DrawnPile {
 export function createGroundItems(heightAt: (x: number, z: number) => number): GroundItems {
   const group = new THREE.Group();
   const patches = new Map<number, GroundModel>();
+  const counts = new Map<number, number>();
+  const harvesting = new HarvestingMotion();
+  group.add(harvesting.group);
   const piles = new Map<number, DrawnPile>();
 
   const remove = (model: GroundModel): void => {
@@ -76,22 +84,53 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
 
   return {
     group,
+    collect: (event, hand) => {
+      let picked = harvesting.collect(event, hand);
+      if (picked === null) {
+        for (const model of patches.values()) {
+          if (
+            model.item !== event.item ||
+            Math.hypot(model.group.position.x - event.x, model.group.position.z - event.z) >= 0.05
+          )
+            continue;
+          picked =
+            model.group.children.filter((child) => child.visible).at(-harvesting.pending(event)) ??
+            null;
+          break;
+        }
+      }
+      if (picked === null) return null;
+      picked.updateWorldMatrix(true, true);
+      return new THREE.Box3().setFromObject(picked).getCenter(new THREE.Vector3());
+    },
+    update: (seconds, reducedMotion) => harvesting.update(seconds, reducedMotion),
+    clearHarvesting: () => harvesting.clear(),
     setGatherPatches: (views) => {
       const present = new Set<number>();
       for (const view of views) {
         present.add(view.id);
         let model = patches.get(view.id);
         if (model === undefined || model.item !== view.item) {
+          harvesting.forget(view.id);
+          counts.delete(view.id);
           if (model !== undefined) remove(model);
           model = createPatchModel(view.item);
           patches.set(view.id, model);
           group.add(model.group);
         }
         model.group.position.set(view.x, heightAt(view.x, view.z), view.z);
+        const before = counts.get(view.id) ?? view.remaining;
+        for (let index = before - 1; index >= view.remaining; index--) {
+          const source = model.group.children[index];
+          if (source?.visible) harvesting.detach(view.id, view.item, view.x, view.z, source);
+        }
         model.show(view.remaining);
+        counts.set(view.id, view.remaining);
       }
       for (const [id, model] of patches) {
         if (present.has(id)) continue;
+        harvesting.forget(id);
+        counts.delete(id);
         remove(model);
         patches.delete(id);
       }
@@ -131,6 +170,8 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
       return model.group.children.findLast((child) => child.visible) ?? null;
     },
     dispose: () => {
+      harvesting.clear();
+      counts.clear();
       for (const model of patches.values()) remove(model);
       for (const drawn of piles.values()) remove(drawn.model);
       patches.clear();

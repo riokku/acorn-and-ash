@@ -1,3 +1,4 @@
+import { isPickedPlant } from './scene/harvesting-motion';
 import { KingStormEffect } from './scene/king-storm';
 import type { KingStormView } from '@acorn/shared';
 import { KingVictoryEffect, KING_VICTORY_SECONDS } from './scene/king-victory';
@@ -3600,6 +3601,7 @@ export class Game {
         this.currentWeather().wind,
       );
     this.updateRemotePlayers(deltaSeconds);
+    this.groundItems?.update(deltaSeconds, this.reducedMotion.matches);
     for (let index = 0; index < waterRippleUniforms.length; index++) {
       const ripple = this.waterWake.ripples[index]!;
       waterRippleUniforms[index]!.value.set(ripple.x, ripple.z, ripple.age, ripple.strength);
@@ -5950,6 +5952,22 @@ export class Game {
     const distance = Math.hypot(listener.x - event.x, listener.z - event.z);
     const volume = event.netId === this.selfNetId ? 1 : Math.max(0, 1 - distance / 12) ** 2 * 0.45;
     playCollection(event.item, event.depleted, volume);
+    if (this.space === OUTDOORS && distance < 24 && isPickedPlant(event.item)) {
+      const character =
+        event.netId === this.selfNetId
+          ? this.localCharacter
+          : this.remoteCharacters.get(event.netId);
+      const y = this.collision?.terrain.heightAt(event.x, event.z) ?? 0;
+      const target =
+        this.groundItems?.collect(event, (into) => character?.handPosition(into) ?? null) ??
+        new THREE.Vector3(
+          event.x,
+          y + (event.item === 'reed' ? 0.55 : event.item === 'flower' ? 0.3 : 0.12),
+          event.z,
+        );
+      character?.reachForCollection(target);
+    }
+
     if (event.depleted && distance < 24) {
       const y = this.collision?.terrain.heightAt(event.x, event.z) ?? 0;
       this.bursts.burst('gather', new THREE.Vector3(event.x, y + 0.18, event.z), 0, 0);
@@ -6176,6 +6194,8 @@ export class Game {
 
   /** A new connection or space has no useful actor history from the old one. */
   private clearRemoteActors(): void {
+    this.groundItems?.clearHarvesting();
+    this.localCharacter?.reachForCollection(null);
     this.clearKingStorm();
     this.clearKingVictory();
     for (const id of this.remotePlayers.netIds()) this.removeRemote(id);
