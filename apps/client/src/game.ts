@@ -1,3 +1,4 @@
+import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
 import { isPickedPlant } from './scene/harvesting-motion';
 import { KingStormEffect } from './scene/king-storm';
 import type { KingStormView } from '@acorn/shared';
@@ -893,6 +894,7 @@ export class Game {
   private discoveriesClaimed = 0;
   private discoveryLeads: readonly DiscoveryLead[] = [];
   private discoverySites: readonly DiscoverySite[] = [];
+  private freshAnimalTracks: FreshAnimalTracks | null = null;
   private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
   private surveyScenery: ReturnType<typeof createSurveyScenery> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
@@ -1761,6 +1763,7 @@ export class Game {
     this.discoveryLandmarks?.dispose();
     this.surveyScenery?.dispose();
     this.animalTracks?.dispose();
+    this.freshAnimalTracks?.dispose();
     for (const model of this.decorModels) model.dispose();
     this.decorModels.length = 0;
     this.wildfireArt?.dispose();
@@ -1935,6 +1938,10 @@ export class Game {
         const { name, character, color, skin } = this.options.identity;
         this.connection?.sendHello(name, character, color, skin);
         void this.enterWorld(message.seed);
+        break;
+      }
+      case 'animalTracks': {
+        this.freshAnimalTracks?.setTracks(message.tracks);
         break;
       }
       case 'kingStorm': {
@@ -2958,6 +2965,8 @@ export class Game {
         ...discoveryColliders([...this.discoverySites, ...SUNREACH_NOTES], terrain),
       ]);
       this.outdoors.add(this.animalTracks.group);
+      this.freshAnimalTracks = new FreshAnimalTracks((x, z) => terrain.heightAt(x, z));
+      this.outdoors.add(this.freshAnimalTracks.group);
       this.encounterLandmarks = createEncounterLandmarks(
         [...encounterSites, ...this.discoveryLeads, ...KING_REMNANTS],
         terrain,
@@ -3626,6 +3635,18 @@ export class Game {
       }
     }
     this.updateRemoteAnimals(deltaSeconds);
+    const trackWeather = this.currentWeather().kind;
+    this.freshAnimalTracks?.update(
+      deltaSeconds,
+      trackWeather === 'storm' || trackWeather === 'blizzard'
+        ? 6
+        : trackWeather === 'rain'
+          ? 4
+          : trackWeather === 'drizzle'
+            ? 2
+            : 1,
+      seasonUniforms.snow.value > 0.5,
+    );
     this.raiders.update(
       deltaSeconds,
       this.listenerPoint(),
@@ -6195,6 +6216,7 @@ export class Game {
   /** A new connection or space has no useful actor history from the old one. */
   private clearRemoteActors(): void {
     this.groundItems?.clearHarvesting();
+    this.freshAnimalTracks?.clear();
     this.localCharacter?.reachForCollection(null);
     this.clearKingStorm();
     this.clearKingVictory();
@@ -6404,6 +6426,11 @@ export class Game {
       trackHint:
         this.space === OUTDOORS && player !== null
           ? (() => {
+              const fresh = this.freshAnimalTracks?.hintAt(
+                player.motion.position.x,
+                player.motion.position.z,
+              );
+              if (fresh) return fresh;
               const track = this.animalTracks?.tracks.find(
                 (track) =>
                   Math.hypot(

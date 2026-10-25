@@ -1,3 +1,4 @@
+import type { FreshAnimalTrack } from '../sim/animal-tracks';
 import type { KingStormView } from '../sim/king-storm';
 import type { AllyView } from '../sim/cooperation';
 import type { TreasureSpot } from '../sim/treasure';
@@ -131,6 +132,7 @@ export const ServerMessageType = {
   Treasure: 0x4a,
   Allies: 0x4b,
   KingStorm: 0x4c,
+  AnimalTracks: 0x4d,
 } as const;
 
 export const RejectReason = {
@@ -718,6 +720,7 @@ export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'animalTracks'; readonly tracks: readonly FreshAnimalTrack[] }
   | { readonly type: 'kingStorm'; readonly storm: KingStormView | null }
   | { readonly type: 'allies'; readonly players: readonly AllyView[] }
   | { readonly type: 'treasure'; readonly spots: readonly TreasureSpot[] }

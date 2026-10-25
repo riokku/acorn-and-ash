@@ -432,6 +432,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showWinterGear(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'fresh-tracks') {
+    const { showFreshTracks, trackGalleryGround } = await import('./fresh-tracks');
+    scene.add(createGalleryGround([], trackGalleryGround, 12, 40));
+    await showFreshTracks(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'harvesting') {
     scene.add(createGalleryGround([], () => 0, 6, 40));
     const { showHarvesting } = await import('./harvesting');

@@ -1,3 +1,4 @@
+import { AnimalTrailHistory, type FreshAnimalTrack } from './animal-tracks';
 import { stepWildlifeAwareness, wildlifeNoticeRadius } from './wildlife-awareness';
 import { CROWNBREAKER_HOLD, KING_REMNANTS } from '../world/hollow-king';
 import { streamWaterDepthAt } from '../world/stream';
@@ -1748,6 +1749,7 @@ export class WorldSimulation {
 
   private readonly homeChests = new Map<number, ChestSlot[]>();
   private readonly players = new Map<number, PlayerRuntime>();
+  private readonly liveAnimalTrails = new AnimalTrailHistory();
   private readonly animals = new Map<number, AnimalRuntime>();
   /** Drained by the world server each tick and turned into messages. */
   private readonly pickupEvents: PickupTaken[] = [];
@@ -3132,6 +3134,7 @@ export class WorldSimulation {
   /** Amble, react to the nearest player, or wait out a catch - whichever this tick calls for. */
   private stepAnimals(): void {
     const weather = this.weather().kind;
+    this.liveAnimalTrails.age(TICK_SECONDS, weather);
     const wet = weather === 'rain' || weather === 'storm' || weather === 'blizzard';
     this.world
       .query(AnimalTag, Position, Velocity, Facing, NetworkId)
@@ -3144,6 +3147,7 @@ export class WorldSimulation {
         const kind: AnimalKind = ANIMAL_KINDS[runtime.kind];
 
         if (runtime.caught) {
+          this.liveAnimalTrails.forget(runtime.id);
           if (this.nowMs < runtime.respawnAtMs) {
             velocity.x = 0;
             velocity.z = 0;
@@ -3292,6 +3296,14 @@ export class WorldSimulation {
       if (runtime.caught) continue;
       const position = runtime.entity.get(Position);
       if (position === undefined) continue;
+      this.liveAnimalTrails.observe(
+        runtime.id,
+        runtime.kind,
+        position.x,
+        position.z,
+        !overlapsWater(this.keepOutWater, position.x, position.z, 0.25) &&
+          streamWaterDepthAt(STREAM, position.x, position.z) <= 0,
+      );
       runtime.trailHead = (runtime.trailHead + 1) % ANIMAL_TRAIL_TICKS;
       runtime.trailX[runtime.trailHead] = position.x;
       runtime.trailZ[runtime.trailHead] = position.z;
@@ -3560,6 +3572,12 @@ export class WorldSimulation {
       }
     }
     return best;
+  }
+
+  animalTracksOf(netId: number): FreshAnimalTrack[] {
+    const player = this.players.get(netId);
+    const at = player?.entity.get(Position);
+    return player?.space === OUTDOORS && at ? this.liveAnimalTrails.near(at.x, at.z) : [];
   }
 
   /** The nearest connected player to a point, as their whole runtime, or null in an empty world. */
@@ -7482,6 +7500,7 @@ export class WorldSimulation {
     runtime.entity.set(Position, { x: position.x, y: position.y, z: position.z });
     runtime.entity.set(Velocity, { x: 0, y: 0, z: 0 });
     runtime.trailCount = 0;
+    this.liveAnimalTrails.forget(animalId);
   }
 
   /** Everything worth writing to storage. */

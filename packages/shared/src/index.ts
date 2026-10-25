@@ -146,3 +146,5 @@ export * from './sim/loot-intent';
 export * from './sim/wildlife-habitat';
 export * from './data/world-boss';
 export * from './world/hollow-king';
+
+export * from './sim/animal-tracks';
