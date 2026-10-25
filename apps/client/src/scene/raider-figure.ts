@@ -213,9 +213,11 @@ export class RaiderFigure {
     at: { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number },
     frame: CharacterFrame,
     volume: number,
+    channeling = false,
   ): MovePose | null {
     const group = this.character.group;
     this.danger?.update(at, frame.move?.kind ?? ActionKind.Idle, frame.move?.age ?? 0);
+    if (channeling && this.danger) this.danger.group.visible = false;
     this.townResident ??= inSkeletonTown(at.x, at.z, 12);
     if (this.townHat) this.townHat.visible = this.townResident;
     group.position.set(at.x, at.y, at.z);

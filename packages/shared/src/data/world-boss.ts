@@ -14,6 +14,18 @@ export const HOLLOW_KING = {
   rewardRecentTicks: 90 * 20,
   respawnSeconds: 30 * 60,
 } as const;
+/** Two clearly warned arena phases, with enough time to reach a ward at walking pace. */
+export const SOUL_STORM = {
+  thresholds: [0.65, 0.25],
+  warningTicks: 140,
+  activeTicks: 100,
+  recoveryTicks: 76,
+  cooldownTicks: 200,
+  pulseTicks: 20,
+  damage: 12,
+  radius: 34,
+  shelterRadius: 4.2,
+} as const;
 export function hollowKingToughness(helpers: number): number {
   return HOLLOW_KING.toughness + Math.max(0, Math.min(5, helpers) - 3) * 10;
 }

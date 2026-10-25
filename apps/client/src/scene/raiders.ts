@@ -1,6 +1,8 @@
 import type * as THREE from 'three/webgpu';
 
 import {
+  type KingStormView,
+  CHARGE_TICKS,
   ActionKind,
   DODGE,
   RAIDER_BLOW_WEIGHT,
@@ -99,6 +101,10 @@ export class RaiderCrowd {
   private readonly spares = new Map<RaiderKindId, Character[]>();
   private readonly action = createActionState();
   private clock = 0;
+  private storm: KingStormView | null = null;
+  setKingStorm(storm: KingStormView | null): void {
+    this.storm = storm;
+  }
 
   constructor(
     private readonly parent: THREE.Object3D,
@@ -304,6 +310,7 @@ export class RaiderCrowd {
       const action = unpackActionByte(pose.action, this.action);
       const memory = this.memories.get(id) ?? new MoveMemory();
       this.memories.set(id, memory);
+      const channeling = this.storm?.bossId === id && this.storm.phase !== 'recovery';
       const move = memory.view(
         action.kind,
         action.step,
@@ -316,11 +323,14 @@ export class RaiderCrowd {
         deltaSeconds,
         pose,
         {
-          move,
+          move: channeling
+            ? { ...move, kind: ActionKind.Charge, step: 0, age: CHARGE_TICKS }
+            : move,
           locomotion: { speed: pose.travelSpeed, airborne: pose.airborne },
           groundHeight: this.groundHeight,
         },
         volumeAt(distance),
+        channeling,
       );
       const kind = RAIDER_KINDS[figure.kind];
       const left = this.hitsLeft.get(id) ?? kind.toughness;
@@ -345,6 +355,7 @@ export class RaiderCrowd {
 
   /** Everybody gone at once: going indoors, or a fresh connection. */
   clear(): void {
+    this.storm = null;
     for (const id of this.positions.netIds()) {
       this.positions.remove(id);
       const figure = this.forget(id);

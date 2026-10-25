@@ -1,8 +1,16 @@
+import { KingStormEffect } from './scene/king-storm';
+import type { KingStormView } from '@acorn/shared';
 import { KingVictoryEffect, KING_VICTORY_SECONDS } from './scene/king-victory';
 import { playKingVictory } from './audio/king-victory';
 import type { KingVictoryView } from './hud/KingVictory';
 import type { AllyView } from '@acorn/shared';
-import { kingsRoadBeat, KING_MUSTER, CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
+import {
+  KING_WARDS,
+  kingsRoadBeat,
+  KING_MUSTER,
+  CROWNBREAKER_HOLD,
+  KING_REMNANTS,
+} from '@acorn/shared';
 import { canBufferLoot } from '@acorn/shared';
 import { equipmentDodgeCooldown } from '@acorn/shared';
 import {
@@ -320,7 +328,7 @@ import {
   setImpactSoundsActive,
   startAmbientMusic,
 } from './audio/sound';
-import { playRaidHorn, playRaidOver, playVictory } from './audio/raid-sounds';
+import { playEarthRumble, playRaidHorn, playRaidOver, playVictory } from './audio/raid-sounds';
 import {
   colorForPlayer,
   createCharacter,
@@ -1123,6 +1131,8 @@ export class Game {
   private raidBanner: { banner: RaidBanner; until: number } | null = null;
   private raidBannersShown = 0;
   private kingVictory: KingVictoryView | null = null;
+  private kingStorm: KingStormView | null = null;
+  private kingStormArt: KingStormEffect | null = null;
   private kingVictoryEffect: KingVictoryEffect | null = null;
   private stopKingVictorySound: (() => void) | null = null;
   private lastKingVictoryAt = -Infinity;
@@ -1773,6 +1783,7 @@ export class Game {
     this.buriedCacheMeshes.clear();
     this.clearKingVictory();
     this.kingVictoryEffect?.dispose();
+    this.kingStormArt?.dispose();
     this.raiders.dispose();
     this.bursts.dispose();
     this.treeLandingEffects.dispose();
@@ -1923,6 +1934,16 @@ export class Game {
         const { name, character, color, skin } = this.options.identity;
         this.connection?.sendHello(name, character, color, skin);
         void this.enterWorld(message.seed);
+        break;
+      }
+      case 'kingStorm': {
+        if (
+          message.storm?.phase === 'storm' &&
+          (this.kingStorm?.phase !== 'storm' || this.kingStorm.wave !== message.storm.wave)
+        )
+          playEarthRumble(message.storm.outside ? 0.3 : 0.65);
+        this.kingStorm = message.storm;
+        this.raiders.setKingStorm(message.storm);
         break;
       }
       case 'allies': {
@@ -2612,11 +2633,36 @@ export class Game {
     )
       return;
     this.lastKingVictoryAt = now;
+    this.clearKingStorm();
     this.kingVictory = { key: ++this.raidBannersShown, startedAt: now };
     this.kingVictoryEffect.start(at, this.reducedMotion.matches);
     this.stopKingVictorySound?.();
     this.stopKingVictorySound = playKingVictory();
     this.options.hud.publish({ kingVictory: this.kingVictory, raidBanner: null });
+  }
+
+  private nearestKingWard(): Compass | null {
+    const at = this.listenerPoint();
+    if (
+      !at ||
+      !this.kingStorm ||
+      this.kingStorm.sheltered ||
+      this.kingStorm.outside ||
+      this.kingStorm.phase === 'recovery'
+    )
+      return null;
+    let nearest: Compass | null = null;
+    for (const ward of KING_WARDS) {
+      const direction = compassTo(at, ward, this.camera?.look.yaw ?? 0);
+      if (!nearest || direction.distanceMeters < nearest.distanceMeters) nearest = direction;
+    }
+    return nearest;
+  }
+
+  private clearKingStorm(): void {
+    this.kingStorm = null;
+    this.raiders.setKingStorm(null);
+    this.kingStormArt?.clear();
   }
 
   private clearKingVictory(): void {
@@ -2995,6 +3041,9 @@ export class Game {
       // without the game freezing to learn how to draw a skeleton.
       this.raiders.rehearse(SPAWN_POSITION);
       this.kingVictoryEffect?.dispose();
+      this.kingStormArt?.dispose();
+      this.kingStormArt = new KingStormEffect(terrain);
+      this.outdoors.add(this.kingStormArt.group);
       this.kingVictoryEffect = new KingVictoryEffect();
       this.outdoors.add(this.kingVictoryEffect.group);
 
@@ -3585,6 +3634,11 @@ export class Game {
       if (age >= KING_VICTORY_SECONDS) this.clearKingVictory();
       else this.kingVictoryEffect?.update(age);
     }
+    this.kingStormArt?.update(
+      this.space === OUTDOORS ? this.kingStorm : null,
+      now / 1000,
+      this.reducedMotion.matches,
+    );
     this.bursts.update(deltaSeconds);
     this.clearingScene?.update(deltaSeconds);
     for (const landing of [
@@ -3688,6 +3742,7 @@ export class Game {
             [
               this.treeLandingEffects.group,
               ...(this.kingVictoryEffect ? [this.kingVictoryEffect.group] : []),
+              ...(this.kingStormArt ? [this.kingStormArt.group] : []),
               ...(this.wildfireArt ? [this.wildfireArt.group] : []),
               ...(flame ? [flame.root] : []),
             ],
@@ -6121,6 +6176,7 @@ export class Game {
 
   /** A new connection or space has no useful actor history from the old one. */
   private clearRemoteActors(): void {
+    this.clearKingStorm();
     this.clearKingVictory();
     for (const id of this.remotePlayers.netIds()) this.removeRemote(id);
     for (const id of this.remoteAnimals.netIds()) this.removeCritter(id);
@@ -6309,6 +6365,8 @@ export class Game {
           ? this.raiders.worldBossNear(player.motion.position)
           : null,
       raidersClose: this.raidersClose,
+      kingStorm: this.space === OUTDOORS ? this.kingStorm : null,
+      kingWard: this.nearestKingWard(),
       kingVictory: this.kingVictory,
       raidBanner: this.currentRaidBanner(now),
       canBuild: this.canBuild,

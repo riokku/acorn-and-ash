@@ -1818,3 +1818,11 @@ above the arena. A delayed epic reveal points contributors to their personal
 spoils. Movement and camera control stay available throughout, with a quieter
 static presentation for reduced-motion preferences. Replay it at
 `/?gallery=king-victory`; add `&at=4.8` to inspect the reveal.
+
+The Hollow King channels **Soul Storm** at 65% and 25% health. A seven-second
+warning gives players time to reach one of three glowing wardstones or help a
+fallen ally. Stand inside a teal shelter circle to avoid the five damaging
+pulses; leaving the storm boundary is safe too. The King stops attacking while
+channeling and becomes exposed for a short counterattack window afterward.
+Shelter, damage and phase timing are server-authoritative. Replay the mechanic
+at `/?gallery=king-storm`, or add `&at=8.5` to inspect the active storm.

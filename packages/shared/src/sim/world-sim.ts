@@ -34,6 +34,7 @@ import {
   type TreasureSpot,
 } from './treasure';
 import { displayedHealth } from './health';
+import { inKingStorm, kingStormSheltered, type KingStormView } from './king-storm';
 import { RESCUE, type AllyView } from './cooperation';
 import {
   advanceWarmth,
@@ -7269,6 +7270,21 @@ export class WorldSimulation {
       item: site.reward[0]?.item ?? null,
     });
     return true;
+  }
+
+  kingStormOf(netId: number): KingStormView | null {
+    const player = this.players.get(netId),
+      at = player?.entity.get(Position),
+      storm = this.raids.kingStorm();
+    if (
+      !player ||
+      player.space !== OUTDOORS ||
+      !at ||
+      !storm ||
+      Math.hypot(at.x - CROWNBREAKER_HOLD.x, at.z - CROWNBREAKER_HOLD.z) > 60
+    )
+      return null;
+    return { ...storm, sheltered: kingStormSheltered(at), outside: !inKingStorm(at) };
   }
 
   worldBossRestUntilMs(): number {
