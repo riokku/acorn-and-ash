@@ -86,7 +86,7 @@ const FLOOR_TILE = 2.8;
  * floor wherever the mesh's own `floor` attribute says, all of it tinted by
  * its `tint` attribute (see ground-shading.ts).
  */
-export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
+export function createGroundMaterial(softTransitions = true): THREE.MeshStandardNodeMaterial {
   const grass = artTexture('grass');
   const floor = artTexture('forestFloor');
   const soil = artTexture('soil');
@@ -119,7 +119,11 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // worn patch really looks, rather than a smooth fade.
   const blades = grassNear.g.sub(0.35).mul(0.9);
   const amount = attribute('floor', 'float');
-  const bare = smoothstep(0.3, 0.7, amount.sub(blades));
+  const bare = smoothstep(
+    softTransitions ? 0.24 : 0.3,
+    softTransitions ? 0.76 : 0.7,
+    amount.sub(blades),
+  );
 
   // The season recolours the whole ground, and in winter snow covers it:
   // thinner under the trees, where the bare forest floor is, and keeping the
@@ -128,13 +132,29 @@ export function createGroundMaterial(): THREE.MeshStandardNodeMaterial {
   // Up the mountain the ground turns to bare grey rock, speckled by the same
   // forest-floor texture so it is not a flat colour (see decision 0114).
   const rockColour = vec3(0.5, 0.48, 0.45).mul(floorNear.r.mul(0.9).add(0.55));
-  const rocky = mix(shaded, rockColour.mul(attribute('tint', 'vec3')), attribute('rock', 'float'));
+  // Keep pure materials intact; irregular fine grain only breaks up their transition band.
+  const rockWeight = attribute('rock', 'float');
+  const rockEdge = rockWeight
+    .add(floorNear.r.sub(0.5).mul(0.65).mul(rockWeight).mul(float(1).sub(rockWeight)))
+    .clamp(0, 1);
+  const rocky = mix(
+    shaded,
+    rockColour.mul(attribute('tint', 'vec3')),
+    softTransitions ? rockEdge : rockWeight,
+  );
   // Reuse the existing fine soil grain with a sandy palette, fading from
   // darker wet sand at the water into a lighter dry bank and then grass.
   const bank = attribute('bank', 'vec2');
   const grain = texture(soil, ground.div(1.8)).r.mul(0.5).add(0.7);
   const sand = mix(color(0xb3a17c), color(0x776f59), bank.y).mul(grain);
-  const beach = mix(rocky, sand.mul(attribute('tint', 'vec3')), bank.x);
+  const sandEdge = bank.x
+    .add(grain.sub(0.95).mul(0.7).mul(bank.x).mul(float(1).sub(bank.x)))
+    .clamp(0, 1);
+  const beach = mix(
+    rocky,
+    sand.mul(attribute('tint', 'vec3')),
+    softTransitions ? sandEdge : bank.x,
+  );
   const seasonal = beach.mul(seasonUniforms.ground);
   const winterSnow = seasonUniforms.snow
     .mul(float(1).sub(bare.mul(float(0.45).mul(float(1).sub(seasonUniforms.blizzard)))))

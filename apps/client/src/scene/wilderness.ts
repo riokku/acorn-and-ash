@@ -1,3 +1,4 @@
+import { detailedTree } from './tree-detail';
 import { createUnderground } from './underground-shell';
 import * as THREE from 'three/webgpu';
 
@@ -45,8 +46,6 @@ const GROUND_SEGMENT_SIZE = 2.5;
  * almost nothing to draw.
  */
 const GROUND_FOG_MARGIN = 340;
-/** Trees nearer than this are drawn in full detail, and further ones as the simpler distant model. */
-const DETAIL_DISTANCE = 80;
 /**
  * The camera's idea of what is in the way is built in squares of forest this
  * wide, so a tree coming down only rebuilds its own square (a millisecond or
@@ -155,6 +154,7 @@ export function buildWildernessScene(
   wilderness: Wilderness,
   terrain: Terrain,
   clearing: Clearing,
+  options: { legacyTransitions?: boolean } = {},
 ): WildernessScene {
   const group = new THREE.Group();
   const disposables: Array<{ dispose(): void }> = [];
@@ -167,6 +167,7 @@ export function buildWildernessScene(
       stream: STREAM,
       props: [...clearing.props, ...wilderness.props],
     }),
+    !options.legacyTransitions,
   );
   group.add(ground.mesh, ground.underground);
   disposables.push(ground);
@@ -280,6 +281,7 @@ export function buildWildernessScene(
   let dirty = false;
   const changedTrees = new Set<number>();
   let sinceDetailUpdate = 1;
+  let detailInitialized = false;
   let lastX = Number.POSITIVE_INFINITY,
     lastZ = Number.POSITIVE_INFINITY;
 
@@ -294,7 +296,14 @@ export function buildWildernessScene(
         // Down, and finished falling: only its stump is left.
         if (felled.has(prop.id) && !falling.has(prop.id)) continue;
         const shown = standingTree(prop);
-        const isNear = Math.hypot(prop.x - position.x, prop.z - position.z) < DETAIL_DISTANCE;
+        const previousSlot = slotOf.get(prop.id);
+        const isNear = options.legacyTransitions
+          ? Math.hypot(prop.x - position.x, prop.z - position.z) < 80
+          : detailedTree(
+              prop.id,
+              Math.hypot(prop.x - position.x, prop.z - position.z),
+              detailInitialized ? previousSlot?.parts === draw.near : undefined,
+            );
         const parts = isNear ? draw.near : draw.far;
         const index = isNear ? near++ : far++;
         const slot = slotOf.get(prop.id);
@@ -468,6 +477,7 @@ export function buildWildernessScene(
         lastX = position.x;
         lastZ = position.z;
         repack(position);
+        detailInitialized = true;
         changedTrees.clear();
       }
 
@@ -509,6 +519,7 @@ export function buildWildernessScene(
 export function createGround(
   terrain: Terrain,
   shader: GroundShader,
+  softTransitions = true,
 ): GroundPatches & {
   mesh: THREE.Mesh;
   /** The ground seen from below, and a floor far under it: dark earth for any crack in a hole to look into, never sky. */
@@ -561,7 +572,7 @@ export function createGround(
   geometry.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
   geometry.setAttribute('bank', new THREE.BufferAttribute(bank, 2));
 
-  const material = createGroundMaterial();
+  const material = createGroundMaterial(softTransitions);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
   const underground = createUnderground(geometry, size);
