@@ -18,39 +18,13 @@ export function createAnimalTracks(
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const scratch = (x: number, z: number, yaw: number, kind: WoodlandKind): void => {
-    const y = terrain.heightAt(x, z) + 0.025;
-    const local = (dx: number, dz: number) => ({
-      x: x + dx * Math.cos(yaw) + dz * Math.sin(yaw),
-      z: z - dx * Math.sin(yaw) + dz * Math.cos(yaw),
-    });
-    const pad = (dx: number, dz: number, radius: number, stretch = 1): void => {
-      const at = local(dx, dz);
-      builder.add(
-        mud,
-        new THREE.CircleGeometry(radius, 4),
-        placed(at.x, y, at.z, { x: -Math.PI / 2, z: yaw }, { x: 1, y: stretch, z: 1 }),
-      );
-    };
-    if (kind === 'elk') {
-      pad(-0.045, 0, 0.055, 1.5);
-      pad(0.045, 0, 0.055, 1.5);
-    } else if (kind === 'curiousRaccoon') {
-      pad(0, 0.025, 0.055);
-      for (let toe = 0; toe < 4; toe++) pad((toe - 1.5) * 0.036, -0.06, 0.022, 1.5);
-    } else
-      for (let root = 0; root < 3; root++) {
-        const at = local((root - 1) * 0.12, 0);
-        builder.add(
-          mud,
-          new THREE.PlaneGeometry(0.04, 0.43 - root * 0.05),
-          placed(at.x, y, at.z, { x: -Math.PI / 2, z: yaw + (root - 1) * 0.22 }),
-        );
-      }
-  };
+
   for (const track of tracks)
     for (const side of [-1, 1])
-      scratch(
+      addAnimalTrack(
+        builder,
+        mud,
+        (x, z) => terrain.heightAt(x, z),
         track.x + Math.cos(track.yaw) * side * 0.17,
         track.z - Math.sin(track.yaw) * side * 0.17,
         track.yaw,
@@ -69,4 +43,43 @@ export function createAnimalTracks(
       mud.dispose();
     },
   };
+}
+
+export function addAnimalTrack(
+  builder: ModelBuilder,
+  mud: THREE.Material,
+  heightAt: (x: number, z: number) => number,
+  x: number,
+  z: number,
+  yaw: number,
+  kind: WoodlandKind,
+): void {
+  const y = heightAt(x, z) + 0.025;
+  const local = (dx: number, dz: number) => ({
+    x: x + dx * Math.cos(yaw) + dz * Math.sin(yaw),
+    z: z - dx * Math.sin(yaw) + dz * Math.cos(yaw),
+  });
+  const pad = (dx: number, dz: number, radius: number, stretch = 1): void => {
+    const at = local(dx, dz);
+    builder.add(
+      mud,
+      new THREE.CircleGeometry(radius, 4),
+      placed(at.x, y, at.z, { x: -Math.PI / 2, z: yaw }, { x: 1, y: stretch, z: 1 }),
+    );
+  };
+  if (kind === 'elk') {
+    pad(-0.045, 0, 0.055, 1.5);
+    pad(0.045, 0, 0.055, 1.5);
+  } else if (kind === 'curiousRaccoon') {
+    pad(0, 0.025, 0.055);
+    for (let toe = 0; toe < 4; toe++) pad((toe - 1.5) * 0.036, -0.06, 0.022, 1.5);
+  } else
+    for (let root = 0; root < 3; root++) {
+      const at = local((root - 1) * 0.12, 0);
+      builder.add(
+        mud,
+        new THREE.PlaneGeometry(0.04, 0.43 - root * 0.05),
+        placed(at.x, y, at.z, { x: -Math.PI / 2, z: yaw + (root - 1) * 0.22 }),
+      );
+    }
 }

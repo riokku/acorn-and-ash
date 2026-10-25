@@ -643,6 +643,13 @@ presentation). See [tactile harvesting](docs/decisions/0232-tactile-harvesting.m
 
 ### Wildlife
 
+Rabbits, jackrabbits, foxes and elk now leave fresh ground tracks along their actual
+routes. Follow the print direction and use the nearby freshness hint; rain and
+snow erase tracks faster. Recent trails are shared with later arrivals, but do not
+survive a world unloading. Existing woodland leads still point to encounter sites.
+Preview the impressions at `?gallery=fresh-tracks` (add `&before` to compare).
+See [fresh animal tracks](docs/decisions/0233-fresh-animal-tracks.md).
+
 A few rabbits - soft-furred, long-eared, with a powder-puff tail - live at fixed spots
 out in the wilderness. Left alone they amble about near home. Walk and pause to
 approach quietly; sprinting is noticed farther away. Prey stops and turns to watch

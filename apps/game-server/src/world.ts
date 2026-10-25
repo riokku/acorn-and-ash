@@ -1,3 +1,4 @@
+import { encodeAnimalTracks } from '@acorn/shared';
 import { encodeTreasure, treasuresFromSaved } from '@acorn/shared';
 import { encodeFireFuel } from '@acorn/shared';
 import {
@@ -1688,6 +1689,8 @@ export class World extends DurableObject<WorldEnv> {
       const entities = simulation.snapshotFor(attachment.netId, this.snapshotScratch);
       this.trySend(ws, encodeAllies(simulation.alliesOf(attachment.netId)));
       this.trySend(ws, encodeKingStorm(simulation.kingStormOf(attachment.netId)));
+      if (simulation.tick % TICK_HZ === 0)
+        this.trySend(ws, encodeAnimalTracks(simulation.animalTracksOf(attachment.netId)));
       this.trySend(
         ws,
         encodeSnapshot(

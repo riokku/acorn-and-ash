@@ -1,3 +1,4 @@
+import { TRACKED_ANIMALS, MAX_VISIBLE_TRACKS, type FreshAnimalTrack } from '../sim/animal-tracks';
 import { KING_STORM_PHASES, type KingStormView } from '../sim/king-storm';
 import { SOUL_STORM } from '../data/world-boss';
 import { RESCUE, type AllyView } from '../sim/cooperation';
@@ -2555,6 +2556,40 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== 6) return null;
       return { type: 'threatHit', event: decodeThreatHit(view) };
     }
+    case ServerMessageType.AnimalTracks: {
+      if (view.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (count > MAX_VISIBLE_TRACKS || view.byteLength !== 2 + count * 13) return null;
+      const tracks: FreshAnimalTrack[] = [];
+      const seen = new Set<number>();
+      for (let i = 0; i < count; i++) {
+        const at = 2 + i * 13;
+        const id = view.getUint16(at, true),
+          kind = TRACKED_ANIMALS[view.getUint8(at + 2)];
+        const x = view.getFloat32(at + 3, true),
+          z = view.getFloat32(at + 7, true);
+        const freshness = view.getUint8(at + 12) / 255;
+        if (
+          !id ||
+          seen.has(id) ||
+          !kind ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(z) ||
+          !freshness
+        )
+          return null;
+        seen.add(id);
+        tracks.push({
+          id,
+          kind,
+          x,
+          z,
+          yaw: (view.getUint8(at + 11) * Math.PI * 2) / 256,
+          freshness,
+        });
+      }
+      return { type: 'animalTracks', tracks };
+    }
     case ServerMessageType.KingStorm: {
       if (data.byteLength !== 8) return null;
       const bossId = view.getUint16(1, true),
@@ -2927,6 +2962,31 @@ export function encodeKingStorm(storm: KingStormView | null): ArrayBuffer {
     view.setUint8(4, KING_STORM_PHASES.indexOf(storm.phase) + 1);
     view.setUint16(5, storm.remainingTicks, true);
     view.setUint8(7, storm.outside ? 2 : storm.sheltered ? 1 : 0);
+  }
+  return buffer;
+}
+
+/** A bounded nearby history, refreshed once a second rather than with every snapshot. */
+export function encodeAnimalTracks(tracks: readonly FreshAnimalTrack[]): ArrayBuffer {
+  const count = Math.min(MAX_VISIBLE_TRACKS, tracks.length);
+  const buffer = new ArrayBuffer(2 + count * 13),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.AnimalTracks);
+  view.setUint8(1, count);
+  for (let i = 0; i < count; i++) {
+    const track = tracks[i]!,
+      at = 2 + i * 13;
+    view.setUint16(at, track.id, true);
+    view.setUint8(at + 2, TRACKED_ANIMALS.indexOf(track.kind));
+    view.setFloat32(at + 3, track.x, true);
+    view.setFloat32(at + 7, track.z, true);
+    view.setUint8(
+      at + 11,
+      Math.round(
+        ((((track.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) * 256) / (Math.PI * 2),
+      ) % 256,
+    );
+    view.setUint8(at + 12, Math.max(1, Math.min(255, Math.round(track.freshness * 255))));
   }
   return buffer;
 }
