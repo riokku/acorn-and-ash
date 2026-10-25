@@ -47,7 +47,9 @@ export async function showForestTrails(
   const terrain = createWildernessTerrain(DEFAULT_WORLD_SEED);
   const clearing = buildTestClearing(DEFAULT_WORLD_SEED, terrain);
   const wilderness = buildWilderness(DEFAULT_WORLD_SEED, terrain);
-  const forest = buildWildernessScene(wilderness, terrain, clearing);
+  const forest = buildWildernessScene(wilderness, terrain, clearing, {
+    legacyTransitions: params.has('transition-review') && params.has('before'),
+  });
   const home = buildClearingScene(clearing, terrain);
   const grass = createGrass(terrain, clearing, wilderness);
   const river = createStreamScene(STREAM, terrain);
@@ -97,8 +99,11 @@ export async function showForestTrails(
   );
   const landmarks = createEncounterLandmarks(
     stronghold
-      ? [...KING_REMNANTS, ...(params.has('before') ? [] : KING_APPROACH)]
-      : params.has('before')
+      ? [
+          ...KING_REMNANTS,
+          ...(params.has('before') && !params.has('transition-review') ? [] : KING_APPROACH),
+        ]
+      : params.has('before') && !params.has('transition-review')
         ? []
         : leads,
     terrain,
@@ -107,7 +112,7 @@ export async function showForestTrails(
   scene.add(bursts.group);
   const figures = stronghold
     ? [
-        ...(params.has('before')
+        ...(params.has('before') && !params.has('transition-review')
           ? []
           : KING_APPROACH.flatMap((site) =>
               KING_APPROACH_LINEUPS[site.strongholdStage!].map((kind, i) => ({

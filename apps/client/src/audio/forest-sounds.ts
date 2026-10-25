@@ -37,6 +37,12 @@ export class ForestAudio {
       } else if (event.surface === 'ice') {
         this.noise(at, 0.06, 3000, volume * 0.055, event.pan);
         this.tone(at, 850 * variation, 450, 0.08, volume * 0.025, event.pan);
+      } else if (event.surface === 'stone') {
+        this.noise(at, 0.045, 3400, volume * 0.08, event.pan);
+        this.tone(at, 180 * variation, 85, 0.065, volume * 0.075, event.pan);
+      } else if (event.surface === 'sand') {
+        this.noise(at, 0.2, 1100, volume * 0.1, event.pan, 0.025);
+        this.tone(at, 60 * variation, 32, 0.08, volume * 0.035, event.pan);
       } else if (event.surface === 'wood') {
         this.tone(at, 125 * variation, 65, 0.13, volume * 0.12, event.pan);
         this.noise(at, 0.085, 650, volume * 0.075, event.pan);
