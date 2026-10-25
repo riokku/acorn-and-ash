@@ -1448,6 +1448,12 @@ worn soil and indoor wood. Nearby trees carry occasional daytime birds and
 quiet canopy rustles with directional sound. Sound effects settings also
 control this atmosphere. The [Pacific Northwest tree direction](docs/art/pacific-northwest-trees.md)
 recommends fir, cedar and spruce silhouettes for a future art pass.
+River flow and waterfalls have a quiet, directional soundscape that grows as you
+approach. Wind softens under canopy; cabins muffle the surrounding world and deep
+tunnels quiet it. Frozen water suppresses the flowing-water layer. The soundscape
+uses two bounded voices and stops immediately on pause, hidden tabs or muted
+effects. Birds leave longer quiet stretches during rain and snow.
+
 Footsteps now follow the visible rig's left/right contacts, with shallow-water,
 snow and ice sounds and one landing event. Existing impact recordings preload
 and reuse bounded voices; paused/hidden worlds stop old tails. Reduced motion

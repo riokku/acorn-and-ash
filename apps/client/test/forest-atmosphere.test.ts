@@ -245,3 +245,20 @@ it('scales landing feedback with uninterrupted airtime and clears it across paus
   atmosphere.update(1 / 60, listener, environment);
   expect(land(3)).toBeCloseTo(short);
 });
+
+it('leaves more quiet space for birds in heavy precipitation', () => {
+  const count = (rain: number) => {
+    const events: ForestSound[] = [];
+    const atmosphere = new ForestAtmosphere(
+      (e) => events.push(e),
+      () => 0.5,
+    );
+    for (let i = 0; i < 120 * 60; i++)
+      atmosphere.update(1 / 60, { ...listener, precipitation: rain }, environment);
+    return events.filter((e) => e.kind === 'bird');
+  };
+  const dry = count(0),
+    wet = count(1);
+  expect(wet.length).toBeLessThan(dry.length);
+  expect(wet[0]!.volume).toBeLessThan(dry[0]!.volume);
+});
