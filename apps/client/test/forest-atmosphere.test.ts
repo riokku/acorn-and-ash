@@ -126,7 +126,7 @@ describe('surface and living canopy lookup', () => {
 
   it('takes exposed hillside classification from actual elevation rather than assuming flat terrain', () => {
     const steep = createForestEnvironment([], [], { kind: 'slope', heightAt: (x) => x });
-    expect(steep.surfaceAt(10, 0)).toBe('forestFloor');
+    expect(steep.surfaceAt(10, 0)).toBe('stone');
   });
 });
 
@@ -210,4 +210,38 @@ describe('visible foot contact feedback', () => {
     const pond = createForestEnvironment([], [{ x: 20, z: 20, radius: 2 }], createFlatTerrain());
     expect(pond.surfaceAt(20, 20)).toBe('water');
   });
+});
+
+it('matches dune sand and elevated rock/stump support instead of the ground beneath', () => {
+  const props = [
+    { id: 1, kind: 'boulder' as const, x: 20, z: 20, rotationY: 0, scale: 1 },
+    { id: 2, kind: 'pine' as const, x: 30, z: 20, rotationY: 0, scale: 1 },
+  ];
+  const ground = createForestEnvironment(props, [], createFlatTerrain(), [props[0]!]);
+  expect(ground.surfaceAt(-230, -234)).toBe('sand');
+  expect(ground.surfaceAt(20, 20, 1)).toBe('stone');
+  expect(ground.surfaceAt(30, 20, 0.4)).toBe('wood');
+  ground.setStandingProps(props);
+  expect(ground.surfaceAt(30, 20, 0.4)).not.toBe('wood');
+});
+it('scales landing feedback with uninterrupted airtime and clears it across pauses', () => {
+  const events: ForestSound[] = [];
+  const atmosphere = new ForestAtmosphere(
+    (e) => events.push(e),
+    () => 0.5,
+  );
+  atmosphere.update(1 / 60, listener, environment);
+  const land = (frames: number) => {
+    for (let i = 0; i < frames; i++)
+      atmosphere.update(1 / 60, { ...listener, grounded: false }, environment);
+    atmosphere.update(1 / 60, listener, environment);
+    return events.filter((e) => e.kind === 'step').at(-1)!.volume;
+  };
+  const short = land(3),
+    long = land(50);
+  expect(short).toBeLessThan(long);
+  expect(long).toBeLessThanOrEqual(0.95);
+  atmosphere.update(1, { ...listener, active: false }, environment);
+  atmosphere.update(1 / 60, listener, environment);
+  expect(land(3)).toBeCloseTo(short);
 });
