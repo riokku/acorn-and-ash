@@ -1,3 +1,4 @@
+import { forestWind, windGustAt } from '../art/forest-wind';
 import * as THREE from 'three/webgpu';
 import { createRng, hashSeed, type ForestWeather, type SeasonMix } from '@acorn/shared';
 
@@ -159,7 +160,7 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
     kind: FallKind,
     count: number,
     point: { x: number; z: number },
-    wind: number,
+    _wind: number,
     delta: number,
   ) {
     const pool = pools[kind];
@@ -173,7 +174,12 @@ export function createSeasonFall(seed: number, heightAt: (x: number, z: number) 
       const grain = grains[kind][i]!;
       const sway = Math.sin(t * 0.7 * grain.speed + grain.phase) * pool.sway;
       // Integrate the wind: a forecast change must not relocate the entire pool.
-      grain.x += delta * pool.drift * wind;
+      const breeze = windGustAt(
+        point.x + wrap(grain.x - point.x, pool.span) - pool.span / 2,
+        point.z + wrap(grain.z - point.z, pool.span) - pool.span / 2,
+      );
+      grain.x += delta * pool.drift * breeze * forestWind.direction.value.x;
+      grain.z += delta * pool.drift * breeze * forestWind.direction.value.y;
       const along = grain.x + sway;
       const across = grain.z + Math.cos(t * 0.5 * grain.speed + grain.phase) * pool.sway * 0.6;
       const half = pool.span / 2;
