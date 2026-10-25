@@ -1,3 +1,4 @@
+import type { AllyView } from '@acorn/shared';
 import type { BuildableKindId } from '@acorn/shared';
 import type { WarmthView } from '@acorn/shared';
 import { fishRecordsFromSaved, type FishRecords, type ReelView } from '@acorn/shared';
@@ -46,10 +47,12 @@ export interface FirePanelState {
   readonly y: number;
 }
 export interface HudState {
+  readonly allies?: readonly (AllyView & { name: string; self: boolean })[];
   readonly worldBoss?: {
     readonly health: number;
     readonly maxHealth: number;
     readonly awakening: boolean;
+    readonly attack?: 'cleave' | 'whirlwind' | null;
   } | null;
   readonly placedObject?: {
     id: number;

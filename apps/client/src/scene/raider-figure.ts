@@ -1,3 +1,4 @@
+import { KingDanger } from './king-danger';
 import { HOLLOW_KING } from '@acorn/shared';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { townHeadwear } from './skeleton-town';
@@ -79,6 +80,7 @@ interface SeenMove {
 
 export class RaiderFigure {
   readonly character: Character;
+  private readonly danger: KingDanger | null;
   readonly bar: RaiderHealthBar;
   private readonly eyes: THREE.MeshStandardMaterial[] = [];
   private readonly bones: THREE.MeshStandardMaterial[] = [];
@@ -119,6 +121,7 @@ export class RaiderFigure {
     private readonly bursts: ImpactBursts,
   ) {
     this.character = character;
+    this.danger = kind === 'hollowKing' ? new KingDanger(parent) : null;
     if (kind === 'hollowKing') character.group.scale.setScalar(HOLLOW_KING.scale);
     const head = character.group.getObjectByName('head');
     this.townHat = character.group.getObjectByName('bonehollow-headwear') ?? townHeadwear(kind);
@@ -212,6 +215,7 @@ export class RaiderFigure {
     volume: number,
   ): MovePose | null {
     const group = this.character.group;
+    this.danger?.update(at, frame.move?.kind ?? ActionKind.Idle, frame.move?.age ?? 0);
     this.townResident ??= inSkeletonTown(at.x, at.z, 12);
     if (this.townHat) this.townHat.visible = this.townResident;
     group.position.set(at.x, at.y, at.z);
@@ -264,6 +268,7 @@ export class RaiderFigure {
     this.swoosh.clear();
     if (this.departing !== null) return;
     this.departing = 0;
+    if (this.danger) this.danger.group.visible = false;
     this.bar.setWanted(false, false);
     const group = this.character.group;
     this.departFrom = group.position.y;
@@ -318,6 +323,7 @@ export class RaiderFigure {
    * away. Use the body that comes back for the next one of the same kind.
    */
   retire(): Character {
+    this.danger?.dispose();
     this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.group.remove(this.bar.sprite);
@@ -341,6 +347,7 @@ export class RaiderFigure {
   }
 
   dispose(): void {
+    this.danger?.dispose();
     this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.dispose();

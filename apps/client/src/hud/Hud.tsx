@@ -1,3 +1,4 @@
+import { Allies } from './Allies';
 import { WorldBossBar } from './WorldBossBar';
 import { surveyInteraction } from '@acorn/shared';
 import { SunreachTrail } from './SunreachTrail';
@@ -439,6 +440,7 @@ export function Hud({
           <span>{Math.ceil(state.meal.ticksLeft / TICK_HZ / 60)} min</span>
         </div>
       ) : null}
+      {showingWorld ? <Allies allies={state.allies ?? []} /> : null}
       {showingWorld && state.worldBoss ? <WorldBossBar boss={state.worldBoss} /> : null}
       {showingWorld && state.raidBanner !== null && !state.worldBoss ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />

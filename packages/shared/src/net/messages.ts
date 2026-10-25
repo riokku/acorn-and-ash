@@ -1,3 +1,4 @@
+import type { AllyView } from '../sim/cooperation';
 import type { TreasureSpot } from '../sim/treasure';
 import type { FireRequest, FireFuelView } from '../sim/fire-fuel';
 import type { PublishedCatalog } from '../data/item-catalog';
@@ -127,6 +128,7 @@ export const ServerMessageType = {
   ItemCatalog: 0x48,
   FireFuel: 0x49,
   Treasure: 0x4a,
+  Allies: 0x4b,
 } as const;
 
 export const RejectReason = {
@@ -714,6 +716,7 @@ export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'allies'; readonly players: readonly AllyView[] }
   | { readonly type: 'treasure'; readonly spots: readonly TreasureSpot[] }
   | { readonly type: 'fireFuel'; readonly fires: readonly FireFuelView[] }
   | (PublishedCatalog & { readonly type: 'itemCatalog' })

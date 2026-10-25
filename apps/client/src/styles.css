@@ -4432,3 +4432,46 @@ body {
   background: linear-gradient(90deg, #8e3a35, #b75d47);
   transition: width 150ms linear;
 }
+
+/* Quiet cooperative status stays out of the aiming area. */
+.allies {
+  position: absolute;
+  left: 18px;
+  top: 125px;
+  width: min(250px, 27vw);
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+  color: #f4eddc;
+  font-size: 12px;
+}
+.ally,
+.rescue-self {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  background: #17221de8;
+  border: 1px solid #b8bd8655;
+  border-radius: 10px;
+  box-shadow: 0 4px 18px #0003;
+}
+.ally progress {
+  width: 100%;
+  height: 6px;
+  accent-color: #a8c698;
+}
+.ally[data-down='true'] {
+  border-color: #f5c277;
+}
+.ally[data-down='true'] progress {
+  accent-color: #efbc77;
+}
+.rescue-self {
+  border-color: #f5c277;
+}
+.world-boss[data-attack='whirlwind'] > span {
+  color: #dfb8ff;
+}
+.world-boss[data-attack='cleave'] > span {
+  color: #ffc19d;
+}

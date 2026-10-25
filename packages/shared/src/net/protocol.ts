@@ -1,3 +1,4 @@
+import { RESCUE, type AllyView } from '../sim/cooperation';
 import { TREASURE_COUNT, type TreasureSpot } from '../sim/treasure';
 import { FIRE_CAPACITY_MS, type FireRequest, type FireFuelView } from '../sim/fire-fuel';
 import { parsePublishedCatalog, type PublishedCatalog } from '../data/item-catalog';
@@ -2552,6 +2553,32 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== 6) return null;
       return { type: 'threatHit', event: decodeThreatHit(view) };
     }
+    case ServerMessageType.Allies: {
+      if (data.byteLength < 2 || data.byteLength !== 2 + view.getUint8(1) * 10) return null;
+      const players: AllyView[] = [];
+      for (let i = 0; i < view.getUint8(1); i++) {
+        const o = 2 + i * 10,
+          downTicks = view.getUint16(o + 4),
+          rescueTicks = view.getUint8(o + 6);
+        if (
+          downTicks > RESCUE.windowTicks ||
+          rescueTicks > RESCUE.holdTicks ||
+          view.getUint8(o + 9) > 1 ||
+          view.getUint8(o + 2) > view.getUint8(o + 3)
+        )
+          return null;
+        players.push({
+          netId: view.getUint16(o),
+          health: view.getUint8(o + 2),
+          maxHealth: view.getUint8(o + 3),
+          downTicks,
+          rescueTicks,
+          rescuerId: view.getUint16(o + 7),
+          inReach: view.getUint8(o + 9) === 1,
+        });
+      }
+      return { type: 'allies', players };
+    }
     case ServerMessageType.Health: {
       if (data.byteLength !== HEALTH_MESSAGE_BYTES) return null;
       return { type: 'health', event: decodeHealth(view) };
@@ -2823,5 +2850,26 @@ export function encodeWildfire(state: WildfireView): ArrayBuffer {
     view.setUint8(at + 33, fire.generation);
     view.setUint8(at + 34, fire.spread ? 1 : 0);
   });
+  return data;
+}
+
+/** Fixed-width, bounded nearby cooperative status. No client can submit these values. */
+export function encodeAllies(players: readonly AllyView[]): ArrayBuffer {
+  const count = Math.min(players.length, 255);
+  const data = new ArrayBuffer(2 + count * 10),
+    view = new DataView(data);
+  view.setUint8(0, ServerMessageType.Allies);
+  view.setUint8(1, count);
+  for (let i = 0; i < count; i++) {
+    const p = players[i]!,
+      o = 2 + i * 10;
+    view.setUint16(o, p.netId);
+    view.setUint8(o + 2, p.health);
+    view.setUint8(o + 3, p.maxHealth);
+    view.setUint16(o + 4, p.downTicks);
+    view.setUint8(o + 6, p.rescueTicks);
+    view.setUint16(o + 7, p.rescuerId);
+    view.setUint8(o + 9, p.inReach ? 1 : 0);
+  }
   return data;
 }

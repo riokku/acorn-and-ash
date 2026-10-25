@@ -1,3 +1,4 @@
+import type { AllyView } from '@acorn/shared';
 import { CROWNBREAKER_HOLD, KING_REMNANTS } from '@acorn/shared';
 import { canBufferLoot } from '@acorn/shared';
 import { equipmentDodgeCooldown } from '@acorn/shared';
@@ -1118,6 +1119,7 @@ export class Game {
   private raidersClose = false;
   private raidBanner: { banner: RaidBanner; until: number } | null = null;
   private raidBannersShown = 0;
+  private allies: readonly AllyView[] = [];
   /** What the combat overlay draws, every frame: see `updateCombatFeed`. */
   readonly combatFeed = new CombatFeed();
   private readonly scratchProject = new THREE.Vector3();
@@ -1900,6 +1902,7 @@ export class Game {
         this.treasures = [];
         this.nearTreasure = null;
         this.applyBuriedCaches();
+        this.allies = [];
         this.selfNetId = message.netId;
         this.serverTick = message.tick;
         // A fresh connection starts from a fresh pack list: what it says is
@@ -1911,6 +1914,10 @@ export class Game {
         const { name, character, color, skin } = this.options.identity;
         this.connection?.sendHello(name, character, color, skin);
         void this.enterWorld(message.seed);
+        break;
+      }
+      case 'allies': {
+        this.allies = message.players;
         break;
       }
       case 'roster': {
@@ -2508,6 +2515,8 @@ export class Game {
   }
 
   private currentHealthNews(now = performance.now()): string | null {
+    if (this.allies.some((ally) => ally.netId === this.selfNetId && ally.downTicks > 0))
+      return 'An ally can help you up. Your belongings remain where you fell.';
     const news = this.healthNews;
     return news !== null && now < news.until ? news.text : null;
   }
@@ -5803,7 +5812,15 @@ export class Game {
   private showKnockout(kind: ActionKind, age: number): void {
     const fade = this.sceneFade;
     if (fade === null) return;
-    if (kind === ActionKind.KnockedOut && age >= KNOCKOUT_DARKENS_AT_TICKS && !this.knockoutDark) {
+    const awaitingRescue = this.allies.some(
+      (ally) => ally.netId === this.selfNetId && ally.downTicks > 0,
+    );
+    if (
+      kind === ActionKind.KnockedOut &&
+      !awaitingRescue &&
+      age >= KNOCKOUT_DARKENS_AT_TICKS &&
+      !this.knockoutDark
+    ) {
       this.knockoutDark = true;
       fade.classList.add('scene-fade-slow', 'scene-fade-dark');
     } else if (kind !== ActionKind.KnockedOut && this.knockoutDark) {
@@ -6215,6 +6232,14 @@ export class Game {
               .markers()
               .filter((marker) => this.raiders.describe(marker.id)?.kind !== 'hollowKing').length
           : 0,
+      allies:
+        this.space === OUTDOORS
+          ? this.allies.map((ally) => ({
+              ...ally,
+              name: this.roster.get(ally.netId)?.name ?? 'Adventurer',
+              self: ally.netId === this.selfNetId,
+            }))
+          : [],
       worldBoss:
         this.space === OUTDOORS && player !== null
           ? this.raiders.worldBossNear(player.motion.position)

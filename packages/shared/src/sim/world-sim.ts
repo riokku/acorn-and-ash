@@ -34,6 +34,7 @@ import {
   type TreasureSpot,
 } from './treasure';
 import { displayedHealth } from './health';
+import { RESCUE, type AllyView } from './cooperation';
 import {
   advanceWarmth,
   warmthFromSaved,
@@ -1094,6 +1095,12 @@ interface PlayerRuntime {
   previousButtons: number;
   /** The tick they were knocked out on, so they wake up a while later. */
   knockedOutAtTick: number;
+  rescueUntilTick: number;
+  rescueTarget: number;
+  rescueTicks: number;
+  rescueHeldTick: number;
+  rescueX: number;
+  rescueZ: number;
   /**
    * The tick their last dodge began on. How long a roll leaves you
    * untouchable is counted on the server's own clock, not in inputs, so
@@ -2232,6 +2239,12 @@ export class WorldSimulation {
       whirlwindTrees: new Set(),
       previousButtons: 0,
       knockedOutAtTick: 0,
+      rescueUntilTick: 0,
+      rescueTarget: 0,
+      rescueTicks: 0,
+      rescueHeldTick: 0,
+      rescueX: 0,
+      rescueZ: 0,
       dodgeStartedAtTick: -Infinity,
       dodgeAttackStartedAtTick: Infinity,
       // With a weapon already in the main hand, nothing chosen from the pack
@@ -2521,7 +2534,7 @@ export class WorldSimulation {
     for (const runtime of this.players.values()) {
       if (
         runtime.action.kind === ActionKind.KnockedOut &&
-        this.tick - runtime.knockedOutAtTick >= KNOCKED_OUT_TICKS
+        this.tick >= (runtime.rescueUntilTick || runtime.knockedOutAtTick + KNOCKED_OUT_TICKS)
       ) {
         this.wakeUp(runtime);
       }
@@ -2673,6 +2686,7 @@ export class WorldSimulation {
             runtime.interactWasHeld = interactHeld;
             if (!interactHeld) runtime.interactSpent = false;
             if (freshInteract) runtime.pickupRefused = false;
+            if (interactHeld) runtime.rescueHeldTick = this.tick;
             const swingHeld = isHeld(input, PlayerButton.Swing) || isHeld(input, PlayerButton.Fish);
             const clicked = swingHeld && !runtime.swingWasHeld;
             runtime.swingWasHeld = swingHeld;
@@ -2724,6 +2738,18 @@ export class WorldSimulation {
         if (runtime.space === OUTDOORS && runtime.health > 0)
           this.findDiscoveries(runtime, scratch.position);
         if (this.tick > runtime.pendingLootExpiresAtTick) runtime.pendingLoot = null;
+        const rescuing = this.tryRescue(
+          runtime,
+          scratch.position,
+          !runtime.interactSpent &&
+            (wantsToInteract ||
+              (runtime.interactWasHeld && this.tick - runtime.rescueHeldTick <= 4)),
+        );
+        if (rescuing) {
+          wantsToInteract = false;
+          wantsToToggleCampfire = false;
+          runtime.pendingLoot = null;
+        }
         const loot = runtime.pendingLoot;
         if (loot !== null) {
           if (
@@ -5453,6 +5479,8 @@ export class WorldSimulation {
               ),
             )),
     );
+    runtime.rescueTarget = 0;
+    runtime.rescueTicks = 0;
     const knockedOut = remaining <= 0;
     runtime.health = knockedOut
       ? characterStats(runtime.worn, undefined, this.equipmentBonuses).vitality
@@ -5495,6 +5523,23 @@ export class WorldSimulation {
       this.discardBuild(runtime, 'busy');
       beginAction(runtime.action, ActionKind.KnockedOut);
       runtime.knockedOutAtTick = this.tick;
+      const at = runtime.entity.get(Position);
+      runtime.rescueUntilTick =
+        runtime.space === OUTDOORS &&
+        at &&
+        [...this.players.values()].some((ally) => {
+          const p = ally.entity.get(Position);
+          return (
+            ally !== runtime &&
+            ally.space === OUTDOORS &&
+            !isUntouchable(ally.action) &&
+            ally.health > 0 &&
+            p &&
+            Math.hypot(p.x - at.x, p.z - at.z) <= RESCUE.nearby
+          );
+        })
+          ? this.tick + RESCUE.windowTicks
+          : 0;
     } else if (!cold && runtime.boatId === null) {
       // A rower takes the blow, but there is nothing to flinch with: they stay in the boat.
       beginAction(runtime.action, ActionKind.Flinch);
@@ -5516,6 +5561,7 @@ export class WorldSimulation {
    * facing whichever way they already happened to be.
    */
   private wakeUp(runtime: PlayerRuntime): void {
+    runtime.rescueUntilTick = 0;
     const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
     if (home !== null) {
       runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
@@ -6435,6 +6481,115 @@ export class WorldSimulation {
   /** How hungry a player is right now, from `HUNGER_MAX` down to zero. */
   hungerOf(netId: number): number {
     return Math.round(this.players.get(netId)?.hunger ?? HUNGER_MAX);
+  }
+
+  /** Nearby outdoor allies only; excludes room coordinates and distant players. */
+  alliesOf(netId: number): AllyView[] {
+    const observer = this.players.get(netId),
+      at = observer?.entity.get(Position);
+    if (!observer || !at || observer.space !== OUTDOORS) return [];
+    const allies: AllyView[] = [];
+    const rescues = new Map<number, { rescuerId: number; rescueTicks: number }>();
+    for (const helper of this.players.values()) {
+      if (helper.rescueTicks > (rescues.get(helper.rescueTarget)?.rescueTicks ?? 0))
+        rescues.set(helper.rescueTarget, {
+          rescuerId: helper.netId,
+          rescueTicks: helper.rescueTicks,
+        });
+    }
+    for (const ally of this.players.values()) {
+      const p = ally.entity.get(Position);
+      if (!p || ally.space !== OUTDOORS || Math.hypot(p.x - at.x, p.z - at.z) > RESCUE.nearby)
+        continue;
+      const { rescuerId, rescueTicks } = rescues.get(ally.netId) ?? {
+        rescuerId: 0,
+        rescueTicks: 0,
+      };
+      allies.push({
+        netId: ally.netId,
+        health: ally.action.kind === ActionKind.KnockedOut ? 0 : displayedHealth(ally.health),
+        maxHealth: characterStats(ally.worn, undefined, this.equipmentBonuses).vitality,
+        downTicks: Math.max(0, ally.rescueUntilTick - this.tick),
+        rescueTicks,
+        rescuerId,
+        inReach:
+          ally !== observer &&
+          Math.hypot(p.x - at.x, p.z - at.z) <= RESCUE.radius &&
+          Math.abs(p.y - at.y) <= 1.5,
+      });
+    }
+    return allies;
+  }
+
+  private tryRescue(helper: PlayerRuntime, at: Readonly<Vec3>, held: boolean): boolean {
+    const reset = () => {
+      helper.rescueTarget = 0;
+      helper.rescueTicks = 0;
+    };
+    if (
+      !held ||
+      helper.space !== OUTDOORS ||
+      helper.action.kind !== ActionKind.Idle ||
+      helper.cast !== null ||
+      helper.boatId !== null
+    ) {
+      reset();
+      return false;
+    }
+    let target: PlayerRuntime | undefined;
+    let distance: number = RESCUE.radius;
+    for (const ally of this.players.values()) {
+      const p = ally.entity.get(Position);
+      if (
+        ally === helper ||
+        ally.space !== OUTDOORS ||
+        ally.action.kind !== ActionKind.KnockedOut ||
+        ally.rescueUntilTick <= this.tick ||
+        !p ||
+        Math.abs(p.y - at.y) > 1.5
+      )
+        continue;
+      const d = Math.hypot(p.x - at.x, p.z - at.z);
+      if (d <= distance) {
+        target = ally;
+        distance = d;
+      }
+    }
+    if (!target) {
+      reset();
+      return false;
+    }
+    if (helper.rescueTarget !== target.netId) {
+      helper.rescueTicks = 0;
+      helper.rescueTarget = target.netId;
+      helper.rescueX = at.x;
+      helper.rescueZ = at.z;
+    }
+    if (Math.hypot(at.x - helper.rescueX, at.z - helper.rescueZ) > 0.12) {
+      reset();
+      return true;
+    }
+    helper.rescueTicks++;
+    if (helper.rescueTicks % 20 === 1)
+      this.gestureEvents.push({ netId: helper.netId, gesture: Gesture.Reach, item: null });
+    if (helper.rescueTicks >= RESCUE.holdTicks) {
+      target.rescueUntilTick = 0;
+      target.health = Math.ceil(
+        characterStats(target.worn, undefined, this.equipmentBonuses).vitality *
+          RESCUE.healthFraction,
+      );
+      beginAction(target.action, ActionKind.Rise, RiseFrom.Ground);
+      this.healthEvents.push({
+        netId: target.netId,
+        health: displayedHealth(target.health),
+        knockedOut: false,
+        dodged: false,
+        adjusted: true,
+      });
+      helper.interactSpent = true;
+      reset();
+    }
+    return true;
   }
 
   /** Current health, retaining armor's fractional damage for saving. The wire encoder rounds for display. */
