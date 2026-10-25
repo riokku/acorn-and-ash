@@ -41,6 +41,9 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
       send(shared.encodeEquipped(sim.equippedList()));
     };
     const refresh = () => {
+      for (const hit of sim.raids.drainHits()) send(shared.encodeRaiderHit(hit));
+      for (const news of sim.raids.drainNews()) send(shared.encodeRaidNews(news));
+      send(shared.encodeDroppedPiles(sim.droppedPilesList(1)));
       send(shared.encodeAllies(sim.alliesOf(1)));
       send(shared.encodeRaiders(sim.raidersList()));
       send(shared.encodeRaiderVitals(king!.id, sim.raids.maxHitsOf(king!.id)));
@@ -108,6 +111,32 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     await expect(page.getByTestId('allies')).not.toContainText('Needs help');
     await page.evaluate(({ x, z }) => window.acornDebug?.faceTowards(x, z), hold);
     await drawnScreenshot(page, testInfo.outputPath('crownbreaker-hold.png'));
+    const player = sim.snapshotFor(1).find((entity) => entity.netId === 1)!;
+    sim.raids.placeRaider(king!.id, { x: player.x, y: player.y, z: player.z + 1.5 }, 0);
+    sim.raids.blowLands(1, player, Math.PI, { kind: 'swing', step: 1 }, 0, 200000);
+    const victory = page.getByTestId('king-victory');
+    await expect(victory).toBeVisible();
+    const victoryKey = await victory.getAttribute('data-victory-key');
+    await expect(victory.locator('.king-victory-reward')).toHaveCSS('opacity', '1', {
+      timeout: 8000,
+    });
+    await expect(victory).toHaveAttribute('data-victory-key', victoryKey!);
+    await page.keyboard.down('KeyD');
+    try {
+      await expect
+        .poll(
+          () => {
+            const now = sim.snapshotFor(1).find((entity) => entity.netId === 1)!;
+            return Math.hypot(now.x - player.x, now.z - player.z);
+          },
+          { timeout: 5000 },
+        )
+        .toBeGreaterThan(0.2);
+    } finally {
+      await page.keyboard.up('KeyD');
+    }
+    await expect(victory).toBeHidden({ timeout: 15000 });
+    expect(sim.droppedPilesList(1).some((pile) => pile.item === 'kingsRequiem')).toBe(true);
     expect(errors).toEqual([]);
   } finally {
     if (timer) clearInterval(timer);

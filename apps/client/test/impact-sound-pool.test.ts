@@ -59,3 +59,16 @@ it('does not allocate or play impact voices while effects are muted', async () =
   sound.playThreatHit();
   expect(AudioVoice.created).toEqual([]);
 });
+
+it('cancels registered sustained effects when muted or the world is hidden, and unregisters finished effects', async () => {
+  const sound = await import('../src/audio/sound');
+  const cancel = vi.fn(),
+    unregister = sound.registerSustainedEffect(cancel);
+  sound.setSfxVolume(0);
+  expect(cancel).toHaveBeenCalledTimes(1);
+  sound.setImpactSoundsActive(false);
+  expect(cancel).toHaveBeenCalledTimes(2);
+  unregister();
+  sound.setSfxVolume(0);
+  expect(cancel).toHaveBeenCalledTimes(2);
+});

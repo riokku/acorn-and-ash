@@ -1810,3 +1810,11 @@ King’s aggression range. Scouts give way to a mixed armored guard; both groups
 can be escaped and neither is a mandatory gate. Cairns, pennants, worn earth and
 brief location cues mark the route. Inspect the real scenery at
 `/?gallery=crownbreaker`, or add `&view=muster` for the ground-level reveal.
+
+Defeating the Hollow King now releases the souls of his watch in an eleven-second
+victory sequence: expanding spectral rings, rising soul ribbons, golden motes,
+a deep bell and fanfare, and the actual enchanted **King’s Requiem** floating
+above the arena. A delayed epic reveal points contributors to their personal
+spoils. Movement and camera control stay available throughout, with a quieter
+static presentation for reduced-motion preferences. Replay it at
+`/?gallery=king-victory`; add `&at=4.8` to inspect the reveal.

@@ -455,6 +455,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showBodies(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'king-victory') {
+    const { showKingVictory } = await import('./king-victory');
+    await showKingVictory(renderer, scene, daylight, params);
+    return;
+  }
+
   if (focus === 'kings-requiem') {
     scene.add(createGalleryGround([]));
     const { showKingsRequiem } = await import('./kings-requiem');
@@ -698,7 +704,7 @@ function showHomeInside(
 }
 
 /** A patch of the same painted ground the world uses, bare under the trees and lush by the pond. */
-function createGalleryGround(
+export function createGalleryGround(
   scenery: readonly PlacedProp[],
   heightAt = (_x: number, _z: number) => 0,
   size = 80,

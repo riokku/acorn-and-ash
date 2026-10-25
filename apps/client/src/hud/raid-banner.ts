@@ -11,16 +11,20 @@ import type { RaidBanner } from './store';
  * (see `compassTo`), or null if there is no telling. `key` is new for every
  * banner, so one replacing another plays in again from the start.
  */
+export function isKingVictoryNews(news: RaidNews): boolean {
+  return (
+    news.kind === 'encounterCleared' &&
+    Math.hypot(news.x - CROWNBREAKER_HOLD.x, news.z - CROWNBREAKER_HOLD.z) < 1
+  );
+}
+
 export function raidBannerFor(
   news: RaidNews,
   targetName: string | null,
   bearingDegrees: number | null,
   key: number,
 ): RaidBanner {
-  if (
-    news.kind === 'encounterCleared' &&
-    Math.hypot(news.x - CROWNBREAKER_HOLD.x, news.z - CROWNBREAKER_HOLD.z) < 1
-  )
+  if (isKingVictoryNews(news))
     return {
       key,
       tone: 'victory',

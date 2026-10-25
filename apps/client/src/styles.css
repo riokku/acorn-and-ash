@@ -4519,3 +4519,267 @@ body {
     animation: none;
   }
 }
+
+/* A boss victory unfolds over the live, fully controllable world. */
+.king-victory {
+  --victory-offset: 0s;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fff0c6;
+  animation: king-victory-envelope 11s both;
+  animation-delay: var(--victory-offset);
+}
+.king-victory-aura {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 26%, #bda6ff18, transparent 55%),
+    linear-gradient(#10121bb3, transparent 52%, #10121b55);
+  animation: king-victory-atmosphere 10.5s both;
+  animation-delay: var(--victory-offset);
+}
+.king-victory-heading {
+  position: absolute;
+  top: 7%;
+  left: 50%;
+  width: min(720px, 88vw);
+  text-align: center;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 4px 9px #101019);
+  animation: king-victory-title 9.5s both;
+  animation-delay: calc(var(--victory-offset) + 0.85s);
+}
+.king-victory-crown {
+  width: clamp(65px, 9vw, 115px);
+  height: 65px;
+  overflow: visible;
+  fill: #d8b88118;
+  stroke: #efd6a2;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 16px #e4b46d77);
+}
+.king-victory-heading > small {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.38em;
+  margin: 8px 0 12px;
+  color: #dbbf8b;
+}
+.king-victory-heading h1 {
+  margin: 0;
+  font:
+    500 clamp(32px, 5.4vw, 68px)/1.15 Fraunces,
+    Georgia,
+    serif;
+  letter-spacing: 0.035em;
+  color: #fff0cf;
+  text-shadow:
+    0 0 30px #e7be7766,
+    0 4px 9px #0009;
+}
+.king-victory-fallen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 13px auto 9px;
+  color: #e7c991;
+  font-size: 14px;
+  letter-spacing: 0.32em;
+}
+.king-victory-fallen span {
+  width: 100px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #d6ad70);
+}
+.king-victory-fallen span:last-child {
+  transform: rotate(180deg);
+}
+.king-victory-heading p {
+  margin: 0;
+  font:
+    italic 16px/1.5 Georgia,
+    serif;
+  color: #e1d9c9;
+}
+.king-victory-reward {
+  position: absolute;
+  bottom: 23%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 19px;
+  width: min(475px, 82vw);
+  padding: 18px 23px;
+  border: 1px solid #c39ce47a;
+  border-radius: 5px;
+  background: linear-gradient(115deg, #2c2142f5, #121c26f5);
+  box-shadow:
+    0 8px 40px #0006,
+    0 0 35px #ac6fe52b,
+    inset 0 0 30px #8c5bc113;
+  animation: king-victory-spoils 6.8s both;
+  animation-delay: calc(var(--victory-offset) + 3.4s);
+}
+.king-victory-reward::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-top: 1px solid #e6d4ff;
+  border-radius: inherit;
+  opacity: 0.6;
+}
+.king-victory-reward small {
+  color: #d2afea;
+  font-size: 9px;
+  letter-spacing: 0.21em;
+  font-weight: 700;
+}
+.king-victory-reward h2 {
+  margin: 6px 0;
+  font:
+    500 clamp(22px, 2.7vw, 32px)/1.1 Fraunces,
+    Georgia,
+    serif;
+  color: #e5c7ff;
+  text-shadow: 0 0 17px #b775ed66;
+}
+.king-victory-reward p {
+  margin: 5px 0;
+  color: #f0e9db;
+  font-size: 12px;
+}
+.king-victory-reward span {
+  color: #aea9b4;
+  font-size: 10px;
+}
+.king-victory-sigil {
+  position: relative;
+  width: 70px;
+  height: 85px;
+  flex: 0 0 70px;
+  display: grid;
+  place-items: center;
+}
+.king-victory-sigil svg {
+  width: 62px;
+  height: 62px;
+  filter: drop-shadow(0 0 8px #bd85ff);
+  animation: king-victory-blade 3s ease-in-out infinite alternate;
+}
+.king-victory-sigil i {
+  position: absolute;
+  inset: 7px -6px;
+  border: 1px solid #bb8cf05c;
+  border-radius: 50%;
+  box-shadow:
+    0 0 22px #a967e62b,
+    inset 0 0 14px #b77eee22;
+  transform: rotate(-25deg);
+}
+.king-victory-sigil i::before,
+.king-victory-sigil i::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  background: #dcfcff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #b8eaff;
+  top: 10px;
+  left: 10px;
+}
+.king-victory-sigil i::after {
+  top: auto;
+  left: auto;
+  right: 6px;
+  bottom: 12px;
+  background: #dbabff;
+}
+@keyframes king-victory-envelope {
+  0%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes king-victory-atmosphere {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes king-victory-title {
+  0% {
+    opacity: 0;
+    translate: 0 20px;
+    scale: 1.06;
+    filter: blur(5px);
+  }
+  15%,
+  78% {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+}
+@keyframes king-victory-spoils {
+  0% {
+    opacity: 0;
+    translate: 0 22px;
+    scale: 0.96;
+  }
+  16%,
+  84% {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+}
+@keyframes king-victory-blade {
+  from {
+    transform: translateY(2px) rotate(-7deg);
+  }
+  to {
+    transform: translateY(-4px) rotate(3deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .king-victory,
+  .king-victory-aura,
+  .king-victory-heading,
+  .king-victory-reward,
+  .king-victory-sigil svg {
+    animation: none;
+  }
+  .king-victory-heading {
+    filter: drop-shadow(0 4px 9px #101019);
+  }
+}
+
+.king-victory-still .king-victory,
+.king-victory-still .king-victory * {
+  animation-play-state: paused !important;
+}
