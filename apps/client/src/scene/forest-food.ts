@@ -3,7 +3,7 @@ import { GATHER_PATCH_MAX_COUNT, type ItemId } from '@acorn/shared';
 import { ModelBuilder, placed } from '../art/shapes';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 
-export function createForageModel(item: 'berry' | 'mushroom') {
+export function createForageModel(item: 'berry' | 'mushroom', colony = false) {
   const group = new THREE.Group();
   const models: ReturnType<ModelBuilder['build']>[] = [];
   const stem = paintedMaterial('burlap', { tint: 0xffefd3, roughness: 1 });
@@ -37,11 +37,11 @@ export function createForageModel(item: 'berry' | 'mushroom') {
     }
     const model = builder.build();
     model.group.position.set(
-      Math.cos(index * 2.4) * (0.13 + index * 0.024),
+      Math.cos(index * 2.4) * (colony ? 0.35 + index * 0.07 : 0.13 + index * 0.024),
       0,
-      Math.sin(index * 2.4) * (0.13 + index * 0.024),
+      Math.sin(index * 2.4) * (colony ? 0.35 + index * 0.07 : 0.13 + index * 0.024),
     );
-    model.group.scale.setScalar(0.85 + (index % 3) * 0.13);
+    model.group.scale.setScalar((0.85 + (index % 3) * 0.13) * (colony ? 1.35 : 1));
     models.push(model);
     group.add(model.group);
   }

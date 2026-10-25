@@ -148,3 +148,4 @@ export * from './data/world-boss';
 export * from './world/hollow-king';
 
 export * from './sim/animal-tracks';
+export * from './sim/foraging-habitats';

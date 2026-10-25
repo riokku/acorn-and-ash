@@ -10,6 +10,7 @@ import * as THREE from 'three/webgpu';
 
 import {
   GATHER_PATCH_MAX_COUNT,
+  isForageHabitat,
   type CollectedEvent,
   skeletonWeaponKind,
   blueprintHome,
@@ -114,7 +115,7 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
           harvesting.forget(view.id);
           counts.delete(view.id);
           if (model !== undefined) remove(model);
-          model = createPatchModel(view.item);
+          model = createPatchModel(view.item, isForageHabitat(view.id));
           patches.set(view.id, model);
           group.add(model.group);
         }
@@ -181,8 +182,8 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
 }
 
 /** A stick, flower, berry, mushroom or reed patch, built to hold as many as any patch ever can. */
-function createPatchModel(item: ItemId): GroundModel {
-  if (item === 'berry' || item === 'mushroom') return createForageModel(item);
+function createPatchModel(item: ItemId, colony = false): GroundModel {
+  if (item === 'berry' || item === 'mushroom') return createForageModel(item, colony);
   if (item === 'reed') return createPartsModel(item, createReedPatchModel());
   if (item === 'stone' || item === 'ironOre') return createRocksModel(item);
   return item === 'flower' ? createFlowerModel('flower') : createSticksModel(item);

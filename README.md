@@ -641,6 +641,14 @@ by moving or fighting. Reduced motion skips the detached-plant effect. Inspect t
 animation at `?gallery=harvesting` (`&at=0.32` freezes it, `&before` compares the old
 presentation). See [tactile harvesting](docs/decisions/0232-tactile-harvesting.md).
 
+Six new foraging colonies make woodland routes worth remembering: mushrooms beside
+existing fallen timber and richer berry clusters in natural canopy gaps. Picked-clean
+colonies return within their small home area after the normal wait. Nearby hints
+explain the habitat and when it needs time to recover. Buildings can cover a colony;
+it waits rather than growing through them. Inspect the reused plant models at
+`?gallery=forage-habitats` (`&before` compares). See
+[learnable foraging habitats](docs/decisions/0234-learnable-foraging-habitats.md).
+
 ### Wildlife
 
 Rabbits, jackrabbits, foxes and elk now leave fresh ground tracks along their actual
