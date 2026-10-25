@@ -3587,6 +3587,7 @@ export class Game {
           x: this.localCharacter?.group.position.x ?? this.localPlayer.motion.position.x,
           z: this.localCharacter?.group.position.z ?? this.localPlayer.motion.position.z,
           grounded: this.localPlayer.motion.grounded,
+          y: this.localPlayer.motion.position.y,
           stridePhase: this.localCharacter?.stridePhase(),
           snow: seasonUniforms.snow.value > 0.5,
           frozenWater: this.lakeFrozen,

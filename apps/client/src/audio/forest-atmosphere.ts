@@ -5,6 +5,7 @@ export type ForestSound =
   | { kind: 'bird' | 'rustle'; volume: number; pan: number; variant: number };
 export interface ForestListener extends ForestPoint {
   readonly grounded: boolean;
+  readonly y?: number;
   readonly indoors: boolean;
   readonly active: boolean;
   readonly night: boolean;
@@ -18,6 +19,7 @@ export interface ForestListener extends ForestPoint {
 export class ForestAtmosphere {
   private previous: ForestListener | null = null;
   private stride = 0;
+  private airborneSeconds = 0;
   private brushDistance = 0;
   private birdIn = 5;
   private rustleIn = 2;
@@ -39,6 +41,7 @@ export class ForestAtmosphere {
       !previous.active ||
       previous.indoors !== listener.indoors
     ) {
+      this.airborneSeconds = 0;
       this.stride = this.brushDistance = 0;
       this.contactPhase = listener.active ? (listener.stridePhase ?? null) : null;
       // No old calls replay after a pause, space change or background tab.
@@ -48,6 +51,7 @@ export class ForestAtmosphere {
     }
     const distance = Math.hypot(listener.x - previous.x, listener.z - previous.z);
     if (distance > 2) {
+      this.airborneSeconds = 0;
       this.stride = this.brushDistance = 0;
       this.contactPhase = null;
       return;
@@ -76,7 +80,7 @@ export class ForestAtmosphere {
         this.stride = 0;
         const ground = listener.indoors
           ? 'wood'
-          : (environment?.surfaceAt(listener.x, listener.z) ?? 'grass');
+          : (environment?.surfaceAt(listener.x, listener.z, listener.y) ?? 'grass');
         const surface =
           ground === 'water' && listener.frozenWater
             ? 'ice'
@@ -89,11 +93,13 @@ export class ForestAtmosphere {
         this.emit({
           kind: 'step',
           surface,
-          volume: landed ? 0.8 : running ? 0.7 : 0.5,
+          volume: landed ? Math.min(0.95, 0.45 + this.airborneSeconds * 0.55) : running ? 0.7 : 0.5,
           pan: landed ? 0 : this.foot * 0.06,
         });
       }
+      this.airborneSeconds = 0;
     } else {
+      this.airborneSeconds += delta;
       this.stride = 0;
       this.contactPhase = null;
     }

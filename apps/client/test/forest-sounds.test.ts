@@ -97,3 +97,13 @@ describe('forest audio lifecycle', () => {
     forest.dispose();
   });
 });
+
+it.each(['stone', 'sand'] as const)('releases %s footstep nodes when paused', (surface) => {
+  const forest = new ForestAudio();
+  forest.update(true);
+  forest.play({ kind: 'step', surface, pan: 0, volume: 0.5 });
+  expect(audio.sources.length).toBe(2);
+  forest.update(false);
+  expect(audio.sources.every((s) => s.disconnect.mock.calls.length > 0)).toBe(true);
+  forest.dispose();
+});
