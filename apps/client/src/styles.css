@@ -4783,3 +4783,69 @@ body {
 .king-victory-still .king-victory * {
   animation-play-state: paused !important;
 }
+
+.king-storm {
+  position: absolute;
+  top: 235px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 60vw);
+  display: grid;
+  gap: 6px;
+  padding: 12px 18px;
+  background: #201a2dee;
+  color: #e5cdff;
+  border: 1px solid #b991d4;
+  border-radius: 8px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 4px 22px #0005;
+}
+.king-storm strong {
+  font-size: 13px;
+  letter-spacing: 0.13em;
+}
+.king-storm span {
+  font-size: 13px;
+}
+.king-storm div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.king-storm progress {
+  width: 100%;
+  height: 7px;
+  accent-color: #c49bea;
+}
+.king-storm b {
+  font-size: 13px;
+  min-width: 25px;
+  font-variant-numeric: tabular-nums;
+}
+.king-storm small {
+  font-size: 11px;
+  color: #d2c5dd;
+}
+.king-storm[data-sheltered='true'],
+.king-storm[data-phase='recovery'] {
+  border-color: #85dcca;
+  color: #b4f3df;
+}
+.king-storm[data-sheltered='true'] progress {
+  accent-color: #85dcca;
+}
+
+.king-ward-direction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #b4f3df;
+}
+.king-ward-direction i {
+  display: inline-block;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+}

@@ -1,3 +1,4 @@
+import { KingStorm } from './KingStorm';
 import { KingVictory } from './KingVictory';
 import { Allies } from './Allies';
 import { WorldBossBar } from './WorldBossBar';
@@ -449,6 +450,9 @@ export function Hud({
         </aside>
       ) : null}
       {showingWorld ? <Allies allies={state.allies ?? []} /> : null}
+      {showingWorld && state.kingStorm && !state.kingVictory ? (
+        <KingStorm storm={state.kingStorm} ward={state.kingWard} />
+      ) : null}
       {showingWorld && state.kingVictory ? (
         <KingVictory key={state.kingVictory.key} victory={state.kingVictory} />
       ) : null}

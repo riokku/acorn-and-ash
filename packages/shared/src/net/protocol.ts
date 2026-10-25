@@ -1,3 +1,5 @@
+import { KING_STORM_PHASES, type KingStormView } from '../sim/king-storm';
+import { SOUL_STORM } from '../data/world-boss';
 import { RESCUE, type AllyView } from '../sim/cooperation';
 import { TREASURE_COUNT, type TreasureSpot } from '../sim/treasure';
 import { FIRE_CAPACITY_MS, type FireRequest, type FireFuelView } from '../sim/fire-fuel';
@@ -2553,6 +2555,46 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       if (data.byteLength !== 6) return null;
       return { type: 'threatHit', event: decodeThreatHit(view) };
     }
+    case ServerMessageType.KingStorm: {
+      if (data.byteLength !== 8) return null;
+      const bossId = view.getUint16(1, true),
+        wave = view.getUint8(3),
+        phaseId = view.getUint8(4),
+        remainingTicks = view.getUint16(5, true),
+        sheltered = view.getUint8(7);
+      if (phaseId === 0)
+        return bossId === 0 && wave === 0 && remainingTicks === 0 && sheltered === 0
+          ? { type: 'kingStorm', storm: null }
+          : null;
+      const phase = KING_STORM_PHASES[phaseId - 1];
+      const maximum =
+        phase === 'warning'
+          ? SOUL_STORM.warningTicks
+          : phase === 'storm'
+            ? SOUL_STORM.activeTicks
+            : SOUL_STORM.recoveryTicks;
+      if (
+        !phase ||
+        bossId === 0 ||
+        wave < 1 ||
+        wave > 2 ||
+        remainingTicks < 1 ||
+        remainingTicks > maximum ||
+        sheltered > 2
+      )
+        return null;
+      return {
+        type: 'kingStorm',
+        storm: {
+          bossId,
+          wave,
+          phase,
+          remainingTicks,
+          sheltered: sheltered === 1,
+          outside: sheltered === 2,
+        },
+      };
+    }
     case ServerMessageType.Allies: {
       if (data.byteLength < 2 || data.byteLength !== 2 + view.getUint8(1) * 10) return null;
       const players: AllyView[] = [];
@@ -2872,4 +2914,19 @@ export function encodeAllies(players: readonly AllyView[]): ArrayBuffer {
     view.setUint8(o + 9, p.inReach ? 1 : 0);
   }
   return data;
+}
+
+/** Eight bytes of authoritative arena timing, including the viewer's shelter status. */
+export function encodeKingStorm(storm: KingStormView | null): ArrayBuffer {
+  const buffer = new ArrayBuffer(8),
+    view = new DataView(buffer);
+  view.setUint8(0, ServerMessageType.KingStorm);
+  if (storm) {
+    view.setUint16(1, storm.bossId, true);
+    view.setUint8(3, storm.wave);
+    view.setUint8(4, KING_STORM_PHASES.indexOf(storm.phase) + 1);
+    view.setUint16(5, storm.remainingTicks, true);
+    view.setUint8(7, storm.outside ? 2 : storm.sheltered ? 1 : 0);
+  }
+  return buffer;
 }

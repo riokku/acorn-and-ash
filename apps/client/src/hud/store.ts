@@ -1,4 +1,5 @@
 import type { KingVictoryView } from './KingVictory';
+import type { KingStormView } from '@acorn/shared';
 import type { AllyView } from '@acorn/shared';
 import type { BuildableKindId } from '@acorn/shared';
 import type { WarmthView } from '@acorn/shared';
@@ -48,6 +49,8 @@ export interface FirePanelState {
   readonly y: number;
 }
 export interface HudState {
+  readonly kingStorm?: KingStormView | null;
+  readonly kingWard?: Compass | null;
   readonly kingVictory?: KingVictoryView | null;
   readonly strongholdApproach?: { title: string; detail: string } | null;
   readonly allies?: readonly (AllyView & { name: string; self: boolean })[];

@@ -1,5 +1,7 @@
+import { inKingsHold } from '../world/hollow-king';
+import { inKingStorm, kingStormPhase, kingStormSheltered, type KingStormView } from './king-storm';
 import { KING_APPROACH_LINEUPS } from '../world/kings-road';
-import { HOLLOW_KING, hollowKingAttack, hollowKingToughness } from '../data/world-boss';
+import { SOUL_STORM, HOLLOW_KING, hollowKingAttack, hollowKingToughness } from '../data/world-boss';
 import { equipmentOpeningPower } from '../data/equipment-specialties';
 import { TOWN_DISTRICTS } from '../world/skeleton-town';
 import { sentinelToughness, captainAttackPlan } from '../data/raiders';
@@ -246,6 +248,9 @@ interface RaiderRuntime {
   plannedStrike: boolean;
   plannedSwings: number;
   attackNumber: number;
+  stormWaves: number;
+  storm: { startedTick: number; recovering: boolean } | null;
+  stormRestUntilTick: number;
   /** Whether this attack has actually begun. */
   attackBegun: boolean;
   attackRecovery: boolean;
@@ -381,6 +386,77 @@ export class RaidDirector {
       if (Number.isInteger(id) && Number.isFinite(tick) && tick >= 0)
         this.encounterRestUntil.set(id, tick);
     }
+  }
+
+  kingStorm(): Omit<KingStormView, 'sheltered' | 'outside'> | null {
+    for (const king of this.raiders.values()) {
+      if (king.kind !== 'hollowKing' || !king.storm || king.mode === 'down') continue;
+      const phase = kingStormPhase(this.tick - king.storm.startedTick);
+      if (phase) return { ...phase, bossId: king.id, wave: king.stormWaves };
+    }
+    return null;
+  }
+
+  /** Runs on server ticks, never on client inputs or wall-clock timers. */
+  private stepKingStorm(king: RaiderRuntime, raid: Raid | undefined): boolean {
+    const fighting =
+      raid?.targetNetId !== 0 &&
+      [...this.fighterById.values()].some(
+        (f) => isFightable(f) && inKingsHold(f.position.x, f.position.z),
+      );
+    // A brief retreat does not restart the warning. The existing full-wipe
+    // reset owns cancellation, so crossing the arena edge cannot stall a cast.
+    if (!fighting && !king.storm) return false;
+    if (!king.storm) {
+      const threshold = SOUL_STORM.thresholds[king.stormWaves];
+      if (
+        threshold === undefined ||
+        this.tick < king.stormRestUntilTick ||
+        1 - king.damageTaken / this.maxHitsOf(king.id) > threshold ||
+        king.action.kind !== ActionKind.Idle ||
+        king.mode === 'recover'
+      )
+        return false;
+      this.releaseTurn(king);
+      king.stormWaves++;
+      king.storm = { startedTick: this.tick, recovering: false };
+      king.attackBegun = false;
+      king.attackRecovery = false;
+      king.previousButtons = 0;
+      king.dodgeAtTick = -1;
+      beginAction(king.action, ActionKind.Idle);
+      for (let i = this.pendingBlows.length - 1; i >= 0; i--)
+        if (this.pendingBlows[i]!.raiderId === king.id) this.pendingBlows.splice(i, 1);
+    }
+    const elapsed = this.tick - king.storm.startedTick;
+    const total = SOUL_STORM.warningTicks + SOUL_STORM.activeTicks;
+    if (elapsed >= total) {
+      if (!king.storm.recovering) {
+        king.storm.recovering = true;
+        this.setMode(king, 'recover');
+        king.attackRecovery = true;
+        king.plannedStrike = true;
+        king.pauseTicks = SOUL_STORM.recoveryTicks;
+        king.stormRestUntilTick = this.tick + SOUL_STORM.recoveryTicks + SOUL_STORM.cooldownTicks;
+      }
+      if (elapsed >= total + SOUL_STORM.recoveryTicks) king.storm = null;
+      return false;
+    }
+    if (
+      elapsed >= SOUL_STORM.warningTicks &&
+      (elapsed - SOUL_STORM.warningTicks) % SOUL_STORM.pulseTicks === 0
+    ) {
+      for (const fighter of this.fighterById.values()) {
+        if (
+          isFightable(fighter) &&
+          inKingStorm(fighter.position) &&
+          !kingStormSheltered(fighter.position)
+        )
+          this.host.strikePlayer(fighter.netId, SOUL_STORM.damage, this.tick);
+      }
+    }
+    this.move(king, this.standStill(king));
+    return true;
   }
 
   /** How many raiders are out in the world right now. */
@@ -870,6 +946,9 @@ export class RaidDirector {
       plannedStrike: false,
       plannedSwings: 1,
       attackNumber: 0,
+      stormWaves: 0,
+      storm: null,
+      stormRestUntilTick: 0,
       attackBegun: false,
       attackRecovery: false,
       lastTurnTick: this.tick,
@@ -1112,6 +1191,9 @@ export class RaidDirector {
             king.contributorKeys.clear();
             king.contributorLastHit.clear();
             king.attackNumber = 0;
+            king.storm = null;
+            king.stormWaves = 0;
+            king.stormRestUntilTick = 0;
             king.attackBegun = false;
             king.whirlwindHits.clear();
             beginAction(king.action, ActionKind.Idle);
@@ -1123,6 +1205,8 @@ export class RaidDirector {
         }
         raid.targetNetId = 0;
         for (const id of raid.raiderIds) {
+          const member = this.raiders.get(id);
+          if (member) member.storm = null;
           const raider = this.raiders.get(id);
           if (raider === undefined || raider.mode === 'down') continue;
           this.releaseTurn(raider);
@@ -1247,6 +1331,7 @@ export class RaidDirector {
       this.move(raider, this.walkEncounter(raider, raid.encounter));
       return;
     }
+    if (raider.kind === 'hollowKing' && this.stepKingStorm(raider, raid)) return;
     const target = this.chooseTarget(raider, raid);
     if (target === null) {
       raider.targetNetId = null;
@@ -1879,6 +1964,7 @@ export class RaidDirector {
 
   private defeat(raider: RaiderRuntime): void {
     if (raider.kind === 'hollowKing') {
+      raider.storm = null;
       this.bossRestUntilMs = this.clockMs() + HOLLOW_KING.respawnSeconds * 1000;
       this.listChanged = true;
     }

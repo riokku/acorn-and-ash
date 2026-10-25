@@ -10,7 +10,7 @@ import {
 import { encodeWarmth, warmthFromSaved, type WarmthState } from '@acorn/shared';
 import { encodeBuildReply } from '@acorn/shared';
 import { encodeWildfire } from '@acorn/shared';
-import { encodeAllies, encodeRaiderVitals } from '@acorn/shared';
+import { encodeKingStorm, encodeAllies, encodeRaiderVitals } from '@acorn/shared';
 import {
   encodeDigRefused,
   encodeGearRefused,
@@ -1687,6 +1687,7 @@ export class World extends DurableObject<WorldEnv> {
       // them, and the acknowledged input number is theirs alone.
       const entities = simulation.snapshotFor(attachment.netId, this.snapshotScratch);
       this.trySend(ws, encodeAllies(simulation.alliesOf(attachment.netId)));
+      this.trySend(ws, encodeKingStorm(simulation.kingStormOf(attachment.netId)));
       this.trySend(
         ws,
         encodeSnapshot(

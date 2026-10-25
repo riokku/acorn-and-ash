@@ -455,7 +455,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showBodies(renderer, scene, fireLights, params);
     return;
   }
-  if (focus === 'king-victory') {
+  if (focus === 'king-victory' || focus === 'king-storm') {
     const { showKingVictory } = await import('./king-victory');
     await showKingVictory(renderer, scene, daylight, params);
     return;

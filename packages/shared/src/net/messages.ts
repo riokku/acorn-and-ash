@@ -1,3 +1,4 @@
+import type { KingStormView } from '../sim/king-storm';
 import type { AllyView } from '../sim/cooperation';
 import type { TreasureSpot } from '../sim/treasure';
 import type { FireRequest, FireFuelView } from '../sim/fire-fuel';
@@ -129,6 +130,7 @@ export const ServerMessageType = {
   FireFuel: 0x49,
   Treasure: 0x4a,
   Allies: 0x4b,
+  KingStorm: 0x4c,
 } as const;
 
 export const RejectReason = {
@@ -716,6 +718,7 @@ export type WarmthMessage = WarmthView & { readonly type: 'warmth' };
 export type MealMessage = MealState & { readonly type: 'meal' };
 
 export type ServerMessage =
+  | { readonly type: 'kingStorm'; readonly storm: KingStormView | null }
   | { readonly type: 'allies'; readonly players: readonly AllyView[] }
   | { readonly type: 'treasure'; readonly spots: readonly TreasureSpot[] }
   | { readonly type: 'fireFuel'; readonly fires: readonly FireFuelView[] }

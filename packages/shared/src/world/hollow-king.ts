@@ -14,8 +14,21 @@ export const HOLLOW_KING_SITE: EncounterSite = {
   leashRadius: 38,
   restSeconds: HOLLOW_KING.respawnSeconds,
 };
+/** The existing cairn model is reused; protection is a magical ward, not physical cover. */
+export const KING_WARDS = [
+  { id: 1, x: CROWNBREAKER_HOLD.x - 13, z: CROWNBREAKER_HOLD.z - 9 },
+  { id: 2, x: CROWNBREAKER_HOLD.x + 13, z: CROWNBREAKER_HOLD.z - 9 },
+  { id: 3, x: CROWNBREAKER_HOLD.x, z: CROWNBREAKER_HOLD.z + 15 },
+] as const;
 /** Existing ruined masonry and cairns, arranged around a wide open fighting floor. */
 export const KING_REMNANTS: readonly EncounterSite[] = [
+  ...KING_WARDS.map((ward) => ({
+    id: 8020 + ward.id,
+    kind: 'wanderer' as const,
+    x: ward.x + 2.8,
+    z: ward.z - 2.7,
+    yaw: 0,
+  })),
   ...[-19, 19].flatMap((dx, i) =>
     [-19, 19].map((dz, j) => ({
       id: 8000 + i * 2 + j,
