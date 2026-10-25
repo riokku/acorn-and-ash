@@ -169,6 +169,7 @@ export function createGrass(
   let buildings: readonly BuiltPropView[] = [];
   let isHole: (x: number, z: number) => boolean = () => false;
   let changed = true;
+  let initialized = false;
   let lastX = Infinity,
     lastZ = Infinity;
   let elapsed = 0;
@@ -190,15 +191,17 @@ export function createGrass(
     /** How much the wind moves it: tall tufts move more. */
     sway: number;
     threshold: number;
+    biome: number;
   }
   const tiles = new Map<string, Clump[]>();
-  const tileAt = (tx: number, tz: number): Clump[] => {
+  function* generateTile(tx: number, tz: number): Generator<void, Clump[]> {
     const key = `${tx},${tz}`;
     const cached = tiles.get(key);
     if (cached !== undefined) return cached;
     const clumps: Clump[] = [];
     const random = seededRandom(Math.imul(tx, 73856093) ^ Math.imul(tz, 19349663) ^ 5279);
     for (let sample = 0; sample < 900; sample++) {
+      if (sample > 0 && sample % 150 === 0) yield;
       const x = (tx + random()) * TILE,
         z = (tz + random()) * TILE;
       const chance = random(),
@@ -259,11 +262,19 @@ export function createGrass(
         leanAngle,
         sway: 0.6 + size * 0.5,
         threshold,
+        biome: highPlainsWeight(x, z),
       });
     }
     tiles.set(key, clumps);
     return clumps;
+  }
+  const tileAt = (tx: number, tz: number): Clump[] => {
+    const generator = generateTile(tx, tz);
+    let next = generator.next();
+    while (!next.done) next = generator.next();
+    return next.value;
   };
+  let preparing: { tx: number; tz: number; generator: Generator<void, Clump[]> } | null = null;
   /** The tiles a clump could be taken from when standing at `position` and reaching `reach` out. */
   const tilesAround = (position: { x: number; z: number }, reach: number) => ({
     fromX: Math.floor((position.x - reach) / TILE),
@@ -276,20 +287,40 @@ export function createGrass(
    * Making seven new ones at once, as laying the grass out would when you
    * cross into a new row, takes several frames' time and shows as a stutter.
    */
-  const prepareNextTile = (position: { x: number; z: number }): void => {
+  const prepareNextTile = (position: { x: number; z: number }): boolean => {
     const { fromX, toX, fromZ, toZ } = tilesAround(position, LAYOUT_REACH + REBUILD_DISTANCE);
-    let nearest: [number, number] | null = null;
+    if (
+      preparing &&
+      (preparing.tx < fromX || preparing.tx > toX || preparing.tz < fromZ || preparing.tz > toZ)
+    )
+      preparing = null;
+    let nearest: [number, number] | null = preparing ? [preparing.tx, preparing.tz] : null;
     let nearestDistance = Infinity;
-    for (let tx = fromX; tx <= toX; tx++)
-      for (let tz = fromZ; tz <= toZ; tz++) {
-        if (tiles.has(`${tx},${tz}`)) continue;
-        const gap = Math.hypot((tx + 0.5) * TILE - position.x, (tz + 0.5) * TILE - position.z);
-        if (gap < nearestDistance) {
-          nearestDistance = gap;
-          nearest = [tx, tz];
+    if (!preparing)
+      for (let tx = fromX; tx <= toX; tx++)
+        for (let tz = fromZ; tz <= toZ; tz++) {
+          if (tiles.has(`${tx},${tz}`)) continue;
+          const gap = Math.hypot((tx + 0.5) * TILE - position.x, (tz + 0.5) * TILE - position.z);
+          if (gap < nearestDistance) {
+            nearestDistance = gap;
+            nearest = [tx, tz];
+          }
         }
-      }
-    if (nearest !== null) tileAt(nearest[0], nearest[1]);
+    if (nearest === null) return false;
+    preparing ??= {
+      tx: nearest[0],
+      tz: nearest[1],
+      generator: generateTile(nearest[0], nearest[1]),
+    };
+    if (!preparing.generator.next().done) return false;
+    preparing = null;
+    const visible = tilesAround(position, LAYOUT_REACH);
+    return (
+      nearest[0] >= visible.fromX &&
+      nearest[0] <= visible.toX &&
+      nearest[1] >= visible.fromZ &&
+      nearest[1] <= visible.toZ
+    );
   };
   const rebuild = (position: { x: number; z: number }): void => {
     const footprints = buildings.map((prop) =>
@@ -324,7 +355,9 @@ export function createGrass(
     const { fromX, toX, fromZ, toZ } = tilesAround(position, LAYOUT_REACH);
     for (let tx = fromX; tx <= toX; tx++)
       for (let tz = fromZ; tz <= toZ; tz++)
-        for (const clump of tileAt(tx, tz)) {
+        // Only the first layout (behind loading) may generate a whole neighborhood.
+        // Travel consumes cached tiles; preparation fills one missing tile per frame.
+        for (const clump of initialized ? (tiles.get(`${tx},${tz}`) ?? []) : tileAt(tx, tz)) {
           const { x, y, z, size, width, depth, threshold } = clump;
           if (
             count >= MAX_CLUMPS ||
@@ -353,7 +386,7 @@ export function createGrass(
           mesh.setMatrixAt(count, matrix);
           roots.set([x, y, z], count * 3);
           looks.set([clump.tone, clump.lean, clump.leanAngle, clump.sway], count * 4);
-          biomes[count] = highPlainsWeight(x, z);
+          biomes[count] = clump.biome;
           count++;
         }
     mesh.count = count;
@@ -364,6 +397,7 @@ export function createGrass(
     lastX = position.x;
     lastZ = position.z;
     changed = false;
+    initialized = true;
   };
   return {
     mesh,
@@ -386,12 +420,19 @@ export function createGrass(
       clock.value = elapsed;
       viewer.value.set(position.x, 0, position.z);
       if (density <= 0) return;
-      if (changed || Math.hypot(position.x - lastX, position.z - lastZ) >= REBUILD_DISTANCE)
+      // A sudden turn or relocation must not force all missing tiles into one frame.
+      // Keep refreshing until prepared tiles have entered the visible layout.
+      const prepared = initialized && prepareNextTile(position);
+      if (
+        changed ||
+        prepared ||
+        Math.hypot(position.x - lastX, position.z - lastZ) >= REBUILD_DISTANCE
+      )
         rebuild(position);
-      else prepareNextTile(position);
     },
     dispose() {
       tiles.clear();
+      preparing = null;
       geometry.dispose();
       material.dispose();
       mesh.dispose();

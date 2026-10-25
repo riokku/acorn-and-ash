@@ -242,6 +242,7 @@ export function buildWildernessScene(
     felled.has(id) && !falling.has(id) ? undefined : slotOf.get(id),
   );
   const landings: TreeLanding[] = [];
+  const pendingBlockers = new Set<string>();
 
   /** The tree as it stands now: the one the seed laid out, or what has grown there since. */
   const standingTree = (tree: PlacedProp): PlacedProp => regrown.get(tree.id) ?? tree;
@@ -437,8 +438,7 @@ export function buildWildernessScene(
       placeStumps();
       // The camera should stop shying away from a trunk that is no longer
       // there, and start minding one that has grown back.
-      for (const key of touchedCells) rebuildCell(key);
-      refreshCameraBlockers();
+      for (const key of touchedCells) pendingBlockers.add(key);
     },
     shakeTree: (treeId, awayX, awayZ, strength = 1) => {
       const length = Math.hypot(awayX, awayZ);
@@ -452,6 +452,14 @@ export function buildWildernessScene(
     },
     drainLandings: () => landings.splice(0),
     update(deltaSeconds, position) {
+      // Tree growth/fire snapshots can touch many cells together. Camera-only
+      // geometry catches up one cell per frame; gameplay collision stays immediate.
+      const nextCell = pendingBlockers.values().next();
+      if (!nextCell.done) {
+        pendingBlockers.delete(nextCell.value);
+        rebuildCell(nextCell.value);
+        refreshCameraBlockers();
+      }
       sinceDetailUpdate += deltaSeconds;
       const moved = Math.hypot(position.x - lastX, position.z - lastZ) >= 4;
       if (dirty || (sinceDetailUpdate >= 0.5 && moved)) {

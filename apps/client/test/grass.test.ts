@@ -216,3 +216,31 @@ describe('nearby grass cover', { timeout: 15_000 }, () => {
     }
   });
 });
+
+it('bounds cold travel generation to 150 candidates per frame and eventually fills the new area', () => {
+  const clearing = buildTestClearing(DEFAULT_WORLD_SEED);
+  const source = createWildernessTerrain(DEFAULT_WORLD_SEED);
+  let samples = 0;
+  const terrain = {
+    ...source,
+    heightAt(x: number, z: number) {
+      samples++;
+      return source.heightAt(x, z);
+    },
+  };
+  const grass = createGrass(terrain, clearing, buildWilderness(DEFAULT_WORLD_SEED, source));
+  try {
+    grass.update(1 / 60, { x: 0, z: 0 }, false);
+    const destination = { x: 90, z: -60 };
+    let maximum = 0;
+    for (let frame = 0; frame < 400; frame++) {
+      samples = 0;
+      grass.update(1 / 60, destination, false);
+      maximum = Math.max(maximum, samples);
+    }
+    expect(maximum).toBeLessThanOrEqual(150 * 5);
+    expect(grass.mesh.count).toBeGreaterThan(1000);
+  } finally {
+    grass.dispose();
+  }
+}, 15000);
