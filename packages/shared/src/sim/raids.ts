@@ -1199,8 +1199,8 @@ export class RaidDirector {
       raidId: raid.id,
       targetNetId: raid.targetNetId,
       count: raid.beaten,
-      x,
-      z,
+      x: raid.encounter?.worldBoss ? raid.encounter.x : x,
+      z: raid.encounter?.worldBoss ? raid.encounter.z : z,
     });
   }
 

@@ -135,6 +135,10 @@ it('credits recent distinct owners, persists the real-time rest deadline and exc
   const deadline = a.director.worldBossRestUntilMs();
   expect(deadline).toBeGreaterThan(1_800_000);
   a.step(100);
+  expect(a.director.drainNews().find((news) => news.kind === 'encounterCleared')).toMatchObject({
+    x: CROWNBREAKER_HOLD.x,
+    z: CROWNBREAKER_HOLD.z,
+  });
   expect(a.director.raidersList()).toEqual([]);
   a.director.restoreWorldBossRestUntilMs(deadline);
   a.setClock(deadline - 2000);
