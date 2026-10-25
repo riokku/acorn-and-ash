@@ -2016,7 +2016,7 @@ export class WorldSimulation {
         rewardWorldBoss: (ownerKey, position) => {
           const rewards: { item: ItemId; count: number }[] = [
             { item: 'kingCrown', count: 1 },
-            { item: 'watchGreatsword', count: 1 },
+            { item: 'kingsRequiem', count: 1 },
             { item: 'forestStew', count: 2 },
           ];
           if (
@@ -2038,7 +2038,9 @@ export class WorldSimulation {
           );
         },
         dropBonusLoot: (raiderId, kind, position, facingYaw) => {
-          const weapon = skeletonWeaponDrop(this.seed, kind, raiderId, this.tick);
+          // The king’s sword is guaranteed, once per contributor, through personal rewards.
+          const weapon =
+            kind === 'hollowKing' ? null : skeletonWeaponDrop(this.seed, kind, raiderId, this.tick);
           if (weapon !== null) this.dropPile(weapon, 1, position, facingYaw, this.nowMs);
           const bag = skeletonBagDrop(this.seed, kind, raiderId, this.tick);
           if (bag !== null) this.dropPile(bag, 1, position, facingYaw, this.nowMs);

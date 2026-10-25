@@ -18,6 +18,7 @@ import { preloadWornGearModels } from '../scene/worn-gear-models';
 import bodyUrl from '@assets/characters/knight.glb?url';
 
 export interface ItemModel {
+  readonly animated?: boolean;
   readonly group: THREE.Group;
   dispose(): void;
 }
@@ -80,7 +81,7 @@ export async function createItemModel(item: ItemId): Promise<ItemModel> {
   const held = heldItemParts(item);
   if (held) return copyParts(held);
   const weapon = wornWeapon(item);
-  if (weapon) return copyParts(weapon.parts);
+  if (weapon) return { ...copyParts(weapon.parts), animated: item === 'kingsRequiem' };
   if (item === 'woodenShield') return copyParts(woodenShieldParts());
   const slot = gearSlotsOf(item).find((slot) => slot !== 'mainHand' && slot !== 'offHand');
   if (slot) {

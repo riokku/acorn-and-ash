@@ -15,7 +15,7 @@ export const CLOTHING_DROP_CHANCE = {
 /** A separate roll, so finding a bag never replaces bones or clothing. */
 export const SKELETON_BAG_DROP_CHANCE = 0.25;
 
-/** The exact carried model becomes wearable loot; bosses share the watch greatsword. */
+/** The exact carried model becomes wearable loot. The king awards his sword through personal rewards. */
 export const SKELETON_WEAPON_DROPS = {
   minion: { item: 'rustySword', chance: 0.05 },
   rogue: { item: 'raiderDagger', chance: 0.05 },
@@ -23,7 +23,7 @@ export const SKELETON_WEAPON_DROPS = {
   mage: { item: 'boneStaff', chance: 0.03 },
   sentinel: { item: 'watchGreatsword', chance: 0.02 },
   captain: { item: 'watchGreatsword', chance: 0.02 },
-  hollowKing: { item: 'watchGreatsword', chance: 0.02 },
+  hollowKing: { item: 'kingsRequiem', chance: 1 },
 } as const satisfies Record<RaiderKindId, { item: ItemId; chance: number }>;
 
 export function skeletonWeaponKind(item: ItemId): RaiderKindId | null {

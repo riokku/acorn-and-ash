@@ -32,6 +32,7 @@ export const EQUIPMENT_BONUSES: Readonly<Partial<Record<ItemId, EquipmentBonus>>
   raiderGreatsword: { power: 45 },
   boneStaff: { power: 35 },
   watchGreatsword: { power: 55 },
+  kingsRequiem: { power: 85 },
 
   huntingKnife: { power: 25 },
   refinedAxe: { power: 25 },

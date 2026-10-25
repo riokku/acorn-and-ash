@@ -17,6 +17,8 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     hungerEmptyAfterSeconds: Infinity,
   });
   sim.addPlayer(1, undefined, 'king-visitor');
+  sim.giveTestGear(1, ['kingsRequiem']);
+  expect(sim.inventoryOf(1).kingsRequiem).toBe(1);
   sim.placePlayer(1, { ...start, y: sim.collision.terrain.heightAt(start.x, start.z) }, Math.PI);
   for (let i = 0; i < 60; i++) sim.step(Date.now());
   const king = sim.raidersList().find((r) => r.kind === 'hollowKing');
@@ -27,6 +29,11 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
   let timer: ReturnType<typeof setInterval> | undefined;
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     const send = (data: ArrayBuffer) => socket.send(Buffer.from(data));
+    const equipment = () => {
+      send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+      send(shared.encodeWorn(sim.wornList()));
+      send(shared.encodeEquipped(sim.equippedList()));
+    };
     const refresh = () => {
       send(shared.encodeRaiders(sim.raidersList()));
       send(shared.encodeRaiderVitals(king!.id, sim.raids.maxHitsOf(king!.id)));
@@ -36,12 +43,18 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     };
     send(shared.encodeWelcome(1, sim.seed, 0, Date.now()));
     send(shared.encodeSpace(0, start.x, start.z, Math.PI));
+    equipment();
     refresh();
     socket.onMessage((message) => {
       if (typeof message === 'string') return;
       const request = shared.decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(shared.encodePong(request.clientTimeMs, Date.now()));
       if (request?.type === 'input') sim.queueInputs(1, request.inputs);
+      if (request?.type === 'gear' && request.action === 'wear') {
+        const change = sim.wearGear(1, request.item, request.slot);
+        if (!change.ok) send(shared.encodeGearRefused(change.reason));
+        equipment();
+      }
     });
     timer = setInterval(() => {
       sim.step(Date.now());
@@ -60,6 +73,13 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
     await expect(
       page.getByRole('progressbar', { name: "The Hollow King's health" }),
     ).toHaveAttribute('aria-valuenow', '220');
+    await page.keyboard.press('KeyB');
+    await page.getByTestId('pack-slot-kingsRequiem').click();
+    await page.keyboard.press('KeyB');
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.equippedItem()))
+      .toBe('kingsRequiem');
+    expect(sim.wornOf(1).mainHand).toBe('kingsRequiem');
     await page.evaluate(({ x, z }) => window.acornDebug?.faceTowards(x, z), hold);
     await drawnScreenshot(page, testInfo.outputPath('crownbreaker-hold.png'));
     expect(errors).toEqual([]);
