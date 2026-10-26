@@ -331,6 +331,11 @@ const SCENERY: readonly { kind: PropKindId; x: number; z: number; scale: number 
 export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const focus = params.get('gallery') ?? '';
+  if (focus === 'homestead' && params.get('view') === 'plan') {
+    const { showHomesteadPlan } = await import('./homestead-plan');
+    showHomesteadPlan(canvas, params);
+    return;
+  }
   if (focus === 'cedar-hunt' && params.get('view') === 'plan') {
     const { showCedarHuntPlan } = await import('./cedar-hunt');
     showCedarHuntPlan(canvas, params);
@@ -402,6 +407,12 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     return;
   }
 
+  if (focus === 'homestead') {
+    scene.add(createGalleryGround([], () => 0, 40, 40));
+    const { showHomestead } = await import('./homestead');
+    showHomestead(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'tree-models') {
     scene.add(createGalleryGround([]));
     const { showTreeModels } = await import('./tree-models');

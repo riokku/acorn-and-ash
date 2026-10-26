@@ -1,3 +1,4 @@
+import { createStorageChest } from './storage-chest';
 import * as THREE from 'three/webgpu';
 import { createHomeFacilities } from './home-facilities';
 import type { GardenPlot } from '@acorn/shared';
@@ -636,26 +637,12 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     );
     group.add(keep(roll.build()));
   }
-  const chest = new THREE.Group();
-  chest.name = 'storage-chest';
+  const storage = createStorageChest(materials),
+    chest = storage.group,
+    lid = storage.lid;
+  disposers.push(storage.dispose);
   const chestShape = HOME_FURNITURE.chest;
   chest.position.set(chestShape.x, 0, chestShape.z);
-  const chestBody = new ModelBuilder();
-  chestBody
-    .add(materials.darkWood, plankGeometry(0.9, 0.45, 0.46, 'x', 1, 482), placed(0, 0.225, 0))
-    .add(materials.iron, plankGeometry(0.94, 0.04, 0.02, 'x', 1, 0), placed(0, 0.32, 0.24))
-    .add(materials.brass, new THREE.BoxGeometry(0.08, 0.1, 0.03), placed(0, 0.4, 0.245));
-  chest.add(keep(chestBody.build()));
-  const lid = new THREE.Group();
-  lid.position.set(0, 0.45, -0.25);
-  const lidModel = new ModelBuilder();
-  lidModel.add(
-    materials.darkWood,
-    plankGeometry(0.94, 0.06, 0.5, 'x', 1, 483),
-    placed(0, 0.03, 0.25),
-  );
-  lid.add(keep(lidModel.build()));
-  chest.add(lid);
   group.add(chest);
   let chestOpen = false;
 

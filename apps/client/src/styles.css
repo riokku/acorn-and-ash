@@ -5046,3 +5046,171 @@ body {
 .cedar-hunt-rarity {
   text-transform: capitalize;
 }
+
+.homestead-plan {
+  color: #e8e1c7;
+  background: linear-gradient(135deg, #263b2e, #172820);
+  border: 1px solid #819568;
+  border-radius: 16px;
+  padding: 22px;
+  margin: 12px 0 22px;
+}
+.homestead-plan h3 {
+  font:
+    28px Georgia,
+    serif;
+  margin: 7px 0 10px;
+  color: #f2dfad;
+}
+.homestead-plan p {
+  line-height: 1.55;
+  font-size: 14px;
+  margin: 8px 0;
+}
+.homestead-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #bfcd9c;
+  font-size: 11px;
+}
+.homestead-progress {
+  height: 6px;
+  border-radius: 4px;
+  background: #102017;
+  overflow: hidden;
+  margin: 16px 0 9px;
+}
+.homestead-progress span {
+  display: block;
+  height: 100%;
+  background: #c9b579;
+  transition: width 0.4s ease;
+}
+.homestead-rank {
+  color: #c8d7a9;
+  font-size: 12px;
+}
+.homestead-callout {
+  border-left: 2px solid #c0a877;
+  padding-left: 12px;
+}
+.homestead-chapters {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+}
+.homestead-chapters article {
+  background: #101e18b8;
+  border: 1px solid #526448;
+  border-radius: 10px;
+  padding: 16px;
+}
+.homestead-chapters article[data-complete='true'] {
+  border-color: #9ba970;
+}
+.homestead-project-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.homestead-project-heading svg {
+  width: 33px;
+  height: 33px;
+  flex-shrink: 0;
+}
+.homestead-project-heading small {
+  font-size: 11px;
+  color: #c0ba9f;
+}
+.homestead-project-heading h4 {
+  font:
+    21px Georgia,
+    serif;
+  color: #f2dfad;
+  margin: 5px 0;
+}
+.homestead-check {
+  margin-left: auto;
+  border: 1px solid #829568;
+  border-radius: 50%;
+  min-width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  color: #cfdaab;
+}
+.homestead-benefit {
+  color: #d5dfb3;
+  font-weight: 600;
+}
+.homestead-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 12px 0;
+}
+.homestead-costs span {
+  border: 1px solid #7f6c49;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #f5cc99;
+}
+.homestead-costs span[data-ready='true'] {
+  color: #c3d6a2;
+  border-color: #627e4b;
+}
+.homestead-plan button {
+  padding: 9px 13px;
+  color: #203026;
+  background: #dec58d;
+  border: 1px solid #fae7b0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.homestead-plan button:disabled {
+  cursor: default;
+  background: #354537;
+  color: #b9bea5;
+  border-color: #647052;
+}
+.homestead-plan button:focus-visible {
+  outline: 3px solid #f8df9a;
+  outline-offset: 3px;
+}
+.homestead-plan footer {
+  color: #b7c1a4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .homestead-progress span {
+    transition: none;
+  }
+}
+
+.homestead-gallery {
+  position: relative;
+  min-height: 100vh;
+  background: #14261e;
+  padding: 20px;
+}
+.homestead-gallery main {
+  max-width: 680px;
+  margin: 0 auto;
+  color: #e4daba;
+}
+.homestead-gallery-caption {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  color: #fff1c9;
+  text-align: center;
+  font:
+    22px Georgia,
+    serif;
+  text-shadow: 0 2px 5px #14261e;
+}

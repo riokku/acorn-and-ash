@@ -2011,7 +2011,7 @@ export class World extends DurableObject<WorldEnv> {
       const attachment = this.attachmentFor(ws);
       if (attachment === null) continue;
       const state = simulation.gardenStateOf(attachment.netId);
-      if (state.homeId !== 0) this.trySend(ws, encodeGardenState(state));
+      this.trySend(ws, encodeGardenState(state));
     }
   }
 
