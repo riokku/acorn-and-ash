@@ -56,7 +56,15 @@ it('fails closed for missing configuration, anonymous players, unverified email,
 });
 it('guards editor HTML and every admin API, including direct addresses and test sign-in', async () => {
   const { cookie } = await startAsTestPlayer();
-  for (const path of ['/admin', '/admin/', '/admin/items', '/admin.html', '/api/admin/items']) {
+  for (const path of [
+    '/admin',
+    '/admin/',
+    '/admin/items',
+    '/admin/worlds',
+    '/admin.html',
+    '/api/admin/items',
+    '/api/admin/worlds/home-clearing',
+  ]) {
     const response = await app.fetch(new Request(SITE + path, { headers: { cookie } }), settings());
     expect(response.status).toBe(403);
     expect(response.headers.get('cache-control')).toContain('no-store');

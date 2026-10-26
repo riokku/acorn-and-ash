@@ -1,3 +1,4 @@
+import { WorldAdmin } from './WorldAdmin';
 import { withEquipmentSpecialty } from '@acorn/shared';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -480,4 +481,22 @@ function Editor(): React.JSX.Element {
     </main>
   );
 }
-createRoot(document.getElementById('admin')!).render(<Editor />);
+createRoot(document.getElementById('admin')!).render(
+  <>
+    <nav className="admin-navigation" aria-label="Administration">
+      <a
+        href="/admin/items"
+        aria-current={!window.location.pathname.startsWith('/admin/worlds') ? 'page' : undefined}
+      >
+        Items
+      </a>
+      <a
+        href="/admin/worlds"
+        aria-current={window.location.pathname.startsWith('/admin/worlds') ? 'page' : undefined}
+      >
+        Worlds
+      </a>
+    </nav>
+    {window.location.pathname.startsWith('/admin/worlds') ? <WorldAdmin /> : <Editor />}
+  </>,
+);

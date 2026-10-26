@@ -21,10 +21,14 @@ const stubGameServer = `
     publish(draftRevision, publishedRevision) { if (draftRevision !== this.draft.revision || publishedRevision !== this.publishedValue.revision) return null; this.publishedValue = {revision: publishedRevision + 1, overrides: this.draft.overrides}; return this.adminState(); }
   }
 
-  export class World {
-    constructor(ctx) { this.ctx = ctx; }
+  export class World extends DurableObject {
+    calls = [];
+    inspectForAdmin(worldId) { this.calls.push({name:'inspect', worldId}); return {worldId, seed:42, players:0, savedCharacters:3, builtStructures:4, canReset:true, history:[]}; }
+    prepareAdminReset(worldId, actor, origin) { this.calls.push({name:'prepare', worldId, actor, origin}); return {ok:true,value:{token:'test-proof',expiresAt:Date.now()+120000,confirmation:'RESET '+worldId,world:{worldId,seed:42,players:0,savedCharacters:3,builtStructures:4,canReset:true,history:[]}}}; }
+    resetForAdmin(worldId, actor, origin, token, confirmation) { this.calls.push({name:'reset', worldId, actor, origin, token, confirmation}); return token==='test-proof' ? {ok:true,value:{worldId,seed:42,players:0,savedCharacters:0,builtStructures:0,canReset:true,history:[]}} : {ok:false,error:'Expired confirmation'}; }
     async fetch(request) {
       const url = new URL(request.url);
+      if(url.pathname === '/__admin-calls') return Response.json(this.calls);
       return Response.json({
         stub: true,
         objectId: this.ctx.id.toString(),

@@ -1372,18 +1372,24 @@ To stop it: Cloudflare dashboard → **Workers & Pages** → that Worker →
 never use this feature, so disconnecting it is always safe and never affects
 the game.
 
-### Starting a world's players over
+### Protected world resets
 
-Visiting `/api/worlds/<worldId>/reset-players?confirm=clear-everyone` clears
-every saved player's pack, hunger, health, position and name for that one
-world, and lets the one-time pickups (the axe, the bag, the rod) be found
-again - a clean slate for testing, not something reachable from inside the
-game itself. It leaves everything else about the world alone: built props,
-felled or regrown trees and buried caches are untouched. Refuses if anyone
-is currently connected to that world - close every tab in it first. For
-staging's default world, that's
-`https://acorn-ash-web-staging.chrisistinson.workers.dev/api/worlds/home-clearing/reset-players?confirm=clear-everyone`.
-See [decision 0042](docs/decisions/0042-hotbar-icons-and-a-way-to-reset-testing.md).
+Use your existing **Manage items** administrator link, then **Worlds**. Only the
+configured verified Google owner can open this page or call its APIs. Inspect a
+world ID (the main world is `home-clearing`), close all game connections to that
+world, then choose **Review full reset**. Check the displayed site and world,
+acknowledge the deletion and type `RESET <world-id>` before the final button.
+
+A reset erases characters, inventory, equipment, structures, storage, terrain
+edits, collected loot and creature progress in that world. Accounts, the
+site-wide item catalogue, the map seed and reset history remain. A two-minute,
+one-use confirmation is bound to the world, site and administrator; any new game
+connection invalidates it. The server rechecks the world is empty during the
+atomic reset. Late events from older connections are ignored. There is no undo.
+
+The old unauthenticated `reset-players` URL is retired and cannot perform resets.
+This is a manual control; scheduled rolling resets are not enabled.
+See [protected world administration](docs/decisions/0248-protected-world-resets.md).
 
 When a world next wakes, buildings whose saved owner no longer exists are
 removed, including their chests, gardens and indoor decorations. This cleans up

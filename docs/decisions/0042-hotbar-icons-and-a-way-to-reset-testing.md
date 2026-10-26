@@ -76,3 +76,5 @@ runs after that save has happened, never before or during it.
   `addColumn`). The block cleared on its own on a later attempt: the full
   monorepo typecheck, lint, test suite (668 tests across every package)
   and build all confirmed clean before this shipped.
+
+The playtest reset URL described above is retired by [0248](0248-protected-world-resets.md). Resets now require authenticated owner administration.
