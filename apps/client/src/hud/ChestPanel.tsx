@@ -49,6 +49,7 @@ export function ChestPanel({
         className="chest-panel"
         role="dialog"
         aria-modal="true"
+        aria-busy={pending}
         aria-labelledby="chest-title"
         data-testid="chest-panel"
         onClick={(event) => event.stopPropagation()}
@@ -158,7 +159,7 @@ export function ChestPanel({
         </div>
         <p className="chest-note" role="status" aria-live="polite">
           {pending
-            ? 'Moving your items…'
+            ? (note ?? 'Waiting for storage confirmation…')
             : (note ?? 'Your belongings are saved here between visits.')}
         </p>
       </div>

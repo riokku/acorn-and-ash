@@ -111,6 +111,17 @@ export function FirePanel({
           Prepare meals
         </button>
       ) : null}
+      {!available || (!storage && (logs === 0 || full)) || (storage && room === 0) ? (
+        <p className="fire-panel-help">
+          {!available
+            ? 'Reconnect to tend the fire or move logs.'
+            : storage
+              ? 'Make room in your pack to take logs.'
+              : full
+                ? 'The fire has enough fuel. Add another log after some has burned.'
+                : 'Bring a log from your pack or cabin shelf to add fuel.'}
+        </p>
+      ) : null}
       <small>
         {storage && !fire.yours
           ? "This is another player's log pile."
