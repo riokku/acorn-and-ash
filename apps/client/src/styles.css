@@ -5425,3 +5425,57 @@ body {
     0.85rem/1.5 Georgia,
     serif;
 }
+
+.home-upgrade {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid #8e8155;
+  border-radius: 10px;
+  background: #111f19c9;
+}
+.home-upgrade-tiers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 0 14px;
+  margin: 0 0 16px;
+  list-style: none;
+  border-bottom: 1px solid #526448;
+}
+.home-upgrade-tiers li {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: #b9b5a2;
+}
+.home-upgrade-tiers li[data-reached='true'] {
+  color: #c3d6a2;
+}
+.home-upgrade-tiers li[aria-current='step'] {
+  color: #f2dfad;
+  font-weight: bold;
+}
+.home-upgrade-materials {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.home-upgrade-materials > div {
+  border-left: 2px solid #af8d58;
+  padding: 5px 10px;
+  font-size: 13px;
+  color: #f5cc99;
+}
+.home-upgrade-materials > div[data-ready='true'] {
+  color: #c3d6a2;
+  border-color: #8da967;
+}
+.home-upgrade-materials small {
+  display: block;
+  color: #c0ba9f;
+  margin-top: 4px;
+}
+.home-upgrade-blueprint {
+  color: #d5dfb3;
+}

@@ -20,7 +20,9 @@ test('the homestead journal takes three projects from plans to an established tr
     await expect(plan.locator(`[data-project=${kind}]`)).toHaveAttribute('data-complete', 'true');
   }
   await expect(plan).toContainText('Trailstead established · 3/3 projects');
-  await expect(plan.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3');
+  await expect(
+    plan.getByRole('progressbar', { name: 'Homestead projects', exact: true }),
+  ).toHaveAttribute('aria-valuenow', '3');
   expect(errors).toEqual([]);
 });
 test('renders a campsite before and after its useful homestead additions', async ({
@@ -83,6 +85,12 @@ test('shows built project progress and opens the real outdoor garden from the jo
   sim.addPlayer(1, undefined, 'owner');
   sim.placePlayer(1, { x: 0, y: 0, z: 1.6 }, 0);
   Object.assign(sim.inventoryOf(1), { berry: 1 });
+  const supplies = shared.emptyChest();
+  supplies[0] = { item: 'log', count: 10 };
+  supplies[1] = { item: 'log', count: 2 };
+  supplies[2] = { item: 'stick', count: 8 };
+  sim.restoreChest(7, supplies);
+  let updateUpgradeSupplies = () => {};
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ body: '' }));
@@ -93,11 +101,17 @@ test('shows built project progress and opens the real outdoor garden from the jo
     send(shared.encodeSpace(0, 0, 1.6, 0));
     const refresh = () => {
       send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
+      send(shared.encodeHomeSkills(shared.learnHome(0, 'teepee')));
+      send(shared.encodeHomeSupplies(sim.homeSuppliesOf(1)));
       send(shared.encodeGardenState(sim.gardenStateOf(1)));
       send(shared.encodeHomesteadAppearance(sim.homesteadAppearanceOf(1)));
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
       );
+    };
+    updateUpgradeSupplies = () => {
+      sim.inventoryOf(1).stick = 8;
+      refresh();
     };
     refresh();
     socket.onMessage((message) => {
@@ -119,6 +133,18 @@ test('shows built project progress and opens the real outdoor garden from the jo
     await page.keyboard.press('KeyC');
     await page.getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page.getByTestId('homestead-plan')).toContainText('2/3 projects');
+    const upgrade = page.getByTestId('home-upgrade');
+    await expect(upgrade).toContainText('71% of materials gathered');
+    await expect(upgrade).toContainText('0 in pack · 8 stored · find 8 more');
+    updateUpgradeSupplies();
+    await expect(upgrade).toContainText('100% of materials gathered');
+    await upgrade.getByRole('button', { name: 'Preview your home upgrade' }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.buildPreview()?.kind))
+      .toBe('teepee');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('KeyC');
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page.locator('[data-project=trailWorkbench]')).toHaveAttribute(
       'data-complete',
       'true',
