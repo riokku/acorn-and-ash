@@ -101,6 +101,7 @@ export class RaiderCrowd {
   private readonly spares = new Map<RaiderKindId, Character[]>();
   private readonly action = createActionState();
   private clock = 0;
+  private readonly predictedContacts = new Map<number, Array<{ heavy: boolean; at: number }>>();
   private storm: KingStormView | null = null;
   setKingStorm(storm: KingStormView | null): void {
     this.storm = storm;
@@ -164,8 +165,8 @@ export class RaiderCrowd {
   }
 
   /**
-   * A blow the server says landed. One of our own was already shown as it
-   * landed here (see `predictBlow`), so only the count changes for it.
+   * A confirmed blow: consume a matching cosmetic prediction once, or show
+   * the contact now when latency/visibility prevented its prediction.
    */
   confirmHit(
     hit: RaiderHit,
@@ -175,8 +176,18 @@ export class RaiderCrowd {
   ): void {
     this.hitsLeft.set(hit.raiderId, hit.hitsLeft);
     if (!hit.shrugged) this.staggeredAt.set(hit.raiderId, this.clock);
-    if (ours || from === undefined) return;
-    this.show(hit.raiderId, from, hit.heavy ? 1.5 : 1, hit.shrugged, listener);
+    if (ours) {
+      const pending = (this.predictedContacts.get(hit.raiderId) ?? []).filter(
+        (contact) => this.clock - contact.at < 1.5,
+      );
+      const matched = pending.findIndex((contact) => contact.heavy === hit.heavy);
+      if (matched >= 0) pending.splice(matched, 1);
+      if (pending.length) this.predictedContacts.set(hit.raiderId, pending);
+      else this.predictedContacts.delete(hit.raiderId);
+      if (matched >= 0) return;
+    }
+    const origin = from ?? (ours ? listener : null);
+    if (origin) this.show(hit.raiderId, origin, hit.heavy ? 1.5 : 1, hit.shrugged, listener);
   }
 
   /**
@@ -201,7 +212,13 @@ export class RaiderCrowd {
       (RAIDER_KINDS[kind].steadfast && ATTACKING.has(action.kind)) ||
       this.clock - (this.staggeredAt.get(id) ?? -Infinity) < POISE_SECONDS;
     const shrugged = kind === 'hollowKing' || (light && steady && left - weight > 0);
-    this.show(id, from, strike ? 1.8 : heavy ? 1.4 : 1, shrugged, null);
+    if (this.show(id, from, strike ? 1.8 : heavy ? 1.4 : 1, shrugged, null)) {
+      const pending = (this.predictedContacts.get(id) ?? []).filter(
+        (contact) => this.clock - contact.at < 1.5,
+      );
+      pending.push({ heavy: heavy || strike, at: this.clock });
+      this.predictedContacts.set(id, pending);
+    }
     return shrugged ? 'shrugged' : 'hit';
   }
 
@@ -356,6 +373,7 @@ export class RaiderCrowd {
   /** Everybody gone at once: going indoors, or a fresh connection. */
   clear(): void {
     this.storm = null;
+    this.predictedContacts.clear();
     for (const id of this.positions.netIds()) {
       this.positions.remove(id);
       const figure = this.forget(id);
@@ -414,16 +432,17 @@ export class RaiderCrowd {
     strength: number,
     shrugged: boolean,
     listener: FlatPoint | null,
-  ): void {
+  ): boolean {
     const figure = this.figures.get(id);
     const pose = this.positions.poseOf(id);
-    if (figure === undefined || pose === undefined) return;
+    if (figure === undefined || pose === undefined) return false;
     const dx = pose.x - from.x;
     const dz = pose.z - from.z;
     const length = Math.hypot(dx, dz) || 1;
     const volume =
       listener === null ? 1 : volumeAt(Math.hypot(pose.x - listener.x, pose.z - listener.z));
     figure.struck(dx / length, dz / length, strength, shrugged, volume);
+    return true;
   }
 
   /** Gone from the snapshots: beaten and fallen apart, or walked off and out of sight. */
@@ -443,6 +462,7 @@ export class RaiderCrowd {
     const figure = this.figures.get(id);
     this.figures.delete(id);
     this.memories.delete(id);
+    this.predictedContacts.delete(id);
     this.staggeredAt.delete(id);
     return figure;
   }

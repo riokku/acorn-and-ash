@@ -27,6 +27,7 @@ export interface SelectedTargetMark {
 }
 
 export class CombatFeed {
+  dodgeAtMs = -Infinity;
   strikeAtMs = -Infinity;
   strikeDefeated = false;
   confirmStrike(defeated: boolean, nowMs: number): void {

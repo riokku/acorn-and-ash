@@ -88,6 +88,7 @@ export function CombatOverlay({ feed }: { readonly feed: CombatFeed }): React.JS
 function worthDrawing(feed: CombatFeed, now: number): boolean {
   if (!feed.showing) return false;
   return (
+    now - feed.dodgeAtMs < 550 ||
     now - feed.strikeAtMs < 320 ||
     feed.target !== null ||
     feed.threats.length > 0 ||
@@ -103,6 +104,18 @@ function drawCombat(
   height: number,
   now: number,
 ): void {
+  const dodgeAge = now - feed.dodgeAtMs;
+  if (dodgeAge >= 0 && dodgeAge < 550) {
+    context.save();
+    context.globalAlpha = Math.min(1, (550 - dodgeAge) / 180);
+    context.fillStyle = '#cce6d1';
+    context.font = '600 15px system-ui';
+    context.textAlign = 'center';
+    context.shadowColor = '#18231c';
+    context.shadowBlur = 4;
+    context.fillText('Evaded', width / 2, height * 0.46 - 26);
+    context.restore();
+  }
   const strikeAge = now - feed.strikeAtMs;
   if (strikeAge >= 0 && strikeAge < 320) {
     // Small stationary confirmation, no extra camera motion or screen flash.
