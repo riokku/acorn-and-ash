@@ -293,10 +293,11 @@ export class WorldConnection {
     return true;
   }
 
-  sendChest(request: ChestRequest): void {
-    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
+  sendChest(request: ChestRequest): boolean {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.flush();
     this.socket.send(encodeChestRequest(request));
+    return true;
   }
   sendExpedition(request: ExpeditionRequest): boolean {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return false;

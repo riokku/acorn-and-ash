@@ -1043,6 +1043,8 @@ export class Game {
   private readonly homesteadAppearances = new Map<number, HomesteadAppearance>();
   private chestOpen = false;
   private chestPending = false;
+  private chestPendingSince = 0;
+  private chestDismissed = false;
   private hoveredChest = false;
   private hoveredTrophy: BuiltPropView | null = null;
   private interactionNote: string | null = null;
@@ -1314,7 +1316,7 @@ export class Game {
 
   /** Escape closes the current panel or placement; the world stays playable. */
   private handleEscapeInput(): void {
-    if (this.chestOpen || this.chestPending) this.closeChest();
+    if (this.chestOpen || (this.chestPending && !this.chestDismissed)) this.closeChest();
     else if (this.mapOpen) this.showMenuPanel(null);
     else if (this.placing !== null) this.stopPlacing();
     else if (this.craftMenuOpen || this.buildMenuOpen || this.inventoryOpen)
@@ -1361,20 +1363,22 @@ export class Game {
 
   transferChest(request: ChestRequest): void {
     if (this.chestPending || !this.playing) return;
-    if (this.connectionState !== 'connected') {
-      this.interactionNote = 'Reconnect to use your chest.';
-      this.interactionNoteUntil = performance.now() + 2800;
-      return;
-    }
+    if (!this.submitAction('use storage', () => this.connection?.sendChest(request))) return;
     this.chestPending = true;
-    this.options.hud.publish({ chestPending: true });
-    this.connection?.sendChest(request);
+    this.chestDismissed = false;
+    this.chestPendingSince = performance.now();
+    this.options.hud.publish({
+      chestPending: true,
+      chestNote: this.chestWaitingText(performance.now()),
+      interactionNote: this.chestOpen ? null : this.chestWaitingText(performance.now()),
+    });
   }
 
   closeChest(): void {
     if (!this.chestOpen && !this.chestPending) return;
     this.chestOpen = false;
-    this.chestPending = false;
+    // Closing a panel cannot cancel a command already sent to the server.
+    this.chestDismissed = this.chestPending;
     this.homeInterior?.setChestOpen(false);
     for (const model of this.builtMeshes.values())
       if ('setChestOpen' in model) model.setChestOpen(false);
@@ -1942,6 +1946,7 @@ export class Game {
               );
               this.options.hud.publish({ craftPending: null, decorationPending: false });
             }
+            this.chestPending = false;
             this.closeChest();
             this.targeting.clear();
           }
@@ -1988,6 +1993,11 @@ export class Game {
               ? `${message.moved} item${message.moved === 1 ? '' : 's'} moved.`
               : null
             : chestReasonText(message.reason);
+        if (this.chestDismissed) {
+          this.chestDismissed = false;
+          if (text) this.showActionNote(text);
+          break;
+        }
         if (
           message.reason === null ||
           message.reason === 'chestFull' ||
@@ -2015,6 +2025,8 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.chestPending = false;
+        this.chestDismissed = false;
         this.homesteadAppearances.clear();
         this.fireFuelStates.clear();
         this.options.hud.publish({ warmth: null });
@@ -4007,7 +4019,7 @@ export class Game {
       this.localPlayer.action.kind !== ActionKind.KnockedOut &&
       !this.settingsOpen &&
       !this.chestOpen &&
-      !this.chestPending &&
+      !(this.chestPending && !this.chestDismissed) &&
       !this.mapOpen &&
       !this.inventoryOpen &&
       !this.buildMenuOpen &&
@@ -4753,9 +4765,17 @@ export class Game {
     ];
   }
 
+  private chestWaitingText(now: number): string | null {
+    if (!this.chestPending) return null;
+    return now - this.chestPendingSince >= 8000
+      ? 'Storage is still waiting for confirmation. Check your connection; items will not be sent twice.'
+      : 'Waiting for storage confirmation…';
+  }
+
   private pendingActionText(now: number): string | null {
     return (
       [
+        this.chestOpen ? null : this.chestWaitingText(now),
         this.craftFeedback.text(now),
         this.decorationFeedback.text(now),
         this.buildFeedback.text(now),
@@ -6612,6 +6632,7 @@ export class Game {
                   y: this.controls?.pointerPosition()?.y ?? 0,
                 },
       firePanel: this.firePanelState(),
+      ...(this.chestPending && this.chestOpen ? { chestNote: this.chestWaitingText(now) } : {}),
       craftPending: this.craftFeedback.item,
       interactionNote:
         now < this.interactionNoteUntil

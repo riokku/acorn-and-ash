@@ -27,6 +27,9 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
   sim.restoreBuiltProps([{ ...home, ownerKey: 'chest-owner', litUntilMs: null }]);
   sim.addPlayer(1, undefined, 'chest-owner');
   Object.assign(sim.inventoryOf(1), { log: 12, stick: 4 });
+  let finishStorage: (() => void) | null = null;
+  let deferStorage = false;
+  let storageRequests = 0;
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
@@ -41,9 +44,14 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
       const request = decodeClientMessage(new Uint8Array(message).buffer);
       if (request?.type === 'ping') send(encodePong(request.clientTimeMs, Date.now()));
       if (request?.type === 'chest') {
-        const result = sim.requestChest(1, request);
-        send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
-        send(encodeChestState(result));
+        storageRequests++;
+        const finish = () => {
+          const result = sim.requestChest(1, request);
+          send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
+          send(encodeChestState(result));
+        };
+        if (deferStorage) finishStorage = finish;
+        else finish();
       }
     });
   });
@@ -70,7 +78,15 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     await expect(panel).toBeVisible();
     await expect(panel).toContainText('0/10');
     await expect(page.locator('[data-testid^="chest-withdraw-"]')).toHaveCount(10);
+    deferStorage = true;
     await page.getByRole('button', { name: 'Store 10 Log', exact: true }).click();
+    await expect(panel).toHaveAttribute('aria-busy', 'true');
+    await expect(panel.getByRole('status')).toContainText('Waiting for storage confirmation');
+    await expect(page.getByRole('button', { name: 'Store 10 Log', exact: true })).toBeDisabled();
+    await expect(panel.getByRole('status')).toContainText('still waiting', { timeout: 12000 });
+    expect(storageRequests).toBe(2);
+    finishStorage!();
+    deferStorage = false;
     await expect(panel).toContainText('1/10');
     await page
       .getByRole('button', { name: 'Take 10 Log', exact: true })
@@ -81,12 +97,27 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
         ? testInfo.outputPath('storage-chest.png')
         : '/workspace/acorn-storage-chest.png',
     });
+    deferStorage = true;
+    await page.getByRole('button', { name: 'Take 9 Log', exact: true }).click();
+    await expect(panel).toHaveAttribute('aria-busy', 'true');
     await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    await expect(page.locator('.interaction-note')).toContainText('Waiting for storage');
+    await page.mouse.click(point.x, point.y);
+    // Pointer actions are consumed by the game's frame, not the DOM click callback.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    expect(storageRequests).toBe(4);
+    finishStorage!();
+    deferStorage = false;
+    await expect(page.locator('.interaction-note')).toHaveText('9 items moved.');
     await expect(panel).toBeHidden();
     await page.mouse.click(point.x, point.y);
     await expect(panel).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Take 9 Log', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Take 9 Log', exact: true }).click();
     await expect(panel).toContainText('0/10');
     await page.getByRole('button', { name: 'Store building supplies', exact: true }).click();
     await expect(panel).toContainText('3/10');
