@@ -572,7 +572,9 @@ export function Hud({
           {connectionNotice(state.connection, state.connectionDetail)}
         </p>
       ) : null}
-      {showingWorld && state.interactionNote !== null ? (
+      {showingWorld &&
+      state.interactionNote !== null &&
+      !(state.characterOpen && state.gearNotice?.text === state.interactionNote) ? (
         <p className="interaction-note" role="status">
           {state.interactionNote}
         </p>

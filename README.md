@@ -1917,3 +1917,12 @@ existing panels. Your outing stays saved throughout. Preparation is advice and
 never prevents leaving. Completed outings show their reward claim instead.
 Compare `/?gallery=expedition-preparation&before` with
 `/?gallery=expedition-preparation`, and use `&ready` for an equipped preview.
+
+### Equipment swaps and spare tools
+
+Swapping weapons or taking gear off uses actual free backpack slots. If an older
+save contains a spare of something already worn, returning that worn item keeps
+both copies safely, including after reconnecting. Each copy occupies its normal
+slot. New world pickups count worn equipment toward existing item limits, and
+blocked loot stays on the ground. Equipment refusal messages also appear during
+play when using the toolbar or backpack.

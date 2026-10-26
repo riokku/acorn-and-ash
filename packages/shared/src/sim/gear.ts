@@ -8,8 +8,8 @@
  */
 
 import { GEAR_SLOTS, canWearIn, type GearSlot, type WornGear } from '../data/gear';
-import type { ItemId } from '../data/items';
-import { addItem, hasItem, removeItem, type Inventory } from './inventory';
+import { ITEM_KINDS, type ItemId } from '../data/items';
+import { countOf, hasItem, removeItem, packSlots, slotsUsed, type Inventory } from './inventory';
 
 /** Why a change of gear is refused, in the order they travel the wire. */
 export const GEAR_REFUSALS = ['wrongSlot', 'missing', 'noRoom', 'inCombat', 'busy'] as const;
@@ -32,6 +32,15 @@ export type GearChange =
 
 const refused = (reason: GearRefusal): GearChange => ({ ok: false, reason });
 
+/** Returning owned equipment needs storage space, not permission to acquire another copy. */
+function returnGearToPack(pack: Inventory, item: ItemId): boolean {
+  const count = countOf(pack, item);
+  const extraSlot = count % ITEM_KINDS[item].stackSize === 0 ? 1 : 0;
+  if (slotsUsed(pack) + extraSlot > packSlots(pack)) return false;
+  pack[item] = count + 1;
+  return true;
+}
+
 /**
  * Put a piece from the pack into a slot. If something is already there it
  * goes back to the pack in its place, a swap. Refuses, changing nothing,
@@ -47,9 +56,9 @@ export function wearGear(
   if (!hasItem(pack, item)) return refused('missing');
   const before = worn[slot] ?? null;
   removeItem(pack, item, 1);
-  if (before !== null && addItem(pack, before, 1) < 1) {
+  if (before !== null && !returnGearToPack(pack, before)) {
     // Put things back exactly as they were: the swap did not happen.
-    addItem(pack, item, 1);
+    pack[item] = countOf(pack, item) + 1;
     return refused('noRoom');
   }
   worn[slot] = item;
@@ -60,7 +69,7 @@ export function wearGear(
 export function takeOffGear(worn: WornGear, pack: Inventory, slot: GearSlot): GearChange {
   const item = worn[slot];
   if (item === undefined) return refused('missing');
-  if (addItem(pack, item, 1) < 1) return refused('noRoom');
+  if (!returnGearToPack(pack, item)) return refused('noRoom');
   delete worn[slot];
   return { ok: true, displaced: null };
 }

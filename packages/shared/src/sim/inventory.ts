@@ -1,3 +1,4 @@
+import { isGear } from '../data/gear';
 /**
  * What a player is carrying.
  *
@@ -150,15 +151,18 @@ export function packStacks(inventory: Inventory): PackStack[] {
  * A direct restore, not a run of pickups, so it does not go through `addItem`:
  * a save from before there were slots keeps whatever it already had, even
  * more than its slots would hold now, the same way a save from before hunger
- * existed starts full rather than empty. Only an item's own limit is
- * enforced - the one axe - the same clamp a lowered limit already needs.
+ * existed starts full rather than empty. Acquisition limits still apply when
+ * collecting new items. Owned equipment returned from worn slots must survive
+ * a round trip even when a legacy spare already exceeded that acquisition limit.
  */
 export function inventoryFromEntries(
   entries: readonly { readonly item: ItemId; readonly count: number }[],
 ): Inventory {
   const inventory = createInventory();
   for (const entry of entries) {
-    const limit = ITEM_KINDS[entry.item].maxCarry ?? Number.POSITIVE_INFINITY;
+    const limit = isGear(entry.item)
+      ? Number.POSITIVE_INFINITY
+      : (ITEM_KINDS[entry.item].maxCarry ?? Number.POSITIVE_INFINITY);
     const clamped = Math.min(limit, Math.max(0, entry.count));
     if (clamped > 0) inventory[entry.item] = clamped;
   }
