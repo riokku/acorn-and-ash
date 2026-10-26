@@ -676,6 +676,8 @@ Cabin interiors retain their existing facilities.
 Review the campsite at `/?gallery=homestead` (`&before` for the empty campsite),
 or try the journal at `/?gallery=homestead&view=plan`.
 
+Your yard reflects daily use: the pantry gains up to five generic wrapped parcels as slots fill (contents stay private), the workbench shows its connected owner’s current tool, and indoor and outdoor crops grow gradually over their existing ten-minute timer. Nearby visitors see the same saved garden and pantry dressing. Compare `/?gallery=homestead&empty` with `/?gallery=homestead`.
+
 ## The Old Cedar Stag
 
 Open **C → Gear** to plan a hunt for the Old Cedar Stag. Broad hoofprints continue

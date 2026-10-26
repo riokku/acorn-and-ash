@@ -64,3 +64,41 @@ it('keeps indoor building locked while allowing already built projects to count'
   const html = renderToStaticMarkup(createElement(HomesteadPlan, { state }));
   expect(html.match(/Step outside to build/g)).toHaveLength(3);
 });
+
+it('dresses pantry fill reversibly and grows crops gradually without changing harvest rules', async () => {
+  const { GARDEN_GROW_TICKS } = await import('@acorn/shared');
+  const pantry = createHomesteadProject('trailPantry');
+  const plots = [
+    { crop: null, growTicks: 0 },
+    { crop: null, growTicks: 0 },
+    { crop: null, growTicks: 0 },
+  ] as const;
+  const visible = () =>
+    pantry.group.children.filter((c) => c.name === 'stored-supplies' && c.visible).length;
+  pantry.setAppearance({ id: 8, stocked: 5, tool: null, plots });
+  expect(visible()).toBe(5);
+  expect(triangleCount(pantry.group)).toBeLessThanOrEqual(
+    BUILDABLE_KINDS.trailPantry.triangleBudget,
+  );
+  pantry.setChestOpen(true);
+  pantry.setAppearance({ id: 8, stocked: 2, tool: null, plots });
+  expect(visible()).toBe(0);
+  pantry.setChestOpen(false);
+  expect(visible()).toBe(2);
+  pantry.setAppearance({ id: 8, stocked: 0, tool: null, plots });
+  expect(visible()).toBe(0);
+  pantry.dispose();
+  const garden = createHomesteadProject('kitchenGarden');
+  const sizes: number[] = [];
+  for (const growTicks of [GARDEN_GROW_TICKS, GARDEN_GROW_TICKS / 2, 0]) {
+    garden.setGardenPlots([{ crop: 'flower', growTicks }, ...plots.slice(1)]);
+    const flowers: THREE.Object3D[] = [];
+    garden.group.traverse((part) => {
+      if (part.visible && part.scale.x !== 1) flowers.push(part);
+    });
+    sizes.push(flowers[0]?.scale.x ?? 1);
+  }
+  expect(sizes[0]).toBeLessThan(sizes[1]!);
+  expect(sizes[1]).toBeLessThan(sizes[2]!);
+  garden.dispose();
+});

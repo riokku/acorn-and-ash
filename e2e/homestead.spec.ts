@@ -94,6 +94,7 @@ test('shows built project progress and opens the real outdoor garden from the jo
     const refresh = () => {
       send(shared.encodeInventory(shared.inventoryEntries(sim.inventoryOf(1))));
       send(shared.encodeGardenState(sim.gardenStateOf(1)));
+      send(shared.encodeHomesteadAppearance(sim.homesteadAppearanceOf(1)));
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
       );

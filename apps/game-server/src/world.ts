@@ -1,3 +1,4 @@
+import { encodeHomesteadAppearance } from '@acorn/shared';
 import { encodeAnimalTracks } from '@acorn/shared';
 import { encodeTreasure, treasuresFromSaved } from '@acorn/shared';
 import { encodeFireFuel } from '@acorn/shared';
@@ -389,6 +390,7 @@ export class World extends DurableObject<WorldEnv> {
     server.send(encodeDroppedPiles(simulation.droppedPilesList(netId)));
     server.send(encodeDiscoveries(simulation.discoveryStateOf(netId)));
     server.send(encodeGardenState(simulation.gardenStateOf(netId)));
+    server.send(encodeHomesteadAppearance(simulation.homesteadAppearanceOf(netId)));
     server.send(encodeExpeditionState(simulation.expeditionStateOf(netId)));
     server.send(encodeFishRecords(simulation.fishRecordsOf(netId)));
     // Any skeletons already out there, so they show up with the right look.
@@ -2012,6 +2014,10 @@ export class World extends DurableObject<WorldEnv> {
       if (attachment === null) continue;
       const state = simulation.gardenStateOf(attachment.netId);
       this.trySend(ws, encodeGardenState(state));
+      this.trySend(
+        ws,
+        encodeHomesteadAppearance(simulation.homesteadAppearanceOf(attachment.netId)),
+      );
     }
   }
 

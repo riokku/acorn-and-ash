@@ -1,4 +1,4 @@
-import { PROP_KINDS } from '@acorn/shared';
+import { GARDEN_GROW_TICKS, PROP_KINDS } from '@acorn/shared';
 import { createPropMeshes, placeInstance } from '../scene/props';
 import * as THREE from 'three/webgpu';
 import { createShelter } from '../scene/shelter';
@@ -42,12 +42,22 @@ export function showHomestead(
     pieces.push(piece);
   };
   if (!params.has('before')) {
-    add(createHomesteadProject('trailWorkbench'), -3.9, 0.4, 0.12);
-    add(createHomesteadProject('trailPantry'), 0.7, -0.3, -0.18);
+    const bench = createHomesteadProject('trailWorkbench');
+    bench.setAppearance({ id: 1, stocked: 0, tool: params.has('empty') ? null : 'axe', plots: [] });
+    add(bench, -3.9, 0.4, 0.12);
+    const pantry = createHomesteadProject('trailPantry');
+    pantry.setAppearance({ id: 2, stocked: params.has('empty') ? 0 : 5, tool: null, plots: [] });
+    add(pantry, 0.7, -0.3, -0.18);
     const garden = createHomesteadProject('kitchenGarden');
     garden.setGardenPlots([
-      { crop: 'berry', growTicks: 0 },
-      { crop: 'mushroom', growTicks: 0 },
+      {
+        crop: 'berry',
+        growTicks: params.has('empty') ? GARDEN_GROW_TICKS : Math.round(GARDEN_GROW_TICKS * 0.7),
+      },
+      {
+        crop: 'mushroom',
+        growTicks: params.has('empty') ? GARDEN_GROW_TICKS : Math.round(GARDEN_GROW_TICKS * 0.3),
+      },
       { crop: 'flower', growTicks: 0 },
     ]);
     add(garden, 2.8, 1.4, -0.2);

@@ -45,6 +45,12 @@ it('saves outdoor pantry transfers and garden planting atomically, then restores
     await waitFor('pantry stored', () =>
       owner.received.some((m) => m.type === 'chest' && m.homeId === 8 && m.moved === 4),
     );
+    await waitFor('stocked yard broadcast', () =>
+      owner.received.some(
+        (m) =>
+          m.type === 'homesteadAppearance' && m.projects.some((p) => p.id === 8 && p.stocked === 1),
+      ),
+    );
     await runInDurableObject(stub, (instance, state) => {
       const slots = JSON.parse(
         state.storage.sql
