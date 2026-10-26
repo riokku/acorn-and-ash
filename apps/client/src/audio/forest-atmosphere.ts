@@ -14,6 +14,7 @@ export interface ForestListener extends ForestPoint {
   readonly snow?: boolean;
   readonly precipitation?: number;
   readonly frozenWater?: boolean;
+  readonly threatened?: boolean;
 }
 
 /** Cosmetic scheduling uses the existing frame, never background timers. */
@@ -113,7 +114,7 @@ export class ForestAtmosphere {
         ((listener.night ? 30 : 9) + this.random() * (listener.night ? 30 : 13)) *
         (1 + Math.max(0, Math.min(1, listener.precipitation ?? 0)) * 2 + (listener.snow ? 0.5 : 0));
       const tree = trees[Math.floor(this.random() * trees.length)];
-      if (tree !== undefined && !listener.night)
+      if (tree !== undefined && !listener.night && !listener.threatened)
         this.spatial(
           'bird',
           tree,
@@ -133,12 +134,13 @@ export class ForestAtmosphere {
     }
     if (this.rustleIn <= 0) {
       this.rustleIn = 4 + this.random() * 7;
-      if (nearest !== undefined) this.spatial('rustle', nearest, listener, 0.26, 18);
+      if (nearest !== undefined)
+        this.spatial('rustle', nearest, listener, listener.threatened ? 0.09 : 0.26, 18);
     }
     this.brushDistance += listener.grounded ? distance : 0;
     if (nearestDistance < 3.5 && this.brushDistance >= 3 && nearest !== undefined) {
       this.brushDistance = 0;
-      this.spatial('rustle', nearest, listener, 0.32, 8);
+      this.spatial('rustle', nearest, listener, listener.threatened ? 0.11 : 0.32, 8);
       this.rustleIn = Math.max(this.rustleIn, 2);
     }
   }

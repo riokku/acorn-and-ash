@@ -1,4 +1,15 @@
-import { STREAM, nearestOnStream, streamPointAt } from '@acorn/shared';
+import {
+  LAKE,
+  POND,
+  POND_LEVEL,
+  defineLake,
+  STREAM,
+  lakeDepthAt,
+  nearestOnStream,
+  streamFlowPaceAt,
+  streamPointAt,
+  streamPools,
+} from '@acorn/shared';
 import { effectsVolume, noiseBuffer, registerSustainedEffect, soundContext } from './sound';
 
 export interface AmbienceListener {
@@ -10,29 +21,64 @@ export interface AmbienceListener {
   readonly indoors: boolean;
   readonly frozen: boolean;
   readonly underground: number;
+  readonly threatened?: boolean;
 }
 export interface AmbienceLevels {
   water: number;
   wind: number;
   pan: number;
   muffled: boolean;
+  waterTone: number;
 }
 const falls = STREAM.falls.map((fall) =>
   streamPointAt(STREAM, Math.round((fall.at / STREAM.length) * (STREAM.count - 1))),
 );
 
+/** Sample the actual union boundary once; overlapping circles do not become phantom shores. */
+const shores = [LAKE, ...streamPools(STREAM), defineLake(POND_LEVEL, POND, [])].flatMap((lake) => {
+  const points: Array<{ x: number; z: number }> = [];
+  for (const circle of [...lake.basin, ...lake.islands.flatMap((island) => island.lobes)]) {
+    const count = Math.min(96, Math.max(24, Math.ceil((2 * Math.PI * circle.radius) / 3)));
+    for (let index = 0; index < count; index++) {
+      const angle = (index / count) * Math.PI * 2;
+      const x = circle.x + Math.cos(angle) * circle.radius;
+      const z = circle.z + Math.sin(angle) * circle.radius;
+      if (Math.abs(lakeDepthAt(lake, x, z)) < 0.1) points.push({ x, z });
+    }
+  }
+  return points;
+});
+
 /** Bounded, world-anchored mix, sampled four times a second rather than every frame. */
 export function ambienceAt(listener: AmbienceListener): AmbienceLevels {
+  let water = 0,
+    weightedPan = 0,
+    weightedTone = 0,
+    weight = 0;
+  const cos = Math.cos(listener.cameraYaw),
+    sin = Math.sin(listener.cameraYaw);
+  const add = (x: number, z: number, level: number, tone: number) => {
+    if (level <= 0) return;
+    const dx = x - listener.x,
+      dz = z - listener.z;
+    const energy = level * level;
+    water = Math.max(water, level);
+    weightedPan += ((dx * cos + dz * sin) / Math.max(1, Math.hypot(dx, dz))) * energy;
+    weightedTone += tone * energy;
+    weight += energy;
+  };
   const stream = nearestOnStream(STREAM, listener.x, listener.z, 24);
-  let water = stream === null ? 0 : 0.028 * (1 - stream.distance / 24) ** 2;
-  let source = stream;
+  if (stream) {
+    const pace = Math.min(1.8, streamFlowPaceAt(STREAM, stream.along));
+    add(stream.x, stream.z, 0.028 * (1 - stream.distance / 24) ** 2, 1200 + pace * 900);
+  }
   for (const fall of falls) {
     const distance = Math.hypot(fall.x - listener.x, fall.z - listener.z);
-    const level = 0.065 * Math.max(0, 1 - distance / 55) ** 2;
-    if (level > water) {
-      water = level;
-      source = { ...fall, distance, along: 0 };
-    }
+    add(fall.x, fall.z, 0.065 * Math.max(0, 1 - distance / 55) ** 2, 3100);
+  }
+  for (const shore of shores) {
+    const distance = Math.hypot(shore.x - listener.x, shore.z - listener.z);
+    if (distance < 18) add(shore.x, shore.z, 0.012 * (1 - distance / 18) ** 2, 850);
   }
   const shelter =
     (listener.indoors ? 0.12 : 1) * (1 - Math.max(0, Math.min(1, listener.underground)));
@@ -40,15 +86,11 @@ export function ambienceAt(listener: AmbienceListener): AmbienceLevels {
     Math.min(1, Math.max(0, listener.wind)) *
     (1 - Math.min(1, Math.max(0, listener.cover)) * 0.7) *
     0.026;
-  const dx = (source?.x ?? listener.x) - listener.x,
-    dz = (source?.z ?? listener.z) - listener.z;
-  const pan =
-    (dx * Math.cos(listener.cameraYaw) + dz * Math.sin(listener.cameraYaw)) /
-    Math.max(1, Math.hypot(dx, dz));
   return {
-    water: listener.frozen ? 0 : water * shelter,
-    wind: wind * shelter,
-    pan: pan * 0.75,
+    water: listener.frozen ? 0 : water * shelter * (listener.threatened ? 0.55 : 1),
+    wind: wind * shelter * (listener.threatened ? 0.45 : 1),
+    pan: weight === 0 ? 0 : (weightedPan / weight) * 0.75,
+    waterTone: weight === 0 ? 850 : weightedTone / weight,
     muffled: listener.indoors || listener.underground > 0.2,
   };
 }
@@ -68,6 +110,7 @@ export class WorldAmbience {
   private levels: AmbienceLevels | null = null;
   private wasIndoors: boolean | null = null;
   private wasFrozen: boolean | null = null;
+  private wasThreatened = false;
   private lastVolume = -1;
   private active = false;
 
@@ -88,12 +131,14 @@ export class WorldAmbience {
       this.sampleIn <= 0 ||
       this.wasIndoors !== listener.indoors ||
       this.wasFrozen !== listener.frozen ||
+      this.wasThreatened !== Boolean(listener.threatened) ||
       volume !== this.lastVolume
     ) {
       this.sampleIn = 0.25;
       this.levels = ambienceAt(listener);
       this.wasIndoors = listener.indoors;
       this.wasFrozen = listener.frozen;
+      this.wasThreatened = Boolean(listener.threatened);
       this.lastVolume = volume;
       if (this.voices.length === 0 && this.levels.water + this.levels.wind > 0.0001) this.start();
       if (this.context)
@@ -101,7 +146,7 @@ export class WorldAmbience {
           voice.gain.gain.setTargetAtTime(
             (i === 0 ? this.levels.water : this.levels.wind) * volume,
             this.context.currentTime,
-            0.45,
+            listener.threatened ? 0.15 : 0.7,
           );
           voice.pan.pan.setTargetAtTime(
             i === 0 ? this.levels.pan : 0,
@@ -109,7 +154,7 @@ export class WorldAmbience {
             0.3,
           );
           voice.filter.frequency.setTargetAtTime(
-            this.levels.muffled ? 360 : i === 0 ? 2400 : 850,
+            this.levels.muffled ? 360 : i === 0 ? this.levels.waterTone : 850,
             this.context.currentTime,
             0.4,
           );
