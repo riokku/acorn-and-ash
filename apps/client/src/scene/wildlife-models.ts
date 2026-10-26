@@ -8,6 +8,12 @@ import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatu
 /** The existing wildlife figure and its movement controller. */
 export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCreature {
   switch (kind) {
+    case 'cedarStag': {
+      const model = createWoodlandCreature('elk', 'cedar');
+      model.group.name = 'Old Cedar Stag';
+      model.group.scale.setScalar(1.15);
+      return model;
+    }
     case 'jackrabbit': {
       const model = animateSmallAnimal(createCritter(), 'rabbit', phaseSeed);
       model.group.scale.setScalar(1.15);

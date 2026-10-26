@@ -18,7 +18,8 @@ export type AnimalKindId =
   | 'curiousRaccoon'
   | 'woodlandGuardian'
   | 'jackrabbit'
-  | 'coyote';
+  | 'coyote'
+  | 'cedarStag';
 
 /**
  * How a threat fights, once it has closed in. Present only on a kind that
@@ -63,6 +64,8 @@ export interface AnimalKind {
    * slower than a sprint. Only prey flees - absent on anything with `threat`.
    */
   readonly fleeSpeed?: number;
+  /** Multiplies time to alarm; alert quarry reacts sooner without changing ordinary prey. */
+  readonly awarenessTimeScale?: number;
   /** A player this close gets its attention, to flee from or to fight. */
   readonly alertRadius: number;
   /**
@@ -96,6 +99,21 @@ export interface AnimalKind {
 }
 
 export const ANIMAL_KINDS = {
+  cedarStag: {
+    id: 'cedarStag',
+    displayName: 'Old Cedar Stag',
+    wanderSpeed: 0.7,
+    fleeSpeed: PLAYER_SPRINT_SPEED * 1.12,
+    alertRadius: 8.5,
+    safeRadius: 16,
+    leashRadius: 10,
+    awarenessTimeScale: 0.55,
+    restSeconds: [5, 9],
+    catchItem: 'cedarHide',
+    collider: { radius: 0.42, height: 2.1 },
+    triangleBudget: 5000,
+    placeholderColor: 0x667345,
+  },
   elk: {
     id: 'elk',
     displayName: 'Roosevelt elk',

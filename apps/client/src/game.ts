@@ -283,6 +283,7 @@ import { createRemotePlayback } from './net/remote-playback';
 import { GatheringFocus } from './scene/gathering-focus';
 import { ForestAtmosphere } from './audio/forest-atmosphere';
 import { ForestAudio } from './audio/forest-sounds';
+import { readCedarHuntPin, writeCedarHuntPin } from './hud/cedar-hunt';
 import { WorldAmbience } from './audio/world-ambience';
 import { createForestEnvironment, type ForestEnvironment } from './audio/forest-environment';
 import { TreeLandingEffects } from './scene/tree-landing';
@@ -1178,6 +1179,11 @@ export class Game {
 
   constructor(options: GameOptions) {
     this.options = options;
+    try {
+      options.hud.publish({ cedarHuntPinned: readCedarHuntPin(localStorage, options.worldId) });
+    } catch {
+      /* Storage may be unavailable. */
+    }
     this.lookSensitivity = options.lookSensitivity;
     this.grassDensity = options.grassDensity;
     this.signOutCountdown = new SignOutCountdown({
@@ -1185,6 +1191,15 @@ export class Game {
       show: (view) =>
         options.hud.publish({ signOutSecondsLeft: view.secondsLeft, signOutNotice: view.notice }),
     });
+  }
+
+  setCedarHuntPinned(pinned: boolean): void {
+    this.options.hud.publish({ cedarHuntPinned: pinned });
+    try {
+      writeCedarHuntPin(localStorage, this.options.worldId, pinned);
+    } catch {
+      /* Keep this session's goal. */
+    }
   }
 
   /** Sign out of the game, after a short wait that moving or getting hurt cancels. */
@@ -2807,9 +2822,13 @@ export class Game {
     // countable thing the way a fish or a craft does.
     this.huntingNews = {
       text:
-        event.added === 0
-          ? `No room for more ${name}, so you let it go.`
-          : `You caught some ${name}!`,
+        event.item === 'cedarHide'
+          ? event.added === 0
+            ? 'Old Cedar Stag caught · your hide is on the ground. Make room and collect it.'
+            : 'Old Cedar Stag caught · hide secured. Stitch your Cedarstalker coat in C → Gear.'
+          : event.added === 0
+            ? `No room for more ${name}, so you let it go.`
+            : `You caught some ${name}!`,
       until: now + NEWS_MS,
     };
     // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather

@@ -3,6 +3,8 @@ import type { WornGear } from './gear';
 
 /** Fixed item identities, separate from the admin-editable base stat bonuses. */
 export const EQUIPMENT_SPECIALTIES: Partial<Record<ItemId, string>> = {
+  cedarstalkerCoat:
+    'Quiet step: prey notices your approach from 15% less distance while worn. Sprinting still startles wildlife; hostile creatures are unaffected. Track the Old Cedar Stag northwest beyond the elk grove, then stitch his hide with reeds and rope.',
   leatherBoots:
     'Sure footing: dodge cooldown is 15% shorter while worn. Stacks with a trail ration; roll distance and invulnerability stay the same. Earn a pair from The Sunreach Survey or A supper by the lake.',
   ironSword:
@@ -40,4 +42,9 @@ export function withEquipmentSpecialty(item: ItemId, description: string): strin
   return specialty && !description.includes(specialty)
     ? `${description} ${specialty}`
     : description;
+}
+
+/** Reduces prey notice distance only; point-blank surprise and predators stay dangerous. */
+export function equipmentPreyNotice(worn: Readonly<WornGear>): number {
+  return worn.upperBody === 'cedarstalkerCoat' ? 0.85 : 1;
 }

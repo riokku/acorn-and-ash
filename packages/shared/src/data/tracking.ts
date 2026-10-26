@@ -1,3 +1,4 @@
+import { CEDAR_STAG } from './cedar-hunt';
 import { STREAM, STREAM_WADING_DEPTH, streamWaterDepthAt } from '../world/stream';
 import { colliderFootprintRadius, type Collider } from '../world/colliders';
 import { createRng, hashSeed } from '../rng';
@@ -6,6 +7,7 @@ export const WOODLAND_ENCOUNTERS = [
   { id: 1008, kind: 'elk', x: -92, z: -74, radius: 8, name: 'Elk grove' },
   { id: 1009, kind: 'curiousRaccoon', x: 105, z: 75, radius: 6, name: 'Raccoon hollow' },
   { id: 1010, kind: 'woodlandGuardian', x: -104, z: 90, radius: 10, name: 'Guardian hollow' },
+  CEDAR_STAG,
 ] as const;
 export type WoodlandKind = (typeof WOODLAND_ENCOUNTERS)[number]['kind'];
 
@@ -22,12 +24,13 @@ export function buildWoodlandTracks(
 ): WoodlandTrack[] {
   return WOODLAND_ENCOUNTERS.flatMap((site) => {
     const rng = createRng(hashSeed(seed, 'woodland-spoor', site.id));
-    const length = Math.hypot(site.x, site.z) * 0.48;
+    const start = site.kind === 'cedarStag' ? 0.74 : 0.52;
+    const length = Math.hypot(site.x, site.z) * (1 - start);
     const steps = Math.floor(length / 1.65);
     const forwardX = site.x / Math.hypot(site.x, site.z),
       forwardZ = site.z / Math.hypot(site.x, site.z);
     return Array.from({ length: steps }, (_, index) => {
-      const progress = 0.52 + (0.48 * index) / (steps - 1);
+      const progress = start + ((1 - start) * index) / (steps - 1);
       const bend = Math.sin(index * 0.2) * 1.8 + rng.nextRange(-0.1, 0.1);
       const x = site.x * progress - forwardZ * bend,
         z = site.z * progress + forwardX * bend;
@@ -58,9 +61,11 @@ export function buildWoodlandTracks(
   });
 }
 export function woodlandTrackHint(kind: WoodlandKind): string {
-  return kind === 'elk'
-    ? 'Split hoofprints lead toward an elk grove · approach quietly'
-    : kind === 'curiousRaccoon'
-      ? 'Tiny pawprints lead toward a hidden raccoon cache'
-      : 'Heavy root-shaped furrows lead toward the guardian hollow';
+  return kind === 'cedarStag'
+    ? 'Broad cedar-stag hoofprints · follow northwest beyond the elk grove · pause when he watches you'
+    : kind === 'elk'
+      ? 'Split hoofprints lead toward an elk grove · approach quietly'
+      : kind === 'curiousRaccoon'
+        ? 'Tiny pawprints lead toward a hidden raccoon cache'
+        : 'Heavy root-shaped furrows lead toward the guardian hollow';
 }

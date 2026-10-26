@@ -23,7 +23,10 @@ export interface WoodlandCreature {
 
 /** Original articulated forest creatures. Their limbs, necks and tails have
  * separate pivots, with distance-driven gait and blended encounter reactions. */
-export function createWoodlandCreature(kind: WoodlandCreatureKind): WoodlandCreature {
+export function createWoodlandCreature(
+  kind: WoodlandCreatureKind,
+  palette?: 'cedar',
+): WoodlandCreature {
   const group = new THREE.Group();
   group.name = kind;
   const torso = new THREE.Group();
@@ -36,16 +39,23 @@ export function createWoodlandCreature(kind: WoodlandCreatureKind): WoodlandCrea
   const eyes: THREE.Group[] = [];
   const owned: { dispose(): void }[] = [];
   const fur = paintedMaterial('fur', {
-    tint: kind === 'elk' ? 0xb19770 : 0x948a7b,
+    tint: palette === 'cedar' ? 0x667345 : kind === 'elk' ? 0xb19770 : 0x948a7b,
     roughness: 1,
     flatShading: true,
   });
   const cream = paintedMaterial('fur', { tint: 0xe3d2b0, roughness: 1, flatShading: true });
-  const dark = paintedMaterial('fur', { tint: 0x493b30, roughness: 1, flatShading: true });
+  const dark = paintedMaterial('fur', {
+    tint: palette === 'cedar' ? 0x303f30 : 0x493b30,
+    roughness: 1,
+    flatShading: true,
+  });
   const hoof = plainMaterial(0x342e29, { roughness: 0.9, flatShading: true });
   const eye = plainMaterial(0x171e18, { roughness: 0.25 });
   const glint = plainMaterial(0xf6e9c8, { roughness: 0.2 });
-  const antler = paintedMaterial('wood', { tint: 0xcfb991, roughness: 1, flatShading: true });
+  const antler =
+    palette === 'cedar'
+      ? plainMaterial(0xe2d4a6, { roughness: 1, flatShading: true })
+      : paintedMaterial('wood', { tint: 0xcfb991, roughness: 1, flatShading: true });
   const bark = paintedMaterial('bark', { tint: 0x74624b, roughness: 1, flatShading: true });
   const grain = paintedMaterial('wood', { tint: 0xb49a72, roughness: 1, flatShading: true });
   const moss = paintedMaterial('grass', { tint: 0x657e47, roughness: 1, flatShading: true });

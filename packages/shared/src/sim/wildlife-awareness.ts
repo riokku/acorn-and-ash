@@ -18,7 +18,7 @@ export function stepWildlifeAwareness(
   fleeing: boolean,
   distance: number,
   speed: number,
-  kind: Pick<AnimalKind, 'alertRadius' | 'safeRadius'>,
+  kind: Pick<AnimalKind, 'alertRadius' | 'safeRadius' | 'awarenessTimeScale'>,
   seconds: number,
 ): WildlifeAwareness {
   if (fleeing) {
@@ -32,7 +32,10 @@ export function stepWildlifeAwareness(
     Math.min(
       1,
       awareness +
-        seconds * (distance < radius ? 1 / (speed > SPRINT_REPORTING_SPEED ? 0.8 : 1.6) : -1 / 2.5),
+        seconds *
+          (distance < radius
+            ? 1 / ((speed > SPRINT_REPORTING_SPEED ? 0.8 : 1.6) * (kind.awarenessTimeScale ?? 1))
+            : -1 / 2.5),
     ),
   );
   return { awareness: next, attentive: distance < radius * 1.5 || next > 0, fleeing: next >= 1 };

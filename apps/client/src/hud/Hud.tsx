@@ -1,3 +1,4 @@
+import { CedarHuntPlan, CedarHuntTracker } from './CedarHuntPlan';
 import { MealPreparation, mealPlan } from './MealPreparation';
 import { KingStorm } from './KingStorm';
 import { KingVictory } from './KingVictory';
@@ -89,6 +90,7 @@ import { FogCache } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
 
 interface HudProps {
+  readonly onCedarHuntPin?: (pinned: boolean) => void;
   readonly onFire?: (request: FireRequest) => void;
   readonly onExpedition?: (request: ExpeditionRequest) => void;
   readonly onToggleDecorations?: () => void;
@@ -157,6 +159,7 @@ export function Hud({
   onJournalTabChange,
   onPickCraft,
   onCraftTabChange,
+  onCedarHuntPin,
   onGardenUse,
   onToggleDecorations,
   onCloseLogStorage,
@@ -195,6 +198,13 @@ export function Hud({
     <>
       {/* First, so it sits under everything else: it is part of the world, not a panel. */}
       <CombatOverlay feed={combatFeed} />
+      {showingWorld &&
+      state.cedarHuntPinned &&
+      !state.inventoryOpen &&
+      !state.craftMenuOpen &&
+      !state.buildMenuOpen ? (
+        <CedarHuntTracker state={state} onPin={onCedarHuntPin} />
+      ) : null}
       {showingWorld && state.placedObject ? (
         <PlacedObjectMenu
           key={`${state.placedObject.indoor}-${state.placedObject.id}`}
@@ -284,6 +294,7 @@ export function Hud({
             state={state}
             onPick={onPickCraft}
             onTabChange={onCraftTabChange}
+            onCedarHuntPin={onCedarHuntPin}
             navigation={
               <JournalTabs
                 selected="craft"
@@ -886,6 +897,7 @@ export function CraftPanel({
   onTabChange,
   navigation,
   guidedMeals = true,
+  onCedarHuntPin,
 }: {
   state: HudState;
   /** Clicking an entry does the same as pressing its number. */
@@ -893,6 +905,7 @@ export function CraftPanel({
   onTabChange?: (tab: CraftTabId) => void;
   navigation: React.ReactNode;
   guidedMeals?: boolean;
+  onCedarHuntPin?: (pinned: boolean) => void;
 }): React.JSX.Element {
   const entries = craftMenuEntries(state);
   const tab = shownTab(entries, state.craftTab);
@@ -1027,6 +1040,7 @@ export function CraftPanel({
       </nav>
       <div className="craft-list">
         {guidedMeals && tab === 'food' ? <MealPreparation state={state} /> : null}
+        {tab === 'gear' ? <CedarHuntPlan state={state} onPin={onCedarHuntPin} /> : null}
         {CRAFT_GROUPS.map((group) => {
           const items = shown.filter((entry) => entry.group === group.id);
           return items.length === 0 ? null : (

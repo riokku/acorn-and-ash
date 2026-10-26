@@ -149,3 +149,5 @@ export * from './world/hollow-king';
 
 export * from './sim/animal-tracks';
 export * from './sim/foraging-habitats';
+
+export * from './data/cedar-hunt';

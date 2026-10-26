@@ -1,3 +1,4 @@
+import { createCritterFor } from '../scene/wildlife-models';
 import { createLastBellTrophy } from '../scene/skeleton-town';
 import { characterStats } from '../item-catalog';
 import * as THREE from 'three/webgpu';
@@ -20,23 +21,37 @@ export async function showWinterGear(
   const asked = params.get('body');
   const kind: CharacterId =
     asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'ranger';
+  const cedar = params.get('gallery') === 'cedar-hunt';
   const basic = params.get('gallery') === 'basic-clothing';
   const lastWatch = params.get('gear') === 'last-watch-helm';
-  const worn = lastWatch
-    ? ({ helm: 'watchCaptainHelm' } as const)
-    : basic
-      ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
-      : ({
-          upperBody: 'winterJacket',
-          helm: 'bearHat',
-          lowerBody: 'travelerTrousers',
-          feet: 'leatherBoots',
-          hands: 'leatherGloves',
-        } as const);
+  const worn = cedar
+    ? ({
+        upperBody: 'cedarstalkerCoat',
+        lowerBody: 'travelerTrousers',
+        feet: 'leatherBoots',
+      } as const)
+    : lastWatch
+      ? ({ helm: 'watchCaptainHelm' } as const)
+      : basic
+        ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
+        : ({
+            upperBody: 'winterJacket',
+            helm: 'bearHat',
+            lowerBody: 'travelerTrousers',
+            feet: 'leatherBoots',
+            hands: 'leatherGloves',
+          } as const);
   const actor = createCharacter(kind, 0x82955e);
   actor.setGear(params.has('before') || params.get('gear') === 'last-bell' ? {} : worn);
   actor.group.rotation.y = params.has('back') ? -0.18 : Math.PI - 0.18;
   scene.add(actor.group);
+  const stag = cedar ? createCritterFor(params.has('before') ? 'elk' : 'cedarStag') : null;
+  if (stag) {
+    stag.group.position.set(2.3, 0, -0.5);
+    stag.group.rotation.y = Math.PI - 0.35;
+    scene.add(stag.group);
+  }
+
   if (params.get('gear') === 'last-bell' && !params.has('before')) {
     const trophy = createLastBellTrophy();
     trophy.group.position.set(0.65, 0, 0);
@@ -55,13 +70,15 @@ export async function showWinterGear(
   const caption = document.createElement('p');
   caption.textContent = params.has('before')
     ? 'Plain clothes · Warmth 0'
-    : params.get('gear') === 'last-bell'
-      ? 'Last Bell keepsake · earned at Bonehollow, displayed at home'
-      : lastWatch
-        ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
-        : basic
-          ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
-          : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
+    : cedar
+      ? 'Cedarstalker coat · Protection 6% · Warmth 45 · Quiet step 15%'
+      : params.get('gear') === 'last-bell'
+        ? 'Last Bell keepsake · earned at Bonehollow, displayed at home'
+        : lastWatch
+          ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
+          : basic
+            ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
+            : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
   caption.style.cssText =
     'position:absolute;left:0;right:0;bottom:24px;text-align:center;color:#f1efdc;font:18px Georgia;pointer-events:none';
   document.body.append(caption);
@@ -69,6 +86,10 @@ export async function showWinterGear(
   const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 50);
   camera.position.set(1.3, lastWatch ? 1.4 : 1.2, lastWatch ? 3 : 2.4);
   camera.lookAt(0, 0.6, 0);
+  if (cedar) {
+    camera.position.set(5.2, 3.4, 9);
+    camera.lookAt(1.15, 1.85, 0);
+  }
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
@@ -86,6 +107,7 @@ export async function showWinterGear(
       groundHeight: () => 0,
     });
     last = now;
+    stag?.update(1 / 60, { speed: 0, groundHeight: () => 0 });
     lights.update(camera.position);
     renderer.render(scene, camera);
     if (++frames === 8) {

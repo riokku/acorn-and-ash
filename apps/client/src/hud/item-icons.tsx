@@ -14,6 +14,10 @@ type IconId = ItemId | BuildableKindId;
  * plain square.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
+  cedarHide: (
+    <path d="M6 2L10 4H14L18 2L20 6L18 10V15L21 19L17 22L13 20H11L7 22L3 19L6 15V10L4 6Z" />
+  ),
+  cedarstalkerCoat: <path d="M8 2H16L22 6L20 14L17 12V22H7V12L4 14L2 6ZM12 5V20" />,
   kingsRequiem: (
     <>
       <path d="M11 2L14 5L13 14L17 16L16 18L12 16L9 21L7 20L10 15L6 13L7 11L11 13Z" />

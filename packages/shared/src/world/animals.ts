@@ -1,3 +1,4 @@
+import { CEDAR_STAG } from '../data/cedar-hunt';
 import { PLAINS_DENS } from './high-plains';
 /**
  * Where wildlife lives, in the wilderness beyond the clearing's tree line.
@@ -30,6 +31,7 @@ export const ANIMAL_DENS: readonly AnimalDen[] = [
   // from either - well past its own leashRadius (16). A chase only happens
   // if wandering happens to carry them together; see decision 0035.
   { id: 1007, kind: 'fox', x: 22, z: -18 },
-  ...WOODLAND_ENCOUNTERS,
+  ...WOODLAND_ENCOUNTERS.filter((site) => site.kind !== 'cedarStag'),
   ...PLAINS_DENS,
+  CEDAR_STAG,
 ];
