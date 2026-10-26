@@ -147,12 +147,16 @@ test('follows spoor, records an elk sketch, collects a cache and builds an earne
     teleport(0, 0);
     await page.keyboard.press('KeyC');
     await page.getByRole('button', { name: 'Crafting', exact: true }).click();
-    // Straight to the Trophies page: a short list that does not scroll under the click.
+    // The earned keepsake card starts the same authoritative placement flow.
     await page
       .locator('.craft-tabs')
       .getByRole('button', { name: 'Trophies', exact: true })
       .click();
-    await page.locator('.hud-journal-entry').filter({ hasText: 'Guardian trophy' }).click();
+    await page
+      .getByTestId('trophy-collection')
+      .locator('[data-keepsake=guardianTrophy]')
+      .getByRole('button')
+      .click();
     // The menu closes once the piece is in hand; a mouse move before that lands on the panel, not the world.
     await expect(page.locator('.hud-journal')).toHaveCount(0);
     const point = await page.evaluate(() => window.acornDebug?.screenPoint(2.5, 0, 0));
