@@ -1507,6 +1507,15 @@ export class Game {
   /** Put something on, take it off or swap two pieces. The server decides (decision 0113). */
   changeGear(request: GearRequest): void {
     if (!this.submitAction('change gear', () => this.connection?.sendGear(request))) return;
+    if (this.gearNotice !== null) {
+      if (this.interactionNote === this.gearNotice.text) {
+        this.interactionNote = null;
+        this.interactionNoteUntil = 0;
+        this.options.hud.publish({ interactionNote: null });
+      }
+      this.gearNotice = null;
+      this.options.hud.publish({ gearNotice: null });
+    }
     // Taking something off puts it back in the pack, which is moving it, not
     // finding it: the pack's reply to this must not make a toast.
     this.quietPackUntil = performance.now() + GEAR_QUIET_MS;
@@ -2084,6 +2093,7 @@ export class Game {
           key: (this.gearNotice?.key ?? 0) + 1,
         };
         this.options.hud.publish({ gearNotice: this.gearNotice });
+        this.showActionNote(this.gearNotice.text);
         break;
       }
       case 'snapshot': {
@@ -5171,6 +5181,12 @@ export class Game {
       return 'Finish your current action first';
     const pack = inventoryFromEntries(this.carrying);
     const kind = ITEM_KINDS[target.item];
+    const owned =
+      (pack[target.item] ?? 0) +
+      Object.values(this.worn.get(this.selfNetId) ?? {}).filter((item) => item === target.item)
+        .length;
+    if (kind.maxCarry !== undefined && owned >= kind.maxCarry)
+      return `You already own the maximum number of ${kind.pluralName.toLowerCase()}`;
     if (roomFor(pack, target.item) === 0 && isPack(target.item))
       return `Maximum inventory capacity reached · ${MAX_PACK_SLOTS} slots`;
     if (roomFor(pack, target.item) === 0)

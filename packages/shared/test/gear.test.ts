@@ -72,6 +72,31 @@ describe('what counts as gear', () => {
 });
 
 describe('putting gear on and taking it off', () => {
+  it('returns an already-owned shovel when swapping weapons, even with a spare in the pack', () => {
+    const worn: WornGear = { mainHand: 'shovel' };
+    const pack = { bag: 5, shovel: 1, axe: 1, rustySword: 1 };
+    expect(wearGear(worn, pack, 'rustySword', 'mainHand')).toEqual({
+      ok: true,
+      displaced: 'shovel',
+    });
+    expect(pack.shovel).toBe(2);
+    expect(worn.mainHand).toBe('rustySword');
+    expect(wearGear(worn, pack, 'axe', 'mainHand').ok).toBe(true);
+    expect(worn.mainHand).toBe('axe');
+    expect(countOf(pack, 'rustySword')).toBe(1);
+    expect(takeOffGear(worn, pack, 'mainHand').ok).toBe(true);
+    expect(countOf(pack, 'axe')).toBe(1);
+  });
+
+  it('preserves an overfull legacy pack exactly when a swap really has no room', () => {
+    const worn: WornGear = { mainHand: 'shovel' };
+    const pack = { axe: 2, log: 10, stick: 10, reed: 10, bone: 10, flower: 10 };
+    const before = { ...pack };
+    expect(wearGear(worn, pack, 'axe', 'mainHand')).toEqual({ ok: false, reason: 'noRoom' });
+    expect(pack).toEqual(before);
+    expect(worn.mainHand).toBe('shovel');
+  });
+
   it('moves a piece from the pack to its slot', () => {
     const worn: WornGear = {};
     const pack = createInventory();
@@ -323,6 +348,46 @@ describe('changing gear in the world', () => {
     const sim = playerWith([{ item: 'bearHat', count: 1 }]);
     expect(sim.inCombat(1)).toBe(false);
     expect(sim.wearGear(1, 'bearHat', 'helm').ok).toBe(true);
+  });
+
+  it('counts a worn shovel when refusing another dropped shovel, leaving the loot intact', () => {
+    const sim = playerWith([{ item: 'shovel', count: 1 }]);
+    expect(sim.wearGear(1, 'shovel', 'mainHand').ok).toBe(true);
+    sim.addPlayer(2);
+    addItem(sim.inventoryOf(2), 'shovel');
+    sim.placePlayer(2, { x: 0, y: 0, z: 0 }, 0);
+    sim.discardItem(2, { item: 'shovel', amount: 1, destroy: false }, clockMs);
+    const pile = sim.droppedPilesList().find((pile) => pile.item === 'shovel')!;
+    expect(pile).toBeDefined();
+    sim.placePlayer(
+      1,
+      { x: pile.x, y: sim.collision.terrain.heightAt(pile.x, pile.z), z: pile.z },
+      0,
+    );
+    sim.requestLoot(1, { kind: 'pile', id: pile.id });
+    sim.queueInput(1, createInput(1, 0, 0, 0));
+    step(sim);
+    expect(countOf(sim.inventoryOf(1), 'shovel')).toBe(0);
+    expect(sim.wornOf(1).mainHand).toBe('shovel');
+    expect(sim.droppedPilesList().find((p) => p.id === pile.id)?.count).toBe(1);
+    expect(sim.drainPickupRefusals().at(-1)?.reason).toBe('limit');
+  });
+
+  it('keeps both owned shovels after swapping a legacy spare and reconnecting', () => {
+    const sim = playerWith([
+      { item: 'shovel', count: 1 },
+      { item: 'axe', count: 1 },
+    ]);
+    expect(sim.wearGear(1, 'shovel', 'mainHand').ok).toBe(true);
+    // Reproduce a save from before worn equipment counted toward world pickups.
+    addItem(sim.inventoryOf(1), 'shovel');
+    expect(sim.wearGear(1, 'axe', 'mainHand').ok).toBe(true);
+    expect(countOf(sim.inventoryOf(1), 'shovel')).toBe(2);
+    const saved = sim.persistablePlayers().find((player) => player.netId === 1)!;
+    sim.removePlayer(1);
+    sim.addPlayer(1, saved);
+    expect(countOf(sim.inventoryOf(1), 'shovel')).toBe(2);
+    expect(sim.wornOf(1).mainHand).toBe('axe');
   });
 
   it('keeps worn gear through a knockout', () => {

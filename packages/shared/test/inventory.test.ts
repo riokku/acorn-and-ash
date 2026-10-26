@@ -100,10 +100,10 @@ describe('what a player carries', () => {
     expect(inventoryFromEntries(entries)).toEqual(pack);
   });
 
-  it('clamps a saved tool that is somehow over its own limit', () => {
-    // A limit lowered between releases must not let an old save exceed it.
-    const restored = inventoryFromEntries([{ item: 'axe', count: 3 }]);
-    expect(countOf(restored, 'axe')).toBe(1);
+  it('preserves owned gear returned to the pack while keeping new acquisition limits', () => {
+    const restored = inventoryFromEntries([{ item: 'axe', count: 2 }]);
+    expect(countOf(restored, 'axe')).toBe(2);
+    expect(addItem(restored, 'axe')).toBe(0);
   });
 });
 

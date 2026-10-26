@@ -174,3 +174,96 @@ test('wears, swaps and takes off gear from the character screen', async ({ page 
   await expect(panel).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('equips sword and axe with a legacy spare shovel in a 10-of-24-slot pack and shows refusals outside Z', async ({
+  page,
+}) => {
+  const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED, forestEncounters: false });
+  sim.addPlayer(1, undefined, 'spare-shovel');
+  sim.giveTestGear(1, [
+    'bag',
+    'bag',
+    'bag',
+    'bag',
+    'bag',
+    'shovel',
+    'axe',
+    'rustySword',
+    'log',
+    'stick',
+    'bone',
+    'reed',
+    'flower',
+    'stone',
+    'clay',
+  ]);
+  expect(sim.wearGear(1, 'shovel', 'mainHand').ok).toBe(true);
+  sim.inventoryOf(1).shovel = 1;
+  let refuse = false;
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ body: '' }));
+  await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
+    const send = (data: ArrayBuffer) => socket.send(Buffer.from(data));
+    const refresh = () => {
+      send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
+      send(encodeWorn(sim.wornList()));
+      send(encodeEquipped(sim.equippedList()));
+    };
+    send(encodeWelcome(1, sim.seed, 0, Date.now()));
+    refresh();
+    send(encodeSnapshot(0, Date.now(), 0, sim.snapshotFor(1)));
+    socket.onMessage((message) => {
+      if (typeof message === 'string') return;
+      const request = decodeClientMessage(new Uint8Array(message).buffer);
+      if (request?.type === 'ping') send(encodePong(request.clientTimeMs, Date.now()));
+      if (request?.type === 'gear' && request.action === 'wear') {
+        if (refuse) {
+          send(encodeGearRefused('busy'));
+          return;
+        }
+        const result = sim.wearGear(1, request.item, request.slot);
+        if (result.ok) refresh();
+        else send(encodeGearRefused(result.reason));
+      }
+    });
+  });
+  try {
+    await page.goto('/?renderer=webgl2&world=spare-shovel');
+    await page.locator('#home-name').fill('Ready to Equip');
+    await page.locator('.home-play').click();
+    await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120000 });
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120000,
+    });
+    await page.keyboard.press('KeyZ');
+    await expect(page.locator('.inventory-meter-label')).toHaveText('10 of 24 slots');
+    await page.getByTestId('pack-slot-rustySword').dragTo(page.locator('.hotbar-slot').first());
+    const sword = page.locator('.hotbar-slot[data-item="rustySword"]');
+    await sword.click();
+    await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'rustySword');
+    expect(sim.inventoryOf(1).shovel).toBe(2);
+    await page.getByTestId('pack-slot-axe').click();
+    await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'axe');
+    await page
+      .getByTestId('pack-slot-shovel')
+      .first()
+      .dragTo(page.getByTestId('gear-slot-mainHand'));
+    await expect(page.getByTestId('gear-slot-mainHand')).toHaveAttribute('data-item', 'shovel');
+    expect(sim.inventoryOf(1).shovel).toBe(1);
+    await page.keyboard.press('KeyZ');
+    refuse = true;
+    await sword.click();
+    await expect(page.locator('.interaction-note')).toContainText(
+      "You can't change gear right now.",
+    );
+    refuse = false;
+    await sword.click();
+    await expect.poll(() => sim.equippedItemOf(1)).toBe('rustySword');
+    await expect(page.locator('.interaction-note')).toHaveCount(0);
+    expect(sim.inventoryOf(1).shovel).toBe(2);
+    expect(errors).toEqual([]);
+  } finally {
+    sim.dispose();
+  }
+});

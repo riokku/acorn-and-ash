@@ -3798,7 +3798,7 @@ export class WorldSimulation {
       (pickup) => groundItemReachable(this.collision, position, pickup, pickup.y),
     );
     if (pickup === null) return false;
-    if (addItem(runtime.inventory, pickup.item) === 0)
+    if (this.collectItem(runtime, pickup.item) === 0)
       return this.refusePickup(runtime, pickup.item);
 
     runtime.takenPickups.add(pickup.id);
@@ -3840,7 +3840,7 @@ export class WorldSimulation {
       (pile) => groundItemReachable(this.collision, position, pile),
     );
     if (pile === null) return false;
-    const taken = addItem(runtime.inventory, pile.item, pile.count);
+    const taken = this.collectItem(runtime, pile.item, pile.count);
     if (taken === 0) return this.refusePickup(runtime, pile.item);
 
     pile.count -= taken;
@@ -3879,7 +3879,7 @@ export class WorldSimulation {
     if (runtime.swingCooldownTicks > 0) return true;
     const offered =
       patch.item === 'mushroom' && forestWeather(this.seed, this.nowMs).mushroomsAbundant ? 2 : 1;
-    const gathered = addItem(runtime.inventory, patch.item, offered);
+    const gathered = this.collectItem(runtime, patch.item, offered);
     this.advanceExpedition(
       runtime,
       {
@@ -3911,11 +3911,31 @@ export class WorldSimulation {
     return true;
   }
 
+  private ownedItemCount(runtime: PlayerRuntime, item: ItemId): number {
+    return (
+      countOf(runtime.inventory, item) +
+      Object.values(runtime.worn).filter((worn) => worn === item).length
+    );
+  }
+
+  /** New world acquisitions count equipment on the body as well as the backpack. */
+  private collectItem(runtime: PlayerRuntime, item: ItemId, count = 1): number {
+    const limit = ITEM_KINDS[item].maxCarry;
+    const allowed =
+      limit === undefined
+        ? count
+        : Math.min(count, Math.max(0, limit - this.ownedItemCount(runtime, item)));
+    return addItem(runtime.inventory, item, allowed);
+  }
+
   /** A blocked target claims E, so reaching for a log cannot eat food or toggle a fire. */
   private refusePickup(runtime: PlayerRuntime, item: ItemId): true {
     if (!runtime.pickupRefused) {
       const reason =
-        ITEM_KINDS[item].maxCarry === 1 && hasItem(runtime.inventory, item) ? 'limit' : 'full';
+        ITEM_KINDS[item].maxCarry !== undefined &&
+        this.ownedItemCount(runtime, item) >= ITEM_KINDS[item].maxCarry!
+          ? 'limit'
+          : 'full';
       this.pickupRefusals.push({ netId: runtime.netId, item, reason });
       runtime.pickupRefused = true;
     }
@@ -4390,7 +4410,7 @@ export class WorldSimulation {
     let recovered = 0;
     const remaining: { item: ItemId; count: number }[] = [];
     for (const entry of treasure.items) {
-      const taken = addItem(runtime.inventory, entry.item, entry.count);
+      const taken = this.collectItem(runtime, entry.item, entry.count);
       recovered += taken;
       if (taken > 0)
         this.collectionEvents.push({
@@ -4435,7 +4455,7 @@ export class WorldSimulation {
     let recovered = 0;
     const remaining: { item: ItemId; count: number }[] = [];
     for (const entry of cache.items) {
-      const taken = addItem(runtime.inventory, entry.item, entry.count);
+      const taken = this.collectItem(runtime, entry.item, entry.count);
       recovered += taken;
       if (taken < entry.count) remaining.push({ item: entry.item, count: entry.count - taken });
     }
@@ -4572,7 +4592,7 @@ export class WorldSimulation {
           : Math.min(amount, stored, roomFor(runtime.inventory, 'log'));
       if (moved <= 0) return false;
       if (request.action === 'storeLogs') removeItem(runtime.inventory, 'log', moved);
-      else addItem(runtime.inventory, 'log', moved);
+      else this.collectItem(runtime, 'log', moved);
       prop.storedLogs = stored + (request.action === 'storeLogs' ? moved : -moved);
       this.updatePlacedSolid(prop);
       this.campfireLitEvents.push({ propId: prop.id, lit: prop.lit, netId });
@@ -4915,7 +4935,7 @@ export class WorldSimulation {
     this.dug.apply(dig);
     this.digNews.push(dig);
     for (const { item, count } of found) {
-      const taken = addItem(runtime.inventory, item, count);
+      const taken = this.collectItem(runtime, item, count);
       if (taken === 0) {
         this.digRefusals.push({ netId: runtime.netId, reason: 'packFull' });
         continue;
@@ -5646,7 +5666,7 @@ export class WorldSimulation {
     const added =
       item === undefined
         ? 0
-        : addItem(runtime.inventory, item, huntingYield(this.equippedItemOf(runtime.netId), item));
+        : this.collectItem(runtime, item, huntingYield(this.equippedItemOf(runtime.netId), item));
     // Named quarry never loses its earned material to a full pack. Owner-bound
     // ground loot uses the existing persistence, reach and pickup validation.
     if (animal.kind === 'cedarStag' && added === 0 && at !== undefined)
@@ -6144,7 +6164,7 @@ export class WorldSimulation {
 
     if (end.outcome === 'caught') {
       // Hooked either way; a full pack means it goes back in the water.
-      const added = addItem(runtime.inventory, end.item);
+      const added = this.collectItem(runtime, end.item);
       recordFish(runtime.fishRecords, end.item, this.seed, castNumber, this.tick);
       this.fishRecordChanges.add(runtime.netId);
       this.advanceExpedition(
@@ -7145,7 +7165,7 @@ export class WorldSimulation {
   giveTestGear(netId: number, items: readonly ItemId[]): void {
     const runtime = this.players.get(netId);
     if (runtime === undefined) return;
-    for (const item of items) addItem(runtime.inventory, item, 1);
+    for (const item of items) this.collectItem(runtime, item, 1);
   }
 
   /** Who gathered a stick since this was last asked, so their pack can be sent. */
