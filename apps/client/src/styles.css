@@ -5320,3 +5320,108 @@ body {
     serif;
   text-shadow: 0 2px 5px #14261e;
 }
+
+.trophy-collection {
+  padding: 1rem;
+  border: 1px solid #b89b60;
+  border-radius: 0.8rem;
+  background: linear-gradient(150deg, #21342c, #15251f);
+  color: #ede5ce;
+  margin-bottom: 1rem;
+}
+.trophy-collection h3 {
+  font:
+    1.6rem Georgia,
+    serif;
+  margin: 0.4rem 0;
+}
+.trophy-collection p,
+.trophy-collection footer {
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.keepsake-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+.keepsake-grid article {
+  padding: 0.9rem;
+  border: 1px solid #66816b;
+  border-radius: 0.6rem;
+  background: #ffffff05;
+}
+.keepsake-grid article[data-displayed='true'] {
+  border-color: #c0c687;
+  background: #b9ce8e0d;
+}
+.keepsake-grid svg {
+  width: 2.4rem;
+  height: 2.4rem;
+  float: right;
+  margin: 0 0 0.4rem 0.5rem;
+}
+.keepsake-grid small {
+  color: #c4c78e;
+  font-size: 0.7rem;
+}
+.keepsake-grid h4 {
+  font:
+    1.15rem Georgia,
+    serif;
+  margin: 0.5rem 0;
+}
+.keepsake-grid strong {
+  font-size: 0.8rem;
+  color: #e1c490;
+}
+.keepsake-route {
+  color: #b9c6b8;
+}
+.keepsake-grid button {
+  width: 100%;
+  padding: 0.6rem;
+  background: #314d3b;
+  color: #eee4c6;
+  border: 1px solid #aeb479;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.keepsake-grid button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.keepsake-grid button:focus-visible {
+  outline: 2px solid #ffdb8e;
+  outline-offset: 3px;
+}
+.keepsake-gallery {
+  position: relative;
+  min-height: 100vh;
+  background: #15251f;
+  padding: 24px 16px;
+}
+.keepsake-gallery .craft-panel {
+  height: auto;
+  overflow: visible;
+  position: relative;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  max-height: none;
+  width: min(900px, 100%);
+  margin: 16px auto;
+}
+.keepsake-gallery .craft-list {
+  overflow: visible;
+}
+.keepsake-gallery-note {
+  max-width: 850px;
+  margin: 0 auto;
+  color: #e0d9be;
+  font:
+    0.85rem/1.5 Georgia,
+    serif;
+}

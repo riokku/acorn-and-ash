@@ -12,8 +12,10 @@ import { BuildableIcon } from './item-icons';
 export function HomesteadPlan({
   state,
   onBuild,
+  onViewKeepsakes,
 }: {
   state: Pick<HudState, 'homeKind' | 'carrying' | 'homesteadProjects' | 'home'>;
+  onViewKeepsakes?: () => void;
   onBuild?: (kind: HomesteadProject) => void;
 }) {
   const built = new Set(state.homesteadProjects ?? []),
@@ -116,6 +118,11 @@ export function HomesteadPlan({
           );
         })}
       </div>
+      {onViewKeepsakes && (
+        <button type="button" onClick={onViewKeepsakes}>
+          Your adventures · see keepsakes
+        </button>
+      )}
       <footer>
         No daily resets or upkeep. Your pantry stays private; neighbors can use your bench. Empty
         storage and harvest growing plants before reclaiming a project.

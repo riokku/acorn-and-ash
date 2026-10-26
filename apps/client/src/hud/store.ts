@@ -186,6 +186,7 @@ export interface HudState {
   readonly craftTab: CraftTabId;
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
+  readonly trophyDisplays?: readonly BuildableKindId[];
   readonly homesteadProjects?: readonly HomesteadProject[];
   /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
   readonly buildMenuOpen: boolean;
