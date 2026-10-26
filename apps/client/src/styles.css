@@ -5297,6 +5297,8 @@ body {
   padding: 24px 16px;
 }
 .keepsake-gallery .craft-panel {
+  height: auto;
+  overflow: visible;
   position: relative;
   top: auto;
   bottom: auto;
