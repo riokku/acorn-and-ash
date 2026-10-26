@@ -213,9 +213,8 @@ app.get('/api/worlds/:worldId/status', (c) =>
   connectToWorld(c.req.raw, c.env, c.req.param('worldId')),
 );
 
-app.get('/api/worlds/:worldId/reset-players', (c) =>
-  connectToWorld(c.req.raw, c.env, c.req.param('worldId')),
-);
+// Retired unauthenticated playtest reset. Destructive operations only use owner-only RPC.
+app.all('/api/worlds/:worldId/reset-players', (c) => c.json({ error: 'Not found' }, 404));
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

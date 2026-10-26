@@ -428,3 +428,89 @@ dialog::backdrop {
   padding: 8px 16px;
   background: #f8f7ef;
 }
+
+.admin-navigation {
+  display: flex;
+  gap: 12px;
+  max-width: 1320px;
+  margin: auto;
+  padding: 18px 32px 0;
+}
+.admin-navigation a {
+  border: 1px solid #7c8c77;
+  border-radius: 6px;
+  padding: 8px 18px;
+  text-decoration: none;
+  color: #29382b;
+}
+.admin-navigation [aria-current='page'] {
+  background: #344b39;
+  color: white;
+}
+.world-administration {
+  max-width: 1000px;
+}
+.admin-site {
+  background: #e3e9df;
+  padding: 10px 14px;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+.world-lookup {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-top: 24px;
+}
+.world-lookup label {
+  flex: 1;
+}
+.world-summary,
+.world-danger,
+.reset-history {
+  margin: 28px 0;
+  padding: 22px;
+  border: 1px solid #acb8a5;
+  border-radius: 8px;
+}
+.world-summary h2,
+.world-danger h2,
+.reset-history h2 {
+  margin-top: 0;
+}
+.world-summary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 0;
+}
+.world-summary dt {
+  font-size: 0.85rem;
+  color: #5f6a5b;
+}
+.world-summary dd {
+  font-size: 1.6rem;
+  margin: 4px 0;
+}
+.world-danger {
+  background: #fff0e9;
+  border-color: #b47860;
+}
+button.danger {
+  background: #873e2d;
+  color: white;
+  border-color: #873e2d;
+}
+.reset-acknowledgement {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  margin: 22px 0;
+}
+.reset-acknowledgement input {
+  width: auto;
+  margin-top: 6px;
+}
+.world-administration dialog {
+  max-width: min(600px, calc(100vw - 40px));
+}

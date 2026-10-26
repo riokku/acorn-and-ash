@@ -1,3 +1,4 @@
+import { worldAdmin } from './world-admin';
 import { Hono } from 'hono';
 import { parseItemOverrides } from '@acorn/shared';
 import { signedInAccount, type Account } from './accounts/session';
@@ -27,11 +28,12 @@ for (const path of ['/api/admin/*', '/admin', '/admin/*', '/admin.html'])
     c.header('Vary', 'Cookie');
     c.header('X-Content-Type-Options', 'nosniff');
     if (!(await canEditItems(await signedInAccount(c.req.raw, c.env), c.env)))
-      return c.json({ error: 'Item editor access is restricted' }, 403);
+      return c.json({ error: 'Administrator access is restricted' }, 403);
     if (c.req.method !== 'GET' && c.req.header('Origin') !== new URL(c.req.url).origin)
       return c.json({ error: 'Not from this site' }, 403);
     await next();
   });
+itemAdmin.route('/', worldAdmin);
 function catalogue(env: WebEnv) {
   return env.ITEM_CATALOG.get(env.ITEM_CATALOG.idFromName('items'));
 }
@@ -89,7 +91,15 @@ itemAdmin.post('/api/admin/items/:action', async (c) => {
       )
     : c.json(state);
 });
-for (const path of ['/admin', '/admin/', '/admin/items', '/admin/items/', '/admin.html']) {
+for (const path of [
+  '/admin',
+  '/admin/',
+  '/admin/items',
+  '/admin/items/',
+  '/admin/worlds',
+  '/admin/worlds/',
+  '/admin.html',
+]) {
   itemAdmin.get(path, async (c) => {
     const url = new URL('/admin.html', c.req.url);
     const asset = await c.env.ASSETS.fetch(new Request(url));

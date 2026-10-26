@@ -1,3 +1,4 @@
+import { WorldAdministration } from './world-administration';
 import { encodeHomesteadAppearance } from '@acorn/shared';
 import { encodeAnimalTracks } from '@acorn/shared';
 import { encodeTreasure, treasuresFromSaved } from '@acorn/shared';
@@ -143,6 +144,7 @@ import type { WorldEnv } from './env';
 
 /** What we keep on a WebSocket so it survives the object going to sleep. */
 interface ConnectionAttachment {
+  readonly resetEpoch?: number;
   readonly netId: number;
   /** Identifies the player between visits. Phase 1 replaces this with a real account. */
   readonly playerKey: string | null;
@@ -190,6 +192,37 @@ export class World extends DurableObject<WorldEnv> {
   private simulation: WorldSimulation | null = null;
   private tickHandle: ReturnType<typeof setInterval> | null = null;
   private nextNetId = 1;
+  private readonly administration = new WorldAdministration(
+    this.ctx,
+    this.env.WORLD,
+    () => this.status(),
+    () => {
+      this.stopTicking();
+      this.releaseSimulation();
+      this.nextNetId = 1;
+      this.savedEncounterRest = '[]';
+      this.savedBossRestUntilMs = 0;
+      this.lastWildfireSaved = '';
+      this.lastTickAtMs = 0;
+      this.slowTickCount = 0;
+      this.snapshotScratch.length = 0;
+    },
+  );
+  inspectForAdmin(worldId: string) {
+    return this.administration.inspect(worldId);
+  }
+  prepareAdminReset(worldId: string, actor: string, origin: string) {
+    return this.administration.prepare(worldId, actor, origin);
+  }
+  resetForAdmin(
+    worldId: string,
+    actor: string,
+    origin: string,
+    token: string,
+    confirmation: string,
+  ) {
+    return this.administration.reset(worldId, actor, origin, token, confirmation);
+  }
   private itemCatalog: PublishedCatalog = EMPTY_CATALOG;
   private catalogCheckedAt = 0;
   private catalogRefresh: Promise<void> | null = null;
@@ -252,20 +285,6 @@ export class World extends DurableObject<WorldEnv> {
       return Response.json(this.status());
     }
 
-    // Playtesting-only: wipes every saved player's pack, hunger, health and
-    // name, and lets the axe, bag and rod be found again. The confirm value
-    // is not real access control - a plain query string is not that - only a
-    // guard against firing from a stray link click or crawler prefetch.
-    if (url.pathname.endsWith('/reset-players')) {
-      if (url.searchParams.get('confirm') !== 'clear-everyone') {
-        return Response.json(
-          { ok: false, reason: 'Missing ?confirm=clear-everyone' },
-          { status: 400 },
-        );
-      }
-      return Response.json(this.resetPlayers());
-    }
-
     // Delete this player's character (decision 0108). Only ever reached through
     // `apps/web`, which puts the signed-in player's own key in the address.
     if (url.pathname.endsWith('/character') && request.method === 'DELETE') {
@@ -287,6 +306,7 @@ export class World extends DurableObject<WorldEnv> {
     }
 
     await this.refreshCatalog();
+    this.administration.invalidate();
     const simulation = this.ensureSimulation();
     const requestedKey = url.searchParams.get('player');
     const playerKey =
@@ -323,6 +343,7 @@ export class World extends DurableObject<WorldEnv> {
     // when a message arrives, instead of us holding it open.
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({
+      resetEpoch: this.administration.epoch,
       netId,
       playerKey,
       name: identity?.name ?? null,
@@ -2122,7 +2143,12 @@ export class World extends DurableObject<WorldEnv> {
 
   private attachmentFor(ws: WebSocket): ConnectionAttachment | null {
     const attachment = ws.deserializeAttachment() as ConnectionAttachment | null | undefined;
-    if (attachment == null || typeof attachment.netId !== 'number') return null;
+    if (
+      attachment == null ||
+      typeof attachment.netId !== 'number' ||
+      (attachment.resetEpoch ?? 0) !== this.administration.epoch
+    )
+      return null;
     return attachment;
   }
 
@@ -3263,34 +3289,5 @@ export class World extends DurableObject<WorldEnv> {
         // The browser may already have left.
       }
     }
-  }
-
-  /**
-   * Wipe every saved player's pack, hunger, health, position and name back to
-   * nothing, and let the axe, bag and rod be found again - a clean slate for
-   * playtesting, not something a player ever triggers themselves. Refuses
-   * outright while anyone is connected: their still-live session would just
-   * write its own (unwiped) state back over this the moment they leave,
-   * undoing it without saying so.
-   *
-   * Deliberately narrower than "reset the world": built props, felled/regrown
-   * trees and buried caches are left exactly as they are, since none of those
-   * are "inventory" and wiping them would erase testing history nobody asked
-   * to lose.
-   */
-  resetPlayers(): { ok: true; clearedPlayers: number } | { ok: false; reason: string } {
-    if (this.simulation !== null) {
-      return {
-        ok: false,
-        reason: 'Somebody is still connected to this world - try again once everybody has left.',
-      };
-    }
-    const sql = this.ctx.storage.sql;
-    const clearedPlayers = sql
-      .exec<{ player_key: string }>('SELECT player_key FROM players')
-      .toArray().length;
-    // The players table is counted above, so read before anything is cleared.
-    for (const table of PER_PLAYER_TABLES) sql.exec(`DELETE FROM ${table}`);
-    return { ok: true, clearedPlayers };
   }
 }
