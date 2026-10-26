@@ -8,13 +8,19 @@ import {
 import { ITEM_KINDS } from '../item-catalog';
 import type { HudState } from './store';
 import { BuildableIcon } from './item-icons';
+import { HomeUpgrade } from './HomeUpgrade';
 
 export function HomesteadPlan({
   state,
   onBuild,
   onViewKeepsakes,
+  onUpgrade,
 }: {
-  state: Pick<HudState, 'homeKind' | 'carrying' | 'homesteadProjects' | 'home'>;
+  state: Pick<
+    HudState,
+    'homeKind' | 'carrying' | 'homesteadProjects' | 'home' | 'homeSkills' | 'homeStoredSupplies'
+  >;
+  onUpgrade?: () => void;
   onViewKeepsakes?: () => void;
   onBuild?: (kind: HomesteadProject) => void;
 }) {
@@ -56,6 +62,7 @@ export function HomesteadPlan({
           · {complete}/3 projects
         </strong>
       </header>
+      <HomeUpgrade state={state} onUpgrade={onUpgrade} />
       {state.homeKind === null ? (
         <p className="homestead-callout">
           First, place a tent from Home. Your projects fit inside your home’s building boundary and

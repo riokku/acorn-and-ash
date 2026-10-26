@@ -1067,6 +1067,7 @@ export function CraftPanel({
           <HomesteadPlan
             state={state}
             onViewKeepsakes={() => onTabChange?.('trophies')}
+            onUpgrade={() => onPick?.({ kind: 'build', buildable: 'cabin' })}
             onBuild={(buildable) => onPick?.({ kind: 'build', buildable })}
           />
         ) : null}
