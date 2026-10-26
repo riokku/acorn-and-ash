@@ -116,6 +116,7 @@ export interface HudState {
   readonly characterOpen: boolean;
   /** What this player is wearing, slot by slot. */
   readonly worn: Readonly<WornGear>;
+  readonly cedarHuntPinned?: boolean;
   /** How this player looks, for the model on the character screen. */
   readonly selfLook: StageLook | null;
   /** The last change of gear the server turned down, in words; `key` changes each time. */

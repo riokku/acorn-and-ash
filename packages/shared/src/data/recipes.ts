@@ -21,6 +21,14 @@ export interface Recipe {
 }
 
 export const RECIPES: Partial<Record<ItemId, Recipe>> = {
+  cedarstalkerCoat: {
+    result: 'cedarstalkerCoat',
+    costs: [
+      { item: 'cedarHide', amount: 1 },
+      { item: 'rope', amount: 2 },
+      { item: 'reed', amount: 4 },
+    ],
+  },
   winterJacket: {
     result: 'winterJacket',
     costs: [

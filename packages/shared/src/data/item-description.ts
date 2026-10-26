@@ -7,6 +7,10 @@ import { ITEM_KINDS, type ItemId } from './items';
 import { cookedItemFor } from '../sim/cooking';
 
 const DESCRIPTIONS: Partial<Record<ItemId, string>> = {
+  cedarHide:
+    'A guaranteed hide from the Old Cedar Stag, a wary moss-colored elk beyond the northwest elk grove. If your pack is full, it is left at the catch to collect. Stitch into a Cedarstalker coat with two rope and four reeds. Kept through knockout.',
+  cedarstalkerCoat:
+    'A moss-green hunting coat stitched from the Old Cedar Stag’s hide. Craft by hand, then wear it on your upper body from Z. Pair it with a warm hat for winter outings. Kept through knockout.',
   kingsRequiem:
     'An epic greatsword claimed from the Hollow King. Violet soul ribbons coil around cold, luminous steel; motes of the First Bell rise along its blade. Wield it in your main hand. Every recent contributor earns a personal sword on victory. Survives knockout.',
   kingCrown:

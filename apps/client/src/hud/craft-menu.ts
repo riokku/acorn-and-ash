@@ -262,9 +262,12 @@ function craftedEntries(state: CraftMenuState): CraftEntry[] {
           isMealItem(item) && needsDiscovery
             ? `Learn this recipe at ${DISCOVERIES.find((site) => site.id === recipe.discoveryId)?.name ?? 'its woodland discovery'}.`
             : undefined,
-        benefitNote: isMealItem(item)
-          ? `${MEAL_BENEFITS[item]} · 10 active minutes · replaces your previous meal`
-          : undefined,
+        benefitNote:
+          item === 'cedarstalkerCoat'
+            ? 'Quiet step · prey notices you from 15% less distance while worn'
+            : isMealItem(item)
+              ? `${MEAL_BENEFITS[item]} · 10 active minutes · replaces your previous meal`
+              : undefined,
       },
     ];
   });

@@ -4917,3 +4917,132 @@ body {
   max-height: calc(100dvh - 48px);
   pointer-events: auto;
 }
+
+.cedar-hunt-plan {
+  margin: 4px 0 16px;
+  padding: 17px 20px;
+  border: 1px solid #728566;
+  border-radius: 9px;
+  background: #e6e9d9;
+  color: #263c2e;
+  line-height: 1.45;
+}
+.cedar-hunt-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #536947;
+}
+.cedar-hunt-plan h3 {
+  font:
+    bold 24px Georgia,
+    serif;
+  margin: 4px 0 8px;
+}
+.cedar-hunt-plan p {
+  margin: 8px 0;
+}
+.cedar-hunt-plan ol {
+  padding-left: 21px;
+  margin: 12px 0;
+}
+.cedar-hunt-plan li {
+  margin: 7px 0;
+}
+.cedar-hunt-reward {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-left: 3px solid #716299;
+  background: #f3f0e3;
+}
+.cedar-hunt-reward strong {
+  color: #675080;
+}
+.cedar-hunt-ingredients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 12px;
+  font-weight: bold;
+  font-size: 12px;
+}
+.cedar-hunt-missing {
+  color: #8d483a;
+}
+.cedar-hunt-next {
+  font-weight: bold;
+}
+.cedar-hunt-meal {
+  color: #4d6740;
+  font-size: 12px;
+}
+.cedar-hunt-plan button {
+  border: 1px solid #526d4b;
+  background: #37513d;
+  color: #fff4d9;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.cedar-hunt-plan small {
+  display: block;
+  margin-top: 7px;
+  color: #53614b;
+  font-size: 11px;
+}
+.cedar-hunt-tracker {
+  position: fixed;
+  right: 18px;
+  top: 155px;
+  max-width: min(270px, calc(100vw - 36px));
+  padding: 12px 28px 12px 14px;
+  display: grid;
+  gap: 5px;
+  background: #1e3029e8;
+  border: 1px solid #9caa7f;
+  border-radius: 7px;
+  color: #f2e7c6;
+  font-size: 12px;
+  pointer-events: auto;
+}
+.cedar-hunt-tracker strong {
+  color: #d6dcb2;
+  font:
+    bold 16px Georgia,
+    serif;
+}
+.cedar-hunt-tracker button {
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  border: 0;
+  background: transparent;
+  color: #eee8d1;
+  cursor: pointer;
+  font-size: 19px;
+}
+.cedar-hunt-gallery {
+  position: fixed;
+  inset: 0;
+  padding: 25px;
+  overflow: auto;
+  background: #c8cfb6;
+  font:
+    14px system-ui,
+    sans-serif;
+}
+.cedar-hunt-gallery > main {
+  max-width: 680px;
+  margin: auto;
+}
+.cedar-hunt-gallery .cedar-hunt-tracker {
+  position: relative;
+  right: auto;
+  top: auto;
+  max-width: none;
+  margin: 12px 0;
+}
+.cedar-hunt-rarity {
+  text-transform: capitalize;
+}

@@ -1,7 +1,7 @@
 import type { AnimalKindId } from '../data/animals';
 import type { WeatherKind } from './weather';
 
-export const TRACKED_ANIMALS = ['rabbit', 'fox', 'elk', 'jackrabbit'] as const;
+export const TRACKED_ANIMALS = ['rabbit', 'fox', 'elk', 'jackrabbit', 'cedarStag'] as const;
 export type TrackedAnimal = (typeof TRACKED_ANIMALS)[number];
 export const FRESH_TRACK_SECONDS = 180;
 export const MAX_FRESH_TRACKS = 768;
@@ -72,10 +72,12 @@ export class AnimalTrailHistory {
 }
 export function freshTrackHint(track: FreshAnimalTrack): string {
   const animal =
-    track.kind === 'elk'
-      ? 'elk hoofprints'
-      : track.kind === 'fox'
-        ? 'fox pawprints'
-        : 'rabbit tracks';
+    track.kind === 'cedarStag'
+      ? 'Old Cedar Stag hoofprints'
+      : track.kind === 'elk'
+        ? 'elk hoofprints'
+        : track.kind === 'fox'
+          ? 'fox pawprints'
+          : 'rabbit tracks';
   return `${track.freshness > 0.65 ? 'Fresh' : track.freshness > 0.25 ? 'Fading' : 'Faint'} ${animal} · follow their direction and approach quietly`;
 }

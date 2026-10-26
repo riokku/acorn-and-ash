@@ -14,7 +14,7 @@ export class FreshAnimalTracks {
 
   constructor(private readonly heightAt: (x: number, z: number) => number) {
     this.group.name = 'fresh-animal-tracks';
-    for (const kind of ['elk', 'paw'] as const) {
+    for (const kind of ['elk', 'paw', 'cedarStag'] as const) {
       const builder = new ModelBuilder();
       const material = new THREE.MeshBasicMaterial();
       for (const side of [-1, 1])
@@ -25,7 +25,7 @@ export class FreshAnimalTracks {
           side * 0.14,
           0,
           0,
-          kind === 'elk' ? 'elk' : 'curiousRaccoon',
+          kind === 'paw' ? 'curiousRaccoon' : kind,
         );
       const model = builder.build();
       const mesh = model.group.children[0] as THREE.Mesh;
@@ -46,7 +46,9 @@ export class FreshAnimalTracks {
         drawn = undefined;
       }
       if (!drawn) {
-        const geometry = this.templates.get(track.kind === 'elk' ? 'elk' : 'paw')!.clone();
+        const geometry = this.templates
+          .get(track.kind === 'cedarStag' ? 'cedarStag' : track.kind === 'elk' ? 'elk' : 'paw')!
+          .clone();
         const material = new THREE.MeshBasicMaterial({
           color: 0x392f24,
           transparent: true,
@@ -89,7 +91,9 @@ export class FreshAnimalTracks {
         continue;
       }
       drawn.track = { ...drawn.track, freshness };
-      drawn.mesh.material.color.set(snow ? 0x8194a8 : 0x392f24);
+      drawn.mesh.material.color.set(
+        snow ? 0x8194a8 : drawn.track.kind === 'cedarStag' ? 0x4e5530 : 0x392f24,
+      );
       drawn.mesh.material.opacity = 0.75 * Math.sqrt(freshness);
     }
   }

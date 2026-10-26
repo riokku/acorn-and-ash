@@ -38,6 +38,7 @@ export function mountHud(
   journalActions?: {
     onTabChange: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
     onCraftTab: (tab: CraftTabId) => void;
+    onCedarHuntPin?: (pinned: boolean) => void;
     onPickCraft: (action: CraftAction) => void;
     onExpedition?: (request: ExpeditionRequest) => void;
     onFire?: (request: FireRequest) => void;
@@ -82,6 +83,7 @@ export function mountHud(
         onGearChange={gearActions?.onChange}
         onJournalTabChange={journalActions?.onTabChange}
         onCraftTabChange={journalActions?.onCraftTab}
+        onCedarHuntPin={journalActions?.onCedarHuntPin}
         onPickCraft={journalActions?.onPickCraft}
         onFire={journalActions?.onFire}
         onGardenUse={journalActions?.onGarden}

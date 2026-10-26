@@ -43,7 +43,7 @@ export function catalogItem(item: ItemId, overrides: ItemOverrides = {}): Catalo
     rarity:
       item === 'kingCrown' || item === 'firstBellRelic' || item === 'kingsRequiem'
         ? 'epic'
-        : item === 'watchCaptainHelm'
+        : item === 'watchCaptainHelm' || item === 'cedarstalkerCoat' || item === 'cedarHide'
           ? 'rare'
           : 'common',
     bonuses: EQUIPMENT_BONUSES[item] ?? {},

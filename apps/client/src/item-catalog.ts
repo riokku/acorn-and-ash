@@ -10,6 +10,7 @@ import {
   EMPTY_CATALOG,
   parsePublishedCatalog,
   type ItemKind,
+  type ItemRarity,
   type PublishedCatalog,
   type ItemId,
   type WornGear,
@@ -50,4 +51,8 @@ export function statsWithItem(
   slot?: GearSlot | null,
 ) {
   return baseComparison(worn, held, item, slot, EQUIPMENT_BONUSES);
+}
+
+export function itemRarity(item: ItemId): ItemRarity {
+  return catalogItem(item, published.overrides).rarity;
 }

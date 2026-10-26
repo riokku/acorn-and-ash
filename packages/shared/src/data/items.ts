@@ -68,7 +68,9 @@ export type ItemId =
   | 'sunreachPennant'
   | 'kingCrown'
   | 'firstBellRelic'
-  | 'kingsRequiem';
+  | 'kingsRequiem'
+  | 'cedarHide'
+  | 'cedarstalkerCoat';
 
 export interface ItemKind {
   readonly id: ItemId;
@@ -116,6 +118,31 @@ export interface ItemKind {
 }
 
 export const ITEM_KINDS = {
+  cedarHide: {
+    id: 'cedarHide',
+    displayName: 'Cedar stag hide',
+    pluralName: 'Cedar stag hides',
+    stackSize: 10,
+    maxCarry: undefined,
+    extraSlots: undefined,
+    placeholderColor: 0x667345,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+  },
+  cedarstalkerCoat: {
+    id: 'cedarstalkerCoat',
+    displayName: 'Cedarstalker coat',
+    pluralName: 'Cedarstalker coats',
+    stackSize: 1,
+    maxCarry: 1,
+    extraSlots: undefined,
+    placeholderColor: 0x42634b,
+    restoresHunger: undefined,
+    keepOnKnockout: true,
+    equippable: false,
+    gearSlots: ['upperBody'],
+  },
   kingsRequiem: {
     id: 'kingsRequiem',
     displayName: 'King’s Requiem',
@@ -956,6 +983,8 @@ export const ITEM_ORDER: readonly ItemId[] = [
   'kingCrown',
   'firstBellRelic',
   'kingsRequiem',
+  'cedarHide',
+  'cedarstalkerCoat',
 ];
 
 export function itemIndex(id: ItemId): number {

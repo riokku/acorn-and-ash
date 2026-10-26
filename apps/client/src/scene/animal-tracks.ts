@@ -67,9 +67,10 @@ export function addAnimalTrack(
       placed(at.x, y, at.z, { x: -Math.PI / 2, z: yaw }, { x: 1, y: stretch, z: 1 }),
     );
   };
-  if (kind === 'elk') {
-    pad(-0.045, 0, 0.055, 1.5);
-    pad(0.045, 0, 0.055, 1.5);
+  if (kind === 'elk' || kind === 'cedarStag') {
+    const size = kind === 'cedarStag' ? 1.35 : 1;
+    pad(-0.045 * size, 0, 0.055 * size, 1.5);
+    pad(0.045 * size, 0, 0.055 * size, 1.5);
   } else if (kind === 'curiousRaccoon') {
     pad(0, 0.025, 0.055);
     for (let toe = 0; toe < 4; toe++) pad((toe - 1.5) * 0.036, -0.06, 0.022, 1.5);

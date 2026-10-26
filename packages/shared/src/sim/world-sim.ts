@@ -1,3 +1,4 @@
+import { equipmentPreyNotice } from '../data/equipment-specialties';
 import { mealWarmthBonus } from './meals';
 import { AnimalTrailHistory, type FreshAnimalTrack } from './animal-tracks';
 import {
@@ -3248,7 +3249,10 @@ export class WorldSimulation {
                 runtime.engaged,
                 playerDistance,
                 approach?.speed ?? 0,
-                kind,
+                {
+                  ...kind,
+                  alertRadius: kind.alertRadius * equipmentPreyNotice(approach?.player.worn ?? {}),
+                },
                 TICK_SECONDS,
               );
         runtime.awareness = predatorAlarm ? 0 : awareness.awareness;
@@ -3587,7 +3591,7 @@ export class WorldSimulation {
           ? distance
           : distance < 1.8
             ? distance - 100
-            : distance / wildlifeNoticeRadius(kind, speed);
+            : distance / (wildlifeNoticeRadius(kind, speed) * equipmentPreyNotice(player.worn));
       if (score < bestScore) {
         bestScore = score;
         best = { player, speed };
@@ -5565,6 +5569,10 @@ export class WorldSimulation {
       item === undefined
         ? 0
         : addItem(runtime.inventory, item, huntingYield(this.equippedItemOf(runtime.netId), item));
+    // Named quarry never loses its earned material to a full pack. Owner-bound
+    // ground loot uses the existing persistence, reach and pickup validation.
+    if (animal.kind === 'cedarStag' && added === 0 && at !== undefined)
+      this.addPile('cedarHide', 1, at.x, at.z, this.nowMs, false, this.rewardOwnerKey(runtime));
     this.catchEvents.push({ netId: runtime.netId, item: item ?? null, added });
   }
 

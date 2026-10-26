@@ -657,6 +657,23 @@ the ten-minute benefit and replaces any other special meal. Berry tea also adds
 clothes and shelter still matter. Preview at `?gallery=meal-preparation`.
 See [meal preparation](docs/decisions/0235-meal-preparation.md).
 
+### The Old Cedar Stag
+
+Open **C → Gear** to plan a hunt for the Old Cedar Stag. Broad hoofprints continue
+northwest beyond the elk grove toward its refuge. This moss-colored quarry is
+more watchful than ordinary elk and faster than a sprint: approach on foot,
+pause when it watches, then close for a strike. Meals are useful preparation and
+remain optional. A catch guarantees one hide; a full pack leaves a personal
+pickup at the catch. One hide, two rope and four reeds make the rare
+**Cedarstalker coat** by hand. Wear it from **Z** for +6 protection, +45 warmth and
+**Quiet step**: prey notices your approach from 15% less distance. Hostile
+creatures keep their normal detection. The hide and coat survive knockout.
+
+Pin the upgrade goal from the guide to follow ingredients and the next step
+while traveling. The pin is saved for that world on this browser; item counts
+and equipment still come from the server. Preview `/?gallery=cedar-hunt` for the
+reused elk/clothing models, or `/?gallery=cedar-hunt&view=plan&hide` for the guide.
+
 ### Wildlife
 
 Rabbits, jackrabbits, foxes and elk now leave fresh ground tracks along their actual
