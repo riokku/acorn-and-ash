@@ -14,6 +14,9 @@ import {
   homeRestingPlace,
   type HomeKind,
   HOME_CHAIR,
+  outdoorSeatInReach,
+  type BenchPlacement,
+  type Vec3,
   OUTDOORS,
   RiseFrom,
   headingDirection,
@@ -58,8 +61,20 @@ export function restSpotFor(
   step: number,
   space: number,
   homeKind: HomeKind = 'cabin',
+  outdoor?: {
+    pieces: readonly BenchPlacement[];
+    position: Readonly<Vec3>;
+    heightAt: (x: number, z: number) => number;
+  },
 ): RestSpot | null {
-  if (space === OUTDOORS) return null;
+  if (space === OUTDOORS) {
+    if (
+      !outdoor ||
+      (kind !== ActionKind.Sit && !(kind === ActionKind.Rise && step === RiseFrom.Chair))
+    )
+      return null;
+    return outdoorSeatInReach(outdoor.pieces, outdoor.position, outdoor.heightAt)?.rest ?? null;
+  }
   const place = restingPlaceFor(kind, step);
   return place === null ? null : homeRestingPlace(place, homeKind).rest;
 }

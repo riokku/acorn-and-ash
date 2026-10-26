@@ -173,6 +173,8 @@ import {
   type SupportCell,
   isFreeToInteract,
   restingPlaceInReach,
+  outdoorSeatInReach,
+  RiseFrom,
   POND_FISH,
   PROP_KINDS,
   roomFor,
@@ -956,7 +958,7 @@ export class Game {
   /** What a door right here would do, for the hint. */
   private doorHint: 'enter' | 'visit' | 'locked' | 'leave' | null = null;
   /** The chair or the bed close enough to use, inside a home, while free to. */
-  private restingNearby: 'chair' | 'bed' | null = null;
+  private restingNearby: 'chair' | 'bed' | 'bench' | 'benchFull' | null = null;
   /** What the minimap and the big map draw, kept up to date every frame. */
   readonly mapFeed = new MapFeed();
   private readonly scratch: Vec3 = vec3();
@@ -1597,7 +1599,8 @@ export class Game {
   private decorationRefusal(reason: DecorationState['reason']): string | null {
     if (reason === null) return null;
     return {
-      occupied: 'Everyone must leave before this can be dismantled.',
+      occupied:
+        'Someone is using this object. Wait for them to get up or leave before moving or dismantling it.',
       contents:
         'Empty storage, pack up indoor decorations, harvest crops and let the fire fuel burn out first.',
       unsupported: 'This structure cannot be moved. Dismantle it to rebuild elsewhere.',
@@ -5577,7 +5580,11 @@ export class Game {
     character.setRestSpot(
       rowing
         ? boatSeatAt(position.x, position.z, player.renderYaw())
-        : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+        : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind(), {
+            pieces: this.builtProps,
+            position: player.motion.position,
+            heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
+          }),
     );
     const speed = Math.hypot(velocity.x, velocity.z);
     const travelSpeed = player.travelSpeed();
@@ -5713,6 +5720,30 @@ export class Game {
       return;
     }
 
+    this.restingNearby = null;
+    if (isFreeToInteract(action) && player.motion.grounded) {
+      const heightAt = (x: number, z: number) => this.collision?.terrain.heightAt(x, z) ?? 0;
+      const nearby = outdoorSeatInReach(this.builtProps, player.motion.position, heightAt);
+      if (nearby) {
+        const free = outdoorSeatInReach(
+          this.builtProps,
+          player.motion.position,
+          heightAt,
+          (seat) =>
+            !this.remotePlayers.netIds().some((id) => {
+              const pose = this.remotePlayers.poseOf(id);
+              if (!pose) return false;
+              const move = unpackActionByte(pose.action, this.remoteAction);
+              return (
+                (move.kind === ActionKind.Sit ||
+                  (move.kind === ActionKind.Rise && move.step === RiseFrom.Chair)) &&
+                Math.hypot(pose.x - seat.stand.x, pose.z - seat.stand.z) < 0.4
+              );
+            }),
+        );
+        this.restingNearby = free ? 'bench' : 'benchFull';
+      }
+    }
     this.nearWorkbench =
       nearestHomesteadPiece(this.builtProps, 'trailWorkbench', player.motion.position) !== null;
     this.nearGarden =
@@ -6527,7 +6558,11 @@ export class Game {
       character.setRestSpot(
         rowing
           ? boatSeatAt(pose.x, pose.z, pose.yaw)
-          : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind()),
+          : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind(), {
+              pieces: this.builtProps,
+              position: pose,
+              heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
+            }),
       );
       if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw);
       const drawn = character.update(deltaSeconds, {
@@ -6806,7 +6841,7 @@ export class Game {
       decorNote: this.decorNote,
       resting: this.restingNow(),
       boat: this.space === OUTDOORS ? this.boatHint : null,
-      restingNearby: this.space === OUTDOORS ? null : this.restingNearby,
+      restingNearby: this.restingNearby,
     });
   }
 

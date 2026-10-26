@@ -251,7 +251,7 @@ export interface HudState {
    */
   readonly resting: 'chair' | 'bed' | 'ground' | null;
   /** The chair or the bed close enough to sit or lie down on, inside a home. */
-  readonly restingNearby: 'chair' | 'bed' | null;
+  readonly restingNearby: 'chair' | 'bed' | 'bench' | 'benchFull' | null;
   /**
    * What a press of E would do about a rowboat right now (see decision 0093):
    * climb into one that is free, find one that somebody else has, find one

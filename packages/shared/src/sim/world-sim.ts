@@ -1,3 +1,4 @@
+import { benchSeats, outdoorSeatInReach } from '../world/outdoor-seating';
 import type { HomesteadAppearance } from '../data/homestead';
 import { equipmentPreyNotice } from '../data/equipment-specialties';
 import { mealWarmthBonus } from './meals';
@@ -1638,6 +1639,10 @@ export class WorldSimulation {
       return result('tooFar');
     if (
       prop.rower !== undefined ||
+      (prop.kind === 'cedarBench' &&
+        benchSeats(prop, (x, z) => this.collision.terrain.heightAt(x, z)).some(
+          (seat) => !this.isRestingPlaceFree(runtime, seat),
+        )) ||
       [...this.players.values()].some((other) => other.space === prop.id)
     )
       return result('occupied');
@@ -2915,7 +2920,7 @@ export class WorldSimulation {
               const dugUp =
                 this.tryDigUpCache(runtime, scratch.position) ||
                 this.tryDigTreasure(runtime, scratch.position);
-              if (!dugUp) {
+              if (!dugUp && !this.trySitOnBench(runtime, scratch, wantsToToggleCampfire)) {
                 // A campfire in reach always claims the button, whether or not
                 // this tick is the fresh press that actually toggles it -
                 // otherwise holding the button down to "keep warm" would fall
@@ -2932,6 +2937,7 @@ export class WorldSimulation {
           }
         }
 
+        if (runtime.action.kind === ActionKind.Sit) aim.yaw = scratch.facingYaw;
         if (runtime.swingCooldownTicks > 0) runtime.swingCooldownTicks -= 1;
         if (runtime.space !== OUTDOORS) {
           // Nothing to chop, catch, cast at or build on in here.
@@ -5563,9 +5569,40 @@ export class WorldSimulation {
       if (other === runtime || other.space !== runtime.space) continue;
       const { action } = other;
       if (action.kind === kind || (action.kind === ActionKind.Rise && action.step === rising)) {
-        return false;
+        if (runtime.space !== OUTDOORS) return false;
+        const at = other.entity.get(Position);
+        if (at && Math.hypot(at.x - place.stand.x, at.z - place.stand.z) < 0.4) return false;
       }
     }
+    return true;
+  }
+
+  private trySitOnBench(runtime: PlayerRuntime, motion: PlayerMotion, fresh: boolean): boolean {
+    if (
+      !motion.grounded ||
+      runtime.cast !== null ||
+      foodToEat(runtime.inventory, runtime.hunger, runtime.equippedItem) !== null
+    )
+      return false;
+    const fire = nearestCampfire(motion.position, this.builtProps);
+    if (
+      fire &&
+      this.fireIsLit(fire.id) &&
+      runtime.equippedItem !== null &&
+      cookedItemFor(runtime.equippedItem) !== null
+    )
+      return false;
+    const heightAt = (x: number, z: number) => this.collision.terrain.heightAt(x, z);
+    const nearby = outdoorSeatInReach(this.builtProps, motion.position, heightAt);
+    if (!nearby) return false;
+    // A held press and an occupied bench still claim E; neither may extinguish a nearby fire.
+    if (!fresh) return true;
+    const seat = outdoorSeatInReach(this.builtProps, motion.position, heightAt, (candidate) => {
+      if (!this.isRestingPlaceFree(runtime, candidate)) return false;
+      const stand = { ...candidate.stand, y: heightAt(candidate.stand.x, candidate.stand.z) };
+      return !resolveCapsule(stand, PLAYER_RADIUS, PLAYER_HEIGHT, this.collision);
+    });
+    if (seat) this.settleInto(runtime, motion, seat);
     return true;
   }
 
@@ -5577,7 +5614,10 @@ export class WorldSimulation {
   private settleInto(runtime: PlayerRuntime, motion: PlayerMotion, place: RestingPlace): void {
     motion.position.x = place.stand.x;
     motion.position.z = place.stand.z;
-    motion.position.y = 0;
+    motion.position.y =
+      runtime.space === OUTDOORS
+        ? this.collision.terrain.heightAt(place.stand.x, place.stand.z)
+        : 0;
     motion.velocity.x = 0;
     motion.velocity.y = 0;
     motion.velocity.z = 0;

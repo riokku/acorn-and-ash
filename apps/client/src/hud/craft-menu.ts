@@ -142,6 +142,7 @@ export function recipeGroup(item: ItemId): CraftGroupId {
 /** Which group a placed piece belongs to. */
 export function buildableGroup(kind: BuildableKindId): CraftGroupId {
   if (isHomeKind(kind) || isHomesteadProject(kind)) return 'home';
+  if (kind === 'cedarBench' || kind === 'timberTable') return 'garden';
   if (kind === 'campfire' || kind === 'lantern' || kind === 'fernLantern' || kind === 'moonLantern')
     return 'camp';
   if (kind === 'rowboat') return 'lake';

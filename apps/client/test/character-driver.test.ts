@@ -146,3 +146,14 @@ describe('move context through small clock corrections', () => {
     expect(memory.view(ActionKind.Flinch, 0, 0, false, 'forward').flinchVariant).not.toBe(first);
   });
 });
+
+it('uses the same rotated outdoor bench rest spot for sitting and rising without affecting ground sitting', () => {
+  const bench = { id: 1, kind: 'cedarBench', x: 8, z: 8, yaw: Math.PI / 2 };
+  const position = { x: 7.18, y: 3, z: 8.42 };
+  const outdoor = { pieces: [bench], position, heightAt: () => 3 };
+  const sitting = restSpotFor(ActionKind.Sit, 0, OUTDOORS, 'tent', outdoor);
+  expect(sitting?.y).toBeCloseTo(3.18);
+  expect(sitting?.yaw).toBeCloseTo(Math.PI / 2);
+  expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, OUTDOORS, 'tent', outdoor)).toEqual(sitting);
+  expect(restSpotFor(ActionKind.SitGround, 0, OUTDOORS, 'tent', outdoor)).toBeNull();
+});

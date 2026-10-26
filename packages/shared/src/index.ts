@@ -154,3 +154,5 @@ export * from './sim/foraging-habitats';
 export * from './data/cedar-hunt';
 
 export * from './data/world-admin';
+
+export * from './world/outdoor-seating';
