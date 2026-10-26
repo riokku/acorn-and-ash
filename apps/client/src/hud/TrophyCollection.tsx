@@ -25,8 +25,8 @@ export function TrophyCollection({
         <span className="homestead-eyebrow">Your adventures belong here</span>
         <h3>Stories brought home</h3>
         <p>
-          Turn a hard-won catch or victory into a landmark in your yard. These are real earned
-          keepsakes, not free decorations.
+          Turn a hard-won catch or victory into a landmark in your yard. Every keepsake has an
+          adventure behind it.
         </p>
         <strong>
           {count}/{KEEPSAKES.length} kinds on display
@@ -96,8 +96,8 @@ export function TrophyCollection({
       </div>
       <footer>
         Place outdoors inside your home boundary, or use B to decorate indoors. Placing spends the
-        trophy or listed materials; reclaiming uses the existing return rules. No collection bonus
-        or upkeep. Counts reflect pieces currently placed, not a permanent achievement history.
+        trophy or listed materials; reclaiming uses the existing return rules. Your display count
+        updates as you place or reclaim keepsakes.
       </footer>
     </section>
   );
