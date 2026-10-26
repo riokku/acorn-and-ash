@@ -1901,3 +1901,15 @@ pulses; leaving the storm boundary is safe too. The King stops attacking while
 channeling and becomes exposed for a short counterattack window afterward.
 Shelter, damage and phase timing are server-authoritative. Replay the mechanic
 at `/?gallery=king-storm`, or add `&at=8.5` to inspect the active storm.
+
+### Before you take the trail
+
+After choosing an outing at your home board, **C → Expeditions** offers preparation
+suited to its objectives: bring the right tools, wear protection or winter layers,
+pack food, leave room for discoveries, and recover before heading out. Winter
+insulation advice follows the current weather, including blizzards. Optional meal
+suggestions link to **Food**; **Review equipment** and **Check backpack** open the
+existing panels. Your outing stays saved throughout. Preparation is advice and
+never prevents leaving. Completed outings show their reward claim instead.
+Compare `/?gallery=expedition-preparation&before` with
+`/?gallery=expedition-preparation`, and use `&ready` for an equipped preview.

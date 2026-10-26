@@ -341,6 +341,11 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showCedarHuntPlan(canvas, params);
     return;
   }
+  if (focus === 'expedition-preparation') {
+    const { showExpeditionPreparation } = await import('./expedition-preparation');
+    showExpeditionPreparation(canvas, params);
+    return;
+  }
   if (focus === 'meal-preparation') {
     const { showMealPreparation } = await import('./meal-preparation');
     showMealPreparation(canvas, params);

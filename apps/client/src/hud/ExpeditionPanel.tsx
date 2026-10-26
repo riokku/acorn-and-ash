@@ -1,3 +1,4 @@
+import { ExpeditionPreparation } from './ExpeditionPreparation';
 import { ITEM_KINDS } from '../item-catalog';
 import {
   EXPEDITIONS,
@@ -24,8 +25,16 @@ export function ExpeditionPanel({
   state,
   onChange,
   onRequest,
+  onFood,
+  onGear,
+  onPack,
+  preparation = true,
 }: {
   state: HudState;
+  onFood?: () => void;
+  onGear?: () => void;
+  onPack?: () => void;
+  preparation?: boolean;
   onChange?: (tab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing') => void;
   onRequest?: (request: ExpeditionRequest) => void;
 }) {
@@ -75,6 +84,15 @@ export function ExpeditionPanel({
               </li>
             ))}
           </ul>
+          {preparation && !expeditionComplete(journey) ? (
+            <ExpeditionPreparation
+              state={state}
+              mission={active}
+              onFood={onFood}
+              onGear={onGear}
+              onPack={onPack}
+            />
+          ) : null}
           <p className="expedition-rewards">Reward · {reward(active.id)}</p>
           <button
             type="button"
