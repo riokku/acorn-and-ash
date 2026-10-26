@@ -2684,6 +2684,7 @@ export class Game {
     } else if (event.dodged) {
       const now = performance.now();
       this.healthNews = { text: 'Dodged!', until: now + NEWS_MS };
+      this.combatFeed.dodgeAtMs = now;
     }
     // Same reasoning as `hearFromTheWater`: pushed straight to the HUD rather
     // than left for the next frame, so a stall in the render loop cannot eat
