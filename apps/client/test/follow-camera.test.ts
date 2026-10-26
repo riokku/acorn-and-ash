@@ -252,3 +252,56 @@ it('makes cursor rays follow an immediate camera turn before any renderer update
   const expected = target.sub(follow.camera.position).normalize();
   expect(ray.ray.direction.distanceTo(expected)).toBeLessThan(1e-8);
 });
+
+describe('grounded trail comfort', () => {
+  it('eases small steps, caps the lag, and keeps jumps and relocations immediate', () => {
+    const follow = new FollowCamera(16 / 9);
+    follow.update(PLAYER_POSITION, 1 / 60, [], null, true);
+    const before = follow.camera.position.y;
+    const raised = { ...PLAYER_POSITION, y: PLAYER_POSITION.y + 0.3 };
+    follow.update(raised, 1 / 60, [], null, true);
+    expect(follow.camera.position.y - before).toBeGreaterThanOrEqual(0.12 - 1e-9);
+    expect(follow.camera.position.y - before).toBeLessThan(0.3);
+    const zeroTime = follow.camera.position.clone();
+    follow.update(raised, 0, [], null, true);
+    expect(follow.camera.position.distanceTo(zeroTime)).toBeLessThan(1e-9);
+    for (let i = 0; i < 90; i++) follow.update(raised, 1 / 60, [], null, true);
+    expect(follow.camera.position.y - before).toBeCloseTo(0.3, 5);
+    const airborne = { ...raised, y: raised.y + 0.4 };
+    follow.update(airborne, 1 / 60, [], null, false);
+    expect(follow.camera.position.y - before).toBeCloseTo(0.7, 5);
+    const moved = { ...raised, x: raised.x + 10, y: raised.y + 4 };
+    follow.update(moved, 1 / 60, [], null, true);
+    expect(follow.camera.position.y - before).toBeCloseTo(4.3, 5);
+  });
+
+  it('keeps terrain clearance while climbing and descending a steep trail', () => {
+    const ground = slopeGround(1.2);
+    const follow = new FollowCamera(21 / 9);
+    try {
+      follow.look.pitch = -0.3;
+      for (let step = 0; step < 100; step++) {
+        const z = Math.sin(step / 20) * 2;
+        follow.look.yaw = step / 20;
+        follow.update({ x: 0, y: z * 1.2, z }, 1 / 60, [], ground, true);
+        const position = follow.camera.position;
+        expect(position.y - position.z * 1.2).toBeGreaterThan(0.05);
+      }
+    } finally {
+      ground.geometry.disposeBoundsTree();
+      ground.geometry.dispose();
+    }
+  });
+});
+
+it('settles the same small trail step at 30, 60 and 144 FPS', () => {
+  const heights = [30, 60, 144].map((fps) => {
+    const follow = new FollowCamera(16 / 9);
+    follow.update(PLAYER_POSITION, 0, [], null, true);
+    for (let frame = 0; frame < fps / 2; frame++)
+      follow.update({ ...PLAYER_POSITION, y: PLAYER_POSITION.y + 0.1 }, 1 / fps, [], null, true);
+    return follow.camera.position.y;
+  });
+  expect(heights[0]).toBeCloseTo(heights[1]!, 10);
+  expect(heights[1]).toBeCloseTo(heights[2]!, 10);
+});

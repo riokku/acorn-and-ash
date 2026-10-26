@@ -62,6 +62,9 @@ export class FollowCamera {
   private shakeStrength = 0;
   private reducedMotion = false;
   private readonly target = new THREE.Vector3();
+  private followedHeight: number | null = null;
+  private wasGrounded = false;
+  private readonly lastPlayerPosition = new THREE.Vector3();
   private readonly desired = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
@@ -125,6 +128,7 @@ export class FollowCamera {
    * the room from the door side; coming out puts the view back how it was.
    */
   setIndoors(indoors: boolean, facingYaw?: number): void {
+    this.followedHeight = null;
     if (indoors && this.outdoorLook === null) {
       this.outdoorLook = { ...this.look };
       this.look.yaw = 0.2;
@@ -155,8 +159,33 @@ export class FollowCamera {
     deltaSeconds: number,
     blockers: readonly THREE.Object3D[],
     ground: THREE.Object3D | null = null,
+    grounded = false,
   ): void {
-    this.target.set(playerPosition.x, playerPosition.y + TARGET_HEIGHT, playerPosition.z);
+    const teleported =
+      (playerPosition.x - this.lastPlayerPosition.x) ** 2 +
+        (playerPosition.z - this.lastPlayerPosition.z) ** 2 >
+        4 || Math.abs(playerPosition.y - this.lastPlayerPosition.y) > 0.65;
+    if (
+      this.followedHeight === null ||
+      !grounded ||
+      !this.wasGrounded ||
+      teleported ||
+      deltaSeconds >= 0.25
+    ) {
+      this.followedHeight = playerPosition.y;
+    } else {
+      // Ease small grounded steps only. Jumps and falls stay directly responsive.
+      this.followedHeight +=
+        (playerPosition.y - this.followedHeight) * (1 - Math.exp(-12 * Math.max(0, deltaSeconds)));
+      this.followedHeight = clamp(
+        this.followedHeight,
+        playerPosition.y - 0.18,
+        playerPosition.y + 0.18,
+      );
+    }
+    this.wasGrounded = grounded;
+    this.lastPlayerPosition.set(playerPosition.x, playerPosition.y, playerPosition.z);
+    this.target.set(playerPosition.x, this.followedHeight + TARGET_HEIGHT, playerPosition.z);
     if (this.outdoorLook !== null) {
       this.keepInRoomView();
       this.target.lerp(ROOM_CENTRE_VECTOR, ROOM_FRAMING);

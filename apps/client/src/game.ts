@@ -5339,6 +5339,7 @@ export class Game {
           ...this.homeCameraBlockers,
         ],
         this.space === OUTDOORS ? wilderness.cameraGround : null,
+        this.space === OUTDOORS && (this.localPlayer?.motion.grounded ?? false),
       );
     }
 
@@ -5584,6 +5585,7 @@ export class Game {
           ]
         : [],
       this.space === OUTDOORS ? wilderness.cameraGround : null,
+      this.space === OUTDOORS && player.motion.grounded && !rowing,
     );
     this.updatePlacement(camera, player);
     const ownHome = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind));
