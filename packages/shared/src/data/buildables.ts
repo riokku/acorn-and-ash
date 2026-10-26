@@ -32,7 +32,10 @@ export type BuildableKindId =
   | 'sentinelTrophy'
   | 'fishDisplay'
   | 'goldenFishDisplay'
-  | 'rowboat';
+  | 'rowboat'
+  | 'trailWorkbench'
+  | 'trailPantry'
+  | 'kitchenGarden';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -70,6 +73,47 @@ export interface BuildableKind {
 }
 
 export const BUILDABLE_KINDS = {
+  trailWorkbench: {
+    id: 'trailWorkbench',
+    displayName: 'Trail workbench',
+    costs: [
+      { item: 'log', amount: 8 },
+      { item: 'stick', amount: 6 },
+    ],
+    footprintRadius: 0.85,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0xb19167,
+  },
+  trailPantry: {
+    id: 'trailPantry',
+    displayName: 'Trail pantry',
+    costs: [
+      { item: 'log', amount: 6 },
+      { item: 'stick', amount: 4 },
+      { item: 'rope', amount: 2 },
+    ],
+    footprintRadius: 0.65,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0x8a6642,
+  },
+  kitchenGarden: {
+    id: 'kitchenGarden',
+    displayName: 'Kitchen garden',
+    costs: [
+      { item: 'log', amount: 4 },
+      { item: 'stick', amount: 6 },
+      { item: 'flower', amount: 3 },
+    ],
+    footprintRadius: 1.15,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 5000,
+    placeholderColor: 0x739c7b,
+  },
   firstBellRelic: {
     id: 'firstBellRelic',
     displayName: 'First Bell relic',
@@ -396,6 +440,9 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'lastBellTrophy',
   'sunreachPennant',
   'firstBellRelic',
+  'trailWorkbench',
+  'trailPantry',
+  'kitchenGarden',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

@@ -1,3 +1,4 @@
+import { HomesteadPlan } from './HomesteadPlan';
 import { CedarHuntPlan, CedarHuntTracker } from './CedarHuntPlan';
 import { MealPreparation, mealPlan } from './MealPreparation';
 import { KingStorm } from './KingStorm';
@@ -1040,9 +1041,23 @@ export function CraftPanel({
       </nav>
       <div className="craft-list">
         {guidedMeals && tab === 'food' ? <MealPreparation state={state} /> : null}
+        {tab === 'home' ? (
+          <HomesteadPlan
+            state={state}
+            onBuild={(buildable) => onPick?.({ kind: 'build', buildable })}
+          />
+        ) : null}
         {tab === 'gear' ? <CedarHuntPlan state={state} onPin={onCedarHuntPin} /> : null}
         {CRAFT_GROUPS.map((group) => {
-          const items = shown.filter((entry) => entry.group === group.id);
+          const items = shown.filter(
+            (entry) =>
+              entry.group === group.id &&
+              !(
+                tab === 'home' &&
+                entry.action.kind === 'build' &&
+                ['trailWorkbench', 'trailPantry', 'kitchenGarden'].includes(entry.action.buildable)
+              ),
+          );
           return items.length === 0 ? null : (
             <section className="craft-group" key={group.id} aria-label={group.heading}>
               <h2>{group.heading}</h2>

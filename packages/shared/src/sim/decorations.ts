@@ -194,6 +194,9 @@ export const DECORATION_REQUEST_KINDS: readonly BuildableKindId[] = [
   'rowboat',
   'sunreachPennant',
   'firstBellRelic',
+  'trailWorkbench',
+  'trailPantry',
+  'kitchenGarden',
 ];
 export const DECORATION_ACTIONS = [
   'place',

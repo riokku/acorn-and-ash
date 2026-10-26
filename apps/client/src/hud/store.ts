@@ -1,3 +1,4 @@
+import type { HomesteadProject } from '@acorn/shared';
 import type { KingVictoryView } from './KingVictory';
 import type { KingStormView } from '@acorn/shared';
 import type { AllyView } from '@acorn/shared';
@@ -185,6 +186,7 @@ export interface HudState {
   readonly craftTab: CraftTabId;
   readonly buildAreaRadius: number | null;
   readonly homeKind: HomeKind | null;
+  readonly homesteadProjects?: readonly HomesteadProject[];
   /** Whether the room-decorating panel (opened with B indoors) is currently showing. */
   readonly buildMenuOpen: boolean;
   /**

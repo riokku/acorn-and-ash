@@ -10,7 +10,7 @@ import type { HudState } from './store';
 import { JournalTabs } from './DiscoveryJournal';
 
 const REASONS = {
-  unavailable: 'A garden comes with the larger cabin.',
+  unavailable: 'Build a kitchen garden in your yard, or upgrade to a larger cabin.',
   private: 'Only the home owner can tend this garden.',
   tooFar: 'Move closer to the garden boxes.',
   busy: 'Finish your current action first.',

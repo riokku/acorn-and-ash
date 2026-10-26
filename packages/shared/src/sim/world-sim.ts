@@ -62,6 +62,7 @@ import {
   protectedDamage,
 } from '../data/equipment-stats';
 import { placedPropColliders } from '../world/placed-solids';
+import { isHomesteadProject, nearestHomesteadPiece } from '../data/homestead';
 import type { Collider } from '../world/colliders';
 import { streamRockColliders } from '../world/scenery-rocks';
 import type { BuildReply, BuildReplyReason } from './building';
@@ -2307,9 +2308,14 @@ export class WorldSimulation {
       moved: 0,
       reason,
     });
-    if (runtime === undefined || runtime.space === OUTDOORS) return unavailable('unavailable');
-    const home = this.builtPropsById.get(runtime.space);
-    if (home === undefined || !BUILDABLE_KINDS[home.kind].isHome) return unavailable('unavailable');
+    if (runtime === undefined) return unavailable('unavailable');
+    const home =
+      runtime.space === OUTDOORS
+        ? (nearestHomesteadPiece(this.builtProps, 'trailPantry', runtime.entity.get(Position)!) ??
+          undefined)
+        : this.builtPropsById.get(runtime.space);
+    if (home === undefined || (!BUILDABLE_KINDS[home.kind].isHome && home.kind !== 'trailPantry'))
+      return unavailable('unavailable');
     if (runtime.playerKey === null || this.builtPropOwner(home.id) !== runtime.playerKey)
       return unavailable('private');
     const slots = this.homeChests.get(home.id) ?? emptyChest();
@@ -2320,8 +2326,16 @@ export class WorldSimulation {
       reason,
     });
     const position = runtime.entity.get(Position);
-    const chest = homeChestSpot(isHomeKind(home.kind) ? home.kind : 'cabin');
-    if (position === undefined || Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
+    const chest =
+      home.kind === 'trailPantry'
+        ? home
+        : homeChestSpot(isHomeKind(home.kind) ? home.kind : 'cabin');
+    if (
+      position === undefined ||
+      Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8 ||
+      (home.kind === 'trailPantry' &&
+        Math.abs(position.y - this.collision.terrain.heightAt(home.x, home.z)) > 2)
+    )
       return reply('tooFar');
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
       return reply('busy');
@@ -2379,14 +2393,31 @@ export class WorldSimulation {
   restoreChest(homeId: number, saved: unknown): void {
     const slots = chestFromSaved(saved);
     const home = this.builtPropsById.get(homeId);
-    if (slots !== null && home !== undefined && BUILDABLE_KINDS[home.kind].isHome)
+    if (
+      slots !== null &&
+      home !== undefined &&
+      (BUILDABLE_KINDS[home.kind].isHome || home.kind === 'trailPantry')
+    )
       this.homeChests.set(homeId, slots);
   }
 
   gardenStateOf(netId: number, reason: GardenReason | null = null): GardenState {
     const runtime = this.players.get(netId);
-    const homeId = runtime?.space ?? OUTDOORS;
-    if (runtime === undefined || homeId === OUTDOORS || this.kindOfHome(homeId) !== 'largeCabin')
+    const homeId =
+      runtime?.space === OUTDOORS
+        ? (nearestHomesteadPiece(
+            this.builtProps,
+            'kitchenGarden',
+            runtime.entity.get(Position)!,
+            30,
+          )?.id ?? 0)
+        : (runtime?.space ?? OUTDOORS);
+    if (
+      runtime === undefined ||
+      homeId === OUTDOORS ||
+      (this.kindOfHome(homeId) !== 'largeCabin' &&
+        this.builtPropsById.get(homeId)?.kind !== 'kitchenGarden')
+    )
       return { homeId: 0, yours: false, plots: emptyGarden(), reason: reason ?? 'unavailable' };
     return {
       homeId,
@@ -2404,8 +2435,15 @@ export class WorldSimulation {
     const refuse = (reason: GardenReason) => this.gardenStateOf(netId, reason);
     if (!state.yours) return refuse('private');
     const position = runtime.entity.get(Position);
-    if (position === undefined || !homeFacilityInReach('largeCabin', 'garden', position))
-      return refuse('tooFar');
+    const outdoor = this.builtPropsById.get(state.homeId);
+    const inReach =
+      runtime.space === OUTDOORS
+        ? outdoor?.kind === 'kitchenGarden' &&
+          position !== undefined &&
+          Math.hypot(position.x - outdoor.x, position.z - outdoor.z) <= 2 &&
+          Math.abs(position.y - this.collision.terrain.heightAt(outdoor.x, outdoor.z)) <= 2
+        : position !== undefined && homeFacilityInReach('largeCabin', 'garden', position);
+    if (!inReach) return refuse('tooFar');
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
       return refuse('busy');
     const plots = this.homeGardens.get(state.homeId) ?? emptyGarden();
@@ -2425,7 +2463,8 @@ export class WorldSimulation {
   restoreGarden(homeId: number, saved: unknown): void {
     const plots = gardenFromSaved(saved),
       home = this.builtPropsById.get(homeId);
-    if (plots !== null && home?.kind === 'largeCabin') this.homeGardens.set(homeId, plots);
+    if (plots !== null && (home?.kind === 'largeCabin' || home?.kind === 'kitchenGarden'))
+      this.homeGardens.set(homeId, plots);
   }
 
   /**
@@ -5434,6 +5473,8 @@ export class WorldSimulation {
       this.decoratedHomes.delete(prop.id);
       this.decoratedRooms.delete(prop.id);
     }
+    this.homeChests.delete(prop.id);
+    this.homeGardens.delete(prop.id);
     this.detachBuiltProp(prop);
     this.removedBuilds.push(prop.id);
   }
@@ -5777,6 +5818,7 @@ export class WorldSimulation {
     };
     if (runtime.swingCooldownTicks > 0) return refuse('busy');
     const ownedHome = runtime.playerKey === null ? null : this.homeOf(runtime.playerKey);
+    if (isHomesteadProject(kind) && ownedHome === null) return 'area';
     const available =
       isHomeKind(kind) && ownedHome !== null
         ? combineHomeSupplies(runtime.inventory, this.homeSuppliesOf(runtime.netId).items)
@@ -7304,8 +7346,9 @@ export class WorldSimulation {
     return (
       runtime !== undefined &&
       position !== undefined &&
-      runtime.space !== OUTDOORS &&
-      homeFacilityInReach(this.kindOfHome(runtime.space), 'workbench', position)
+      (runtime.space === OUTDOORS
+        ? nearestHomesteadPiece(this.builtProps, 'trailWorkbench', position) !== null
+        : homeFacilityInReach(this.kindOfHome(runtime.space), 'workbench', position))
     );
   }
 

@@ -122,6 +122,22 @@ export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Col
       return [post(0.05, 1.45)];
     case 'cedarBench':
       return [slab(0.85, 0.23, 0.4825, groundY, true)];
+    case 'trailPantry':
+      return [slab(0.47, 0.27, 0.51, groundY, true)];
+    case 'kitchenGarden':
+      return [-0.65, 0, 0.65].map((dx) => ({
+        ...box(
+          x + Math.cos(yaw) * dx,
+          groundY + 0.16,
+          z - Math.sin(yaw) * dx,
+          0.28,
+          0.16,
+          0.28,
+          yaw,
+        ),
+        standable: true,
+      }));
+    case 'trailWorkbench':
     case 'timberTable':
       return [slab(0.575, 0.475, 0.7825, groundY, true)];
     case 'rowboat': {

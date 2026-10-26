@@ -5,7 +5,7 @@ import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { createForageModel } from './forest-food';
 
 /** Tier facilities use the same room coordinates as authoritative reach checks. */
-export function createHomeFacilities(kind: HomeKind) {
+export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garden') {
   const builder = new ModelBuilder();
   const cookingFlameMaterial = plainMaterial(0xff9e47, {
     emissive: 0xe85c24,
@@ -14,7 +14,7 @@ export function createHomeFacilities(kind: HomeKind) {
   const wood = paintedMaterial('wood', { tint: 0xd2b08a, roughness: 0.9 });
   const metal = plainMaterial(0x484c47, { roughness: 0.55 });
   const stone = paintedMaterial('stone', { tint: 0xaab79b, roughness: 1 });
-  if (kind === 'teepee') {
+  if (kind === 'teepee' && only === undefined) {
     const { x, z } = HOME_FACILITIES.cooking;
     for (let index = 0; index < 8; index++) {
       const angle = (index * Math.PI) / 4;
@@ -34,7 +34,7 @@ export function createHomeFacilities(kind: HomeKind) {
     builder.add(metal, handle, placed(x, 0.38, z));
     builder.add(cookingFlameMaterial, new THREE.ConeGeometry(0.09, 0.17, 5), placed(x, 0.1, z));
   }
-  if (homeHasFacility(kind, 'workbench')) {
+  if (homeHasFacility(kind, 'workbench') && only !== 'garden') {
     const { x, z } = HOME_FACILITIES.workbench;
     builder.add(wood, plankGeometry(0.65, 0.035, 0.72, 'z', 1, 2601), placed(x, 0.69, z));
     for (const dx of [-0.065, 0.065])
@@ -60,7 +60,7 @@ export function createHomeFacilities(kind: HomeKind) {
     flower: THREE.Group;
   }[] = [];
   const gardenModels: ReturnType<ModelBuilder['build']>[] = [];
-  if (homeHasFacility(kind, 'garden')) {
+  if (homeHasFacility(kind, 'garden') && only !== 'workbench') {
     const { x, z } = HOME_FACILITIES.garden;
     for (let index = 0; index < 3; index++) {
       const bed = new ModelBuilder(),

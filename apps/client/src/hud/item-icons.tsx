@@ -235,6 +235,11 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   cabinBlueprint: blueprint(),
   largeCabinBlueprint: blueprint(),
   cabin: <polygon points="12,3 21,10 21,21 3,21 3,10" />,
+  trailWorkbench: <path d="M2 9H22V12H20V22H17V12H7V22H4V12H2ZM9 3H16V8H9Z" />,
+  trailPantry: <path d="M3 8Q3 3 8 3H16Q21 3 21 8V21H3ZM4 9H20V12H4ZM10 10V15H14V10Z" />,
+  kitchenGarden: (
+    <path d="M2 14H22V21H2ZM6 14V7L2 4L7 5L8 1L10 6L7 9V14ZM16 14V9L12 6L17 7L18 3L20 8L17 11V14Z" />
+  ),
   flowerBed: (
     <>
       <rect x="4" y="14" width="16" height="6" rx="1.5" />

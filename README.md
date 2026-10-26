@@ -657,7 +657,26 @@ the ten-minute benefit and replaces any other special meal. Berry tea also adds
 clothes and shelter still matter. Preview at `?gallery=meal-preparation`.
 See [meal preparation](docs/decisions/0235-meal-preparation.md).
 
-### The Old Cedar Stag
+### Make This Place Home
+
+Open **C → Home** to turn your first tent into a working trailstead. Build three
+projects in any order inside your home boundary:
+
+- **Trail workbench:** refine tools outdoors; nearby visitors can use it too.
+- **Trail pantry:** ten extra private slots. Left-click the chest within reach.
+- **Kitchen garden:** three growing boxes. Open the Garden journal beside them,
+  or click the boxes; plant one berry, mushroom or flower and harvest three after
+  ten minutes while the world is awake.
+
+The Home guide shows backpack materials and completed projects. You can keep
+supplies in your home chest between trips, then withdraw them to build. Projects
+persist with the world. Empty a pantry or harvest its crops before reclaiming it.
+Cabin interiors retain their existing facilities.
+
+Review the campsite at `/?gallery=homestead` (`&before` for the empty campsite),
+or try the journal at `/?gallery=homestead&view=plan`.
+
+## The Old Cedar Stag
 
 Open **C → Gear** to plan a hunt for the Old Cedar Stag. Broad hoofprints continue
 northwest beyond the elk grove toward its refuge. This moss-colored quarry is

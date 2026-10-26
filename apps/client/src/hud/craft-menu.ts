@@ -1,3 +1,4 @@
+import { isHomesteadProject } from '@acorn/shared';
 import { ITEM_KINDS } from '../item-catalog';
 /**
  * What the Craft menu lists (see decision 0096).
@@ -123,6 +124,7 @@ export type CraftMenuState = Pick<
   | 'nearCampfire'
   | 'nearWorkbench'
   | 'homeKind'
+  | 'homesteadProjects'
   | 'homeSkills'
   | 'homeStoredSupplies'
   | 'expedition'
@@ -139,7 +141,7 @@ export function recipeGroup(item: ItemId): CraftGroupId {
 
 /** Which group a placed piece belongs to. */
 export function buildableGroup(kind: BuildableKindId): CraftGroupId {
-  if (isHomeKind(kind)) return 'home';
+  if (isHomeKind(kind) || isHomesteadProject(kind)) return 'home';
   if (kind === 'campfire' || kind === 'lantern' || kind === 'fernLantern' || kind === 'moonLantern')
     return 'camp';
   if (kind === 'rowboat') return 'lake';
@@ -287,6 +289,9 @@ function placedEntries(state: CraftMenuState): CraftEntry[] {
     const home = isHomeKind(kind);
     const pennantLocked = kind === 'trailPennant' && !(cosmetics & 1);
     const fishLocked = !fishDisplayLearned(kind, fishRecords);
+    const projectLocked =
+      isHomesteadProject(kind) &&
+      (state.homeKind === null || (state.homesteadProjects ?? []).includes(kind));
     const supplies =
       home && state.homeKind !== null
         ? combineHomeSupplies(inventory, state.homeStoredSupplies)
@@ -296,7 +301,7 @@ function placedEntries(state: CraftMenuState): CraftEntry[] {
     const { status, label } = statusOf(
       shortfalls,
       needsBlueprint ? ['needBlueprint'] : [],
-      pennantLocked || fishLocked,
+      pennantLocked || fishLocked || projectLocked,
     );
     return [
       {
@@ -307,15 +312,19 @@ function placedEntries(state: CraftMenuState): CraftEntry[] {
           needsBlueprint ? ' · blueprint needed' : ''
         }`,
         costs: buildable.costs,
-        locked: pennantLocked || fishLocked,
+        locked: pennantLocked || fishLocked || projectLocked,
         supplyNote:
           home && state.homeKind !== null
             ? 'Uses backpack first, then your private home chest'
-            : pennantLocked
-              ? 'Complete three outings to learn this recipe'
-              : fishLocked
-                ? 'Earn this recipe in your fishing collection'
-                : undefined,
+            : projectLocked
+              ? state.homeKind === null
+                ? 'Build your first home to begin these projects'
+                : 'Already built · find it in your yard'
+              : pennantLocked
+                ? 'Complete three outings to learn this recipe'
+                : fishLocked
+                  ? 'Earn this recipe in your fishing collection'
+                  : undefined,
         ready: status === 'ready',
         status,
         statusLabel: label,

@@ -87,6 +87,7 @@ export * from './net/protocol';
 export * from './sim/chest';
 
 export * from './data/housing';
+export * from './data/homestead';
 
 export * from './world/encounters';
 

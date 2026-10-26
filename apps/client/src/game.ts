@@ -85,6 +85,8 @@ import {
   type HomeDecoration,
   type DecorationState,
 } from '@acorn/shared';
+import { createHomesteadProject } from './scene/homestead-project';
+import { isHomesteadProject, nearestHomesteadPiece } from '@acorn/shared';
 import { createHomeDecoration } from './scene/home-decoration';
 import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
 import { createSnowFootprints } from './scene/snow-footprints';
@@ -542,7 +544,9 @@ function createBuiltMesh(
   | Fence
   | GardenPath
   | Rowboat
+  | ReturnType<typeof createHomesteadProject>
   | ReturnType<typeof createHomeDecoration> {
+  if (isHomesteadProject(kind)) return createHomesteadProject(kind);
   if (isHomeKind(kind)) {
     const home =
       kind === 'tent' || kind === 'teepee'
@@ -838,6 +842,7 @@ export class Game {
     | Lantern
     | Fence
     | GardenPath
+    | ReturnType<typeof createHomesteadProject>
     | ReturnType<typeof createHomeDecoration>
   >();
   private builtProps: readonly BuiltPropView[] = [];
@@ -1367,13 +1372,58 @@ export class Game {
     this.chestOpen = false;
     this.chestPending = false;
     this.homeInterior?.setChestOpen(false);
+    for (const model of this.builtMeshes.values())
+      if ('setChestOpen' in model) model.setChestOpen(false);
     this.syncGameplayControls();
     this.options.hud.publish({ chestSlots: null, chestPending: false, chestNote: null });
   }
 
   private chestAt(point: { x: number; y: number }, camera: FollowCamera): boolean {
-    return this.interiorTargetAt(point, camera, this.homeInterior?.chest);
+    return this.space === OUTDOORS
+      ? this.outdoorProjectAt(point, camera, 'trailPantry')
+      : this.interiorTargetAt(point, camera, this.homeInterior?.chest);
   }
+  private outdoorProjectAt(
+    point: { x: number; y: number },
+    camera: FollowCamera,
+    kind: 'trailPantry' | 'kitchenGarden',
+  ): boolean {
+    if (this.space !== OUTDOORS) return false;
+    const piece = nearestHomesteadPiece(this.builtProps, kind, this.motionOrOrigin());
+    const model = piece === null ? undefined : this.builtMeshes.get(piece.id);
+    if (!model) return false;
+    this.clickNdc.set((point.x / innerWidth) * 2 - 1, (-point.y / innerHeight) * 2 + 1);
+    this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
+    model.group.updateWorldMatrix(true, true);
+    const hit = this.clickRaycaster.intersectObject(model.group, true).find((entry) => {
+      for (let node: THREE.Object3D | null = entry.object; node; node = node.parent)
+        if (!node.visible) return false;
+      return true;
+    });
+    if (!hit) return false;
+    const previousFar = this.clickRaycaster.far;
+    try {
+      this.clickRaycaster.far = Math.max(0, hit.distance - 0.02);
+      const blockers = [
+        ...(this.wildernessScene
+          ? [this.wildernessScene.cameraGround, ...this.wildernessScene.cameraBlockers]
+          : []),
+        ...(this.clearingScene ? [this.clearingScene.cameraBlockers] : []),
+        ...(this.digScene?.cameraBlockers ?? []),
+        ...this.homeCameraBlockers,
+        ...[...this.builtMeshes.values()]
+          .filter((other) => other !== model)
+          .map((other) => other.group),
+      ];
+      return !blockers.some((blocker) => {
+        blocker.updateWorldMatrix(true, true);
+        return this.clickRaycaster.intersectObject(blocker, true).length > 0;
+      });
+    } finally {
+      this.clickRaycaster.far = previousFar;
+    }
+  }
+
   private interiorTargetAt(
     point: { x: number; y: number },
     camera: FollowCamera,
@@ -1401,6 +1451,14 @@ export class Game {
   }
 
   private chestHoverDetail(): string {
+    if (this.space === OUTDOORS) {
+      const pantry = nearestHomesteadPiece(this.builtProps, 'trailPantry', this.motionOrOrigin());
+      if (!pantry?.yours) return 'Private · belongs to the home owner';
+      return Math.hypot(this.motionOrOrigin().x - pantry.x, this.motionOrOrigin().z - pantry.z) >
+        1.8
+        ? 'Too far away · move closer'
+        : 'Left-click to open · 10 extra private slots';
+    }
     if (this.homeHere()?.yours !== true) return 'Private · belongs to the home owner';
     const chest = homeChestSpot(this.currentHomeKind());
     const position = this.motionOrOrigin();
@@ -1920,6 +1978,8 @@ export class Game {
           Object.assign(this, menuPanelState(null));
           this.controls?.setGameplayEnabled(false);
           this.homeInterior?.setChestOpen(true);
+          const pantry = this.builtMeshes.get(message.homeId);
+          if (pantry && 'setChestOpen' in pantry) pantry.setChestOpen(true);
           this.options.hud.publish({
             chestSlots: message.slots,
             chestPending: false,
@@ -2200,6 +2260,8 @@ export class Game {
       case 'garden': {
         this.garden = message;
         if (message.homeId === this.space) this.homeInterior?.setGardenPlots(message.plots);
+        const garden = this.builtMeshes.get(message.homeId);
+        if (garden && 'setGardenPlots' in garden) garden.setGardenPlots(message.plots);
         this.options.hud.publish({ garden: message });
         break;
       }
@@ -2408,6 +2470,28 @@ export class Game {
             }
             return true;
           });
+        const finished = message.props.filter(
+          (prop) =>
+            prop.yours &&
+            isHomesteadProject(prop.kind) &&
+            !this.builtProps.some((old) => old.id === prop.id),
+        );
+        if (
+          this.playing &&
+          this.builtProps.some((prop) => prop.yours && isHomeKind(prop.kind)) &&
+          finished.length > 0
+        ) {
+          const count = message.props.filter(
+            (prop) => prop.yours && isHomesteadProject(prop.kind),
+          ).length;
+          this.craftingNews = {
+            text:
+              count === 3
+                ? 'Trailstead established · a place to make, to keep and to grow.'
+                : `${BUILDABLE_KINDS[finished[0]!.kind].displayName} complete · ${count}/3 homestead projects.`,
+            until: performance.now() + NEWS_MS,
+          };
+        }
         this.builtProps = message.props;
         if (!onlyBoatMotion) this.grass?.setBuildings(message.props);
         this.applyBuiltProps(onlyBoatMotion);
@@ -3256,6 +3340,8 @@ export class Game {
         continue;
       }
       const built = createBuiltMesh(prop.kind);
+      if ('setGardenPlots' in built && this.garden.homeId === prop.id)
+        built.setGardenPlots(this.garden.plots);
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
       if ('setLit' in built) built.setLit?.(this.fuelFireLit(prop.id));
@@ -3549,8 +3635,10 @@ export class Game {
           !this.mapOpen &&
           !this.buildMenuOpen &&
           !this.craftMenuOpen &&
-          this.currentHomeKind() === 'largeCabin' &&
-          this.interiorTargetAt(clickPoint, camera, this.homeInterior?.garden)
+          ((this.space === OUTDOORS &&
+            this.outdoorProjectAt(clickPoint, camera, 'kitchenGarden')) ||
+            (this.currentHomeKind() === 'largeCabin' &&
+              this.interiorTargetAt(clickPoint, camera, this.homeInterior?.garden)))
         ) {
           controls.swallowLeftPress();
           this.setJournalTab('garden');
@@ -5556,9 +5644,10 @@ export class Game {
       return;
     }
 
-    this.hoveredChest = false;
-    this.nearWorkbench = false;
-    this.nearGarden = false;
+    this.nearWorkbench =
+      nearestHomesteadPiece(this.builtProps, 'trailWorkbench', player.motion.position) !== null;
+    this.nearGarden =
+      nearestHomesteadPiece(this.builtProps, 'kitchenGarden', player.motion.position) !== null;
     if (performance.now() >= this.hoverDueAt) {
       this.hoverDueAt = performance.now() + 80;
       const pointer = this.controls?.pointerPosition() ?? null;
@@ -5576,7 +5665,20 @@ export class Game {
         this.placing === null
           ? this.lootTargetAt(pointer, camera)
           : null;
-      this.options.canvas.style.cursor = this.hoveredLoot === null ? '' : 'pointer';
+      this.hoveredChest =
+        overWorld &&
+        pointer !== null &&
+        this.playing &&
+        !this.controls?.isPointerLocked &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen &&
+        !this.chestOpen &&
+        this.placing === null &&
+        this.chestAt(pointer, camera);
+      this.options.canvas.style.cursor =
+        this.hoveredLoot === null && !this.hoveredChest ? '' : 'pointer';
     }
     // Only a hint. The server decides who actually gets it.
     const reachable =
@@ -6400,7 +6502,7 @@ export class Game {
       hoveredLoot:
         this.hoveredChest && !this.chestOpen
           ? {
-              name: 'Storage chest',
+              name: this.space === OUTDOORS ? 'Trail pantry' : 'Storage chest',
               count: 0,
               detail: this.chestHoverDetail(),
               x: this.controls?.pointerPosition()?.x ?? 0,
@@ -6525,6 +6627,10 @@ export class Game {
             : this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
         return kind !== undefined && isHomeKind(kind) ? HOME_BUILD_RADII[kind] : null;
       })(),
+      homesteadProjects: this.builtProps
+        .filter((prop) => prop.yours)
+        .map((prop) => prop.kind)
+        .filter(isHomesteadProject),
       homeKind: (() => {
         const kind = this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
         return kind !== undefined && isHomeKind(kind) ? kind : null;
