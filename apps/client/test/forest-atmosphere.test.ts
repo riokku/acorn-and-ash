@@ -262,3 +262,23 @@ it('leaves more quiet space for birds in heavy precipitation', () => {
   expect(wet.length).toBeLessThan(dry.length);
   expect(wet[0]!.volume).toBeLessThan(dry[0]!.volume);
 });
+
+it('leaves bird calls quiet during nearby danger without hiding footsteps or replaying a backlog', () => {
+  const events: ForestSound[] = [];
+  const atmosphere = new ForestAtmosphere(
+    (event) => events.push(event),
+    () => 0.5,
+  );
+  for (let frame = 0; frame < 60 * 30; frame++)
+    atmosphere.update(1 / 60, { ...listener, threatened: true, x: frame * 0.01 }, environment);
+  expect(events.some((event) => event.kind === 'bird')).toBe(false);
+  expect(events.some((event) => event.kind === 'step')).toBe(true);
+  expect(
+    events.filter((event) => event.kind === 'rustle').every((event) => event.volume <= 0.11),
+  ).toBe(true);
+  events.length = 0;
+  atmosphere.update(1 / 60, { ...listener, x: 18, threatened: false }, environment);
+  expect(events.filter((event) => event.kind === 'bird').length).toBeLessThanOrEqual(1);
+  wait(atmosphere, { ...listener, x: 18 }, 25);
+  expect(events.some((event) => event.kind === 'bird')).toBe(true);
+});

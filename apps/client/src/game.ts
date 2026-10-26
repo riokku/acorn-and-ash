@@ -1061,6 +1061,7 @@ export class Game {
   private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
   private readonly worldAmbience = new WorldAmbience();
   private ambienceCover = 0;
+  private ambienceDangerUntil = 0;
   private ambienceCoverIn = 0;
   private forestEnvironment: ForestEnvironment | null = null;
   private wildernessProps: readonly PlacedProp[] = [];
@@ -2676,6 +2677,7 @@ export class Game {
     if (event.health < this.health && !event.adjusted) {
       this.signOutCountdown.noteHurt();
       if (!event.cold) {
+        this.ambienceDangerUntil = performance.now() + 3500;
         this.camera?.shake(TOOK_DAMAGE_SHAKE);
         playTookDamage();
       }
@@ -2739,6 +2741,7 @@ export class Game {
     }
     const now = performance.now();
     // Whirlwinds can confirm several victims together: one quiet cue per beat.
+    if (ours) this.ambienceDangerUntil = now + 3500;
     if (ours && now - this.lastConfirmedStrikeAt >= 70) {
       this.lastConfirmedStrikeAt = now;
       playConfirmedStrike(hit.heavy, hit.hitsLeft === 0);
@@ -3753,6 +3756,7 @@ export class Game {
           stridePhase: this.localCharacter?.stridePhase(),
           snow: seasonUniforms.snow.value > 0.5,
           frozenWater: this.lakeFrozen,
+          threatened: performance.now() < this.ambienceDangerUntil,
           indoors: this.space !== OUTDOORS,
           active: forestActive,
           night: isNight(dayProgress(this.estimatedServerTimeMs())),
@@ -3867,6 +3871,7 @@ export class Game {
           indoors: this.space !== OUTDOORS,
           frozen: this.lakeFrozen,
           underground: this.undergroundDark,
+          threatened: performance.now() < this.ambienceDangerUntil,
         },
         forestActive,
       );
@@ -4123,6 +4128,7 @@ export class Game {
       const dz = marker.z - me.z;
       const distance = Math.hypot(dx, dz);
       if (distance > THREAT_ARROWS_WITHIN) continue;
+      if (marker.attacking && distance < 14) this.ambienceDangerUntil = performance.now() + 3500;
       if (this.inView(marker.x, marker.y, marker.z, camera)) continue;
       const bearing = wrapAngle(camera.look.yaw - Math.atan2(-dx, -dz));
       threats.push({ bearing, distance, attacking: marker.attacking });
