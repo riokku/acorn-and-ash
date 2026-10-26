@@ -1,3 +1,4 @@
+import type { HomesteadAppearance } from '@acorn/shared';
 import { advanceForestWind } from './art/forest-wind';
 import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
 import { forageHabitatHint } from '@acorn/shared';
@@ -1038,6 +1039,7 @@ export class Game {
   private nearbyItem: ItemId | null = null;
   private hoveredLoot: LootTarget | null = null;
   private hoverDueAt = 0;
+  private readonly homesteadAppearances = new Map<number, HomesteadAppearance>();
   private chestOpen = false;
   private chestPending = false;
   private hoveredChest = false;
@@ -1994,6 +1996,7 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.homesteadAppearances.clear();
         this.fireFuelStates.clear();
         this.options.hud.publish({ warmth: null });
         this.clearRemoteActors();
@@ -2255,6 +2258,15 @@ export class Game {
           notice: message.notice,
         };
         this.expeditionPendingUntil = 0;
+        break;
+      }
+      case 'homesteadAppearance': {
+        this.homesteadAppearances.clear();
+        for (const project of message.projects) {
+          this.homesteadAppearances.set(project.id, project);
+          const model = this.builtMeshes.get(project.id);
+          if (model && 'setAppearance' in model) model.setAppearance(project);
+        }
         break;
       }
       case 'garden': {
@@ -3340,6 +3352,8 @@ export class Game {
         continue;
       }
       const built = createBuiltMesh(prop.kind);
+      const appearance = this.homesteadAppearances.get(prop.id);
+      if (appearance && 'setAppearance' in built) built.setAppearance(appearance);
       if ('setGardenPlots' in built && this.garden.homeId === prop.id)
         built.setGardenPlots(this.garden.plots);
       // Reflects whatever the server already thinks, not always unlit - a

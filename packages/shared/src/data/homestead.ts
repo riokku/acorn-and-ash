@@ -54,3 +54,11 @@ export function nearestHomesteadPiece<
   }
   return best;
 }
+
+/** Public dressing only: no private item identities or quantities leave the pantry. */
+export interface HomesteadAppearance {
+  readonly id: number;
+  readonly stocked: number;
+  readonly tool: import('./items').ItemId | null;
+  readonly plots: readonly import('../sim/garden').GardenPlot[];
+}

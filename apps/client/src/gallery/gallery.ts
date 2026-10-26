@@ -409,6 +409,8 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
 
   if (focus === 'homestead') {
     scene.add(createGalleryGround([], () => 0, 40, 40));
+    const { preloadItemModels } = await import('../scene/item-models');
+    await preloadItemModels();
     const { showHomestead } = await import('./homestead');
     showHomestead(renderer, scene, fireLights, params);
     return;

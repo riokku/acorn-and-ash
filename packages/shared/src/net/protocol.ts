@@ -1,3 +1,4 @@
+import type { HomesteadAppearance } from '../data/homestead';
 import { TRACKED_ANIMALS, MAX_VISIBLE_TRACKS, type FreshAnimalTrack } from '../sim/animal-tracks';
 import { KING_STORM_PHASES, type KingStormView } from '../sim/king-storm';
 import { SOUL_STORM } from '../data/world-boss';
@@ -78,7 +79,7 @@ import {
   type ChestResult,
 } from '../sim/chest';
 import { MAX_PLAYERS_PER_WORLD, MAX_TREE_GENERATION, SNAPSHOT_HZ, TICK_HZ } from '../constants';
-import { itemFromIndex, itemIndex, type ItemId } from '../data/items';
+import { ITEM_ORDER, itemFromIndex, itemIndex, type ItemId } from '../data/items';
 import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import {
   characterFromIndex,
@@ -1882,6 +1883,34 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         secondsToDamage: seconds === 255 ? null : seconds,
       };
     }
+    case ServerMessageType.HomesteadAppearance: {
+      if (data.byteLength < 2) return null;
+      const count = view.getUint8(1);
+      if (count > 128 || data.byteLength !== 2 + count * 15) return null;
+      const projects: HomesteadAppearance[] = [],
+        ids = new Set<number>();
+      for (let i = 0; i < count; i++) {
+        const at = 2 + i * 15,
+          id = view.getUint32(at, true),
+          stocked = view.getUint8(at + 4),
+          tool = view.getUint8(at + 5);
+        if (id === 0 || ids.has(id) || stocked > 5 || tool > ITEM_ORDER.length) return null;
+        ids.add(id);
+        const values = [];
+        for (let plot = 0; plot < 3; plot++) {
+          const crop = view.getUint8(at + 6 + plot * 3);
+          if (crop > GARDEN_CROPS.length) return null;
+          values.push({
+            crop: crop === 0 ? null : GARDEN_CROPS[crop - 1],
+            growTicks: view.getUint16(at + 7 + plot * 3, true),
+          });
+        }
+        const plots = gardenFromSaved(values);
+        if (plots === null) return null;
+        projects.push({ id, stocked, tool: tool === 0 ? null : ITEM_ORDER[tool - 1]!, plots });
+      }
+      return { type: 'homesteadAppearance', projects };
+    }
     case ServerMessageType.Garden: {
       if (
         data.byteLength !== 7 + GARDEN_PLOTS * 3 ||
@@ -2989,4 +3018,26 @@ export function encodeAnimalTracks(tracks: readonly FreshAnimalTrack[]): ArrayBu
     view.setUint8(at + 12, Math.max(1, Math.min(255, Math.round(track.freshness * 255))));
   }
   return buffer;
+}
+
+/** Bounded public presentation, sent alongside the one-second garden updates. */
+export function encodeHomesteadAppearance(projects: readonly HomesteadAppearance[]): ArrayBuffer {
+  const count = Math.min(projects.length, 128);
+  const view = new DataView(new ArrayBuffer(2 + count * 15));
+  view.setUint8(0, ServerMessageType.HomesteadAppearance);
+  view.setUint8(1, count);
+  projects.slice(0, count).forEach((project, index) => {
+    const at = 2 + index * 15;
+    view.setUint32(at, project.id, true);
+    view.setUint8(at + 4, project.stocked);
+    view.setUint8(at + 5, project.tool === null ? 0 : ITEM_ORDER.indexOf(project.tool) + 1);
+    project.plots.forEach((plot, index) => {
+      view.setUint8(
+        at + 6 + index * 3,
+        plot.crop === null ? 0 : GARDEN_CROPS.indexOf(plot.crop) + 1,
+      );
+      view.setUint16(at + 7 + index * 3, plot.growTicks, true);
+    });
+  });
+  return view.buffer;
 }

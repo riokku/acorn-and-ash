@@ -40,7 +40,6 @@ function world() {
 }
 function project(sim: WorldSimulation, kind: HomesteadProject, id = 8, x = 0, z = 0) {
   sim.restoreBuiltProps([
-    ...sim.builtPropsList().map((p) => ({ ...p, ownerKey: 'owner', litUntilMs: null })),
     { id, kind, x, z, yaw: 0, lit: false, ownerKey: 'owner', litUntilMs: null },
   ]);
 }
@@ -211,4 +210,48 @@ describe('a working homestead', () => {
     expect(nearestHomesteadPiece(pieces, 'trailPantry', { x: 0, z: 0 })?.id).toBe(8);
     expect(nearestHomesteadPiece(pieces, 'trailPantry', { x: 10, z: 0 })).toBeNull();
   });
+});
+
+it('shares restored dressing with visitors without revealing pantry contents, and respects interest range', async () => {
+  const { encodeHomesteadAppearance, decodeServerMessage } = await import('../src/index');
+  const sim = world();
+  project(sim, 'trailPantry');
+  project(sim, 'kitchenGarden', 9, 3, 0);
+  const slots = emptyChest();
+  slots[0] = { item: 'firstBellRelic', count: 1 };
+  slots[2] = { item: 'log', count: 10 };
+  slots[4] = { item: 'berry', count: 3 };
+  sim.restoreChest(8, slots);
+  sim.restoreGarden(9, [
+    { crop: 'berry', growTicks: GARDEN_GROW_TICKS / 2 },
+    { crop: null, growTicks: 0 },
+    { crop: 'flower', growTicks: 0 },
+  ]);
+  sim.addPlayer(2, undefined, 'visitor');
+  sim.placePlayer(2, { x: 0, y: 0, z: 2 }, 0);
+  const projects = sim.homesteadAppearanceOf(2);
+  expect(projects.find((p) => p.id === 8)).toEqual({
+    id: 8,
+    stocked: 2,
+    tool: null,
+    plots: [
+      { crop: null, growTicks: 0 },
+      { crop: null, growTicks: 0 },
+      { crop: null, growTicks: 0 },
+    ],
+  });
+  expect(projects.find((p) => p.id === 9)?.plots[0]?.growTicks).toBe(GARDEN_GROW_TICKS / 2);
+  expect(decodeServerMessage(encodeHomesteadAppearance(projects))).toEqual({
+    type: 'homesteadAppearance',
+    projects,
+  });
+  expect(JSON.stringify(projects)).not.toContain('firstBellRelic');
+  expect(sim.requestChest(2, { action: 'open' }).reason).toBe('private');
+  sim.placePlayer(2, { x: 200, y: 0, z: 200 }, 0);
+  expect(sim.homesteadAppearanceOf(2)).toEqual([]);
+  const encoded = encodeHomesteadAppearance(projects);
+  expect(decodeServerMessage(encoded.slice(0, -1))).toBeNull();
+  const bad = new Uint8Array(encoded.slice(0));
+  bad[6] = 6;
+  expect(decodeServerMessage(bad.buffer)).toBeNull();
 });

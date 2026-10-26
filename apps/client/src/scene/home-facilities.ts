@@ -1,5 +1,11 @@
 import * as THREE from 'three/webgpu';
-import { HOME_FACILITIES, homeHasFacility, type HomeKind, type GardenPlot } from '@acorn/shared';
+import {
+  HOME_FACILITIES,
+  GARDEN_GROW_TICKS,
+  homeHasFacility,
+  type HomeKind,
+  type GardenPlot,
+} from '@acorn/shared';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { createForageModel } from './forest-food';
@@ -128,7 +134,10 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
         plant.berry.show(plot?.crop === 'berry' ? 3 : 0);
         plant.mushroom.show(plot?.crop === 'mushroom' ? 3 : 0);
         plant.flower.visible = plot?.crop === 'flower';
-        const scale = plot?.growTicks === 0 ? 1 : 0.45;
+        const progress = plot?.crop
+          ? 1 - Math.min(GARDEN_GROW_TICKS, Math.max(0, plot.growTicks)) / GARDEN_GROW_TICKS
+          : 0;
+        const scale = 0.22 + 0.78 * progress;
         for (const group of [plant.berry.group, plant.mushroom.group, plant.flower])
           group.scale.setScalar(scale);
       });

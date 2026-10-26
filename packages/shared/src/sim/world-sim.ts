@@ -1,3 +1,4 @@
+import type { HomesteadAppearance } from '../data/homestead';
 import { equipmentPreyNotice } from '../data/equipment-specialties';
 import { mealWarmthBonus } from './meals';
 import { AnimalTrailHistory, type FreshAnimalTrack } from './animal-tracks';
@@ -2399,6 +2400,42 @@ export class WorldSimulation {
       (BUILDABLE_KINDS[home.kind].isHome || home.kind === 'trailPantry')
     )
       this.homeChests.set(homeId, slots);
+  }
+
+  /** Nearby yards are visible to visitors; only a coarse fill level is public. */
+  homesteadAppearanceOf(netId: number): HomesteadAppearance[] {
+    const runtime = this.players.get(netId);
+    const position = runtime?.entity.get(Position);
+    if (runtime?.space !== OUTDOORS || position === undefined) return [];
+    return this.builtProps
+      .filter((prop) => ['trailPantry', 'trailWorkbench', 'kitchenGarden'].includes(prop.kind))
+      .map((prop) => ({ prop, distance: Math.hypot(prop.x - position.x, prop.z - position.z) }))
+      .filter(({ distance }) => distance <= 60)
+      .sort((a, b) => a.distance - b.distance || a.prop.id - b.prop.id)
+      .slice(0, 128)
+      .map(({ prop }) => {
+        const owner = [...this.players.values()].find(
+          (player) =>
+            player.playerKey !== null && player.playerKey === this.builtPropOwner(prop.id),
+        );
+        return {
+          id: prop.id,
+          stocked:
+            prop.kind === 'trailPantry'
+              ? Math.ceil(
+                  (this.homeChests.get(prop.id) ?? []).filter((slot) => slot !== null).length / 2,
+                )
+              : 0,
+          tool:
+            prop.kind === 'trailWorkbench' && owner !== undefined
+              ? this.equippedItemOf(owner.netId)
+              : null,
+          plots: (prop.kind === 'kitchenGarden'
+            ? (this.homeGardens.get(prop.id) ?? emptyGarden())
+            : emptyGarden()
+          ).map((plot) => ({ ...plot })),
+        };
+      });
   }
 
   gardenStateOf(netId: number, reason: GardenReason | null = null): GardenState {
