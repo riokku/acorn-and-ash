@@ -131,6 +131,7 @@ interface HudProps {
   /** Delete this player's character (decision 0108). Rejects when it could not be done. */
   readonly onDeleteCharacter?: () => Promise<void>;
   /** Put on, take off or swap a piece of gear - see decision 0113. */
+  readonly onOpenEquipment?: () => void;
   readonly onGearChange?: (request: GearRequest) => void;
 }
 
@@ -157,6 +158,7 @@ export function Hud({
   onCancelSignOut,
   onDeleteCharacter,
   onGearChange,
+  onOpenEquipment,
   onJournalTabChange,
   onPickCraft,
   onCraftTabChange,
@@ -285,7 +287,21 @@ export function Hud({
         state.journalTab === 'fishing' ? (
           <FishingJournal state={state} onChange={onJournalTabChange} />
         ) : state.journalTab === 'expeditions' ? (
-          <ExpeditionPanel state={state} onChange={onJournalTabChange} onRequest={onExpedition} />
+          <ExpeditionPanel
+            state={state}
+            onChange={onJournalTabChange}
+            onRequest={onExpedition}
+            onFood={
+              onCraftTabChange && onJournalTabChange
+                ? () => {
+                    onCraftTabChange('food');
+                    onJournalTabChange('craft');
+                  }
+                : undefined
+            }
+            onGear={onOpenEquipment}
+            onPack={onToggleInventory}
+          />
         ) : state.journalTab === 'garden' ? (
           <GardenJournal state={state} onChange={onJournalTabChange} onUse={onGardenUse} />
         ) : state.journalTab === 'discoveries' ? (

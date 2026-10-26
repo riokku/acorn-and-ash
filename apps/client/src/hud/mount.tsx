@@ -55,6 +55,7 @@ export function mountHud(
     onDeleteCharacter?: () => Promise<void>;
   },
   gearActions?: {
+    onOpen?: () => void;
     onChange: (request: GearRequest) => void;
   },
 ): void {
@@ -81,6 +82,7 @@ export function mountHud(
         onCancelSignOut={accountActions?.onCancelSignOut}
         onDeleteCharacter={accountActions?.onDeleteCharacter}
         onGearChange={gearActions?.onChange}
+        onOpenEquipment={gearActions?.onOpen}
         onJournalTabChange={journalActions?.onTabChange}
         onCraftTabChange={journalActions?.onCraftTab}
         onCedarHuntPin={journalActions?.onCedarHuntPin}

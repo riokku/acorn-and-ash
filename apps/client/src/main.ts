@@ -160,7 +160,7 @@ const enterWorld = (identity: PlayerIdentity): void => {
       onCancelSignOut: () => game.cancelSignOut(),
       onDeleteCharacter: deleteCharacterAndRestart,
     },
-    { onChange: (request) => game.changeGear(request) },
+    { onChange: (request) => game.changeGear(request), onOpen: () => game.toggleCharacter() },
   );
   window.acornDebug = game.debug();
 
