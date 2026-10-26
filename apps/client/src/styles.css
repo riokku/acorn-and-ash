@@ -5479,3 +5479,43 @@ body {
 .home-upgrade-blueprint {
   color: #d5dfb3;
 }
+
+.gathering-nook {
+  border: 1px solid #788763;
+  background: #15251d;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 18px 0;
+}
+.gathering-nook summary {
+  cursor: pointer;
+  color: #f2dfad;
+}
+.gathering-nook summary span {
+  color: #bfcd9c;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-right: 12px;
+}
+.gathering-nook summary strong {
+  font:
+    21px Georgia,
+    serif;
+}
+.gathering-nook summary:focus-visible {
+  outline: 2px solid #f2dfad;
+  outline-offset: 6px;
+}
+.gathering-nook-pieces {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 14px 0 0;
+}
+.gathering-nook-pieces article {
+  padding: 14px;
+  border: 1px solid #526448;
+  border-radius: 8px;
+  background: #101e18;
+}

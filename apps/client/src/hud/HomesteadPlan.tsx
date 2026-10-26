@@ -9,18 +9,22 @@ import { ITEM_KINDS } from '../item-catalog';
 import type { HudState } from './store';
 import { BuildableIcon } from './item-icons';
 import { HomeUpgrade } from './HomeUpgrade';
+import { GatheringNook } from './GatheringNook';
+import type { BuildableKindId } from '@acorn/shared';
 
 export function HomesteadPlan({
   state,
   onBuild,
   onViewKeepsakes,
   onUpgrade,
+  onPlaceNook,
 }: {
   state: Pick<
     HudState,
     'homeKind' | 'carrying' | 'homesteadProjects' | 'home' | 'homeSkills' | 'homeStoredSupplies'
   >;
   onUpgrade?: () => void;
+  onPlaceNook?: (kind: BuildableKindId) => void;
   onViewKeepsakes?: () => void;
   onBuild?: (kind: HomesteadProject) => void;
 }) {
@@ -125,6 +129,7 @@ export function HomesteadPlan({
           );
         })}
       </div>
+      <GatheringNook state={state} onPlace={onPlaceNook} />
       {onViewKeepsakes && (
         <button type="button" onClick={onViewKeepsakes}>
           Your adventures · see keepsakes

@@ -1068,6 +1068,7 @@ export function CraftPanel({
             state={state}
             onViewKeepsakes={() => onTabChange?.('trophies')}
             onUpgrade={() => onPick?.({ kind: 'build', buildable: 'cabin' })}
+            onPlaceNook={(buildable) => onPick?.({ kind: 'build', buildable })}
             onBuild={(buildable) => onPick?.({ kind: 'build', buildable })}
           />
         ) : null}
@@ -1128,7 +1129,9 @@ export function hint(state: HudState): string {
   if (fighting !== null) return fighting;
   // Settled in, E gets you up rather than doing anything else it would.
   if (state.resting === 'chair')
-    return 'Resting at home · safe and sheltered · move or press E to get up';
+    return state.home === null
+      ? 'Taking a seat outdoors · move or press E to get up'
+      : 'Resting at home · safe and sheltered · move or press E to get up';
   if (state.resting === 'bed')
     return 'Snug in bed · safe and sheltered · move or press E to get up';
   // Sat on the bare ground is only a rest for the eyes: nothing is sheltered.
@@ -1176,6 +1179,13 @@ export function hint(state: HudState): string {
   if (state.nearTreasure === 'needsShovel') return 'Buried treasure · equip a shovel to dig it up';
   const cookingNow = campfireCookingHint(state);
   if (cookingNow !== null) return cookingNow;
+  if (
+    (state.restingNearby === 'bench' || state.restingNearby === 'benchFull') &&
+    !(state.equippedItem !== null && isFood(state.equippedItem) && state.hunger < HUNGER_MAX)
+  )
+    return state.restingNearby === 'benchFull'
+      ? 'Both bench seats are in use · join your friends when a seat opens'
+      : 'Press E to take a seat on the cedar bench · room for two';
   if (state.nearCampfire === 'unlit')
     return state.firePanel?.remainingMs === 0
       ? 'Add a log to light the fire · E or use the fuel meter'

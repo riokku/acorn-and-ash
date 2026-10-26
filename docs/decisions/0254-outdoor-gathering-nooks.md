@@ -1,0 +1,7 @@
+# Outdoor gathering nooks with existing furniture
+
+Benches and timber tables existed only as indoor decorations, despite already having outdoor rendering and solid footprints. Make both available in the Yard building list using their existing models, costs and catalog IDs. Keep rugs indoors. Add an expandable Home-journal guide connecting seating, tables, paths, a fueled fire and lighting, with material checks and links to the normal placement preview.
+
+Each cedar bench has two deterministic seats. Players approach a clear standing spot in front, press E, and use the existing sit/rise animation; moving or pressing E gets up. The server checks reach, height, grounding, clear collision and occupied seats. A seat stays reserved while rising, disconnect releases it, and occupied benches cannot be moved or reclaimed. Visitors may sit; only the owner may move/reclaim furniture. Existing loot and cooking interactions keep priority. A full bench claims the button so it cannot accidentally put out a nearby fire.
+
+Use existing action/position snapshots to draw local and remote seated bodies at the same terrain-aware spot, without a new protocol or saved seat state. Outdoor seating grants no indoor shelter or extra survival bonus; nearby fueled fires retain their existing warmth rules. No timers or new art assets. Porch, weapon-rack and beehive models remain work for a Blender-connected art session under decision 0105.

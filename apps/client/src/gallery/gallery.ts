@@ -422,7 +422,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     const { preloadItemModels } = await import('../scene/item-models');
     await preloadItemModels();
     const { showHomestead } = await import('./homestead');
-    showHomestead(renderer, scene, fireLights, params);
+    await showHomestead(renderer, scene, fireLights, params);
     return;
   }
   if (focus === 'tree-models') {

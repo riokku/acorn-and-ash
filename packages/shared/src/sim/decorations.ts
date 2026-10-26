@@ -64,7 +64,7 @@ export function isDecorationKind(kind: BuildableKindId): kind is DecorationKind 
   return (DECORATION_KINDS as readonly string[]).includes(kind);
 }
 export function isIndoorOnlyKind(kind: BuildableKindId): boolean {
-  return kind === 'cedarBench' || kind === 'timberTable' || kind === 'wovenRug';
+  return kind === 'wovenRug';
 }
 export function decorationCollider(piece: HomeDecoration): Collider | null {
   return piece.kind === 'wovenRug'
