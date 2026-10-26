@@ -1,3 +1,4 @@
+import type { HomesteadAppearance } from '../data/homestead';
 import type { FreshAnimalTrack } from '../sim/animal-tracks';
 import type { KingStormView } from '../sim/king-storm';
 import type { AllyView } from '../sim/cooperation';
@@ -723,7 +724,7 @@ export type MealMessage = MealState & { readonly type: 'meal' };
 export type ServerMessage =
   | {
       readonly type: 'homesteadAppearance';
-      readonly projects: readonly import('../data/homestead').HomesteadAppearance[];
+      readonly projects: readonly HomesteadAppearance[];
     }
   | { readonly type: 'animalTracks'; readonly tracks: readonly FreshAnimalTrack[] }
   | { readonly type: 'kingStorm'; readonly storm: KingStormView | null }

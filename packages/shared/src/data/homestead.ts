@@ -1,3 +1,5 @@
+import type { ItemId } from './items';
+import type { GardenPlot } from '../sim/garden';
 import type { BuildableKindId } from './buildables';
 
 /** Permanent placed projects, never a second quest currency or a repeatable reward. */
@@ -59,6 +61,6 @@ export function nearestHomesteadPiece<
 export interface HomesteadAppearance {
   readonly id: number;
   readonly stocked: number;
-  readonly tool: import('./items').ItemId | null;
-  readonly plots: readonly import('../sim/garden').GardenPlot[];
+  readonly tool: ItemId | null;
+  readonly plots: readonly GardenPlot[];
 }
