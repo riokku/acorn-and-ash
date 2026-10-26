@@ -107,6 +107,7 @@ import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/sh
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
 import { type WoodlandCreature } from './scene/woodland-creatures';
+import { KEEPSAKES, isKeepsake } from './hud/keepsakes';
 import { createGuardianTrophy } from './scene/guardian-trophy';
 import {
   WOODLAND_ENCOUNTERS,
@@ -1043,6 +1044,7 @@ export class Game {
   private chestOpen = false;
   private chestPending = false;
   private hoveredChest = false;
+  private hoveredTrophy: BuiltPropView | null = null;
   private interactionNote: string | null = null;
   private interactionNoteUntil = 0;
   private nearGatherSpot: ItemId | null = null;
@@ -1392,7 +1394,15 @@ export class Game {
   ): boolean {
     if (this.space !== OUTDOORS) return false;
     const piece = nearestHomesteadPiece(this.builtProps, kind, this.motionOrOrigin());
-    const model = piece === null ? undefined : this.builtMeshes.get(piece.id);
+    return piece !== null && this.outdoorBuiltHit(point, camera, piece.id);
+  }
+
+  private outdoorBuiltHit(
+    point: { x: number; y: number },
+    camera: FollowCamera,
+    id: number,
+  ): boolean {
+    const model = this.builtMeshes.get(id);
     if (!model) return false;
     this.clickNdc.set((point.x / innerWidth) * 2 - 1, (-point.y / innerHeight) * 2 + 1);
     this.clickRaycaster.setFromCamera(this.clickNdc, camera.camera);
@@ -5691,6 +5701,36 @@ export class Game {
         !this.chestOpen &&
         this.placing === null &&
         this.chestAt(pointer, camera);
+      this.hoveredTrophy =
+        overWorld &&
+        pointer !== null &&
+        this.playing &&
+        !this.controls?.isPointerLocked &&
+        !this.inventoryOpen &&
+        !this.mapOpen &&
+        !this.craftMenuOpen &&
+        !this.buildMenuOpen &&
+        !this.chestOpen &&
+        this.placing === null &&
+        this.hoveredLoot === null &&
+        !this.hoveredChest
+          ? (this.builtProps
+              .filter(
+                (prop) =>
+                  isKeepsake(prop.kind) &&
+                  Math.hypot(
+                    prop.x - player.motion.position.x,
+                    prop.z - player.motion.position.z,
+                  ) <= 5,
+              )
+              .sort(
+                (a, b) =>
+                  Math.hypot(a.x - position.x, a.z - position.z) -
+                    Math.hypot(b.x - position.x, b.z - position.z) || a.id - b.id,
+              )
+              .slice(0, 8)
+              .find((prop) => this.outdoorBuiltHit(pointer, camera, prop.id)) ?? null)
+          : null;
       this.options.canvas.style.cursor =
         this.hoveredLoot === null && !this.hoveredChest ? '' : 'pointer';
     }
@@ -6522,23 +6562,39 @@ export class Game {
               x: this.controls?.pointerPosition()?.x ?? 0,
               y: this.controls?.pointerPosition()?.y ?? 0,
             }
-          : this.hoveredLoot === null ||
-              !this.playing ||
-              this.inventoryOpen ||
-              this.mapOpen ||
-              this.placing !== null ||
-              this.controls?.isPointerLocked
-            ? null
-            : {
-                name:
-                  this.hoveredLoot.request.kind === 'patch' && this.hoveredLoot.item === 'reed'
-                    ? 'Mature reeds'
-                    : ITEM_KINDS[this.hoveredLoot.item].displayName,
-                count: this.hoveredLoot.count,
-                detail: this.lootDetail(this.hoveredLoot),
+          : this.space === OUTDOORS &&
+              this.hoveredTrophy !== null &&
+              this.playing &&
+              !this.inventoryOpen &&
+              !this.mapOpen &&
+              !this.craftMenuOpen &&
+              !this.buildMenuOpen &&
+              this.placing === null &&
+              !this.controls?.isPointerLocked
+            ? {
+                name: BUILDABLE_KINDS[this.hoveredTrophy.kind].displayName,
+                count: 0,
+                detail: `${this.hoveredTrophy.yours ? 'Your keepsake' : 'A neighbor’s keepsake'} · ${KEEPSAKES.find((entry) => entry.kind === this.hoveredTrophy!.kind)?.story ?? ''}`,
                 x: this.controls?.pointerPosition()?.x ?? 0,
                 y: this.controls?.pointerPosition()?.y ?? 0,
-              },
+              }
+            : this.hoveredLoot === null ||
+                !this.playing ||
+                this.inventoryOpen ||
+                this.mapOpen ||
+                this.placing !== null ||
+                this.controls?.isPointerLocked
+              ? null
+              : {
+                  name:
+                    this.hoveredLoot.request.kind === 'patch' && this.hoveredLoot.item === 'reed'
+                      ? 'Mature reeds'
+                      : ITEM_KINDS[this.hoveredLoot.item].displayName,
+                  count: this.hoveredLoot.count,
+                  detail: this.lootDetail(this.hoveredLoot),
+                  x: this.controls?.pointerPosition()?.x ?? 0,
+                  y: this.controls?.pointerPosition()?.y ?? 0,
+                },
       firePanel: this.firePanelState(),
       craftPending: this.craftFeedback.item,
       interactionNote:
@@ -6641,6 +6697,15 @@ export class Game {
             : this.builtProps.find((prop) => prop.yours && isHomeKind(prop.kind))?.kind;
         return kind !== undefined && isHomeKind(kind) ? HOME_BUILD_RADII[kind] : null;
       })(),
+      trophyDisplays: [
+        ...this.builtProps
+          .filter((prop) => prop.yours && isKeepsake(prop.kind))
+          .map((prop) => prop.kind),
+        ...this.decorations
+          .filter((piece) => this.builtProps.some((home) => home.id === piece.homeId && home.yours))
+          .map((piece) => piece.kind)
+          .filter(isKeepsake),
+      ],
       homesteadProjects: this.builtProps
         .filter((prop) => prop.yours)
         .map((prop) => prop.kind)

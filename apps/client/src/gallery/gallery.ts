@@ -331,6 +331,11 @@ const SCENERY: readonly { kind: PropKindId; x: number; z: number; scale: number 
 export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const focus = params.get('gallery') ?? '';
+  if (focus === 'keepsakes') {
+    const { showKeepsakes } = await import('./keepsakes');
+    showKeepsakes(canvas, params);
+    return;
+  }
   if (focus === 'homestead' && params.get('view') === 'plan') {
     const { showHomesteadPlan } = await import('./homestead-plan');
     showHomesteadPlan(canvas, params);

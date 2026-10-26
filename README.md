@@ -657,6 +657,10 @@ the ten-minute benefit and replaces any other special meal. Berry tea also adds
 clothes and shelter still matter. Preview at `?gallery=meal-preparation`.
 See [meal preparation](docs/decisions/0235-meal-preparation.md).
 
+### Stories brought home
+
+Open **C → Trophies** (also linked from **C → Home**) for the stories and real acquisition routes behind eight existing earned displays. A count tracks distinct kinds currently placed in your yard or inside your own home. Choose a ready keepsake to start ordinary outdoor placement; use **B** for indoor decoration. Hover an outdoor trophy within five metres to read its story. Reclaiming changes the current collection count, without erasing or granting an achievement. Preview the collection at `/?gallery=keepsakes` (`&before` for the previous recipe list).
+
 ### Make This Place Home
 
 Open **C → Home** to turn your first tent into a working trailstead. Build three

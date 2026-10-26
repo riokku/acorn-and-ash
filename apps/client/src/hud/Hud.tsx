@@ -1,3 +1,5 @@
+import { TrophyCollection } from './TrophyCollection';
+import { isKeepsake } from './keepsakes';
 import { HomesteadPlan } from './HomesteadPlan';
 import { CedarHuntPlan, CedarHuntTracker } from './CedarHuntPlan';
 import { MealPreparation, mealPlan } from './MealPreparation';
@@ -898,6 +900,7 @@ export function CraftPanel({
   onTabChange,
   navigation,
   guidedMeals = true,
+  guidedKeepsakes = true,
   onCedarHuntPin,
 }: {
   state: HudState;
@@ -906,6 +909,7 @@ export function CraftPanel({
   onTabChange?: (tab: CraftTabId) => void;
   navigation: React.ReactNode;
   guidedMeals?: boolean;
+  guidedKeepsakes?: boolean;
   onCedarHuntPin?: (pinned: boolean) => void;
 }): React.JSX.Element {
   const entries = craftMenuEntries(state);
@@ -1044,14 +1048,24 @@ export function CraftPanel({
         {tab === 'home' ? (
           <HomesteadPlan
             state={state}
+            onViewKeepsakes={() => onTabChange?.('trophies')}
             onBuild={(buildable) => onPick?.({ kind: 'build', buildable })}
           />
+        ) : null}
+        {guidedKeepsakes && tab === 'trophies' ? (
+          <TrophyCollection state={state} onPick={onPick} />
         ) : null}
         {tab === 'gear' ? <CedarHuntPlan state={state} onPin={onCedarHuntPin} /> : null}
         {CRAFT_GROUPS.map((group) => {
           const items = shown.filter(
             (entry) =>
               entry.group === group.id &&
+              !(
+                guidedKeepsakes &&
+                tab === 'trophies' &&
+                entry.action.kind === 'build' &&
+                isKeepsake(entry.action.buildable)
+              ) &&
               !(
                 tab === 'home' &&
                 entry.action.kind === 'build' &&
