@@ -90,7 +90,9 @@ test(
       .click();
     await expect(page.getByLabel('Warmth', { exact: true })).toHaveValue('60');
     await page.getByLabel('Warmth', { exact: true }).fill('70');
-    await page.getByLabel('Filter by rarity').selectOption('rare');
+    // Use the rare item this test published, so new winter items cannot change the empty result.
+    await page.getByRole('searchbox', { name: 'Find an item' }).fill('River axe');
+    await page.getByLabel('Filter by rarity').selectOption('common');
     await expect(page.getByText('No matching items.')).toBeVisible();
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect(page.getByRole('searchbox', { name: 'Find an item' })).toHaveValue('');
