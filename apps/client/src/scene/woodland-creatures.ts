@@ -8,6 +8,8 @@ export type WoodlandCreatureKind = 'elk' | 'curiousRaccoon' | 'woodlandGuardian'
 export interface WoodlandPose {
   readonly speed: number;
   readonly alert?: boolean;
+  readonly tense?: boolean;
+  readonly fleeing?: boolean;
   readonly windup?: boolean;
   readonly attacking?: boolean;
   readonly recovering?: boolean;
@@ -26,12 +28,15 @@ export interface WoodlandCreature {
 export function createWoodlandCreature(
   kind: WoodlandCreatureKind,
   palette?: 'cedar',
+  phaseSeed = 0,
 ): WoodlandCreature {
   const group = new THREE.Group();
   group.name = kind;
   const torso = new THREE.Group();
   const head = new THREE.Group();
   const neck = new THREE.Group();
+  neck.name = 'neck';
+  head.name = 'head';
   const tail = new THREE.Group();
   const legs: { upper: THREE.Group; lower: THREE.Group; phase: number }[] = [];
   const arms: THREE.Group[] = [];
@@ -338,10 +343,12 @@ export function createWoodlandCreature(
         ),
     );
   }
-  let time = 0,
+  let time = (((phaseSeed * 0.173) % 17) + 17) % 17,
     gait = 0,
     speed = 0,
     alert = 0,
+    tense = 0,
+    fleeing = 0,
     wound = 0,
     windup = 0,
     strike = 0,
@@ -357,6 +364,8 @@ export function createWoodlandCreature(
       const distance = targetSpeed * dt + ((speed - targetSpeed) * blend) / 9;
       speed += (targetSpeed - speed) * blend;
       alert += ((pose.alert || pose.windup ? 1 : 0) - alert) * blend;
+      tense += ((pose.tense ? 1 : 0) - tense) * blend;
+      fleeing += ((pose.fleeing ? 1 : 0) - fleeing) * blend;
       wound += ((pose.hurt ? 1 : 0) - wound) * blend;
       windup += ((pose.windup ? 1 : 0) - windup) * blend;
       strike += ((pose.attacking ? 1 : 0) - strike) * blend;
@@ -370,25 +379,37 @@ export function createWoodlandCreature(
         Math.sin(time * 2.1) * 0.008 +
         Math.sin(gait) ** 2 * 0.025 * moving -
         defeat * restingHeight * 0.32;
-      torso.rotation.x = wound * -0.17 - windup * 0.14 + strike * 0.24 + defeat * 0.45;
+      torso.rotation.x =
+        wound * -0.17 -
+        windup * 0.14 +
+        strike * 0.24 +
+        defeat * 0.45 +
+        tense * 0.045 * (1 - moving);
       torso.rotation.z = Math.sin(gait) * 0.018 * moving + defeat * 1.1;
       for (const leg of legs) {
         const step = Math.sin(gait + leg.phase);
-        leg.upper.rotation.x = step * amplitude + defeat * 0.9;
-        leg.lower.rotation.x = Math.max(0, -step) ** 2 * amplitude * 1.25 - defeat * 0.6;
+        const brace = tense * (1 - moving) * 0.07;
+        leg.upper.rotation.x = step * amplitude + defeat * 0.9 - brace;
+        leg.lower.rotation.x =
+          Math.max(0, -step) ** 2 * amplitude * 1.25 - defeat * 0.6 + brace * 1.4;
       }
       const grazing =
         Math.max(0, (Math.sin(time * 0.45 - 2) - 0.3) / 0.7) * (1 - moving) * (1 - alert);
-      neck.rotation.x = kind === 'elk' ? -1.85 * grazing - alert * 0.12 : 0;
-      head.rotation.y = Math.sin(time * 0.9) * (1 - moving) * 0.12;
+      neck.rotation.x = kind === 'elk' ? -1.85 * grazing - alert * 0.12 - tense * 0.12 : 0;
+      head.rotation.y = Math.sin(time * 0.9) * (1 - moving) * 0.12 * (1 - alert * 0.85);
       head.rotation.x =
         kind === 'curiousRaccoon'
           ? Math.sin(time * 2.5) * (1 - moving) * 0.07 - alert * 0.1
           : (kind === 'elk' ? grazing * 0.75 : 0) - alert * 0.08;
       tail.rotation.y = Math.sin(time * 1.8 + gait * 0.2) * 0.16;
-      tail.rotation.x = kind === 'curiousRaccoon' ? alert * -0.15 : 0;
+      tail.rotation.x =
+        kind === 'curiousRaccoon' ? alert * -0.15 : kind === 'elk' ? fleeing * -0.4 : 0;
       ears.forEach((ear, index) => {
-        ear.rotation.z = Math.sin(time * 0.7 + index * 2) * 0.06 + alert * (index ? -0.12 : 0.12);
+        ear.rotation.z =
+          Math.sin(time * 0.7 + index * 2) * 0.06 +
+          alert * (index ? -0.12 : 0.12) +
+          tense * (index ? -0.12 : 0.12) -
+          fleeing * (index ? -0.2 : 0.2);
       });
       arms.forEach((arm, index) => {
         arm.rotation.x =

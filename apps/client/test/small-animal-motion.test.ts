@@ -92,3 +92,15 @@ it('fits a small creature to sloping ground without translating its root or samp
   expect(groundHeight.mock.calls.length).toBeLessThan(90);
   model.dispose();
 });
+
+it('braces a listening rabbit before flight and releases the pose smoothly', () => {
+  const { model } = animal('rabbit');
+  const motion = model.group.children[0]!;
+  for (let frame = 0; frame < 90; frame++)
+    model.update(1 / 60, { speed: 0, alert: true, tense: true });
+  expect(motion.scale.y).toBeLessThan(0.98);
+  expect(motion.rotation.x).toBeLessThan(-0.035);
+  for (let frame = 0; frame < 180; frame++) model.update(1 / 60, { speed: 0 });
+  expect(Math.abs(motion.rotation.x)).toBeLessThan(0.00001);
+  model.dispose();
+});

@@ -156,3 +156,4 @@ export * from './data/cedar-hunt';
 export * from './data/world-admin';
 
 export * from './world/outdoor-seating';
+export * from './sim/wildlife-awareness';

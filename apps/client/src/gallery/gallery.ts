@@ -166,12 +166,15 @@ const EXHIBITS: readonly Exhibit[] = [
     view: kind === 'curiousRaccoon' ? 1.8 : kind === 'elk' ? 6 : 5.5,
     yaw: Math.PI,
     create: () => {
-      const model = createWoodlandCreature(kind);
       const params = new URLSearchParams(window.location.search);
       const motion = params.get('motion') ?? 'idle';
+      // Start the calm study in its grazing phase; gameplay phases vary by animal id.
+      const model = createWoodlandCreature(kind, undefined, motion === 'graze' ? 40 : 0);
       const pose = {
-        speed: motion === 'walk' ? 1.2 : motion === 'run' ? 5 : 0,
-        alert: motion === 'alert',
+        speed: motion === 'walk' ? 1.2 : motion === 'run' || motion === 'flee' ? 5 : 0,
+        alert: ['alert', 'listen', 'tense', 'flee'].includes(motion),
+        tense: motion === 'tense',
+        fleeing: motion === 'flee',
         windup: motion === 'windup',
         attacking: motion === 'attack',
         hurt: motion === 'hurt',

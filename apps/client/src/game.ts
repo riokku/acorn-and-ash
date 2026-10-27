@@ -173,6 +173,7 @@ import {
   type SupportCell,
   isFreeToInteract,
   restingPlaceInReach,
+  PREY_POSE,
   outdoorSeatInReach,
   RiseFrom,
   POND_FISH,
@@ -6644,6 +6645,8 @@ export class Game {
         critter.update(deltaSeconds, {
           speed: pose.action & 8 ? 0 : pose.travelSpeed,
           alert: (pose.action & 4) !== 0,
+          tense: (pose.action & PREY_POSE.tense) !== 0,
+          fleeing: (pose.action & PREY_POSE.fleeing) !== 0,
           windup: (pose.action & 3) === 1,
           attacking: (pose.action & 3) === 2 && pose.actionAge < 5,
           recovering: (pose.action & 3) === 2 && pose.actionAge >= 5,

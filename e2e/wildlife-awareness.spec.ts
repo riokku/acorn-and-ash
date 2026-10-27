@@ -21,12 +21,21 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ body: '' }));
   let timer: ReturnType<typeof setInterval> | undefined;
+  let started = false;
+  let stepBack = () => {};
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     const send = (data: ArrayBuffer) => socket.send(Buffer.from(data));
     const refresh = () =>
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
       );
+    stepBack = () => {
+      const pose = animal();
+      const spot = { x: pose.x, z: pose.z + shared.ANIMAL_KINDS.rabbit.safeRadius + 4 };
+      sim.placePlayer(1, { ...spot, y: sim.collision.terrain.heightAt(spot.x, spot.z) }, 0);
+      send(shared.encodeSpace(0, spot.x, spot.z, 0));
+      refresh();
+    };
     send(shared.encodeWelcome(1, sim.seed, 0, Date.now()));
     send(shared.encodeSpace(0, start.x, start.z, 0));
     refresh();
@@ -37,7 +46,7 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
       if (request?.type === 'input') sim.queueInputs(1, request.inputs);
     });
     timer = setInterval(() => {
-      sim.step(Date.now());
+      if (started) sim.step(Date.now());
       refresh();
     }, shared.TICK_MILLISECONDS);
   });
@@ -49,6 +58,8 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120000,
     });
+    // Start after loading so the short first-look cue is not consumed behind the curtain.
+    started = true;
     await expect.poll(() => animal().action & 4).toBe(4);
     expect(Math.hypot(animal().vx, animal().vz)).toBe(0);
     await expect
@@ -60,8 +71,8 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
     await page.keyboard.down('KeyW');
     try {
       await expect
-        .poll(() => Math.hypot(animal().vx, animal().vz), { timeout: 5000 })
-        .toBeCloseTo(shared.ANIMAL_KINDS.rabbit.fleeSpeed, 1);
+        .poll(() => animal().action & shared.PREY_POSE.fleeing, { timeout: 5000 })
+        .toBe(shared.PREY_POSE.fleeing);
     } finally {
       await page.keyboard.up('KeyW');
     }
@@ -73,6 +84,12 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
         ),
       )
       .toBeLessThan(den.z - 0.3);
+    stepBack();
+    await expect
+      .poll(() => animal().action & (4 | shared.PREY_POSE.tense | shared.PREY_POSE.fleeing), {
+        timeout: 6000,
+      })
+      .toBe(0);
     expect(errors).toEqual([]);
   } finally {
     if (timer) clearInterval(timer);
