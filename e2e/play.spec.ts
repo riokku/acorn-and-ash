@@ -2107,6 +2107,18 @@ test('you can gather flowers and plant something pretty for the garden', async (
     timeout: 120_000,
   });
 
+  // Check the relevant choices before the long walk. Yard is extensible: adding
+  // a bench or another buildable must not break the gathering/planting test.
+  await page.keyboard.press('KeyC');
+  await page.locator('.craft-tabs').getByRole('button', { name: 'Yard', exact: true }).click();
+  const yardNames = page.locator('.hud-journal-entry-name');
+  for (const name of ['Flower bed', 'Fence', 'Garden path', 'Woodland flower planter'])
+    await expect(yardNames.filter({ hasText: name })).toBeVisible();
+  await page.keyboard.press('KeyC');
+  await expect
+    .poll(async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true))
+    .toBe(false);
+
   // Remembered before wandering off to a flower patch, the same reason the
   // campfire test remembers it: guaranteed clear of every landmark to build on.
   const spawnSpot = await page.evaluate(() => window.acornDebug?.localPosition() ?? { x: 0, z: 0 });
@@ -2130,19 +2142,6 @@ test('you can gather flowers and plant something pretty for the garden', async (
     [spawnSpot.x, spawnSpot.z],
   );
   await expect.poll(async () => page.evaluate(() => window.acornDebug?.canBuild())).toBe(true);
-
-  // One Craft menu lists everything. Its Yard page holds the flower bed, the
-  // fence, the garden path stone (decision 0048) and the planter, and the
-  // lantern sits on the Camp page that is built from below.
-  await page.keyboard.press('KeyC');
-  await page.locator('.craft-tabs').getByRole('button', { name: 'Yard', exact: true }).click();
-  await expect(page.locator('.hud-journal-entry')).toHaveCount(4);
-  await expect(page.locator('.hud-journal')).toContainText('Fence');
-  await expect(page.locator('.hud-journal')).toContainText('Garden path');
-  await page.keyboard.press('KeyC');
-  await expect
-    .poll(async () => page.evaluate(() => window.acornDebug?.craftMenuOpen() ?? true))
-    .toBe(false);
 
   // The lantern needs a building area, so the first tent goes up before it.
   const tent = await buildFirstTent(page, spawnSpot);
