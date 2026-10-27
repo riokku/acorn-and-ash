@@ -1,3 +1,4 @@
+import { cabinFinish } from './cabin-finish';
 import { housingDetails } from './housing-details';
 import { createHomeDecoration } from './home-decoration';
 import { createLogsModel } from './ground-items';
@@ -128,6 +129,8 @@ export function createCabin(logCapacity = 20): Cabin {
 
   const model = builder.build();
   model.group.add(housingDetails('Cabin'));
+  const finish = cabinFinish({ cedar: boards, trim, iron, glass, stone });
+  model.group.add(finish.joinery.group);
   const base = supports.build();
   const woodpile = createLogsModel(logCapacity, true);
   woodpile.show(0);
@@ -140,7 +143,10 @@ export function createCabin(logCapacity = 20): Cabin {
   storage.position.x = -2.9;
   woodpile.group.position.y = 0.42;
   storage.add(shelf.group, woodpile.group);
-  model.group.add(base.group, storage);
+  model.group.add(base.group, finish.footing.group, storage);
+  const groundFooting = finish.footing.group.children.map((part) =>
+    groundBuildingSupport(part as THREE.Mesh, 0.09),
+  );
   const groundSupports = base.group.children.map((part) =>
     groundBuildingSupport(part as THREE.Mesh, 0.09, (part as THREE.Mesh).material === stone),
   );
@@ -166,7 +172,7 @@ export function createCabin(logCapacity = 20): Cabin {
     group: model.group,
     setStoredLogs: (count) => woodpile.show(count),
     groundOn(heightAt) {
-      for (const fit of groundSupports) fit(heightAt);
+      for (const fit of [...groundSupports, ...groundFooting]) fit(heightAt);
       groundLooseBuildingPart(storage, heightAt);
     },
     setLit(lit) {
@@ -187,6 +193,8 @@ export function createCabin(logCapacity = 20): Cabin {
       glass.dispose();
       model.dispose();
       base.dispose();
+      finish.joinery.dispose();
+      finish.footing.dispose();
       woodpile.dispose();
       shelf.dispose();
     },

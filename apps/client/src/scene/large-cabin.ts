@@ -1,6 +1,6 @@
 import { housingDetails } from './housing-details';
 import * as THREE from 'three/webgpu';
-import { paintedMaterial } from '../art/materials';
+import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { createCabin, type Cabin } from './cabin';
 import { groundBuildingSupport } from './building-ground';
@@ -18,6 +18,7 @@ export function createLargeCabin(): Cabin {
   const step = new ModelBuilder();
   const boards = paintedMaterial('wood', { tint: 0xd2b18b, roughness: 0.9 });
   const trim = paintedMaterial('wood', { tint: 0xf2dfc3, roughness: 0.85 });
+  const iron = plainMaterial(0x383832, { roughness: 0.75 });
   const shingles = paintedMaterial('shingles', { roughness: 0.95 });
   for (let i = 0; i < 10; i++)
     builder.add(
@@ -26,8 +27,12 @@ export function createLargeCabin(): Cabin {
       placed(0, 0.14, 2.15 + i * 0.1),
     );
   for (const x of [-1.62, 1.62]) {
-    for (const z of [2.17, 3.07])
+    for (const z of [2.17, 3.07]) {
       posts.add(trim, plankGeometry(0.11, 2.1, 0.11, 'y', 1, 980 + z), placed(x, 1.17, z));
+      // Collars and cedar capitals finish the exposed porch posts.
+      builder.add(iron, new THREE.BoxGeometry(0.135, 0.08, 0.135), placed(x, 0.28, z));
+      builder.add(trim, plankGeometry(0.19, 0.07, 0.19, 'x', 0.8, 981), placed(x, 2.12, z));
+    }
     builder.add(trim, plankGeometry(0.1, 0.12, 0.95, 'z', 1, 984), placed(x, 0.95, 2.63));
     for (let i = 0; i < 4; i++)
       builder.add(
