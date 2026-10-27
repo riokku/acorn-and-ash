@@ -2905,6 +2905,8 @@ export class WorldSimulation {
           } else if (wantsToToggleCampfire) {
             this.tryEat(runtime);
           }
+        } else if (wantsToToggleCampfire && this.tryShareMeal(runtime, scratch.position)) {
+          // A held two-serving meal offers supper to the nearby eligible companion.
         } else if (
           wantsToInteract &&
           (this.tryInspectRumor(runtime, scratch.position, wantsToToggleCampfire) ||
@@ -4708,6 +4710,10 @@ export class WorldSimulation {
 
   private eatItem(runtime: PlayerRuntime, item: ItemId): void {
     removeItem(runtime.inventory, item);
+    this.nourishPlayer(runtime, item);
+  }
+
+  private nourishPlayer(runtime: PlayerRuntime, item: ItemId): void {
     runtime.hunger = eat(runtime.hunger, item);
     if (isMealItem(item)) {
       runtime.meal = startMeal(item);
@@ -6802,6 +6808,7 @@ export class WorldSimulation {
       at = observer?.entity.get(Position);
     if (!observer || !at || observer.space !== OUTDOORS) return [];
     const allies: AllyView[] = [];
+    const supperGuest = this.sharedMealGuest(observer, at);
     const rescues = new Map<number, { rescuerId: number; rescueTicks: number }>();
     for (const helper of this.players.values()) {
       if (helper.rescueTicks > (rescues.get(helper.rescueTarget)?.rescueTicks ?? 0))
@@ -6820,6 +6827,7 @@ export class WorldSimulation {
       };
       allies.push({
         netId: ally.netId,
+        ...(ally === supperGuest ? { shareMeal: true as const } : {}),
         health: ally.action.kind === ActionKind.KnockedOut ? 0 : displayedHealth(ally.health),
         maxHealth: characterStats(ally.worn, undefined, this.equipmentBonuses).vitality,
         downTicks: Math.max(0, ally.rescueUntilTick - this.tick),
@@ -6832,6 +6840,59 @@ export class WorldSimulation {
       });
     }
     return allies;
+  }
+
+  /** A deliberate offer uses two real servings and never replaces an active meal. */
+  private sharedMealGuest(host: PlayerRuntime, at: Readonly<Vec3>): PlayerRuntime | null {
+    const item = host.equippedItem;
+    if (
+      item === null ||
+      !isMealItem(item) ||
+      countOf(host.inventory, item) < 2 ||
+      host.space !== OUTDOORS ||
+      host.health <= 0 ||
+      host.action.kind !== ActionKind.Idle ||
+      host.cast !== null ||
+      host.boatId !== null ||
+      host.meal.ticksLeft > 0
+    )
+      return null;
+    let guest: PlayerRuntime | null = null;
+    let distance: number = RESCUE.radius;
+    for (const ally of this.players.values()) {
+      const p = ally.entity.get(Position);
+      if (
+        ally === host ||
+        !p ||
+        ally.space !== OUTDOORS ||
+        ally.health <= 0 ||
+        ally.action.kind !== ActionKind.Idle ||
+        ally.cast !== null ||
+        ally.boatId !== null ||
+        ally.meal.ticksLeft > 0 ||
+        Math.abs(p.y - at.y) > 1.5
+      )
+        continue;
+      const gap = Math.hypot(p.x - at.x, p.z - at.z);
+      if (gap < distance || (gap === distance && (!guest || ally.netId < guest.netId))) {
+        guest = ally;
+        distance = gap;
+      }
+    }
+    return guest;
+  }
+
+  private tryShareMeal(host: PlayerRuntime, at: Readonly<Vec3>): boolean {
+    const guest = this.sharedMealGuest(host, at),
+      item = host.equippedItem;
+    if (!guest || item === null || !isMealItem(item)) return false;
+    // Validate both participants before mutating either inventory or benefit.
+    removeItem(host.inventory, item, 2);
+    this.nourishPlayer(host, item);
+    this.nourishPlayer(guest, item);
+    this.equipEvents.push(host.netId);
+    host.interactSpent = true;
+    return true;
   }
 
   private tryRescue(helper: PlayerRuntime, at: Readonly<Vec3>, held: boolean): boolean {

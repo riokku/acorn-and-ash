@@ -2670,7 +2670,9 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         if (
           downTicks > RESCUE.windowTicks ||
           rescueTicks > RESCUE.holdTicks ||
-          view.getUint8(o + 9) > 1 ||
+          view.getUint8(o + 9) > 3 ||
+          ((view.getUint8(o + 9) & 2) !== 0 &&
+            ((view.getUint8(o + 9) & 1) === 0 || downTicks > 0 || view.getUint8(o + 2) === 0)) ||
           view.getUint8(o + 2) > view.getUint8(o + 3)
         )
           return null;
@@ -2681,7 +2683,8 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
           downTicks,
           rescueTicks,
           rescuerId: view.getUint16(o + 7),
-          inReach: view.getUint8(o + 9) === 1,
+          inReach: (view.getUint8(o + 9) & 1) !== 0,
+          ...((view.getUint8(o + 9) & 2) !== 0 ? { shareMeal: true as const } : {}),
         });
       }
       return { type: 'allies', players };
@@ -2976,7 +2979,7 @@ export function encodeAllies(players: readonly AllyView[]): ArrayBuffer {
     view.setUint16(o + 4, p.downTicks);
     view.setUint8(o + 6, p.rescueTicks);
     view.setUint16(o + 7, p.rescuerId);
-    view.setUint8(o + 9, p.inReach ? 1 : 0);
+    view.setUint8(o + 9, (p.inReach ? 1 : 0) | (p.shareMeal ? 2 : 0));
   }
   return data;
 }

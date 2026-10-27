@@ -1,9 +1,18 @@
-import { RESCUE, TICK_HZ } from '@acorn/shared';
+import { RESCUE, TICK_HZ, ITEM_KINDS, isMealItem, type ItemId } from '@acorn/shared';
 import type { HudState } from './store';
 
-export function Allies({ allies }: { allies: NonNullable<HudState['allies']> }) {
+export function Allies({
+  allies,
+  heldMeal = null,
+}: {
+  allies: NonNullable<HudState['allies']>;
+  heldMeal?: ItemId | null;
+}) {
   const down = allies.find((ally) => ally.self && ally.downTicks > 0);
-  const nearby = allies.filter((ally) => !ally.self).slice(0, 8);
+  const nearby = allies
+    .filter((ally) => !ally.self)
+    .sort((a, b) => Number(!!b.shareMeal) - Number(!!a.shareMeal))
+    .slice(0, 8);
   if (!down && nearby.length === 0) return null;
   return (
     <aside className="allies" aria-label="Nearby adventurers" data-testid="allies">
@@ -33,6 +42,8 @@ export function Allies({ allies }: { allies: NonNullable<HudState['allies']> }) 
                 value={ally.rescueTicks}
               />
             </>
+          ) : ally.shareMeal && heldMeal && isMealItem(heldMeal) ? (
+            <span>E · Share {ITEM_KINDS[heldMeal].displayName} · uses 2 servings, one each</span>
           ) : ally.health / ally.maxHealth <= 0.3 ? (
             <span>Low health</span>
           ) : null}
