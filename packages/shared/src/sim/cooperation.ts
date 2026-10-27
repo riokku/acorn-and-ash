@@ -14,4 +14,6 @@ export interface AllyView {
   readonly rescueTicks: number;
   readonly rescuerId: number;
   readonly inReach: boolean;
+  /** This is the one eligible nearby companion for the held two-serving meal. */
+  readonly shareMeal?: true;
 }

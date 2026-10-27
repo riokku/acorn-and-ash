@@ -496,7 +496,7 @@ export function Hud({
           <span>{state.strongholdApproach.detail}</span>
         </aside>
       ) : null}
-      {showingWorld ? <Allies allies={state.allies ?? []} /> : null}
+      {showingWorld ? <Allies allies={state.allies ?? []} heldMeal={state.equippedItem} /> : null}
       {showingWorld && state.kingStorm && !state.kingVictory ? (
         <KingStorm storm={state.kingStorm} ward={state.kingWard} />
       ) : null}
