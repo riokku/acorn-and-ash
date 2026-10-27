@@ -3,8 +3,9 @@
 PRs 336 and 338 passed every package and browser check, then failed while
 creating their preview servers: Cloudflare's free account allows 100 Durable
 Object namespaces. A read-only audit found 99 namespaces, including 91 servers
-for closed PRs 10–213. These servers predated the automatic closure cleanup.
-The existing cleanup handles newer closed previews; it was never retroactive.
+for closed PRs 10–213. These servers survived an old merge/deploy race: cleanup ran before their
+previews existed. PR 219 fixed that race (decision 0163), but historical
+leftovers remained. The newer lifecycle guards stay in place.
 
 Before uploading previews, serialize a bounded capacity recovery job. With at
 most 80 namespaces, it needs only one read. Above that threshold, inventory all
