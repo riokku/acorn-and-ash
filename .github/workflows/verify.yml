@@ -34,7 +34,7 @@ jobs:
       - name: Formatting
         run: pnpm format:check
       - name: Preview lifecycle tests
-        run: node --test tools/preview-pr-state.test.mjs
+        run: node --test tools/preview-pr-state.test.mjs tools/preview-namespaces.test.mjs
       - name: Asset licences
         timeout-minutes: 5
         run: pnpm check:assets
