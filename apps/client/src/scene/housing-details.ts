@@ -27,8 +27,8 @@ export function preloadHousingDetails(): Promise<void> {
               : source;
             if (/Canvas/.test(source.name) && material instanceof THREE.MeshStandardNodeMaterial) {
               material.colorNode = triplanarTexture(texture(artTexture('burlap')))
-                .rgb.mul(0.16)
-                .add(color(source.color).mul(0.85));
+                .rgb.mul(0.18)
+                .add(color(/Tent/.test(source.name) ? 0x9da986 : 0xcdb995).mul(0.82));
             }
             material.side = THREE.DoubleSide;
             materials.set(source, material);
