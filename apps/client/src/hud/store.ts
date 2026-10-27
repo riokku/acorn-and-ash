@@ -1,3 +1,4 @@
+import type { HomecomingSummary } from './homecoming';
 import type { HomesteadProject } from '@acorn/shared';
 import type { KingVictoryView } from './KingVictory';
 import type { KingStormView } from '@acorn/shared';
@@ -232,6 +233,7 @@ export interface HudState {
   readonly discardNews: string | null;
   /** Everything just gained, for the toasts down the side (see decision 0061). */
   readonly toasts: readonly ToastView[];
+  readonly homecoming?: HomecomingSummary | null;
   readonly pickupNotice: PickupNotice | null;
   /** Whether dropping something would work here: out of doors, where it has somewhere to land. */
   readonly canDrop: boolean;
