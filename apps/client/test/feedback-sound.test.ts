@@ -53,9 +53,11 @@ vi.mock('../src/audio/sound', () => ({
   effectsVolume: audio.volume,
   soundContext: audio.getContext,
   noiseBuffer: () => null,
+  registerSustainedEffect: vi.fn(() => vi.fn()),
 }));
 import {
   playCollection,
+  playDigContact,
   playPickupRefused,
   playTreeLanding,
   playConfirmedStrike,
@@ -88,12 +90,14 @@ describe('feedback audio', () => {
 
   it('keeps muted effects and distant landings silent without creating voices', () => {
     audio.volume.mockReturnValue(0);
+    playDigContact(1);
     playPickupRefused();
     playConfirmedStrike(true, true);
     playLastBell();
     playTreeLanding(1);
     playCollection('log', true);
     audio.volume.mockReturnValue(1);
+    playDigContact(0);
     playTreeLanding(0);
     playCollection('flower', true, 0);
     expect(audio.getContext).not.toHaveBeenCalled();
@@ -125,5 +129,18 @@ it('keeps confirmed impacts restrained and releases every bell voice', () => {
   for (const voice of audio.ended) {
     voice.onended?.();
     expect(voice.disconnect).toHaveBeenCalled();
+  }
+});
+
+it('scales excavation contact by distance and cleans up both voices', () => {
+  playDigContact(1);
+  const loud = [...audio.peaks];
+  audio.peaks.length = 0;
+  playDigContact(0.2);
+  audio.peaks.forEach((peak, i) => expect(peak).toBeCloseTo(loud[i]! * 0.2));
+  expect(audio.ended).toHaveLength(4);
+  for (const source of audio.ended) {
+    source.onended?.();
+    expect(source.disconnect).toHaveBeenCalled();
   }
 });

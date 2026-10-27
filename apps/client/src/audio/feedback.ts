@@ -1,5 +1,5 @@
 import type { ItemId } from '@acorn/shared';
-import { effectsVolume, noiseBuffer, soundContext } from './sound';
+import { effectsVolume, noiseBuffer, soundContext, registerSustainedEffect } from './sound';
 
 /** A quiet descending double knock, distinct from gaining an item or taking damage. */
 export function playPickupRefused(): void {
@@ -8,6 +8,16 @@ export function playPickupRefused(): void {
   if (context === null) return;
   tone(context, context.currentTime, 330, 250, 0.09, 0.095);
   tone(context, context.currentTime + 0.1, 235, 180, 0.13, 0.075);
+}
+
+/** A brief scrape only after a new excavation is confirmed. */
+export function playDigContact(volume: number): void {
+  if (volume <= 0 || effectsVolume() <= 0) return;
+  const context = soundContext();
+  if (context === null) return;
+  const start = context.currentTime;
+  tone(context, start, 145, 65, 0.09, volume * 0.09);
+  noise(context, start, 0.18, 1600, volume * 0.12);
 }
 
 /** Material-specific confirmations: heavy wood, a dry twig click, or a delicate flower pluck. */
@@ -67,7 +77,9 @@ function tone(
   source.frequency.exponentialRampToValueAtTime(to, start + duration);
   envelope(gain, start, duration, volume);
   source.connect(gain).connect(context.destination);
+  const unregister = registerSustainedEffect(() => source.stop());
   source.onended = () => {
+    unregister();
     source.disconnect();
     gain.disconnect();
   };
@@ -91,7 +103,9 @@ function noise(
   const gain = context.createGain();
   envelope(gain, start, duration, volume);
   source.connect(filter).connect(gain).connect(context.destination);
+  const unregister = registerSustainedEffect(() => source.stop());
   source.onended = () => {
+    unregister();
     source.disconnect();
     filter.disconnect();
     gain.disconnect();
