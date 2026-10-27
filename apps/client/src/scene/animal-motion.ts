@@ -19,6 +19,7 @@ export function animateSmallAnimal(
     phase = ((phaseSeed * 0.61803399) % 1) * Math.PI * 2,
     speed = 0,
     alert = 0,
+    tense = 0,
     windup = 0,
     strike = 0,
     defeat = 0,
@@ -67,6 +68,7 @@ export function animateSmallAnimal(
       seconds += dt;
       phase += distance * (kind === 'rabbit' ? 4.5 : 4);
       alert += ((pose.alert ? 1 : 0) - alert) * blend;
+      tense += ((pose.tense ? 1 : 0) - tense) * blend;
       windup += ((pose.windup ? 1 : 0) - windup) * blend;
       strike += ((pose.attacking ? 1 : 0) - strike) * blend;
       defeat += ((pose.defeated ? 1 : 0) - defeat) * blend;
@@ -81,7 +83,9 @@ export function animateSmallAnimal(
       motion.rotation.z = kind === 'rabbit' ? defeat * 0.8 : wave * lift * 0.018 + defeat * 1.1;
       // Breathing keeps feet at their original base rather than floating the idle body.
       motion.scale.y = 1 + Math.sin(seconds * 2.1) * 0.005 * (1 - moving) * (1 - defeat);
-      motion.scale.x = motion.scale.z = 1 + alert * 0.006;
+      motion.scale.x = motion.scale.z = 1 + alert * 0.006 + tense * 0.008;
+      motion.scale.y -= tense * 0.035 * (1 - moving);
+      motion.rotation.x -= tense * 0.04 * (1 - moving);
       if (kind === 'coyote') {
         // Keep feet rooted; the presentation never changes authoritative position or reach.
         motion.scale.y -= windup * 0.12 + recovering * 0.025;

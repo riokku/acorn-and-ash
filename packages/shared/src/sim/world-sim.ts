@@ -9,7 +9,14 @@ import {
   forageHabitatCount,
   type ForageHabitat,
 } from './foraging-habitats';
-import { stepWildlifeAwareness, wildlifeNoticeRadius } from './wildlife-awareness';
+import {
+  PREY_POSE,
+  quietWildlifeListening,
+  stepWildlifeListening,
+  stepWildlifeAwareness,
+  wildlifeNoticeRadius,
+  type WildlifeListening,
+} from './wildlife-awareness';
 import { CROWNBREAKER_HOLD, KING_REMNANTS } from '../world/hollow-king';
 import { streamWaterDepthAt } from '../world/stream';
 import { wildlifeCover, wildlifePauseMs, fleePastCover } from './wildlife-habitat';
@@ -1168,6 +1175,7 @@ interface AnimalRuntime {
   engaged: boolean;
   awareness: number;
   attentive: boolean;
+  listening: WildlifeListening;
   /** Where it is ambling toward, while calm. Meaningless while engaged. */
   targetX: number;
   targetZ: number;
@@ -2118,6 +2126,7 @@ export class WorldSimulation {
       engaged: false,
       awareness: 0,
       attentive: false,
+      listening: quietWildlifeListening(),
       // Starting already "arrived" makes the first tick draw a real wander
       // target rather than needing a special case for a fresh spawn.
       targetX: den.x,
@@ -3264,6 +3273,7 @@ export class WorldSimulation {
           runtime.engaged = false;
           runtime.awareness = 0;
           runtime.attentive = false;
+          runtime.listening = quietWildlifeListening();
           runtime.attackState = 'none';
           runtime.attackTargetNetId = null;
           runtime.circled = false;
@@ -3345,6 +3355,26 @@ export class WorldSimulation {
             ? predatorPosition
             : playerPosition;
 
+        if (kind.fleeSpeed !== undefined) {
+          runtime.listening = stepWildlifeListening(
+            runtime.listening,
+            approach && playerPosition
+              ? {
+                  id: approach.player.netId,
+                  x: playerPosition.x,
+                  z: playerPosition.z,
+                  distance: playerDistance,
+                  speed: approach.speed,
+                }
+              : null,
+            { alertRadius: kind.alertRadius * equipmentPreyNotice(approach?.player.worn ?? {}) },
+            TICK_SECONDS,
+            runtime.engaged ? alarmPosition : null,
+          );
+          runtime.attentive = runtime.awareness > 0 || runtime.listening.remaining > 0;
+        }
+        const listeningPoint =
+          kind.fleeSpeed !== undefined ? runtime.listening.point : playerPosition;
         let direction: Direction2D;
         let speed: number;
         if (runtime.kind === 'curiousRaccoon' && runtime.engaged && playerPosition !== null) {
@@ -3362,12 +3392,12 @@ export class WorldSimulation {
             runtime.cover,
           );
           speed = kind.fleeSpeed ?? 0;
-        } else if (runtime.attentive && playerPosition !== null) {
+        } else if (runtime.attentive && listeningPoint !== null) {
           direction = { x: 0, z: 0 };
           speed = 0;
           const targetYaw = Math.atan2(
-            -(playerPosition.x - position.x),
-            -(playerPosition.z - position.z),
+            -(listeningPoint.x - position.x),
+            -(listeningPoint.z - position.z),
           );
           const turn = Math.atan2(
             Math.sin(targetYaw - facing.yaw),
@@ -7831,7 +7861,18 @@ export class WorldSimulation {
           action: animal?.caught
             ? 8
             : (animal?.engaged || animal?.attentive ? 4 : 0) |
-              (animal?.attackState === 'windup' ? 1 : animal?.attackState === 'cooldown' ? 2 : 0),
+              (animal?.attackState === 'windup' ? 1 : animal?.attackState === 'cooldown' ? 2 : 0) |
+              (animal &&
+              (ANIMAL_KINDS[animal.kind] as AnimalKind).fleeSpeed !== undefined &&
+              !animal.engaged &&
+              animal.awareness >= 0.65
+                ? PREY_POSE.tense
+                : 0) |
+              (animal &&
+              (ANIMAL_KINDS[animal.kind] as AnimalKind).fleeSpeed !== undefined &&
+              animal.engaged
+                ? PREY_POSE.fleeing
+                : 0),
           actionAge:
             animal?.attackState === 'cooldown'
               ? Math.min(

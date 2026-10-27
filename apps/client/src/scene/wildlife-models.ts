@@ -9,7 +9,7 @@ import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatu
 export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCreature {
   switch (kind) {
     case 'cedarStag': {
-      const model = createWoodlandCreature('elk', 'cedar');
+      const model = createWoodlandCreature('elk', 'cedar', phaseSeed);
       model.group.name = 'Old Cedar Stag';
       model.group.scale.setScalar(1.15);
       return model;
@@ -33,6 +33,6 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
     case 'elk':
     case 'curiousRaccoon':
     case 'woodlandGuardian':
-      return createWoodlandCreature(kind);
+      return createWoodlandCreature(kind, undefined, phaseSeed);
   }
 }

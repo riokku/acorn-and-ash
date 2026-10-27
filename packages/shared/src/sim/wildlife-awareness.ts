@@ -40,3 +40,49 @@ export function stepWildlifeAwareness(
   );
   return { awareness: next, attentive: distance < radius * 1.5 || next > 0, fleeing: next >= 1 };
 }
+
+/** Additive prey bits in the existing animal action byte; threat attack bits stay unchanged. */
+export const PREY_POSE = { tense: 16, fleeing: 32 } as const;
+export const WILDLIFE_LISTEN_SECONDS = 2.5;
+
+export interface WildlifeListening {
+  readonly sourceId: number | null;
+  readonly point: { readonly x: number; readonly z: number } | null;
+  readonly remaining: number;
+  readonly inRange: boolean;
+}
+export function quietWildlifeListening(): WildlifeListening {
+  return { sourceId: null, point: null, remaining: 0, inRange: false };
+}
+export interface WildlifeDisturbance {
+  readonly id: number;
+  readonly x: number;
+  readonly z: number;
+  readonly distance: number;
+  readonly speed: number;
+}
+
+/** Remember where a disturbance happened; quiet observers outside sight do not stay tracked. */
+export function stepWildlifeListening(
+  previous: WildlifeListening,
+  source: WildlifeDisturbance | null,
+  kind: Pick<AnimalKind, 'alertRadius'>,
+  seconds: number,
+  fleeingFrom: { readonly x: number; readonly z: number } | null = null,
+): WildlifeListening {
+  const inRange =
+    source !== null && source.distance < wildlifeNoticeRadius(kind, source.speed) * 1.5;
+  const firstNotice = inRange && (!previous.inRange || previous.sourceId !== source?.id);
+  const heard = inRange && source !== null && source.speed > 0.15;
+  const seen = source !== null && source.distance < wildlifeNoticeRadius(kind, 0);
+  const stimulus = fleeingFrom ?? (firstNotice || heard || seen ? source : null);
+  return {
+    sourceId: source?.id ?? null,
+    point: stimulus === null ? previous.point : { x: stimulus.x, z: stimulus.z },
+    remaining:
+      stimulus === null
+        ? Math.max(0, previous.remaining - Math.max(0, seconds))
+        : WILDLIFE_LISTEN_SECONDS,
+    inRange,
+  };
+}

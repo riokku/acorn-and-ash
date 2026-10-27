@@ -104,3 +104,39 @@ it('notices a runner beyond a closer quiet observer', () => {
   }
   expect(Math.hypot(animal().vx, animal().vz)).toBeCloseTo(kind.fleeSpeed);
 });
+
+it('lets a quiet observer remain without keeping prey locked in its watching pose forever', () => {
+  const { sim, player, animal } = setup();
+  player(1, 4);
+  sim.step(1000);
+  expect(animal().action & 4).toBe(4);
+  for (let i = 1; i <= 54; i++) sim.step(1000 + i * 50);
+  expect(animal().action & 4).toBe(0);
+});
+
+it('sends a tense warning before flight and keeps the old alert bit', () => {
+  const { sim, player, animal, at, den } = setup();
+  player(1, 20);
+  sim.addPlayer(2);
+  sim.placePlayer(2, { ...at, x: at.x - 3, z: at.z + 6 }, 0);
+  let warned = false,
+    fled = false;
+  for (let i = 0; i < 24; i++) {
+    sim.placeAnimal(den.id, at);
+    sim.queueInput(2, createInput(i + 1, 1, 0, 0, PlayerButton.Sprint));
+    sim.step(1000 + i * 50);
+    const flags = animal().action;
+    if (flags & 16) {
+      warned = true;
+      expect(flags & 4).toBe(4);
+      expect(flags & 32).toBe(0);
+    }
+    if (flags & 32) {
+      fled = true;
+      expect(warned).toBe(true);
+      expect(flags & 4).toBe(4);
+    }
+  }
+  expect(warned).toBe(true);
+  expect(fled).toBe(true);
+});
