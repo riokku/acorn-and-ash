@@ -157,3 +157,5 @@ export * from './data/world-admin';
 
 export * from './world/outdoor-seating';
 export * from './sim/wildlife-awareness';
+
+export * from './sim/rumors';

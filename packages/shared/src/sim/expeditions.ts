@@ -1,3 +1,4 @@
+import { RUMOR_EXPEDITIONS, RUMOR_IDS } from './rumors';
 import type { ItemId } from '../data/items';
 import type { DiscoveryKind } from '../data/discoveries';
 import type { HomeKind } from '../data/housing';
@@ -7,6 +8,7 @@ import { hashSeed } from '../rng';
 export const BONEHOLLOW_EXPEDITION_ID = 8;
 export const SUNREACH_EXPEDITION_ID = 11;
 export type ExpeditionEvent =
+  | { readonly kind: 'rumor'; readonly step: number }
   | { readonly kind: 'sunreach'; readonly step: 'outpost' | 'cairn' | 'vault' }
   | { readonly kind: 'bonehollow'; readonly step: 'arrival' | 'watch' | 'captain' }
   | { readonly kind: 'gather'; readonly item: ItemId; readonly region?: 'mountain' | 'lake' }
@@ -242,6 +244,7 @@ export const EXPEDITIONS: readonly ExpeditionDefinition[] = [
       { item: 'leatherBoots', count: 1 },
     ],
   },
+  ...RUMOR_EXPEDITIONS,
 ];
 export interface ExpeditionState {
   cycle: number;
@@ -313,10 +316,21 @@ export function expeditionOffers(
   const tier = home === 'largeCabin' ? 3 : home === 'cabin' ? 2 : home === 'teepee' ? 1 : 0;
   const eligible = EXPEDITIONS.filter(
     (def) =>
-      def.id !== BONEHOLLOW_EXPEDITION_ID && def.id !== SUNREACH_EXPEDITION_ID && def.tier <= tier,
+      def.id !== BONEHOLLOW_EXPEDITION_ID &&
+      def.id !== SUNREACH_EXPEDITION_ID &&
+      !RUMOR_IDS.some((id) => id === def.id) &&
+      def.tier <= tier,
   ).map((def) => def.id);
   const start = hashSeed(seed, 'expeditions', owner, state.cycle) % eligible.length;
-  return [eligible[start]!, SUNREACH_EXPEDITION_ID, BONEHOLLOW_EXPEDITION_ID];
+  const rumor =
+    RUMOR_IDS[
+      (hashSeed(seed, 'rumor-offer', owner) + Math.floor(state.cycle / 2)) % RUMOR_IDS.length
+    ]!;
+  return [
+    state.cycle % 2 === 0 ? rumor : eligible[start]!,
+    SUNREACH_EXPEDITION_ID,
+    BONEHOLLOW_EXPEDITION_ID,
+  ];
 }
 export function progressExpedition(
   state: ExpeditionState,
@@ -326,6 +340,7 @@ export function progressExpedition(
   if (!Number.isInteger(count) || count <= 0 || state.active === null) return false;
   const mission = EXPEDITIONS[state.active];
   if (!mission) return false;
+  if (event.kind === 'rumor' && event.step !== state.progress.findIndex((n) => n < 1)) return false;
   let changed = false;
   mission.objectives.forEach((goal, i) => {
     if (

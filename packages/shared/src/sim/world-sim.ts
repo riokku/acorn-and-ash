@@ -1,3 +1,4 @@
+import { rumorInteraction, rumorOutcome } from './rumors';
 import { benchSeats, outdoorSeatInReach } from '../world/outdoor-seating';
 import type { HomesteadAppearance } from '../data/homestead';
 import { equipmentPreyNotice } from '../data/equipment-specialties';
@@ -2906,7 +2907,8 @@ export class WorldSimulation {
           }
         } else if (
           wantsToInteract &&
-          this.tryInspectSurvey(runtime, scratch.position, wantsToToggleCampfire)
+          (this.tryInspectRumor(runtime, scratch.position, wantsToToggleCampfire) ||
+            this.tryInspectSurvey(runtime, scratch.position, wantsToToggleCampfire))
         ) {
           // Personal clues claim E, including the shovel requirement.
         } else if (wantsToToggleCampfire && this.tryInspectDiscovery(runtime, scratch.position)) {
@@ -7414,7 +7416,8 @@ export class WorldSimulation {
     }
     if (!expeditionComplete(state)) return result('unfinished');
     const copy = { ...runtime.inventory };
-    for (const reward of EXPEDITIONS[state.active!]!.rewards) {
+    for (const reward of rumorOutcome(state, this.seed)?.rewards ??
+      EXPEDITIONS[state.active!]!.rewards) {
       // A permanent tool or a fully expanded pack must never trap an outing.
       const limit = ITEM_KINDS[reward.item].maxCarry;
       const count = Math.min(
@@ -7520,6 +7523,47 @@ export class WorldSimulation {
       runtime.discoveriesFound |= 1 << site.id;
       this.discoveryChanges.set(runtime.netId, 'none');
     }
+  }
+
+  private tryInspectRumor(
+    runtime: PlayerRuntime,
+    position: Readonly<Vec3>,
+    fresh: boolean,
+  ): boolean {
+    if (runtime.space !== OUTDOORS || runtime.health <= 0 || runtime.cast !== null) return false;
+    const interaction = rumorInteraction(
+      runtime.expedition,
+      this.discoverySites,
+      position,
+      this.equippedItemOf(runtime.netId),
+    );
+    if (
+      interaction === null ||
+      Math.abs(position.y - this.collision.terrain.heightAt(position.x, position.z)) > 2.5
+    )
+      return false;
+    if (!interaction.ready || !fresh) return true;
+    if (
+      interaction.index === 2 &&
+      this.raids.raidersList().some((r) => {
+        const at = this.raids.positionOf(r.id);
+        return (
+          r.hitsLeft > 0 &&
+          at !== null &&
+          Math.hypot(at.x - interaction.site.x, at.z - interaction.site.z) < 12
+        );
+      })
+    ) {
+      this.discoveryChanges.set(runtime.netId, 'guarded');
+      return true;
+    }
+    this.advanceExpedition(runtime, { kind: 'rumor', step: interaction.index }, 1);
+    this.gestureEvents.push({
+      netId: runtime.netId,
+      gesture: interaction.index === 2 ? Gesture.Dig : Gesture.Reach,
+      item: interaction.index === 2 ? 'shovel' : null,
+    });
+    return true;
   }
 
   private tryInspectSurvey(

@@ -1,3 +1,5 @@
+import { RumorTrail } from './RumorTrail';
+import { rumorDefinition, rumorInteraction } from '@acorn/shared';
 import { HomecomingCard } from './Homecoming';
 import { TrophyCollection } from './TrophyCollection';
 import { isKeepsake } from './keepsakes';
@@ -225,8 +227,13 @@ export function Hud({
       !state.craftMenuOpen &&
       !state.buildMenuOpen ? (
         <>
-          <BonehollowTrail state={state} />
-          <SunreachTrail state={state} />
+          <RumorTrail state={state} />
+          {!rumorDefinition(state.expedition?.active ?? null) ? (
+            <>
+              <BonehollowTrail state={state} />
+              <SunreachTrail state={state} />
+            </>
+          ) : null}
         </>
       ) : null}
       {showingWorld &&
@@ -1158,6 +1165,11 @@ export function hint(state: HudState): string {
         ? 'Follow a lead · C to close'
         : craftMenuHint();
   if (state.charging) return 'Charging a heavy swing · release to strike';
+  const rumor = state.expedition
+    ? rumorInteraction(state.expedition, state.discoverySites, state.position, state.equippedItem)
+    : null;
+  if (state.home === null && rumor !== null)
+    return rumor.ready ? `Press E to ${rumor.hint.toLowerCase()}` : rumor.hint;
   const survey =
     state.expedition === undefined
       ? null

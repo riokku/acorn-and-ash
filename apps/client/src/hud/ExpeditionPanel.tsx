@@ -1,3 +1,4 @@
+import { rumorDefinition, rumorOutcome, rumorStage } from '@acorn/shared';
 import { ExpeditionPreparation } from './ExpeditionPreparation';
 import { ITEM_KINDS } from '../item-catalog';
 import {
@@ -44,12 +45,20 @@ export function ExpeditionPanel({
     notice: 'none' as const,
   };
   const active = journey.active === null ? undefined : EXPEDITIONS[journey.active];
+  const rumor = rumorDefinition(active?.id ?? null);
+  const nextClue = rumorStage(journey);
   const atBoard = state.nearExpeditionBoard === true,
     pending = state.expeditionPending === true;
   const reward = (id: number) =>
-    EXPEDITIONS[id]!.rewards.map(
-      (r) => `${r.count} ${ITEM_KINDS[r.item].pluralName.toLowerCase()}`,
-    ).join(' · ');
+    (rumorDefinition(id)
+      ? rumorOutcome({ ...journey, active: id }, state.worldSeed ?? 0)!.rewards
+      : EXPEDITIONS[id]!.rewards
+    )
+      .map(
+        (r) =>
+          `${r.count} ${(r.count === 1 ? ITEM_KINDS[r.item].displayName : ITEM_KINDS[r.item].pluralName).toLowerCase()}`,
+      )
+      .join(' · ');
   return (
     <section className="hud-journal expedition-panel" aria-label="Expedition board">
       <div className="hud-journal-header">
@@ -66,9 +75,27 @@ export function ExpeditionPanel({
       </p>
       {active ? (
         <article className="expedition-active">
-          <span className="expedition-eyebrow">Your chosen outing</span>
+          <span className="expedition-eyebrow">
+            {rumorDefinition(active.id) ? 'Rumors of the Wild' : 'Your chosen outing'}
+          </span>
           <h3>{active.name}</h3>
-          <p>{active.hint}</p>
+          <p>
+            {rumor && nextClue < 0
+              ? 'The trail bundle is recovered. Return to your home board to collect the find.'
+              : rumor && nextClue > 0
+                ? rumor.clues[nextClue - 1]
+                : active.hint}
+          </p>
+          {rumor && journey.progress[0]! > 0 ? (
+            <details className="rumor-notes">
+              <summary>Collected clues</summary>
+              <ol>
+                {rumor.clues.map((clue, index) =>
+                  (journey.progress[index] ?? 0) > 0 ? <li key={index}>{clue}</li> : null,
+                )}
+              </ol>
+            </details>
+          ) : null}
           <ul className="expedition-objectives">
             {active.objectives.map((objective, i) => (
               <li key={i}>
@@ -93,7 +120,17 @@ export function ExpeditionPanel({
               onPack={onPack}
             />
           ) : null}
-          <p className="expedition-rewards">Reward · {reward(active.id)}</p>
+          {rumorDefinition(active.id) && expeditionComplete(journey) ? (
+            <p className="rumor-outcome">
+              {rumorOutcome(journey, state.worldSeed ?? 0)?.title} ·{' '}
+              {rumorOutcome(journey, state.worldSeed ?? 0)?.story}
+            </p>
+          ) : null}
+          <p className="expedition-rewards">
+            {rumorDefinition(active.id) && !expeditionComplete(journey)
+              ? 'A personal trail bundle · clothing, useful supplies or a bag. Its contents are revealed when you finish the trail.'
+              : `Reward · ${reward(active.id)}`}
+          </p>
           <button
             type="button"
             disabled={!atBoard || !expeditionComplete(journey) || pending}
@@ -110,7 +147,9 @@ export function ExpeditionPanel({
             if (!mission) return null;
             return (
               <article className="expedition-offer" key={id}>
-                <span className="expedition-eyebrow">Outing {index + 1}</span>
+                <span className="expedition-eyebrow">
+                  {rumorDefinition(id) ? 'Rumors of the Wild' : `Outing ${index + 1}`}
+                </span>
                 <h3>{mission.name}</h3>
                 <p>{mission.hint}</p>
                 <ul>
@@ -120,7 +159,11 @@ export function ExpeditionPanel({
                     </li>
                   ))}
                 </ul>
-                <p className="expedition-rewards">Reward · {reward(id)}</p>
+                <p className="expedition-rewards">
+                  {rumorDefinition(id)
+                    ? 'Follow three clues · recover a personal trail bundle. Bring a shovel.'
+                    : `Reward · ${reward(id)}`}
+                </p>
                 <button
                   type="button"
                   disabled={!atBoard || pending}

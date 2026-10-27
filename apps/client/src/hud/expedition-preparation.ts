@@ -32,7 +32,11 @@ export function expeditionPreparation(state: PreparationState, mission: Expediti
     state.carrying.some((row) => row.count > 0 && toolKind(row.item) === tool) ||
     (state.worn.mainHand !== undefined && toolKind(state.worn.mainHand) === tool);
   const combat = mission.objectives.some(
-    (goal) => goal.kind === 'defeat' || goal.kind === 'bonehollow' || goal.kind === 'sunreach',
+    (goal) =>
+      goal.kind === 'defeat' ||
+      goal.kind === 'bonehollow' ||
+      goal.kind === 'sunreach' ||
+      goal.kind === 'rumor',
   );
   const winter = state.season?.season === 'winter';
   const meal: MealItem = winter
@@ -56,6 +60,15 @@ export function expeditionPreparation(state: PreparationState, mission: Expediti
         ready: hasTool(tool),
       });
   }
+  if (mission.objectives.some((goal) => goal.kind === 'rumor'))
+    checks.push({
+      id: 'shovel',
+      label: 'Bring a shovel',
+      detail: 'Equip it at the final clue to uncover the bundle.',
+      ready:
+        state.carrying.some((row) => row.item === 'shovel' && row.count > 0) ||
+        state.worn.mainHand === 'shovel',
+    });
   if (combat) {
     const usefulWeapon = (item: ItemId) =>
       isWeapon(item) && toolKind(item) !== 'rod' && item !== 'shovel' && item !== 'torch';
