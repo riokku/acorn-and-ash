@@ -4,7 +4,9 @@ import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 
-test('keeps the forest ready through repeated visits to a far-away home', async ({ page }) => {
+test('keeps the forest ready through repeated visits to a far-away home', async ({
+  page,
+}, testInfo) => {
   const errors: string[] = [];
   const models: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -23,6 +25,7 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
   // Start inside: a returning player may never have drawn this part of the forest.
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0, home.id);
   let publishSpace = (_space: number, _x: number, _z: number) => {};
+  let collect = () => {};
   let closed = false;
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     socket.onClose(() => {
@@ -31,6 +34,12 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
     const send = (data: ArrayBuffer) => {
       if (!closed) socket.send(Buffer.from(data));
     };
+    collect = () =>
+      send(
+        shared.encodeCollected([
+          { netId: 1, item: 'log', count: 5, x: doorstep.x, z: doorstep.z, depleted: false },
+        ]),
+      );
     const snapshot = () =>
       send(
         shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
@@ -79,6 +88,14 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
       await expect
         .poll(() => page.evaluate(() => window.acornDebug?.outdoorFocus()))
         .toEqual(doorstep);
+      if (visit === 1) {
+        const recap = page.getByRole('status', { name: 'Outing recap' });
+        await expect(recap).toBeVisible();
+        await expect(recap).toContainText('+5 Logs');
+        await page.screenshot({ path: testInfo.outputPath('homecoming-recap.png') });
+        await page.getByRole('button', { name: 'Dismiss outing recap' }).click();
+        await expect(recap).toHaveCount(0);
+      }
       const loadedModels = [...models];
       publishSpace(shared.OUTDOORS, doorstep.x, doorstep.z);
       await expect
@@ -87,6 +104,8 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
       await expect(preparing).toHaveCount(0);
       await expect(page.locator('.scene-arrival')).toBeHidden();
       expect(models).toEqual(loadedModels);
+      await expect(page.getByRole('status', { name: 'Outing recap' })).toHaveCount(0);
+      if (visit === 0) collect();
       // Controls resume after preparation rather than requiring a refresh.
       await page.keyboard.press('KeyI');
       await expect(page.locator('.inventory-panel')).toBeVisible();

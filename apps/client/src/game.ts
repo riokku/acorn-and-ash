@@ -399,6 +399,7 @@ import {
 } from './hud/board-claim';
 import { resolveHotbarSlots } from './hud/hotbar-layout';
 import { amountOf } from './hud/item-words';
+import { Homecoming } from './hud/homecoming';
 import { ToastShelf, packGains } from './hud/toasts';
 import { digRefusalText, gearRefusalText, supportProblemText } from './hud/gear-notices';
 import { MapFeed, type MapBuild } from './map/map-feed';
@@ -911,6 +912,7 @@ export class Game {
   private lastConfirmedStrikeAt = -Infinity;
   private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
   private craftTab: CraftTabId = 'all';
+  private readonly homecoming = new Homecoming();
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoveryLeads: readonly DiscoveryLead[] = [];
@@ -2072,6 +2074,8 @@ export class Game {
         // A fresh connection starts from a fresh pack list: what it says is
         // what we had, not what we just gained.
         this.packHeardFrom = false;
+        this.homecoming.clear();
+        this.options.hud.publish({ homecoming: null });
         this.syncServerClock(message.serverTimeMs);
         // Every fresh connection is a clean slate on the server - this has to
         // be resent on every reconnect, not only the first one.
@@ -2215,11 +2219,13 @@ export class Game {
             else if (
               discoveryKnown(message.found, definition.id) &&
               !discoveryKnown(this.discoveriesFound, definition.id)
-            )
+            ) {
+              if (this.space === OUTDOORS) this.homecoming.discover();
               this.showJournalNotice(
                 `Found ${definition.name.toLowerCase()} · noted in your journal`,
                 performance.now(),
               );
+            }
           }
         }
         this.receivedDiscoveryState = true;
@@ -2752,6 +2758,8 @@ export class Game {
     }
     this.health = event.health;
     if (event.knockedOut) {
+      this.homecoming.clear();
+      this.options.hud.publish({ homecoming: null });
       const now = performance.now();
       this.healthNews = {
         text: 'Knocked out! You wake up safe. Any belongings from an earlier death are lost.',
@@ -6086,15 +6094,21 @@ export class Game {
         this.outdoorFocus.z = doorway.z;
       }
     }
+    if (changed && !inside) this.options.hud.publish({ homecoming: null });
     if (changed && inside && this.homeHere()?.yours === true) {
+      const recap = this.homecoming.arrive();
+      this.options.hud.publish({ homecoming: recap });
       const kind = this.currentHomeKind();
-      this.craftingNews = {
-        text:
-          kind === 'tent'
-            ? 'Home again · store your finds and rest before your next outing.'
-            : 'Home again · store your finds, cook a meal and settle in.',
-        until: performance.now() + NEWS_MS,
-      };
+      this.craftingNews =
+        recap === null
+          ? {
+              text:
+                kind === 'tent'
+                  ? 'Home again · store your finds and rest before your next outing.'
+                  : 'Home again · store your finds, cook a meal and settle in.',
+              until: performance.now() + NEWS_MS,
+            }
+          : null;
     }
 
     this.outdoors.visible = !inside;
@@ -6316,6 +6330,8 @@ export class Game {
   }
 
   private showCollection(event: CollectedEvent): void {
+    if (event.netId === this.selfNetId && this.space === OUTDOORS)
+      this.homecoming.collect(event.item, event.count);
     const listener = this.listenerPoint();
     if (listener === null) return;
     const distance = Math.hypot(listener.x - event.x, listener.z - event.z);

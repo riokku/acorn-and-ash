@@ -1,3 +1,4 @@
+import { HomecomingCard } from './Homecoming';
 import { TrophyCollection } from './TrophyCollection';
 import { isKeepsake } from './keepsakes';
 import { HomesteadPlan } from './HomesteadPlan';
@@ -586,6 +587,9 @@ export function Hud({
             if (!state.inventoryOpen) onToggleInventory();
           }}
         />
+      ) : null}
+      {showingWorld && state.homecoming ? (
+        <HomecomingCard key={state.homecoming.id} summary={state.homecoming} />
       ) : null}
       {showingWorld && state.toasts.length > 0 ? <Toasts toasts={state.toasts} /> : null}
 

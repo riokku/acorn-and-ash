@@ -5519,3 +5519,52 @@ body {
   border-radius: 8px;
   background: #101e18;
 }
+
+.homecoming-card {
+  position: fixed;
+  z-index: 25;
+  top: 230px;
+  max-height: calc(100vh - 330px);
+  overflow-y: auto;
+  right: 24px;
+  width: min(280px, calc(100vw - 48px));
+  padding: 20px;
+  border: 1px solid #ac9060;
+  border-radius: 12px;
+  background: #24332af2;
+  color: #f5e8cc;
+  box-shadow: 0 8px 28px #0004;
+  pointer-events: auto;
+}
+.homecoming-card h2 {
+  margin: 5px 0 14px;
+  font-size: 23px;
+}
+.homecoming-card p,
+.homecoming-card small {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.homecoming-card ul {
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.homecoming-eyebrow {
+  color: #d9bd7c;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.homecoming-card button {
+  float: right;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+.homecoming-card button:focus-visible {
+  outline: 2px solid #f1cc7d;
+  outline-offset: 3px;
+}
