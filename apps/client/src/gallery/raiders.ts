@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 import {
   ActionKind,
   CHARGE_TICKS,
+  HOLLOW_KING,
   DODGE,
   FLINCH,
   KNOCKED_OUT_TICKS,
@@ -56,6 +57,8 @@ interface Demo {
 }
 
 const IDLE: Step = { kind: ActionKind.Idle, step: 0, age: 0 };
+const chargeLength = (raider: RaiderKindId) =>
+  raider === 'hollowKing' ? HOLLOW_KING.chargeTicks : CHARGE_TICKS;
 
 /** The wind-up and the whole light combo, as each kind throws it. */
 function attack(raider: RaiderKindId, age: number): Step {
@@ -94,16 +97,20 @@ const DEMOS: readonly Demo[] = [
   {
     name: 'strike',
     length: (raider) =>
-      CHARGE_TICKS +
+      chargeLength(raider) +
       STRIKE.end +
       Math.round(
-        (raider === 'captain' ? 1.4 : RAIDER_KINDS[raider].recoverySeconds) / TICK_SECONDS,
+        (raider === 'hollowKing'
+          ? HOLLOW_KING.spinRecoverySeconds
+          : raider === 'captain'
+            ? 1.4
+            : RAIDER_KINDS[raider].recoverySeconds) / TICK_SECONDS,
       ),
-    move: (_, age) =>
-      age < CHARGE_TICKS
+    move: (raider, age) =>
+      age < chargeLength(raider)
         ? { kind: ActionKind.Charge, step: 0, age }
-        : age < CHARGE_TICKS + STRIKE.end
-          ? { kind: ActionKind.Strike, step: 0, age: age - CHARGE_TICKS }
+        : age < chargeLength(raider) + STRIKE.end
+          ? { kind: ActionKind.Strike, step: 0, age: age - chargeLength(raider) }
           : IDLE,
   },
   {
@@ -266,10 +273,8 @@ export async function showRaiders(
 
   let last = performance.now();
   let frames = 0;
-  renderer.setAnimationLoop(() => {
-    const now = performance.now();
-    const delta = Math.min(0.1, (now - last) / 1000);
-    last = now;
+  const inspect = params.has('inspect');
+  const advance = (delta: number): void => {
     for (const showing of showings) {
       if (showing.frozen) continue;
       const before = showing.age;
@@ -285,6 +290,49 @@ export async function showRaiders(
       drawAt(showing, showing.age, showing.age < before ? -1 : before, delta);
     }
     if (showings.some((showing) => !showing.frozen)) bursts.update(delta);
+  };
+  if (inspect) {
+    // Gallery-only inspection uses the same step function as normal playback,
+    // so the loaded rig and warnings can be checked independently of GPU speed.
+    window.acornAdvanceRaiderCombat = (delta) => {
+      advance(delta);
+      scene.updateMatrixWorld(true);
+      const showing = showings[0];
+      if (!showing) return;
+      const warning = scene.getObjectByName('raider-attack-warning')!;
+      const mesh = warning.children.find((child) => child.visible) as THREE.Mesh<
+        THREE.RingGeometry,
+        THREE.MeshBasicMaterial
+      >;
+      const step = showing.demo.move(showing.raider, showing.age);
+      const hand = showing.figure.character.handPosition(new THREE.Vector3());
+      let groundError = 0;
+      if (warning.visible && mesh) {
+        const p = mesh.geometry.getAttribute('position');
+        const point = new THREE.Vector3();
+        for (let i = 0; i < p.count; i++) {
+          point.fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld);
+          groundError = Math.max(groundError, Math.abs(point.y - groundHeight(point.x) - 0.045));
+        }
+      }
+      const samples = (window.acornRaiderCombat ??= []);
+      samples.push({
+        kind: step.kind,
+        age: step.age,
+        step: step.step,
+        warning: warning.visible ? mesh.name : null,
+        opacity: mesh.material.opacity,
+        groundError,
+        hand: hand?.toArray() ?? [],
+      });
+      if (samples.length > 600) samples.shift();
+    };
+  }
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const delta = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (!inspect) advance(delta);
     fireLights.update(camera.position);
     renderer.render(scene, camera);
     frames += 1;
@@ -299,12 +347,24 @@ interface RaiderMotionFrame {
   readonly leg: readonly number[];
   readonly walking: boolean;
 }
+interface RaiderCombatFrame {
+  readonly kind: ActionKind;
+  readonly age: number;
+  readonly step: number;
+  readonly warning: string | null;
+  readonly opacity: number;
+  readonly groundError: number;
+  readonly hand: readonly number[];
+}
 declare global {
   interface Window {
     /** Bounded gallery-only samples from the actual rendered skeleton rig. */
     acornRaiderMotion?: RaiderMotionFrame[];
     /** Advance the gallery rig at a controlled frame rate for browser checks. */
     acornAdvanceRaiderMotion?: (deltaSeconds: number) => void;
+    /** Inspect loaded combat rigs and terrain-fitted warnings, only in the gallery. */
+    acornRaiderCombat?: RaiderCombatFrame[];
+    acornAdvanceRaiderCombat?: (deltaSeconds: number) => void;
   }
 }
 

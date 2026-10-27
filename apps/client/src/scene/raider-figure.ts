@@ -1,4 +1,4 @@
-import { KingDanger } from './king-danger';
+import { RaiderDanger } from './raider-danger';
 import { HOLLOW_KING } from '@acorn/shared';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { townHeadwear } from './skeleton-town';
@@ -80,7 +80,7 @@ interface SeenMove {
 
 export class RaiderFigure {
   readonly character: Character;
-  private readonly danger: KingDanger | null;
+  private readonly danger: RaiderDanger;
   readonly bar: RaiderHealthBar;
   private readonly eyes: THREE.MeshStandardMaterial[] = [];
   private readonly bones: THREE.MeshStandardMaterial[] = [];
@@ -121,7 +121,7 @@ export class RaiderFigure {
     private readonly bursts: ImpactBursts,
   ) {
     this.character = character;
-    this.danger = kind === 'hollowKing' ? new KingDanger(parent) : null;
+    this.danger = new RaiderDanger(parent, kind);
     if (kind === 'hollowKing') character.group.scale.setScalar(HOLLOW_KING.scale);
     const head = character.group.getObjectByName('head');
     this.townHat = character.group.getObjectByName('bonehollow-headwear') ?? townHeadwear(kind);
@@ -216,8 +216,8 @@ export class RaiderFigure {
     channeling = false,
   ): MovePose | null {
     const group = this.character.group;
-    this.danger?.update(at, frame.move?.kind ?? ActionKind.Idle, frame.move?.age ?? 0);
-    if (channeling && this.danger) this.danger.group.visible = false;
+    this.danger.update(at, frame.move, frame.groundHeight);
+    if (channeling) this.danger.hide();
     this.townResident ??= inSkeletonTown(at.x, at.z, 12);
     if (this.townHat) this.townHat.visible = this.townResident;
     group.position.set(at.x, at.y, at.z);
@@ -262,7 +262,7 @@ export class RaiderFigure {
       playBoneClatter(volume);
     }
     // The same beat's pause the player's own swing gets, on both ends of it.
-    if (this.kind !== 'hollowKing') this.character.hitStop(strength > 1 ? 0.12 : 0.06);
+    if (!shrugged && this.kind !== 'hollowKing') this.character.hitStop(strength > 1 ? 0.12 : 0.06);
   }
 
   /** Gave up, or went out of sight: sink back into the earth rather than vanish. */
@@ -270,7 +270,7 @@ export class RaiderFigure {
     this.swoosh.clear();
     if (this.departing !== null) return;
     this.departing = 0;
-    if (this.danger) this.danger.group.visible = false;
+    this.danger.hide();
     this.bar.setWanted(false, false);
     const group = this.character.group;
     this.departFrom = group.position.y;
@@ -308,10 +308,11 @@ export class RaiderFigure {
   showEverythingAt(x: number, y: number, z: number): void {
     this.character.group.position.set(x, y, z);
     this.glint.position.set(x, y, z);
+    this.danger.group.position.set(x, y, z);
     this.character.group.traverse((object) => {
       this.asBuilt.push({ object, visible: object.visible, frustumCulled: object.frustumCulled });
     });
-    for (const part of [this.character.group, this.trail.mesh, this.glint]) {
+    for (const part of [this.character.group, this.trail.mesh, this.glint, this.danger.group]) {
       part.traverse((object) => {
         object.visible = true;
         object.frustumCulled = false;
@@ -325,7 +326,7 @@ export class RaiderFigure {
    * away. Use the body that comes back for the next one of the same kind.
    */
   retire(): Character {
-    this.danger?.dispose();
+    this.danger.dispose();
     this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.group.remove(this.bar.sprite);
@@ -349,7 +350,7 @@ export class RaiderFigure {
   }
 
   dispose(): void {
-    this.danger?.dispose();
+    this.danger.dispose();
     this.swoosh.clear();
     this.parent.remove(this.character.group, this.trail.mesh, this.glint);
     this.character.dispose();
@@ -362,7 +363,10 @@ export class RaiderFigure {
   private noticeNewMove(move: CharacterFrame['move'], volume: number): void {
     const last = this.seen;
     const fresh =
-      last === null || move.kind !== last.kind || move.step !== last.step || move.age < last.age;
+      last === null ||
+      move.kind !== last.kind ||
+      move.step !== last.step ||
+      move.age + 1 < last.age;
     this.seen = { kind: move.kind, step: move.step, age: move.age };
     if (!fresh) return;
     const group = this.character.group;
