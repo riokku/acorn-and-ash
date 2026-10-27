@@ -541,14 +541,16 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const scenery: readonly PlacedProp[] =
     focus === 'pond'
       ? buildTestClearing(DEFAULT_WORLD_SEED).props
-      : SCENERY.map((entry, index) => ({
-          id: index + 1,
-          kind: entry.kind,
-          x: entry.x,
-          z: entry.z,
-          rotationY: index * 1.3,
-          scale: entry.scale,
-        }));
+      : params.has('studio')
+        ? []
+        : SCENERY.map((entry, index) => ({
+            id: index + 1,
+            kind: entry.kind,
+            x: entry.x,
+            z: entry.z,
+            rotationY: index * 1.3,
+            scale: entry.scale,
+          }));
   const alone = EXHIBITS.some((exhibit) => exhibit.name === focus && exhibit.alone === true);
   if (!alone) {
     const water = focus === 'pond' ? CLEARING_POND : POND;
