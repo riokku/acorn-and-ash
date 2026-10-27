@@ -22,6 +22,7 @@ declare global {
       buriedCaches(): Array<{ id: number; ownerNetId: number | null; x: number; z: number }>;
       snowFootprints(): number;
       footstepCount(): number;
+      wildlifeSoundCount(): number;
       wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
       weatherEffects(): { rainDrops: number; fireflies: number };
       snowOnGround(): number;
