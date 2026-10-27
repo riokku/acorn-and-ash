@@ -1,6 +1,7 @@
 import type { ForestEnvironment, ForestPoint, FootstepSurface } from './forest-environment';
 
 export type ForestSound =
+  | { kind: 'wildlife'; cue: 'hoof' | 'brush' | 'snort'; volume: number; pan: number }
   | { kind: 'step'; surface: FootstepSurface; volume: number; pan: number }
   | { kind: 'bird' | 'rustle'; volume: number; pan: number; variant: number };
 export interface ForestListener extends ForestPoint {
