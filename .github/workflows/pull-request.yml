@@ -30,7 +30,7 @@ jobs:
       - name: Retire verified closed previews when space is low
         env:
           PREVIEW_CAPACITY_APPLY: '1'
-          PREVIEW_CLEANUP_LIMIT: '1'
+          PREVIEW_CLEANUP_LIMIT: '20'
           GH_TOKEN: ${{ github.token }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

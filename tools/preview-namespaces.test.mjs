@@ -186,3 +186,19 @@ test('reads all advertised pages even if Cloudflare returns fewer rows than requ
   assert.deepEqual(pages, [1, 2]);
   assert.equal(report.total, 2);
 });
+
+test('needs only one read and no GitHub requests when capacity already has headroom', async () => {
+  const calls = [];
+  const result = await recoverPreviewCapacity({
+    ...options,
+    apply: true,
+    request: async (url, init) => {
+      calls.push({ url, init });
+      assert.ok(url.includes('/namespaces?'));
+      return Response.json({ success: true, result: [] });
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(result.after, 0);
+  assert.deepEqual(result.removed, []);
+});

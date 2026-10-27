@@ -41,6 +41,12 @@ function namespaceClient({ accountId, cloudflareToken, request }) {
   return { cfBase, ask, list };
 }
 
+function validateScope({ repository, githubToken, accountId, cloudflareToken }) {
+  if (repository !== 'riokku/acorn-and-ash') throw new Error('Unexpected preview repository');
+  if (!githubToken || !accountId || !cloudflareToken)
+    throw new Error('Missing preview inventory credentials');
+}
+
 /** Read-only inventory. A name alone is never authorization to retire a preview. */
 export async function previewNamespaces({
   repository,
@@ -49,9 +55,7 @@ export async function previewNamespaces({
   cloudflareToken,
   request = fetch,
 }) {
-  if (repository !== 'riokku/acorn-and-ash') throw new Error('Unexpected preview repository');
-  if (!githubToken || !accountId || !cloudflareToken)
-    throw new Error('Missing preview inventory credentials');
+  validateScope({ repository, githubToken, accountId, cloudflareToken });
   const { cfBase, ask, list } = namespaceClient({ accountId, cloudflareToken, request });
   const namespaces = await list();
   const groups = new Map();
@@ -121,12 +125,22 @@ export async function recoverPreviewCapacity(options) {
     maxRemovals > 20
   )
     throw new Error('Invalid preview cleanup bounds');
+  validateScope(options);
+  const { cfBase, ask, list } = namespaceClient({ ...options, request });
+  let namespaces = await list();
+  if (namespaces.length <= target)
+    return {
+      before: namespaces.length,
+      after: namespaces.length,
+      apply,
+      removed: [],
+      withinReserve: true,
+    };
   const report = await previewNamespaces({ ...options, request });
   const candidates = report.previews
     .filter((p) => p.state === 'closed' && p.workerExists)
     .sort((a, b) => a.number - b.number);
-  const { cfBase, ask, list } = namespaceClient({ ...options, request });
-  let namespaces = await list();
+  namespaces = await list();
   const removed = [];
   for (const candidate of candidates) {
     if (namespaces.length <= target || removed.length >= maxRemovals) break;
