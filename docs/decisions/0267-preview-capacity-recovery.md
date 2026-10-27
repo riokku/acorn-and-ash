@@ -20,7 +20,9 @@ Only exact preview names with known World/ItemCatalog classes qualify. Open PRs,
 unknown classes, staging, production and other repositories are excluded. API
 failures or a reopening stop cleanup. Default CLI behavior remains read-only;
 writing requires an explicit environment switch. Fail if two free slots cannot
-be recovered. Preview deployment waits for this job and all normal verification.
+be recovered. Run capacity recovery first so it cannot queue behind long browser shards.
+Normal verification still runs after a failed/skipped preflight unless the run
+is cancelled; only preview deployment requires both capacity and checks.
 
 This discards only obsolete, closed-PR test worlds, as the existing closure job
 does. It does not reset live worlds, weaken checks or change the Cloudflare plan.

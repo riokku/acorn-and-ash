@@ -37,6 +37,8 @@ jobs:
         run: node tools/preview-namespaces.mjs
 
   verify:
+    needs: preview-capacity
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/verify.yml
     with:
       build-all: true
@@ -55,6 +57,8 @@ jobs:
         run: test "$VERIFY_RESULT" = success
 
   browser:
+    needs: preview-capacity
+    if: ${{ !cancelled() }}
     name: Browser tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 35
