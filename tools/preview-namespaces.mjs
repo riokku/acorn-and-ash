@@ -26,6 +26,10 @@ export async function previewNamespaces({
     }
     if (allowMissing && response.status === 404) return null;
     if (!response.ok) throw new Error(`Cannot read preview inventory (HTTP ${response.status})`);
+    if (allowMissing) {
+      await response.body?.cancel();
+      return true;
+    }
     return response.json();
   };
   const namespaces = [];

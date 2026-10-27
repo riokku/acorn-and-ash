@@ -53,3 +53,24 @@ test('fails closed on an unavailable API or a preview from a fork', async () => 
     );
   await assert.rejects(previewNamespaces({ ...options, request }), /ownership/);
 });
+
+test('checks Worker existence without trying to parse its JavaScript as JSON', async () => {
+  const report = await previewNamespaces({
+    ...options,
+    request: async (url) => {
+      if (url.includes('/namespaces?'))
+        return Response.json({
+          success: true,
+          result: [{ script: 'acorn-ash-game-server-pr-210', class: 'World' }],
+        });
+      if (url.includes('api.github.com'))
+        return Response.json({
+          number: 210,
+          state: 'closed',
+          head: { repo: { full_name: options.repository } },
+        });
+      return new Response('export default { fetch() {} }');
+    },
+  });
+  assert.equal(report.previews[0].workerExists, true);
+});
