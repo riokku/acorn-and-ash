@@ -215,3 +215,12 @@ export function rumorInteraction(
           : 'Read the rumor’s clue',
   };
 }
+
+/** Personal, permanent story marks share the existing expedition cosmetic byte. */
+export function rumorMemoryBit(id: number | null): number {
+  const index = RUMOR_IDS.findIndex((value) => value === id);
+  return index < 0 ? 0 : 1 << (index + 1);
+}
+export function rememberedRumors(cosmetics: number): readonly RumorDefinition[] {
+  return RUMORS.filter((rumor) => (cosmetics & rumorMemoryBit(rumor.id)) !== 0);
+}

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   BUILDABLE_KINDS,
+  emptyExpedition,
+  rumorMemoryBit,
   canAfford,
   inventoryFromEntries,
   inventoryEntries,
@@ -24,6 +26,12 @@ export function showHomesteadPlan(canvas: HTMLCanvasElement, params: URLSearchPa
     const [state, setState] = useState<HudState>(() => ({
       ...new HudStore().getSnapshot(),
       homeKind: 'tent',
+      expedition: {
+        ...emptyExpedition(),
+        offers: [12, 11, 8],
+        notice: 'none',
+        cosmetics: params.has('stories') ? 1 | rumorMemoryBit(12) : 0,
+      },
       carrying: [
         { item: 'log', count: 18 },
         { item: 'stick', count: 16 },

@@ -1,4 +1,4 @@
-import { RUMOR_EXPEDITIONS, RUMOR_IDS } from './rumors';
+import { RUMOR_EXPEDITIONS, RUMOR_IDS, rumorMemoryBit } from './rumors';
 import type { ItemId } from '../data/items';
 import type { DiscoveryKind } from '../data/discoveries';
 import type { HomeKind } from '../data/housing';
@@ -272,6 +272,10 @@ export interface ExpeditionView extends ExpeditionState {
 export type ExpeditionRequest =
   { readonly action: 'accept'; readonly index: number } | { readonly action: 'claim' };
 export const TRAIL_PENNANT_SKILL = 1;
+export const EXPEDITION_COSMETIC_MASK = RUMOR_IDS.reduce<number>(
+  (mask, id) => mask | rumorMemoryBit(id),
+  TRAIL_PENNANT_SKILL,
+);
 export function emptyExpedition(): ExpeditionState {
   return { cycle: 0, completed: 0, active: null, progress: [0, 0, 0], cosmetics: 0 };
 }
@@ -284,7 +288,7 @@ export function expeditionFromSaved(value: unknown): ExpeditionState {
   if (
     !integer(v.cycle, 0xffffffff) ||
     !integer(v.completed, 0xffffffff) ||
-    !integer(v.cosmetics, 1) ||
+    !integer(v.cosmetics, EXPEDITION_COSMETIC_MASK) ||
     !(v.active === null || integer(v.active, EXPEDITIONS.length - 1)) ||
     !Array.isArray(v.progress) ||
     v.progress.length !== 3 ||
