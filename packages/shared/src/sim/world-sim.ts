@@ -1,4 +1,4 @@
-import { rumorInteraction, rumorOutcome } from './rumors';
+import { rumorInteraction, rumorOutcome, rumorMemoryBit } from './rumors';
 import { benchSeats, outdoorSeatInReach } from '../world/outdoor-seating';
 import type { HomesteadAppearance } from '../data/homestead';
 import { equipmentPreyNotice } from '../data/equipment-specialties';
@@ -7427,6 +7427,8 @@ export class WorldSimulation {
       if (count > 0 && addItem(copy, reward.item, count) !== count) return result('full');
     }
     Object.assign(runtime.inventory, copy);
+    const story = rumorMemoryBit(state.active);
+    if (story) state.cosmetics |= story | TRAIL_PENNANT_SKILL;
     state.active = null;
     state.progress = [0, 0, 0];
     state.completed = Math.min(0xffffffff, state.completed + 1);

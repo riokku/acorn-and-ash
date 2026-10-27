@@ -27,6 +27,7 @@ import { REEL_LIMIT, type ReelView } from '../sim/rare-reel';
 import {
   EXPEDITIONS,
   EXPEDITION_NOTICES,
+  EXPEDITION_COSMETIC_MASK,
   expeditionFromSaved,
   type ExpeditionRequest,
   type ExpeditionView,
@@ -2084,7 +2085,7 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
         offers.some((id) => id >= EXPEDITIONS.length) ||
         new Set(offers).size !== 3 ||
         notice === undefined ||
-        view.getUint8(16) > 1
+        view.getUint8(16) > EXPEDITION_COSMETIC_MASK
       )
         return null;
       return {

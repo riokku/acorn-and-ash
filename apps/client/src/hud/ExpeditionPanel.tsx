@@ -186,7 +186,7 @@ export function ExpeditionPanel({
         {journey.completed} outings completed ·{' '}
         {(journey.cosmetics & TRAIL_PENNANT_SKILL) !== 0
           ? 'Trail pennant recipe learned'
-          : 'Complete three outings to learn the trail pennant recipe'}
+          : 'Recover a rumor or complete three outings to learn the trail pennant recipe'}
       </p>
       <p role="status">{pending ? 'Sending your choice…' : NOTES[journey.notice]}</p>
     </section>

@@ -322,7 +322,7 @@ function placedEntries(state: CraftMenuState): CraftEntry[] {
                 ? 'Build your first home to begin these projects'
                 : 'Already built · find it in your yard'
               : pennantLocked
-                ? 'Complete three outings to learn this recipe'
+                ? 'Recover a rumor or complete three outings to learn this recipe'
                 : fishLocked
                   ? 'Earn this recipe in your fishing collection'
                   : undefined,

@@ -387,7 +387,7 @@ export function Hud({
                                   {BUILDABLE_KINDS[kind].displayName}
                                   {kind === 'trailPennant' &&
                                   !((state.expedition?.cosmetics ?? 0) & 1)
-                                    ? ' · complete three outings'
+                                    ? ' · recover a rumor or complete three outings'
                                     : !fishDisplayLearned(
                                           kind,
                                           fishRecordsFromSaved(state.fishRecords),

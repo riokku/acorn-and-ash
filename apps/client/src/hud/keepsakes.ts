@@ -47,8 +47,9 @@ export const KEEPSAKES = [
   {
     kind: 'trailPennant',
     title: 'A home between adventures',
-    story: 'Three completed outings, and many more trails ahead.',
-    route: 'Complete three outings from your home board to learn the trail pennant recipe.',
+    story: 'Stories gathered far from home, remembered beside the door.',
+    route:
+      'Recover your first rumor bundle, or complete three ordinary outings, to learn the trail pennant recipe.',
   },
 ] as const satisfies readonly {
   kind: BuildableKindId;

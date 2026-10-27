@@ -1,3 +1,4 @@
+import { HomeStories } from './HomeStories';
 import {
   HOMESTEAD_PROJECTS,
   BUILDABLE_KINDS,
@@ -21,7 +22,13 @@ export function HomesteadPlan({
 }: {
   state: Pick<
     HudState,
-    'homeKind' | 'carrying' | 'homesteadProjects' | 'home' | 'homeSkills' | 'homeStoredSupplies'
+    | 'homeKind'
+    | 'carrying'
+    | 'homesteadProjects'
+    | 'home'
+    | 'homeSkills'
+    | 'homeStoredSupplies'
+    | 'expedition'
   >;
   onUpgrade?: () => void;
   onPlaceNook?: (kind: BuildableKindId) => void;
@@ -129,12 +136,8 @@ export function HomesteadPlan({
           );
         })}
       </div>
+      <HomeStories cosmetics={state.expedition?.cosmetics ?? 0} onKeepsakes={onViewKeepsakes} />
       <GatheringNook state={state} onPlace={onPlaceNook} />
-      {onViewKeepsakes && (
-        <button type="button" onClick={onViewKeepsakes}>
-          Your adventures · see keepsakes
-        </button>
-      )}
       <footer>
         No daily resets or upkeep. Your pantry stays private; neighbors can use your bench. Empty
         storage and harvest growing plants before reclaiming a project.

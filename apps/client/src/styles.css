@@ -5568,3 +5568,40 @@ body {
   outline: 2px solid #f1cc7d;
   outline-offset: 3px;
 }
+
+.homestead-stories {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid #b7b18d;
+  border-radius: 10px;
+  background: #e8ead7;
+  color: #334c3e;
+}
+.homestead-stories h4 {
+  margin: 4px 0 8px;
+  font-family: Georgia, serif;
+  font-size: 21px;
+}
+.homestead-stories p {
+  line-height: 1.6;
+}
+.homestead-stories ul {
+  list-style: none;
+  padding: 0;
+}
+.homestead-stories li {
+  padding: 9px 0;
+  border-bottom: 1px solid #b7b18d66;
+  color: #766e5c;
+}
+.homestead-stories li[data-remembered='true'] {
+  color: #365f40;
+  font-weight: 600;
+}
+.homestead-stories li span {
+  display: inline-block;
+  width: 20px;
+}
+.homestead-stories .homestead-eyebrow {
+  color: #566b49;
+}
