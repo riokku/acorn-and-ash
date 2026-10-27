@@ -303,7 +303,12 @@ import {
   type CraftEntry,
   type CraftTabId,
 } from './hud/craft-menu';
-import { playPickupRefused, playTreeLanding, playCollection } from './audio/feedback';
+import {
+  playPickupRefused,
+  playTreeLanding,
+  playCollection,
+  playDigContact,
+} from './audio/feedback';
 import {
   buildClearingScene,
   type ClearingScene,
@@ -2256,6 +2261,38 @@ export class Game {
       case 'dug': {
         // Digs only ever add, so a full list is the old one plus more: carving
         // twice changes nothing, and it can simply be played again.
+        // Full lists are world history, never a burst of fresh impacts on arrival.
+        if (!message.replace && this.space === OUTDOORS && this.playing) {
+          const listener = this.listenerPoint();
+          for (const dig of message.digs.slice(-8)) {
+            if (
+              this.digs.some(
+                (old) =>
+                  old.ix === dig.ix &&
+                  old.iy === dig.iy &&
+                  old.iz === dig.iz &&
+                  old.dir === dig.dir,
+              )
+            )
+              continue;
+            const at = new THREE.Vector3(
+              (dig.ix + 0.5) * 0.5,
+              (dig.iy + 0.5) * 0.5,
+              (dig.iz + 0.5) * 0.5,
+            );
+            const distance =
+              listener === null
+                ? Infinity
+                : Math.hypot(
+                    listener.x - at.x,
+                    (this.localPlayer?.motion.position.y ?? 0) - at.y,
+                    listener.z - at.z,
+                  );
+            if (distance >= 12) continue;
+            playDigContact(Math.max(0, 1 - distance / 12) ** 2);
+            if (!this.reducedMotion.matches) this.bursts.burst('dust', at, 0, 0, 0.55);
+          }
+        }
         this.digs = message.replace ? [...message.digs] : [...this.digs, ...message.digs];
         this.digScene?.apply(message.digs);
         this.grass?.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
@@ -6278,6 +6315,24 @@ export class Game {
       character?.reachForCollection(target);
     }
 
+    if (
+      distance < 12 &&
+      this.space === OUTDOORS &&
+      !this.reducedMotion.matches &&
+      (event.item === 'stone' || event.item === 'ironOre' || event.item === 'clay')
+    ) {
+      const y =
+        event.netId === this.selfNetId
+          ? this.motionOrOrigin().y
+          : (this.collision?.terrain.heightAt(event.x, event.z) ?? 0);
+      this.bursts.burst(
+        event.item === 'ironOre' ? 'spark' : 'dust',
+        new THREE.Vector3(event.x, y + 0.2, event.z),
+        0,
+        0,
+        0.45,
+      );
+    }
     if (event.depleted && distance < 24) {
       const y = this.collision?.terrain.heightAt(event.x, event.z) ?? 0;
       this.bursts.burst('gather', new THREE.Vector3(event.x, y + 0.18, event.z), 0, 0);
