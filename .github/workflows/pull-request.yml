@@ -13,7 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  preview-capacity:
+    name: Recover closed-preview capacity
+    concurrency:
+      group: acorn-preview-capacity
+      cancel-in-progress: false
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Retire verified closed previews when space is low
+        env:
+          PREVIEW_CAPACITY_APPLY: '1'
+          PREVIEW_CLEANUP_LIMIT: '20'
+          GH_TOKEN: ${{ github.token }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/preview-namespaces.mjs
+
   verify:
+    needs: preview-capacity
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/verify.yml
     with:
       build-all: true
@@ -32,6 +57,8 @@ jobs:
         run: test "$VERIFY_RESULT" = success
 
   browser:
+    needs: preview-capacity
+    if: ${{ !cancelled() }}
     name: Browser tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -89,7 +116,7 @@ jobs:
 
   preview:
     name: Preview build
-    needs: check
+    needs: [check, preview-capacity]
     runs-on: ubuntu-latest
     env:
       # One throwaway world server per pull request, named after it.

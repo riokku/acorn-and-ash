@@ -1,6 +1,8 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from './fixtures';
 
 import {
+  decodeServerMessage,
+  SnapshotFlag,
   CLEARING_TREE_LINE_INNER,
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
@@ -398,28 +400,70 @@ test('two tabs see each other move', async ({ browser }) => {
 });
 
 test('sprinting covers more ground than walking', async ({ page }) => {
-  await page.goto('/');
+  let self = 0,
+    latestSpeed = 0;
+  let phase: 'walk' | 'sprint' | null = null;
+  const speeds = { walk: [] as number[], sprint: [] as number[] };
+  // Observe the real server, including its sprint flag. A slow renderer can
+  // produce different input-tick counts during equal wall-clock key holds.
+  page.on('websocket', (socket) =>
+    socket.on('framereceived', ({ payload }) => {
+      if (typeof payload === 'string') return;
+      const message = decodeServerMessage(new Uint8Array(payload).buffer);
+      if (message?.type === 'welcome') self = message.netId;
+      if (message?.type !== 'snapshot') return;
+      const player = message.entities.find((entity) => entity.netId === self);
+      if (!player) return;
+      latestSpeed = Math.hypot(player.vx, player.vz);
+      const sprinting = (player.flags & SnapshotFlag.Sprinting) !== 0;
+      if (phase && latestSpeed > 1 && sprinting === (phase === 'sprint'))
+        speeds[phase].push(latestSpeed);
+    }),
+  );
+  // Isolate the route from structures left by other smoke scenarios.
+  await page.goto(`/?world=sprint-speed-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
     timeout: 120_000,
   });
-
-  const beforeWalk = positionOf(await hudValue(page, 'Position'));
-  await hold(page, 'KeyW', 1000);
-  await page.waitForTimeout(500);
-  const afterWalk = positionOf(await hudValue(page, 'Position'));
-
+  await expect(page.getByTestId('loading-screen')).toBeHidden();
+  await page.bringToFront();
+  const position = () => page.evaluate(() => window.acornDebug!.localPosition());
+  const beforeWalk = await position();
+  await page.evaluate(({ x, z }) => window.acornDebug!.faceTowards(x, z - 10), beforeWalk);
+  phase = 'walk';
+  await page.keyboard.down('KeyW');
+  try {
+    await expect
+      .poll(async () => beforeWalk.z - (await position()).z, { timeout: 10000 })
+      .toBeGreaterThan(1);
+    await expect.poll(() => speeds.walk.length, { timeout: 10000 }).toBeGreaterThanOrEqual(3);
+  } finally {
+    phase = null;
+    await page.keyboard.up('KeyW');
+  }
+  await expect.poll(() => latestSpeed).toBeLessThan(0.1);
+  const afterWalk = await position();
+  // Sprint back along the same unobstructed lane.
+  await page.evaluate(({ x, z }) => window.acornDebug!.faceTowards(x, z + 10), afterWalk);
+  phase = 'sprint';
   await page.keyboard.down('Shift');
-  await hold(page, 'KeyW', 1000);
-  await page.keyboard.up('Shift');
-  await page.waitForTimeout(500);
-  const afterSprint = positionOf(await hudValue(page, 'Position'));
-
-  const walked = beforeWalk.z - afterWalk.z;
-  const sprinted = afterWalk.z - afterSprint.z;
-  expect(walked).toBeGreaterThan(1);
-  // Sprinting is 7 m/s against 4.5, so roughly half again as far in the same time.
-  expect(sprinted).toBeGreaterThan(walked * 1.2);
+  await page.keyboard.down('KeyW');
+  try {
+    await expect.poll(() => speeds.sprint.length, { timeout: 10000 }).toBeGreaterThanOrEqual(3);
+    await expect
+      .poll(async () => (await position()).z - afterWalk.z, { timeout: 10000 })
+      .toBeGreaterThan(1);
+  } finally {
+    phase = null;
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('Shift');
+  }
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
+  expect(beforeWalk.z - afterWalk.z).toBeGreaterThan(1);
+  // Compare metres per simulated second, retaining the 20% minimum advantage.
+  expect(median(speeds.sprint)).toBeGreaterThan(median(speeds.walk) * 1.2);
 });
 
 test('dodging moves you a decisive step, on command', async ({ page }) => {
