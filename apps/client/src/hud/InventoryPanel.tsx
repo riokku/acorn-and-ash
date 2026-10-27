@@ -1,6 +1,6 @@
 import { ITEM_KINDS } from '../item-catalog';
 import type { WornGear } from '@acorn/shared';
-import { equipmentDetail, equipmentComparison } from './equipment-stats';
+import { equipmentDetail, equipmentComparison, equipmentTraitComparison } from './equipment-stats';
 import {
   MAX_PACK_SLOTS,
   PACK_ITEMS,
@@ -236,6 +236,7 @@ export function InventoryPanel({
             count={stack.count}
             equipped={stack.item === equippedItem}
             comparison={equipmentComparison(stack.item, worn, equippedItem)}
+            traitComparison={equipmentTraitComparison(stack.item, worn, equippedItem)}
             onUseItem={onUseItem}
             onOpenSlotMenu={onOpenSlotMenu}
             onWearGear={onWearGear}
@@ -257,6 +258,7 @@ function PackSlot({
   count,
   equipped,
   comparison,
+  traitComparison,
   onUseItem,
   onOpenSlotMenu,
   onWearGear,
@@ -265,6 +267,7 @@ function PackSlot({
   count: number;
   equipped: boolean;
   comparison: string | null;
+  traitComparison: string | null;
   onUseItem: (item: ItemId) => void;
   onOpenSlotMenu: (target: SlotMenuTarget) => void;
   onWearGear?: (item: ItemId) => void;
@@ -284,7 +287,15 @@ function PackSlot({
           {equipmentDetail(item) === null ? null : (
             <span className="item-tooltip-detail">{equipmentDetail(item)}</span>
           )}
-          {comparison === null ? null : <span className="item-tooltip-detail">{comparison}</span>}
+          {comparison === null ? null : (
+            <span className="item-tooltip-detail">
+              {isWeapon(item) ? 'Main-hand equip: ' : ''}
+              {comparison}
+            </span>
+          )}
+          {traitComparison === null ? null : (
+            <span className="item-tooltip-traits">{traitComparison}</span>
+          )}
           <span className="item-tooltip-action">{itemUseHint(item)}</span>
         </>
       }

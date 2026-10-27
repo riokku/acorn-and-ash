@@ -5,7 +5,7 @@ describe('equipment explanations', () => {
     expect(equipmentComparison('ironSword', {}, 'axe')).toBe('Attack power 110% → 150% (+40%).');
     expect(equipmentDetail('huntingKnife')).toContain('main hand');
     expect(equipmentComparison('huntingKnife', { mainHand: 'ironSword' }, 'ironSword')).toBe(
-      'No change to your current equipment stats.',
+      'Attack power 150% → 125% (-25%).',
     );
     expect(equipmentComparison('flower', {}, null)).toBeNull();
   });
