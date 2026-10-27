@@ -107,3 +107,26 @@ it.each(['stone', 'sand'] as const)('releases %s footstep nodes when paused', (s
   expect(audio.sources.every((s) => s.disconnect.mock.calls.length > 0)).toBe(true);
   forest.dispose();
 });
+
+it.each(['hoof', 'brush', 'snort'] as const)(
+  'keeps wildlife %s in the muted, bounded and disposable sound bus',
+  (cue) => {
+    const forest = new ForestAudio();
+    const event = { kind: 'wildlife', cue, pan: 0.5, volume: 0.5 } as const;
+    forest.play(event);
+    expect(audio.sources).toHaveLength(0);
+    forest.update(true);
+    forest.play(event);
+    expect(audio.sources.length).toBeGreaterThan(0);
+    const before = audio.sources.length;
+    audio.volume.mockReturnValue(0);
+    forest.play(event);
+    expect(audio.sources).toHaveLength(before);
+    audio.volume.mockReturnValue(1);
+    for (let i = 0; i < 100; i++) forest.play(event);
+    expect(audio.sources.length).toBeLessThanOrEqual(18);
+    forest.update(false);
+    expect(audio.sources.every((source) => source.disconnect.mock.calls.length > 0)).toBe(true);
+    forest.dispose();
+  },
+);

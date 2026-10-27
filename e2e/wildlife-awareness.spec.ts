@@ -84,6 +84,9 @@ test('shows a watching rabbit, then a fleeing rabbit when the player walks too c
         ),
       )
       .toBeLessThan(den.z - 0.3);
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.wildlifeSoundCount() ?? 0))
+      .toBeGreaterThan(0);
     stepBack();
     await expect
       .poll(() => animal().action & (4 | shared.PREY_POSE.tense | shared.PREY_POSE.fleeing), {

@@ -59,6 +59,17 @@ export class ForestAudio {
         this.tone(at, 78 * variation, 42, 0.095, volume * 0.065, event.pan);
         if (floor) this.noise(at + 0.045, 0.11, 2600, volume * 0.035, event.pan);
       }
+    } else if (event.kind === 'wildlife') {
+      if (event.cue === 'hoof') {
+        this.noise(at, 0.055, 1700, event.volume * 0.1, event.pan);
+        this.tone(at, 125, 60, 0.075, event.volume * 0.11, event.pan);
+      } else if (event.cue === 'snort') {
+        // A short breath warning, rather than a constant ambient animal loop.
+        this.noise(at, 0.19, 750, event.volume * 0.16, event.pan, 0.025);
+        this.noise(at, 0.055, 1800, event.volume * 0.06, event.pan);
+      } else {
+        this.noise(at, 0.14, 2200, event.volume * 0.13, event.pan, 0.025);
+      }
     } else if (event.kind === 'rustle') {
       // A slow, soft swell, with finer needles moving above the low canopy wash.
       this.noise(at, 1.8, 1100, event.volume * 0.15, event.pan, 0.55);

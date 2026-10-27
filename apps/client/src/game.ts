@@ -1,3 +1,4 @@
+import { WildlifeAtmosphere } from './audio/wildlife-atmosphere';
 import { rumorInteraction } from '@acorn/shared';
 import { createRumorCache } from './scene/rumor-cache';
 import { HandSelection, handSelectionText } from './hud/hand-selection';
@@ -655,6 +656,7 @@ export interface GameDebug {
   combatMove(): { kind: number; age: number; grounded: boolean };
   snowFootprints(): number;
   footstepCount(): number;
+  wildlifeSoundCount(): number;
   wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
   /** How much of the ground and grass is under snow right now, from 0 to 1. */
@@ -1073,6 +1075,9 @@ export class Game {
   private droppedPiles: readonly DroppedPileView[] = [];
   private groundItems: GroundItems | null = null;
   private readonly forestAudio = new ForestAudio();
+  private readonly wildlifeAtmosphere = new WildlifeAtmosphere((event) =>
+    this.forestAudio.play(event),
+  );
   private readonly forestAtmosphere = new ForestAtmosphere((event) => this.forestAudio.play(event));
   private readonly worldAmbience = new WorldAmbience();
   private ambienceCover = 0;
@@ -1353,7 +1358,10 @@ export class Game {
 
   private setPlaying(playing: boolean): void {
     this.playing = playing;
-    if (!playing) this.closeChest();
+    if (!playing) {
+      this.closeChest();
+      this.wildlifeAtmosphere.clear();
+    }
     this.syncGameplayControls();
     this.forestAudio.update(playing && !document.hidden);
     this.worldAmbience.setActive(playing && !document.hidden);
@@ -1707,6 +1715,7 @@ export class Game {
         grounded: this.localPlayer?.motion.grounded ?? true,
       }),
       footstepCount: () => this.forestAtmosphere.scheduledSteps,
+      wildlifeSoundCount: () => this.wildlifeAtmosphere.scheduledSounds,
       snowFootprints: () => this.footprints?.visibleCount() ?? 0,
       wildfireEffects: () =>
         this.wildfireArt?.visibleEffects() ?? { fires: 0, smoke: 0, embers: 0, lightning: false },
@@ -3692,6 +3701,7 @@ export class Game {
   }
 
   private removeCritter(animalId: number): void {
+    this.wildlifeAtmosphere.forget(animalId);
     const critter = this.critters.get(animalId);
     if (critter === undefined) return;
     this.scene.remove(critter.group);
@@ -3714,6 +3724,7 @@ export class Game {
   /* ---------------------------------------------------------------------- */
 
   private readonly handleForestVisibility = (): void => {
+    if (document.hidden) this.wildlifeAtmosphere.clear();
     this.forestAudio.update(this.playing && !document.hidden);
     this.worldAmbience.setActive(this.playing && !document.hidden);
     setImpactSoundsActive(this.playing && !document.hidden);
@@ -6689,10 +6700,28 @@ export class Game {
   private updateRemoteAnimals(deltaSeconds: number): void {
     if (this.clearingScene === null) return;
     this.remoteAnimals.advance(deltaSeconds);
+    const listener = this.localPlayer?.motion.position;
+    this.wildlifeAtmosphere.beginFrame(deltaSeconds, {
+      x: listener?.x ?? 0,
+      y: listener?.y ?? 0,
+      z: listener?.z ?? 0,
+      cameraYaw: this.camera?.look.yaw ?? 0,
+      active: this.playing && !document.hidden && listener !== undefined,
+      indoors: this.space !== OUTDOORS,
+    });
 
     for (const animalId of this.remoteAnimals.netIds()) {
       const pose = this.remoteAnimals.poseOf(animalId);
       if (pose === undefined) continue;
+      const kind = animalKindOf(animalId);
+      if (kind)
+        this.wildlifeAtmosphere.observe(animalId, kind, {
+          ...pose,
+          speed: pose.travelSpeed,
+          tense: (pose.action & PREY_POSE.tense) !== 0,
+          fleeing: (pose.action & PREY_POSE.fleeing) !== 0,
+          defeated: (pose.action & 8) !== 0,
+        });
       const critter = this.critterFor(animalId);
       critter.group.position.set(pose.x, pose.y, pose.z);
       critter.group.rotation.set(0, pose.yaw, 0, 'YXZ');
