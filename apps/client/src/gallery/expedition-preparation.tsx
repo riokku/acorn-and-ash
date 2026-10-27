@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
 import {
   emptyExpedition,
+  RUMOR_IDS,
   craft,
   inventoryFromEntries,
   inventoryEntries,
@@ -11,6 +12,8 @@ import { ExpeditionPanel } from '../hud/ExpeditionPanel';
 import { CraftPanel } from '../hud/Hud';
 import { HudStore, type HudState } from '../hud/store';
 export function showExpeditionPreparation(canvas: HTMLCanvasElement, params: URLSearchParams) {
+  const rumor = RUMOR_IDS.find((id) => id === Number(params.get('rumor')));
+  const stage = Math.max(0, Math.min(3, Number(params.get('stage') ?? 0))) | 0;
   canvas.hidden = true;
   document.documentElement.style.overflow = 'auto';
   document.documentElement.style.height = 'auto';
@@ -25,6 +28,7 @@ export function showExpeditionPreparation(canvas: HTMLCanvasElement, params: URL
     const [state, setState] = useState<HudState>(() => ({
       ...new HudStore().getSnapshot(),
       homeKind: 'cabin',
+      worldSeed: 42,
       nearExpeditionBoard: true,
       nearCampfire: 'lit',
       craftTab: 'food',
@@ -33,6 +37,7 @@ export function showExpeditionPreparation(canvas: HTMLCanvasElement, params: URL
         ? [
             { item: 'bag', count: 2 },
             { item: 'forestStew', count: 2 },
+            ...(rumor ? [{ item: 'shovel' as const, count: 1 }] : []),
           ]
         : [
             { item: 'bag', count: 1 },
@@ -43,13 +48,20 @@ export function showExpeditionPreparation(canvas: HTMLCanvasElement, params: URL
             { item: 'berry', count: 5 },
           ],
       worn: params.has('ready') ? { mainHand: 'ironSword', upperBody: 'winterJacket' } : {},
-      expedition: { ...emptyExpedition(), active: 8, offers: [0, 1, 8], notice: 'accepted' },
+      expedition: {
+        ...emptyExpedition(),
+        active: rumor ?? 8,
+        offers: [rumor ?? 0, 11, 8],
+        notice: 'accepted',
+        progress: [0, 1, 2].map((i) => (rumor && i < stage ? 1 : 0)),
+      },
     }));
     return (
       <>
         <p>
-          Expedition journal preview · prepare a meal here with the existing recipe. Your chosen
-          outing stays saved.
+          {rumor
+            ? 'Rumors of the Wild · journal preview. Clues and finds are personal and saved in the game.'
+            : 'Expedition journal preview · prepare a meal here with the existing recipe. Your chosen outing stays saved.'}
         </p>
         {page === 'outing' ? (
           <ExpeditionPanel

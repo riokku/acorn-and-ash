@@ -179,6 +179,7 @@ export interface HudState {
   readonly homeSkills: number;
   readonly discoveriesFound: number;
   readonly discoveriesClaimed: number;
+  readonly worldSeed?: number;
   readonly discoverySites: readonly DiscoverySite[];
   readonly trackHint: string | null;
   readonly nearbyDiscovery: string | null;

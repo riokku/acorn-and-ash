@@ -1,3 +1,5 @@
+import { rumorInteraction } from '@acorn/shared';
+import { createRumorCache } from './scene/rumor-cache';
 import { HandSelection, handSelectionText } from './hud/hand-selection';
 import type { HomesteadAppearance } from '@acorn/shared';
 import { advanceForestWind } from './art/forest-wind';
@@ -919,6 +921,7 @@ export class Game {
   private discoverySites: readonly DiscoverySite[] = [];
   private freshAnimalTracks: FreshAnimalTracks | null = null;
   private animalTracks: ReturnType<typeof createAnimalTracks> | null = null;
+  private rumorCache: ReturnType<typeof createRumorCache> | null = null;
   private surveyScenery: ReturnType<typeof createSurveyScenery> | null = null;
   private discoveryLandmarks: ReturnType<typeof createDiscoveryLandmarks> | null = null;
   private receivedDiscoveryState = false;
@@ -1890,6 +1893,7 @@ export class Game {
     this.buildBoundary?.dispose();
     this.encounterLandmarks?.dispose();
     this.discoveryLandmarks?.dispose();
+    this.rumorCache?.dispose();
     this.surveyScenery?.dispose();
     this.animalTracks?.dispose();
     this.freshAnimalTracks?.dispose();
@@ -2048,6 +2052,7 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.options.hud.publish({ worldSeed: message.seed });
         this.handSelection.clear();
         this.equipped.clear();
         this.chestPending = false;
@@ -2359,6 +2364,7 @@ export class Game {
           notice: message.notice,
         };
         this.expeditionPendingUntil = 0;
+        this.rumorCache?.update(this.expedition, this.discoverySites);
         break;
       }
       case 'homesteadAppearance': {
@@ -3180,6 +3186,11 @@ export class Game {
       this.buildBoundary = createBuildBoundary(terrain);
       this.outdoors.add(this.buildBoundary.group);
       this.updateDiscoveryMarkers();
+      this.rumorCache?.group.removeFromParent();
+      this.rumorCache?.dispose();
+      this.rumorCache = createRumorCache(terrain);
+      this.rumorCache.update(this.expedition, this.discoverySites);
+      this.outdoors.add(this.rumorCache.group);
       this.surveyScenery = createSurveyScenery(terrain);
       this.outdoors.add(this.surveyScenery.group);
       this.discoveryLandmarks = createDiscoveryLandmarks(this.discoverySites, terrain);
@@ -4982,6 +4993,13 @@ export class Game {
   private nearbyDiscoveryName(): string | null {
     const player = this.localPlayer;
     if (this.space !== OUTDOORS || player === null) return null;
+    const rumor = rumorInteraction(
+      this.expedition,
+      this.discoverySites,
+      player.motion.position,
+      this.equipped.get(this.selfNetId) ?? null,
+    );
+    if (rumor !== null) return rumor.hint;
     const survey = surveyInteraction(
       this.expedition,
       player.motion.position,
