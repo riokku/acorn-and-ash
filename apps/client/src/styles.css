@@ -5605,3 +5605,54 @@ body {
 .homestead-stories .homestead-eyebrow {
   color: #566b49;
 }
+
+/* Compact by default, so equipment choices stay readable beside the character. */
+.equipment-traits {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(80, 108, 63, 0.08);
+  border: 1px solid rgba(80, 108, 63, 0.2);
+  border-radius: 8px 3px 8px 3px;
+  font-size: 0.8rem;
+}
+.equipment-traits summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #435936;
+}
+.equipment-traits-content {
+  max-height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.equipment-traits ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.equipment-traits li + li {
+  border-top: 1px solid rgba(80, 108, 63, 0.16);
+  padding-top: 8px;
+}
+.equipment-traits strong span {
+  font-weight: 400;
+}
+.equipment-traits p {
+  margin: 5px 0 10px;
+  line-height: 1.45;
+}
+.equipment-traits-note {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.item-tooltip-traits {
+  display: block;
+  margin-top: 5px;
+  color: #d7e5b6;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.character-panel {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}

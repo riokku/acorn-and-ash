@@ -1,5 +1,12 @@
 import { EQUIPMENT_BONUSES, characterStats, statsWithItem } from '../item-catalog';
-import { gearSlotsOf, type ItemId, type WornGear } from '@acorn/shared';
+import {
+  activeEquipmentTraits,
+  slotToWear,
+  isWeapon,
+  gearSlotsOf,
+  type ItemId,
+  type WornGear,
+} from '@acorn/shared';
 
 export function equipmentDetail(item: ItemId): string | null {
   const bonus = EQUIPMENT_BONUSES[item];
@@ -21,7 +28,7 @@ export function equipmentComparison(
 ): string | null {
   if (EQUIPMENT_BONUSES[item] === undefined && gearSlotsOf(item).length === 0) return null;
   const before = characterStats(worn, held);
-  const after = statsWithItem(worn, held, item);
+  const after = statsWithItem(worn, held, item, isWeapon(item) ? 'mainHand' : undefined);
   const parts: string[] = [];
   for (const [key, label] of [
     ['power', 'Attack power'],
@@ -37,4 +44,27 @@ export function equipmentComparison(
       );
   }
   return parts.join(' ') || 'No change to your current equipment stats.';
+}
+
+/** Compare the primary equip action, including non-numeric traits that a stat total cannot explain. */
+export function equipmentTraitComparison(
+  item: ItemId,
+  worn: Readonly<WornGear>,
+  held: ItemId | null,
+): string | null {
+  const slot = isWeapon(item) ? 'mainHand' : slotToWear(item, worn);
+  const heldTool = slot === null && EQUIPMENT_BONUSES[item]?.power !== undefined;
+  if (slot === null && !heldTool) return null;
+  const before = activeEquipmentTraits(worn, held);
+  const after = activeEquipmentTraits(
+    slot === null ? worn : { ...worn, [slot]: item },
+    slot === 'mainHand' || heldTool ? item : held,
+  );
+  const lost = before.filter((old) => !after.some((next) => next.item === old.item));
+  const gained = after.filter((next) => !before.some((old) => old.item === next.item));
+  const parts = [
+    ...gained.map(({ trait }) => `Gain ${trait.name}: ${trait.benefit}`),
+    ...lost.map(({ trait }) => `Give up ${trait.name}: ${trait.benefit}`),
+  ];
+  return parts.length ? parts.join(' ') : null;
 }

@@ -1,3 +1,4 @@
+import { EquipmentTraits } from './EquipmentTraits';
 import { AdminItemsLink } from '../home/AdminItemsLink';
 import { characterStats, ITEM_KINDS } from '../item-catalog';
 import { useEffect, useRef, useState } from 'react';
@@ -106,6 +107,7 @@ export function CharacterPanel({
           <dd>{characterStats(worn, held).warmth}</dd>
         </div>
       </dl>
+      <EquipmentTraits worn={worn} held={held} />
       <AdminItemsLink allowed={canEditItems} compact />
       <p className="character-panel-note" role="status" key={notice?.key ?? 0}>
         {notice?.text ?? 'Gear adds bonuses while equipped. You cannot change it in a fight.'}

@@ -1,22 +1,75 @@
 import type { ItemId } from './items';
-import type { WornGear } from './gear';
+import { GEAR_SLOTS, canWearIn, isWeapon, type WornGear } from './gear';
 
 /** Fixed item identities, separate from the admin-editable base stat bonuses. */
-export const EQUIPMENT_SPECIALTIES: Partial<Record<ItemId, string>> = {
-  cedarstalkerCoat:
-    'Quiet step: prey notices your approach from 15% less distance while worn. Sprinting still startles wildlife; hostile creatures are unaffected. Track the Old Cedar Stag northwest beyond the elk grove, then stitch his hide with reeds and rope.',
-  leatherBoots:
-    'Sure footing: dodge cooldown is 15% shorter while worn. Stacks with a trail ration; roll distance and invulnerability stay the same. Earn a pair from The Sunreach Survey or A supper by the lake.',
-  ironSword:
-    'Duelist: deal 20% more damage when striking a hostile creature during its recovery after an attack. Must be the active weapon. Find one in buried treasure.',
-
-  travelerTunic:
-    'Trail comfort: hunger drains 15% more slowly while worn. Find it at the forgotten camp.',
-  winterJacket:
-    'Heat keeper: recover warmth 25% faster beside a lit campfire or fueled home fire while worn. Craft with reeds and rope.',
-  huntingKnife:
-    'Careful harvest: finishing a meat-bearing animal with this knife yields one extra meat, if your pack has room. Find it in buried treasure with a shovel. Must be the active weapon.',
+export interface EquipmentTrait {
+  readonly name: string;
+  readonly benefit: string;
+  readonly detail: string;
+}
+export const EQUIPMENT_TRAITS: Readonly<Partial<Record<ItemId, EquipmentTrait>>> = {
+  cedarstalkerCoat: {
+    name: 'Quiet step',
+    benefit: 'Prey notices your approach from 15% less distance while worn.',
+    detail:
+      'Sprinting still startles wildlife; hostile creatures are unaffected. Track the Old Cedar Stag northwest beyond the elk grove, then stitch his hide with reeds and rope.',
+  },
+  leatherBoots: {
+    name: 'Sure footing',
+    benefit: 'Dodge cooldown is 15% shorter while worn.',
+    detail:
+      'Stacks with a trail ration; roll distance and invulnerability stay the same. Earn a pair from The Sunreach Survey or A supper by the lake.',
+  },
+  ironSword: {
+    name: 'Duelist',
+    benefit:
+      'Deal 20% more damage when striking a hostile creature during its recovery after an attack.',
+    detail: 'Must be the active weapon. Find one in buried treasure.',
+  },
+  travelerTunic: {
+    name: 'Trail comfort',
+    benefit: 'Hunger drains 15% more slowly while worn.',
+    detail: 'Find it at the forgotten camp.',
+  },
+  winterJacket: {
+    name: 'Heat keeper',
+    benefit: 'Recover warmth 25% faster beside a lit campfire or fueled home fire while worn.',
+    detail: 'Craft with reeds and rope.',
+  },
+  huntingKnife: {
+    name: 'Careful harvest',
+    benefit:
+      'Finishing a meat-bearing animal with this knife yields one extra meat, if your pack has room.',
+    detail: 'Find it in buried treasure with a shovel. Must be the active weapon.',
+  },
 };
+export const EQUIPMENT_SPECIALTIES: Readonly<Partial<Record<ItemId, string>>> = Object.fromEntries(
+  Object.entries(EQUIPMENT_TRAITS).map(([item, trait]) => [
+    item,
+    `${trait.name}: ${trait.benefit[0]!.toLowerCase()}${trait.benefit.slice(1)} ${trait.detail}`,
+  ]),
+);
+
+/** Show only worn clothing in valid slots and the actual active hand, never stowed weapons. */
+export function activeEquipmentTraits(
+  worn: Readonly<WornGear>,
+  held: ItemId | null = worn.mainHand ?? null,
+): readonly { item: ItemId; trait: EquipmentTrait }[] {
+  const items = new Set<ItemId>();
+  for (const slot of GEAR_SLOTS) {
+    const item = worn[slot];
+    if (
+      slot !== 'mainHand' &&
+      slot !== 'offHand' &&
+      item &&
+      canWearIn(item, slot) &&
+      EQUIPMENT_TRAITS[item]
+    )
+      items.add(item);
+  }
+  if (held && isWeapon(held) && EQUIPMENT_TRAITS[held]) items.add(held);
+  return [...items].map((item) => ({ item, trait: EQUIPMENT_TRAITS[item]! }));
+}
 export function equipmentHungerRate(worn: Readonly<WornGear>): number {
   return worn.upperBody === 'travelerTunic' ? 0.85 : 1;
 }
