@@ -1,3 +1,5 @@
+import { createFireGlow } from './fire-light';
+import { addShelterStitching } from './shelter-stitching';
 import { housingDetails } from './housing-details';
 import * as THREE from 'three/webgpu';
 import { color, texture } from 'three/tsl';
@@ -14,7 +16,10 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
   const depth = 2.05 * scale;
   const builder = new ModelBuilder();
   const canvas = createCanvasMaterial(kind);
-  const hem = paintedMaterial('burlap', { tint: 0xa38b63, roughness: 1 });
+  const hem = paintedMaterial('burlap', {
+    tint: kind === 'tent' ? 0x777e5d : 0x9d8055,
+    roughness: 1,
+  });
   const wood = paintedMaterial('wood', { tint: 0xab8152, roughness: 0.9 });
   const rope = plainMaterial(0xdac5a0, { roughness: 1 });
   const brass = plainMaterial(0x9c793e, { roughness: 0.45 });
@@ -23,7 +28,7 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
     roughness: 0.3,
     emissive: 0xffb653,
     emissiveIntensity: 1,
-  });
+  }).clone();
   const group = new THREE.Group();
   group.name = kind;
   const authoredCanvas = housingDetails(kind === 'tent' ? 'Tent' : 'Teepee');
@@ -150,6 +155,12 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
     plankGeometry(1.05, 0.025, 0.46, 'z', 0.4, 902),
     placed(doorX, 0.018, depth + 0.14),
   );
+  // A tucked-in groundsheet gives the opening depth instead of exposing bright grass.
+  builder.add(
+    hem,
+    plankGeometry(0.82, 0.025, 0.8, 'z', 0.5, 903),
+    placed(doorX, 0.022, depth - 0.45),
+  );
   const lx = doorX + 0.72,
     lz = depth + 0.02;
   builder.add(wood, new THREE.CylinderGeometry(0.035, 0.05, 0.94, 6), placed(lx, 0.47, lz));
@@ -167,13 +178,27 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
         new THREE.CylinderGeometry(0.012, 0.012, 0.25, 4),
         placed(lx + dx, 0.81, lz + dz),
       );
+  addShelterStitching(builder, kind, doorX, depth, { hem, thread: rope, wood });
   const built = builder.build();
   group.add(built.group);
+  const lanternGlow = createFireGlow(0xffc577, 0.65, 2.4, 0.025);
+  lanternGlow.anchor.position.set(lx, 0.81, lz + 0.08);
+  group.add(lanternGlow.anchor);
   return {
     group,
+    setDaylight(brightness) {
+      const night = 1 - Math.max(0, Math.min(1, brightness));
+      glow.emissiveIntensity = 0.35 + night * 0.85;
+      lanternGlow.brightness = 0.08 + night * 0.92;
+    },
+    update(deltaSeconds) {
+      lanternGlow.update(deltaSeconds);
+    },
     dispose() {
       built.dispose();
       canvas.dispose();
+      glow.dispose();
+      lanternGlow.dispose();
     },
   };
 }
@@ -201,7 +226,7 @@ export function createCanvasMaterial(kind: 'tent' | 'teepee'): THREE.MeshStandar
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 1, side: THREE.DoubleSide });
   // A pale linen base keeps the woven texture from turning a whole shelter brown.
   material.colorNode = texture(artTexture('burlap'))
-    .rgb.mul(0.32)
-    .add(color(kind === 'tent' ? 0x9b987f : 0xb8aa91));
+    .rgb.mul(0.18)
+    .add(color(kind === 'tent' ? 0x9da986 : 0xcdb995).mul(0.82));
   return material;
 }
