@@ -1,3 +1,4 @@
+import { HandSelection, handSelectionText } from './hud/hand-selection';
 import type { HomesteadAppearance } from '@acorn/shared';
 import { advanceForestWind } from './art/forest-wind';
 import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
@@ -830,6 +831,7 @@ export class Game {
   /** What the server's Roster says about everybody currently connected. */
   private readonly roster = new Map<number, RosterEntry>();
   /** What the server's Equipped list says everybody currently has in hand, including ourselves. */
+  private readonly handSelection = new HandSelection();
   private readonly equipped = new Map<number, ItemId | null>();
   /** What the server's Worn list says everybody currently wears, including ourselves (decision 0113). */
   private readonly worn = new Map<number, Readonly<WornGear>>();
@@ -1559,8 +1561,17 @@ export class Game {
       return;
     }
     if (!ITEM_KINDS[item].equippable && blueprintHome(item) === null) return;
-    if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) return;
-    this.submitAction('use this item', () => this.connection?.sendUseItem(item));
+    if (!this.carrying.some((entry) => entry.item === item && entry.count > 0)) {
+      this.showActionNote(`No ${ITEM_KINDS[item].displayName.toLowerCase()} in your pack.`);
+      return;
+    }
+    if (
+      (this.equipped.get(this.selfNetId) ?? null) !== item &&
+      !this.handSelection.begin(item, performance.now())
+    )
+      return;
+    if (!this.submitAction('use this item', () => this.connection?.sendUseItem(item)))
+      this.handSelection.clear();
   }
 
   /**
@@ -2029,6 +2040,8 @@ export class Game {
         break;
       }
       case 'welcome': {
+        this.handSelection.clear();
+        this.equipped.clear();
         this.chestPending = false;
         this.chestDismissed = false;
         this.homesteadAppearances.clear();
@@ -2086,6 +2099,13 @@ export class Game {
         break;
       }
       case 'equipped': {
+        const before = this.equipped.get(this.selfNetId);
+        const own = message.players.find((entry) => entry.netId === this.selfNetId);
+        if (own !== undefined) {
+          this.handSelection.confirm(own.item);
+          const note = handSelectionText(before, own.item);
+          if (note !== null && this.playing) this.showActionNote(note);
+        }
         this.equipped.clear();
         for (const entry of message.players) this.equipped.set(entry.netId, entry.item);
         this.applyEquipped();
@@ -2104,6 +2124,7 @@ export class Game {
         break;
       }
       case 'gearRefused': {
+        this.handSelection.clear();
         this.gearNotice = {
           text: gearRefusalText(message.reason),
           key: (this.gearNotice?.key ?? 0) + 1,
