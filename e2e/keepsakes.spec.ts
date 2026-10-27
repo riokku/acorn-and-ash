@@ -21,7 +21,10 @@ test('shows earned keepsake plans, places a carried trophy once, and keeps unear
   await expect(collection.locator('[data-keepsake=guardianTrophy] button')).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('after.png'), fullPage: true });
   await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await page.getByRole('button', { name: 'Your adventures · see keepsakes' }).click();
+  await page
+    .getByRole('region', { name: 'Stories brought home' })
+    .getByRole('button', { name: 'See your earned keepsakes' })
+    .click();
   await expect(collection).toBeVisible();
   expect(errors).toEqual([]);
 });
