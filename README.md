@@ -1475,6 +1475,9 @@ orbit and scroll to zoom make the elevation changes easy to review. See
 
 - [`docs/decisions/`](docs/decisions/) — why things are the way they are, one
   short page each.
+- [Working art direction](docs/design/art-direction.md) and
+  [visual audit](docs/design/visual-audit.md) — the cabin-to-forest quality
+  standard, observed findings, and priorities for the presentation pass.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found
   out about WebGPU, running an ECS inside a Durable Object, and what 50 players
   costs.
