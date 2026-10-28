@@ -25,7 +25,7 @@ import {
 import { seasonUniforms } from '../art/season-uniforms';
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
-import { realModelPartsFor } from './prop-models';
+import { realModelPartsFor, treeVariant } from './prop-models';
 import {
   groundWeights,
   propBurialDepth,
@@ -380,16 +380,40 @@ export function placeOneInstance(
   part.burn?.(index, 0);
 }
 
-/** A cylinder standing where the prop does, matching what the server collides with. */
+/** Camera proxies include foliage; the server's walking collision stays at the trunk. */
 export function blockerGeometry(kind: PropKind, prop: PlacedProp): THREE.BufferGeometry {
   const radius = kind.colliderRadius * prop.scale;
-  const height =
-    (kind.shape.family === 'tree'
-      ? kind.shape.trunkHeight + kind.shape.canopyHeight
-      : kind.shape.height) * prop.scale;
-  const geometry = new THREE.CylinderGeometry(radius, radius, height, 6, 1);
-  geometry.translate(prop.x, (prop.y ?? 0) + height / 2, prop.z);
-  return geometry;
+  const height = propHeight(kind) * prop.scale;
+  const trunk = new THREE.CylinderGeometry(radius, radius, height, 6, 1);
+  trunk.translate(prop.x, (prop.y ?? 0) + height / 2, prop.z);
+  if (kind.shape.family !== 'tree' || kind.deciduous) return trunk;
+
+  // The loaded, scaled model is the source of the canopy's size. In particular,
+  // cedar has lower branches than the placeholder tree's trunk height.
+  const foliage = realModelPartsFor(prop.kind, false, treeVariant(prop))?.filter(
+    (part) => !/bark/i.test(part.material.name),
+  );
+  const bounds = new THREE.Box3();
+  for (const part of foliage ?? []) {
+    if (part.geometry.boundingBox === null) part.geometry.computeBoundingBox();
+    if (part.geometry.boundingBox !== null) bounds.union(part.geometry.boundingBox);
+  }
+  const bottom = bounds.isEmpty() ? kind.shape.trunkHeight : bounds.min.y;
+  const top = bounds.isEmpty() ? kind.shape.trunkHeight + kind.shape.canopyHeight : bounds.max.y;
+  const canopyRadius = bounds.isEmpty()
+    ? kind.shape.canopyRadius
+    : Math.max(
+        Math.abs(bounds.min.x),
+        Math.abs(bounds.max.x),
+        Math.abs(bounds.min.z),
+        Math.abs(bounds.max.z),
+      );
+  const canopy = new THREE.ConeGeometry(canopyRadius * prop.scale, (top - bottom) * prop.scale, 8);
+  canopy.translate(prop.x, (prop.y ?? 0) + ((bottom + top) * prop.scale) / 2, prop.z);
+  const combined = mergeGeometries([trunk, canopy], false)!;
+  trunk.dispose();
+  canopy.dispose();
+  return combined;
 }
 
 /**
