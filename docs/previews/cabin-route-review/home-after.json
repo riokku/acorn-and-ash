@@ -1,0 +1,11 @@
+{
+  "review": "home",
+  "condition": "day",
+  "renderer": "webgl2",
+  "bundle": "http://127.0.0.1:5185/assets/index-m3cEMR-U.js",
+  "home": {
+    "x": -2,
+    "z": -4.2,
+    "validatedUpgrade": true
+  }
+}

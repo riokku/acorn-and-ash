@@ -7,6 +7,18 @@ import { FollowCamera } from '../src/camera/follow-camera';
 
 const PLAYER_POSITION = { x: 0, y: 0, z: 0 };
 
+it('reports the current view as an independent snapshot', () => {
+  const follow = new FollowCamera(16 / 9);
+  follow.update(PLAYER_POSITION, 0, []);
+  const view = follow.view();
+  expect(view.distance).toBeCloseTo(6);
+  expect(view.target.y).toBeCloseTo(PLAYER_HEIGHT * 0.78);
+  view.position.x = 100;
+  view.target.y = 100;
+  expect(follow.view().position.x).not.toBe(100);
+  expect(follow.view().target.y).not.toBe(100);
+});
+
 describe('camera shake', () => {
   it('clamps to full strength no matter how many hits land at once', () => {
     const followCamera = new FollowCamera(16 / 9);

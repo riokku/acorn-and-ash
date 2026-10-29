@@ -204,6 +204,18 @@ export class RaiderFigure {
     return this.departing !== null && this.departing >= DEPART_SECONDS;
   }
 
+  /** The pose and warning passed to the last draw, for visual checks. */
+  display(): {
+    kind: ActionKind;
+    step: number;
+    age: number;
+    warning: { visible: boolean; opacity: number };
+  } | null {
+    if (this.lastFrame === null) return null;
+    const { kind, step, age } = this.lastFrame.move;
+    return { kind, step, age, warning: this.danger.display() };
+  }
+
   /**
    * Draw this frame, standing at `at` and doing `frame`. `volume` is how
    * loud it should sound, from 0 to 1, by how far off it is.

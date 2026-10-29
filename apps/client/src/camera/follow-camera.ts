@@ -149,6 +149,15 @@ export class FollowCamera {
     return this.outdoorLook !== null;
   }
 
+  /** Current camera and look target, for visual diagnostics. */
+  view(): { position: Vec3; target: Vec3; distance: number } {
+    return {
+      position: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z },
+      target: { x: this.target.x, y: this.target.y, z: this.target.z },
+      distance: this.camera.position.distanceTo(this.target),
+    };
+  }
+
   private keepInRoomView(): void {
     this.look.yaw = clamp(this.look.yaw, -ROOM_YAW_LIMIT, ROOM_YAW_LIMIT);
     this.look.pitch = clamp(this.look.pitch, ROOM_MIN_PITCH, ROOM_MAX_PITCH);

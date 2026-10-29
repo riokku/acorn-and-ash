@@ -1,0 +1,50 @@
+{
+  "skeleton-swing": {
+    "display": {
+      "kind": 1,
+      "step": 3,
+      "age": 6.6949033081159,
+      "warning": {
+        "visible": true,
+        "opacity": 0.021814413469713155
+      }
+    },
+    "health": 100,
+    "point": {
+      "x": 480.0755869337877,
+      "y": 317.4583942882303
+    }
+  },
+  "skeleton-recovery": {
+    "display": {
+      "kind": 1,
+      "step": 3,
+      "age": 9.244919110648334,
+      "warning": {
+        "visible": false,
+        "opacity": 0.14300000000000002
+      }
+    },
+    "health": 100,
+    "point": {
+      "x": 509.66229952893525,
+      "y": 318.50447950902674
+    }
+  },
+  "skeleton-windup": {
+    "display": {
+      "kind": 10,
+      "step": 2,
+      "age": 6.572281859740615,
+      "warning": {
+        "visible": true,
+        "opacity": 0.09479211394805462
+      }
+    },
+    "health": 100,
+    "point": {
+      "x": 480.02375467827346,
+      "y": 316.9371457331214
+    }
+  }
+}
