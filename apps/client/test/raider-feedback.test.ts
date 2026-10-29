@@ -62,6 +62,37 @@ function setup(kind: RaiderKindId = 'minion') {
   return { parent, figure, hitStop, burst, draw };
 }
 
+it('reports the last drawn action and warning without exposing mutable state', () => {
+  const { figure, draw } = setup();
+  try {
+    expect(figure.display()).toBeNull();
+    draw(ActionKind.Windup, 3.5);
+    const shown = figure.display()!;
+    expect(shown).toMatchObject({
+      kind: ActionKind.Windup,
+      step: 0,
+      age: 3.5,
+      warning: { visible: true },
+    });
+    expect(shown.warning.opacity).toBeGreaterThan(0);
+    shown.age = 99;
+    shown.warning.visible = false;
+    expect(figure.display()).toEqual({
+      ...shown,
+      age: 3.5,
+      warning: { ...shown.warning, visible: true },
+    });
+    draw(ActionKind.Idle, 0);
+    expect(figure.display()).toMatchObject({
+      kind: ActionKind.Idle,
+      age: 0,
+      warning: { visible: false },
+    });
+  } finally {
+    figure.dispose();
+  }
+});
+
 it('keeps wind-up audio stable across fractional snapshot corrections but plays a fresh attack', () => {
   const { figure, draw, parent } = setup();
   try {

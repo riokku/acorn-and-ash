@@ -707,6 +707,8 @@ export interface GameDebug {
   aimedAnimal(): { name: string; hitsLeft?: number } | null;
   /** Every skeleton raider in sight (see decision 0063), and how many blows each still needs. */
   raiders(): Array<{ id: number; kind: string; x: number; z: number; hitsLeft: number }>;
+  /** Last drawn raider action and warning, including presentation timing. */
+  raiderDisplay(id: number): ReturnType<RaiderCrowd['display']>;
   /** The skeleton a swing would land on right now, if any. */
   aimedRaider(): { name: string; hitsLeft: number } | null;
   /** The raid banner showing right now, if any: its big words. */
@@ -771,6 +773,7 @@ export interface GameDebug {
   faceTowards(x: number, z: number): void;
   /** Project a world point for browser interaction tests, without changing game state. */
   screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
+  cameraView(): ReturnType<FollowCamera['view']> | null;
   /** The pond, as the circles it is made of. */
   pond(): Array<{ x: number; z: number; radius: number }>;
   /** The lake's shape, as the world was built: its blobs of water and its islands. */
@@ -1791,6 +1794,7 @@ export class Game {
                 },
               ];
         }),
+      raiderDisplay: (id) => this.raiders.display(id),
       aimedRaider: () => (this.aimedRaider === null ? null : { ...this.aimedRaider }),
       raidBanner: () => this.currentRaidBanner()?.title ?? null,
       canBuild: () => this.canBuild,
@@ -1842,6 +1846,7 @@ export class Game {
           y: ((1 - this.scratchProject.y) * window.innerHeight) / 2,
         };
       },
+      cameraView: () => this.camera?.view() ?? null,
       faceTowards: (x, z) => {
         const camera = this.camera;
         if (camera === null) return;
@@ -3311,7 +3316,7 @@ export class Game {
         TINT_COLORS[this.options.identity.color].hex,
         this.options.identity.skin,
       );
-      this.localCharacter.setName(this.options.identity.name);
+      // A redundant local nameplate can cover an enemy's name and health bar.
       this.localCharacter.setGear(this.worn.get(this.selfNetId) ?? {});
       this.scene.add(this.localCharacter.group);
       // If we signed in inside a distant home, draw the forest at its door

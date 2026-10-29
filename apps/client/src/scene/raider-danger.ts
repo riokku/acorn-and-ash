@@ -100,6 +100,11 @@ export class RaiderDanger {
     this.fitted = null;
   }
 
+  /** The warning actually shown with the last drawn pose. */
+  display(): { visible: boolean; opacity: number } {
+    return { visible: this.group.visible, opacity: this.material.opacity };
+  }
+
   dispose(): void {
     this.group.removeFromParent();
     this.circle.geometry.dispose();

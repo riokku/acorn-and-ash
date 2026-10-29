@@ -247,6 +247,11 @@ export class RaiderCrowd {
     return markers;
   }
 
+  /** Last drawn pose and warning, independently of the latest server snapshot. */
+  display(id: number): ReturnType<RaiderFigure['display']> {
+    return this.figures.get(id)?.display() ?? null;
+  }
+
   /**
    * The closest raider mid-swing within `within` metres of `at`, if any:
    * the one most likely to have landed the blow that just hurt us.
