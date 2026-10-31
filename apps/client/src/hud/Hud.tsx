@@ -1,6 +1,6 @@
 import { RumorTrail } from './RumorTrail';
 import { rumorDefinition, rumorInteraction } from '@acorn/shared';
-import { HomecomingCard } from './Homecoming';
+import { HomecomingCard } from './HomecomingCard';
 import { TrophyCollection } from './TrophyCollection';
 import { isKeepsake } from './keepsakes';
 import { HomesteadPlan } from './HomesteadPlan';
