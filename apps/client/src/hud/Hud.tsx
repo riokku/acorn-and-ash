@@ -472,8 +472,10 @@ export function Hud({
       {showingWorld ? (
         <div className="vitals">
           {state.warmth !== null ? <WarmthBar warmth={state.warmth} /> : null}
-          <HungerBar hunger={state.hunger} />
-          <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
+          <div className="vitals-card">
+            <HungerBar hunger={state.hunger} />
+            <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
+          </div>
         </div>
       ) : null}
       {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
@@ -1404,20 +1406,23 @@ function Hotbar({
   const resolved = resolveHotbarSlots(state.carrying, state.hotbarSlots, state.worn.mainHand);
   return (
     <div className="hotbar">
-      {resolved.map((item, index) => (
-        <HotbarSlot
-          key={index}
-          slotNumber={index + 1}
-          item={item}
-          count={state.carrying.find((entry) => entry.item === item)?.count ?? 0}
-          worn={item !== null && item === state.worn.mainHand}
-          equipped={item !== null && item === state.equippedItem}
-          onUseItem={onUseItem}
-          onAssign={(dropped) => onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))}
-          onOpenSlotMenu={onOpenSlotMenu}
-        />
-      ))}
-      <span className="hotbar-divider" aria-hidden="true" />
+      <div className="hotbar-slots">
+        {resolved.map((item, index) => (
+          <HotbarSlot
+            key={index}
+            slotNumber={index + 1}
+            item={item}
+            count={state.carrying.find((entry) => entry.item === item)?.count ?? 0}
+            worn={item !== null && item === state.worn.mainHand}
+            equipped={item !== null && item === state.equippedItem}
+            onUseItem={onUseItem}
+            onAssign={(dropped) =>
+              onHotbarSlotsChange(assignSlot(state.hotbarSlots, index, dropped))
+            }
+            onOpenSlotMenu={onOpenSlotMenu}
+          />
+        ))}
+      </div>
       <PackButton
         carrying={state.carrying}
         open={state.inventoryOpen}
