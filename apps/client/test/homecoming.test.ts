@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { Homecoming } from '../src/hud/homecoming';
-import { HomecomingCard } from '../src/hud/Homecoming';
+import { HomecomingCard } from '../src/hud/HomecomingCard';
 
 it('combines confirmed collections and discoveries into one outing, then starts fresh', () => {
   const trip = new Homecoming();
