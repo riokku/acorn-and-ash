@@ -123,7 +123,7 @@ Chris has the Blender MCP connected, so Claude can see and edit a live Blender s
 3. Look at it. Take viewport screenshots from the front, the side and three-quarters, check them against the style and the in-game scale, fix what is off and repeat. Don't call a model done without looking at it.
 4. Check the triangle budget (player 10k, animals 5k, trees 4k plus distance versions, props 2k) and the polygon count of anything downloaded or AI-generated. Those are usually far over, so retopologize or decimate them.
 5. Save the `.blend` to `assets/<category>/`, keep it small (a few MB; bake or drop heavy textures), and export a glTF with Y up. Run `node tools/import-model.mjs <exported.gltf> assets/<category>/<name>.glb` to compress it with Meshopt. Large textures also go to KTX2 with glTF Transform, as the size limits above require.
-6. Add a `LICENSES.csv` row for every file you added, `.blend` and `.glb`. For our own work: `source_url` is `original`, `author` is `Acorn & Ash`, `license` is `All rights reserved (original)`, `ai_tool` and `ai_plan` stay empty, and `modifications` says "Modelled in Blender with Claude through the Blender MCP". Chris can change that default.
+6. Add a `LICENSES.csv` row for every file you added, `.blend` and `.glb`. For our own work: `source_url` is `original`, `author` is `Acorn & Ash`, `license` is `CC0-1.0`, `ai_tool` and `ai_plan` stay empty, and `modifications` says "Modelled in Blender with Claude through the Blender MCP". Chris chose CC0 for everything we make ourselves.
 7. Load it in the game or the gallery, check it at gameplay distance and in each season and at night, then open the pull request with screenshots.
 
 **The libraries inside the Blender MCP:**

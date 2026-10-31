@@ -72,6 +72,7 @@ import { createMineLantern, preloadMineLantern } from './mine-lantern';
 import { preloadMineSupport } from '../scene/mine-supports';
 import { createDugGround, createDugRamp } from './dug-ground';
 import { createIronAxe, preloadIronAxe } from './iron-axe';
+import { createUnderstory, preloadUnderstory } from './understory';
 
 /**
  * The art gallery: every piece of the game's own art laid out in daylight on
@@ -279,6 +280,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: () => smallAnimalExhibit('fox', createFox()) },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
+  // The forest-floor plants, made in Blender (see understory.ts).
+  { name: 'understory', x: -22, z: -4, view: 4, create: createUnderstory },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
   // A tunnel propped with mine supports (see mine-supports.ts).
@@ -376,6 +379,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadCampfireModels(),
     preloadFoxModel(),
     preloadIronAxe(),
+    preloadUnderstory(),
     preloadDugWalls(),
     preloadMineSupport(),
     preloadMineLantern(),
