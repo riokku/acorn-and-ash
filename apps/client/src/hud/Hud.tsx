@@ -565,9 +565,11 @@ export function Hud({
       {showingWorld && !state.inventoryOpen && state.hoveredLoot !== null ? (
         <div
           className="loot-hover"
-          style={{
-            left: Math.max(8, Math.min(state.hoveredLoot.x + 18, window.innerWidth - 260)),
-            top: Math.max(8, Math.min(state.hoveredLoot.y + 18, window.innerHeight - 110)),
+          ref={(element) => {
+            if (element === null || state.hoveredLoot === null) return;
+            const bounds = element.getBoundingClientRect();
+            element.style.left = `${Math.max(8, Math.min(state.hoveredLoot.x + 18, window.innerWidth - bounds.width - 8))}px`;
+            element.style.top = `${Math.max(8, Math.min(state.hoveredLoot.y + 18, window.innerHeight - bounds.height - 8))}px`;
           }}
         >
           <strong>
@@ -582,21 +584,65 @@ export function Hud({
           {connectionNotice(state.connection, state.connectionDetail)}
         </p>
       ) : null}
-      {showingWorld &&
-      state.interactionNote !== null &&
-      !(state.characterOpen && state.gearNotice?.text === state.interactionNote) ? (
-        <p className="interaction-note" role="status">
-          {state.interactionNote}
-        </p>
-      ) : null}
-      {showingWorld && !state.inventoryOpen && state.pickupNotice !== null ? (
-        <PickupNotice
-          notice={state.pickupNotice}
-          onOpenPack={() => {
-            if (!state.inventoryOpen) onToggleInventory();
-          }}
-        />
-      ) : null}
+      <div className="feedback-stack">
+        {showingWorld &&
+        state.interactionNote !== null &&
+        !(state.characterOpen && state.gearNotice?.text === state.interactionNote) ? (
+          <p className="interaction-note" role="status">
+            {state.interactionNote}
+          </p>
+        ) : null}
+        {showingWorld && !state.inventoryOpen && state.pickupNotice !== null ? (
+          <PickupNotice
+            notice={state.pickupNotice}
+            onOpenPack={() => {
+              if (!state.inventoryOpen) onToggleInventory();
+            }}
+          />
+        ) : null}
+        {state.ready &&
+        state.playing &&
+        !state.mapOpen &&
+        (state.fishingNews !== null ||
+          state.healthNews !== null ||
+          state.cacheNews !== null ||
+          state.hungerNews !== null ||
+          state.craftingNews !== null ||
+          state.cookingNews !== null ||
+          state.huntingNews !== null ||
+          state.discardNews !== null) ? (
+          <p className="hud-news">
+            {state.fishingNews ??
+              state.healthNews ??
+              state.cacheNews ??
+              state.hungerNews ??
+              state.craftingNews ??
+              state.cookingNews ??
+              state.huntingNews ??
+              state.discardNews}
+          </p>
+        ) : null}
+
+        {state.ready &&
+        state.playing &&
+        !state.mapOpen &&
+        !state.inventoryOpen &&
+        hint(state) !== '' ? (
+          <p
+            className={
+              state.fishing === 'biting' ||
+              state.hunger <= 0 ||
+              state.health <= HEALTH_LOW_THRESHOLD
+                ? 'hud-hint hud-hint-urgent'
+                : (state.placing?.refusal ?? null) !== null && !state.buildMenuOpen
+                  ? 'hud-hint hud-hint-blocked'
+                  : 'hud-hint'
+            }
+          >
+            {hint(state)}
+          </p>
+        ) : null}
+      </div>
       {showingWorld && state.homecoming ? (
         <HomecomingCard key={state.homecoming.id} summary={state.homecoming} />
       ) : null}
@@ -639,46 +685,6 @@ export function Hud({
       ) : null}
 
       {showingWorld && !state.mapOpen ? <RareReelHint state={state} /> : null}
-      {state.ready &&
-      state.playing &&
-      !state.mapOpen &&
-      (state.fishingNews !== null ||
-        state.healthNews !== null ||
-        state.cacheNews !== null ||
-        state.hungerNews !== null ||
-        state.craftingNews !== null ||
-        state.cookingNews !== null ||
-        state.huntingNews !== null ||
-        state.discardNews !== null) ? (
-        <p className="hud-news">
-          {state.fishingNews ??
-            state.healthNews ??
-            state.cacheNews ??
-            state.hungerNews ??
-            state.craftingNews ??
-            state.cookingNews ??
-            state.huntingNews ??
-            state.discardNews}
-        </p>
-      ) : null}
-
-      {state.ready &&
-      state.playing &&
-      !state.mapOpen &&
-      !state.inventoryOpen &&
-      hint(state) !== '' ? (
-        <p
-          className={
-            state.fishing === 'biting' || state.hunger <= 0 || state.health <= HEALTH_LOW_THRESHOLD
-              ? 'hud-hint hud-hint-urgent'
-              : (state.placing?.refusal ?? null) !== null && !state.buildMenuOpen
-                ? 'hud-hint hud-hint-blocked'
-                : 'hud-hint'
-          }
-        >
-          {hint(state)}
-        </p>
-      ) : null}
 
       {menuTarget !== null ? (
         <SlotMenu

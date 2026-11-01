@@ -1490,6 +1490,7 @@ orbit and scroll to zoom make the elevation changes easy to review. See
 - [Working art direction](docs/design/art-direction.md) and
   [visual audit](docs/design/visual-audit.md) — the cabin-to-forest quality
   standard, observed findings, and priorities for the presentation pass.
+- [Field journal gameplay feedback](docs/design/field-journal-feedback.md) — contextual guidance and gain notices.
 - [Field journal HUD](docs/design/field-journal-hud.md) — the approved paper,
   fir-green and copper treatment, with controlled desktop review coverage.
 - [Field journal menus and icons](docs/design/field-journal-menus.md) — matching
