@@ -98,45 +98,61 @@ body {
   color: var(--bad);
 }
 
-.hud-hint {
+.feedback-stack {
   position: absolute;
-  left: 50%;
-  bottom: 88px;
-  transform: translateX(-50%);
-  padding: 9px 16px;
-  border: 1px solid var(--panel-edge);
-  border-radius: 999px;
-  background: var(--panel);
-  backdrop-filter: blur(6px);
-  font-size: 13px;
-  white-space: nowrap;
+  left: 0;
+  right: 0;
+  bottom: 101px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  pointer-events: none;
 }
 
-/* A fish on the line: the one moment the hint has to shout. */
+/* Leave room for the vitals at narrow desktop widths, including long hints. */
+@media (min-width: 720px) and (max-width: 1000px) {
+  .feedback-stack {
+    max-width: min(560px, calc(100vw - 520px));
+  }
+}
+
+.hud-hint,
+.hud-news,
+.interaction-note {
+  max-width: 100%;
+  margin: 0;
+  padding: 7px 13px;
+  border: 1px solid #718776a8;
+  border-radius: 6px;
+  background: #20362fee;
+  color: #fff0d1;
+  box-shadow:
+    0 3px 12px #0004,
+    inset 0 1px #fff1d114;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.interaction-note {
+  position: relative;
+  z-index: 40;
+}
+
+/* Preserve the established warning meanings. */
 .hud-hint-urgent {
   border-color: #e8b53a;
   color: #fff4d6;
   font-weight: 600;
 }
-
-/* A piece being placed that will not fit where it is pointed - see decision 0052. */
 .hud-hint-blocked {
   border-color: #ff6f61;
   color: #ffe3de;
-}
-
-/* What just happened to your line, just above the hint. */
-.hud-news {
-  position: absolute;
-  left: 50%;
-  bottom: 134px;
-  transform: translateX(-50%);
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: var(--panel);
-  backdrop-filter: blur(6px);
-  font-size: 14px;
-  white-space: nowrap;
 }
 
 /*
@@ -2552,7 +2568,8 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 14px 6px 8px;
-  border-radius: 999px;
+  border: 1px solid #718776;
+  border-radius: 6px;
   background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
   box-shadow:
     0 6px 14px rgba(0, 0, 0, 0.28),
@@ -2561,7 +2578,8 @@ body {
   font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  max-width: min(200px, calc((100vw - 520px) / 2 - 24px));
+  overflow-wrap: anywhere;
   animation: toast-in 220ms ease-out;
   transition:
     opacity 450ms ease-in,
@@ -3003,23 +3021,19 @@ body {
 
 /* Pickup refusal stays above the hotbar, with a direct way to make room. */
 .pickup-notice {
-  position: absolute;
-  left: 50%;
-  bottom: 116px;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 12px;
   width: max-content;
-  max-width: calc(100vw - 32px);
-  padding: 12px 16px;
-  border: 1px solid #d4a86299;
-  border-radius: 12px;
-  background: linear-gradient(120deg, #332b22f5, #201f1cf5);
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #718776;
+  border-radius: 7px;
+  background: linear-gradient(180deg, var(--parchment), var(--parchment-dim));
   box-shadow:
     0 8px 28px #0005,
     inset 0 1px #ffe3ab15;
-  color: #eee3d2;
+  color: var(--ink-warm);
   pointer-events: auto;
   animation: pickup-notice-enter 200ms ease-out;
   z-index: 20;
@@ -3050,7 +3064,7 @@ body {
   gap: 3px;
 }
 .pickup-notice-copy strong {
-  color: #f3c887;
+  color: #273f32;
   font-size: 14px;
 }
 .pickup-notice-copy > span {
@@ -3058,21 +3072,21 @@ body {
   line-height: 1.4;
 }
 .pickup-notice button {
-  border: 1px solid #e6c38b55;
+  border: 1px solid #365344;
   border-radius: 7px;
   padding: 8px 10px;
-  background: #e6c38b12;
-  color: #f3d8ad;
+  background: #304d3e;
+  color: #fff0d1;
   cursor: pointer;
   white-space: nowrap;
   font: inherit;
   font-size: 12px;
 }
 .pickup-notice button:hover {
-  background: #e6c38b28;
+  background: #41644f;
 }
 .pickup-notice button:focus-visible {
-  outline: 2px solid #f3c887;
+  outline: 2px solid #a25c2e;
   outline-offset: 3px;
 }
 .pickup-notice kbd {
@@ -3089,8 +3103,13 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pickup-notice {
+  .pickup-notice,
+  .toast {
     animation: none;
+    transition: none;
+  }
+  .toast-fading {
+    transform: none;
   }
 }
 @media (max-width: 560px) {
@@ -3267,9 +3286,11 @@ body {
 .loot-hover {
   position: fixed;
   z-index: 12;
-  width: 210px;
-  padding: 12px 15px;
-  border: 1px solid #d4b77888;
+  box-sizing: border-box;
+  width: min(240px, calc(100vw - 16px));
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+  border: 1px solid #718776a8;
   border-radius: 7px;
   background: #203632ee;
   color: #fff0d1;
@@ -3284,21 +3305,6 @@ body {
   font-size: 12px;
   line-height: 1.4;
 }
-.interaction-note {
-  position: fixed;
-  z-index: 40;
-  max-width: calc(100vw - 32px);
-  bottom: 145px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 18px;
-  border-radius: 8px;
-  background: #28332bef;
-  color: #f5ddb2;
-  pointer-events: none;
-  text-align: center;
-}
-
 /* A private chest and the pack beside it, in the same warm parchment as the cabin menus. */
 .chest-scrim {
   position: fixed;
