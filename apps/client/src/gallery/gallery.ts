@@ -352,6 +352,11 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     showKeepsakes(canvas, params);
     return;
   }
+  if (focus === 'cursors') {
+    const { showCursors } = await import('./cursors');
+    showCursors(canvas);
+    return;
+  }
   if (focus === 'homestead' && params.get('view') === 'plan') {
     const { showHomesteadPlan } = await import('./homestead-plan');
     showHomesteadPlan(canvas, params);

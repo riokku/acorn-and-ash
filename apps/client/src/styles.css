@@ -37,6 +37,9 @@ body {
     Arial,
     sans-serif;
   color: var(--ink);
+  cursor:
+    url('../../../assets/ui/cursor-default.png') 3 3,
+    auto;
 }
 
 #scene {

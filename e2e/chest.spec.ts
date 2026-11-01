@@ -73,9 +73,11 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     if (point == null) throw new Error('Chest is off screen');
     await page.mouse.move(point.x, point.y);
     await expect(page.locator('.loot-hover')).toContainText('Storage chest');
+    await expect(page.locator('#scene')).toHaveCSS('cursor', /url\(.+\) 3 3, pointer$/);
     await page.mouse.click(point.x, point.y);
     const panel = page.getByTestId('chest-panel');
     await expect(panel).toBeVisible();
+    await expect(page.locator('#scene')).toHaveCSS('cursor', /url\(.+\) 3 3, auto$/);
     await expect(panel).toContainText('0/10');
     await expect(page.locator('[data-testid^="chest-withdraw-"]')).toHaveCount(10);
     deferStorage = true;

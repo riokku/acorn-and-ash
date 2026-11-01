@@ -100,6 +100,7 @@ test('records a discovery, inspects its personal reward and crafts the learned r
     if (point == null) throw new Error('forage is off screen');
     await page.mouse.move(point.x, point.y);
     await expect(page.locator('.loot-hover')).toContainText('Forest berries');
+    await expect(page.locator('#scene')).toHaveCSS('cursor', /url\(.+\) 3 3, pointer$/);
     await page.mouse.click(point.x, point.y, { button: 'right' });
     await expect.poll(() => sim.inventoryOf(1).berry ?? 0).toBe(before + 1);
     expect(errors).toEqual([]);
