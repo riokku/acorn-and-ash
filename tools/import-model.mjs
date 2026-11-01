@@ -2,10 +2,14 @@
 // slot whose image file wasn't shipped with it (we skip huge normal maps
 // when pulling assets down — see docs/decisions on the first art pass), and
 // writes an optimized, Meshopt-compressed .glb. Run with:
-// node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes]
+// node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes] [--quantize]
+//
+// --quantize stores positions, normals, colours and joint weights as small whole numbers
+// (KHR_mesh_quantization) before compressing. Worth it for flat-shaded, vertex-coloured models,
+// where every facet has corners of its own: the dwarf bodies shrink to under half.
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
-import { dedup, prune, reorder, weld } from '@gltf-transform/functions';
+import { dedup, prune, quantize, reorder, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import obj2gltf from 'obj2gltf';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +18,7 @@ import { dirname, resolve } from 'node:path';
 const [, , inputPath, outputPath] = process.argv;
 if (!inputPath || !outputPath) {
   console.error(
-    'usage: node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes]',
+    'usage: node tools/import-model.mjs <input.gltf|input.glb|input.obj> <output.glb> [--keep-attributes] [--quantize]',
   );
   process.exit(1);
 }
@@ -89,6 +93,12 @@ await document.transform(
   reorder({ encoder: MeshoptEncoder }),
 );
 
+const quantized = process.argv.includes('--quantize');
+if (quantized) {
+  await document.transform(
+    quantize({ quantizePosition: 14, quantizeNormal: 8, quantizeColor: 8, quantizeWeight: 8 }),
+  );
+}
 const meshopt = document.createExtension(EXTMeshoptCompression).setRequired(true);
 void meshopt;
 

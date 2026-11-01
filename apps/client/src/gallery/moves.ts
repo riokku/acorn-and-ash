@@ -21,6 +21,8 @@ import {
   SETTLE,
   STRIKE,
   TICK_SECONDS,
+  CHARACTER_KINDS,
+  type CharacterId,
   type ItemId,
   type RestingPlace,
 } from '@acorn/shared';
@@ -48,7 +50,7 @@ import type { RendererSetup } from '../scene/renderer';
  * `?gallery=moves` shows them all, looping; `&demo=` picks one to look at up
  * close; `&strip=N` lays that one out as N frozen moments across its length;
  * `&at=` freezes them all at one moment, in ticks; `&item=` puts something
- * else in every hand.
+ * else in every hand; `&body=mage` (any body's id) plays them on that body.
  */
 
 /** One move to show, and how it unfolds tick by tick. */
@@ -242,18 +244,21 @@ export async function showMoves(
   const turn = Number(params.get('turn') ?? 0.5);
   const asked = params.get('item');
   const carrying = asked !== null && asked in ITEM_KINDS ? (asked as ItemId) : null;
+  const askedBody = params.get('body');
+  const body: CharacterId =
+    askedBody !== null && askedBody in CHARACTER_KINDS ? (askedBody as CharacterId) : 'knight';
 
   const showings: Showing[] = [];
   bursts = new ImpactBursts();
   scene.add(bursts.group);
   const place = (demo: Demo, x: number, z: number, age: number, frozen: boolean): void => {
-    const character = createCharacter('knight', 0xf2efe6);
+    const character = createCharacter(body, 0xf2efe6);
     character.group.position.set(x, 0, z);
     character.group.rotation.y = turn;
     character.setEquippedItem(carrying ?? demo.item);
     scene.add(character.group);
     const label = createNameplate(frozen ? `${demo.name} @${age}` : demo.name);
-    label.sprite.position.set(x, 1.45, z);
+    label.sprite.position.set(x, 1.05, z);
     label.sprite.scale.multiplyScalar(0.6);
     scene.add(label.sprite);
     const trail = new WeaponTrail();

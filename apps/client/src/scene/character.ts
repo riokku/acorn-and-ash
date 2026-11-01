@@ -31,6 +31,14 @@ import { isSkinMaterial, skinShade } from './skin-tone';
 import { createFireGlow, type FireGlow } from './fire-light';
 import { createTorchFlame } from './torch-flame';
 import { createGearVisuals, hideBakedHeadPieces } from './gear-visuals';
+import {
+  BODY_BEARD,
+  BODY_REACH,
+  HELD_SIZE,
+  bodyShapeOf,
+  showBeard,
+  type BeardStyle,
+} from './body-shape';
 import { wornWeapon } from './gear-models';
 
 export type { FishingPose, Locomotion, MoveView };
@@ -231,7 +239,8 @@ function steadiedAt(lean: number, turn: THREE.Quaternion): THREE.Quaternion {
 /**
  * How a held item sits relative to the hand bone: `rotation`/`offset` place
  * it, and everything is scaled by `1 / MODEL_SCALE` to cancel the character's
- * own shrink, the same as the axe's group always was.
+ * own shrink, the same as the axe's group always was (and then by `HELD_SIZE`,
+ * smaller in a dwarf's hand).
  */
 interface HeldItemRest {
   readonly rotation: THREE.Euler;
@@ -487,6 +496,8 @@ export interface CharacterLook {
   /** A lighter or darker shade of the body's own skin; its own skin if left out. */
   readonly skin?: SkinToneId;
   readonly weapon?: CharacterWeapon;
+  /** A dwarf's beard; none if left out. */
+  readonly beard?: BeardStyle | null;
 }
 
 /**
@@ -580,7 +591,8 @@ export function createCharacter(
   skin: SkinToneId = DEFAULT_SKIN_TONE,
 ): Character {
   const template = characterModelTemplate(character);
-  if (template !== undefined) return createAnimatedCharacter(template, { tint: color, skin });
+  if (template !== undefined)
+    return createAnimatedCharacter(template, { tint: color, skin, beard: BODY_BEARD[character] });
   return createPlaceholderCharacter(color);
 }
 
@@ -610,6 +622,9 @@ const COIL_LEAN = 0.14;
 function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): Character {
   const instance = instantiateAnimatedModel(template);
   const model = instance.root;
+  const shape = bodyShapeOf(model);
+  /** Cancels the character's own shrink, then sizes what is held to the body. */
+  const heldScale = HELD_SIZE[shape] / MODEL_SCALE;
   // The template's own four clips only ever stand in until the animation
   // library has loaded: every move comes from there.
   instance.mixer.stopAllAction();
@@ -682,7 +697,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // animation for free, with no per-frame code needed here. Scaled up to
   // cancel MODEL_SCALE: parented this deep, it would otherwise shrink along
   // with the character, even though it's the same physical item as the one
-  // on the ground. All start hidden; at most one shows at a time.
+  // on the ground (a dwarf's are a size down; see HELD_SIZE). All start
+  // hidden; at most one shows at a time.
   const heldItems = new Map<HeldThing, HeldModel>();
   // Lives only while a torch is actually part of the rig - `held.visible`
   // already puts its glow out along with the rest of the group whenever
@@ -722,7 +738,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       }
       held.rotation.copy(grips.carry.rotation);
       held.position.copy(grips.carry.offset);
-      held.scale.setScalar(1 / MODEL_SCALE);
+      held.scale.setScalar(heldScale);
       held.visible = false;
       if (thing === 'torch') {
         torchGlow = createFireGlow(TORCH_LIGHT_COLOR, TORCH_LIGHT_INTENSITY, TORCH_LIGHT_DISTANCE);
@@ -749,7 +765,12 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
 
   // The head pieces baked into the six models give way to whatever is worn.
   hideBakedHeadPieces(model);
-  const gear = createGearVisuals(model, model.getObjectByName(OFF_HAND_BONE_NAME), 1 / MODEL_SCALE);
+  showBeard(model, look.beard ?? null);
+  // Today's helms and clothes were made for the taller Adventurers, so a
+  // dwarf wears none until they are refitted (the shield is held, so it stays).
+  const gear = createGearVisuals(model, model.getObjectByName(OFF_HAND_BONE_NAME), heldScale, {
+    bodyFitted: shape === 'adventurer',
+  });
 
   let equipped: ItemId | null = null;
   /** How long the shovel has left out, digging, in seconds. */
@@ -768,9 +789,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   /** The animator, made once the library has loaded, or null while it is on its way. */
   const animatorFor = (): CharacterAnimator | null => {
     if (animator !== null) return animator;
-    const clips: CharacterClips | null = characterClips() ?? fallbackClips(template);
+    const clips: CharacterClips | null = characterClips(shape) ?? fallbackClips(template);
     if (clips === null) return null;
-    animator = new CharacterAnimator(model, clips);
+    animator = new CharacterAnimator(model, clips, BODY_REACH[shape]);
     return animator;
   };
 
@@ -790,7 +811,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
             : (equipped ?? (look.weapon === undefined ? null : 'weapon'));
     for (const [thing, held] of heldItems) {
       held.group.visible = thing === showing;
-      held.group.scale.setScalar((1 / MODEL_SCALE) * (thing === eating ? left : 1));
+      held.group.scale.setScalar(heldScale * (thing === eating ? left : 1));
     }
   };
 

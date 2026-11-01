@@ -2,13 +2,18 @@ import * as THREE from 'three/webgpu';
 
 import { loadAnimatedModel } from './model-loading';
 import type { MoveClip } from './character-moves';
+import type { BodyShape } from './body-shape';
 
 import libraryUrl from '@assets/animations/character.glb?url';
+import dwarfLibraryUrl from '@assets/animations/dwarf.glb?url';
 
 /**
- * Every character move, loaded once and shared by all six characters: they
- * all use KayKit's Rig_Medium skeleton, bone for bone, so one clip plays on
- * any of them (see decision 0056 and tools/import-animations.mjs).
+ * Every character move, loaded once and shared by every character on
+ * KayKit's Rig_Medium skeleton, bone for bone, so one clip plays on any of
+ * them (see decision 0056 and tools/import-animations.mjs). The players'
+ * dwarves have the same bones in shorter lengths, and their own copy of
+ * every move fitted to them (tools/retarget-dwarf-animations.mjs), which is
+ * also where moves made just for dwarves go.
  *
  * Some clips also come split in two - the upper body and the legs - so a
  * character can eat, reach or fish with their arms while their legs keep
@@ -69,23 +74,32 @@ export interface CharacterClips {
   readonly lower: ReadonlyMap<MoveClip, THREE.AnimationClip>;
 }
 
-let library: CharacterClips | null = null;
+const LIBRARY_URLS: Record<BodyShape, string> = {
+  adventurer: libraryUrl,
+  dwarf: dwarfLibraryUrl,
+};
+
+const libraries = new Map<BodyShape, CharacterClips>();
 let loading: Promise<void> | null = null;
 
 /** Fetches the moves up front. Safe to call as often as you like. */
 export function preloadCharacterAnimations(): Promise<void> {
-  loading ??= load();
+  loading ??= Promise.all(
+    (Object.entries(LIBRARY_URLS) as Array<[BodyShape, string]>).map(([shape, url]) =>
+      load(shape, url),
+    ),
+  ).then(() => {});
   return loading;
 }
 
-/** The moves, once loaded, or null to keep standing still in the meantime. */
-export function characterClips(): CharacterClips | null {
-  return library;
+/** The moves for this body shape, once loaded, or null to keep standing still in the meantime. */
+export function characterClips(shape: BodyShape = 'adventurer'): CharacterClips | null {
+  return libraries.get(shape) ?? null;
 }
 
-async function load(): Promise<void> {
+async function load(shape: BodyShape, url: string): Promise<void> {
   try {
-    const model = await loadAnimatedModel(libraryUrl);
+    const model = await loadAnimatedModel(url);
     const whole = new Map<MoveClip, THREE.AnimationClip>();
     for (const clip of model.clips) whole.set(clip.name as MoveClip, clip);
     const upper = new Map<MoveClip, THREE.AnimationClip>();
@@ -131,10 +145,10 @@ async function load(): Promise<void> {
         );
       }
     }
-    library = { whole, upper, lower };
+    libraries.set(shape, { whole, upper, lower });
   } catch (error) {
     // Characters simply keep their own built-in walk and idle without it.
-    console.error('Could not load the character animations.', error);
+    console.error(`Could not load the ${shape} character animations.`, error);
   }
 }
 

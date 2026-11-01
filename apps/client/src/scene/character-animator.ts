@@ -4,6 +4,7 @@ import { ActionKind, Gesture, TICK_SECONDS } from '@acorn/shared';
 
 import { ArmReach, turnInWorld } from './arm-reach';
 import type { CharacterClips } from './character-animations';
+import { BODY_REACH, type BodyReach } from './body-shape';
 import {
   EAT_SECONDS,
   GESTURE_PLAYS,
@@ -39,18 +40,6 @@ const RUN_PACE = 7;
 /** How quickly a hit-stop's lost time is caught back up afterwards, as a share of real time. */
 const CATCH_UP = 0.6;
 
-/*
- * Eating, in the rig's own space (the pack's metres, facing +Z, the right
- * hand out along -X), measured off the characters' own heads: where the
- * right hand holds a mouthful, just in front of the mouth, where it holds
- * it between bites, and which way the elbow sticks out meanwhile.
- */
-const MOUTHFUL = new THREE.Vector3(-0.1, 1.36, 0.66);
-const BETWEEN_BITES = new THREE.Vector3(-0.16, 1.26, 0.84);
-const EATING_ELBOW = new THREE.Vector3(-0.9, 0.7, 0);
-/** Weapon arm out to the side, with a slight bend instead of a locked elbow. */
-const WHIRLWIND_HAND = new THREE.Vector3(-1.1, 1.05, 0.08);
-const WHIRLWIND_ELBOW = new THREE.Vector3(-0.6, 0.6, -0.35);
 /** How far the head dips to take each bite, in radians. */
 const BITE_NOD = 0.14;
 
@@ -157,6 +146,8 @@ export class CharacterAnimator {
   constructor(
     private readonly root: THREE.Object3D,
     clips: CharacterClips,
+    /** Where this body's hand goes to eat or hold a whirlwind out (see BODY_REACH). */
+    private readonly reachTo: BodyReach = BODY_REACH.adventurer,
   ) {
     this.mixer = new THREE.AnimationMixer(root);
     const upperArm = root.getObjectByName('upperarmr');
@@ -331,8 +322,8 @@ export class CharacterAnimator {
     this.mixer.update(deltaSeconds);
     if ((pose.whirlwindReach ?? 0) > 0 && this.rightArm !== null) {
       this.root.updateWorldMatrix(true, false);
-      this.root.localToWorld(this.target.copy(WHIRLWIND_HAND));
-      this.root.localToWorld(this.pole.copy(WHIRLWIND_ELBOW));
+      this.root.localToWorld(this.target.copy(this.reachTo.whirlwindHand));
+      this.root.localToWorld(this.pole.copy(this.reachTo.whirlwindElbow));
       this.rightArm.reach(this.target, this.pole, pose.whirlwindReach ?? 0);
     }
     // A whole-body move takes the arm back for itself.
@@ -391,9 +382,9 @@ export class CharacterAnimator {
     const weight = eating.reach * share;
     if (weight <= 0 || this.rightArm === null) return;
     this.root.updateWorldMatrix(true, false);
-    this.target.lerpVectors(BETWEEN_BITES, MOUTHFUL, eating.bite);
+    this.target.lerpVectors(this.reachTo.betweenBites, this.reachTo.mouthful, eating.bite);
     this.root.localToWorld(this.target);
-    this.root.localToWorld(this.pole.copy(EATING_ELBOW));
+    this.root.localToWorld(this.pole.copy(this.reachTo.eatingElbow));
     this.rightArm.reach(this.target, this.pole, weight);
     if (this.head !== null) {
       // About the character's own left-to-right: a dip forward, into the food.

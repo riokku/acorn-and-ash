@@ -18,3 +18,5 @@ apps/web/wrangler.preview.jsonc
 apps/web/wrangler.deploy.jsonc
 # Written by CI: the session secret for a pull request's preview.
 apps/web/preview-secrets.json
+# Python bytecode from the Blender art scripts.
+__pycache__/

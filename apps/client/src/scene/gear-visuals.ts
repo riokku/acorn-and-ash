@@ -144,12 +144,15 @@ export function hideBakedHeadPieces(model: THREE.Object3D): void {
 /**
  * Gear for the character built from this model. `leftHand` is the bone the
  * shield hangs from; `heldScale` cancels the character's own scale for things
- * parented that deep in its skeleton.
+ * parented that deep in its skeleton. With `bodyFitted` false, only what is
+ * held (the shield) is drawn: helms and clothes are left off a body they were
+ * not made for.
  */
 export function createGearVisuals(
   model: THREE.Object3D,
   leftHand: THREE.Object3D | undefined,
   heldScale: number,
+  { bodyFitted = true }: { readonly bodyFitted?: boolean } = {},
 ): GearVisuals {
   const skinned: THREE.SkinnedMesh[] = [];
   model.traverse((child) => {
@@ -257,9 +260,15 @@ export function createGearVisuals(
 
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
-    if (slot === 'helm') buildHelm(item, objects);
-    else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
-      buildSkin(slot, item, objects);
+    if (slot === 'helm') {
+      if (bodyFitted) buildHelm(item, objects);
+    } else if (
+      slot === 'upperBody' ||
+      slot === 'lowerBody' ||
+      slot === 'feet' ||
+      slot === 'hands'
+    ) {
+      if (bodyFitted) buildSkin(slot, item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
     for (const object of objects)
       object.traverse((part) => {
