@@ -1,5 +1,6 @@
 import type { BuildableKindId, ItemId } from '@acorn/shared';
-import itemAtlas from '../../../../assets/ui/item-atlas.webp?url';
+import { useId } from 'react';
+import { PAINTED_ICONS, SYSTEM_ICONS, type ArtSpec, type SystemIconId } from './painted-icons';
 
 /** Every item or buildable kind this module can draw a shape for. */
 type IconId = ItemId | BuildableKindId;
@@ -422,28 +423,6 @@ function roastedMeat(): React.JSX.Element {
   );
 }
 
-// Visible alpha bounds (x, y, width, height) in the 1254px square atlas.
-// Only exact item IDs use painted art; upgrades retain their silhouettes.
-type ArtBounds = readonly [number, number, number, number];
-const PAINTED_ITEMS: Partial<Record<ItemId, ArtBounds>> = {
-  axe: [82, 121, 200, 182],
-  rod: [387, 101, 194, 200],
-  shovel: [686, 108, 184, 200],
-  torch: [1003, 92, 152, 219],
-  berry: [89, 414, 186, 175],
-  mushroom: [401, 413, 169, 177],
-  meat: [682, 427, 193, 157],
-  roastedMeat: [997, 424, 173, 161],
-  bag: [87, 694, 181, 175],
-  log: [399, 708, 184, 156],
-  stick: [676, 696, 180, 168],
-  rope: [995, 705, 187, 163],
-  reed: [111, 953, 143, 202],
-  bone: [402, 978, 173, 161],
-  stone: [687, 986, 176, 152],
-  forestStew: [991, 984, 183, 153],
-};
-
 function GameIcon({
   id,
   color,
@@ -453,9 +432,8 @@ function GameIcon({
   id: IconId;
   color: string;
   className?: string;
-  painted?: ArtBounds;
+  painted?: ArtSpec;
 }): React.JSX.Element {
-  const scale = painted ? (24 * 0.82) / Math.max(painted[2], painted[3]) : 0;
   return (
     <svg
       className={className}
@@ -464,17 +442,59 @@ function GameIcon({
       aria-hidden="true"
       style={painted ? { overflow: 'hidden' } : undefined}
     >
-      {painted ? (
-        <image
-          href={itemAtlas}
-          x={12 - (painted[0] + painted[2] / 2) * scale}
-          y={12 - (painted[1] + painted[3] / 2) * scale}
-          width={1254 * scale}
-          height={1254 * scale}
-        />
-      ) : (
-        ICON_SHAPES[id]
-      )}
+      {painted ? <AtlasImage art={painted} /> : ICON_SHAPES[id]}
+    </svg>
+  );
+}
+
+function AtlasImage({ art }: { art: ArtSpec }): React.JSX.Element {
+  const clipId = useId();
+  const bounds = art.bounds;
+  const scale = (24 * 0.82) / Math.max(bounds[2], bounds[3]);
+  return (
+    <>
+      <defs>
+        <clipPath id={clipId}>
+          <rect
+            x={12 - (bounds[2] / 2 + 2) * scale}
+            y={12 - (bounds[3] / 2 + 2) * scale}
+            width={(bounds[2] + 4) * scale}
+            height={(bounds[3] + 4) * scale}
+          />
+        </clipPath>
+      </defs>
+      <image
+        href={art.src}
+        x={12 - (bounds[0] + bounds[2] / 2) * scale}
+        y={12 - (bounds[1] + bounds[3] / 2) * scale}
+        width={art.size * scale}
+        height={art.size * scale}
+        clipPath={`url(#${clipId})`}
+      />
+    </>
+  );
+}
+
+export function SystemIcon({
+  icon,
+  className,
+  size = 24,
+}: {
+  icon: SystemIconId;
+  className?: string;
+  size?: number;
+}): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+      style={{ overflow: 'hidden', display: 'block' }}
+    >
+      <AtlasImage art={SYSTEM_ICONS[icon]} />
     </svg>
   );
 }
@@ -488,7 +508,7 @@ export function ItemIcon({
   color: string;
   className?: string;
 }): React.JSX.Element {
-  return <GameIcon id={item} color={color} className={className} painted={PAINTED_ITEMS[item]} />;
+  return <GameIcon id={item} color={color} className={className} painted={PAINTED_ICONS[item]} />;
 }
 
 export function BuildableIcon({
@@ -500,7 +520,7 @@ export function BuildableIcon({
   color: string;
   className?: string;
 }): React.JSX.Element {
-  return <GameIcon id={kind} color={color} className={className} />;
+  return <GameIcon id={kind} color={color} className={className} painted={PAINTED_ICONS[kind]} />;
 }
 
 function blueprint(): React.JSX.Element {

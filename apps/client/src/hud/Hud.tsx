@@ -69,7 +69,7 @@ import {
 } from '@acorn/shared';
 
 import type { HudStore, HudState, RaidBanner } from './store';
-import { BuildableIcon, ItemIcon } from './item-icons';
+import { BuildableIcon, ItemIcon, SystemIcon } from './item-icons';
 import { CombatOverlay } from './CombatOverlay';
 import type { CombatFeed } from './combat-feed';
 import {
@@ -770,12 +770,7 @@ function HungerBar({ hunger }: { hunger: number }): React.JSX.Element {
       aria-valuemax={HUNGER_MAX}
       aria-valuenow={Math.round(hunger)}
     >
-      {/* A drumstick: meat on a bone. */}
-      <svg className="hunger-bar-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path className="hunger-bar-bone" d="M10.2 13.8 5.4 18.6" />
-        <circle className="hunger-bar-bone-end" cx="4.6" cy="19.4" r="1.9" />
-        <circle className="hunger-bar-meat" cx="15" cy="9" r="6.6" />
-      </svg>
+      <SystemIcon icon="hunger" className="hunger-bar-icon" />
       <div className="hunger-bar-track">
         <div className="hunger-bar-fill" style={{ width: `${fraction * 100}%` }} />
       </div>
@@ -810,9 +805,7 @@ function HealthBar({ health, maximum }: { health: number; maximum: number }): Re
       aria-valuemax={maximum}
       aria-valuenow={Math.round(health)}
     >
-      <svg className="health-bar-heart" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 20.5C6 16 2.5 12.5 2.5 8.6c0-2.8 2.2-4.8 4.8-4.8 1.9 0 3.6 1.1 4.7 2.8 1.1-1.7 2.8-2.8 4.7-2.8 2.6 0 4.8 2 4.8 4.8 0 3.9-3.5 7.4-9.5 11.9z" />
-      </svg>
+      <SystemIcon icon="health" className="health-bar-heart" />
       <div className="health-bar-track">
         <div className="health-bar-trail" style={{ width: `${fraction * 100}%` }} />
         <div className="health-bar-fill" style={{ width: `${fraction * 100}%` }} />
@@ -890,7 +883,7 @@ function CacheCompass({
         className="cache-compass-arrow"
         style={{ transform: `rotate(${compass.bearingDegrees}deg)` }}
       >
-        ▲
+        <SystemIcon icon="compass" size={16} />
       </span>
       Recover belongings · {Math.round(compass.distanceMeters)} m
     </div>

@@ -1,9 +1,22 @@
+import { BUILDABLE_KIND_ORDER, ITEM_ORDER } from '@acorn/shared';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { BuildableIcon, ItemIcon } from '../src/hud/item-icons';
+import { PAINTED_ICONS } from '../src/hud/painted-icons';
 
 describe('inventory artwork', () => {
+  it('provides painted artwork for every canonical item and buildable', () => {
+    for (const item of ITEM_ORDER) {
+      expect(renderToStaticMarkup(ItemIcon({ item, color: '#abcdef' })), item).toContain('<image');
+    }
+    for (const kind of BUILDABLE_KIND_ORDER) {
+      expect(renderToStaticMarkup(BuildableIcon({ kind, color: '#abcdef' })), kind).toContain(
+        '<image',
+      );
+    }
+  });
   it('centers artwork at a useful size without distorting it, while keeping the decorative SVG', () => {
     const first = renderToStaticMarkup(
       ItemIcon({ item: 'axe', color: '#123456', className: 'slot-icon' }),
@@ -35,15 +48,32 @@ describe('inventory artwork', () => {
     }
   });
 
-  it('keeps the colored silhouette for an upgraded item and a buildable', () => {
-    const upgraded = renderToStaticMarkup(ItemIcon({ item: 'refinedAxe', color: '#abcdef' }));
-    const buildable = renderToStaticMarkup(BuildableIcon({ kind: 'campfire', color: '#abcdef' }));
-
-    for (const icon of [upgraded, buildable]) {
+  it('keeps a colored silhouette when artwork is unavailable', () => {
+    const saved = PAINTED_ICONS.refinedAxe;
+    delete PAINTED_ICONS.refinedAxe;
+    try {
+      const icon = renderToStaticMarkup(ItemIcon({ item: 'refinedAxe', color: '#abcdef' }));
       expect(icon).toContain('fill="#abcdef"');
       expect(icon).toContain('aria-hidden="true"');
       expect(icon).not.toContain('<image');
       expect(icon).toMatch(/<(path|g|rect|circle|polygon|ellipse)\b/);
+    } finally {
+      PAINTED_ICONS.refinedAxe = saved;
     }
+  });
+
+  it('uses a separate clip for each painted icon on the page', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        createElement(ItemIcon, { item: 'axe', color: '#123456' }),
+        createElement(BuildableIcon, { kind: 'guardianTrophy', color: '#123456' }),
+      ),
+    );
+    const ids = [...markup.matchAll(/<clipPath id="([^"]+)"/g)].map((match) => match[1]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(markup).toContain(`clip-path="url(#${id})"`);
   });
 });
