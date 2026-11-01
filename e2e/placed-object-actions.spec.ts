@@ -77,6 +77,7 @@ test('right-click dismantles an owned outdoor object only after confirmation', a
     await menu.getByRole('button', { name: 'Dismantle…', exact: true }).click();
     expect(requests).toBe(0);
     await menu.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect(requests).toBe(0);
     expect(sim.builtPropsList()).toHaveLength(1);
     await menu.getByRole('button', { name: 'Dismantle…', exact: true }).click();
     await menu.getByRole('button', { name: 'Confirm dismantle', exact: true }).click();
