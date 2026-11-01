@@ -5701,7 +5701,10 @@ body {
 .hud-journal,
 .inventory-panel,
 .character-panel,
-.slot-menu {
+.slot-menu,
+.world-map-page,
+.loading-copy,
+.fire-panel {
   border: 3px solid var(--journal-binding);
   background: linear-gradient(var(--journal-paper-top), var(--journal-paper-bottom));
   box-shadow:
@@ -6039,4 +6042,215 @@ body {
   border-color: var(--journal-well-edge);
   border-radius: 7px;
   background: var(--journal-well);
+}
+
+/* Map, journey and fireside notes belong to the same field journal. */
+.world-map-backdrop {
+  background: rgba(17, 28, 19, 0.62);
+}
+
+.world-map-page {
+  padding: 0 16px 12px;
+  border-radius: 9px;
+  color-scheme: light;
+}
+
+.world-map-header {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0 -16px 12px;
+  padding: 12px 16px;
+  border-bottom: 3px solid var(--journal-copper);
+  border-radius: 5px 5px 0 0;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+}
+
+.world-map-header p {
+  color: #e4dfcb;
+  font-size: 13px;
+}
+
+.world-map-header h2 {
+  font-size: clamp(20px, 2vw, 24px);
+}
+
+.world-map-close,
+.world-map-tools button,
+.fire-panel button {
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-well);
+  color: var(--ink-warm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.world-map-close {
+  flex-shrink: 0;
+  background: var(--journal-paper-top);
+}
+
+.world-map-tools button {
+  min-width: 32px;
+  height: 32px;
+}
+
+.world-map-close:hover,
+.world-map-tools button:hover,
+.fire-panel button:hover:not(:disabled) {
+  border-color: var(--journal-copper);
+  background: var(--journal-paper-light);
+}
+
+.world-map-footer {
+  gap: 10px 18px;
+  margin-top: 10px;
+  border-top: 1px solid var(--journal-rule);
+}
+
+.world-map-hint {
+  color: #655538;
+}
+
+.loading-copy {
+  width: min(560px, 90vw);
+  padding: 24px 28px;
+  border-radius: 9px;
+  color: var(--ink-warm);
+  color-scheme: light;
+}
+
+.loading-eyebrow {
+  margin: -24px -28px 20px;
+  padding: 12px 16px;
+  border-bottom: 3px solid var(--journal-copper);
+  border-radius: 5px 5px 0 0;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.loading-copy h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(28px, 4vw, 44px);
+  text-shadow: none;
+}
+
+.loading-description {
+  margin: 12px 0 24px;
+  color: #655538;
+  line-height: 1.5;
+}
+
+.loading-progress {
+  height: 9px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 3px;
+  background: rgba(73, 99, 66, 0.16);
+  box-shadow: inset 0 1px 3px rgba(81, 58, 28, 0.14);
+}
+
+.loading-progress > span {
+  border-radius: 1px;
+  background: var(--journal-fir);
+  box-shadow: inset 0 1px 0 #82946d;
+}
+
+.loading-status {
+  gap: 16px;
+  color: #655538;
+  line-height: 1.5;
+}
+
+.loading-status > :first-child {
+  overflow-wrap: anywhere;
+}
+
+.loading-retry,
+.fire-panel-actions button:first-child:not(:disabled),
+.fire-panel .fire-prepare-meals {
+  border: 1px solid var(--journal-binding);
+  border-radius: 5px;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  box-shadow: inset 0 -3px var(--journal-copper);
+}
+
+.loading-retry:hover,
+.fire-panel-actions button:first-child:hover:not(:disabled),
+.fire-panel .fire-prepare-meals:hover {
+  background: var(--journal-binding);
+  color: var(--journal-paper-light);
+}
+
+.fire-panel {
+  border-radius: 8px;
+  color: var(--ink-warm);
+  color-scheme: light;
+}
+
+.fire-panel > strong {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 17px;
+}
+
+.fire-panel > button[aria-label] {
+  float: right;
+  margin: -1px -1px 6px 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.fire-panel > meter {
+  clear: both;
+  accent-color: var(--journal-fir);
+}
+
+.fire-panel > meter::-webkit-meter-bar {
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 3px;
+  background: rgba(73, 99, 66, 0.16);
+}
+
+.fire-panel > meter::-webkit-meter-optimum-value {
+  background: var(--journal-fir);
+}
+
+.fire-panel > meter::-moz-meter-bar {
+  background: var(--journal-fir);
+}
+
+.fire-panel > small,
+.fire-panel-help {
+  color: #655538;
+  opacity: 1;
+}
+
+.world-map-page button:focus-visible,
+.loading-retry:focus-visible,
+.fire-panel button:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 3px;
+}
+
+@media (max-height: 520px) {
+  .loading-copy {
+    bottom: 14%;
+    padding: 18px 24px;
+  }
+  .loading-description {
+    margin-bottom: 16px;
+  }
+  .loading-status,
+  .loading-retry {
+    margin-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-map-backdrop {
+    animation: none;
+  }
 }
