@@ -16,8 +16,8 @@ test('painted icon catalog visual review', async ({ page }) => {
   const cards = page.locator('.icon-review-card');
   expect(await cards.count()).toBeGreaterThan(90);
   const data = await page.evaluate(() => {
-    const ids = [...document.querySelectorAll('clipPath[id]')].map((el) => el.id);
-    const images = [...document.querySelectorAll('svg image')];
+    const ids = Array.from(document.querySelectorAll('clipPath[id]')).map((el) => el.id);
+    const images = Array.from(document.querySelectorAll('svg image'));
     return {
       ids,
       imageCount: images.length,

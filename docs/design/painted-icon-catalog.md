@@ -24,6 +24,17 @@ low health/hunger, reduced motion, recovery-compass bearings, keyboard focus,
 and 900 × 600 through 1920 × 1080 desktop layouts. They do not certify online
 authentication, continuous gameplay, native WebGPU or frame rate.
 
+| View    | Before                                                    | After                                                   |
+| ------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| Day HUD | [Before](../previews/painted-icon-catalog/before-hud.png) | [After](../previews/painted-icon-catalog/after-hud.png) |
+
+Review the [complete size and background board](../previews/painted-icon-catalog/icons-board.png)
+and [night warning state](../previews/painted-icon-catalog/after-warning.png).
+The before capture uses merged menu pass `caf68e9`; final captures use the
+compressed atlases rebased onto `9a7079d`. A shared frozen world background
+keeps attention on the live HUD. The compass checks use three distinct cache
+IDs and assert changes in bearing and a stable rotation center.
+
 ```sh
 ICON_REVIEW_SHOTS=/tmp/icon-catalog pnpm exec playwright test e2e/icon-catalog.spec.ts
 CATALOG_HUD_SHOTS=/tmp/icon-hud pnpm exec playwright test e2e/icon-hud-review.spec.ts
