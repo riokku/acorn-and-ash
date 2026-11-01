@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { HomecomingSummary } from './homecoming';
 import { gainedLabel } from './item-words';
+import { ItemIcon } from './item-icons';
 
 /** A quiet receipt; no modal, reward claim or interruption to movement. */
 export function HomecomingCard({ summary }: { summary: HomecomingSummary }) {
@@ -22,7 +23,10 @@ export function HomecomingCard({ summary }: { summary: HomecomingSummary }) {
           <p>Gathered on this outing</p>
           <ul>
             {summary.gathered.slice(0, 4).map(({ item, count }) => (
-              <li key={item}>{gainedLabel(item, count)}</li>
+              <li key={item}>
+                <ItemIcon item={item} color="currentColor" />
+                <span>{gainedLabel(item, count)}</span>
+              </li>
             ))}
           </ul>
           {summary.gathered.length > 4 ? (
