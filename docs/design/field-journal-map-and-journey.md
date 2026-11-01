@@ -11,20 +11,26 @@ with fir progress ink on paper and a matching retry button. Fire and storage
 notes use the same paper, button hierarchy and quieter helper text. This pass
 changes CSS only; the controls and gameplay rules stay in their components.
 
-## Review
+## Reviewed evidence
 
-Rendered before/after review used the actual React components with controlled
-sample state, the production map painter, and a fixed game screenshot behind
-in-game panels. The landscape behind loading used the actual painted backdrop.
-Chromium checks covered map zoom, pan, re-centering, close, keyboard focus,
-storage requests and a disabled add-log action when the pack has no logs.
-Both before and after runs completed without page errors. The map fit at
-900 × 600; the retry button remained reachable at 900 × 480.
+These captures use the actual React components with controlled sample state,
+the production map painter, and a fixed game screenshot behind in-game panels.
+The landscape behind loading is the actual painted backdrop. Chromium checks
+covered map zoom, pan, re-centering, close, keyboard focus, storage requests
+and a disabled add-log action when the pack has no logs. Both before and after
+runs completed without page errors.
 
-Client TypeScript, stylesheet formatting, diff checks and the client build
-passed locally. Screenshot publication and the result of the separate
-fire-fuel integration check remain pending because the cloud workspace
-connection was lost. Keep the PR in draft until those review items are complete.
+| View      | Before                                                      | After                                                     |
+| --------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| World map | [Before](../previews/field-journal-map/before-map.webp)     | [After](../previews/field-journal-map/after-map.webp)     |
+| Loading   | [Before](../previews/field-journal-map/before-loading.webp) | [After](../previews/field-journal-map/after-loading.webp) |
+| Fire fuel | [Before](../previews/field-journal-map/before-fire.webp)    | [After](../previews/field-journal-map/after-fire.webp)    |
+
+Additional checks: [map at 900 × 600](../previews/field-journal-map/after-map-narrow.webp),
+[retry at 900 × 480](../previews/field-journal-map/after-error-short.webp),
+[log storage](../previews/field-journal-map/after-storage.webp), and
+[empty pack](../previews/field-journal-map/after-empty.webp).
 
 These are component and layout checks, not an online playthrough or performance
 measurement. The fixture does not exercise server persistence or authentication.
+Review screenshots use quality-92 WebP to keep documentation size modest.
