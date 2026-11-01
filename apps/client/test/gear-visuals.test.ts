@@ -125,3 +125,15 @@ it('attaches the Last Watch helm to the animated head without disposing shared a
   expect(disposeGeometry).not.toHaveBeenCalled();
   expect(disposeMaterial).not.toHaveBeenCalled();
 });
+it('leaves helms and clothes off a body they were not made for, but still hangs the shield', () => {
+  const root = new THREE.Group();
+  const body = part('dwarf1_Body');
+  const hand = new THREE.Bone();
+  root.add(body.mesh, body.bone, hand);
+  const visuals = createGearVisuals(root, hand, 1, { bodyFitted: false });
+  visuals.setWorn({ helm: 'woolCap', upperBody: 'winterJacket', offHand: 'woodenShield' });
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
+  expect(hand.children).toHaveLength(1);
+  visuals.dispose();
+  expect(hand.children).toHaveLength(0);
+});

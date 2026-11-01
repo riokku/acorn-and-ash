@@ -4,19 +4,19 @@ import { SKIN_TONES, type CharacterId, type SkinToneId } from '@acorn/shared';
 
 /**
  * Skin tones (decision 0113). Each body's skin is a material of its own,
- * marked `userData.skin` in the model (see tools/art/plain_bodies.py), so a
+ * marked `userData.skin` in the model (see tools/art/dwarf_bodies.py), so a
  * tone only ever lightens or darkens the skin: hair, eyes and clothes keep
  * their colours.
  */
 
 /** Each body's own skin as painted, for the swatches on the character screen. */
 const BODY_SKIN: Record<CharacterId, string> = {
-  knight: '#f5b58f',
-  barbarian: '#f5c29e',
-  mage: '#f5b58f',
-  ranger: '#f5b58f',
-  rogue: '#f5b58f',
-  rogueHooded: '#f5b58f',
+  knight: '#f2b497',
+  barbarian: '#eab08e',
+  mage: '#c58a64',
+  ranger: '#8d5a3a',
+  rogue: '#6e4530',
+  rogueHooded: '#b97a50',
 };
 
 /** Whether a material is one of a body's skin materials. */

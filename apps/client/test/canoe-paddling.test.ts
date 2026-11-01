@@ -33,7 +33,8 @@ let sit: THREE.AnimationClip;
 beforeAll(async () => {
   // GLTFLoader's embedded-buffer progress event has no DOM equivalent in Node.
   vi.stubGlobal('ProgressEvent', class {});
-  sit = (await rigFile('assets/animations/character.glb')).animations.find(
+  // Every player body is a dwarf, seated by the dwarves' own fitted moves.
+  sit = (await rigFile('assets/animations/dwarf.glb')).animations.find(
     (clip) => clip.name === 'sitIdle',
   )!;
 });

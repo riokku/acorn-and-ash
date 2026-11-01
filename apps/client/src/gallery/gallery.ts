@@ -81,8 +81,8 @@ import { createUnderstory, preloadUnderstory } from './understory';
  *
  * `?gallery=cabin` looks at one piece up close; `?gallery=moves` and
  * `?gallery=raiders` play the characters' and the skeletons' moves (see
- * moves.ts and raiders.ts); `?gallery=bodies` shows the six bodies before
- * and after their outfits became gear (see bodies.ts); `&time=0.3` picks a time of
+ * moves.ts and raiders.ts); `?gallery=bodies` lines up the six dwarf bodies
+ * (see bodies.ts); `&time=0.3` picks a time of
  * day from 0 (midnight) through 0.5 (noon); `&spin` turns the view slowly
  * round. Only ever used to look at the art: nothing here is part of playing.
  */

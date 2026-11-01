@@ -309,6 +309,12 @@ just a shirt and shorts. The bodies now wear just that, and the old outfits
 are saved as separate gear in [`assets/gear/`](assets/gear/); wearing and
 finding gear in the game are still to come (see
 [decision 0112](docs/decisions/0112-plain-clothes-start-and-found-gear.md)).
+All six bodies are now chubby, faceted dwarves of our own (three men, three
+women), still called Body 1 to Body 6; an old character becomes the dwarf with
+the same number, keeping its skin tone and progress. Gear still works on a
+dwarf but is not drawn on one until each piece has been refitted, one family at
+a time. Dwarves play their own copy of the moves, fitted to their shorter
+limbs. See [decision 0270](docs/decisions/0270-dwarf-bodies.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
 (see [decision 0113](docs/decisions/0113-skin-tones.md)).
@@ -1183,10 +1189,11 @@ character makes, over and over; `&demo=combo` (or `walk`, `run`, `chop`,
 moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
 `?gallery=raiders` does the same for the skeletons: every kind's moves,
 looping, with `&kind=warrior` (or `minion`, `rogue`, `mage`) for one of
-them, and `&demo=` and `&strip=` as above. `?gallery=bodies` shows the six
-bodies in pairs, in their old outfits and then in just a shirt and shorts;
-`&gear=mage-hat` (or any file name in `assets/gear/`) puts that one piece on
-every body instead, and `&motion=walk` or `run` sets them moving.
+them, and `&demo=` and `&strip=` as above. The moves gallery shows Body 1;
+`&body=mage` (or another body's id) picks another. `?gallery=bodies` lines up
+the six dwarf bodies with their own beards; `&beard=long` (or `braids`, `full`,
+`stache`, `chops`, `none`) gives them all that beard, and `&motion=walk` or
+`run` sets them moving.
 `?gallery=bodies&tones` lines up every body in all five skin tones, and
 `&skin=darker` (or another tone) gives the bodies that skin.
 
@@ -1458,8 +1465,13 @@ rebuilt. Its colours are painted on as vertex colours rather than a texture.
 See it in the gallery with `?gallery=iron-axe`, and
 [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
 for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
-deleted.) The six plain bodies and the gear lifted off their outfits are built
-the same way, by `tools/art/plain_bodies.py`.
+deleted.) The six plain bodies and the gear lifted off their outfits were built
+the same way, by `tools/art/plain_bodies.py`, and the six dwarf bodies that
+replaced them by `tools/art/dwarf_bodies.py`. After re-exporting the dwarves,
+refit the moves to them with
+`node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/dwarf.glb`;
+a new move made in Blender for the dwarves goes straight into
+`assets/animations/dwarf.glb` with `tools/add-animation.mjs`.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
