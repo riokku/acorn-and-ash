@@ -2739,6 +2739,8 @@ body {
 /* Slimmer than health: it matters, but it is the quieter of the two. */
 .hunger-bar {
   padding-block: 3px;
+  /* Leave room for the low-hunger pulse to grow without covering health. */
+  margin-bottom: 2px;
 }
 
 .hunger-bar-icon {
