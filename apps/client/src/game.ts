@@ -61,6 +61,7 @@ import { BuildFeedback, buildReplyText } from './hud/build-feedback';
 import { DecorationFeedback } from './hud/decoration-feedback';
 import { CraftFeedback, craftRefusalText } from './hud/craft-feedback';
 import { menuPanelState, type MenuPanel } from './input/menu-panels';
+import { LOOT_CURSOR } from './input/cursors';
 import { createWildfireArt } from './scene/wildfire';
 import { groundHeightAt } from '@acorn/shared';
 import type { Dig, WildfireView } from '@acorn/shared';
@@ -5771,7 +5772,7 @@ export class Game {
         pointer !== null &&
         document.elementFromPoint(pointer.x, pointer.y) === this.options.canvas &&
         this.chestAt(pointer, camera);
-      this.options.canvas.style.cursor = this.hoveredChest ? 'pointer' : '';
+      this.options.canvas.style.cursor = this.hoveredChest ? LOOT_CURSOR : '';
       this.gatheringFocus.setTarget(
         this.hoveredChest ? (this.homeInterior?.chest ?? null) : null,
         0.65,
@@ -5909,7 +5910,7 @@ export class Game {
               .find((prop) => this.outdoorBuiltHit(pointer, camera, prop.id)) ?? null)
           : null;
       this.options.canvas.style.cursor =
-        this.hoveredLoot === null && !this.hoveredChest ? '' : 'pointer';
+        this.hoveredLoot === null && !this.hoveredChest ? '' : LOOT_CURSOR;
     }
     // Only a hint. The server decides who actually gets it.
     const reachable =
