@@ -11,7 +11,7 @@ import {
 } from '@acorn/shared';
 import { ITEM_KINDS } from '../item-catalog';
 import type { HudState } from './store';
-import { BuildableIcon } from './item-icons';
+import { BuildableIcon, ItemIcon } from './item-icons';
 
 const BENEFITS: Record<HomeKind, string> = {
   tent: 'Your first bed and private storage. A place to return after every outing.',
@@ -62,7 +62,7 @@ export function HomeUpgrade({
         ))}
       </ol>
       <div className="homestead-project-heading">
-        <BuildableIcon kind={target ?? 'largeCabin'} color="#dfbf82" />
+        <BuildableIcon kind={target ?? 'largeCabin'} color="#76533a" />
         <div>
           <small>{target === null ? 'Look how far you have come' : 'Your next shelter'}</small>
           <h4>
@@ -91,6 +91,7 @@ export function HomeUpgrade({
               return (
                 <div key={cost.item} data-ready={have >= cost.amount}>
                   <strong>
+                    <ItemIcon item={cost.item} color="#76533a" />
                     {Math.min(have, cost.amount)}/{cost.amount}{' '}
                     {ITEM_KINDS[cost.item].pluralName.toLowerCase()}
                   </strong>
@@ -107,7 +108,7 @@ export function HomeUpgrade({
               ? 'Gather the materials in your pack, then choose a clear spot for your first home.'
               : 'Supplies in your pack and private home chest count together. Stored supplies stay safe between outings; upgrades use your existing home site.'}
           </p>
-          <p className="home-upgrade-blueprint">
+          <p className="home-upgrade-blueprint" data-known={known}>
             {known
               ? '✓ Blueprint learned'
               : `Learn the ${blueprint === null ? 'home blueprint' : ITEM_KINDS[blueprint].displayName.toLowerCase()} before building.`}

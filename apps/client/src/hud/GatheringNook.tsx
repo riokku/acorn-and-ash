@@ -5,7 +5,7 @@ import {
   type BuildableKindId,
 } from '@acorn/shared';
 import { ITEM_KINDS } from '../item-catalog';
-import { BuildableIcon } from './item-icons';
+import { BuildableIcon, ItemIcon } from './item-icons';
 import type { HudState } from './store';
 
 const PIECES = [
@@ -52,13 +52,14 @@ export function GatheringNook({
           return (
             <article key={kind}>
               <div className="homestead-project-heading">
-                <BuildableIcon kind={kind} color="#dfbf82" />
+                <BuildableIcon kind={kind} color="#76533a" />
                 <h4>{definition.displayName}</h4>
               </div>
               <p>{detail}</p>
               <div className="homestead-costs">
                 {definition.costs.map((cost) => (
                   <span key={cost.item} data-ready={countOf(pack, cost.item) >= cost.amount}>
+                    <ItemIcon item={cost.item} color="#76533a" />
                     {cost.amount} {ITEM_KINDS[cost.item].pluralName.toLowerCase()}
                   </span>
                 ))}

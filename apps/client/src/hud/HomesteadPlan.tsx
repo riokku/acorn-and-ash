@@ -8,7 +8,7 @@ import {
 } from '@acorn/shared';
 import { ITEM_KINDS } from '../item-catalog';
 import type { HudState } from './store';
-import { BuildableIcon } from './item-icons';
+import { BuildableIcon, ItemIcon } from './item-icons';
 import { HomeUpgrade } from './HomeUpgrade';
 import { GatheringNook } from './GatheringNook';
 import type { BuildableKindId } from '@acorn/shared';
@@ -94,7 +94,7 @@ export function HomesteadPlan({
           return (
             <article key={project.kind} data-project={project.kind} data-complete={done}>
               <div className="homestead-project-heading">
-                <BuildableIcon kind={project.kind} color={done ? '#bdcd93' : '#dfbf82'} />
+                <BuildableIcon kind={project.kind} color={done ? '#496342' : '#76533a'} />
                 <div>
                   <small>
                     Chapter {index + 1} · {project.chapter}
@@ -111,6 +111,7 @@ export function HomesteadPlan({
                 <div className="homestead-costs">
                   {definition.costs.map((cost) => (
                     <span key={cost.item} data-ready={countOf(pack, cost.item) >= cost.amount}>
+                      <ItemIcon item={cost.item} color="#76533a" />
                       {Math.min(countOf(pack, cost.item), cost.amount)}/{cost.amount}{' '}
                       {ITEM_KINDS[cost.item].pluralName.toLowerCase()}
                     </span>
