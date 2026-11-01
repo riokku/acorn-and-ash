@@ -263,6 +263,9 @@ character screen and the loading screen. Your own machine and the browser tests
 skip the front page; previews and the real game show it. See
 [decision 0103](docs/decisions/0103-the-front-door.md).
 
+The shared landscape uses the painted icons' warm storybook style. Inspect it
+in the [backdrop gallery](docs/design/storybook-backdrop.md) at `/?gallery=backdrop`.
+
 The painting is alive and follows the seasons. Mist drifts, the lake glints,
 smoke rises from the chimney, the cabin window glows and the camera moves very
 slowly. In autumn the leaves turn gold and red and fall, in winter the trees go

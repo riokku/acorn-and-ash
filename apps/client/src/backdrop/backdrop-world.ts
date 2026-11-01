@@ -26,17 +26,16 @@ export const PAINTING_HEIGHT = 941;
 /** Where things are in the painting. */
 export const SPOTS = {
   /** The top of the cabin's chimney, where the smoke starts. */
-  chimney: { x: 1344, y: 517 },
+  chimney: { x: 1378, y: 473 },
   /** The glowing windows and lamps of the cabin, each with how far its light spreads. */
   windows: [
-    { x: 1314, y: 540, radius: 20 },
-    { x: 1308, y: 557, radius: 24 },
-    { x: 1323, y: 557, radius: 24 },
-    { x: 1340, y: 557, radius: 13 },
-    { x: 1362, y: 557, radius: 13 },
+    { x: 1312, y: 520, radius: 16 },
+    { x: 1304, y: 549, radius: 18 },
+    { x: 1324, y: 549, radius: 18 },
+    { x: 1356, y: 548, radius: 18 },
   ],
   /** The cabin's light, lying on the water below it. */
-  reflection: { x: 1312, top: 698, bottom: 762 },
+  reflection: { x: 1310, top: 665, bottom: 755 },
   /** The bands of mist the painting already has: where a drifting patch may wander. */
   mist: [
     { left: 560, right: 1500, top: 330, bottom: 470, width: 520, height: 120 },
