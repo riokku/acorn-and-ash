@@ -15,6 +15,9 @@ are reviewed. See [decision 0269](../decisions/0269-painted-journal-icons.md).
 Open `/?gallery=icons` to inspect the production renderer at 13, 24, 30 and
 40 pixels on paper and fir backgrounds. Thin objects at 13 pixels accompany
 ingredient text; the larger icons identify objects by silhouette and material.
+The [complete catalog pass](painted-icon-catalog.md) extends this treatment to
+all current items and buildables, plus matching HUD symbols.
+
 Each illustration is centered from its measured visible bounds without
 stretching, and its crop excludes neighboring atlas art.
 

@@ -18,7 +18,9 @@ the production map painter, and a fixed game screenshot behind in-game panels.
 The landscape behind loading is the actual painted backdrop. Chromium checks
 covered map zoom, pan, re-centering, close, keyboard focus, storage requests
 and a disabled add-log action when the pack has no logs. Both before and after
-runs completed without page errors.
+runs completed without page errors. The existing fire-fuel browser case also
+passed, covering log storage, withdrawal, cabin and outdoor fuel, and full/empty
+fire actions against a controlled local simulation.
 
 | View      | Before                                                      | After                                                     |
 | --------- | ----------------------------------------------------------- | --------------------------------------------------------- |

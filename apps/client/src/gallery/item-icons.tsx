@@ -1,29 +1,10 @@
-import { ITEM_KINDS, type ItemId } from '@acorn/shared';
+import { BUILDABLE_KINDS, BUILDABLE_KIND_ORDER, ITEM_KINDS, ITEM_ORDER } from '@acorn/shared';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
-import { ItemIcon } from '../hud/item-icons';
+import { BuildableIcon, ItemIcon, SystemIcon } from '../hud/item-icons';
+import { SYSTEM_ICONS, type SystemIconId } from '../hud/painted-icons';
 
-const ITEMS: readonly ItemId[] = [
-  'axe',
-  'rod',
-  'shovel',
-  'torch',
-  'berry',
-  'mushroom',
-  'meat',
-  'roastedMeat',
-  'bag',
-  'log',
-  'stick',
-  'rope',
-  'reed',
-  'bone',
-  'stone',
-  'forestStew',
-  'refinedAxe',
-  'ironSword',
-];
 const SIZES = [13, 24, 30, 40] as const;
 
 export function showItemIcons(canvas: HTMLCanvasElement): void {
@@ -54,7 +35,7 @@ export function showItemIcons(canvas: HTMLCanvasElement): void {
           <h1>Item icon review</h1>
           <p>Paper and fir backgrounds at 13, 24, 30 and 40 pixels.</p>
           <div className="icon-review-grid">
-            {ITEMS.map((item) => (
+            {ITEM_ORDER.map((item) => (
               <section className="icon-review-card" key={item}>
                 <h2>{ITEM_KINDS[item].displayName}</h2>
                 {(['paper', 'fir'] as const).map((background) => (
@@ -72,6 +53,50 @@ export function showItemIcons(canvas: HTMLCanvasElement): void {
                             className="icon-review-image"
                           />
                         </div>
+                        <span>{size}px</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </section>
+            ))}
+            {BUILDABLE_KIND_ORDER.map((kind) => (
+              <section className="icon-review-card" key={`buildable-${kind}`}>
+                <h2>{BUILDABLE_KINDS[kind].displayName} (buildable)</h2>
+                {(['paper', 'fir'] as const).map((background) => (
+                  <div
+                    className={`icon-review-row icon-review-${background}`}
+                    key={background}
+                    aria-label={`${background} background`}
+                  >
+                    {SIZES.map((size) => (
+                      <div className="icon-review-sample" key={size}>
+                        <div style={{ width: size, height: size }}>
+                          <BuildableIcon
+                            kind={kind}
+                            color={background === 'paper' ? '#534329' : '#f8edcf'}
+                            className="icon-review-image"
+                          />
+                        </div>
+                        <span>{size}px</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </section>
+            ))}
+            {(Object.keys(SYSTEM_ICONS) as SystemIconId[]).map((icon) => (
+              <section className="icon-review-card" key={`system-${icon}`}>
+                <h2>{icon} (system)</h2>
+                {(['paper', 'fir'] as const).map((background) => (
+                  <div
+                    className={`icon-review-row icon-review-${background}`}
+                    key={background}
+                    aria-label={`${background} background`}
+                  >
+                    {SIZES.map((size) => (
+                      <div className="icon-review-sample" key={size}>
+                        <SystemIcon icon={icon} size={size} />
                         <span>{size}px</span>
                       </div>
                     ))}

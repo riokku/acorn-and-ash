@@ -1498,6 +1498,8 @@ orbit and scroll to zoom make the elevation changes easy to review. See
   sign-in, character-entry and settings surfaces in the same visual direction.
 - [Map, journey and fireside notes](docs/design/field-journal-map-and-journey.md) —
   matching world-map, loading, fire-fuel and cabin log-storage surfaces.
+- [Complete painted icon catalog](docs/design/painted-icon-catalog.md) — all current
+  items, buildables and matching HUD symbols, with size and contrast review.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found
   out about WebGPU, running an ECS inside a Durable Object, and what 50 players
   costs.
