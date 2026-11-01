@@ -1482,6 +1482,8 @@ orbit and scroll to zoom make the elevation changes easy to review. See
   fir-green and copper treatment, with controlled desktop review coverage.
 - [Field journal menus and icons](docs/design/field-journal-menus.md) — matching
   pack, crafting and equipment surfaces; inspect the painted item art at `/?gallery=icons`.
+- [Field journal entry and settings](docs/design/field-journal-entry.md) — title,
+  sign-in, character-entry and settings surfaces in the same visual direction.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found
   out about WebGPU, running an ECS inside a Durable Object, and what 50 players
   costs.
