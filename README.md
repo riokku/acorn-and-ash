@@ -1480,6 +1480,8 @@ orbit and scroll to zoom make the elevation changes easy to review. See
   standard, observed findings, and priorities for the presentation pass.
 - [Field journal HUD](docs/design/field-journal-hud.md) — the approved paper,
   fir-green and copper treatment, with controlled desktop review coverage.
+- [Field journal menus and icons](docs/design/field-journal-menus.md) — matching
+  pack, crafting and equipment surfaces; inspect the painted item art at `/?gallery=icons`.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found
   out about WebGPU, running an ECS inside a Durable Object, and what 50 players
   costs.

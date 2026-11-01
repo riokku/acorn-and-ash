@@ -116,3 +116,4 @@ assets/housing/cabin-details.blend,original,Acorn & Ash,All rights reserved (ori
 assets/housing/cabin-details.glb,original,Acorn & Ash,All rights reserved (original),2026-10-18,Modelled in Blender using the headless housing_details.py builder; cedar joinery and tensioned shelter canvas; Meshopt compressed,,
 assets/gear/last-watch-helm.blend,original,Acorn & Ash,All rights reserved (original),2026-10-18,Modelled in headless Blender with last_watch_helm.py; original Last Watch helm,,
 assets/gear/last-watch-helm.glb,original,Acorn & Ash,All rights reserved (original),2026-10-18,Modelled in headless Blender with last_watch_helm.py; original Last Watch helm; Meshopt compressed,,
+assets/ui/item-atlas.webp,https://openai.com/policies/terms-of-use/,OpenAI image generation,OpenAI Terms of Use,2026-10-31,"Generated at the user’s request for Acorn & Ash; encoded as WebP",OpenAI,

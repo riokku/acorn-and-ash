@@ -19,36 +19,53 @@ import { dirname } from 'node:path';
  * some tests save. Tests tagged `@real-drawing` are about the drawing itself
  * and draw for their visual assertions; drawnScreenshot restores a real
  * frame for tests that need fast logic between visual checks.
+ * Pass sceneOnly for UI reviews that must still draw a separate character
+ * preview while suppressing the full world's draw calls.
  */
-export async function skipDrawing(target: Page | BrowserContext): Promise<void> {
+export async function skipDrawing(
+  target: Page | BrowserContext,
+  options: { sceneOnly?: boolean } = {},
+): Promise<void> {
   if (process.env.ACORN_E2E_DRAW === '1' || process.env.SHOT_DIR) return;
-  await target.addInitScript(() => {
-    // Galleries are small scenes and provide actual asset-rendering coverage.
-    if (new URLSearchParams(location.search).has('gallery')) return;
-    const host = window as Window & { acornE2eDrawing?: (enabled: boolean) => void };
-    if (host.acornE2eDrawing !== undefined) return;
-    const originals: { prototype: Record<string, unknown>; name: string; method: unknown }[] = [];
-    const drawCalls = [
-      'drawArrays',
-      'drawElements',
-      'drawArraysInstanced',
-      'drawElementsInstanced',
-      'drawRangeElements',
-    ];
-    for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
-      for (const name of drawCalls) {
-        if (name in prototype) {
-          const methods = prototype as unknown as Record<string, unknown>;
-          originals.push({ prototype: methods, name, method: methods[name] });
+  await target.addInitScript(
+    ({ sceneOnly }) => {
+      // Galleries are small scenes and provide actual asset-rendering coverage.
+      if (new URLSearchParams(location.search).has('gallery')) return;
+      const host = window as Window & { acornE2eDrawing?: (enabled: boolean) => void };
+      if (host.acornE2eDrawing !== undefined) return;
+      const originals: { prototype: Record<string, unknown>; name: string; method: unknown }[] = [];
+      const drawCalls = [
+        'drawArrays',
+        'drawElements',
+        'drawArraysInstanced',
+        'drawElementsInstanced',
+        'drawRangeElements',
+      ];
+      for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+        for (const name of drawCalls) {
+          if (name in prototype) {
+            const methods = prototype as unknown as Record<string, unknown>;
+            originals.push({ prototype: methods, name, method: methods[name] });
+          }
         }
       }
-    }
-    host.acornE2eDrawing = (enabled) => {
-      for (const { prototype, name, method } of originals)
-        prototype[name] = enabled ? method : () => {};
-    };
-    host.acornE2eDrawing(false);
-  });
+      host.acornE2eDrawing = (enabled) => {
+        for (const { prototype, name, method } of originals)
+          prototype[name] = enabled
+            ? method
+            : function (this: WebGLRenderingContext | WebGL2RenderingContext, ...args: unknown[]) {
+                if (
+                  sceneOnly &&
+                  this.canvas instanceof HTMLCanvasElement &&
+                  this.canvas.id !== 'scene'
+                )
+                  return Reflect.apply(method as (...args: unknown[]) => unknown, this, args);
+              };
+      };
+      host.acornE2eDrawing(false);
+    },
+    { sceneOnly: options.sceneOnly === true },
+  );
 }
 
 /** Render a real screenshot without rasterizing the forest throughout a logic check. */

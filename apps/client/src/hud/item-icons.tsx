@@ -1,4 +1,5 @@
 import type { BuildableKindId, ItemId } from '@acorn/shared';
+import itemAtlas from '../../../../assets/ui/item-atlas.webp?url';
 
 /** Every item or buildable kind this module can draw a shape for. */
 type IconId = ItemId | BuildableKindId;
@@ -6,12 +7,8 @@ type IconId = ItemId | BuildableKindId;
 /**
  * A small flat shape per item or buildable kind, in a shared 24x24 box, built
  * from the same "two or three simple primitives" idiom every placeholder in
- * this game already uses (a stem and a sphere for a flower, a handle and a
- * blade for an axe) - nobody has real icon art yet, so these stand in for it.
- * Every shape is a single flat fill, set by the caller (normally the thing's
- * own `placeholderColor`), so a slot still reads by colour at a glance the
- * same way it always has, just as a recognisable outline now instead of a
- * plain square.
+ * this game already uses. These remain the fallback for items without painted
+ * art, and for buildables. Their fill is set by the caller.
  */
 const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   cedarHide: (
@@ -425,18 +422,59 @@ function roastedMeat(): React.JSX.Element {
   );
 }
 
+// Visible alpha bounds (x, y, width, height) in the 1254px square atlas.
+// Only exact item IDs use painted art; upgrades retain their silhouettes.
+type ArtBounds = readonly [number, number, number, number];
+const PAINTED_ITEMS: Partial<Record<ItemId, ArtBounds>> = {
+  axe: [82, 121, 200, 182],
+  rod: [387, 101, 194, 200],
+  shovel: [686, 108, 184, 200],
+  torch: [1003, 92, 152, 219],
+  berry: [89, 414, 186, 175],
+  mushroom: [401, 413, 169, 177],
+  meat: [682, 427, 193, 157],
+  roastedMeat: [997, 424, 173, 161],
+  bag: [87, 694, 181, 175],
+  log: [399, 708, 184, 156],
+  stick: [676, 696, 180, 168],
+  rope: [995, 705, 187, 163],
+  reed: [111, 953, 143, 202],
+  bone: [402, 978, 173, 161],
+  stone: [687, 986, 176, 152],
+  forestStew: [991, 984, 183, 153],
+};
+
 function GameIcon({
   id,
   color,
   className,
+  painted,
 }: {
   id: IconId;
   color: string;
   className?: string;
+  painted?: ArtBounds;
 }): React.JSX.Element {
+  const scale = painted ? (24 * 0.82) / Math.max(painted[2], painted[3]) : 0;
   return (
-    <svg className={className} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-      {ICON_SHAPES[id]}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill={color}
+      aria-hidden="true"
+      style={painted ? { overflow: 'hidden' } : undefined}
+    >
+      {painted ? (
+        <image
+          href={itemAtlas}
+          x={12 - (painted[0] + painted[2] / 2) * scale}
+          y={12 - (painted[1] + painted[3] / 2) * scale}
+          width={1254 * scale}
+          height={1254 * scale}
+        />
+      ) : (
+        ICON_SHAPES[id]
+      )}
     </svg>
   );
 }
@@ -450,7 +488,7 @@ export function ItemIcon({
   color: string;
   className?: string;
 }): React.JSX.Element {
-  return <GameIcon id={item} color={color} className={className} />;
+  return <GameIcon id={item} color={color} className={className} painted={PAINTED_ITEMS[item]} />;
 }
 
 export function BuildableIcon({
