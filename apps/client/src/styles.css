@@ -2516,8 +2516,9 @@ body {
   align-items: center;
   gap: 10px;
   padding: 7px 8px 7px 14px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dim) 100%);
+  border: 1px solid var(--journal-binding);
+  border-radius: 6px;
+  background: linear-gradient(var(--journal-paper-top), var(--journal-paper-bottom));
   box-shadow:
     0 8px 18px rgba(0, 0, 0, 0.3),
     0 0 0 1px rgba(58, 42, 20, 0.14);
@@ -2533,9 +2534,9 @@ body {
 
 .door-lock button {
   padding: 5px 12px;
-  border: 1px solid rgba(91, 70, 49, 0.45);
-  border-radius: 999px;
-  background: #fff8e6;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-well);
   color: var(--ink-warm);
   font:
     600 12px/1 system-ui,
@@ -2544,7 +2545,13 @@ body {
 }
 
 .door-lock button:hover {
-  background: #fffdf4;
+  border-color: var(--journal-copper);
+  background: var(--journal-paper-light);
+}
+
+.door-lock button:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 3px;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -3324,23 +3331,23 @@ body {
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   padding: 26px;
-  border: 1px solid #b49c70;
-  border-radius: 16px;
-  background: #eee6d4;
-  color: #334332;
-  box-shadow: 0 20px 80px rgb(0 0 0 / 35%);
+  border-radius: 8px;
+  color: var(--ink-warm);
+  color-scheme: light;
 }
 .chest-panel header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--journal-rule);
 }
 .chest-eyebrow {
   font-size: 11px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #746845;
+  color: #655538;
 }
 .chest-panel h2 {
   margin: 6px 0;
@@ -3350,9 +3357,9 @@ body {
 .chest-close {
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  border: 1px solid #a5a18a;
-  background: transparent;
+  border-radius: 5px;
+  border: 1px solid var(--journal-well-edge);
+  background: var(--journal-well);
   color: inherit;
   font-size: 24px;
   cursor: pointer;
@@ -3361,7 +3368,7 @@ body {
 .chest-note {
   font-size: 13px;
   line-height: 1.6;
-  color: #5c614e;
+  color: #655538;
 }
 .chest-columns {
   display: grid;
@@ -3376,7 +3383,7 @@ body {
   font-weight: 600;
 }
 .chest-columns h3 span {
-  color: #7f7d67;
+  color: #655538;
   font-size: 13px;
 }
 .chest-grid {
@@ -3390,17 +3397,19 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  border: 1px solid #b7b097;
-  border-radius: 8px;
-  background: #e0d8c2;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-well);
+  box-shadow: inset 0 1px 3px rgba(81, 58, 28, 0.12);
   cursor: pointer;
   color: #334332;
   padding: 5px;
 }
-.storage-slot:hover,
+.storage-slot:not(.storage-slot-empty):hover:not(:disabled),
 .storage-slot:focus-visible {
-  background: #f7edce;
-  outline: 2px solid #6e8360;
+  background: var(--journal-paper-light);
+  border-color: var(--journal-copper);
+  outline: 2px solid var(--journal-copper);
   outline-offset: 2px;
 }
 .storage-slot:disabled {
@@ -3408,7 +3417,8 @@ body {
   cursor: wait;
 }
 .storage-slot-empty {
-  opacity: 0.6;
+  border-style: dashed;
+  background: var(--journal-well-empty);
   cursor: default;
 }
 .storage-slot-empty span {
@@ -3426,11 +3436,18 @@ body {
   right: 5px;
   font-size: 11px;
   font-weight: 700;
+  min-width: 17px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: var(--journal-binding);
+  color: var(--journal-paper-light);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 .chest-note {
   min-height: 42px;
   margin: 22px 0 0;
-  border-top: 1px solid #c6bea5;
+  border-top: 1px solid var(--journal-rule);
   padding-top: 12px;
 }
 @media (max-width: 640px) {
@@ -3672,10 +3689,11 @@ body {
 }
 .chest-store-supplies {
   padding: 10px 16px;
-  border: 1px solid #52725a;
-  border-radius: 8px;
-  background: #355740;
-  color: #fff5df;
+  border: 1px solid var(--journal-binding);
+  border-radius: 5px;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  box-shadow: inset 0 -3px var(--journal-copper);
   cursor: pointer;
 }
 .chest-store-supplies:disabled {
@@ -3683,7 +3701,7 @@ body {
   cursor: default;
 }
 .chest-store-supplies:focus-visible {
-  outline: 3px solid #c08f36;
+  outline: 3px solid var(--journal-copper);
   outline-offset: 3px;
 }
 
@@ -5713,7 +5731,9 @@ body {
 .slot-menu,
 .world-map-page,
 .loading-copy,
-.fire-panel {
+.fire-panel,
+.chest-panel,
+.placed-object-panel {
   border: 3px solid var(--journal-binding);
   background: linear-gradient(var(--journal-paper-top), var(--journal-paper-bottom));
   box-shadow:
@@ -6262,4 +6282,167 @@ body {
   .world-map-backdrop {
     animation: none;
   }
+}
+
+/* Managing the home uses the same paper, binding and controls as the pack. */
+.placed-object-panel {
+  position: fixed;
+  right: 24px;
+  top: 25%;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(75dvh - 20px);
+  overflow: hidden;
+  border-radius: 8px;
+  color: var(--ink-warm);
+  color-scheme: light;
+  pointer-events: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.placed-object-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--journal-rule);
+}
+
+.placed-object-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.placed-object-header h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font:
+    700 20px/1.2 'Fraunces',
+    Georgia,
+    serif;
+  overflow-wrap: anywhere;
+}
+
+.placed-object-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  overscroll-behavior: contain;
+}
+
+.placed-object-body p {
+  margin: 0 0 12px;
+}
+
+.placed-object-body p:last-child {
+  margin-bottom: 0;
+}
+
+.placed-object-loss {
+  color: #7a3d2f;
+}
+
+.placed-object-refund {
+  padding: 8px 10px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-well);
+}
+
+.placed-object-prerequisites {
+  color: #655538;
+}
+
+.placed-object-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.placed-object-panel button {
+  padding: 7px 10px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-well);
+  color: var(--ink-warm);
+  font: inherit;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.placed-object-header button {
+  flex: none;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.placed-object-panel .placed-object-primary {
+  border-color: var(--journal-binding);
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  box-shadow: inset 0 -3px var(--journal-copper);
+}
+
+.placed-object-panel .placed-object-danger {
+  border-color: #794333;
+  background: #8a4a38;
+  color: #fff5e6;
+}
+
+.placed-object-panel button:hover:not(:disabled),
+.chest-close:hover {
+  border-color: var(--journal-copper);
+  background: var(--journal-paper-light);
+  color: var(--ink-warm);
+}
+
+.placed-object-panel .placed-object-primary:hover:not(:disabled),
+.chest-store-supplies:hover:not(:disabled) {
+  background: var(--journal-binding);
+  color: var(--journal-paper-light);
+}
+
+.placed-object-panel .placed-object-danger:hover:not(:disabled) {
+  border-color: #794333;
+  background: #703b2d;
+  color: #fff5e6;
+}
+
+.placed-object-panel button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.placed-object-confirmation {
+  padding-top: 12px;
+  border-top: 1px solid var(--journal-rule);
+}
+
+.placed-object-confirm-label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.placed-object-confirm-label input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 5px;
+  background: var(--journal-paper-light);
+  color: var(--ink-warm);
+  font: inherit;
+}
+
+.placed-object-panel button:focus-visible,
+.placed-object-confirm-label input:focus-visible,
+.chest-close:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 3px;
 }
