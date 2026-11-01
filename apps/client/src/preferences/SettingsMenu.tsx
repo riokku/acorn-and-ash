@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DeleteCharacterPanel, type DeleteCharacter } from '../home/DeleteCharacterPanel';
 import { KEYBINDINGS } from './keybindings';
+import { SystemIcon } from '../hud/item-icons';
 
 import { MAX_SENSITIVITY, MIN_SENSITIVITY, type Preferences } from './preferences';
 
@@ -323,28 +324,6 @@ function SliderRow({
   );
 }
 
-/**
- * A simple cog: a ring with eight teeth spaced evenly around it. Built from
- * plain shapes rather than a hand-drawn path, so its correctness does not
- * depend on getting a long string of curve coordinates right by eye.
- */
 function GearIcon(): React.JSX.Element {
-  const teeth = [0, 45, 90, 135, 180, 225, 270, 315];
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      {teeth.map((angle) => (
-        <rect
-          key={angle}
-          x="10.5"
-          y="1"
-          width="3"
-          height="5"
-          rx="1"
-          transform={`rotate(${angle} 12 12)`}
-        />
-      ))}
-      <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" strokeWidth="2.4" />
-      <circle cx="12" cy="12" r="2.1" />
-    </svg>
-  );
+  return <SystemIcon icon="settings" size={20} />;
 }

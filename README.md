@@ -1496,6 +1496,8 @@ orbit and scroll to zoom make the elevation changes easy to review. See
   pack, crafting and equipment surfaces; inspect the painted item art at `/?gallery=icons`.
 - [Field journal entry and settings](docs/design/field-journal-entry.md) — title,
   sign-in, character-entry and settings surfaces in the same visual direction.
+- [Complete painted icon catalog](docs/design/painted-icon-catalog.md) — all current
+  items, buildables and matching HUD symbols, with size and contrast review.
 - [`docs/phase-0-experiments.md`](docs/phase-0-experiments.md) — what we found
   out about WebGPU, running an ECS inside a Durable Object, and what 50 players
   costs.
