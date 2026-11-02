@@ -115,7 +115,7 @@ const POND: WaterCircle[] = [
 ];
 
 function smallAnimalExhibit(
-  kind: 'rabbit' | 'maskedRaccoon' | 'fox',
+  kind: 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote',
   model: { group: THREE.Group; dispose(): void },
 ) {
   const art = animateSmallAnimal(model, kind);
@@ -298,6 +298,18 @@ const EXHIBITS: readonly Exhibit[] = [
     create: () => smallAnimalExhibit('maskedRaccoon', createRaccoon()),
   },
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: () => smallAnimalExhibit('fox', createFox()) },
+  // The plains coyote is drawn as a fox grown by half (see wildlife-models.ts).
+  {
+    name: 'coyote',
+    x: 10.4,
+    z: 1.6,
+    view: 2.8,
+    create: () => {
+      const exhibit = smallAnimalExhibit('coyote', createFox(1.45));
+      exhibit.group.scale.setScalar(1.45);
+      return exhibit;
+    },
+  },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The forest-floor plants, made in Blender (see understory.ts).

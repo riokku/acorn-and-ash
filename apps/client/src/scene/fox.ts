@@ -2,15 +2,18 @@ import * as THREE from 'three/webgpu';
 
 import { ANIMAL_KINDS } from '@acorn/shared';
 
-import { foxModelParts } from './fox-model';
+import { createRedFoxModel, foxModelParts } from './fox-model';
 
 /**
- * A fox: real modeled art once it has loaded (see fox-model.ts), or a low
- * rust-orange body with two ears and a tail until then, the same fallback
- * every other placeholder gets before its art arrives.
+ * A fox: Polyfork's Red Fox once it has downloaded, else the Quaternius fox
+ * (see fox-model.ts), or a low rust-orange body with two ears and a tail
+ * until either arrives, the same fallback every other placeholder gets
+ * before its art arrives.
  */
 export interface Fox {
   readonly group: THREE.Group;
+  /** Plays the model's own gait at this speed (m/s); only Polyfork's fox has one. */
+  animate?(deltaSeconds: number, speed: number): void;
   dispose(): void;
 }
 
@@ -21,7 +24,11 @@ const EAR_RADIUS = 0.045;
 const TAIL_LENGTH = 0.32;
 const TAIL_RADIUS = 0.08;
 
-export function createFox(): Fox {
+/** `size` is how much bigger the caller will draw it (the coyote is a big fox), so a gait keeps pace. */
+export function createFox(size = 1): Fox {
+  const redFox = createRedFoxModel(size);
+  if (redFox !== undefined) return redFox;
+
   const group = new THREE.Group();
 
   const realParts = foxModelParts();
