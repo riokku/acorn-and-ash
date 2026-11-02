@@ -16,7 +16,7 @@ export interface PolyforkPiece {
 const everyPiece: Array<() => Promise<void>> = [];
 
 /** Polyfork paints with vertex colours, so one material serves every piece. */
-const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
+export const polyforkPaint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
 
 /**
  * Registers `public/polyfork/<file>.glb`. `fit` moves it into the game's
@@ -53,7 +53,7 @@ export function polyforkGroup(
   const group = new THREE.Group();
   group.name = name;
   for (const geometry of geometries) {
-    const mesh = new THREE.Mesh(geometry, paint);
+    const mesh = new THREE.Mesh(geometry, polyforkPaint);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
