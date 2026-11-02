@@ -37,6 +37,7 @@ import bmesh
 import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 
 REPO = r'C:\Users\studi\OneDrive\Desktop\Projects\acorn-and-ash'
 sys.path.insert(0, os.path.join(REPO, 'tools', 'art'))
@@ -71,8 +72,9 @@ BODY2 = dict(
     hairline=((-.135, 1.212), (-.11, 1.202), (-.04, 1.09), (.04, 1.05), (.12, .96), (.22, .945)),
     ears=(.165, (-.015, .045), (1.03, 1.135)),
     smooth=(((.068, 1.15), .045), ((.07, 1.095), .035)),  # Meshy's carved eye lines, under the new eyes
-    eyes=(.068, 1.132), eye_size=(.012, .0155), lashes=True,
-    brow=((.035, 1.168), (.07, 1.18), (.103, 1.173)), brow_thick=.018,
+    even=(((.068, 1.13), .06), ((.1, 1.14), .022), ((.065, 1.095), .035)),  # and its eyelids, short of the temples
+    eyes=(.067, 1.135), eye_size=(.0105, .0125), eye_lift=.3, lashes=True,  # small, round, smiling
+    brow=((.035, 1.158), (.068, 1.166), (.1, 1.16)), brow_thick=.02,  # soft, close above them
     nose=((0, 1.067), .032), nose_base=-.134, nose_keep=1.0, cheeks=((.095, 1.05), .045),
     smile=(1.022, .03, .008, .009), beard_shift=(-.019, -.025),  # her mouth, from Body 1's
     skin='#eab08e', blush='#e0857a', shirt='#e2d3b6', shorts_colour='#6e4a34', hair='#e3b85c',
@@ -352,9 +354,13 @@ def decal(name, tree, rings, lift, rows_between=0):
     return me
 
 
-def ellipse(cx, cz, rx, rz, segs=14, f=1.0):
-    return [(cx + rx * f * math.cos(2 * math.pi * k / segs), cz + rz * f * math.sin(2 * math.pi * k / segs))
-            for k in range(segs)]
+def ellipse(cx, cz, rx, rz, segs=14, f=1.0, lift=0.0):
+    """Points round an ellipse; lift pushes its lower half up by that share, for a smiling eye."""
+    pts = []
+    for k in range(segs):
+        c, s = math.cos(2 * math.pi * k / segs), math.sin(2 * math.pi * k / segs)
+        pts.append((cx + rx * f * c, cz + rz * f * s * (1 - lift if s < 0 else 1)))
+    return pts
 
 
 def face_pieces(ob, B):
@@ -365,7 +371,9 @@ def face_pieces(ob, B):
     rx, rz = B['eye_size']
     for s in (-1, 1):
         x = s * ex
-        out.append((decal('eye', tree, [[(x, ez)], ellipse(x, ez, rx, rz, f=.55), ellipse(x, ez, rx, rz)], .0015),
+        lift = B.get('eye_lift', 0.0)
+        out.append((decal('eye', tree, [[(x, ez)], ellipse(x, ez, rx, rz, f=.55, lift=lift),
+                                        ellipse(x, ez, rx, rz, lift=lift)], .0015),
                     B['eyes_colour']))
         gx, gz = x - .0035, ez + .0045
         out.append((decal('glint', tree, [[(gx, gz)], ellipse(gx, gz, .0032, .0032, segs=8)], .0025), '#ffffff'))
@@ -389,7 +397,7 @@ def face_pieces(ob, B):
             for k in range(9):
                 a = math.radians(40 + 100 * k / 8)  # from above the outer corner round over the top
                 f = 1.0 + .25 * smoothstep(.5, 1.0, 1 - k / 8)
-                px, pz = x + s * rx * math.cos(a) * f, ez + rz * math.sin(a)
+                px, pz = x + s * rx * .95 * math.cos(a) * f, ez + rz * .9 * math.sin(a)  # on the eye's edge
                 inner.append((px, pz))
                 outer.append((x + s * (rx + .004) * math.cos(a) * f * 1.05, ez + (rz + .003) * math.sin(a)))
             out.append((decal('lashes', tree, [inner, outer], .002, rows_between=1), B['eyes_colour']))
@@ -405,12 +413,40 @@ def face_pieces(ob, B):
     return out
 
 
+def even_out(ob, B, reach=.022, rounds=6):
+    """Even out lumps and dents on the front of the face, like Meshy's eyelids, mirrored on both
+    sides. Each round, a vertex moves onto the average depth of its neighbours within reach across
+    the face. Only depth changes, and the reach is small, so the face keeps its overall shape. Only
+    skin facing forward takes part, and only neighbours at about the same depth count, so a fold
+    (an eyelid over the eye) is never pulled through itself."""
+    front = [v for v in ob.data.vertices if v.co.y < -.06 and v.normal.y < -.3]
+    kd = KDTree(len(front))
+    for i, v in enumerate(front):
+        kd.insert((v.co.x, v.co.z, 0), i)
+    kd.balance()
+    weights = {}
+    for (cx, cz), r in B.get('even', ()):
+        for i, v in enumerate(front):
+            d = math.hypot(abs(v.co.x) - cx, v.co.z - cz)
+            if d < r:
+                weights[i] = max(weights.get(i, 0), 1 - smoothstep(r * .6, r, d))
+    for _ in range(rounds):
+        ys = [v.co.y for v in front]
+        for i, w in weights.items():
+            near = [(1 - (d / reach) ** 2, ys[j]) for _, j, d in kd.find_range((front[i].co.x, front[i].co.z, 0), reach)
+                    if abs(ys[j] - ys[i]) < .015]
+            avg = sum(k * y for k, y in near) / sum(k for k, _ in near)
+            front[i].co.y = ys[i] + (avg - ys[i]) * w
+    ob.data.update()
+
+
 def dress(ob, B):
     """Cut the hems, colour the body by part and add the face pieces, all in one mesh with two
     materials: [<id>_body, <id>_skin]."""
     if 'arm_fit' in B:
         fit_arms(ob, *B['arm_fit'])
     smooth_face(ob, B)
+    even_out(ob, B)
     shorten_nose(ob, B)
     cut_hems(ob, B)
     me = ob.data
