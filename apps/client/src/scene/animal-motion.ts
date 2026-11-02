@@ -2,9 +2,12 @@ import * as THREE from 'three/webgpu';
 import { lerp, smoothstep } from '@acorn/shared';
 import type { WoodlandCreature, WoodlandPose } from './woodland-creatures';
 
-type SmallAnimal = 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote';
+type SmallAnimal = 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote' | 'elk';
 
-/** Give the existing small-animal figures secondary motion without changing their art. */
+/**
+ * Give the existing small-animal figures, and the real Polyfork animals,
+ * secondary motion without changing their art.
+ */
 export function animateSmallAnimal(
   model: {
     group: THREE.Group;

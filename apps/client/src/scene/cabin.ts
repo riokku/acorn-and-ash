@@ -5,6 +5,7 @@ import { createLogsModel } from './ground-items';
 import * as THREE from 'three/webgpu';
 
 import { createFireGlow } from './fire-light';
+import { createLogCabin } from './log-cabin';
 import {
   groundBuildingSupport,
   groundLooseBuildingPart,
@@ -14,7 +15,8 @@ import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 
 /**
- * A little log cabin (see decision 0053): honey-coloured logs notched
+ * A little log cabin: Polyfork's Log Cabin once it has loaded (see
+ * log-cabin.ts), otherwise this placeholder (see decision 0053): honey-coloured logs notched
  * together at the corners on a low stone footing, a plank door with a
  * doorstep, a window glowing warm from inside with a flower box under it,
  * a shingled roof with plank gables, a fieldstone chimney, and a woodpile
@@ -58,6 +60,8 @@ const DOOR = { left: -1.05, right: -0.1, bottom: FOOTING, top: FOOTING + 1.85 };
 const WINDOW = { left: 0.75, right: 1.55, bottom: FOOTING + 0.85, top: FOOTING + 1.6 };
 
 export function createCabin(logCapacity = 20): Cabin {
+  const real = createLogCabin(logCapacity);
+  if (real !== undefined) return real;
   const logs = paintedMaterial('wood', { tint: 0xf2e2cc, roughness: 0.85 });
   const logEnds = paintedMaterial('logEnd', { roughness: 0.9 });
   const boards = paintedMaterial('wood', { tint: 0xc9a07a, roughness: 0.9 });
@@ -134,7 +138,7 @@ export function createCabin(logCapacity = 20): Cabin {
   const base = supports.build();
   const woodpile = createLogsModel(logCapacity, true);
   woodpile.show(0);
-  const shelf = createHomeDecoration('cedarBench');
+  const shelf = createHomeDecoration('cedarBench', false);
   shelf.group.rotation.y = Math.PI / 2;
   shelf.group.scale.set(((logCapacity > 20 ? 10 : 5) * 0.28) / 1.7, 0.85, 0.95 / 0.46);
   const storage = new THREE.Group();

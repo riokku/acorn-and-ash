@@ -30,6 +30,54 @@
       "id": "wooden-fence-section-d72055",
       "title": "Wooden Fence Section",
       "page": "https://polyfork.dev/asset/wooden-fence-section-d72055"
+    },
+    {
+      "name": "tree-stump",
+      "id": "tree-stump-ec3f48",
+      "title": "Tree Stump",
+      "page": "https://polyfork.dev/asset/tree-stump-ec3f48"
+    },
+    {
+      "name": "toadstool",
+      "id": "toadstool-257a4a",
+      "title": "Toadstool",
+      "page": "https://polyfork.dev/asset/toadstool-257a4a"
+    },
+    {
+      "name": "mushroom-cluster",
+      "id": "mushroom-cluster-18dc1d",
+      "title": "Mushroom Cluster",
+      "page": "https://polyfork.dev/asset/mushroom-cluster-18dc1d"
+    },
+    {
+      "name": "berry-bush",
+      "id": "berry-bush-ee4812",
+      "title": "Berry Bush",
+      "page": "https://polyfork.dev/asset/berry-bush-ee4812"
+    },
+    {
+      "name": "forest-deer",
+      "id": "forest-deer-fe648d",
+      "title": "Forest Deer",
+      "page": "https://polyfork.dev/asset/forest-deer-fe648d"
+    },
+    {
+      "name": "log-cabin",
+      "id": "log-cabin-4fac3b",
+      "title": "Log Cabin",
+      "page": "https://polyfork.dev/asset/log-cabin-4fac3b"
+    },
+    {
+      "name": "wooden-bench",
+      "id": "wooden-bench-02e2c8",
+      "title": "Wooden Bench",
+      "page": "https://polyfork.dev/asset/wooden-bench-02e2c8"
+    },
+    {
+      "name": "campsite-picnic-table",
+      "id": "campsite-picnic-table-361d51",
+      "title": "Campsite Picnic Table",
+      "page": "https://polyfork.dev/asset/campsite-picnic-table-361d51"
     }
   ]
 }

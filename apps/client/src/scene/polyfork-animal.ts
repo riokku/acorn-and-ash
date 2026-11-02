@@ -1,0 +1,85 @@
+import * as THREE from 'three/webgpu';
+import { smoothstep } from '@acorn/shared';
+
+import { instantiateAnimatedModel, loadAnimatedModel, type AnimatedModel } from './model-loading';
+
+/**
+ * A free Polyfork animal (decision 0272), downloaded at build time into
+ * public/polyfork. It brings its own skeleton and Idle, Walk and Run clips;
+ * animal-motion.ts still tilts it to the ground and plays its alert and defeat.
+ */
+export interface PolyforkAnimal {
+  /** Fetches the animal up front. Idempotent, like the other model preloads. */
+  preload(): Promise<void>;
+  /** A living copy, or undefined to keep drawing the placeholder. */
+  create(): AnimatedAnimal | undefined;
+}
+
+export interface AnimatedAnimal {
+  readonly group: THREE.Group;
+  /** Plays its own gait at this speed (m/s). */
+  animate(deltaSeconds: number, speed: number): void;
+  dispose(): void;
+}
+
+export function polyforkAnimal(
+  file: string,
+  gait: {
+    /** The speeds (m/s) the Walk and Run clips look right at, at this scale. */
+    walkSpeed: number;
+    runSpeed: number;
+    /** Grown or shrunk evenly from Polyfork's size. */
+    scale?: number;
+  },
+): PolyforkAnimal {
+  let template: AnimatedModel | undefined;
+  let loading: Promise<void> | null = null;
+  return {
+    preload() {
+      loading ??= loadAnimatedModel(`${import.meta.env.BASE_URL}polyfork/${file}.glb`).then(
+        (loaded) => {
+          template = loaded;
+        },
+        (error: unknown) => {
+          // The placeholder is a fine fallback, so a missing download
+          // shouldn't empty the forest of this animal.
+          console.error(`Could not load the ${file} model; keeping the placeholder.`, error);
+        },
+      );
+      return loading;
+    },
+    create() {
+      if (template === undefined) return undefined;
+      const { root, mixer, actions } = instantiateAnimatedModel(template);
+      // Polyfork faces +Z; every creature here faces -Z before it is turned.
+      root.rotation.y = Math.PI;
+      root.scale.setScalar(gait.scale ?? 1);
+      root.traverse((child) => {
+        if (child instanceof THREE.Mesh) child.castShadow = true;
+      });
+      const group = new THREE.Group();
+      group.add(root);
+
+      const clip = (name: string) => actions.find((action) => action.getClip().name === name);
+      const idle = clip('Idle');
+      const walk = clip('Walk');
+      const run = clip('Run');
+      for (const action of [idle, walk, run]) action?.play();
+
+      return {
+        group,
+        animate(deltaSeconds, speed) {
+          const moving = smoothstep(speed, 0.05, 0.5);
+          const running = smoothstep(speed, gait.walkSpeed * 1.8, gait.walkSpeed * 3.6);
+          idle?.setEffectiveWeight(1 - moving);
+          walk?.setEffectiveWeight(moving * (1 - running));
+          run?.setEffectiveWeight(moving * running);
+          walk?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / gait.walkSpeed, 0.5, 1.8));
+          run?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / gait.runSpeed, 0.6, 1.5));
+          mixer.update(deltaSeconds);
+        },
+        dispose: () => mixer.stopAllAction(),
+      };
+    },
+  };
+}

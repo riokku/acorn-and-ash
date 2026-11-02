@@ -7,7 +7,31 @@ import { paintedMaterial } from '../art/materials';
 import type { DecorationKind } from '@acorn/shared';
 import { createLantern } from './lantern';
 import { createGuardianTrophy } from './guardian-trophy';
-export function createHomeDecoration(kind: DecorationKind) {
+import { polyforkGroup, polyforkPiece } from './polyfork-piece';
+
+/**
+ * Polyfork's free Wooden Bench and Campsite Picnic Table (decision 0272). The
+ * bench is our bench's size already; the picnic table, seats and all, is
+ * shrunk a little towards the old table's footprint.
+ */
+const PICNIC_TABLE_SCALE = 0.8;
+const polyforkFurniture = {
+  cedarBench: polyforkPiece('wooden-bench'),
+  timberTable: polyforkPiece(
+    'campsite-picnic-table',
+    new THREE.Matrix4().makeScale(PICNIC_TABLE_SCALE, PICNIC_TABLE_SCALE, PICNIC_TABLE_SCALE),
+  ),
+};
+
+/**
+ * A piece of home decoration. `realModel: false` keeps the placeholder bench,
+ * which the cabins stretch into their woodpile shelf.
+ */
+export function createHomeDecoration(kind: DecorationKind, realModel = true) {
+  if (realModel && (kind === 'cedarBench' || kind === 'timberTable')) {
+    const real = polyforkFurniture[kind].parts();
+    if (real !== undefined) return polyforkGroup(kind, real.values());
+  }
   if (kind === 'sunreachPennant') return createHomeDecoration('trailPennant');
   if (kind === 'fishDisplay' || kind === 'goldenFishDisplay')
     return createFishDisplay(kind === 'goldenFishDisplay');

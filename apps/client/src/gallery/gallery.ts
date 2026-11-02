@@ -57,6 +57,8 @@ import { preloadRabbitModel } from '../scene/rabbit-model';
 import { preloadTentModel } from '../scene/tent-model';
 import { preloadLanternModel } from '../scene/lantern-model';
 import { preloadPolyforkPieces } from '../scene/polyfork-piece';
+import { preloadDeerModel } from '../scene/deer-model';
+import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
 import { createHomeInterior } from '../scene/home-interior';
@@ -174,7 +176,10 @@ const EXHIBITS: readonly Exhibit[] = [
       const params = new URLSearchParams(window.location.search);
       const motion = params.get('motion') ?? 'idle';
       // Start the calm study in its grazing phase; gameplay phases vary by animal id.
-      const model = createWoodlandCreature(kind, undefined, motion === 'graze' ? 40 : 0);
+      const model =
+        kind === 'elk'
+          ? createCritterFor('elk')
+          : createWoodlandCreature(kind, undefined, motion === 'graze' ? 40 : 0);
       const pose = {
         speed: motion === 'walk' ? 1.2 : motion === 'run' || motion === 'flee' ? 5 : 0,
         alert: ['alert', 'listen', 'tense', 'flee'].includes(motion),
@@ -228,6 +233,17 @@ const EXHIBITS: readonly Exhibit[] = [
         group.add(model.group);
       }
       return { group };
+    },
+  },
+  {
+    name: 'berry-bush',
+    x: 26,
+    z: 12,
+    view: 2.5,
+    create: () => {
+      const bush = createForageModel('berry', false, true);
+      bush.show(4);
+      return bush;
     },
   },
   {
@@ -406,6 +422,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadTentModel(),
     preloadLanternModel(),
     preloadPolyforkPieces(),
+    preloadDeerModel(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),

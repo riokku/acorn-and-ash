@@ -25,6 +25,10 @@ import {
 import { seasonUniforms } from '../art/season-uniforms';
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
+import { polyforkPaint, polyforkPiece } from './polyfork-piece';
+
+/** Polyfork's free Tree Stump, already our stump's size (0.82 m across, 0.48 m tall). */
+const polyforkStump = polyforkPiece('tree-stump');
 import { realModelPartsFor, treeVariant } from './prop-models';
 import {
   groundWeights,
@@ -110,6 +114,11 @@ function propMeshes(kind: PropKind, count: number, distant: boolean, variant: nu
   }
 
   if (kind.shape.family === 'stump') {
+    const real = polyforkStump.parts();
+    if (real !== undefined)
+      return [...real.values()].map((geometry) =>
+        instanced(geometry, polyforkPaint, count, 0, false),
+      );
     // Bark sides flaring into roots, and a sawn top showing its rings (see
     // pickup-models.ts), wearing the shared painted materials.
     const { bark, top } = stumpGeometries(kind.shape.radius, kind.shape.height);
