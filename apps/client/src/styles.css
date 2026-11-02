@@ -1622,7 +1622,7 @@ body {
 
 .home-character {
   position: relative;
-  height: 140px;
+  height: 156px;
   border-radius: 14px;
   border: 2px solid rgba(58, 42, 20, 0.14);
   background: rgba(255, 252, 242, 0.6);
@@ -1655,9 +1655,10 @@ body {
   background: rgba(193, 121, 74, 0.1);
 }
 
+/* Two bodies leave room for larger portraits, still under their 96 x 128 source. */
 .home-character-icon {
-  width: 42px;
-  height: 54px;
+  width: 72px;
+  height: 96px;
   object-fit: contain;
 }
 
