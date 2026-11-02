@@ -4,12 +4,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CanoePaddling } from '../src/scene/canoe-paddling';
+import { bodyShapeOf, type BodyShape } from '../src/scene/body-shape';
 import { createRowboat } from '../src/scene/rowboat';
 import { ActionKind } from '@acorn/shared';
 
 vi.mock('../src/scene/character-animations', () => ({
-  characterClips: () => ({
-    whole: new Map([['sitIdle', sit]]),
+  characterClips: (shape: BodyShape) => ({
+    whole: new Map([['sitIdle', sits.get(shape)]]),
     upper: new Map(),
     lower: new Map(),
   }),
@@ -29,14 +30,21 @@ async function rigFile(path: string) {
   return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(JSON.stringify(data), '');
 }
 
-let sit: THREE.AnimationClip;
+/** Each dwarf shape sits by its own fitted moves, as in the game. */
+const sits = new Map<BodyShape, THREE.AnimationClip>();
 beforeAll(async () => {
   // GLTFLoader's embedded-buffer progress event has no DOM equivalent in Node.
   vi.stubGlobal('ProgressEvent', class {});
-  // Every player body is a dwarf, seated by the dwarves' own fitted moves.
-  sit = (await rigFile('assets/animations/dwarf.glb')).animations.find(
-    (clip) => clip.name === 'sitIdle',
-  )!;
+  for (const [shape, file] of [
+    ['dwarf', 'dwarf.glb'],
+    ['softDwarf', 'soft-dwarf.glb'],
+  ] as const) {
+    const library = await rigFile(`assets/animations/${file}`);
+    sits.set(
+      shape,
+      library.animations.find((clip) => clip.name === 'sitIdle')!,
+    );
+  }
 });
 afterAll(() => vi.unstubAllGlobals());
 
@@ -54,7 +62,7 @@ async function setup(body = 'knight') {
   root.scale.setScalar(0.6);
   parent.add(root);
   const mixer = new THREE.AnimationMixer(root);
-  mixer.clipAction(sit).play();
+  mixer.clipAction(sits.get(bodyShapeOf(root))!).play();
   mixer.update(0.5);
   const paddling = CanoePaddling.forRig(root)!;
   return { root, mixer, paddling };

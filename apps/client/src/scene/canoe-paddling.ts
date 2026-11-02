@@ -41,6 +41,15 @@ const STROKES: Readonly<Record<BodyShape, Stroke>> = {
     rightElbow: new THREE.Vector3(-0.9, 0.6, -0.5),
     leftElbow: new THREE.Vector3(0.6, 0.75, -0.55),
   },
+  // Seated, a soft dwarf's shoulders are at 0.93 m and 0.07 m further back, and its arms reach 0.41 m.
+  softDwarf: {
+    catchAt: new THREE.Vector3(-0.39, 0.6, -0.25),
+    lift: new THREE.Vector2(0.06, 0.08),
+    sway: 0.06,
+    coast: new THREE.Vector3(-0.23, 0.68, -0.21),
+    rightElbow: new THREE.Vector3(-0.9, 0.78, -0.6),
+    leftElbow: new THREE.Vector3(0.6, 0.93, -0.65),
+  },
 };
 
 /** A two-handed stroke on the existing rig, with the paddle parented to its lower hand. */

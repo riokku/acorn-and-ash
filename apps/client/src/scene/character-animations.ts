@@ -6,14 +6,16 @@ import type { BodyShape } from './body-shape';
 
 import libraryUrl from '@assets/animations/character.glb?url';
 import dwarfLibraryUrl from '@assets/animations/dwarf.glb?url';
+import softDwarfLibraryUrl from '@assets/animations/soft-dwarf.glb?url';
 
 /**
  * Every character move, loaded once and shared by every character on
  * KayKit's Rig_Medium skeleton, bone for bone, so one clip plays on any of
  * them (see decision 0056 and tools/import-animations.mjs). The players'
- * dwarves have the same bones in shorter lengths, and their own copy of
- * every move fitted to them (tools/retarget-dwarf-animations.mjs), which is
- * also where moves made just for dwarves go.
+ * dwarves have the same bones in shorter lengths, and each dwarf shape (the
+ * faceted and the soft) has its own copy of every move fitted to it
+ * (tools/retarget-dwarf-animations.mjs), which is also where moves made just
+ * for dwarves go.
  *
  * Some clips also come split in two - the upper body and the legs - so a
  * character can eat, reach or fish with their arms while their legs keep
@@ -77,6 +79,7 @@ export interface CharacterClips {
 const LIBRARY_URLS: Record<BodyShape, string> = {
   adventurer: libraryUrl,
   dwarf: dwarfLibraryUrl,
+  softDwarf: softDwarfLibraryUrl,
 };
 
 const libraries = new Map<BodyShape, CharacterClips>();

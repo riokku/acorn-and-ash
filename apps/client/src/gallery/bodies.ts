@@ -12,7 +12,7 @@ import {
 
 import { characterModelTemplate, preloadCharacterModels } from '../scene/character-model';
 import { characterClips, preloadCharacterAnimations } from '../scene/character-animations';
-import { BODY_BEARD, showBeard, type BeardStyle } from '../scene/body-shape';
+import { BODY_BEARD, bodyShapeOf, showBeard, type BeardStyle } from '../scene/body-shape';
 import { instantiateAnimatedModel, type AnimatedModelInstance } from '../scene/model-loading';
 import { createNameplate } from '../scene/nameplate';
 import { isSkinMaterial, skinShade } from '../scene/skin-tone';
@@ -57,7 +57,6 @@ export async function showBodies(
   const tones = params.has('tones');
 
   await Promise.all([preloadCharacterModels(), preloadCharacterAnimations()]);
-  const clip = characterClips('dwarf')?.whole.get(clipName);
 
   const mixers: THREE.AnimationMixer[] = [];
   const place = (
@@ -78,6 +77,8 @@ export async function showBodies(
       if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
     });
     scene.add(body.root);
+    // Each body plays the moves fitted to its own shape (faceted or soft dwarf).
+    const clip = characterClips(bodyShapeOf(body.root))?.whole.get(clipName);
     if (clip !== undefined) play(body, clip, column);
     mixers.push(body.mixer);
   };

@@ -320,6 +320,9 @@ the same number, keeping its skin tone and progress. Gear still works on a
 dwarf but is not drawn on one until each piece has been refitted, one family at
 a time. Dwarves play their own copy of the moves, fitted to their shorter
 limbs. See [decision 0270](docs/decisions/0270-dwarf-bodies.md).
+Body 1 is the first to be remade in a softer, rounder style (a Meshy model,
+cleaned up in Blender, with our own beards and face). The others follow one at
+a time. See [decision 0272](docs/decisions/0272-soft-dwarf-bodies.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
 (see [decision 0113](docs/decisions/0113-skin-tones.md)).
@@ -1474,9 +1477,12 @@ deleted.) The six plain bodies and the gear lifted off their outfits were built
 the same way, by `tools/art/plain_bodies.py`, and the six dwarf bodies that
 replaced them by `tools/art/dwarf_bodies.py`. After re-exporting the dwarves,
 refit the moves to them with
-`node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/dwarf.glb`;
+`node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/barbarian.glb assets/animations/dwarf.glb`;
 a new move made in Blender for the dwarves goes straight into
-`assets/animations/dwarf.glb` with `tools/add-animation.mjs`.
+`assets/animations/dwarf.glb` with `tools/add-animation.mjs`. The soft dwarves
+(Body 1 so far) are made from a Meshy model by `tools/art/meshy_body.py` and have
+their own fitted moves:
+`node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/soft-dwarf.glb`.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose
 licence forbids redistribution.
