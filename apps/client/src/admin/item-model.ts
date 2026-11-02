@@ -15,7 +15,9 @@ import {
   type ModelPart,
 } from '../scene/model-loading';
 import { preloadWornGearModels } from '../scene/worn-gear-models';
-import bodyUrl from '@assets/characters/knight.glb?url';
+// Worn clothes are previewed as skins over a body built of named parts (_Body, _ArmLeft and so
+// on). The soft dwarves (decision 0272) are one smooth piece, so this uses Body 3, still faceted.
+import bodyUrl from '@assets/characters/mage.glb?url';
 
 export interface ItemModel {
   readonly animated?: boolean;
