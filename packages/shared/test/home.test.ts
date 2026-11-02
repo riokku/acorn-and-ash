@@ -15,6 +15,7 @@ import {
   isLeavingRoom,
 } from '../src/world/home';
 import { createFlatTerrain } from '../src/world/terrain';
+import { HOME_TIERS, type HomeKind } from '../src/data/housing';
 import {
   decodeClientMessage,
   decodeServerMessage,
@@ -80,6 +81,58 @@ describe('a cabin from the outside', () => {
     // Nor is being nowhere near the door.
     expect(isEnteringDoorway(home, doorway.x + 3, doorway.z, 0, -1, false)).toBe(false);
   });
+});
+
+describe('each home from the outside', () => {
+  /**
+   * Where each home's drawn walls are, left to right and back to front, for
+   * a home at the origin facing +Z: measured from Polyfork's Camp Tent and
+   * Log Cabin as tent-model.ts, shelter.ts, log-cabin.ts and large-cabin.ts
+   * place them, and from the teepee's canvas rim.
+   */
+  const drawnWalls: Record<HomeKind, { left: number; right: number; depth: number }> = {
+    tent: { left: -1.4, right: 0.7, depth: 1.23 },
+    teepee: { left: -1.67, right: 1.99, depth: 1.64 },
+    cabin: { left: -2.69, right: 1.54, depth: 1.96 },
+    largeCabin: { left: -3.22, right: 1.84, depth: 2.36 },
+  };
+
+  for (const kind of HOME_TIERS) {
+    const home = { kind, x: 0, z: 0, yaw: 0 };
+    const walls = drawnWalls[kind];
+    const solid = [cabinCollider(home)];
+
+    it(`puts the ${kind}'s walls where they are drawn`, () => {
+      const block = cabinCollider(home) as { x: number; halfX: number; halfZ: number };
+      expect(Math.abs(block.x - block.halfX - walls.left)).toBeLessThan(0.1);
+      expect(Math.abs(block.x + block.halfX - walls.right)).toBeLessThan(0.1);
+      expect(Math.abs(block.halfZ - walls.depth)).toBeLessThan(0.1);
+    });
+
+    it(`has no invisible wall beside the ${kind}, and no walking into it`, () => {
+      // Brushing past either side, a hand's width from the wall, is free...
+      for (const x of [walls.left - PLAYER_RADIUS - 0.1, walls.right + PLAYER_RADIUS + 0.1]) {
+        const beside = pushedOut(x, 0, solid);
+        expect(beside.x).toBeCloseTo(x, 3);
+      }
+      // ...but leaning into either side wall stops you at it.
+      const left = pushedOut(walls.left + 0.1, 0, solid);
+      expect(left.x).toBeLessThan(walls.left - PLAYER_RADIUS + 0.15);
+      const right = pushedOut(walls.right - 0.1, 0, solid);
+      expect(right.x).toBeGreaterThan(walls.right + PLAYER_RADIUS - 0.15);
+    });
+
+    it(`lets you walk up to the ${kind}'s door and in`, () => {
+      const doorway = cabinDoorway(home);
+      const there = pushedOut(doorway.x, doorway.z, solid);
+      expect(there.x).toBeCloseTo(doorway.x, 3);
+      expect(there.z).toBeCloseTo(doorway.z, 3);
+      expect(isEnteringDoorway(home, there.x, there.z, 0, -1, false)).toBe(true);
+      const doorstep = cabinDoorstep(home);
+      const outside = pushedOut(doorstep.x, doorstep.z, solid);
+      expect(outside.z).toBeCloseTo(doorstep.z, 3);
+    });
+  }
 });
 
 describe('the room inside', () => {

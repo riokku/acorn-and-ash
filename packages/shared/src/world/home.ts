@@ -13,7 +13,7 @@
  */
 
 import type { BuildableKindId } from '../data/buildables';
-import { homeOuterScale, homeRoomScale, type HomeKind } from '../data/housing';
+import { homeOuterScale, homeRoomScale, isHomeKind, type HomeKind } from '../data/housing';
 import { PLAYER_RADIUS } from '../constants';
 import { box, cylinder, type Collider } from './colliders';
 import { HOME_FACILITIES } from '../data/home-facilities';
@@ -38,14 +38,38 @@ export interface HomePlacement {
 /* Outside                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/**
- * The cabin's solid block, in its own coordinates: the log walls, a little
- * past them for the log ends, and out to the chimney on the +X end. The
- * woodpile and the doorstep stay walkable.
- */
-const CABIN_BLOCK = { centreX: 0.2, halfX: 2.5, halfZ: 2.05, height: 3.2 } as const;
 /** The middle of the front door, along the front wall. */
 const CABIN_DOOR_X = -0.575;
+
+/** A home's solid block, in its own coordinates, before `homeOuterScale`. */
+interface HomeBlock {
+  readonly centreX: number;
+  readonly halfX: number;
+  readonly halfZ: number;
+  readonly height: number;
+}
+
+/**
+ * Each home's solid block, fitted to the model drawn for it. The woodpile,
+ * the lantern and the doorstep stay walkable.
+ */
+const HOME_BLOCKS: Record<HomeKind, HomeBlock> = {
+  // Polyfork's Camp Tent, centred on the door: about 1.05 m of canvas either
+  // side of it at chest height, its full squeezed length, up to the ridge.
+  tent: { centreX: CABIN_DOOR_X, halfX: 1.75, halfZ: 2.05, height: 3.3 },
+  // The canvas teepee's rim, 1.83 m either side of a point a little right
+  // of the door.
+  teepee: { centreX: 0.2, halfX: 2.29, halfZ: 2.05, height: 3.2 },
+  // Polyfork's Log Cabin, centred on the door, out to its stone footing.
+  cabin: { centreX: CABIN_DOOR_X, halfX: 2.15, halfZ: 2, height: 3.2 },
+  // The same cabin, drawn bigger.
+  largeCabin: { centreX: CABIN_DOOR_X, halfX: 2.15, halfZ: 2, height: 3.2 },
+};
+
+/** The block for this home, as a cabin when it isn't one of the home kinds. */
+function homeBlock(kind: BuildableKindId | undefined): HomeBlock {
+  return HOME_BLOCKS[kind !== undefined && isHomeKind(kind) ? kind : 'cabin'];
+}
 /** How close to the doorway you have to be to go in. */
 export const DOORWAY_REACH = 1;
 /**
@@ -69,15 +93,16 @@ function toWorld(home: HomePlacement, localX: number, localZ: number): { x: numb
 /** What stops you walking through a cabin's walls. */
 export function cabinCollider(home: HomePlacement, groundY = 0): Collider {
   const scale = homeOuterScale(home.kind);
-  const centre = toWorld(home, CABIN_BLOCK.centreX * scale, 0);
+  const block = homeBlock(home.kind);
+  const centre = toWorld(home, block.centreX * scale, 0);
   // Collision boxes turn the other way round from Three.js models.
   return box(
     centre.x,
-    groundY + (CABIN_BLOCK.height * scale) / 2,
+    groundY + (block.height * scale) / 2,
     centre.z,
-    CABIN_BLOCK.halfX * scale,
-    (CABIN_BLOCK.height * scale) / 2,
-    CABIN_BLOCK.halfZ * scale,
+    block.halfX * scale,
+    (block.height * scale) / 2,
+    block.halfZ * scale,
     -home.yaw,
   );
 }
@@ -93,14 +118,18 @@ export function cabinDoorway(home: HomePlacement): {
   readonly inwardZ: number;
 } {
   const scale = homeOuterScale(home.kind);
-  const spot = toWorld(home, CABIN_DOOR_X * scale, CABIN_BLOCK.halfZ * scale + PLAYER_RADIUS + 0.1);
+  const spot = toWorld(
+    home,
+    CABIN_DOOR_X * scale,
+    homeBlock(home.kind).halfZ * scale + PLAYER_RADIUS + 0.1,
+  );
   return { ...spot, inwardX: -Math.sin(home.yaw), inwardZ: -Math.cos(home.yaw) };
 }
 
 /** Where you come out of a cabin: a step in front of the door, facing away from it. */
 export function cabinDoorstep(home: HomePlacement): PlacedSpot {
   const scale = homeOuterScale(home.kind);
-  const spot = toWorld(home, CABIN_DOOR_X * scale, CABIN_BLOCK.halfZ * scale + 0.9);
+  const spot = toWorld(home, CABIN_DOOR_X * scale, homeBlock(home.kind).halfZ * scale + 0.9);
   return { ...spot, yaw: home.yaw + Math.PI };
 }
 
