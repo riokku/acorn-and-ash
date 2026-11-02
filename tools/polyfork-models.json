@@ -80,6 +80,18 @@
       "page": "https://polyfork.dev/asset/berry-bush-ee4812"
     },
     {
+      "name": "wildflower",
+      "id": "wildflower-68d3a1",
+      "title": "Wildflower",
+      "page": "https://polyfork.dev/asset/wildflower-68d3a1"
+    },
+    {
+      "name": "lake-pebbles",
+      "id": "lake-pebbles-6c0359",
+      "title": "Lake Pebbles",
+      "page": "https://polyfork.dev/asset/lake-pebbles-6c0359"
+    },
+    {
       "name": "forest-deer",
       "id": "forest-deer-fe648d",
       "title": "Forest Deer",

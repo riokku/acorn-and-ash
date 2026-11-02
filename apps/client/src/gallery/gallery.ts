@@ -17,7 +17,7 @@ import { createForageModel, createMealModel } from '../scene/forest-food';
 import { DISCOVERIES, parseSeason } from '@acorn/shared';
 import { createSeasonRig } from '../scene/seasons';
 import { createSeasonFall } from '../scene/season-fall';
-import { createFlatTerrain } from '@acorn/shared';
+import { createFlatTerrain, GATHER_PATCH_MAX_COUNT } from '@acorn/shared';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
 
@@ -58,7 +58,9 @@ import { preloadFoxModel } from '../scene/fox-model';
 import { preloadRabbitModel } from '../scene/rabbit-model';
 import { preloadTentModel } from '../scene/tent-model';
 import { preloadLanternModel } from '../scene/lantern-model';
-import { preloadPolyforkPieces } from '../scene/polyfork-piece';
+import { polyforkGroup, preloadPolyforkPieces } from '../scene/polyfork-piece';
+import { lakePebblesGeometry } from '../scene/lake';
+import { createPileModel } from '../scene/ground-items';
 import { preloadDeerModel } from '../scene/deer-model';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
@@ -346,6 +348,30 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'understory', x: -22, z: -4, view: 4, create: createUnderstory },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
+  // Polyfork's lake pebbles, laid along the lake's banks (see lake.ts).
+  {
+    name: 'lake-pebbles',
+    x: -28,
+    z: -4,
+    view: 3,
+    create: () =>
+      polyforkGroup(
+        'lake-pebbles',
+        [lakePebblesGeometry()].filter((g) => g !== undefined),
+      ),
+  },
+  // A full patch of wildflowers to pick: Polyfork's wildflower (see flower-models.ts).
+  {
+    name: 'wildflowers',
+    x: -28,
+    z: 2,
+    view: 1.6,
+    create: () => {
+      const patch = createPileModel('flower');
+      patch.show(GATHER_PATCH_MAX_COUNT);
+      return patch;
+    },
+  },
   // A tunnel propped with mine supports (see mine-supports.ts).
   { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
   // The hanging mine lantern, made in Blender (see mine-lantern.ts).

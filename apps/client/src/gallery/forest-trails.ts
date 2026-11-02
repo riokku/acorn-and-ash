@@ -181,6 +181,11 @@ export async function showForestTrails(
     dunes: { label: 'Amber Dunes', target: [-233, 21, -213], eye: [-207, 30, -174] },
     cedar: { label: 'Cedar bench', target: [111, 13, 43], eye: [82, 30, 82] },
     overlook: { label: 'Lake overlook', target: [174, 17, -80], eye: [149, 35, -40] },
+    shore: {
+      label: 'Lake shore',
+      target: [68.6, terrain.heightAt(68.6, -54.2), -54.2],
+      eye: [70, terrain.heightAt(70, -51) + 1.3, -51],
+    },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
   } as const;
   const nav = document.createElement('nav');
