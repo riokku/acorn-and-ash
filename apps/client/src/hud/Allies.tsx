@@ -1,5 +1,25 @@
+import type { KeyboardEvent } from 'react';
 import { RESCUE, TICK_HZ, ITEM_KINDS, isMealItem, type ItemId } from '@acorn/shared';
 import type { HudState } from './store';
+
+export function isolateHudScrollKeys(event: KeyboardEvent): void {
+  if (
+    [
+      'Tab',
+      'Enter',
+      'Space',
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      'PageUp',
+      'PageDown',
+      'Home',
+      'End',
+    ].includes(event.code)
+  )
+    event.stopPropagation();
+}
 
 export function Allies({
   allies,
@@ -26,29 +46,46 @@ export function Allies({
           {down.rescueTicks > 0 ? <span>An ally is helping you up…</span> : null}
         </div>
       ) : null}
-      {nearby.map((ally) => (
-        <div className="ally" key={ally.netId} data-down={ally.downTicks > 0}>
-          <strong>{ally.name}</strong>
-          <progress aria-label={`${ally.name}'s health`} max={ally.maxHealth} value={ally.health} />
-          {ally.downTicks > 0 ? (
-            <>
-              <span>
-                {ally.inReach ? 'Hold E · help them up (3s)' : 'Needs help · move closer'} ·{' '}
-                {Math.ceil(ally.downTicks / TICK_HZ)}s
-              </span>
+      {nearby.length > 0 ? (
+        <div
+          className="allies-list"
+          data-testid="allies-list"
+          role="region"
+          aria-label="Nearby player status"
+          tabIndex={0}
+          onKeyDown={isolateHudScrollKeys}
+        >
+          {nearby.map((ally) => (
+            <div className="ally" key={ally.netId} data-down={ally.downTicks > 0}>
+              <strong>{ally.name}</strong>
               <progress
-                aria-label={`Helping ${ally.name}`}
-                max={RESCUE.holdTicks}
-                value={ally.rescueTicks}
+                aria-label={`${ally.name}'s health`}
+                max={ally.maxHealth}
+                value={ally.health}
               />
-            </>
-          ) : ally.shareMeal && heldMeal && isMealItem(heldMeal) ? (
-            <span>E · Share {ITEM_KINDS[heldMeal].displayName} · uses 2 servings, one each</span>
-          ) : ally.health / ally.maxHealth <= 0.3 ? (
-            <span>Low health</span>
-          ) : null}
+              {ally.downTicks > 0 ? (
+                <>
+                  <span>
+                    {ally.inReach ? 'Hold E · help them up (3s)' : 'Needs help · move closer'} ·{' '}
+                    {Math.ceil(ally.downTicks / TICK_HZ)}s
+                  </span>
+                  <progress
+                    aria-label={`Helping ${ally.name}`}
+                    max={RESCUE.holdTicks}
+                    value={ally.rescueTicks}
+                  />
+                </>
+              ) : ally.shareMeal && heldMeal && isMealItem(heldMeal) ? (
+                <span>
+                  E · Share {ITEM_KINDS[heldMeal].displayName} · uses 2 servings, one each
+                </span>
+              ) : ally.health / ally.maxHealth <= 0.3 ? (
+                <span>Low health</span>
+              ) : null}
+            </div>
+          ))}
         </div>
-      ))}
+      ) : null}
     </aside>
   );
 }

@@ -58,19 +58,58 @@ body {
   pointer-events: none;
 }
 
-.hud-panel {
+.hud-left-column {
   position: absolute;
   top: 12px;
+  bottom: 22px;
   left: 12px;
-  min-width: 190px;
-  padding: 10px 12px;
-  border: 1px solid var(--panel-edge);
-  border-radius: 10px;
-  background: var(--panel);
-  backdrop-filter: blur(6px);
+  width: min(250px, 27vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.hud-panel {
+  flex: none;
+  padding: 8px 10px;
+  border: 1px solid #718776;
+  border-radius: 6px;
+  background: #172b23ed;
+  color: #f4eddc;
   font-size: 12px;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+.hud-panel summary {
+  cursor: pointer;
+  color: #e8d6b2;
+}
+.hud-diagnostics-rows {
+  max-height: 60px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.hud-panel summary:focus-visible,
+.hud-diagnostics-rows:focus-visible,
+.allies-list:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 2px;
+}
+.hud-left-column .vitals {
+  position: static;
+  flex: none;
+  align-self: flex-start;
+  margin-top: auto;
+}
+@media (max-width: 1000px) {
+  .hud-left-column {
+    width: min(210px, 27vw);
+    bottom: 105px;
+  }
+  .hud-left-column .warmth-meter {
+    max-width: 218px;
+  }
 }
 
 .hud-title {
@@ -4524,26 +4563,36 @@ body {
 
 /* Quiet cooperative status stays out of the aiming area. */
 .allies {
-  position: absolute;
-  left: 18px;
-  top: 125px;
-  width: min(250px, 27vw);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  pointer-events: none;
+  min-height: 0;
   color: #f4eddc;
   font-size: 12px;
+}
+.allies-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
 }
 .ally,
 .rescue-self {
   display: grid;
   gap: 5px;
-  padding: 10px 12px;
-  background: #17221de8;
-  border: 1px solid #b8bd8655;
-  border-radius: 10px;
-  box-shadow: 0 4px 18px #0003;
+  padding: 8px 10px;
+  background: #172b23f2;
+  border: 1px solid #718776;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px #0003;
 }
+.rescue-self {
+  flex: none;
+}
+
 .ally progress {
   width: 100%;
   height: 6px;
