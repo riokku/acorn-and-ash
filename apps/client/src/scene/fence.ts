@@ -1,10 +1,12 @@
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
 
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, logGeometry, placed } from '../art/shapes';
+import { polyforkGroup, polyforkPiece } from './polyfork-piece';
 
 /**
- * A rustic split-rail fence piece (see decision 0053): two weathered round
+ * A fence piece: Polyfork's Wooden Fence Section once it has loaded,
+ * otherwise this placeholder, a rustic split-rail fence piece (see decision 0053): two weathered round
  * posts with a sawn top, and two rails between them, each a little
  * irregular, the same piece a player places over and over to build a line.
  *
@@ -23,7 +25,16 @@ const POST_HEIGHT = 0.82;
 const RAIL_RADIUS = 0.045;
 const RAIL_HEIGHTS = [0.34, 0.64];
 
+/** Polyfork's posts stand 1.8 m apart; squeeze it lengthways so they land on ours. */
+const POLYFORK_POST_SPACING = 1.8;
+const polyforkFence = polyforkPiece(
+  'wooden-fence-section',
+  new THREE.Matrix4().makeScale(SEGMENT_WIDTH / POLYFORK_POST_SPACING, 1, 1),
+);
+
 export function createFence(): Fence {
+  const real = polyforkFence.parts();
+  if (real !== undefined) return polyforkGroup('fence', real.values());
   // Silvered a little by the weather, rather than fresh honey-coloured wood.
   const weathered = paintedMaterial('wood', { tint: 0xc4b8a6, roughness: 0.95 });
   const ends = paintedMaterial('logEnd', { tint: 0xd4c8b6, roughness: 0.95 });
