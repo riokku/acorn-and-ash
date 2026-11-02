@@ -4,9 +4,11 @@ import { BOAT_SEAT_HEIGHT } from '@acorn/shared';
 
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
+import { canoeHullPart } from './canoe-model';
 
 /**
- * A temporary timber canoe using the existing painted boat materials. Its
+ * A timber canoe: Polyfork's Wooden Canoe once canoe-model.ts has loaded it,
+ * otherwise a placeholder built from the existing painted boat materials. Its
  * double-ended hull is 3.34 m long and 0.84 m wide, with one visible paddler
  * on the middle thwart. Local +X is the bow, local y=0 the waterline.
  * The legacy Rowboat API and saved kind remain compatible with existing worlds.
@@ -88,6 +90,9 @@ function wallOutline(halfLength: number, halfBeam: number): THREE.Shape {
 export function createRowboat(): Rowboat {
   const planking = paintedMaterial('wood', { tint: 0xb5834f, roughness: 0.9 });
   const trim = paintedMaterial('wood', { tint: 0x80573a, roughness: 0.9 });
+
+  const hull = canoeHullPart();
+  if (hull !== undefined) return withStowedPaddle(polyforkCanoe(hull), planking, trim);
   const rope = paintedMaterial('burlap', { tint: 0xd8c18a, roughness: 1 });
 
   const builder = new ModelBuilder();
@@ -140,7 +145,28 @@ export function createRowboat(): Rowboat {
     placed(1.05, 0.09, 0, { x: Math.PI / 2 }),
   );
 
-  const built = builder.build();
+  return withStowedPaddle(builder.build(), planking, trim);
+}
+
+/** The real hull from canoe-model.ts. Its geometry is shared by every canoe, so it is never disposed. */
+function polyforkCanoe(hull: { geometry: THREE.BufferGeometry; material: THREE.Material }): {
+  group: THREE.Group;
+  dispose(): void;
+} {
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(hull.geometry, hull.material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  return { group, dispose: () => {} };
+}
+
+/** A paddle laid in the hull, hidden while someone is paddling with their own. */
+function withStowedPaddle(
+  built: { group: THREE.Group; dispose(): void },
+  planking: THREE.Material,
+  trim: THREE.Material,
+): Rowboat {
   built.group.name = 'canoe';
   const paddle = createCanoePaddle(planking, trim);
   paddle.group.position.set(0.4, 0.08, 0.18);

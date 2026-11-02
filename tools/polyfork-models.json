@@ -1,0 +1,11 @@
+{
+  "$comment": "Free Polyfork models the game uses. tools/fetch-polyfork.mjs downloads each one into apps/client/public/polyfork/<name>.glb at build time; the files are never committed (see docs/decisions/0272-polyfork-models-fetched-at-build.md).",
+  "models": [
+    {
+      "name": "wooden-canoe",
+      "id": "wooden-canoe-1d00c5",
+      "title": "Wooden Canoe",
+      "page": "https://polyfork.dev/asset/wooden-canoe-1d00c5"
+    }
+  ]
+}

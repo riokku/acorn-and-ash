@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Three.js game client. Builds to static files served by @acorn/web.",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node ../../tools/fetch-polyfork.mjs && vite",
+    "build": "node ../../tools/fetch-polyfork.mjs && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

@@ -20,3 +20,5 @@ apps/web/wrangler.deploy.jsonc
 apps/web/preview-secrets.json
 # Python bytecode from the Blender art scripts.
 __pycache__/
+# Free Polyfork models, downloaded at build time and never committed (decision 0272).
+apps/client/public/polyfork/
