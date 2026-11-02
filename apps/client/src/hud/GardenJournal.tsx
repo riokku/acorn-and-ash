@@ -8,6 +8,7 @@ import {
 } from '@acorn/shared';
 import type { HudState } from './store';
 import { JournalTabs } from './DiscoveryJournal';
+import { ItemIcon } from './item-icons';
 
 const REASONS = {
   unavailable: 'Build a kitchen garden in your yard, or upgrade to a larger cabin.',
@@ -54,6 +55,7 @@ export function GardenJournal({
       {garden.plots.map((plot, index) => (
         <article className="garden-box" key={index}>
           <h3>
+            {plot.crop !== null ? <ItemIcon item={plot.crop} color="#496342" /> : null}
             Box {index + 1} ·{' '}
             {plot.crop === null ? 'Ready to plant' : ITEM_KINDS[plot.crop].displayName}
           </h3>
@@ -66,6 +68,7 @@ export function GardenJournal({
                   disabled={!canTend || countOf(inventory, crop) < 1}
                   onClick={() => onUse?.({ action: 'plant', plot: index, crop })}
                 >
+                  <ItemIcon item={crop} color="#496342" />
                   Plant {ITEM_KINDS[crop].displayName.toLowerCase()} · 1
                 </button>
               ))}
@@ -81,6 +84,7 @@ export function GardenJournal({
               disabled={!canTend}
               onClick={() => onUse?.({ action: 'harvest', plot: index })}
             >
+              <ItemIcon item={plot.crop} color="#496342" />
               Harvest 3 {ITEM_KINDS[plot.crop].pluralName.toLowerCase()}
             </button>
           )}

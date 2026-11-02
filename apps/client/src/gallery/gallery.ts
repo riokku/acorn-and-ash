@@ -362,6 +362,16 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showBodyIcon(canvas, params);
     return;
   }
+  if (focus === 'loading-tips') {
+    const { showLoadingTips } = await import('./loading-tips');
+    showLoadingTips(canvas, params);
+    return;
+  }
+  if (focus === 'journal-art') {
+    const { showJournalArt } = await import('./journal-art');
+    showJournalArt(canvas, params);
+    return;
+  }
   if (focus === 'backdrop') {
     const { showBackdrop } = await import('./backdrop');
     await showBackdrop(canvas);

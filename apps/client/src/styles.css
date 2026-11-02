@@ -662,6 +662,9 @@ body {
  */
 .hud-journal {
   pointer-events: auto;
+  /* Tab rows can reach the minimap at compact widths. Keep the active journal
+     page above it so every tab remains directly clickable. */
+  z-index: 3;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
   position: absolute;
@@ -3502,6 +3505,9 @@ body {
   padding: 0.5rem 0 0.9rem;
 }
 .hud-journal-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid #7e886c;
   border-radius: 6px;
   background: transparent;
@@ -3509,6 +3515,11 @@ body {
   padding: 0.35rem 0.8rem;
   cursor: pointer;
   font: inherit;
+}
+.hud-journal-tabs button svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 .hud-journal-tabs button[aria-pressed='true'] {
   background: #dbe0c9;
@@ -3550,6 +3561,13 @@ body {
 .discovery-entry-found .discovery-sketch {
   color: #547254;
 }
+.discovery-art {
+  width: 78px;
+  height: 64px;
+  flex: 0 0 78px;
+  align-self: center;
+  object-fit: contain;
+}
 .discovery-status {
   font-size: 0.77rem;
   color: #65754b;
@@ -3567,12 +3585,21 @@ body {
   margin: 0 0 0.6rem;
   font-size: 1rem;
 }
+.garden-box h3 svg {
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
 .garden-choices {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
 }
 .garden-box button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid #7e886c;
   border-radius: 6px;
   background: #dbe0c9;
@@ -3580,6 +3607,11 @@ body {
   padding: 0.45rem 0.65rem;
   font: inherit;
   cursor: pointer;
+}
+.garden-box button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 .garden-box button:disabled {
   opacity: 0.5;
@@ -4101,9 +4133,6 @@ body {
 }
 .hud-journal-tabs {
   flex-wrap: wrap;
-}
-.fishing-journal {
-  z-index: 3;
 }
 .fishing-species article p {
   margin: 0.45rem 0;
@@ -5918,6 +5947,12 @@ body {
   display: inline-block;
   width: 20px;
 }
+.homestead-story-stamp {
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
 .homestead-stories .homestead-eyebrow {
   color: #566b49;
 }
@@ -6708,4 +6743,79 @@ body {
 .chest-close:focus-visible {
   outline: 3px solid var(--journal-copper);
   outline-offset: 3px;
+}
+
+.journal-art-gallery {
+  min-height: 100vh;
+  padding: 24px 16px;
+  background: var(--journal-paper-bottom);
+}
+.journal-art-gallery main {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.journal-art-gallery .hud-journal {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.loading-tip {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 116px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 6px;
+  background: var(--journal-well);
+  color: #403a2c;
+  text-align: left;
+}
+.loading-tip-icon {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+.loading-tip-body {
+  flex: 1;
+  min-width: 0;
+}
+.loading-tip-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #655538;
+  font-size: 12px;
+}
+.loading-tip-body p {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.loading-tip-body button {
+  padding: 4px 9px;
+  border: 1px solid var(--journal-fir);
+  border-radius: 5px;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.loading-tip-body button:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 3px;
+}
+@media (max-height: 520px) {
+  .loading-tip {
+    display: none;
+  }
 }
