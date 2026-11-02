@@ -14,10 +14,10 @@ test('shows basic clothing on every body with a rigged cap', async ({ page }, te
     await expect(page.locator('body')).toContainText('Protection 5% · Warmth 30');
     await page.screenshot({ path: testInfo.outputPath(`basic-${body}.png`) });
   }
-  await page.goto('/?gallery=basic-clothing&body=ranger&renderer=webgl2&still&back');
+  await page.goto('/?gallery=basic-clothing&body=barbarian&renderer=webgl2&still&back');
   await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true');
-  await page.screenshot({ path: testInfo.outputPath('basic-ranger-back.png') });
-  await page.goto('/?gallery=basic-clothing&body=ranger&renderer=webgl2&still&before');
+  await page.screenshot({ path: testInfo.outputPath('basic-barbarian-back.png') });
+  await page.goto('/?gallery=basic-clothing&body=barbarian&renderer=webgl2&still&before');
   await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true');
   await page.screenshot({ path: testInfo.outputPath('basic-before.png') });
   expect(errors).toEqual([]);

@@ -5,37 +5,26 @@ import { heldItemParts } from '../scene/character';
 import { preloadItemModels } from '../scene/item-models';
 import { preloadFlowerModel } from '../scene/flower-models';
 import { wornWeapon, woodenShieldParts } from '../scene/gear-models';
-import { createGearVisuals } from '../scene/gear-visuals';
 import { createPileModel } from '../scene/ground-items';
 import { createSatchel } from '../scene/pickup-models';
 import { createGuardianTrophy } from '../scene/guardian-trophy';
-import {
-  instantiateAnimatedModel,
-  loadAnimatedModel,
-  type ModelPart,
-} from '../scene/model-loading';
-import { preloadWornGearModels } from '../scene/worn-gear-models';
-// Worn clothes are previewed as skins over a body built of named parts (_Body, _ArmLeft and so
-// on). The soft dwarves (decision 0272) are one smooth piece, so this uses Body 3, still faceted.
-import bodyUrl from '@assets/characters/mage.glb?url';
+import type { ModelPart } from '../scene/model-loading';
 
 export interface ItemModel {
   readonly animated?: boolean;
   readonly group: THREE.Group;
   dispose(): void;
 }
-let body: ReturnType<typeof loadAnimatedModel> | undefined;
 
 /** Copy only drawable surfaces. Cached game geometry, materials and textures remain untouched. */
-function copySurfaces(root: THREE.Object3D, onlyGear?: ItemId): ItemModel {
+function copySurfaces(root: THREE.Object3D): ItemModel {
   root.updateMatrixWorld(true);
   root.traverse((object) => {
     if (object instanceof THREE.SkinnedMesh) object.skeleton.update();
   });
   const group = new THREE.Group();
   root.traverseVisible((object) => {
-    if (!(object instanceof THREE.Mesh) || (onlyGear && object.userData.gearItem !== onlyGear))
-      return;
+    if (!(object instanceof THREE.Mesh)) return;
     let geometry = object.geometry.clone();
     if (object instanceof THREE.SkinnedMesh) {
       const positions = geometry.getAttribute('position');
@@ -76,8 +65,12 @@ function copyParts(parts: readonly ModelPart[]): ItemModel {
   return copySurfaces(source);
 }
 
-/** The same held tools, wearable shells and dropped items used in the world; no separate preview art. */
-export async function createItemModel(item: ItemId): Promise<ItemModel> {
+/**
+ * The same held tools, weapons and dropped items used in the world; no separate preview art. Null
+ * for clothes: they were fitted to bodies built of parts, and the soft bodies that replaced those
+ * are one smooth piece (decision 0275), so clothes have no picture until they are refitted.
+ */
+export async function createItemModel(item: ItemId): Promise<ItemModel | null> {
   if (['axe', 'rod', 'refinedAxe', 'refinedRod', 'torch', 'shovel'].includes(item))
     await preloadItemModels();
   const held = heldItemParts(item);
@@ -85,20 +78,7 @@ export async function createItemModel(item: ItemId): Promise<ItemModel> {
   const weapon = wornWeapon(item);
   if (weapon) return { ...copyParts(weapon.parts), animated: item === 'kingsRequiem' };
   if (item === 'woodenShield') return copyParts(woodenShieldParts());
-  const slot = gearSlotsOf(item).find((slot) => slot !== 'mainHand' && slot !== 'offHand');
-  if (slot) {
-    body ??= loadAnimatedModel(bodyUrl);
-    const [template] = await Promise.all([body, preloadWornGearModels()]);
-    const instance = instantiateAnimatedModel(template);
-    const gear = createGearVisuals(instance.root, undefined, 1);
-    try {
-      gear.setWorn({ [slot]: item });
-      return copySurfaces(instance.root, item);
-    } finally {
-      gear.dispose();
-      instance.mixer.uncacheRoot(instance.root);
-    }
-  }
+  if (gearSlotsOf(item).some((slot) => slot !== 'mainHand' && slot !== 'offHand')) return null;
   if (item === 'lastBellTrophy' || item === 'firstBellRelic') await preloadSkeletonTown();
   if (item === 'flower') await preloadFlowerModel();
   const source =

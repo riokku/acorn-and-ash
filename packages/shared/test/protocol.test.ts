@@ -1091,11 +1091,11 @@ describe('introducing yourself', () => {
   });
 
   it('carries the skin tone picked', () => {
-    const decoded = decodeClientMessage(encodeHello('Acorn', 'mage', 'teal', 'darkest'));
+    const decoded = decodeClientMessage(encodeHello('Acorn', 'barbarian', 'teal', 'darkest'));
     expect(decoded).toEqual({
       type: 'hello',
       name: 'Acorn',
-      character: 'mage',
+      character: 'barbarian',
       color: 'teal',
       skin: 'darkest',
     });

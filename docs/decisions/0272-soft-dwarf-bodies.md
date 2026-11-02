@@ -39,15 +39,15 @@ he asked for the woman's equivalent as Body 2, and to pause the other bodies.
   from the body, room the faceted dwarves' round bellies needed, so in the soft
   idle, walk and run they are turned in to about 23°.
 - **One body at a time.** Body 1 (`knight.glb`) and Body 2 (`barbarian.glb`)
-  are soft now. Bodies 3 to 6 are paused at Chris's request and stay faceted.
-  `dwarf.glb` is now fitted from `mage.glb`.
+  are soft now. Bodies 3 to 6 were paused at Chris's request, then retired
+  (decision 0275).
 
 ## Consequences
 
 - Each soft body is at most about 9,800 triangles with its biggest beard,
   under the 10k player budget. Each file is about 120 KB.
-- A third move library loads until the last faceted body is replaced: about
-  400 KB more.
+- A third move library loaded while faceted bodies were left: about 400 KB
+  more. It went with them (decision 0275).
 - Meshy must be credited (CC BY 4.0) in `LICENSES.csv` and so on the credits
   page.
 - The style no longer matches Quaternius. Whether to update the art row in

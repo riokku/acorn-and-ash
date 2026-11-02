@@ -50,14 +50,14 @@ test('offers two prepared servings to a nearby companion and gives both the meal
         {
           netId: 1,
           name: 'Trail cook',
-          character: 'ranger',
+          character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
         },
         {
           netId: 2,
           name: 'Fern',
-          character: 'ranger',
+          character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
         },

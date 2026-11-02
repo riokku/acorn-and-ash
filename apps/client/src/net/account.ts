@@ -9,11 +9,10 @@
  */
 
 import {
-  CHARACTER_KINDS,
+  characterFromName,
   TINT_COLORS,
   isValidPlayerName,
   sanitizePlayerName,
-  type CharacterId,
   type TintColorId,
 } from '@acorn/shared';
 
@@ -168,11 +167,12 @@ export async function fetchSavedCharacter(
 
   const cleaned = sanitizePlayerName(name);
   if (!isValidPlayerName(cleaned)) return null;
-  if (typeof character !== 'string' || !(character in CHARACTER_KINDS)) return null;
+  const chosen = characterFromName(character);
+  if (chosen === null) return null;
   if (typeof color !== 'string' || !(color in TINT_COLORS)) return null;
   return {
     name: cleaned,
-    character: character as CharacterId,
+    character: chosen,
     color: color as TintColorId,
     skin: readSkinTone(skin),
   };

@@ -20,7 +20,7 @@ export async function showWinterGear(
   await Promise.all([preloadCharacterModels(), preloadCharacterAnimations()]);
   const asked = params.get('body');
   const kind: CharacterId =
-    asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'ranger';
+    asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'barbarian';
   const cedar = params.get('gallery') === 'cedar-hunt';
   const basic = params.get('gallery') === 'basic-clothing';
   const lastWatch = params.get('gear') === 'last-watch-helm';

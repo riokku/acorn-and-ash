@@ -62,7 +62,7 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
         Array.from({ length: 9 }, (_, i) => ({
           netId: i + 1,
           name: `Long Trail Companion ${i + 1}`,
-          character: 'ranger' as const,
+          character: 'barbarian' as const,
           color: 'moss' as const,
           skin: shared.DEFAULT_SKIN_TONE,
         })),

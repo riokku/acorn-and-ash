@@ -1,5 +1,5 @@
 import {
-  CHARACTER_KINDS,
+  characterFromName,
   DEFAULT_CHARACTER,
   DEFAULT_SKIN_TONE,
   DEFAULT_TINT_COLOR,
@@ -41,10 +41,7 @@ export function readIdentity(storage: Storage): PlayerIdentity {
 
     return {
       name: typeof name === 'string' ? sanitizePlayerName(name) : '',
-      character:
-        typeof character === 'string' && character in CHARACTER_KINDS
-          ? (character as CharacterId)
-          : DEFAULT_CHARACTER,
+      character: characterFromName(character) ?? DEFAULT_CHARACTER,
       color:
         typeof color === 'string' && color in TINT_COLORS
           ? (color as TintColorId)

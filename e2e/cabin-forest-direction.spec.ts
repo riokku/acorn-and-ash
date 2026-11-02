@@ -109,7 +109,7 @@ test('captures the cabin and forest visual review', { tag: '@real-drawing' }, as
         {
           netId: 1,
           name: 'Traveller',
-          character: 'ranger',
+          character: 'barbarian',
           color: 'amber',
           skin: shared.DEFAULT_SKIN_TONE,
         },
@@ -125,14 +125,14 @@ test('captures the cabin and forest visual review', { tag: '@real-drawing' }, as
           {
             netId: 1,
             name: 'Traveller',
-            character: 'ranger',
+            character: 'barbarian',
             color: 'amber',
             skin: shared.DEFAULT_SKIN_TONE,
           },
           {
             netId: 2,
             name: 'Rowan',
-            character: 'ranger',
+            character: 'barbarian',
             color: 'amber',
             skin: shared.DEFAULT_SKIN_TONE,
           },

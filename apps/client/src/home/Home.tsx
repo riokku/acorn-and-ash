@@ -18,18 +18,10 @@ import {
 
 import knightPortrait from '@assets/ui/body-portraits/knight.webp?url';
 import barbarianPortrait from '@assets/ui/body-portraits/barbarian.webp?url';
-import magePortrait from '@assets/ui/body-portraits/mage.webp?url';
-import rangerPortrait from '@assets/ui/body-portraits/ranger.webp?url';
-import roguePortrait from '@assets/ui/body-portraits/rogue.webp?url';
-import rogueHoodedPortrait from '@assets/ui/body-portraits/rogueHooded.webp?url';
 
 const BODY_PORTRAITS: Record<CharacterId, string> = {
   knight: knightPortrait,
   barbarian: barbarianPortrait,
-  mage: magePortrait,
-  ranger: rangerPortrait,
-  rogue: roguePortrait,
-  rogueHooded: rogueHoodedPortrait,
 };
 
 import { DeleteCharacterDialog } from './DeleteCharacterPanel';

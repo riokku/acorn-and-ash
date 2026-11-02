@@ -1,5 +1,9 @@
 # Dwarf bodies
 
+The faceted dwarves below are superseded: Bodies 1 and 2 were remade in a soft
+style ([decision 0272](0272-soft-dwarf-bodies.md)) and Bodies 3 to 6 were
+retired ([decision 0275](0275-two-bodies.md)).
+
 ## Context
 
 The six player bodies were the KayKit Adventurers with their outfits lifted

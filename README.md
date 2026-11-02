@@ -321,9 +321,12 @@ dwarf but is not drawn on one until each piece has been refitted, one family at
 a time. Dwarves play their own copy of the moves, fitted to their shorter
 limbs. See [decision 0270](docs/decisions/0270-dwarf-bodies.md).
 Bodies 1 and 2 have been remade in a softer, rounder style (Meshy models,
-cleaned up in Blender, with our own beards, face and, for Body 2, braids). The
-others follow later, one at a time. See
-[decision 0272](docs/decisions/0272-soft-dwarf-bodies.md).
+cleaned up in Blender, with our own beards, face and, for Body 2, braids). See
+[decision 0272](docs/decisions/0272-soft-dwarf-bodies.md). Now only those two
+are left to pick from. A character saved as one of Bodies 3 to 6 comes back as
+Body 1 (the men) or Body 2 (the women), keeping its beard, skin tone, items and
+progress, and clothes have no picture in the item editor until they are refitted
+to the two bodies. See [decision 0275](docs/decisions/0275-two-bodies.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
 (see [decision 0113](docs/decisions/0113-skin-tones.md)).
@@ -502,7 +505,7 @@ Inspect it at `?gallery=canoe`; see [decision 0193](docs/decisions/0193-narrow-r
 Both hands grip the paddle through the stroke. The blade feathers clear during
 recovery and settles into a raised resting grip when you stop paddling; current
 alone does not keep the arms stroking. Other players use the same motion. Add
-`&coast` or `&body=ranger` in the canoe gallery to inspect it. See
+`&coast` or `&body=barbarian` in the canoe gallery to inspect it. See
 [decision 0194](docs/decisions/0194-hand-held-canoe-paddling.md).
 
 If you are knocked out and your boat is left on an island, where you can't walk
@@ -1199,8 +1202,8 @@ moments, and `&item=torch` (or `axe`, `rod`) puts that in every hand.
 `?gallery=raiders` does the same for the skeletons: every kind's moves,
 looping, with `&kind=warrior` (or `minion`, `rogue`, `mage`) for one of
 them, and `&demo=` and `&strip=` as above. The moves gallery shows Body 1;
-`&body=mage` (or another body's id) picks another. `?gallery=bodies` lines up
-the six dwarf bodies with their own beards; `&beard=long` (or `braids`, `full`,
+`&body=barbarian` picks Body 2. `?gallery=bodies` lines up
+the two bodies with their own beards; `&beard=long` (or `braids`, `full`,
 `stache`, `chops`, `none`) gives them all that beard, and `&motion=walk` or
 `run` sets them moving.
 `?gallery=bodies&tones` lines up every body in all five skin tones, and
@@ -1484,14 +1487,11 @@ See it in the gallery with `?gallery=iron-axe`, and
 [decision 0107](docs/decisions/0107-dwarves-built-from-scripts-with-vertex-colours.md)
 for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
 deleted.) The six plain bodies and the gear lifted off their outfits were built
-the same way, by `tools/art/plain_bodies.py`, and the six dwarf bodies that
-replaced them by `tools/art/dwarf_bodies.py`. After re-exporting the dwarves,
-refit the moves to them with
-`node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/mage.glb assets/animations/dwarf.glb`;
-a new move made in Blender for the dwarves goes straight into
-`assets/animations/dwarf.glb` with `tools/add-animation.mjs`. The soft dwarves
-(Bodies 1 and 2 so far) are made from Meshy models by `tools/art/meshy_body.py`
-and share one skeleton and their own fitted moves:
+the same way, by `tools/art/plain_bodies.py`, and the six faceted dwarf bodies
+that replaced them by `tools/art/dwarf_bodies.py` (both since retired; their
+`.blend` files stay as sources). The two bodies left, Body 1 and Body 2, are made
+from Meshy models by `tools/art/meshy_body.py` and share one skeleton and their
+own fitted moves. After changing that skeleton, refit the moves with
 `node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/soft-dwarf.glb`.
 
 **This repository is public.** Never commit secrets, `.env` files, or art whose

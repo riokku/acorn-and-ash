@@ -30,15 +30,12 @@ async function rigFile(path: string) {
   return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(JSON.stringify(data), '');
 }
 
-/** Each dwarf shape sits by its own fitted moves, as in the game. */
+/** The dwarves sit by their own fitted moves, as in the game. */
 const sits = new Map<BodyShape, THREE.AnimationClip>();
 beforeAll(async () => {
   // GLTFLoader's embedded-buffer progress event has no DOM equivalent in Node.
   vi.stubGlobal('ProgressEvent', class {});
-  for (const [shape, file] of [
-    ['dwarf', 'dwarf.glb'],
-    ['softDwarf', 'soft-dwarf.glb'],
-  ] as const) {
+  for (const [shape, file] of [['softDwarf', 'soft-dwarf.glb']] as const) {
     const library = await rigFile(`assets/animations/${file}`);
     sits.set(
       shape,
@@ -69,7 +66,7 @@ async function setup(body = 'knight') {
 }
 
 describe('a paddle held by both hands', () => {
-  it.each(['knight', 'barbarian', 'mage', 'ranger', 'rogue', 'rogueHooded'])(
+  it.each(['knight', 'barbarian'])(
     'keeps both %s grips connected through the whole stroke and while coasting',
     async (body) => {
       const { root, mixer, paddling } = await setup(body);

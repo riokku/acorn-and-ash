@@ -1,5 +1,5 @@
 // Fits every move in the game's character animation library to the dwarf skeleton, and writes the
-// dwarves' own library (assets/animations/dwarf.glb).
+// dwarves' own library (assets/animations/soft-dwarf.glb, the moves of Bodies 1 and 2).
 //
 // The dwarves use the same skeleton as the Adventurers (Rig_Medium: the same 23 bones, names and
 // joint directions), with the bones moved to short, round proportions (tools/art/dwarf_bodies.py).
@@ -12,11 +12,7 @@
 //   its resting place, shrunk to the dwarf's leg length and added to the dwarf's own resting place.
 //   The root's own travel is left at full size, so a roll covers the same ground as before.
 //
-// The dwarf library is where hand-made dwarf moves go too: `node tools/add-animation.mjs` replaces
-// one clip in it at a time, without touching the others.
-//
 // Run with:
-//   node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/mage.glb assets/animations/dwarf.glb
 //   node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/soft-dwarf.glb
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
