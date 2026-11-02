@@ -56,6 +56,7 @@ export async function showHomestead(
     add(bench, -3.9, 0.4, 0.12);
     const pantry = createHomesteadProject('trailPantry');
     pantry.setAppearance({ id: 2, stocked: params.has('empty') ? 0 : 5, tool: null, plots: [] });
+    pantry.setChestOpen(params.has('open'));
     add(pantry, 0.7, -0.3, -0.18);
     const garden = createHomesteadProject('kitchenGarden');
     garden.setGardenPlots([
@@ -112,6 +113,11 @@ export async function showHomestead(
   if (params.has('nook')) {
     camera.position.set(8, 7, 13);
     camera.lookAt(0.4, 0.6, 2.4);
+  }
+  if (params.has('pantry')) {
+    // Close up on the trail pantry's chest.
+    camera.position.set(1.5, 1.3, 1.4);
+    camera.lookAt(0.7, 0.3, -0.3);
   }
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);

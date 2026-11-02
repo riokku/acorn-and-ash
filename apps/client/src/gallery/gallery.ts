@@ -765,6 +765,8 @@ function showHomeInside(
     requested !== null && isHomeKind(requested) ? requested : 'cabin',
   );
   inside.setFireLit(!params.has('unlit'));
+  // `&open` lifts the storage chest's lid.
+  inside.setChestOpen(params.has('open'));
   if (requested === 'largeCabin')
     inside.setGardenPlots([
       { crop: 'berry', growTicks: 0 },
