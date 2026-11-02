@@ -6,10 +6,16 @@ type SmallAnimal = 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote';
 
 /** Give the existing small-animal figures secondary motion without changing their art. */
 export function animateSmallAnimal(
-  model: { group: THREE.Group; dispose(): void },
+  model: {
+    group: THREE.Group;
+    animate?(deltaSeconds: number, speed: number): void;
+    dispose(): void;
+  },
   kind: SmallAnimal,
   phaseSeed = 0,
 ): WoodlandCreature {
+  // A model with its own gait hops by itself; only the placeholders need the whole-body bounce.
+  const ownGait = model.animate !== undefined;
   const root = model.group;
   const motion = new THREE.Group();
   motion.name = `${kind}-motion`;
@@ -74,8 +80,9 @@ export function animateSmallAnimal(
       defeat += ((pose.defeated ? 1 : 0) - defeat) * blend;
       recovering += ((pose.recovering ? 1 : 0) - recovering) * blend;
       const moving = smoothstep(speed, 0, 1.2) * (1 - defeat);
+      model.animate?.(dt, speed * (1 - defeat));
       const wave = kind === 'rabbit' ? Math.max(0, Math.sin(phase)) : Math.sin(phase);
-      const lift = wave * wave * moving;
+      const lift = ownGait ? 0 : wave * wave * moving;
       const height = kind === 'rabbit' ? lerp(0.045, 0.095, smoothstep(speed, 1.4, 5)) : 0.014;
       motion.position.y = lift * height - defeat * 0.06;
       motion.rotation.x =
