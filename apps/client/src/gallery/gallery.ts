@@ -43,6 +43,8 @@ import { createGroundMaterial } from '../art/materials';
 import { preloadArtTextures } from '../art/textures';
 import { createBuriedCacheMound } from '../scene/buried-cache';
 import { createShelter } from '../scene/shelter';
+import { createExpeditionBoard } from '../scene/expedition-board';
+import { expeditionBoardSpot } from '@acorn/shared';
 import { createLargeCabin } from '../scene/large-cabin';
 import { createCabin } from '../scene/cabin';
 import { createCampfire } from '../scene/campfire';
@@ -113,6 +115,32 @@ const POND: WaterCircle[] = [
   { x: 9, z: -7, radius: 3 },
   { x: 11.5, z: -5.5, radius: 2 },
 ];
+
+/** A home with its expedition board, set out the way the game sets them out. */
+function createBoardBesideHome() {
+  const requested = new URLSearchParams(window.location.search).get('home');
+  const kind =
+    requested === 'teepee' || requested === 'cabin' || requested === 'largeCabin'
+      ? requested
+      : 'tent';
+  const home =
+    kind === 'cabin'
+      ? createCabin()
+      : kind === 'largeCabin'
+        ? createLargeCabin()
+        : createShelter(kind);
+  const board = createExpeditionBoard();
+  const spot = expeditionBoardSpot({ kind, x: 0, z: 0, yaw: 0 });
+  board.group.position.set(spot.x, 0, spot.z);
+  home.group.add(board.group);
+  return {
+    group: home.group,
+    dispose: () => {
+      home.dispose();
+      board.dispose();
+    },
+  };
+}
 
 function smallAnimalExhibit(
   kind: 'rabbit' | 'maskedRaccoon' | 'fox',
@@ -266,6 +294,8 @@ const EXHIBITS: readonly Exhibit[] = [
       ),
   },
   { name: 'tent', x: -15, z: 7, view: 7, create: () => createShelter('tent') },
+  // The expedition board beside a home's door; `&home=teepee`, `cabin` or `largeCabin` for others.
+  { name: 'expedition-board', x: -24, z: 2, view: 7, create: createBoardBesideHome },
   { name: 'teepee', x: -8, z: 9, view: 8, create: () => createShelter('teepee') },
   { name: 'largeCabin', x: 2, z: 10, view: 12, create: createLargeCabin },
   { name: 'cabin', x: -11, z: -1, yaw: 0.35, view: 11, create: createCabin },
