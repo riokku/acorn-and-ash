@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
+  GARDEN_TRAY,
   HOME_FACILITIES,
   GARDEN_GROW_TICKS,
   homeHasFacility,
@@ -9,6 +11,37 @@ import {
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { createForageModel } from './forest-food';
+import { polyforkGroup, polyforkPiece, splitByPaint } from './polyfork-piece';
+
+/**
+ * Polyfork's free Seedling Tray (decision 0272) holds each garden plot,
+ * turned so its long side runs front to back. Its sprouts are painted in two
+ * greens; they are split off so they only show while something is planted.
+ */
+const seedlingTray = polyforkPiece('seedling-tray', new THREE.Matrix4().makeRotationY(Math.PI / 2));
+const SPROUT_GREENS = [new THREE.Color(0.301, 0.402, 0.109), new THREE.Color(0.178, 0.238, 0.056)];
+/** How high the soil in the tray's cells sits, where crops are planted. */
+const SEEDLING_TRAY_SOIL = 0.11;
+let trayParts: { tray: THREE.BufferGeometry; sprouts: THREE.BufferGeometry } | undefined;
+
+function seedlingTrayParts(): typeof trayParts {
+  if (trayParts !== undefined) return trayParts;
+  const whole = seedlingTray.parts()?.values().next().value;
+  if (whole === undefined) return undefined;
+  try {
+    const [rest, light] = splitByPaint(whole, SPROUT_GREENS[0]!);
+    const [tray, dark] = splitByPaint(rest, SPROUT_GREENS[1]!);
+    const sprouts = mergeGeometries([light, dark]);
+    for (const part of [rest, light, dark]) part.dispose();
+    if (sprouts === null) throw new Error('the sprouts could not be merged');
+    trayParts = { tray, sprouts };
+  } catch (error) {
+    // A repainted tray on Polyfork's side still draws, sprouts and all.
+    console.error('Could not find the seedling tray sprouts.', error);
+    trayParts = { tray: whole, sprouts: new THREE.BufferGeometry() };
+  }
+  return trayParts;
+}
 
 /** Tier facilities use the same room coordinates as authoritative reach checks. */
 export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garden') {
@@ -64,29 +97,44 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
     berry: ReturnType<typeof createForageModel>;
     mushroom: ReturnType<typeof createForageModel>;
     flower: THREE.Group;
+    /** The tray's own seedlings, showing while anything grows there. */
+    sprouts: THREE.Group | null;
   }[] = [];
   const gardenModels: ReturnType<ModelBuilder['build']>[] = [];
   if (homeHasFacility(kind, 'garden') && only !== 'workbench') {
     const { x, z } = HOME_FACILITIES.garden;
+    const trays = seedlingTrayParts();
     for (let index = 0; index < 3; index++) {
       const bed = new ModelBuilder(),
-        dx = x + (index - 1) * 0.65;
-      bed.add(
-        plainMaterial(0x51422f, { roughness: 1 }),
-        new THREE.BoxGeometry(0.49, 0.27, 0.49),
-        placed(dx, 0.145, z),
-      );
-      for (const side of [-1, 1]) {
+        dx = x + (index - 1) * GARDEN_TRAY.spacing;
+      let sprouts: THREE.Group | null = null;
+      if (trays !== undefined) {
+        const tray = polyforkGroup('seedling-tray', [trays.tray]);
+        tray.group.position.set(dx, 0, z);
+        garden.add(tray.group);
+        const seedlings = polyforkGroup('seedlings', [trays.sprouts]);
+        seedlings.group.position.set(dx, 0, z);
+        seedlings.group.visible = false;
+        garden.add(seedlings.group);
+        sprouts = seedlings.group;
+      } else {
         bed.add(
-          wood,
-          plankGeometry(0.56, 0.3, 0.04, 'x', 0.8, 2610 + index),
-          placed(dx, 0.17, z + side * 0.27),
+          plainMaterial(0x51422f, { roughness: 1 }),
+          new THREE.BoxGeometry(0.49, 0.27, 0.49),
+          placed(dx, 0.145, z),
         );
-        bed.add(
-          wood,
-          plankGeometry(0.04, 0.3, 0.49, 'z', 0.8, 2620 + index),
-          placed(dx + side * 0.27, 0.17, z),
-        );
+        for (const side of [-1, 1]) {
+          bed.add(
+            wood,
+            plankGeometry(0.56, 0.3, 0.04, 'x', 0.8, 2610 + index),
+            placed(dx, 0.17, z + side * 0.27),
+          );
+          bed.add(
+            wood,
+            plankGeometry(0.04, 0.3, 0.49, 'z', 0.8, 2620 + index),
+            placed(dx + side * 0.27, 0.17, z),
+          );
+        }
       }
       const built = bed.build();
       gardenModels.push(built);
@@ -112,10 +160,10 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
       flowers.group.visible = false;
       gardenModels.push(flowers);
       for (const group of [berry.group, mushroom.group, flowers.group]) {
-        group.position.set(dx, 0.28, z);
+        group.position.set(dx, trays === undefined ? 0.28 : SEEDLING_TRAY_SOIL, z);
         garden.add(group);
       }
-      plants.push({ berry, mushroom, flower: flowers.group });
+      plants.push({ berry, mushroom, flower: flowers.group, sprouts });
     }
   }
   model.group.add(garden);
@@ -134,6 +182,7 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
         plant.berry.show(plot?.crop === 'berry' ? 3 : 0);
         plant.mushroom.show(plot?.crop === 'mushroom' ? 3 : 0);
         plant.flower.visible = plot?.crop === 'flower';
+        if (plant.sprouts !== null) plant.sprouts.visible = Boolean(plot?.crop);
         const progress = plot?.crop
           ? 1 - Math.min(GARDEN_GROW_TICKS, Math.max(0, plot.growTicks)) / GARDEN_GROW_TICKS
           : 0;
