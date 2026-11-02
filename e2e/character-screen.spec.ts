@@ -51,7 +51,7 @@ test.describe('making a character', () => {
     await page.getByRole('button', { name: 'Body 1' }).click();
     await expect(stage).toHaveAttribute('data-character', 'knight');
 
-    // Bodies 3 to 6 were retired (decision 0273).
+    // Bodies 3 to 6 were retired (decision 0275).
     await expect(page.getByRole('button', { name: /^Body [3-6]\b/ })).toHaveCount(0);
   });
 

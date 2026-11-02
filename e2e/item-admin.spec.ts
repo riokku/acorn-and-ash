@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 // The UI uses the real compiled editor. Owner API replies are stubbed here;
 // verified Google/session/origin checks run against D1 in the web Worker tests.
 
-/** Worn clothes, which have no picture until they are refitted to the soft bodies (decision 0273). */
+/** Worn clothes, which have no picture until they are refitted to the soft bodies (decision 0275). */
 const isClothing = (id: ItemId): boolean =>
   gearSlotsOf(id).some((slot) => slot !== 'mainHand' && slot !== 'offHand');
 test(
@@ -110,7 +110,7 @@ test(
       page.getByText(`${ITEM_ORDER.length} of ${ITEM_ORDER.length} items`),
     ).toBeVisible();
     await expect(page.getByLabel('Warmth', { exact: true })).toHaveValue('70');
-    // Clothes have no picture until they are refitted to the soft bodies (decision 0273).
+    // Clothes have no picture until they are refitted to the soft bodies (decision 0275).
     await expect(page.locator('.model-viewport')).toHaveAttribute('data-state', 'none');
     await expect(preview).not.toHaveAttribute('data-item');
     await page.mouse.move(10, 10);

@@ -14,30 +14,6 @@
       "sha256": "68b1b605975dae63ab29d9f3c339b5fc57d1d9036a87e3966dec986371ce9cbd",
       "portrait": "assets/ui/body-portraits/barbarian.webp",
       "bounds": [20, 22, 75, 117]
-    },
-    "mage": {
-      "model": "assets/characters/mage.glb",
-      "sha256": "1f474a26c148f3a8174cdacae35ea0549774dde15f0858d0deccc33bd0d35e16",
-      "portrait": "assets/ui/body-portraits/mage.webp",
-      "bounds": [13, 28, 83, 115]
-    },
-    "ranger": {
-      "model": "assets/characters/ranger.glb",
-      "sha256": "f5c766469c9bb74922bedda30b5365f0939b51b1184dac9aad448e5e442ce4f4",
-      "portrait": "assets/ui/body-portraits/ranger.webp",
-      "bounds": [13, 19, 83, 115]
-    },
-    "rogue": {
-      "model": "assets/characters/rogue.glb",
-      "sha256": "3bbfba50dda03a2e71e661c94a54cfd589335498270649e0848855984f67e208",
-      "portrait": "assets/ui/body-portraits/rogue.webp",
-      "bounds": [13, 22, 83, 115]
-    },
-    "rogueHooded": {
-      "model": "assets/characters/rogueHooded.glb",
-      "sha256": "9f95c3dae14beb7430583fa68c4a959e41a1a3e26dc52d3156bcad864f64cfbd",
-      "portrait": "assets/ui/body-portraits/rogueHooded.webp",
-      "bounds": [13, 28, 83, 115]
     }
   }
 }

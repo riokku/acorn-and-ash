@@ -68,7 +68,7 @@ function copyParts(parts: readonly ModelPart[]): ItemModel {
 /**
  * The same held tools, weapons and dropped items used in the world; no separate preview art. Null
  * for clothes: they were fitted to bodies built of parts, and the soft bodies that replaced those
- * are one smooth piece (decision 0273), so clothes have no picture until they are refitted.
+ * are one smooth piece (decision 0275), so clothes have no picture until they are refitted.
  */
 export async function createItemModel(item: ItemId): Promise<ItemModel | null> {
   if (['axe', 'rod', 'refinedAxe', 'refinedRod', 'torch', 'shovel'].includes(item))

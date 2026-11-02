@@ -5,7 +5,7 @@
  * order of `CHARACTER_ORDER` (decision 0112): a character is a body, and
  * outfits are gear to be found. The ids (`knight`, `barbarian`) are older
  * art's names and stay exactly as they are, because worlds and browsers have
- * already saved them. Bodies 3 to 6 were retired (decision 0273); characters
+ * already saved them. Bodies 3 to 6 were retired (decision 0275); characters
  * made with them play as Body 1 or Body 2 instead.
  */
 
@@ -27,7 +27,7 @@ export const CHARACTER_ORDER: readonly CharacterId[] = ['knight', 'barbarian'];
 
 /**
  * What each saved number means, so a choice can be sent over the wire and saved
- * as one small number. 2 to 5 were Bodies 3 to 6 (decision 0273): the men,
+ * as one small number. 2 to 5 were Bodies 3 to 6 (decision 0275): the men,
  * Bodies 3 and 5, now play as Body 1 and the women, Bodies 4 and 6, as Body 2.
  *
  * Only ever add to the end, and never reuse 2 to 5 - the Home screen and the
