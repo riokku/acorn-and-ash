@@ -56,6 +56,7 @@ import { preloadFoxModel } from '../scene/fox-model';
 import { preloadRabbitModel } from '../scene/rabbit-model';
 import { preloadTentModel } from '../scene/tent-model';
 import { preloadLanternModel } from '../scene/lantern-model';
+import { preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
 import { createHomeInterior } from '../scene/home-interior';
@@ -399,6 +400,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadRabbitModel(),
     preloadTentModel(),
     preloadLanternModel(),
+    preloadPolyforkPieces(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),
