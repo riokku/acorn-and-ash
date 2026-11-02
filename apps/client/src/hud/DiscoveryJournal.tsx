@@ -1,6 +1,7 @@
 import { ITEM_KINDS } from '../item-catalog';
 import { DISCOVERIES, discoveryKnown, type DiscoveryKind } from '@acorn/shared';
 import type { HudState } from './store';
+import { ItemIcon, SystemIcon } from './item-icons';
 import campArt from '@assets/ui/discoveries/camp.webp?url';
 import loggingArt from '@assets/ui/discoveries/logging.webp?url';
 import groveArt from '@assets/ui/discoveries/grove.webp?url';
@@ -45,6 +46,17 @@ export function JournalTabs({
           aria-pressed={selected === tab}
           onClick={() => onChange?.(tab)}
         >
+          {tab === 'craft' ? (
+            <ItemIcon item="axe" color="#496342" />
+          ) : tab === 'discoveries' ? (
+            <SystemIcon icon="journal" size={18} />
+          ) : tab === 'expeditions' ? (
+            <SystemIcon icon="map" size={18} />
+          ) : tab === 'fishing' ? (
+            <ItemIcon item="perch" color="#496342" />
+          ) : (
+            <ItemIcon item="flower" color="#496342" />
+          )}
           {tab === 'craft'
             ? 'Crafting'
             : tab === 'garden'
