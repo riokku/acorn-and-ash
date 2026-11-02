@@ -30,6 +30,7 @@ export * from './world/islands';
 export * from './world/reeds';
 export * from './world/boat';
 export * from './world/wilderness';
+export * from './world/deadwood';
 export * from './world/noise';
 export * from './world/animals';
 export * from './world/home';

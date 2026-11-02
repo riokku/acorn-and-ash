@@ -13,6 +13,8 @@ import { createFishDisplay } from '../scene/fish-display';
 import { createGuardianTrophy } from '../scene/guardian-trophy';
 import { createWoodlandCreature } from '../scene/woodland-creatures';
 import { createDiscoveryLandmarks } from '../scene/discovery-sites';
+import { createDeadwood } from '../scene/deadwood';
+import { woodlandGeometry } from '../scene/woodland-pieces';
 import { createForageModel, createMealModel } from '../scene/forest-food';
 import { DISCOVERIES, parseSeason } from '@acorn/shared';
 import { createSeasonRig } from '../scene/seasons';
@@ -58,7 +60,7 @@ import { preloadFoxModel } from '../scene/fox-model';
 import { preloadRabbitModel } from '../scene/rabbit-model';
 import { preloadTentModel } from '../scene/tent-model';
 import { preloadLanternModel } from '../scene/lantern-model';
-import { preloadPolyforkPieces } from '../scene/polyfork-piece';
+import { polyforkPaint, preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { preloadDeerModel } from '../scene/deer-model';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
@@ -140,6 +142,23 @@ function createBoardBesideHome() {
       board.dispose();
     },
   };
+}
+
+/** Polyfork's woodland pieces in a row at their size in the forest: dead tree, fallen log, roots, firewood. */
+function createWoodland() {
+  const deadwood = createDeadwood([
+    { kind: 'deadTree', x: -3.4, z: 0, y: 0, rotationY: 0.3, scale: 1 },
+    { kind: 'fallenLog', x: 0, z: 0.4, y: 0, rotationY: -0.4, scale: 1 },
+    { kind: 'treeRoots', x: 3.6, z: 0, y: 0, rotationY: 0.6, scale: 1 },
+  ]);
+  const firewood = woodlandGeometry('firewoodStack');
+  if (firewood) {
+    const stack = new THREE.Mesh(firewood, polyforkPaint);
+    stack.position.set(6.2, 0, 0.3);
+    stack.castShadow = true;
+    deadwood.group.add(stack);
+  }
+  return deadwood;
 }
 
 function smallAnimalExhibit(
@@ -344,6 +363,8 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The forest-floor plants, made in Blender (see understory.ts).
   { name: 'understory', x: -22, z: -4, view: 4, create: createUnderstory },
+  // Polyfork's dead wood, scattered through the wilderness (see deadwood.ts).
+  { name: 'woodland', x: -32, z: -14, view: 10, create: createWoodland },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
   // A tunnel propped with mine supports (see mine-supports.ts).
