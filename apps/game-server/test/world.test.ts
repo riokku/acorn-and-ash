@@ -458,9 +458,9 @@ describe('introducing yourself', () => {
     // DEFAULT_CHARACTER` ternary) stays in the code, ready for whenever a
     // future seventh character ships locked the same way these five once
     // were.
-    client.hello('Merlin', 'mage', 'plum');
+    client.hello('Merlin', 'barbarian', 'plum');
     await waitFor('the roster to include them', () => client.roster().length > 0);
-    expect(client.roster()[0]?.character).toBe('mage');
+    expect(client.roster()[0]?.character).toBe('barbarian');
     client.close();
   });
 
@@ -551,7 +551,7 @@ describe('one character per world', () => {
 
     const second = await TestClient.connect(worldId, playerKey);
     await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
-    second.hello('Somebody Else', 'mage', 'plum', 'lightest');
+    second.hello('Somebody Else', 'barbarian', 'plum', 'lightest');
     await sleep(200);
 
     expect(await characterOf(worldId, playerKey)).toEqual({
@@ -605,7 +605,7 @@ describe('one character per world', () => {
     await waitFor('a welcome', () => client.received.length > 0);
     client.hello('Acorn', 'knight', 'clay');
     await waitFor('the roster to include them', () => client.roster().length > 0);
-    client.hello('Changed My Mind', 'mage', 'plum');
+    client.hello('Changed My Mind', 'barbarian', 'plum');
     await sleep(200);
 
     expect(client.roster()[0]).toMatchObject({ name: 'Acorn', character: 'knight' });

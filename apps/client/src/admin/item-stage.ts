@@ -90,14 +90,16 @@ export class ItemStage {
       throw error;
     }
   }
-  async show(item: ItemId): Promise<boolean> {
+  /** 'ready' once drawn, 'none' for an item with no picture, null if another item was asked for meanwhile. */
+  async show(item: ItemId): Promise<'ready' | 'none' | null> {
     const request = ++this.generation;
     this.clear();
     const model = await createItemModel(item);
     if (this.disposed || request !== this.generation) {
-      model.dispose();
-      return false;
+      model?.dispose();
+      return null;
     }
+    if (model === null) return 'none';
     const box = new THREE.Box3().setFromObject(model.group);
     if (box.isEmpty()) {
       model.dispose();
@@ -110,7 +112,7 @@ export class ItemStage {
     this.pivot.add(model.group);
     this.canvas.dataset.item = item;
     this.reset();
-    return true;
+    return 'ready';
   }
   reset(): void {
     this.yaw = -0.35;

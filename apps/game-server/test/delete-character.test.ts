@@ -163,14 +163,14 @@ describe('deleting a character', () => {
 
     const second = await TestClient.connect(worldId, key);
     await waitFor('a welcome', () => second.received.some((message) => message.type === 'welcome'));
-    second.hello('Ash', 'mage', 'plum');
+    second.hello('Ash', 'barbarian', 'plum');
     await waitFor('their roster entry', () => second.roster().length > 0);
 
     expect(second.roster()).toEqual([
       {
         netId: second.welcome().netId,
         name: 'Ash',
-        character: 'mage',
+        character: 'barbarian',
         color: 'plum',
         skin: 'natural',
       },

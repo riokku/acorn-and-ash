@@ -140,7 +140,7 @@ test(
   async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/?gallery=winter-gear&body=ranger&renderer=webgl2');
+    await page.goto('/?gallery=winter-gear&body=barbarian&renderer=webgl2');
     await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true', {
       timeout: 120_000,
     });

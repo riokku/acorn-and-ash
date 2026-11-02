@@ -45,11 +45,14 @@ test.describe('making a character', () => {
     await expect(stage).toHaveAttribute('data-character', 'knight');
     await expect(page.locator('.home-play')).toHaveText('Enter World');
 
-    await page.getByRole('button', { name: 'Body 3' }).click();
-    await expect(stage).toHaveAttribute('data-character', 'mage');
+    await page.getByRole('button', { name: 'Body 2' }).click();
+    await expect(stage).toHaveAttribute('data-character', 'barbarian');
 
-    await page.getByRole('button', { name: 'Body 4' }).click();
-    await expect(stage).toHaveAttribute('data-character', 'ranger');
+    await page.getByRole('button', { name: 'Body 1' }).click();
+    await expect(stage).toHaveAttribute('data-character', 'knight');
+
+    // Bodies 3 to 6 were retired (decision 0273).
+    await expect(page.getByRole('button', { name: /^Body [3-6]\b/ })).toHaveCount(0);
   });
 
   test('writes the name you are typing under the character', async ({ page }) => {

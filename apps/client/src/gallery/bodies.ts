@@ -20,7 +20,7 @@ import type { FireLights } from '../scene/fire-light';
 import type { RendererSetup } from '../scene/renderer';
 
 /**
- * The six dwarf bodies in just a shirt and shorts (tools/art/dwarf_bodies.py,
+ * The two dwarf bodies in just a shirt and shorts (tools/art/meshy_body.py,
  * decision 0112): `?gallery=bodies` lines them up, each with its own beard;
  * `&beard=long` (braids, long, full, stache, chops or none) gives every one
  * that beard instead; `&motion=walk` or `run` sets them moving; `&skin=darker`
@@ -77,7 +77,7 @@ export async function showBodies(
       if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
     });
     scene.add(body.root);
-    // Each body plays the moves fitted to its own shape (faceted or soft dwarf).
+    // Each body plays the moves fitted to its own shape.
     const clip = characterClips(bodyShapeOf(body.root))?.whole.get(clipName);
     if (clip !== undefined) play(body, clip, column);
     mixers.push(body.mixer);
@@ -107,7 +107,7 @@ export async function showBodies(
     });
   }
   const title = createNameplate(
-    tones ? 'Every body in each skin tone' : 'The six bodies, in a shirt and shorts',
+    tones ? 'Every body in each skin tone' : 'The two bodies, in a shirt and shorts',
   );
   title.sprite.position.set(
     0,
@@ -121,7 +121,7 @@ export async function showBodies(
   const target = tones
     ? new THREE.Vector3(0, 0.4, -((SKIN_TONE_SWATCHES.length - 1) * TONE_ROW_GAP) / 2)
     : new THREE.Vector3(0, 0.5, 0);
-  const distance = Number(params.get('distance') ?? (tones ? 7.5 : 5.6));
+  const distance = Number(params.get('distance') ?? (tones ? 6 : 2.6));
   const height = Number(params.get('height') ?? (tones ? 4.2 : 0.5));
   const angle = Number(params.get('angle') ?? 0);
   camera.position.set(

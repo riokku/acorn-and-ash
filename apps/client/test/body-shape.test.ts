@@ -7,11 +7,6 @@ it('knows a dwarf by the mark on its skeleton', () => {
   const adventurer = new THREE.Group();
   adventurer.add(new THREE.Bone());
   expect(bodyShapeOf(adventurer)).toBe('adventurer');
-  const dwarf = new THREE.Group();
-  const rig = new THREE.Group();
-  rig.userData.dwarf = true;
-  dwarf.add(rig);
-  expect(bodyShapeOf(dwarf)).toBe('dwarf');
   const soft = new THREE.Group();
   const softRig = new THREE.Group();
   softRig.userData.softDwarf = true;

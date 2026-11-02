@@ -50,7 +50,7 @@ test('joins a friend on a two-seat outdoor bench, rises safely, and chooses furn
         [1, 2].map((netId) => ({
           netId,
           name: netId === 1 ? 'Host' : 'Friend',
-          character: 'ranger',
+          character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
         })),

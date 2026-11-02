@@ -32,16 +32,8 @@ const STROKES: Readonly<Record<BodyShape, Stroke>> = {
     rightElbow: new THREE.Vector3(-0.9, 0.9, -0.5),
     leftElbow: new THREE.Vector3(0.6, 1.1, -0.55),
   },
-  // Seated, a dwarf's shoulders are at 0.74 m (the Adventurers' at 1.18 m) and its arms reach 0.45 m.
-  dwarf: {
-    catchAt: new THREE.Vector3(-0.43, 0.42, -0.12),
-    lift: new THREE.Vector2(0.06, 0.08),
-    sway: 0.06,
-    coast: new THREE.Vector3(-0.25, 0.5, -0.08),
-    rightElbow: new THREE.Vector3(-0.9, 0.6, -0.5),
-    leftElbow: new THREE.Vector3(0.6, 0.75, -0.55),
-  },
-  // Seated, a soft dwarf's shoulders are at 0.93 m and 0.07 m further back, and its arms reach 0.41 m.
+  // Seated, a soft dwarf's shoulders are at 0.93 m (the Adventurers' at 1.18 m) and 0.07 m further
+  // back, and its arms reach 0.41 m.
   softDwarf: {
     catchAt: new THREE.Vector3(-0.39, 0.6, -0.25),
     lift: new THREE.Vector2(0.06, 0.08),

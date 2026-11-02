@@ -11,7 +11,7 @@ export function ItemModelPreview({
 }): React.JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [stage, setStage] = useState<ItemStage | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'none' | 'unavailable'>('loading');
   useEffect(() => {
     let disposed = false;
     let opened: ItemStage | null = null;
@@ -42,7 +42,7 @@ export function ItemModelPreview({
     stage
       .show(item)
       .then((shown) => {
-        if (active && shown) setStatus('ready');
+        if (active && shown !== null) setStatus(shown);
       })
       .catch(() => {
         if (active) setStatus('unavailable');
@@ -69,7 +69,9 @@ export function ItemModelPreview({
           <p className="model-status">
             {status === 'loading'
               ? 'Loading model…'
-              : 'Model preview unavailable. You can still edit this item.'}
+              : status === 'none'
+                ? 'No picture for clothes until they are refitted to the new bodies. You can still edit this item.'
+                : 'Model preview unavailable. You can still edit this item.'}
           </p>
         )}
       </div>

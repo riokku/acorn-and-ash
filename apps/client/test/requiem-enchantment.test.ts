@@ -37,7 +37,7 @@ it('keeps animated admin previews independent of shared game materials and geome
     part.geometry.addEventListener('dispose', disposed);
     part.material.addEventListener('dispose', disposed);
   }
-  const preview = await createItemModel('kingsRequiem');
+  const preview = (await createItemModel('kingsRequiem'))!;
   expect(preview.animated).toBe(true);
   const meshes = preview.group.children as THREE.Mesh[];
   expect(meshes.some((m) => m.material instanceof THREE.MeshBasicNodeMaterial)).toBe(true);

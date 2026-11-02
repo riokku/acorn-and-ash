@@ -1,9 +1,18 @@
 import { readFile } from 'node:fs/promises';
-import { ITEM_ORDER, type CatalogState } from '../packages/shared/src/index';
+import {
+  ITEM_ORDER,
+  gearSlotsOf,
+  type CatalogState,
+  type ItemId,
+} from '../packages/shared/src/index';
 import { test, expect } from './fixtures';
 
 // The UI uses the real compiled editor. Owner API replies are stubbed here;
 // verified Google/session/origin checks run against D1 in the web Worker tests.
+
+/** Worn clothes, which have no picture until they are refitted to the soft bodies (decision 0273). */
+const isClothing = (id: ItemId): boolean =>
+  gearSlotsOf(id).some((slot) => slot !== 'mainHand' && slot !== 'offHand');
 test(
   'private item editor searches, saves a draft and reviews publication without losing conflicted edits',
   { tag: '@real-drawing' },
@@ -101,8 +110,9 @@ test(
       page.getByText(`${ITEM_ORDER.length} of ${ITEM_ORDER.length} items`),
     ).toBeVisible();
     await expect(page.getByLabel('Warmth', { exact: true })).toHaveValue('70');
-    await expect(preview).toHaveAttribute('data-item', 'winterJacket');
-    await expect(page.locator('.model-viewport')).toHaveAttribute('data-state', 'ready');
+    // Clothes have no picture until they are refitted to the soft bodies (decision 0273).
+    await expect(page.locator('.model-viewport')).toHaveAttribute('data-state', 'none');
+    await expect(preview).not.toHaveAttribute('data-item');
     await page.mouse.move(10, 10);
     await page.screenshot({ path: testInfo.outputPath('item-editor.png'), fullPage: true });
     conflict = true;
@@ -125,7 +135,7 @@ test('test sign-in cannot open the admin editor or its APIs', async ({ request }
 });
 
 test(
-  'every catalogue item has a visible model, including rapid selection changes',
+  'every catalogue item but clothes has a visible model, including rapid selection changes',
   { tag: '@real-drawing' },
   async ({ page }) => {
     const errors: string[] = [];
@@ -151,8 +161,13 @@ test(
         .getByRole('button')
         .filter({ has: page.locator('small', { hasText: new RegExp(`^${id}$`) }) });
       await row.click();
-      await expect(page.locator('.model-viewport canvas')).toHaveAttribute('data-item', id);
-      await expect(page.locator('.model-viewport')).toHaveAttribute('data-state', 'ready');
+      const viewport = page.locator('.model-viewport');
+      if (isClothing(id)) {
+        await expect(viewport).toHaveAttribute('data-state', 'none');
+        continue;
+      }
+      await expect(viewport.locator('canvas')).toHaveAttribute('data-item', id);
+      await expect(viewport).toHaveAttribute('data-state', 'ready');
     }
     await page.getByRole('button', { name: 'Clear filters' }).click();
     const rows = page.getByRole('navigation', { name: 'Items' }).getByRole('button');

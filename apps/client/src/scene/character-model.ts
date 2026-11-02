@@ -5,19 +5,11 @@ import { loadAnimatedModel, type AnimatedModel } from './model-loading';
 
 import knightUrl from '@assets/characters/knight.glb?url';
 import barbarianUrl from '@assets/characters/barbarian.glb?url';
-import mageUrl from '@assets/characters/mage.glb?url';
-import rangerUrl from '@assets/characters/ranger.glb?url';
-import rogueUrl from '@assets/characters/rogue.glb?url';
-import rogueHoodedUrl from '@assets/characters/rogueHooded.glb?url';
 
 /** Every character's own model, one glTF per kind (see assets/LICENSES.csv). */
 const MODEL_URLS: Record<CharacterId, string> = {
   knight: knightUrl,
   barbarian: barbarianUrl,
-  mage: mageUrl,
-  ranger: rangerUrl,
-  rogue: rogueUrl,
-  rogueHooded: rogueHoodedUrl,
 };
 
 const templates = new Map<CharacterId, AnimatedModel>();

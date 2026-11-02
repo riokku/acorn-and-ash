@@ -82,7 +82,7 @@ export async function showHomestead(
       add(createHomeDecoration('cedarBench'), x, 4.4, yaw);
       const seat = benchSeats({ id: index, x, z: 4.4, yaw }, () => 0)[0]!;
       const character = createCharacter(
-        index === 0 ? 'ranger' : 'rogue',
+        index === 0 ? 'barbarian' : 'knight',
         index === 0 ? 0x748b64 : 0x92765c,
       );
       character.group.position.set(seat.stand.x, 0, seat.stand.z);
