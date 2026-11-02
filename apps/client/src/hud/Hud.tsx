@@ -879,9 +879,7 @@ function RaidBannerView({ banner }: { banner: RaidBanner }): React.JSX.Element {
 function RaidTracker({ count }: { count: number }): React.JSX.Element {
   return (
     <div className="raid-tracker" data-testid="raid-tracker">
-      <span className="raid-tracker-skull" aria-hidden="true">
-        ☠
-      </span>
+      <SystemIcon icon="raidThreat" size={20} />
       {count === 1 ? '1 skeleton left' : `${count} skeletons left`}
     </div>
   );

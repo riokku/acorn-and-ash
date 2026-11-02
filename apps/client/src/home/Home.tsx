@@ -16,6 +16,22 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
+import knightPortrait from '@assets/ui/body-portraits/knight.webp?url';
+import barbarianPortrait from '@assets/ui/body-portraits/barbarian.webp?url';
+import magePortrait from '@assets/ui/body-portraits/mage.webp?url';
+import rangerPortrait from '@assets/ui/body-portraits/ranger.webp?url';
+import roguePortrait from '@assets/ui/body-portraits/rogue.webp?url';
+import rogueHoodedPortrait from '@assets/ui/body-portraits/rogueHooded.webp?url';
+
+const BODY_PORTRAITS: Record<CharacterId, string> = {
+  knight: knightPortrait,
+  barbarian: barbarianPortrait,
+  mage: magePortrait,
+  ranger: rangerPortrait,
+  rogue: roguePortrait,
+  rogueHooded: rogueHoodedPortrait,
+};
+
 import { DeleteCharacterDialog } from './DeleteCharacterPanel';
 import { HomeSeasonBanner } from './HomeSeasonBanner';
 import type { PlayerIdentity } from './identity';
@@ -264,6 +280,7 @@ export function Home({
                     highlighted ? { borderColor: hexString(TINT_COLORS[color].hex) } : undefined
                   }
                   disabled={!kind.available}
+                  aria-pressed={selected}
                   onClick={() => setCharacter(id)}
                   aria-label={
                     kind.available
@@ -281,8 +298,11 @@ export function Home({
                       <CheckIcon />
                     </span>
                   ) : null}
-                  <PersonIcon
-                    color={kind.available ? hexString(TINT_COLORS[color].hex) : undefined}
+                  <img
+                    className="home-character-icon"
+                    src={BODY_PORTRAITS[id]}
+                    alt=""
+                    aria-hidden="true"
                   />
                   <span className="home-character-name">{kind.displayName}</span>
                   {!kind.available ? (
@@ -375,22 +395,6 @@ function AccountLine({
 
 function hexString(hex: number): string {
   return `#${hex.toString(16).padStart(6, '0')}`;
-}
-
-function PersonIcon({ color }: { color?: string }): React.JSX.Element {
-  return (
-    <svg
-      width="42"
-      height="54"
-      viewBox="0 0 56 72"
-      className="home-character-icon"
-      style={color !== undefined ? { color } : undefined}
-      aria-hidden="true"
-    >
-      <circle cx="28" cy="18" r="14" fill="currentColor" />
-      <path d="M10 72 C10 48 16 40 28 40 C40 40 46 48 46 72 Z" fill="currentColor" />
-    </svg>
-  );
 }
 
 function LockIcon(): React.JSX.Element {
