@@ -4,9 +4,11 @@ import * as THREE from 'three/webgpu';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry, stoneGeometry } from '../art/shapes';
 import { createFireGlow } from './fire-light';
+import { lanternModelParts, type LanternModelParts } from './lantern-model';
 
 /**
- * A garden lantern (see decision 0053): a stained timber post set on a
+ * A garden lantern: Polyfork's Lantern Post once lantern-model.ts has loaded
+ * it, otherwise this placeholder (see decision 0053): a stained timber post set on a
  * stone, with an arm holding out a small iron lantern whose glass glows
  * warm. Always lit once built - no fuel and no switch, the same "atmosphere
  * only" choice the campfire's own fire already made (see decision 0033) -
@@ -33,6 +35,8 @@ const LANTERN_LIGHT_DISTANCE = 5;
 
 export function createLantern(shade: keyof typeof LANTERN_PALETTES = 'amber'): Lantern {
   const palette = LANTERN_PALETTES[shade];
+  const real = lanternModelParts();
+  if (real !== undefined) return createPolyforkLantern(real, palette);
   const timber = paintedMaterial('wood', { tint: 0x9b7658, roughness: 0.85 });
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
   const iron = plainMaterial(0x2f2a26, { roughness: 0.55, flatShading: true });
@@ -115,5 +119,34 @@ export function createLantern(shade: keyof typeof LANTERN_PALETTES = 'amber'): L
       model.dispose();
       fireGlow.dispose();
     },
+  };
+}
+
+/** The real Lantern Post, its painted glass swapped for this shade's glowing glass. */
+function createPolyforkLantern(
+  parts: LanternModelParts,
+  palette: (typeof LANTERN_PALETTES)[keyof typeof LANTERN_PALETTES],
+): Lantern {
+  const group = new THREE.Group();
+  group.name = 'lantern';
+  const glass = plainMaterial(palette.glass, {
+    roughness: 0.25,
+    emissive: palette.emissive,
+    emissiveIntensity: 1.6,
+  });
+  for (const geometry of parts.frame) {
+    const mesh = new THREE.Mesh(geometry, parts.material);
+    mesh.castShadow = true;
+    group.add(mesh);
+  }
+  group.add(new THREE.Mesh(parts.glass, glass));
+  const fireGlow = createFireGlow(palette.light, LANTERN_LIGHT_INTENSITY, LANTERN_LIGHT_DISTANCE);
+  fireGlow.anchor.position.copy(parts.glassCentre);
+  group.add(fireGlow.anchor);
+  return {
+    group,
+    update: (deltaSeconds) => fireGlow.update(deltaSeconds),
+    // The geometry and paint are shared by every lantern, so only the light goes.
+    dispose: () => fireGlow.dispose(),
   };
 }
