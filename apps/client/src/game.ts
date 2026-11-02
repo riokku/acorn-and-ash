@@ -372,6 +372,7 @@ import { createLantern, type Lantern } from './scene/lantern';
 import { createFence, type Fence } from './scene/fence';
 import { createGardenPath, type GardenPath } from './scene/garden-path';
 import { createCritterFor } from './scene/wildlife-models';
+import { preloadCanoeModel } from './scene/canoe-model';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -1261,6 +1262,7 @@ export class Game {
     void preloadCampfireModels();
     void preloadItemModels();
     void preloadFoxModel();
+    void preloadCanoeModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
     void preloadRaiderModels();
@@ -3125,6 +3127,7 @@ export class Game {
           preloadCampfireModels(),
           preloadItemModels(),
           preloadFoxModel(),
+          preloadCanoeModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
           preloadRaiderModels(),

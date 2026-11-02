@@ -104,6 +104,7 @@ docs/decisions/     Short decision records
   - Meshy, on a paid plan or on the free plan with CC BY 4.0 credit.
   - Tripo, on a paid plan only.
   - Hyper3D Rodin (AI), on a paid plan only, until Chris has checked the free plan's terms.
+  - Polyfork free low-poly models, only those Chris has picked, used as they are. Never commit their files: list them in `tools/polyfork-models.json` and the build downloads them. See `docs/decisions/0272-polyfork-models-fetched-at-build.md`.
 - Not allowed: Hunyuan3D (including its button in the Blender MCP), or anything with unclear terms.
 - Size limits: player 10k triangles, animals 5k, trees 4k (with distance versions), props 2k. Optimize with glTF Transform (Meshopt + KTX2).
 - **This repo is public.** Never commit secrets, `.env` files, or asset source files whose license forbids redistribution (e.g. paid "Source" tiers).

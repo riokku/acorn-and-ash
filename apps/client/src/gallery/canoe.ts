@@ -13,6 +13,7 @@ import { createCharacter } from '../scene/character';
 import { preloadCharacterAnimations } from '../scene/character-animations';
 import { boatSeatAt } from '../scene/character-driver';
 import { preloadCharacterModels } from '../scene/character-model';
+import { preloadCanoeModel } from '../scene/canoe-model';
 import { createRowboat } from '../scene/rowboat';
 import type { RendererSetup } from '../scene/renderer';
 import type { FireLights } from '../scene/fire-light';
@@ -24,7 +25,7 @@ export async function showCanoe(
   lights: FireLights,
   params: URLSearchParams,
 ): Promise<void> {
-  await Promise.all([preloadCharacterModels(), preloadCharacterAnimations()]);
+  await Promise.all([preloadCharacterModels(), preloadCharacterAnimations(), preloadCanoeModel()]);
   const spot = streamPointAt(STREAM, 2);
   const level = navigableWaterSurfaceAt(spot.x, spot.z);
   const boat = createRowboat();

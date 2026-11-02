@@ -1440,6 +1440,15 @@ Nothing to download and nothing to license - all of it is this game's own.
 That is how the art made so far works; new and replacement art is made in
 Blender (below), one family of things at a time.
 
+A few models come from [Polyfork](https://polyfork.dev) instead. Their licence
+lets the game ship them but not redistribute the files, so they are never
+committed: `pnpm dev` and `pnpm build` download the ones listed in
+[`tools/polyfork-models.json`](tools/polyfork-models.json) into
+`apps/client/public/polyfork/` first. If a download fails, the game draws that
+model's old placeholder shape. Run `node tools/fetch-polyfork.mjs --refresh`
+to fetch them all again. See
+[decision 0272](docs/decisions/0272-polyfork-models-fetched-at-build.md).
+
 ### Making art with Blender
 
 New models and textures are made in Blender, with Claude driving it through the
