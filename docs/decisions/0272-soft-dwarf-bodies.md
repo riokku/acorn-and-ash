@@ -35,7 +35,9 @@ he asked for the woman's equivalent as Body 2, and to pause the other bodies.
   arms are moved onto the shared skeleton instead (Body 2's by 3 to 4.5 cm).
 - **Calmer arms.** The longer arms swung up nearly to shoulder height, so in
   the soft moves the walk keeps half its arm swing and the run 55%, centred on
-  how the arms hang at idle.
+  how the arms hang at idle. The moves also held the upper arms about 40° out
+  from the body, room the faceted dwarves' round bellies needed, so in the soft
+  idle, walk and run they are turned in to about 23°.
 - **One body at a time.** Body 1 (`knight.glb`) and Body 2 (`barbarian.glb`)
   are soft now. Bodies 3 to 6 are paused at Chris's request and stay faceted.
   `dwarf.glb` is now fitted from `mage.glb`.
