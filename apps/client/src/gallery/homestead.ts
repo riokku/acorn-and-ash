@@ -110,14 +110,14 @@ export async function showHomestead(
   const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 80);
   camera.position.set(9, 8.5, 14);
   camera.lookAt(-0.3, 0.6, 0);
-  if (params.has('nook')) {
-    camera.position.set(8, 7, 13);
-    camera.lookAt(0.4, 0.6, 2.4);
-  }
   if (params.has('pantry')) {
     // Close up on the trail pantry's chest.
     camera.position.set(1.5, 1.3, 1.4);
     camera.lookAt(0.7, 0.3, -0.3);
+  }
+  if (params.has('nook')) {
+    camera.position.set(8, 7, 13);
+    camera.lookAt(0.4, 0.6, 2.4);
   }
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
