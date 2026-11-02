@@ -9,7 +9,9 @@ The “Home again” receipt uses the same paper with a narrow fir binding. It s
 below the minimap on taller screens and beside it on shorter screens, leaving the
 region label, map controls, cache compass, expedition-board button and lower
 feedback clear. It keeps the first four gathered entries in their original order,
-the overflow count, discoveries, keyboard dismissal and 14-second lifetime.
+the overflow count, discoveries and keyboard dismissal. The later
+[HUD priority pass](field-journal-hud-priority.md) changes its 14-second lifetime
+to visible reading time, pausing while urgent messages or panels take priority.
 
 Outing objectives, timing, saved progress, preparation shortcuts, claim rules and
 backpack-full advice retain their behavior. Rumor rewards remain sealed until

@@ -52,8 +52,8 @@ cards, storm with ward guidance, homecoming receipt, vitals, feedback and board
 button. Astra approved the final code and rendered results.
 
 The crowded captures also expose overlap between the receipt and storm banner,
-and between party health and connection details. Those need a broader HUD
-priority pass; the collision checks here cover the pinned goal.
+and between party health and connection details. The later [HUD priority pass](field-journal-hud-priority.md) resolves those
+collisions; the checks recorded here cover the pinned goal.
 
 All three existing progression/pin unit tests passed. The two existing hunt and
 gallery browser cases passed, including real-input hunting, coat crafting and

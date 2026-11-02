@@ -1,16 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { VisibleTime } from './visible-time';
 import type { HomecomingSummary } from './homecoming';
 import { gainedLabel } from './item-words';
 import { ItemIcon } from './item-icons';
 
 /** A quiet receipt; no modal, reward claim or interruption to movement. */
-export function HomecomingCard({ summary }: { summary: HomecomingSummary }) {
+export function HomecomingCard({
+  summary,
+  paused = false,
+}: {
+  summary: HomecomingSummary;
+  paused?: boolean;
+}) {
   const [dismissed, setDismissed] = useState(false);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDismissed(true), 14000);
-    return () => window.clearTimeout(timer);
-  }, []);
-  if (dismissed) return null;
+  const budget = useRef<VisibleTime | null>(null);
+  if (budget.current === null) budget.current = new VisibleTime(14000);
+  useLayoutEffect(() => {
+    if (paused || dismissed) return;
+    const clock = budget.current!;
+    const timer = window.setTimeout(() => setDismissed(true), clock.start(performance.now()));
+    return () => {
+      window.clearTimeout(timer);
+      clock.pause(performance.now());
+    };
+  }, [paused, dismissed]);
+  if (dismissed || paused) return null;
   return (
     <section className="homecoming-card" aria-label="Outing recap" role="status">
       <button type="button" aria-label="Dismiss outing recap" onClick={() => setDismissed(true)}>

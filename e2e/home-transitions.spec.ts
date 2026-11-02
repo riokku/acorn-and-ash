@@ -26,6 +26,7 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
   sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0, home.id);
   let publishSpace = (_space: number, _x: number, _z: number) => {};
   let collect = () => {};
+  let sendWorld = (_data: ArrayBuffer) => {};
   let closed = false;
   await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
     socket.onClose(() => {
@@ -34,6 +35,7 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
     const send = (data: ArrayBuffer) => {
       if (!closed) socket.send(Buffer.from(data));
     };
+    sendWorld = send;
     collect = () =>
       send(
         shared.encodeCollected([
@@ -55,6 +57,17 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
       snapshot();
     };
     send(shared.encodeWelcome(1, shared.DEFAULT_WORLD_SEED, 0, Date.now()));
+    send(
+      shared.encodeRoster(
+        Array.from({ length: 9 }, (_, i) => ({
+          netId: i + 1,
+          name: `Long Trail Companion ${i + 1}`,
+          character: 'ranger' as const,
+          color: 'moss' as const,
+          skin: shared.DEFAULT_SKIN_TONE,
+        })),
+      ),
+    );
     send(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
     publishSpace(home.id, 0, 0);
     socket.onMessage((message) => {
@@ -75,6 +88,95 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
     await page.locator('#home-name').fill('Traveller');
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
+    const checkParty = async () => {
+      sendWorld(
+        shared.encodeAllies(
+          Array.from({ length: 9 }, (_, i) => ({
+            netId: i + 1,
+            health: 20,
+            maxHealth: 100,
+            downTicks: 200,
+            rescueTicks: 0,
+            rescuerId: 0,
+            inReach: true,
+          })),
+        ),
+      );
+      const allies = page.getByTestId('allies');
+      const list = page.getByTestId('allies-list');
+      const rescue = allies.locator('.rescue-self');
+      await expect(rescue).toBeVisible();
+      const details = page.getByTestId('hud-diagnostics');
+      await details.locator('summary').focus();
+      await page.keyboard.press('Enter');
+      await expect(details).toHaveAttribute('open', '');
+      for (const viewport of [
+        { width: 1366, height: 768 },
+        { width: 900, height: 600 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await list.focus();
+        await page.keyboard.press('End');
+        await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+        await expect
+          .poll(() =>
+            list.evaluate((element) => {
+              const last = element.querySelector('.ally:last-child')!.getBoundingClientRect();
+              return last.bottom - element.getBoundingClientRect().bottom;
+            }),
+          )
+          .toBeLessThanOrEqual(1);
+        const bounds = await page.evaluate(() => {
+          const rect = (selector: string) =>
+            document.querySelector(selector)!.getBoundingClientRect().toJSON();
+          return {
+            list: rect('.allies-list'),
+            last: rect('.ally:last-child'),
+            rescue: rect('.rescue-self'),
+            vitals: rect('.vitals'),
+            panel: rect('.hud-panel'),
+          };
+        });
+        expect(bounds.last.bottom).toBeLessThanOrEqual(bounds.list.bottom + 1);
+        expect(bounds.panel.bottom).toBeLessThanOrEqual(bounds.rescue.top);
+        expect(bounds.rescue.bottom).toBeLessThanOrEqual(bounds.list.top);
+        expect(bounds.list.bottom).toBeLessThanOrEqual(bounds.vitals.top);
+      }
+      // Scroll keys belong to the focused HUD, even while the player can move.
+      sendWorld(
+        shared.encodeAllies(
+          Array.from({ length: 8 }, (_, i) => ({
+            netId: i + 2,
+            health: 80,
+            maxHealth: 100,
+            downTicks: 0,
+            rescueTicks: 0,
+            rescuerId: 0,
+            inReach: true,
+          })),
+        ),
+      );
+      await expect(rescue).toHaveCount(0);
+      const beforeScroll = await page.evaluate(() => window.acornDebug!.localPosition());
+      for (const region of [list, page.getByRole('region', { name: 'Connection readings' })]) {
+        await region.focus();
+        await page.keyboard.press('Home');
+        await expect.poll(() => region.evaluate((element) => element.scrollTop)).toBe(0);
+        await page.keyboard.down('ArrowDown');
+        await page.waitForTimeout(250);
+        await page.keyboard.up('ArrowDown');
+        await expect.poll(() => region.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      }
+      const afterScroll = await page.evaluate(() => window.acornDebug!.localPosition());
+      expect(
+        Math.hypot(afterScroll.x - beforeScroll.x, afterScroll.z - beforeScroll.z),
+      ).toBeLessThan(0.02);
+      await details.locator('summary').focus();
+      await page.keyboard.press('Space');
+      await expect(details).not.toHaveAttribute('open', '');
+      sendWorld(shared.encodeAllies([]));
+      await expect(allies).toHaveCount(0);
+    };
     const preparing = page.locator('.scene-fade-preparing');
     await expect(preparing).toHaveCount(0);
     for (let visit = 0; visit < 3; visit++) {
@@ -88,12 +190,29 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
       await expect
         .poll(() => page.evaluate(() => window.acornDebug?.outdoorFocus()))
         .toEqual(doorstep);
+      const recap = page.getByRole('status', { name: 'Outing recap' });
       if (visit === 1) {
-        const recap = page.getByRole('status', { name: 'Outing recap' });
         await expect(recap).toBeVisible();
         await expect(recap).toContainText('+5 Logs');
         await page.screenshot({ path: testInfo.outputPath('homecoming-recap.png') });
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toBeVisible();
+        await expect(recap).toHaveCount(0);
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toHaveCount(0);
+        await expect(recap).toBeVisible();
         await page.getByRole('button', { name: 'Dismiss outing recap' }).click();
+        await expect(recap).toHaveCount(0);
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toBeVisible();
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toHaveCount(0);
+        await expect(recap).toHaveCount(0);
+      }
+      if (visit === 2) {
+        await expect(recap).toBeVisible();
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toBeVisible();
         await expect(recap).toHaveCount(0);
       }
       const loadedModels = [...models];
@@ -105,7 +224,13 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
       await expect(page.locator('.scene-arrival')).toBeHidden();
       expect(models).toEqual(loadedModels);
       await expect(page.getByRole('status', { name: 'Outing recap' })).toHaveCount(0);
-      if (visit === 0) collect();
+      if (visit === 2) {
+        await page.keyboard.press('KeyI');
+        await expect(page.locator('.inventory-panel')).toHaveCount(0);
+        await expect(recap).toHaveCount(0);
+      }
+      if (visit === 0) await checkParty();
+      if (visit < 2) collect();
       // Controls resume after preparation rather than requiring a refresh.
       await page.keyboard.press('KeyI');
       await expect(page.locator('.inventory-panel')).toBeVisible();

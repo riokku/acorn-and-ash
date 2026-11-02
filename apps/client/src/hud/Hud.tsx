@@ -8,7 +8,7 @@ import { CedarHuntPlan, CedarHuntTracker } from './CedarHuntPlan';
 import { MealPreparation, mealPlan } from './MealPreparation';
 import { KingStorm } from './KingStorm';
 import { KingVictory } from './KingVictory';
-import { Allies } from './Allies';
+import { Allies, isolateHudScrollKeys } from './Allies';
 import { WorldBossBar } from './WorldBossBar';
 import { surveyInteraction } from '@acorn/shared';
 import { SunreachTrail } from './SunreachTrail';
@@ -47,7 +47,14 @@ import {
 import { LoadingScreen } from './LoadingScreen';
 import { ChestPanel } from './ChestPanel';
 import type { ChestRequest } from '@acorn/shared';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { usePanelLifecycle } from './panel-lifecycle';
 
 import {
@@ -192,7 +199,31 @@ export function Hud({
   // One parchment layer for both maps, so it is only ever worked out once.
   const [fog] = useState(() => new FogCache());
   const [slotMenu, setSlotMenu] = useState<SlotMenuTarget | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsChanged = useCallback(
+    (open: boolean) => {
+      setSettingsOpen(open);
+      onSettingsOpenChange?.(open);
+    },
+    [onSettingsOpenChange],
+  );
+  useEffect(() => {
+    if (!state.ready && settingsOpen) settingsChanged(false);
+  }, [state.ready, settingsOpen, settingsChanged]);
   const showingWorld = state.ready && state.playing && !state.mapOpen && state.chestSlots === null;
+  const recapPaused =
+    !showingWorld ||
+    state.inventoryOpen ||
+    state.characterOpen ||
+    state.craftMenuOpen ||
+    state.buildMenuOpen ||
+    settingsOpen ||
+    !!state.worldBoss ||
+    !!state.kingStorm ||
+    !!state.kingVictory ||
+    state.raidBanner !== null ||
+    state.raidersClose ||
+    (state.allies ?? []).some((ally) => ally.downTicks > 0);
   // Gone the moment there is nothing left of it to drop - used up, eaten, or
   // dropped already from the other copy of the same slot.
   const menuTarget =
@@ -257,27 +288,49 @@ export function Hud({
           }
         />
       ) : null}
-      <div
-        className="hud-panel"
-        data-world-ready={state.ready && state.playing}
-        data-player-name={state.playerName}
-      >
-        <p className="hud-title">Acorn &amp; Ash</p>
-        <Row label="Server" value={<Connection state={state} />} />
-        <Row label="Players" value={state.playersOnline} />
-        <Row label="Ping" value={`${state.pingMs} ms`} />
-        <Row label="Tick" value={state.serverTick} />
-        <Row label="Renderer" value={renderer(state)} />
-        <Row label="FPS" value={state.fps} />
-        <Row
-          label="Position"
-          value={`${state.position.x.toFixed(1)}, ${state.position.z.toFixed(1)}`}
-        />
-        <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
-        <Row label="Time" value={timeOfDay(state)} />
-        <Row label="Season" value={seasonLine(state)} />
-        <Row label="Hunger" value={<Hunger state={state} />} />
-        <Row label="Health" value={<Health state={state} />} />
+      <div className="hud-left-column">
+        <div
+          className="hud-panel"
+          data-world-ready={state.ready && state.playing}
+          data-player-name={state.playerName}
+        >
+          <p className="hud-title">Acorn &amp; Ash</p>
+          <Row label="Server" value={<Connection state={state} />} />
+          <details data-testid="hud-diagnostics" onKeyDown={isolateHudScrollKeys}>
+            <summary>Connection details</summary>
+            <div
+              className="hud-diagnostics-rows"
+              role="region"
+              aria-label="Connection readings"
+              tabIndex={0}
+            >
+              <Row label="Players" value={state.playersOnline} />
+              <Row label="Ping" value={`${state.pingMs} ms`} />
+              <Row label="Tick" value={state.serverTick} />
+              <Row label="Renderer" value={renderer(state)} />
+              <Row label="FPS" value={state.fps} />
+              <Row
+                label="Position"
+                value={`${state.position.x.toFixed(1)}, ${state.position.z.toFixed(1)}`}
+              />
+              <Row label="Correction" value={`${state.correctionCm.toFixed(0)} cm`} />
+              <Row label="Time" value={timeOfDay(state)} />
+              <Row label="Season" value={seasonLine(state)} />
+              <Row label="Hunger" value={<Hunger state={state} />} />
+              <Row label="Health" value={<Health state={state} />} />
+            </div>
+          </details>
+        </div>
+        {showingWorld ? <Allies allies={state.allies ?? []} heldMeal={state.equippedItem} /> : null}
+        {showingWorld ? (
+          <div className="vitals">
+            {state.warmth !== null ? <WarmthBar warmth={state.warmth} /> : null}
+            <div className="vitals-card">
+              <HungerBar hunger={state.hunger} />
+              <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {showingWorld &&
@@ -469,15 +522,6 @@ export function Hud({
           onClose={onCloseChest}
         />
       ) : null}
-      {showingWorld ? (
-        <div className="vitals">
-          {state.warmth !== null ? <WarmthBar warmth={state.warmth} /> : null}
-          <div className="vitals-card">
-            <HungerBar hunger={state.hunger} />
-            <HealthBar health={state.health} maximum={characterStats(state.worn).vitality} />
-          </div>
-        </div>
-      ) : null}
       {showingWorld && state.meal.item !== null && state.meal.ticksLeft > 0 ? (
         <div
           className="meal-benefit"
@@ -498,7 +542,6 @@ export function Hud({
           <span>{state.strongholdApproach.detail}</span>
         </aside>
       ) : null}
-      {showingWorld ? <Allies allies={state.allies ?? []} heldMeal={state.equippedItem} /> : null}
       {showingWorld && state.kingStorm && !state.kingVictory ? (
         <KingStorm storm={state.kingStorm} ward={state.kingWard} />
       ) : null}
@@ -643,8 +686,8 @@ export function Hud({
           </p>
         ) : null}
       </div>
-      {showingWorld && state.homecoming ? (
-        <HomecomingCard key={state.homecoming.id} summary={state.homecoming} />
+      {state.homecoming ? (
+        <HomecomingCard key={state.homecoming.id} summary={state.homecoming} paused={recapPaused} />
       ) : null}
       {showingWorld && state.toasts.length > 0 ? <Toasts toasts={state.toasts} /> : null}
 
@@ -653,7 +696,7 @@ export function Hud({
           <SettingsMenu
             initial={initialPreferences}
             onChange={onSettingsChange}
-            onOpenChange={onSettingsOpenChange}
+            onOpenChange={settingsChanged}
             account={
               onSignOut !== undefined && onCancelSignOut !== undefined
                 ? {
