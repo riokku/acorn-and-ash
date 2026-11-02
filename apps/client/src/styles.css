@@ -5250,19 +5250,20 @@ body {
 }
 
 .homestead-plan {
-  color: #e8e1c7;
-  background: linear-gradient(135deg, #263b2e, #172820);
-  border: 1px solid #819568;
-  border-radius: 16px;
+  color: #403a2c;
+  background: var(--journal-well);
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
   padding: 22px;
   margin: 12px 0 22px;
 }
 .homestead-plan h3 {
   font:
-    28px Georgia,
+    28px Fraunces,
+    Georgia,
     serif;
   margin: 7px 0 10px;
-  color: #f2dfad;
+  color: #354a32;
 }
 .homestead-plan p {
   line-height: 1.55;
@@ -5272,28 +5273,28 @@ body {
 .homestead-eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: #bfcd9c;
+  color: #596342;
   font-size: 11px;
 }
 .homestead-progress {
   height: 6px;
   border-radius: 4px;
-  background: #102017;
+  background: #d2c19b;
   overflow: hidden;
   margin: 16px 0 9px;
 }
 .homestead-progress span {
   display: block;
   height: 100%;
-  background: #c9b579;
+  background: var(--journal-fir);
   transition: width 0.4s ease;
 }
 .homestead-rank {
-  color: #c8d7a9;
+  color: #496342;
   font-size: 12px;
 }
 .homestead-callout {
-  border-left: 2px solid #c0a877;
+  border-left: 2px solid var(--journal-copper);
   padding-left: 12px;
 }
 .homestead-chapters {
@@ -5302,13 +5303,13 @@ body {
   margin: 18px 0;
 }
 .homestead-chapters article {
-  background: #101e18b8;
-  border: 1px solid #526448;
-  border-radius: 10px;
+  background: var(--journal-well);
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
   padding: 16px;
 }
 .homestead-chapters article[data-complete='true'] {
-  border-color: #9ba970;
+  border-color: var(--journal-fir);
 }
 .homestead-project-heading {
   display: flex;
@@ -5322,27 +5323,33 @@ body {
 }
 .homestead-project-heading small {
   font-size: 11px;
-  color: #c0ba9f;
+  color: #655538;
 }
 .homestead-project-heading h4 {
   font:
-    21px Georgia,
+    21px Fraunces,
+    Georgia,
     serif;
-  color: #f2dfad;
+  color: #354a32;
   margin: 5px 0;
 }
 .homestead-check {
   margin-left: auto;
-  border: 1px solid #829568;
+  border: 1px solid var(--journal-well-edge);
   border-radius: 50%;
   min-width: 27px;
   height: 27px;
   display: grid;
   place-items: center;
-  color: #cfdaab;
+  color: #496342;
+}
+.homestead-chapters article[data-complete='true'] .homestead-check {
+  border-color: var(--journal-fir);
+  background: var(--journal-fir);
+  color: #fff8e6;
 }
 .homestead-benefit {
-  color: #d5dfb3;
+  color: #496342;
   font-weight: 600;
 }
 .homestead-costs {
@@ -5352,21 +5359,24 @@ body {
   margin: 12px 0;
 }
 .homestead-costs span {
-  border: 1px solid #7f6c49;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #bf9c7e;
   padding: 5px 8px;
   border-radius: 6px;
   font-size: 12px;
-  color: #f5cc99;
+  color: #89543f;
 }
 .homestead-costs span[data-ready='true'] {
-  color: #c3d6a2;
-  border-color: #627e4b;
+  color: #496342;
+  border-color: #8c9b75;
 }
 .homestead-plan button {
   padding: 9px 13px;
-  color: #203026;
-  background: #dec58d;
-  border: 1px solid #fae7b0;
+  color: #fff8e6;
+  background: var(--journal-fir);
+  border: 1px solid var(--journal-fir);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
@@ -5374,16 +5384,16 @@ body {
 }
 .homestead-plan button:disabled {
   cursor: default;
-  background: #354537;
-  color: #b9bea5;
-  border-color: #647052;
+  background: #e6dcc5;
+  color: #6e6656;
+  border-color: #b9aa8b;
 }
 .homestead-plan button:focus-visible {
-  outline: 3px solid #f8df9a;
+  outline: 3px solid var(--journal-copper);
   outline-offset: 3px;
 }
 .homestead-plan footer {
-  color: #b7c1a4;
+  color: #655538;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -5396,13 +5406,13 @@ body {
 .homestead-gallery {
   position: relative;
   min-height: 100vh;
-  background: #14261e;
+  background: #e6d4ab;
   padding: 20px;
 }
 .homestead-gallery main {
   max-width: 680px;
   margin: 0 auto;
-  color: #e4daba;
+  color: #403a2c;
 }
 .homestead-gallery-caption {
   position: absolute;
@@ -5525,9 +5535,9 @@ body {
 .home-upgrade {
   margin: 20px 0;
   padding: 18px;
-  border: 1px solid #8e8155;
-  border-radius: 10px;
-  background: #111f19c9;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
+  background: var(--journal-well-empty);
 }
 .home-upgrade-tiers {
   display: grid;
@@ -5536,20 +5546,20 @@ body {
   padding: 0 0 14px;
   margin: 0 0 16px;
   list-style: none;
-  border-bottom: 1px solid #526448;
+  border-bottom: 1px solid var(--journal-well-edge);
 }
 .home-upgrade-tiers li {
   display: flex;
   flex-direction: column;
   gap: 5px;
   font-size: 11px;
-  color: #b9b5a2;
+  color: #655538;
 }
 .home-upgrade-tiers li[data-reached='true'] {
-  color: #c3d6a2;
+  color: #496342;
 }
 .home-upgrade-tiers li[aria-current='step'] {
-  color: #f2dfad;
+  color: #354a32;
   font-weight: bold;
 }
 .home-upgrade-materials {
@@ -5558,37 +5568,50 @@ body {
   margin: 12px 0;
 }
 .home-upgrade-materials > div {
-  border-left: 2px solid #af8d58;
+  border-left: 2px solid #bb8e6d;
   padding: 5px 10px;
   font-size: 13px;
-  color: #f5cc99;
+  color: #89543f;
 }
 .home-upgrade-materials > div[data-ready='true'] {
-  color: #c3d6a2;
-  border-color: #8da967;
+  color: #496342;
+  border-color: var(--journal-fir);
+}
+.homestead-costs svg,
+.home-upgrade-materials strong svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  vertical-align: -3px;
+}
+.home-upgrade-materials strong svg {
+  margin-right: 4px;
 }
 .home-upgrade-materials small {
   display: block;
-  color: #c0ba9f;
+  color: #655538;
   margin-top: 4px;
 }
 .home-upgrade-blueprint {
-  color: #d5dfb3;
+  color: #89543f;
+}
+.home-upgrade-blueprint[data-known='true'] {
+  color: #496342;
 }
 
 .gathering-nook {
-  border: 1px solid #788763;
-  background: #15251d;
-  border-radius: 10px;
+  border: 1px solid var(--journal-well-edge);
+  background: var(--journal-well-empty);
+  border-radius: 7px;
   padding: 16px;
   margin: 18px 0;
 }
 .gathering-nook summary {
   cursor: pointer;
-  color: #f2dfad;
+  color: #354a32;
 }
 .gathering-nook summary span {
-  color: #bfcd9c;
+  color: #596342;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -5596,11 +5619,12 @@ body {
 }
 .gathering-nook summary strong {
   font:
-    21px Georgia,
+    21px Fraunces,
+    Georgia,
     serif;
 }
 .gathering-nook summary:focus-visible {
-  outline: 2px solid #f2dfad;
+  outline: 2px solid var(--journal-copper);
   outline-offset: 6px;
 }
 .gathering-nook-pieces {
@@ -5611,9 +5635,9 @@ body {
 }
 .gathering-nook-pieces article {
   padding: 14px;
-  border: 1px solid #526448;
-  border-radius: 8px;
-  background: #101e18;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
+  background: var(--journal-well);
 }
 
 .homecoming-card {
@@ -5710,14 +5734,14 @@ body {
 .homestead-stories {
   margin: 18px 0;
   padding: 18px;
-  border: 1px solid #b7b18d;
-  border-radius: 10px;
-  background: #e8ead7;
-  color: #334c3e;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
+  background: var(--journal-well-empty);
+  color: #403a2c;
 }
 .homestead-stories h4 {
   margin: 4px 0 8px;
-  font-family: Georgia, serif;
+  font-family: Fraunces, Georgia, serif;
   font-size: 21px;
 }
 .homestead-stories p {
@@ -5729,11 +5753,11 @@ body {
 }
 .homestead-stories li {
   padding: 9px 0;
-  border-bottom: 1px solid #b7b18d66;
-  color: #766e5c;
+  border-bottom: 1px solid #b09c7380;
+  color: #655538;
 }
 .homestead-stories li[data-remembered='true'] {
-  color: #365f40;
+  color: #496342;
   font-weight: 600;
 }
 .homestead-stories li span {
