@@ -5378,22 +5378,30 @@ body {
 
 .trophy-collection {
   padding: 1rem;
-  border: 1px solid #b89b60;
-  border-radius: 0.8rem;
-  background: linear-gradient(150deg, #21342c, #15251f);
-  color: #ede5ce;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
+  background: var(--journal-well);
+  color: #403a2c;
   margin-bottom: 1rem;
 }
 .trophy-collection h3 {
   font:
-    1.6rem Georgia,
+    1.6rem 'Fraunces',
+    Georgia,
     serif;
+  color: #354a32;
   margin: 0.4rem 0;
 }
 .trophy-collection p,
 .trophy-collection footer {
   font-size: 0.85rem;
   line-height: 1.55;
+}
+.keepsake-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #655538;
+  font-size: 11px;
 }
 .keepsake-grid {
   display: grid;
@@ -5403,58 +5411,94 @@ body {
 }
 .keepsake-grid article {
   padding: 0.9rem;
-  border: 1px solid #66816b;
-  border-radius: 0.6rem;
-  background: #ffffff05;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 6px;
+  background: var(--journal-well);
 }
 .keepsake-grid article[data-displayed='true'] {
-  border-color: #c0c687;
-  background: #b9ce8e0d;
+  border-color: var(--journal-fir);
+  background: var(--journal-well-empty);
 }
-.keepsake-grid svg {
+.keepsake-grid .keepsake-icon {
   width: 2.4rem;
   height: 2.4rem;
   float: right;
   margin: 0 0 0.4rem 0.5rem;
 }
 .keepsake-grid small {
-  color: #c4c78e;
+  color: #655538;
   font-size: 0.7rem;
 }
 .keepsake-grid h4 {
   font:
-    1.15rem Georgia,
+    1.15rem 'Fraunces',
+    Georgia,
     serif;
+  color: #354a32;
   margin: 0.5rem 0;
 }
 .keepsake-grid strong {
   font-size: 0.8rem;
-  color: #e1c490;
+  color: #655538;
 }
 .keepsake-route {
-  color: #b9c6b8;
+  color: #655538;
+}
+.keepsake-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 12px 0;
+}
+.keepsake-costs span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--journal-well-edge);
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #784833;
+}
+.keepsake-costs span[data-ready='true'] {
+  color: #496342;
+  border-color: #496342;
+}
+.keepsake-costs svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  float: none;
 }
 .keepsake-grid button {
   width: 100%;
   padding: 0.6rem;
-  background: #314d3b;
-  color: #eee4c6;
-  border: 1px solid #aeb479;
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
+  border: 1px solid var(--journal-fir);
   border-radius: 0.35rem;
   cursor: pointer;
 }
 .keepsake-grid button:disabled {
-  opacity: 0.65;
+  opacity: 1;
+  background: #ede2c8;
+  color: #655538;
+  border-color: var(--journal-well-edge);
   cursor: default;
 }
 .keepsake-grid button:focus-visible {
-  outline: 2px solid #ffdb8e;
+  outline: 3px solid var(--journal-copper);
   outline-offset: 3px;
+}
+.trophy-collection footer {
+  border-top: 1px solid var(--journal-well-edge);
+  padding-top: 0.75rem;
+  color: #655538;
 }
 .keepsake-gallery {
   position: relative;
   min-height: 100vh;
-  background: #15251f;
+  background: var(--journal-paper-bottom);
   padding: 24px 16px;
 }
 .keepsake-gallery .craft-panel {
@@ -5475,7 +5519,7 @@ body {
 .keepsake-gallery-note {
   max-width: 850px;
   margin: 0 auto;
-  color: #e0d9be;
+  color: #655538;
   font:
     0.85rem/1.5 Georgia,
     serif;

@@ -1,7 +1,7 @@
 import { ITEM_KINDS } from '../item-catalog';
 import { BUILDABLE_KINDS } from '@acorn/shared';
 import { KEEPSAKES } from './keepsakes';
-import { BuildableIcon } from './item-icons';
+import { BuildableIcon, ItemIcon } from './item-icons';
 import { craftMenuEntries, entriesOnTab, CRAFT_HOTKEY_COUNT, type CraftAction } from './craft-menu';
 import type { HudState } from './store';
 
@@ -22,7 +22,7 @@ export function TrophyCollection({
       data-testid="trophy-collection"
     >
       <header>
-        <span className="homestead-eyebrow">Your adventures belong here</span>
+        <span className="keepsake-eyebrow">Your adventures belong here</span>
         <h3>Stories brought home</h3>
         <p>
           Turn a hard-won catch or victory into a landmark in your yard. Every keepsake has an
@@ -45,7 +45,11 @@ export function TrophyCollection({
             state.homeKind !== null && entry?.ready === true && !entry.locked && !displayed;
           return (
             <article key={keepsake.kind} data-keepsake={keepsake.kind} data-displayed={displayed}>
-              <BuildableIcon kind={keepsake.kind} color={displayed ? '#bdcd93' : '#dfbf82'} />
+              <BuildableIcon
+                kind={keepsake.kind}
+                color={displayed ? '#496342' : '#80503a'}
+                className="keepsake-icon"
+              />
               <small>
                 {displayed
                   ? 'On display · your homestead'
@@ -63,11 +67,15 @@ export function TrophyCollection({
               <p>{keepsake.story}</p>
               <p className="keepsake-route">{keepsake.route}</p>
               {!displayed && (
-                <div className="homestead-costs" aria-label="Backpack materials">
+                <div className="keepsake-costs" aria-label="Backpack materials">
                   {BUILDABLE_KINDS[keepsake.kind].costs.map((cost) => {
                     const have = state.carrying.find((row) => row.item === cost.item)?.count ?? 0;
                     return (
                       <span key={cost.item} data-ready={have >= cost.amount}>
+                        <ItemIcon
+                          item={cost.item}
+                          color={have >= cost.amount ? '#496342' : '#784833'}
+                        />
                         {Math.min(have, cost.amount)}/{cost.amount}{' '}
                         {ITEM_KINDS[cost.item].pluralName.toLowerCase()}
                       </span>
