@@ -1252,9 +1252,13 @@ caught. To see real pictures, for screenshots say, run with
 
 Gameplay specs share `e2e/fixtures.ts`; checks tagged `@real-drawing` and asset
 galleries still paint their scenes. `SHOT_DIR` also preserves drawing for requested
-screenshots. CI runs every case across eight independent shards, with one browser
-per machine. All eight must pass the `Browser smoke tests` check, and failed shards
+screenshots. CI runs every case across ten independent shards, with one browser
+per machine. All ten must pass the `Browser smoke tests` check, and failed shards
 save separate traces and screenshots (see [decision 0131](docs/decisions/0131-reliable-browser-regression-checks.md)).
+Shards are split by how long each test took in earlier runs, kept in
+`e2e/durations.json`. When the shards drift apart, refresh it from finished pull
+request runs with `node tools/e2e-shards.mjs record <run-id>...`
+(see [decision 0278](docs/decisions/0278-browser-shards-split-by-time.md)).
 
 Package unit suites run on independent CI runners alongside static checks.
 Preview, staging and production deploys use the verified client build from their
