@@ -253,6 +253,8 @@ test(
   'the game loads, connects and draws the clearing',
   { tag: '@real-drawing' },
   async ({ page }) => {
+    // Cold software rendering can take longer than the default budget for the first frame.
+    test.setTimeout(180_000);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
 
