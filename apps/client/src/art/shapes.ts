@@ -25,7 +25,10 @@ export class ModelBuilder {
   add(material: THREE.Material, geometry: THREE.BufferGeometry, matrix?: THREE.Matrix4): this {
     let part = geometry.index === null ? geometry : geometry.toNonIndexed();
     if (part !== geometry) geometry.dispose();
+    // Polyfork models are painted per vertex, so their colours survive the merge.
+    const keepColour = 'vertexColors' in material && material.vertexColors === true;
     for (const name of Object.keys(part.attributes)) {
+      if (name === 'color' && keepColour) continue;
       if (name !== 'position' && name !== 'normal' && name !== 'uv') part.deleteAttribute(name);
     }
     if (part.attributes.uv === undefined) {
