@@ -59,13 +59,13 @@ jobs:
   browser:
     needs: preview-capacity
     if: ${{ !cancelled() }}
-    name: Browser tests (${{ matrix.shard }}/8)
+    name: Browser tests (${{ matrix.shard }}/10)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v5
 
@@ -82,11 +82,18 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Playwright's own --shard cuts the alphabetical list into equal counts,
+      # which put every long play.spec.ts case on one machine. This splits by
+      # how long each test took in earlier runs (e2e/durations.json) instead;
+      # see decision 0278.
+      - name: Pick this shard's tests
+        run: node tools/e2e-shards.mjs plan ${{ matrix.shard }}/10 "$RUNNER_TEMP/shard-tests.txt"
+
       # Runs the real stack: the built client served by apps/web, talking to the
       # World Durable Object in apps/game-server, all locally.
       - name: Play the game
         timeout-minutes: 30
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/8
+        run: pnpm test:e2e --test-list "$RUNNER_TEMP/shard-tests.txt"
 
       # Screenshots and traces from a failure live in test-results, and the
       # HTML report is not written in CI at all. Keeping only the report meant
