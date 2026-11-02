@@ -123,6 +123,7 @@ import {
 import { createBuildBoundary } from './scene/build-boundary';
 import { groundAlongRay } from './building/ground-ray';
 import { createDiscoveryLandmarks } from './scene/discovery-sites';
+import { createDeadwood } from './scene/deadwood';
 import { homeFacilityInReach, toolKind } from '@acorn/shared';
 import { emptyGarden, type GardenRequest, type GardenState } from '@acorn/shared';
 import {
@@ -207,6 +208,7 @@ import {
   isLeavingRoom,
   worldMoveDirection,
   buildWilderness,
+  buildDeadwood,
   calendarAt,
   LAKE,
   STREAM,
@@ -850,6 +852,7 @@ export class Game {
   private lookSensitivity: number;
   private grassDensity: number;
   private grass: GrassScene | null = null;
+  private deadwood: ReturnType<typeof createDeadwood> | null = null;
   private readonly ownSwoosh = new CombatSwoosh();
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly scene = new THREE.Scene();
@@ -1944,6 +1947,7 @@ export class Game {
     this.weatherArt?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
+    this.deadwood?.dispose();
     this.floats.dispose();
     this.localCharacter?.dispose();
     for (const character of this.remoteCharacters.values()) character.dispose();
@@ -2650,7 +2654,10 @@ export class Game {
           };
         }
         this.builtProps = message.props;
-        if (!onlyBoatMotion) this.grass?.setBuildings(message.props);
+        if (!onlyBoatMotion) {
+          this.grass?.setBuildings(message.props);
+          this.deadwood?.setBuildings(message.props);
+        }
         this.applyBuiltProps(onlyBoatMotion);
         break;
       }
@@ -3303,6 +3310,12 @@ export class Game {
       this.grass.setBuildings(this.builtProps);
       this.grass.setHoles((x, z) => this.digScene?.isOpenNear(x, z) ?? false);
       this.outdoors.add(this.grass.mesh);
+      this.deadwood?.dispose();
+      this.deadwood = createDeadwood(
+        buildDeadwood(seed, terrain, wilderness, this.protectedBuildSites),
+      );
+      this.deadwood.setBuildings(this.builtProps);
+      this.outdoors.add(this.deadwood.group);
 
       this.outdoors.add(this.floats.group);
 

@@ -50,6 +50,30 @@
       "page": "https://polyfork.dev/asset/tree-stump-ec3f48"
     },
     {
+      "name": "fallen-log",
+      "id": "fallen-log-1685fb",
+      "title": "Fallen Log",
+      "page": "https://polyfork.dev/asset/fallen-log-1685fb"
+    },
+    {
+      "name": "dead-tree",
+      "id": "dead-tree-6795fa",
+      "title": "Dead Tree",
+      "page": "https://polyfork.dev/asset/dead-tree-6795fa"
+    },
+    {
+      "name": "exposed-tree-roots",
+      "id": "exposed-tree-roots-e1409c",
+      "title": "Exposed Tree Roots",
+      "page": "https://polyfork.dev/asset/exposed-tree-roots-e1409c"
+    },
+    {
+      "name": "firewood-stack",
+      "id": "firewood-stack-8a2899",
+      "title": "Firewood Stack",
+      "page": "https://polyfork.dev/asset/firewood-stack-8a2899"
+    },
+    {
       "name": "flower-bed",
       "id": "flower-bed-708e73",
       "title": "Flower Bed",
