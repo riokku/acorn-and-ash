@@ -11,7 +11,7 @@
     },
     "barbarian": {
       "model": "assets/characters/barbarian.glb",
-      "sha256": "68b1b605975dae63ab29d9f3c339b5fc57d1d9036a87e3966dec986371ce9cbd",
+      "sha256": "f9397e21b01ea7c6f8044ed6d0a1820c3ae363d3ae435db8aea4f2e79ebe0292",
       "portrait": "assets/ui/body-portraits/barbarian.webp",
       "bounds": [20, 22, 75, 117]
     },
