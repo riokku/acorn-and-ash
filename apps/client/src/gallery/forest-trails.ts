@@ -21,11 +21,13 @@ import {
   DEFAULT_WORLD_SEED,
   LAKE,
   STREAM,
+  buildDeadwood,
   buildTestClearing,
   buildWilderness,
   createWildernessTerrain,
 } from '@acorn/shared';
 import { buildWildernessScene } from '../scene/wilderness';
+import { createDeadwood } from '../scene/deadwood';
 import { buildClearingScene } from '../scene/clearing';
 import { createGrass } from '../scene/grass';
 import { createStreamScene, riverMouthConnections } from '../scene/stream';
@@ -61,7 +63,10 @@ export async function showForestTrails(
     undefined,
     { groundHeightAt: terrain.heightAt },
   );
-  scene.add(forest.group, home.group, grass.mesh, river.group, lake.group);
+  const deadwood = createDeadwood(
+    params.has('before') ? [] : buildDeadwood(DEFAULT_WORLD_SEED, terrain, wilderness),
+  );
+  scene.add(forest.group, home.group, grass.mesh, river.group, lake.group, deadwood.group);
   const wildlife = PLAINS_DENS.map((den) => {
     const model = createCritterFor(den.kind, den.id);
     model.group.position.set(den.x, terrain.heightAt(den.x, den.z), den.z);
@@ -180,6 +185,11 @@ export async function showForestTrails(
     pass: { label: 'Windbreak Pass', target: [-143, 9, -142], eye: [-109, 22, -114] },
     dunes: { label: 'Amber Dunes', target: [-233, 21, -213], eye: [-207, 30, -174] },
     cedar: { label: 'Cedar bench', target: [111, 13, 43], eye: [82, 30, 82] },
+    deadwood: {
+      label: 'Dead wood',
+      target: [-18, terrain.heightAt(-18, 64) + 1.5, 64],
+      eye: [-6, terrain.heightAt(-6, 50) + 7, 50],
+    },
     overlook: { label: 'Lake overlook', target: [174, 17, -80], eye: [149, 35, -40] },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
   } as const;

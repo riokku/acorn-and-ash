@@ -1,7 +1,21 @@
 import * as THREE from 'three/webgpu';
-import type { DiscoverySite, Terrain } from '@acorn/shared';
+import {
+  LOGGING_WOODPILE,
+  raccoonHollowLog,
+  type DiscoverySite,
+  type Terrain,
+} from '@acorn/shared';
 import { ModelBuilder, placed, plankGeometry, logGeometry, stoneGeometry } from '../art/shapes';
 import { paintedMaterial } from '../art/materials';
+import { polyforkPaint } from './polyfork-piece';
+import { woodlandGeometry } from './woodland-pieces';
+
+/** Polyfork's 3 m fallen log, cut to the 1.5 m the hollow's and the grove's logs have always been. */
+const LOG_SIZE = { x: 0.5, y: 1, z: 0.75 };
+/** Polyfork's firewood stack, a little larger, fills the logging site's woodpile. */
+const FIREWOOD_SIZE = 1.25;
+/** Set a touch into the ground so a slight slope never shows daylight under the wood. */
+const LOG_SINK = 0.03;
 
 /** Handcrafted remnants of forest life, arranged around open, walkable centers. */
 export function createDiscoveryLandmarks(sites: readonly DiscoverySite[], terrain: Terrain) {
@@ -13,13 +27,25 @@ export function createDiscoveryLandmarks(sites: readonly DiscoverySite[], terrai
   const blanket = paintedMaterial('burlap', { tint: 0x88aaa0, roughness: 1 });
   const trim = paintedMaterial('wood', { tint: 0x79664b, roughness: 1 });
   const moss = paintedMaterial('stone', { tint: 0xadc394, roughness: 1 });
+  const fallenLog = woodlandGeometry('fallenLog');
+  const firewoodStack = woodlandGeometry('firewoodStack');
   for (const site of sites) {
     if (site.kind === 'elkGrove' || site.kind === 'guardianHollow') continue;
     if (site.kind === 'raccoonHollow') {
       const y = terrain.heightAt(site.x + 0.75, site.z);
-      const fallen = logGeometry(1.5, 0.22, { seed: 1009, sides: 8 });
-      const matrix = placed(site.x + 0.75, y + 0.24, site.z, { y: 0.7 });
-      builder.add(bark, fallen.side, matrix).add(cut, fallen.ends, matrix);
+      const log = raccoonHollowLog(site);
+      const logY = terrain.heightAt(log.x, log.z);
+      if (fallenLog) {
+        builder.add(
+          polyforkPaint,
+          fallenLog.clone(),
+          placed(log.x, logY - LOG_SINK, log.z, { y: log.yaw }, LOG_SIZE),
+        );
+      } else {
+        const fallen = logGeometry(1.5, 0.22, { seed: 1009, sides: 8 });
+        const matrix = placed(log.x, logY + 0.24, log.z, { y: log.yaw });
+        builder.add(bark, fallen.side, matrix).add(cut, fallen.ends, matrix);
+      }
       builder.add(
         wood,
         new THREE.BoxGeometry(0.35, 0.19, 0.3),
@@ -84,6 +110,12 @@ export function createDiscoveryLandmarks(sites: readonly DiscoverySite[], terrai
         new THREE.BoxGeometry(0.23, 0.008, 0.2),
         placed(site.x - 0.8, terrain.heightAt(site.x - 0.8, site.z) + 0.249, site.z, { y: 0.2 }),
       );
+    } else if (site.kind === 'logging' && firewoodStack) {
+      builder.add(
+        polyforkPaint,
+        firewoodStack.clone(),
+        placed(x, y - LOG_SINK, z + LOGGING_WOODPILE.back, {}, FIREWOOD_SIZE),
+      );
     } else if (site.kind === 'logging') {
       for (let i = 0; i < 5; i++) {
         const log = logGeometry(1.7, 0.13, { seed: 420 + i, sides: 8 });
@@ -98,10 +130,18 @@ export function createDiscoveryLandmarks(sites: readonly DiscoverySite[], terrai
           placed(x + dx, y + 0.08, z + 0.25),
         );
     } else if (site.kind === 'grove') {
-      const log = logGeometry(1.75, 0.16, { seed: 601, sides: 8 });
-      const matrix = placed(x, y + 0.14, z, { y: 0.4 });
-      builder.add(bark, log.side, matrix);
-      builder.add(cut, log.ends, matrix);
+      if (fallenLog) {
+        builder.add(
+          polyforkPaint,
+          fallenLog.clone(),
+          placed(x, y - LOG_SINK, z, { y: 0.4 }, LOG_SIZE),
+        );
+      } else {
+        const log = logGeometry(1.75, 0.16, { seed: 601, sides: 8 });
+        const matrix = placed(x, y + 0.14, z, { y: 0.4 });
+        builder.add(bark, log.side, matrix);
+        builder.add(cut, log.ends, matrix);
+      }
       builder.add(moss, stoneGeometry(0.3, 0.08, 621), placed(x - 0.4, y + 0.12, z));
       builder.add(
         linen,
