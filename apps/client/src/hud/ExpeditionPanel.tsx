@@ -11,6 +11,7 @@ import {
 } from '@acorn/shared';
 import type { HudState } from './store';
 import { JournalTabs } from './DiscoveryJournal';
+import { ItemIcon } from './item-icons';
 const NOTES: Record<ExpeditionNotice, string> = {
   none: '',
   away: 'Choose and claim outings at your own home board.',
@@ -49,16 +50,27 @@ export function ExpeditionPanel({
   const nextClue = rumorStage(journey);
   const atBoard = state.nearExpeditionBoard === true,
     pending = state.expeditionPending === true;
-  const reward = (id: number) =>
-    (rumorDefinition(id)
-      ? rumorOutcome({ ...journey, active: id }, state.worldSeed ?? 0)!.rewards
-      : EXPEDITIONS[id]!.rewards
-    )
-      .map(
-        (r) =>
-          `${r.count} ${(r.count === 1 ? ITEM_KINDS[r.item].displayName : ITEM_KINDS[r.item].pluralName).toLowerCase()}`,
-      )
-      .join(' · ');
+  const reward = (id: number) => (
+    <>
+      <span>Reward · </span>
+      {(rumorDefinition(id)
+        ? rumorOutcome({ ...journey, active: id }, state.worldSeed ?? 0)!.rewards
+        : EXPEDITIONS[id]!.rewards
+      ).map((r) => (
+        <span className="expedition-reward-item" key={r.item}>
+          <ItemIcon item={r.item} color="currentColor" />
+          <span>
+            {' '}
+            {r.count}{' '}
+            {(r.count === 1
+              ? ITEM_KINDS[r.item].displayName
+              : ITEM_KINDS[r.item].pluralName
+            ).toLowerCase()}
+          </span>
+        </span>
+      ))}
+    </>
+  );
   return (
     <section className="hud-journal expedition-panel" aria-label="Expedition board">
       <div className="hud-journal-header">
@@ -129,7 +141,7 @@ export function ExpeditionPanel({
           <p className="expedition-rewards">
             {rumorDefinition(active.id) && !expeditionComplete(journey)
               ? 'A personal trail bundle · clothing, useful supplies or a bag. Its contents are revealed when you finish the trail.'
-              : `Reward · ${reward(active.id)}`}
+              : reward(active.id)}
           </p>
           <button
             type="button"
@@ -162,7 +174,7 @@ export function ExpeditionPanel({
                 <p className="expedition-rewards">
                   {rumorDefinition(id)
                     ? 'Follow three clues · recover a personal trail bundle. Bring a shovel.'
-                    : `Reward · ${reward(id)}`}
+                    : reward(id)}
                 </p>
                 <button
                   type="button"

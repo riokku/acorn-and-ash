@@ -1,6 +1,7 @@
 import { MEAL_BENEFITS, type ExpeditionDefinition } from '@acorn/shared';
 import { expeditionPreparation, type PreparationState } from './expedition-preparation';
 import { MEAL_PLANS } from './MealPreparation';
+import { ItemIcon } from './item-icons';
 
 export function ExpeditionPreparation({
   state,
@@ -54,7 +55,10 @@ export function ExpeditionPreparation({
             ? 'a special meal is packed or active'
             : 'no special meal packed or active'}
         </small>
-        <h4>Suggested: {plan.mealName}</h4>
+        <h4>
+          <ItemIcon item={plan.meal} color="currentColor" />
+          <span>Suggested: {plan.mealName}</span>
+        </h4>
         <p>{MEAL_BENEFITS[plan.meal]}</p>
         <p>{MEAL_PLANS[plan.meal].route}</p>
         <p>

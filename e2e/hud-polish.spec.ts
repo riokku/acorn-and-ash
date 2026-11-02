@@ -86,11 +86,25 @@ test.describe('hunger and health bars', () => {
       const health = page.getByTestId('health-bar');
       await expect(hunger).toBeVisible();
       await expect(health).toBeVisible();
+      await expect(hunger).toHaveClass(/hunger-bar-low/);
+      await expect(health).toHaveClass(/health-bar-low/);
+      // Check at the largest point of the pulse, not a random animation frame.
+      const hasPulse = await hunger.evaluate((element) => {
+        const pulse = element
+          .getAnimations()
+          .find(
+            (animation) =>
+              animation instanceof CSSAnimation && animation.animationName === 'hunger-throb',
+          );
+        if (pulse === undefined) return false;
+        pulse.pause();
+        pulse.currentTime = 700;
+        return true;
+      });
+      expect(hasPulse).toBe(true);
       const hungerBox = (await hunger.boundingBox())!;
       const healthBox = (await health.boundingBox())!;
       expect(hungerBox.y + hungerBox.height).toBeLessThanOrEqual(healthBox.y);
-      await expect(hunger).toHaveClass(/hunger-bar-low/);
-      await expect(health).toHaveClass(/health-bar-low/);
     } finally {
       sim.dispose();
     }
