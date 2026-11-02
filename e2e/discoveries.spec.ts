@@ -90,12 +90,10 @@ test('records a discovery, inspects its personal reward and crafts the learned r
       shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
     );
     await expect(page.locator('.hud-journal')).toHaveCount(0);
+    // Wild berries grow on Polyfork's bush, so aim into the middle of it.
     const point = await page.evaluate(({ x, y, z }) => window.acornDebug?.screenPoint(x, y, z), {
       ...patch,
-      x: patch.x + 0.13,
-      y:
-        shared.createWildernessTerrain(shared.DEFAULT_WORLD_SEED).heightAt(patch.x, patch.z) +
-        0.055,
+      y: shared.createWildernessTerrain(shared.DEFAULT_WORLD_SEED).heightAt(patch.x, patch.z) + 0.4,
     });
     if (point == null) throw new Error('forage is off screen');
     await page.mouse.move(point.x, point.y);
