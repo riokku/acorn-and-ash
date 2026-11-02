@@ -16,7 +16,7 @@ import type { BuildableKindId } from '../data/buildables';
 import { homeOuterScale, homeRoomScale, isHomeKind, type HomeKind } from '../data/housing';
 import { PLAYER_RADIUS } from '../constants';
 import { box, cylinder, type Collider } from './colliders';
-import { HOME_FACILITIES } from '../data/home-facilities';
+import { GARDEN_TRAY, HOME_FACILITIES } from '../data/home-facilities';
 
 /** A flat point with the way something faces, in the same yaw convention as everything else. */
 export interface PlacedSpot {
@@ -368,8 +368,18 @@ export function homeRoomColliders(kind: HomeKind = 'cabin'): Collider[] {
   }
   if (kind === 'largeCabin') {
     const spot = HOME_FACILITIES.garden;
+    const tray = GARDEN_TRAY;
     for (let index = 0; index < 3; index++)
-      extra.push(box(spot.x + (index - 1) * 0.65, 0.15, spot.z, 0.28, 0.15, 0.28));
+      extra.push(
+        box(
+          spot.x + (index - 1) * tray.spacing,
+          tray.height / 2,
+          spot.z,
+          tray.halfX,
+          tray.height / 2,
+          tray.halfZ,
+        ),
+      );
   }
   return [
     ...cabinRoomColliders().filter((_, index) => {

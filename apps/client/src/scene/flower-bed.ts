@@ -1,17 +1,19 @@
 import { ITEM_KINDS } from '../item-catalog';
 import * as THREE from 'three/webgpu';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { paintedMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { flowerModelParts } from './flower-models';
+import { polyforkGroup, polyforkPiece } from './polyfork-piece';
 
 /**
- * A flower bed (see decision 0053): a low planter of stained boards with a
- * handful of blooms growing in its soil. Each
- * bloom uses the real flower model once it has loaded (see
- * flower-models.ts); until then, or if it fails to load, a placeholder
- * stem-and-sphere stands in, the same as everything else does before its
- * art arrives.
+ * A flower bed: Polyfork's free Flower Bed (decision 0272) once it has
+ * downloaded. Otherwise our own (see decision 0053): a low planter of stained
+ * boards with a handful of blooms growing in its soil. Each bloom uses the
+ * real flower model once it has loaded (see flower-models.ts); until then, or
+ * if it fails to load, a placeholder stem-and-sphere stands in, the same as
+ * everything else does before its art arrives.
  */
 export interface FlowerBed {
   readonly group: THREE.Group;
@@ -21,6 +23,34 @@ export interface FlowerBed {
 const BOX_WIDTH = 1.2;
 const BOX_HEIGHT = 0.25;
 const BOX_DEPTH = 0.8;
+
+const polyforkBed = polyforkPiece('flower-bed');
+let fittedBed: THREE.BufferGeometry | undefined;
+
+/**
+ * Polyfork's bed is a metre square; ours, and the solid shape players bump
+ * into and stand on, is 1.2 × 0.8 m. The edging and soil are stretched to
+ * that; each bloom only moves with the soil it grows in, so none is squashed.
+ * Its plant-label marker is left out, and the rest is merged to draw at once.
+ */
+function polyforkFlowerBed(): THREE.BufferGeometry | undefined {
+  if (fittedBed !== undefined) return fittedBed;
+  const parts = polyforkBed.parts();
+  const body = parts?.get('flower-bed-mesh');
+  if (parts === undefined || body === undefined) return undefined;
+  const stretch = new THREE.Vector3(BOX_WIDTH, 1, BOX_DEPTH);
+  const bed = [body.clone().scale(stretch.x, stretch.y, stretch.z)];
+  for (const [name, geometry] of parts) {
+    if (!name.startsWith('yield-')) continue;
+    geometry.computeBoundingBox();
+    const centre = geometry.boundingBox?.getCenter(new THREE.Vector3()) ?? new THREE.Vector3();
+    const moved = centre.clone().multiply(stretch).sub(centre);
+    bed.push(geometry.clone().translate(moved.x, 0, moved.z));
+  }
+  fittedBed = mergeGeometries(bed) ?? undefined;
+  for (const part of bed) part.dispose();
+  return fittedBed;
+}
 const BLOOM_COLORS = [ITEM_KINDS.flower.placeholderColor, 0xe8c33a, 0xd8dce8];
 
 // A handful of small blooms, scattered across the soil rather than lined up,
@@ -34,6 +64,9 @@ const BLOOM_OFFSETS = [
 ];
 
 export function createFlowerBed(): FlowerBed {
+  const polyfork = polyforkFlowerBed();
+  if (polyfork !== undefined) return polyforkGroup('flower-bed', [polyfork]);
+
   const group = new THREE.Group();
   const disposables: Array<{ dispose(): void }> = [];
 

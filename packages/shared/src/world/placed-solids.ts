@@ -1,5 +1,6 @@
 import { logStorageCapacity, logStorageSpot } from '../sim/fire-fuel';
 import type { BuildableKindId } from '../data/buildables';
+import { GARDEN_TRAY } from '../data/home-facilities';
 import { isHomeKind } from '../data/housing';
 import { box, cylinder, type Collider } from './colliders';
 import { navigableWaterSurfaceAt } from './navigable-water';
@@ -125,18 +126,21 @@ export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Col
     case 'trailPantry':
       return [slab(0.47, 0.27, 0.51, groundY, true)];
     case 'kitchenGarden':
-      return [-0.65, 0, 0.65].map((dx) => ({
-        ...box(
-          x + Math.cos(yaw) * dx,
-          groundY + 0.16,
-          z - Math.sin(yaw) * dx,
-          0.28,
-          0.16,
-          0.28,
-          yaw,
-        ),
-        standable: true,
-      }));
+      return [-1, 0, 1].map((index) => {
+        const dx = index * GARDEN_TRAY.spacing;
+        return {
+          ...box(
+            x + Math.cos(yaw) * dx,
+            groundY + GARDEN_TRAY.height / 2,
+            z - Math.sin(yaw) * dx,
+            GARDEN_TRAY.halfX,
+            GARDEN_TRAY.height / 2,
+            GARDEN_TRAY.halfZ,
+            yaw,
+          ),
+          standable: true,
+        };
+      });
     case 'trailWorkbench':
     case 'timberTable':
       return [slab(0.575, 0.475, 0.7825, groundY, true)];
