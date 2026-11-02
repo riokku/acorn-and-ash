@@ -375,6 +375,7 @@ import { createCritterFor } from './scene/wildlife-models';
 import { preloadCanoeModel } from './scene/canoe-model';
 import { preloadRabbitModel } from './scene/rabbit-model';
 import { preloadTentModel } from './scene/tent-model';
+import { preloadLanternModel } from './scene/lantern-model';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -1267,6 +1268,7 @@ export class Game {
     void preloadCanoeModel();
     void preloadRabbitModel();
     void preloadTentModel();
+    void preloadLanternModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
     void preloadRaiderModels();
@@ -3134,6 +3136,7 @@ export class Game {
           preloadCanoeModel(),
           preloadRabbitModel(),
           preloadTentModel(),
+          preloadLanternModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
           preloadRaiderModels(),
