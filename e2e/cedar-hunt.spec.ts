@@ -147,3 +147,158 @@ test(
     expect(errors).toEqual([]);
   },
 );
+
+test('keeps the pinned goal clear of other HUD panels', async ({ page }) => {
+  const sim = new shared.WorldSimulation({ seed: shared.DEFAULT_WORLD_SEED });
+  const home = { id: 7, kind: 'cabin', x: 0, z: -4.2, yaw: 0, lit: false } as const;
+  const board = shared.expeditionBoardSpot(home);
+  // Approach from clear ground rather than spawning against the cabin wall.
+  const approach = { x: board.x, z: board.z + 1 };
+  sim.restoreBuiltProps([{ ...home, ownerKey: 'hunter', litUntilMs: null }]);
+  sim.addPlayer(1, undefined, 'hunter');
+  let sendWorld = (_data: ArrayBuffer) => {};
+  let publishSpace = (_space: number, _x: number, _z: number) => {};
+  let closed = false;
+  await page.addInitScript(() => localStorage.setItem('acorn.cedarHunt.cedar-collision', 'pinned'));
+  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ body: '' }));
+  await page.routeWebSocket('**/api/worlds/*/ws*', (socket) => {
+    socket.onClose(() => {
+      closed = true;
+    });
+    sendWorld = (data) => {
+      if (!closed) socket.send(Buffer.from(data));
+    };
+    const snapshot = () =>
+      sendWorld(
+        shared.encodeSnapshot(sim.tick, Date.now(), sim.lastProcessedSeq(1), sim.snapshotFor(1)),
+      );
+    publishSpace = (space, x, z) => {
+      sim.placePlayer(
+        1,
+        { x, y: space === 0 ? sim.collision.terrain.heightAt(x, z) : 0, z },
+        0,
+        space,
+      );
+      sendWorld(shared.encodeSpace(space, x, z, 0));
+      snapshot();
+    };
+    sendWorld(shared.encodeWelcome(1, sim.seed, 0, Date.now()));
+    sendWorld(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
+    sendWorld(shared.encodeInventory([]));
+    publishSpace(0, approach.x, approach.z);
+    socket.onMessage((message) => {
+      if (closed || typeof message === 'string') return;
+      const request = shared.decodeClientMessage(new Uint8Array(message).buffer);
+      if (request?.type === 'ping') sendWorld(shared.encodePong(request.clientTimeMs, Date.now()));
+    });
+  });
+  try {
+    await page.goto('/?renderer=webgl2&world=cedar-collision');
+    await page.locator('#home-name').fill('Hunter');
+    await page.locator('.home-play').click();
+    await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
+      timeout: 120000,
+    });
+    const tracker = page.getByRole('complementary', { name: 'Pinned upgrade goal' });
+    const clearOf = async (selector: string) => {
+      const other = page.locator(selector);
+      await expect(other).toBeVisible();
+      const a = await tracker.boundingBox(),
+        b = await other.boundingBox();
+      expect(a).not.toBeNull();
+      expect(b).not.toBeNull();
+      expect(
+        a!.x + a!.width <= b!.x ||
+          b!.x + b!.width <= a!.x ||
+          a!.y + a!.height <= b!.y ||
+          b!.y + b!.height <= a!.y,
+      ).toBe(true);
+    };
+    for (const viewport of [
+      { width: 1366, height: 768 },
+      { width: 900, height: 600 },
+    ]) {
+      await page.setViewportSize(viewport);
+      sendWorld(shared.encodeAllies([]));
+      sendWorld(shared.encodeKingStorm(null));
+      await expect(tracker).toBeVisible();
+      await clearOf('.minimap');
+      await clearOf('.expedition-board-open');
+      await clearOf('.vitals');
+      sendWorld(
+        shared.encodeAllies(
+          Array.from({ length: 9 }, (_, i) => ({
+            netId: i + 1,
+            health: 20,
+            maxHealth: 100,
+            downTicks: 200,
+            rescueTicks: 0,
+            rescuerId: 0,
+            inReach: true,
+          })),
+        ),
+      );
+      await clearOf('.allies');
+      sendWorld(
+        shared.encodeKingStorm({
+          bossId: 1,
+          wave: 1,
+          phase: 'warning',
+          remainingTicks: shared.SOUL_STORM.warningTicks,
+          sheltered: false,
+          outside: false,
+        }),
+      );
+      await expect(page.locator('.king-ward-direction')).toContainText('Nearest ward');
+      await clearOf('.king-storm');
+      await clearOf('.allies');
+      await clearOf('.minimap');
+      await clearOf('.expedition-board-open');
+      sendWorld(shared.encodeKingStorm(null));
+      sendWorld(shared.encodeAllies([]));
+      sendWorld(
+        shared.encodeCollected(
+          (['log', 'stone', 'reed', 'stick', 'berry'] as const).map((item) => ({
+            netId: 1,
+            item,
+            count: 5,
+            x: board.x,
+            z: board.z,
+            depleted: false,
+          })),
+        ),
+      );
+      publishSpace(home.id, 0, 0);
+      await expect(page.getByRole('status', { name: 'Outing recap' })).toContainText('+5 Logs');
+      await clearOf('[aria-label="Outing recap"]');
+      publishSpace(0, approach.x, approach.z);
+      await expect(page.getByRole('status', { name: 'Outing recap' })).toHaveCount(0);
+      await expect(tracker).toBeVisible();
+      const progress = await tracker.textContent();
+      sendWorld(shared.encodeInventory([]));
+      sendWorld(
+        shared.encodeInventory([
+          { item: 'kingCrown', count: 2 },
+          { item: 'sentinelTrophy', count: 2 },
+          { item: 'lastBellTrophy', count: 2 },
+        ]),
+      );
+      await expect(page.getByTestId('toast')).toHaveCount(3);
+      if (viewport.height <= 760) {
+        await expect(tracker).toBeHidden();
+      } else {
+        await expect(tracker).toBeVisible();
+        await clearOf('.toasts');
+      }
+      expect(
+        await page.evaluate(() => localStorage.getItem('acorn.cedarHunt.cedar-collision')),
+      ).toBe('pinned');
+      await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 10000 });
+      await expect(tracker).toBeVisible();
+      await expect(tracker).toHaveText(progress!);
+    }
+  } finally {
+    closed = true;
+    sim.dispose();
+  }
+});

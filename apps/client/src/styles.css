@@ -5123,22 +5123,24 @@ body {
 .cedar-hunt-plan {
   margin: 4px 0 16px;
   padding: 17px 20px;
-  border: 1px solid #728566;
-  border-radius: 9px;
-  background: #e6e9d9;
-  color: #263c2e;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 7px;
+  background: var(--journal-well);
+  color: #403a2c;
   line-height: 1.45;
 }
 .cedar-hunt-eyebrow {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #536947;
+  color: #655538;
 }
 .cedar-hunt-plan h3 {
   font:
-    bold 24px Georgia,
+    24px Fraunces,
+    Georgia,
     serif;
+  color: #354a32;
   margin: 4px 0 8px;
 }
 .cedar-hunt-plan p {
@@ -5152,14 +5154,29 @@ body {
   margin: 7px 0;
 }
 .cedar-hunt-reward {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--journal-well-edge);
+  border-radius: 6px;
+  background: var(--journal-well);
+}
+.cedar-hunt-reward-icon {
+  width: 38px;
+  height: 38px;
+  flex: none;
+}
+.cedar-hunt-reward div {
   display: grid;
   gap: 4px;
-  padding: 12px;
-  border-left: 3px solid #716299;
-  background: #f3f0e3;
 }
 .cedar-hunt-reward strong {
+  color: #354a32;
+}
+.cedar-hunt-rarity {
   color: #675080;
+  text-transform: capitalize;
 }
 .cedar-hunt-ingredients {
   display: flex;
@@ -5168,61 +5185,109 @@ body {
   margin-top: 12px;
   font-weight: bold;
   font-size: 12px;
+  color: #496342;
 }
-.cedar-hunt-missing {
-  color: #8d483a;
+.cedar-hunt-ingredients span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cedar-hunt-ingredients svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.cedar-hunt-ingredients .cedar-hunt-missing {
+  color: #784833;
 }
 .cedar-hunt-next {
   font-weight: bold;
 }
 .cedar-hunt-meal {
-  color: #4d6740;
+  color: #496342;
   font-size: 12px;
 }
 .cedar-hunt-plan button {
-  border: 1px solid #526d4b;
-  background: #37513d;
-  color: #fff4d9;
+  border: 1px solid var(--journal-fir);
+  background: var(--journal-fir);
+  color: var(--journal-paper-light);
   padding: 8px 12px;
   border-radius: 5px;
   cursor: pointer;
 }
+.cedar-hunt-plan button:focus-visible,
+.cedar-hunt-tracker button:focus-visible {
+  outline: 3px solid var(--journal-copper);
+  outline-offset: 3px;
+}
 .cedar-hunt-plan small {
   display: block;
   margin-top: 7px;
-  color: #53614b;
+  color: #655538;
   font-size: 11px;
 }
 .cedar-hunt-tracker {
   position: fixed;
-  right: 18px;
-  top: 155px;
-  max-width: min(270px, calc(100vw - 36px));
-  padding: 12px 28px 12px 14px;
+  left: 16px;
+  right: auto;
+  top: 292px;
+  width: 264px;
+  box-sizing: border-box;
+  padding: 10px 30px 10px 12px;
   display: grid;
-  gap: 5px;
-  background: #1e3029e8;
-  border: 1px solid #9caa7f;
+  gap: 4px;
+  background: linear-gradient(var(--journal-paper-top), var(--journal-paper-bottom));
+  border: 2px solid var(--journal-binding);
   border-radius: 7px;
-  color: #f2e7c6;
+  box-shadow:
+    inset 0 0 0 1px var(--journal-rule),
+    0 4px 10px #0003;
+  color: #655538;
   font-size: 12px;
   pointer-events: auto;
 }
 .cedar-hunt-tracker strong {
-  color: #d6dcb2;
+  color: #354a32;
   font:
-    bold 16px Georgia,
+    16px Fraunces,
+    Georgia,
     serif;
 }
 .cedar-hunt-tracker button {
   position: absolute;
-  right: 5px;
-  top: 4px;
+  right: 3px;
+  top: 3px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   background: transparent;
-  color: #eee8d1;
+  color: #403a2c;
   cursor: pointer;
   font-size: 19px;
+}
+#hud:has(.allies) .cedar-hunt-tracker {
+  left: 284px;
+}
+#hud:has(.king-storm) .cedar-hunt-tracker {
+  top: 400px;
+}
+@media (max-height: 760px) {
+  #hud .cedar-hunt-tracker,
+  #hud:has(.allies) .cedar-hunt-tracker,
+  #hud:has(.king-storm) .cedar-hunt-tracker {
+    left: auto;
+    right: 16px;
+    top: 276px;
+    width: 236px;
+  }
+  #hud:has(.king-storm) .cedar-hunt-tracker {
+    width: 216px;
+  }
+  /* Three wrapped pickup notices take priority; the saved goal stays pinned. */
+  #hud:has(.toasts > .toast:nth-child(3)) .cedar-hunt-tracker {
+    visibility: hidden;
+  }
 }
 .cedar-hunt-gallery {
   position: fixed;
@@ -5240,13 +5305,11 @@ body {
 }
 .cedar-hunt-gallery .cedar-hunt-tracker {
   position: relative;
+  left: auto;
   right: auto;
   top: auto;
-  max-width: none;
+  width: auto;
   margin: 12px 0;
-}
-.cedar-hunt-rarity {
-  text-transform: capitalize;
 }
 
 .homestead-plan {
