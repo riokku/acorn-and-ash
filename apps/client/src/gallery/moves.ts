@@ -50,7 +50,7 @@ import type { RendererSetup } from '../scene/renderer';
  * `?gallery=moves` shows them all, looping; `&demo=` picks one to look at up
  * close; `&strip=N` lays that one out as N frozen moments across its length;
  * `&at=` freezes them all at one moment, in ticks; `&item=` puts something
- * else in every hand; `&body=mage` (any body's id) plays them on that body.
+ * else in every hand; `&body=barbarian` plays them on Body 2.
  */
 
 /** One move to show, and how it unfolds tick by tick. */
