@@ -11,8 +11,11 @@ import { instantiateAnimatedModel, loadAnimatedModel, type AnimatedModel } from 
 export interface PolyforkAnimal {
   /** Fetches the animal up front. Idempotent, like the other model preloads. */
   preload(): Promise<void>;
-  /** A living copy, or undefined to keep drawing the placeholder. */
-  create(): AnimatedAnimal | undefined;
+  /**
+   * A living copy, or undefined to keep drawing the placeholder. `size` is
+   * how much bigger the caller will draw it, so its gait keeps pace.
+   */
+  create(size?: number): AnimatedAnimal | undefined;
 }
 
 export interface AnimatedAnimal {
@@ -48,8 +51,11 @@ export function polyforkAnimal(
       );
       return loading;
     },
-    create() {
+    create(size = 1) {
       if (template === undefined) return undefined;
+      // A bigger animal's stride is longer, so each clip looks right at a faster speed.
+      const walkSpeed = gait.walkSpeed * size;
+      const runSpeed = gait.runSpeed * size;
       const { root, mixer, actions } = instantiateAnimatedModel(template);
       // Polyfork faces +Z; every creature here faces -Z before it is turned.
       root.rotation.y = Math.PI;
@@ -70,12 +76,12 @@ export function polyforkAnimal(
         group,
         animate(deltaSeconds, speed) {
           const moving = smoothstep(speed, 0.05, 0.5);
-          const running = smoothstep(speed, gait.walkSpeed * 1.8, gait.walkSpeed * 3.6);
+          const running = smoothstep(speed, walkSpeed * 1.8, walkSpeed * 3.6);
           idle?.setEffectiveWeight(1 - moving);
           walk?.setEffectiveWeight(moving * (1 - running));
           run?.setEffectiveWeight(moving * running);
-          walk?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / gait.walkSpeed, 0.5, 1.8));
-          run?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / gait.runSpeed, 0.6, 1.5));
+          walk?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / walkSpeed, 0.5, 1.8));
+          run?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / runSpeed, 0.6, 1.5));
           mixer.update(deltaSeconds);
         },
         dispose: () => mixer.stopAllAction(),

@@ -6,6 +6,9 @@ import { animateSmallAnimal } from './animal-motion';
 import { createDeerModel } from './deer-model';
 import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatures';
 
+/** The coyote is drawn as a fox grown this much. */
+const COYOTE_SIZE = 1.45;
+
 /** The existing wildlife figure and its movement controller. */
 export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCreature {
   switch (kind) {
@@ -21,8 +24,8 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
       return model;
     }
     case 'coyote': {
-      const model = animateSmallAnimal(createFox(), 'coyote', phaseSeed);
-      model.group.scale.setScalar(1.45);
+      const model = animateSmallAnimal(createFox(COYOTE_SIZE), 'coyote', phaseSeed);
+      model.group.scale.setScalar(COYOTE_SIZE);
       return model;
     }
     case 'rabbit':

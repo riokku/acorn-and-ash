@@ -24,6 +24,25 @@ const refresh = process.argv.includes('--refresh');
 /** Polyfork asks callers to name themselves. */
 const USER_AGENT = 'acorn-and-ash-build (https://github.com/riokku/acorn-and-ash)';
 
+/**
+ * A dropped connection is usually gone a moment later, so try a few times
+ * before falling back to the placeholder.
+ */
+async function fetchModel(id, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(`https://polyfork.dev/cdn/${id}.glb`, {
+        headers: { 'User-Agent': USER_AGENT },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+    }
+  }
+}
+
 mkdirSync(outDir, { recursive: true });
 
 const failed = [];
@@ -33,11 +52,7 @@ for (const model of manifest.models) {
 
   const download = join(tmpdir(), `polyfork-${model.id}.glb`);
   try {
-    const response = await fetch(`https://polyfork.dev/cdn/${model.id}.glb`, {
-      headers: { 'User-Agent': USER_AGENT },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    writeFileSync(download, Buffer.from(await response.arrayBuffer()));
+    writeFileSync(download, await fetchModel(model.id));
     // Not --quantize: the game re-scales these, and quantized positions can't hold
     // anything outside -1..1 once scaled into plain geometry.
     execFileSync(process.execPath, [importModel, download, target], {
