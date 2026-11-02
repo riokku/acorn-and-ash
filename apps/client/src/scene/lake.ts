@@ -15,6 +15,7 @@ import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
 import { addLilyDrift, addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
 import { buryGeometryBase } from './prop-grounding';
+import { polyforkPaint, polyforkPiece } from './polyfork-piece';
 
 /** Round discs are cut finely so the water's outline never shows corners, even on the big blobs. */
 const DISC_SEGMENTS = 72;
@@ -28,6 +29,18 @@ const REED_SHARE = 0.55;
 /** Scenery reeds keep this far from a reed that can be cut, in metres. */
 const REED_PATCH_CLEAR = 2.5;
 const LILY_PADS = 26;
+/** A patch of pebbles lies about every this many metres along a shore, in places. */
+const PEBBLE_SPACING = 6;
+/** Of those, how many get one. */
+const PEBBLE_SHARE = 0.5;
+
+/** Polyfork's free Lake Pebbles (decision 0272): a flat 3 × 1.9 m scatter of stones, 9 cm high. */
+const lakePebbles = polyforkPiece('lake-pebbles');
+
+/** One patch of pebbles as Polyfork made it, or undefined if it didn't download. */
+export function lakePebblesGeometry(): THREE.BufferGeometry | undefined {
+  return lakePebbles.parts()?.values().next().value;
+}
 
 /**
  * The lake (see decision 0090): one wide sheet of water over the whole basin,
@@ -142,6 +155,7 @@ export function createLakeScene(
     scenery.seed ?? 909,
     scenery.groundHeightAt ?? surfaceHeightAt,
     scenery.lilyPads === false ? 0 : LILY_PADS,
+    scenery.groundHeightAt !== undefined,
   );
   group.add(plants.group);
   const plantMaterials = waterPlantMaterials();
@@ -202,6 +216,7 @@ function createShorePlants(
   seed: number,
   groundHeightAt: (x: number, z: number) => number,
   lilyPads: number,
+  pebbles: boolean,
 ): { group: THREE.Group; dispose(): void } {
   const plants = waterPlantMaterials();
   const stone = paintedMaterial('stone', { roughness: 1, flatShading: true });
@@ -285,5 +300,51 @@ function createShorePlants(
     );
   }
 
+  if (pebbles) addShorePebbles(builder, lake, excludePlantsAt, seed, groundHeightAt);
+
   return builder.build();
+}
+
+/**
+ * Patches of Polyfork's lake pebbles on the bank, just above the water's edge
+ * of the mainland and the islands. Each one is bent to the ground it lies on,
+ * so it never floats over a slope. Only scenery: you walk over them. They
+ * have their own stream of randomness, so the reeds and pads stay where they
+ * were.
+ */
+function addShorePebbles(
+  builder: ModelBuilder,
+  lake: Lake,
+  excludePlantsAt: (x: number, z: number) => boolean,
+  seed: number,
+  groundHeightAt: (x: number, z: number) => number,
+): void {
+  const patch = lakePebblesGeometry();
+  if (patch === undefined) return;
+  const random = seededRandom(seed + 5003);
+  const along = (circle: WaterCircle, landwards: 1 | -1): void => {
+    for (const [x, z, outX, outZ] of rimPoints(circle, PEBBLE_SPACING, random)) {
+      if (random() > PEBBLE_SHARE) continue;
+      const inset = 0.15 + random() * 0.5;
+      const at = { x: x + outX * inset * landwards, z: z + outZ * inset * landwards };
+      // Real pebble size: any smaller and they vanish into the grass.
+      const scale = 1 + random() * 0.35;
+      // Lengthways along the shore, give or take.
+      const yaw = Math.atan2(outX, outZ) + Math.PI / 2 + (random() - 0.5) * 0.6;
+      // On the bank, not under water nor up inside an island where two of its circles overlap.
+      const depth = lakeDepthAt(lake, at.x, at.z);
+      if (depth > -0.05 || depth < -1.5 || groundHeightAt(at.x, at.z) < lake.level) continue;
+      if (excludePlantsAt(at.x, at.z)) continue;
+      const laid = patch.clone().scale(scale, scale, scale).rotateY(yaw);
+      const positions = laid.getAttribute('position');
+      for (let vertex = 0; vertex < positions.count; vertex++) {
+        const ground = groundHeightAt(at.x + positions.getX(vertex), at.z + positions.getZ(vertex));
+        positions.setY(vertex, positions.getY(vertex) + ground);
+      }
+      builder.add(polyforkPaint, laid, placed(at.x, 0, at.z));
+    }
+  };
+  for (const circle of lake.basin) along(circle, 1);
+  // An island's bank is inside its own circles.
+  for (const island of lake.islands) for (const lobe of island.lobes) along(lobe, -1);
 }

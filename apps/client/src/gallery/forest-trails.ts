@@ -191,6 +191,11 @@ export async function showForestTrails(
       eye: [-6, terrain.heightAt(-6, 50) + 7, 50],
     },
     overlook: { label: 'Lake overlook', target: [174, 17, -80], eye: [149, 35, -40] },
+    shore: {
+      label: 'Lake shore',
+      target: [68.6, terrain.heightAt(68.6, -54.2), -54.2],
+      eye: [70, terrain.heightAt(70, -51) + 1.3, -51],
+    },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
   } as const;
   const nav = document.createElement('nav');

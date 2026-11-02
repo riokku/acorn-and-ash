@@ -19,7 +19,10 @@ import { createForageModel, createMealModel } from '../scene/forest-food';
 import { DISCOVERIES, parseSeason } from '@acorn/shared';
 import { createSeasonRig } from '../scene/seasons';
 import { createSeasonFall } from '../scene/season-fall';
-import { createFlatTerrain } from '@acorn/shared';
+import { createFlatTerrain, GATHER_PATCH_MAX_COUNT } from '@acorn/shared';
+import { lakePebblesGeometry } from '../scene/lake';
+import { polyforkGroup } from '../scene/polyfork-piece';
+import { createPileModel } from '../scene/ground-items';
 import { createEncounterLandmarks } from '../scene/encounter-sites';
 import * as THREE from 'three/webgpu';
 
@@ -367,6 +370,30 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'woodland', x: -32, z: -14, view: 10, create: createWoodland },
   // The layers on dug tunnel walls, painted in Blender (see dug-earth.ts).
   { name: 'dug-earth', x: -16, z: 8, view: 9, create: createDugEarth },
+  // Polyfork's lake pebbles, laid along the lake's banks (see lake.ts).
+  {
+    name: 'lake-pebbles',
+    x: -28,
+    z: -4,
+    view: 3,
+    create: () =>
+      polyforkGroup(
+        'lake-pebbles',
+        [lakePebblesGeometry()].filter((g) => g !== undefined),
+      ),
+  },
+  // A full patch of wildflowers to pick: Polyfork's wildflower (see flower-models.ts).
+  {
+    name: 'wildflowers',
+    x: -28,
+    z: 2,
+    view: 1.6,
+    create: () => {
+      const patch = createPileModel('flower');
+      patch.show(GATHER_PATCH_MAX_COUNT);
+      return patch;
+    },
+  },
   // A tunnel propped with mine supports (see mine-supports.ts).
   { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
   // The hanging mine lantern, made in Blender (see mine-lantern.ts).
