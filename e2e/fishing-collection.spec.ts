@@ -230,9 +230,15 @@ test('keeps saved species pages and journal tabs readable in wide and narrow win
     const rect = (await journal.boundingBox())!;
     expect(rect.x).toBeGreaterThanOrEqual(0);
     expect(rect.x + rect.width).toBeLessThanOrEqual(600);
-    await page.getByRole('button', { name: 'Crafting', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Fishing', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Fishing', exact: true }).click();
+    // The minimap shares this corner at compact widths. Click tab centres,
+    // rather than calling Locator.click, so this catches any HUD layering that
+    // would intercept a player's pointer.
+    for (const name of ['Crafting', 'Discoveries', 'Expeditions', 'Fishing']) {
+      const tab = page.getByRole('button', { name, exact: true });
+      const box = (await tab.boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    }
     await expect(journal).toContainText('Best 55 cm');
   } finally {
     closed = true;
