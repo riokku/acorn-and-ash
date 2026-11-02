@@ -1,9 +1,40 @@
 import * as THREE from 'three/webgpu';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ModelBuilder, placed } from '../art/shapes';
 import { paintedMaterial } from '../art/materials';
+import { polyforkPaint, polyforkPiece } from './polyfork-piece';
 
-/** A cedar trail board with three weathered notices, merged into five draw calls. */
-export function createExpeditionBoard() {
+/**
+ * Polyfork's free Camp Notice Board (decision 0272), roof, notices and
+ * leaflets, shrunk from 2.2 m wide and 2.4 m tall so it stands beside the
+ * door without reaching the tent or cabin.
+ */
+const NOTICE_BOARD_SCALE = 0.8;
+const noticeBoard = polyforkPiece(
+  'camp-notice-board',
+  new THREE.Matrix4().makeScale(NOTICE_BOARD_SCALE, NOTICE_BOARD_SCALE, NOTICE_BOARD_SCALE),
+);
+let mergedBoard: THREE.BufferGeometry | null | undefined;
+
+/**
+ * Polyfork's board once it has downloaded; otherwise a cedar trail board with
+ * three weathered notices, merged into five draw calls. Each board gets its
+ * own geometry, because the home stretches its feet down to the ground.
+ */
+export function createExpeditionBoard(): { group: THREE.Group; dispose(): void } {
+  const parts = noticeBoard.parts();
+  if (parts !== undefined) mergedBoard ??= mergeGeometries([...parts.values()]);
+  if (mergedBoard) {
+    const geometry = mergedBoard.clone();
+    const mesh = new THREE.Mesh(geometry, polyforkPaint);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const group = new THREE.Group();
+    group.name = 'expedition-board';
+    group.add(mesh);
+    return { group, dispose: () => geometry.dispose() };
+  }
+
   const cedar = paintedMaterial('wood', { tint: 0x9b7650, roughness: 1 });
   const dark = paintedMaterial('wood', { tint: 0x574333, roughness: 1 });
   const paper = paintedMaterial('burlap', { tint: 0xe1cea0, roughness: 1 });
