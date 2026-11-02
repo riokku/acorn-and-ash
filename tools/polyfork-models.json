@@ -66,6 +66,18 @@
       "id": "log-cabin-4fac3b",
       "title": "Log Cabin",
       "page": "https://polyfork.dev/asset/log-cabin-4fac3b"
+    },
+    {
+      "name": "wooden-bench",
+      "id": "wooden-bench-02e2c8",
+      "title": "Wooden Bench",
+      "page": "https://polyfork.dev/asset/wooden-bench-02e2c8"
+    },
+    {
+      "name": "campsite-picnic-table",
+      "id": "campsite-picnic-table-361d51",
+      "title": "Campsite Picnic Table",
+      "page": "https://polyfork.dev/asset/campsite-picnic-table-361d51"
     }
   ]
 }

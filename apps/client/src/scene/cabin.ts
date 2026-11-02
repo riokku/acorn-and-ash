@@ -138,7 +138,7 @@ export function createCabin(logCapacity = 20): Cabin {
   const base = supports.build();
   const woodpile = createLogsModel(logCapacity, true);
   woodpile.show(0);
-  const shelf = createHomeDecoration('cedarBench');
+  const shelf = createHomeDecoration('cedarBench', false);
   shelf.group.rotation.y = Math.PI / 2;
   shelf.group.scale.set(((logCapacity > 20 ? 10 : 5) * 0.28) / 1.7, 0.85, 0.95 / 0.46);
   const storage = new THREE.Group();
