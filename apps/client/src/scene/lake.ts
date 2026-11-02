@@ -13,7 +13,7 @@ import {
 import { createIceMaterial, createWaterMaterial, paintedMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
 import { ModelBuilder, placed, stoneGeometry } from '../art/shapes';
-import { addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
+import { addLilyDrift, addLilyPad, addReedClump, waterPlantMaterials } from './water-plants';
 import { buryGeometryBase } from './prop-grounding';
 
 /** Round discs are cut finely so the water's outline never shows corners, even on the big blobs. */
@@ -151,6 +151,7 @@ export function createLakeScene(
     plantMaterials.petal,
     plantMaterials.petalPink,
     plantMaterials.heart,
+    plantMaterials.polyforkPad,
   ]);
 
   return {
@@ -252,6 +253,13 @@ function createShorePlants(
     if (depth < 1.4 || depth > 4.5) continue;
     if (excludePlantsAt(at.x, at.z)) continue;
     const flower = random() < 0.3 ? (random() < 0.5 ? 'white' : 'pink') : null;
+    // Some spots hold a whole drift of pads instead of one.
+    const drift = random() < 0.15;
+    const turn = random() * Math.PI * 2;
+    if (drift && addLilyDrift(builder, plants, at, turn, 0.8 + random() * 0.3, surfaceHeightAt)) {
+      placedPads += 1;
+      continue;
+    }
     addLilyPad(
       builder,
       plants,

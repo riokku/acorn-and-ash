@@ -16,6 +16,13 @@ rejected. A pull request uses about 150 minutes of GitHub Actions time, and
 there were about 78 of them last month. A private repo on the free plan gets
 about 2,000 minutes a month.
 
+In November 2026 Chris picked more from a side-by-side sheet: lily pads and
+reeds, the camp notice board, flower bed, seedling tray, common chest, four
+rocks, the red fox, firewood stack, lake pebbles, fallen log, dead tree,
+exposed roots, wildflower, black bear and duck. They arrive one family per
+pull request, starting with the lily pads and reeds; the manifest is the list
+of what is in.
+
 ## Decision
 
 - **Never commit the files.** `tools/polyfork-models.json` lists each model
