@@ -119,6 +119,11 @@ export async function showHomestead(
     camera.position.set(8, 7, 13);
     camera.lookAt(0.4, 0.6, 2.4);
   }
+  if (params.has('garden')) {
+    // Close up on the kitchen garden's three growing trays.
+    camera.position.set(3.6, 1.4, 3.3);
+    camera.lookAt(2.8, 0.15, 1.4);
+  }
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
