@@ -163,12 +163,12 @@ function positionOf(text: string): { x: number; z: number } {
 }
 
 test.describe('the Home screen', () => {
-  test('shows a name field and a character picker, all six unlocked', async ({ page }) => {
+  test('shows a name field and a character picker, both bodies unlocked', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#home-name')).toBeVisible();
 
     const characters = page.locator('.home-character');
-    await expect(characters).toHaveCount(6);
+    await expect(characters).toHaveCount(2);
     for (const character of await characters.all()) {
       await expect(character).toBeEnabled();
     }
