@@ -2585,7 +2585,7 @@ describe('trees growing back', () => {
       if (sim.isFelled(tree.id)) break;
     }
     if (!sim.isFelled(tree.id)) throw new Error('the tree never came down');
-    return { tree, dueAt: regrowDueAtMs(sim.seed, tree.id, 0, felledAt) };
+    return { tree, felledAt, dueAt: regrowDueAtMs(sim.seed, tree.id, 0, felledAt) };
   }
 
   it('leaves the stump alone until its time is up', () => {
@@ -2595,6 +2595,28 @@ describe('trees growing back', () => {
 
     expect(sim.regrowTrees(dueAt - 60_000)).toEqual([]);
     expect(sim.isFelled(tree.id)).toBe(true);
+  });
+
+  it('brings a stump already down back in seconds once a browser test fast-forwards', () => {
+    const sim = createWorld();
+    sim.addPlayer(1, withAxe(1));
+    const { tree, felledAt, dueAt } = fell(sim, 1, 'birch');
+    sim.placePlayer(1, { x: 0, y: 0, z: 0 }, 0);
+
+    sim.setTestRegrowSeconds(5);
+    const quickDueAt = regrowDueAtMs(sim.seed, tree.id, 0, felledAt, 5);
+    expect(quickDueAt - felledAt).toBeLessThanOrEqual(10_000);
+    expect(quickDueAt).toBeLessThan(dueAt);
+    expect(sim.regrowTrees(quickDueAt - 1)).toEqual([]);
+    expect(sim.regrowTrees(quickDueAt)).toEqual([{ treeId: tree.id, generation: 1 }]);
+  });
+
+  it('ignores a fast-forward that is not a sensible number of seconds', () => {
+    const sim = createWorld();
+    const before = sim.regrowMinSeconds;
+    sim.setTestRegrowSeconds(0);
+    sim.setTestRegrowSeconds(Number.NaN);
+    expect(sim.regrowMinSeconds).toBe(before);
   });
 
   it('brings the tree back once it is due', () => {

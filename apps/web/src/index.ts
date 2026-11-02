@@ -229,7 +229,9 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
  * for a season asked for with `?season=` (decision 0089), which only goes on
  * to the world from your own machine and pull request previews: anywhere else
  * the seasons follow the world's own clock. And likewise for `?gear=`
- * (decision 0113), which hands out one of every piece of gear for trying on.
+ * (decision 0113), which hands out one of every piece of gear for trying on,
+ * and `?quickRegrow` (decision 0279), which only the browser tests' own world
+ * server honours anyway.
  */
 function asPlayer(request: Request, playerKey: string, mayPickSeason = false): Request {
   const url = new URL(request.url);
@@ -237,6 +239,7 @@ function asPlayer(request: Request, playerKey: string, mayPickSeason = false): R
   if (!mayPickSeason) {
     url.searchParams.delete('season');
     url.searchParams.delete('gear');
+    url.searchParams.delete('quickRegrow');
   }
   return new Request(url, request);
 }

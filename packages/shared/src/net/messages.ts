@@ -68,6 +68,8 @@ export const ClientMessageType = {
   DigTarget: 0x0f,
   PlaceSupport: 0x10,
   Fire: 0x11,
+  /** Browser tests only (decision 0279): honoured where `WORLD_ALLOW_TEST_SHORTCUTS` is set. */
+  TestPlace: 0x12,
 } as const;
 
 /** What the server says back. */
@@ -216,6 +218,18 @@ export interface SetDoorLockMessage {
 }
 
 /**
+ * Put me here, facing this way: a shortcut for browser tests whose subject is
+ * not walking (decision 0279). Only a server set up for the browser tests
+ * (`WORLD_ALLOW_TEST_SHORTCUTS`) honours it; every other server ignores it.
+ */
+export interface TestPlaceMessage {
+  readonly type: 'testPlace';
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+}
+
+/**
  * Introduce yourself: the name, character, tint and skin tone picked on the
  * Home screen.
  *
@@ -284,6 +298,7 @@ export type ClientMessage =
   | DigTargetMessage
   | PlaceSupportMessage
   | SetDoorLockMessage
+  | TestPlaceMessage
   | DiscardMessage
   | LootMessage;
 

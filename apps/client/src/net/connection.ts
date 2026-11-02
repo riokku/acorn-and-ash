@@ -22,6 +22,7 @@ import {
   encodeInputBundle,
   encodePing,
   encodeSetDoorLock,
+  encodeTestPlace,
   encodeDigTarget,
   encodePlaceSupport,
   encodeUseItem,
@@ -262,6 +263,12 @@ export class WorldConnection {
     this.socket.send(encodeSetDoorLock(locked));
   }
 
+  /** A browser test asking to stand somewhere (decision 0279); ignored by real servers. */
+  sendTestPlace(spot: { x: number; z: number; yaw: number }): void {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(encodeTestPlace(spot));
+  }
+
   /** Stand a mine support in this cell of tunnel (decision 0119). */
   sendPlaceSupport(cell: SupportCell): void {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
@@ -430,7 +437,8 @@ export class WorldConnection {
  * testing. Only the first browser into an empty world sets it, and only on
  * your own machine and pull request previews; everywhere else it is left out
  * on the way (decision 0095). `?gear=` goes along the same way, asking for
- * one of every piece of gear to try on (decision 0113).
+ * one of every piece of gear to try on (decision 0113), and so does a browser
+ * test's `?quickRegrow` (decision 0279).
  */
 export function worldSocketUrl(
   worldId: string,
@@ -447,6 +455,8 @@ export function worldSocketUrl(
   base.search = asked.toString();
   const weather = new URL(currentHref).searchParams.get('weather');
   if (weather === 'storm' || weather === 'blizzard') base.searchParams.set('weather', weather);
+  if (new URL(currentHref).searchParams.has('quickRegrow'))
+    base.searchParams.set('quickRegrow', '');
   base.hash = '';
   return base.toString();
 }

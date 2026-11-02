@@ -77,4 +77,14 @@ export interface WorldEnv extends Pick<Env, 'WORLD' | 'ITEM_CATALOG'> {
    * staging and production.
    */
   readonly WORLD_ALLOW_TEST_GEAR?: string;
+  /**
+   * Set to "1" to honour the browser tests' shortcuts (decision 0279): a test
+   * may ask, with `?quickRegrow`, for felled trees to come back in seconds,
+   * and may send a `testPlace` message to stand next to whatever it is about
+   * to use instead of walking there.
+   *
+   * Set for the browser tests (`e2e`) and the server's own tests only. Never
+   * on local runs, previews, staging or production, where players could use it.
+   */
+  readonly WORLD_ALLOW_TEST_SHORTCUTS?: string;
 }

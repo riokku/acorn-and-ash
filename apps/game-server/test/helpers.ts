@@ -30,6 +30,7 @@ import {
   encodeInputBundle,
   encodePing,
   encodeSetDoorLock,
+  encodeTestPlace,
   encodeGear,
   type GearRequest,
   encodeUseItem,
@@ -110,11 +111,13 @@ export class TestClient {
     playerKey?: string,
     season?: string,
     gear = false,
+    quickRegrow = false,
   ): Promise<TestClient> {
     const params = new URLSearchParams();
     if (playerKey !== undefined) params.set('player', playerKey);
     if (season !== undefined) params.set('season', season);
     if (gear) params.set('gear', 'all');
+    if (quickRegrow) params.set('quickRegrow', '');
     const query = params.size === 0 ? '' : `?${params}`;
     const response = await SELF.fetch(`https://game.test/worlds/${worldId}/ws${query}`, {
       headers: { Upgrade: 'websocket' },
@@ -181,6 +184,11 @@ export class TestClient {
 
   useItem(item: ItemId): void {
     this.socket.send(encodeUseItem(item));
+  }
+
+  /** The browser tests' shortcut past a walk (decision 0279). */
+  testPlace(spot: { x: number; z: number; yaw: number }): void {
+    this.socket.send(encodeTestPlace(spot));
   }
 
   /**

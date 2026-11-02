@@ -1262,7 +1262,11 @@ export class WorldSimulation {
     homeRoomColliders(),
     HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
   );
-  readonly regrowMinSeconds: number;
+  /** Set once at creation, except for a browser test that asks to fast-forward it. */
+  private treeRegrowMinSeconds: number;
+  get regrowMinSeconds(): number {
+    return this.treeRegrowMinSeconds;
+  }
   readonly patchRegrowMinSeconds: number;
   readonly reedRegrowMinSeconds: number;
   readonly hungerDrainPerSecond: number;
@@ -1278,6 +1282,14 @@ export class WorldSimulation {
   private testWeather: 'storm' | 'blizzard' | null = null;
   setTestWeather(weather: 'storm' | 'blizzard' | null): void {
     this.testWeather = weather;
+  }
+  /**
+   * Felled trees come back after `seconds` to twice it, from now on, including
+   * ones already down. Only the browser tests ask for this (decision 0279), so
+   * a tree growing back is a few seconds' wait rather than minutes.
+   */
+  setTestRegrowSeconds(seconds: number): void {
+    if (Number.isFinite(seconds) && seconds > 0) this.treeRegrowMinSeconds = seconds;
   }
   weather() {
     const weather = forestWeather(this.seed, this.tick * TICK_MILLISECONDS, this.calendar());
@@ -1897,7 +1909,7 @@ export class WorldSimulation {
 
   constructor(options: WorldSimulationOptions) {
     this.seed = options.seed;
-    this.regrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
+    this.treeRegrowMinSeconds = options.regrowMinSeconds ?? REGROW_MIN_SECONDS;
     this.patchRegrowMinSeconds = options.patchRegrowMinSeconds ?? PATCH_REGROW_MIN_SECONDS;
     this.reedRegrowMinSeconds = options.reedRegrowMinSeconds ?? REED_REGROW_MIN_SECONDS;
     this.hungerDrainPerSecond = hungerDrainPerSecond(

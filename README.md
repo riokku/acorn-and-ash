@@ -1237,10 +1237,17 @@ Worker walking fixtures wait for input acknowledgements and a stopped position
 before reaching for loot, so a busy runner cannot carry a test player past the
 bag or axe while the test reads an older snapshot.
 
-`pnpm test:e2e` takes several minutes: one of the tests chops a tree down and
-then waits for it to grow back, and another waits at the pond for a bite. It
-runs the world in the `e2e` environment, where skeleton raids are put off for
-a day so one cannot knock the test player out halfway through.
+`pnpm test:e2e` takes several minutes: one of the tests waits at the pond for a
+bite, and many walk across the clearing. It runs the world in the `e2e`
+environment, where skeleton raids are put off for a day so one cannot knock the
+test player out halfway through.
+
+The `e2e` environment alone also honours two test shortcuts
+(`WORLD_ALLOW_TEST_SHORTCUTS`). A test that opens its world with `?quickRegrow`
+sees a chopped tree grow back in seconds. A test that calls `skipWalks(page)` is
+stood a step short of the axe, tree or patch it needs instead of walking there.
+Tests about moving never use it, and no other server honours either shortcut
+(see [decision 0279](docs/decisions/0279-browser-test-shortcuts.md)).
 
 Gameplay tests skip the
 actual drawing (they stop the browser sending triangles to the graphics card), because the browsers in

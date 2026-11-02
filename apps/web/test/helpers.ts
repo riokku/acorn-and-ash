@@ -38,11 +38,21 @@ export async function playerSeenByWorld(
   cookie: string,
   extraQuery = '',
   site = SITE,
-): Promise<{ status: number; player: string | null; season: string | null }> {
+): Promise<{
+  status: number;
+  player: string | null;
+  season: string | null;
+  quickRegrow: boolean;
+}> {
   const response = await SELF.fetch(`${site}/api/worlds/home-clearing/ws${extraQuery}`, {
     headers: { Upgrade: 'websocket', cookie },
   });
-  if (response.status !== 200) return { status: response.status, player: null, season: null };
-  const body = (await response.json()) as { player: string | null; season: string | null };
-  return { status: 200, player: body.player, season: body.season };
+  if (response.status !== 200)
+    return { status: response.status, player: null, season: null, quickRegrow: false };
+  const body = (await response.json()) as {
+    player: string | null;
+    season: string | null;
+    quickRegrow: boolean;
+  };
+  return { status: 200, player: body.player, season: body.season, quickRegrow: body.quickRegrow };
 }
