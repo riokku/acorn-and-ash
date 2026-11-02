@@ -374,6 +374,7 @@ import { createGardenPath, type GardenPath } from './scene/garden-path';
 import { createCritterFor } from './scene/wildlife-models';
 import { preloadCanoeModel } from './scene/canoe-model';
 import { preloadRabbitModel } from './scene/rabbit-model';
+import { preloadTentModel } from './scene/tent-model';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -1265,6 +1266,7 @@ export class Game {
     void preloadFoxModel();
     void preloadCanoeModel();
     void preloadRabbitModel();
+    void preloadTentModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
     void preloadRaiderModels();
@@ -3131,6 +3133,7 @@ export class Game {
           preloadFoxModel(),
           preloadCanoeModel(),
           preloadRabbitModel(),
+          preloadTentModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
           preloadRaiderModels(),
