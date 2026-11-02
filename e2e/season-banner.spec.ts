@@ -1,3 +1,4 @@
+import { hudValue } from './hud-diagnostics';
 import { expect, test, type Page } from './fixtures';
 
 import { skipDrawing } from './skip-drawing';
@@ -128,8 +129,7 @@ test.describe('in the game', () => {
     const ring = page.getByTestId('season-ring');
     await expect(ring).toBeVisible();
 
-    const row = page.locator('.hud-row', { hasText: 'Season' }).first();
-    const line = (await row.locator('span').nth(1).innerText()).trim();
+    const line = await hudValue(page, 'Season');
     const [name, day] = /^(\w+), day (\d) of 6$/.exec(line)!.slice(1) as [string, string];
     await expect(ring).toHaveAttribute('data-season', name.toLowerCase());
     await expect(ring).toHaveAttribute('aria-label', `${name}, day ${day} of 6`);
