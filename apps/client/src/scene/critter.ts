@@ -2,9 +2,11 @@ import * as THREE from 'three/webgpu';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed } from '../art/shapes';
+import { createRabbitModel } from './rabbit-model';
 
 /**
- * A rabbit (see decision 0053): a round, soft-furred body sitting on big
+ * A rabbit: Polyfork's Forest Rabbit once rabbit-model.ts has loaded it,
+ * otherwise this placeholder (see decision 0053): a round, soft-furred body sitting on big
  * hind feet, a head with long ears laid back, dark bright eyes, a pink nose
  * and a white powder-puff tail. Low to the ground, so it reads as something
  * that scurries rather than walks.
@@ -14,6 +16,8 @@ import { ModelBuilder, placed } from '../art/shapes';
  */
 export interface Critter {
   readonly group: THREE.Group;
+  /** Plays the model's own gait at this speed (m/s); only the real rabbit has one. */
+  animate?(deltaSeconds: number, speed: number): void;
   dispose(): void;
 }
 
@@ -31,6 +35,9 @@ export function ellipsoid(
 }
 
 export function createCritter(): Critter {
+  const real = createRabbitModel();
+  if (real !== undefined) return real;
+
   const fur = paintedMaterial('fur', { tint: 0xb89470, roughness: 1, flatShading: true });
   const cream = paintedMaterial('fur', { tint: 0xf3eadb, roughness: 1, flatShading: true });
   const innerEar = plainMaterial(0xe8b4a8, { roughness: 0.9, flatShading: true });
