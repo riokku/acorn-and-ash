@@ -1,4 +1,5 @@
 import { RUMORS, rememberedRumors, TRAIL_PENNANT_SKILL } from '@acorn/shared';
+import { BuildableIcon } from './item-icons';
 
 /** A permanent record beside the home projects, with an earned object to bring into the world. */
 export function HomeStories({
@@ -25,6 +26,13 @@ export function HomeStories({
         {RUMORS.map((rumor) => (
           <li key={rumor.id} data-remembered={remembered.some((r) => r.id === rumor.id)}>
             <span aria-hidden="true">{remembered.some((r) => r.id === rumor.id) ? '✓' : '◇'}</span>{' '}
+            {remembered.some((r) => r.id === rumor.id) ? (
+              <BuildableIcon
+                kind="trailPennant"
+                color="#496342"
+                className="homestead-story-stamp"
+              />
+            ) : null}
             {rumor.name}
             {remembered.some((r) => r.id === rumor.id) ? ' · brought home' : ' · a trail ahead'}
           </li>

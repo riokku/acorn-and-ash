@@ -1,6 +1,23 @@
 import { ITEM_KINDS } from '../item-catalog';
 import { DISCOVERIES, discoveryKnown, type DiscoveryKind } from '@acorn/shared';
 import type { HudState } from './store';
+import campArt from '@assets/ui/discoveries/camp.webp?url';
+import loggingArt from '@assets/ui/discoveries/logging.webp?url';
+import groveArt from '@assets/ui/discoveries/grove.webp?url';
+import shrineArt from '@assets/ui/discoveries/shrine.webp?url';
+import elkGroveArt from '@assets/ui/discoveries/elkGrove.webp?url';
+import raccoonHollowArt from '@assets/ui/discoveries/raccoonHollow.webp?url';
+import guardianHollowArt from '@assets/ui/discoveries/guardianHollow.webp?url';
+
+const DISCOVERY_ART: Record<DiscoveryKind, string> = {
+  camp: campArt,
+  logging: loggingArt,
+  grove: groveArt,
+  shrine: shrineArt,
+  elkGrove: elkGroveArt,
+  raccoonHollow: raccoonHollowArt,
+  guardianHollow: guardianHollowArt,
+};
 
 export function JournalTabs({
   selected,
@@ -74,7 +91,19 @@ export function DiscoveryJournal({
             key={discovery.id}
             className={`discovery-entry${known ? ' discovery-entry-found' : ''}`}
           >
-            <Sketch kind={discovery.kind} />
+            {known ? (
+              <img
+                className="discovery-art"
+                src={DISCOVERY_ART[discovery.kind]}
+                data-discovery-kind={discovery.kind}
+                width={78}
+                height={64}
+                alt=""
+                aria-hidden="true"
+              />
+            ) : (
+              <Sketch kind={discovery.kind} />
+            )}
             <div>
               <h3>{discovery.name}</h3>
               <p>{known ? discovery.note : discovery.clue}</p>
