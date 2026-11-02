@@ -73,6 +73,10 @@
         "WORLD_ABANDONED_SECONDS": "120",
         "WORLD_ALLOW_TEST_SEASON": "1",
         "WORLD_ALLOW_TEST_GEAR": "1",
+        // Browser-test shortcuts (decision 0279): trees back in seconds when a
+        // test asks, and standing next to a target instead of walking there.
+        // Only ever here, never on a preview, staging or production.
+        "WORLD_ALLOW_TEST_SHORTCUTS": "1",
       },
     },
     // One of these is deployed per pull request, renamed on the command line to

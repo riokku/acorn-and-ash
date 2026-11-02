@@ -65,6 +65,7 @@ import {
   HUNGER_MAX,
   MAX_GESTURES_PER_MESSAGE,
   MAX_PLAYERS_PER_WORLD,
+  OUTDOORS,
   ROD_PICKUP_ID,
   SAVE_INTERVAL_TICKS,
   SLOW_TICK_BUDGET_MS,
@@ -158,6 +159,12 @@ interface ConnectionAttachment {
 
 /** A player key is supplied by the client, so it is checked before it is trusted. */
 const PLAYER_KEY_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * The shortest a felled tree takes to come back in a browser test that asks
+ * with `?quickRegrow` (decision 0279): it returns within this and twice it.
+ */
+const TEST_QUICK_REGROW_SECONDS = 4;
 
 /**
  * Every table that holds one row per player, keyed by `player_key`: all there
@@ -370,6 +377,9 @@ export class World extends DurableObject<WorldEnv> {
       simulation.setCalendarShift(
         clockShiftForSeason(simulation.seed, simulation.tick * TICK_MILLISECONDS, season),
       );
+    // Felled trees back in seconds, asked for by a browser test (decision 0279).
+    if (this.testQuickRegrow(url) && earlier === null && simulation.playerCount === 0)
+      simulation.setTestRegrowSeconds(TEST_QUICK_REGROW_SECONDS);
 
     if (earlier !== null) simulation.handOver(netId);
     else simulation.addPlayer(netId, playerKey ? this.loadPlayer(playerKey) : undefined, playerKey);
@@ -644,6 +654,20 @@ export class World extends DurableObject<WorldEnv> {
       // Private, never broadcast to other players or visitors.
       ws.send(encodeChestState(result));
       ws.send(encodeHomeSupplies(simulation.homeSuppliesOf(attachment.netId)));
+      return;
+    }
+    if (decoded.type === 'testPlace') {
+      // A browser-test shortcut past a walk that is not what the test is
+      // about (decision 0279). Every server not set up for the browser tests
+      // ignores it, and even there it only moves somebody who is outdoors.
+      if (this.env.WORLD_ALLOW_TEST_SHORTCUTS !== '1') return;
+      if (simulation.spaceOf(attachment.netId) !== OUTDOORS) return;
+      const ground = simulation.collision.terrain.heightAt(decoded.x, decoded.z);
+      simulation.placePlayer(
+        attachment.netId,
+        { x: decoded.x, y: ground, z: decoded.z },
+        decoded.yaw,
+      );
       return;
     }
     if (decoded.type === 'setDoorLock') {
@@ -1168,6 +1192,15 @@ export class World extends DurableObject<WorldEnv> {
    */
   private testGear(url: URL): boolean {
     return this.env.WORLD_ALLOW_TEST_GEAR === '1' && url.searchParams.has('gear');
+  }
+
+  /**
+   * Whether a browser test asked for trees to grow back in seconds with
+   * `?quickRegrow`, only where this server is set up for the browser tests
+   * (decision 0279). Previews, staging and production never take it.
+   */
+  private testQuickRegrow(url: URL): boolean {
+    return this.env.WORLD_ALLOW_TEST_SHORTCUTS === '1' && url.searchParams.has('quickRegrow');
   }
 
   private testSeason(url: URL): SeasonId | null {

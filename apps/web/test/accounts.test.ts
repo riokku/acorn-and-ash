@@ -151,6 +151,12 @@ describe('getting into a world', () => {
     expect(seen.player).toMatch(/^[0-9a-f]{32}$/);
   });
 
+  it('hands on the quick-regrowth test shortcut from your own machine only', async () => {
+    const { cookie } = await startAsTestPlayer();
+    expect((await playerSeenByWorld(cookie, '?quickRegrow')).quickRegrow).toBe(true);
+    expect((await playerSeenByWorld(cookie, '?quickRegrow', LIVE_SITE)).quickRegrow).toBe(false);
+  });
+
   it('notes that the account has been in a world, once', async () => {
     const { cookie } = await startAsTestPlayer();
     const { player } = await playerSeenByWorld(cookie);

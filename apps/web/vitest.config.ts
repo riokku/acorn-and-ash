@@ -37,6 +37,7 @@ const stubGameServer = `
         upgrade: request.headers.get('Upgrade'),
         player: url.searchParams.get('player'),
         season: url.searchParams.get('season'),
+        quickRegrow: url.searchParams.has('quickRegrow'),
       });
     }
   }

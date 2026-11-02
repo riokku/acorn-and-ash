@@ -28,6 +28,7 @@ export default defineConfig({
           WORLD_ABANDONED_SECONDS: '3',
           WORLD_ALLOW_TEST_SEASON: '1',
           WORLD_ALLOW_TEST_GEAR: '1',
+          WORLD_ALLOW_TEST_SHORTCUTS: '1',
         },
       },
     }),

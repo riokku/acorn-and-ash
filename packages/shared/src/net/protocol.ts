@@ -251,6 +251,8 @@ const CACHE_MESSAGE_BYTES = 4;
 const CRAFT_MESSAGE_BYTES = 2;
 /** type(1) + which kind(1) + x(2) + z(2) + yaw(2) */
 const BUILD_MESSAGE_BYTES = 8;
+/** type(1) + x(2) + z(2) + yaw(2) */
+const TEST_PLACE_MESSAGE_BYTES = 7;
 /** type(1) + which item to use(1) */
 const USE_ITEM_MESSAGE_BYTES = 2;
 const DIG_TARGET_MESSAGE_BYTES = 8;
@@ -381,6 +383,17 @@ export function encodeBuild(request: BuildRequest): ArrayBuffer {
   view.setInt16(2, clamp(quantisePosition(request.x), INT16_MIN, INT16_MAX), true);
   view.setInt16(4, clamp(quantisePosition(request.z), INT16_MIN, INT16_MAX), true);
   view.setUint16(6, quantiseAngle(request.yaw), true);
+  return buffer;
+}
+
+/** A browser test asking to stand somewhere (decision 0279); see `TestPlaceMessage`. */
+export function encodeTestPlace(spot: { x: number; z: number; yaw: number }): ArrayBuffer {
+  const buffer = new ArrayBuffer(TEST_PLACE_MESSAGE_BYTES);
+  const view = new DataView(buffer);
+  view.setUint8(0, ClientMessageType.TestPlace);
+  view.setInt16(1, clamp(quantisePosition(spot.x), INT16_MIN, INT16_MAX), true);
+  view.setInt16(3, clamp(quantisePosition(spot.z), INT16_MIN, INT16_MAX), true);
+  view.setUint16(5, quantiseAngle(spot.yaw), true);
   return buffer;
 }
 
@@ -779,6 +792,16 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
       x: dequantisePosition(view.getInt16(2, true)),
       z: dequantisePosition(view.getInt16(4, true)),
       yaw: dequantiseAngle(view.getUint16(6, true)),
+    };
+  }
+
+  if (type === ClientMessageType.TestPlace) {
+    if (data.byteLength !== TEST_PLACE_MESSAGE_BYTES) return null;
+    return {
+      type: 'testPlace',
+      x: dequantisePosition(view.getInt16(1, true)),
+      z: dequantisePosition(view.getInt16(3, true)),
+      yaw: dequantiseAngle(view.getUint16(5, true)),
     };
   }
 

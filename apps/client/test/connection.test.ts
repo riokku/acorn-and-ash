@@ -39,6 +39,12 @@ describe('finding the world server', () => {
     expect(url).toBe('wss://acorn.example/api/worlds/home-clearing/ws?season=winter');
   });
 
+  it('carries a browser test asking for trees to grow back quickly', () => {
+    const url = worldSocketUrl('home-clearing', 'http://localhost:8787/?world=x&quickRegrow');
+    expect(new URL(url).searchParams.has('quickRegrow')).toBe(true);
+    expect(new URL(url).searchParams.has('world')).toBe(false);
+  });
+
   it('asks for no season when the address did not', () => {
     const url = worldSocketUrl('home-clearing', 'https://acorn.example/?season=winter');
     expect(new URL(url).searchParams.has('season')).toBe(false);

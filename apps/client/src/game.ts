@@ -778,6 +778,12 @@ export interface GameDebug {
    * Smoke tests use it so they can walk somewhere without steering by hand.
    */
   faceTowards(x: number, z: number): void;
+  /**
+   * Ask the server to stand us here, facing `yaw` (decision 0279). A shortcut
+   * for browser tests whose subject is not the walk; only the browser-test
+   * server honours it, and every other one ignores the request.
+   */
+  testPlace(x: number, z: number, yaw: number): void;
   /** Project a world point for browser interaction tests, without changing game state. */
   screenPoint(x: number, y: number, z: number): { x: number; y: number } | null;
   cameraView(): ReturnType<FollowCamera['view']> | null;
@@ -1870,6 +1876,11 @@ export class Game {
         const yaw = Math.atan2(-(x - from.x), -(z - from.z));
         camera.look.yaw = yaw;
         this.aimYaw = yaw;
+      },
+      testPlace: (x, z, yaw) => {
+        if (this.camera !== null) this.camera.look.yaw = yaw;
+        this.aimYaw = yaw;
+        this.connection?.sendTestPlace({ x, z, yaw });
       },
       pond: () => (this.clearing?.water ?? []).map((circle) => ({ ...circle })),
       lake: () => ({

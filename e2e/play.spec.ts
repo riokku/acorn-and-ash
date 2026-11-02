@@ -73,6 +73,7 @@ declare global {
         refusal: string | null;
       } | null;
       faceTowards(x: number, z: number): void;
+      testPlace(x: number, z: number, yaw: number): void;
       pond(): Array<{ x: number; z: number; radius: number }>;
       lake(): { basin: Array<{ x: number; z: number; radius: number }>; islands: string[] };
       lakeFrozen(): boolean;
@@ -552,10 +553,65 @@ test('walking away from the clearing leads into generated wilderness, not a wall
  * reach: the bag lies a few steps from where everyone spawns, so "something is
  * in reach" is already true before the first step towards the axe.
  */
+/**
+ * Pages whose test is about what happens on arrival, not the walk there.
+ *
+ * Walking up to the axe, a tree or a stick patch in short steps takes up to a
+ * minute on a slow machine, and most tests here are about crafting, chopping
+ * or building rather than walking. Those opt in with `skipWalks`: the
+ * browser-test server stands the player a step short of the target (decision
+ * 0279), and the usual approach below takes the last step and checks reach as
+ * before. The tests about moving - walking, sprinting, dodging, jumping, the
+ * wilderness, the pond and two tabs - never opt in and still walk every metre.
+ */
+const pagesSkippingWalks = new WeakSet<Page>();
+
+function skipWalks(page: Page): void {
+  pagesSkippingWalks.add(page);
+}
+
+/** Stand `distance` short of a target, facing it, if this page skips walks. */
+async function standNear(page: Page, x: number, z: number, distance: number): Promise<void> {
+  if (!pagesSkippingWalks.has(page)) return;
+  const here = await page.evaluate(() => window.acornDebug?.localPosition());
+  if (here === undefined) return;
+  const gap = Math.hypot(here.x - x, here.z - z);
+  if (gap <= distance + 1) return;
+  // On the way from here to there, so whatever the walk would have arrived
+  // beside is what the player now stands beside.
+  const spot = {
+    x: x + ((here.x - x) / gap) * distance,
+    z: z + ((here.z - z) / gap) * distance,
+  };
+  const yaw = Math.atan2(-(x - spot.x), -(z - spot.z));
+  // Asked again each time round until it shows: a request sent while the
+  // connection is still settling is dropped, like any other. A spot inside a
+  // rock or stump is pushed clear, so this waits for the player to be near the
+  // target rather than exactly on the spot.
+  await expect
+    .poll(async () => {
+      const now = await page.evaluate(() => window.acornDebug?.localPosition());
+      const left = now === undefined ? Infinity : Math.hypot(now.x - x, now.z - z);
+      if (left >= distance + 1.5)
+        await page.evaluate(
+          ([spotX, spotZ, facing]) => window.acornDebug?.testPlace(spotX!, spotZ!, facing!),
+          [spot.x, spot.z, yaw],
+        );
+      return left;
+    })
+    .toBeLessThan(distance + 1.5);
+}
+
 async function walkWithinReachOf(page: Page, x: number, z: number, item: string): Promise<void> {
+  // Two metres short: the axe sits in a stump, and the last steps in are the
+  // same short ones a full walk ends with.
+  await standNear(page, x, z, 2);
   for (let step = 0; step < 80; step++) {
     const reachable = await page.evaluate(() => window.acornDebug?.nearbyItem() ?? null);
     if (reachable === item) return;
+    // Stood beside the last find, this one can be in reach too and come along
+    // with it, so there is nothing left to walk to.
+    if (pagesSkippingWalks.has(page) && (await countHeld(page, item)) > 0) return;
 
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
     const gap = Math.hypot((here?.x ?? 0) - x, (here?.z ?? 0) - z);
@@ -579,6 +635,7 @@ async function walkWithinReachOf(page: Page, x: number, z: number, item: string)
  * targets, such as a campfire, keep their original 1.5 metre approach distance.
  */
 async function walkOntoSpot(page: Page, x: number, z: number, pileId?: number): Promise<void> {
+  await standNear(page, x, z, 1);
   let previous: { x: number; z: number } | undefined;
   for (let step = 0; step < 80; step++) {
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
@@ -611,6 +668,7 @@ async function walkOntoSpot(page: Page, x: number, z: number, pileId?: number): 
 
 /** Walk to a gather spot until the game says something is in reach there. */
 async function walkWithinReachOfGatherSpot(page: Page, x: number, z: number): Promise<void> {
+  await standNear(page, x, z, 1);
   let previous: { x: number; z: number } | undefined;
   for (let step = 0; step < 80; step++) {
     if ((await page.evaluate(() => window.acornDebug?.nearGatherSpot() ?? null)) !== null) return;
@@ -717,6 +775,7 @@ async function walkWithinReachOfTree(
   // Every tree in the forest can be chopped now, so the first tree faced on the
   // way over is often a different one. Only the kind we came for counts.
   const wanted = treeName(tree.kind);
+  await standNear(page, tree.x, tree.z, PROP_KINDS[tree.kind as PropKindId].colliderRadius + 1);
   for (let step = 0; step < 80; step++) {
     const aimed = await page.evaluate(() => window.acornDebug?.aimedTree() ?? null);
     if (aimed?.name === wanted) return;
@@ -745,6 +804,7 @@ test('you can find the axe, pick it up, and still have it next time', async ({ b
   const context = await openBrowserContext(browser);
   // A fresh world, so the axe is definitely still in its stump.
   const page = await context.newPage();
+  skipWalks(page);
   await page.goto(`/?world=axe-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -806,6 +866,7 @@ test('equipping the axe shows it in your hand, and a nearby player can tell', as
   const equipper = await openTab(browser);
   const watcher = await openTab(browser);
 
+  skipWalks(equipper);
   await equipper.goto(`/?world=${worldId}`);
   await watcher.goto(`/?world=${worldId}`);
   await waitForConnected(equipper);
@@ -885,6 +946,7 @@ test('you can gather sticks and craft your own axe, without ever finding one', a
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=craft-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -943,6 +1005,7 @@ test('crafting a torch lets you equip it, lighting up in your hand', async ({ pa
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=torch-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -987,6 +1050,7 @@ test('you can drop sticks to pick up again, or destroy them for good', async ({ 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=drop-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -1161,6 +1225,7 @@ test('you can chop a tree down, and the stump is still there next time', async (
   // One context throughout, so coming back is the same player returning.
   const context = await openBrowserContext(browser);
   const page = await context.newPage();
+  skipWalks(page);
   await page.goto(`/?world=chop-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -1221,6 +1286,7 @@ test('you can chop a tree down, and the stump is still there next time', async (
 });
 
 test('a charged attack reaches a tree behind the player and drops logs', async ({ page }) => {
+  skipWalks(page);
   await page.goto(`/?world=charge-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -1275,11 +1341,14 @@ test('a charged attack reaches a tree behind the player and drops logs', async (
 });
 
 test('a chopped tree grows back on its own', async ({ browser }) => {
-  // Locally a tree takes two to four minutes to come back, and this waits it out.
-  test.setTimeout(600_000);
+  test.setTimeout(180_000);
   const context = await openBrowserContext(browser);
   const page = await context.newPage();
-  await page.goto(`/?world=regrow-${Date.now()}`);
+  skipWalks(page);
+  // Locally a tree takes two to four minutes to come back. The browser-test
+  // server fast-forwards that to four to eight seconds when asked (decision
+  // 0279), so this checks the regrowth itself without waiting minutes for it.
+  await page.goto(`/?world=regrow-${Date.now()}&quickRegrow`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
     timeout: 120_000,
@@ -1299,7 +1368,8 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   if (oak === undefined) throw new Error('no oak in the clearing');
   await walkWithinReachOfTree(page, oak);
   await chopUntilFelled(page, oak);
-  await collectFallenLogs(page);
+  // Straight away: in a few seconds it is coming back. Picking up the logs is
+  // the chopping test's business, not this one's.
   expect(await page.evaluate(() => window.acornDebug?.felledTrees())).toEqual([oak.id]);
 
   // Walk well away: a tree will not grow through somebody standing on it.
@@ -1308,13 +1378,12 @@ test('a chopped tree grows back on its own', async ({ browser }) => {
   await page.waitForTimeout(2500);
   await page.keyboard.up('KeyW');
 
-  // Locally and on a preview the shortest wait is two minutes rather than half
-  // an hour, and a tree takes between that and twice it, so this has to be
-  // willing to sit through four. Staging and production use the real wait.
+  // Four to eight seconds once nobody stands in the way, with room to spare
+  // on a slow machine. Staging and production use the real wait.
   await expect
     .poll(async () => (await page.evaluate(() => window.acornDebug?.felledTrees() ?? [])).length, {
-      timeout: 260_000,
-      intervals: [2_000],
+      timeout: 60_000,
+      intervals: [1_000],
     })
     .toBe(0);
 
@@ -1761,6 +1830,7 @@ test('you can find a masked raccoon and land a hit on it', async ({ page }) => {
  * is just as buildable.
  */
 async function walkToward(page: Page, target: { x: number; z: number }): Promise<void> {
+  await standNear(page, target.x, target.z, 1.5);
   for (let attempt = 0; attempt < 15; attempt++) {
     if (await page.evaluate(() => window.acornDebug?.canBuild() ?? false)) return;
     const here = await page.evaluate(() => window.acornDebug?.localPosition());
@@ -1934,6 +2004,7 @@ test('you can chop enough logs to build a campfire, and it is still there next t
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=build-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -2053,6 +2124,7 @@ test('you can light a campfire and put it out again', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=light-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -2143,6 +2215,7 @@ test('you can gather flowers and plant something pretty for the garden', async (
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
+  skipWalks(page);
   await page.goto(`/?world=flowers-${Date.now()}`);
   await waitForConnected(page);
   await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
@@ -2247,6 +2320,7 @@ test.describe('woods interaction polish', () => {
   });
 
   test('right-clicks world loot and keeps camera drags from looting', async ({ page }) => {
+    skipWalks(page);
     await page.goto(`/?renderer=webgl2&world=polish-${Date.now()}`);
     await waitForConnected(page);
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {

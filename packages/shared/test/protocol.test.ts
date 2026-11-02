@@ -10,6 +10,7 @@ import {
   encodePickupsTaken,
   encodePing,
   encodeBuild,
+  encodeTestPlace,
   encodeCraft,
   encodeUseItem,
   encodeDiscard,
@@ -783,6 +784,26 @@ describe('asking to build something', () => {
     const encoded = new Uint8Array(encodeBuild(cabin).slice(0));
     encoded[1] = 200;
     expect(decodeClientMessage(encoded.buffer)).toBeNull();
+  });
+});
+
+describe('a browser test asking to stand somewhere', () => {
+  const spot = { x: -12.5, z: 33.25, yaw: 2.4 };
+
+  it('keeps its fixed message id', () => {
+    expect(new Uint8Array(encodeTestPlace(spot))[0]).toBe(0x12);
+  });
+
+  it('survives a round trip, with where and which way', () => {
+    const decoded = decodeClientMessage(encodeTestPlace(spot));
+    if (decoded?.type !== 'testPlace') throw new Error('expected a test placement');
+    expect(decoded.x).toBeCloseTo(-12.5, 2);
+    expect(decoded.z).toBeCloseTo(33.25, 2);
+    expect(decoded.yaw).toBeCloseTo(2.4, 3);
+  });
+
+  it('refuses one that has been cut short', () => {
+    expect(decodeClientMessage(encodeTestPlace(spot).slice(0, 6))).toBeNull();
   });
 });
 
