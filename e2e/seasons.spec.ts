@@ -1,3 +1,4 @@
+import { hudValue } from './hud-diagnostics';
 import { expect, test, type Page } from './fixtures';
 
 /**
@@ -15,21 +16,16 @@ async function enterWorld(page: Page, search: string): Promise<void> {
   await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
 }
 
-async function seasonLine(page: Page): Promise<string> {
-  const row = page.locator('.hud-row', { hasText: 'Season' }).first();
-  return (await row.locator('span').nth(1).innerText()).trim();
-}
-
 test('shows which season it is, and which day of it', async ({ page }) => {
   await enterWorld(page, '');
   await expect
-    .poll(() => seasonLine(page))
+    .poll(() => hudValue(page, 'Season'))
     .toMatch(/^(Spring|Summer|Autumn|Winter), day [1-6] of 6$/);
 });
 
 test('winter is snowy, and the first day of it', async ({ page }) => {
   await enterWorld(page, 'season=winter');
-  await expect.poll(() => seasonLine(page)).toBe('Winter, day 1 of 6');
+  await expect.poll(() => hudValue(page, 'Season')).toBe('Winter, day 1 of 6');
   await expect
     .poll(() => page.evaluate(() => window.acornDebug?.snowOnGround() ?? 0))
     .toBeGreaterThan(0.99);
@@ -37,14 +33,14 @@ test('winter is snowy, and the first day of it', async ({ page }) => {
 
 test('the other seasons have no snow', async ({ page }) => {
   await enterWorld(page, 'season=summer');
-  await expect.poll(() => seasonLine(page)).toBe('Summer, day 1 of 6');
+  await expect.poll(() => hudValue(page, 'Season')).toBe('Summer, day 1 of 6');
   expect(await page.evaluate(() => window.acornDebug?.snowOnGround() ?? 1)).toBeLessThan(0.01);
 });
 
 test('ignores a season that does not exist', async ({ page }) => {
   await enterWorld(page, 'season=monsoon');
   await expect
-    .poll(() => seasonLine(page))
+    .poll(() => hudValue(page, 'Season'))
     .toMatch(/^(Spring|Summer|Autumn|Winter), day [1-6] of 6$/);
 });
 
@@ -80,7 +76,7 @@ test('snow falls in winter and nothing else does', async ({ page }) => {
 
 test('summer has no petals, leaves or snow in the air', async ({ page }) => {
   await enterWorld(page, 'season=summer');
-  await expect.poll(() => seasonLine(page)).toBe('Summer, day 1 of 6');
+  await expect.poll(() => hudValue(page, 'Season')).toBe('Summer, day 1 of 6');
   const air = await drifting(page);
   expect(air.petals).toBe(0);
   expect(air.leaves).toBe(0);
@@ -90,7 +86,7 @@ test('summer has no petals, leaves or snow in the air', async ({ page }) => {
 test('nothing falls for someone who asked for less movement', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await enterWorld(page, 'season=winter');
-  await expect.poll(() => seasonLine(page)).toBe('Winter, day 1 of 6');
+  await expect.poll(() => hudValue(page, 'Season')).toBe('Winter, day 1 of 6');
   await expect
     .poll(() => page.evaluate(() => window.acornDebug?.snowOnGround() ?? 0))
     .toBeGreaterThan(0.99);

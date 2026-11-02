@@ -1,3 +1,4 @@
+import { hudValue } from './hud-diagnostics';
 import { expect, test, type Browser, type BrowserContext, type Page } from './fixtures';
 
 import {
@@ -102,16 +103,6 @@ async function openBrowserContext(browser: Browser): Promise<BrowserContext> {
   const context = await browser.newContext();
   await skipDrawing(context);
   return context;
-}
-
-/** Read one labelled row out of the HUD panel. */
-async function hudValue(page: Page, label: string): Promise<string> {
-  if (label !== 'Server') {
-    const details = page.getByTestId('hud-diagnostics');
-    if ((await details.getAttribute('open')) === null) await details.locator('summary').click();
-  }
-  const row = page.locator('.hud-row', { hasText: label }).first();
-  return (await row.locator('span').nth(1).innerText()).trim();
 }
 
 /**
