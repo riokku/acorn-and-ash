@@ -3,6 +3,7 @@ import { createCritter } from './critter';
 import { createRaccoon } from './raccoon';
 import { createFox } from './fox';
 import { animateSmallAnimal } from './animal-motion';
+import { createDeerModel } from './deer-model';
 import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatures';
 
 /** The existing wildlife figure and its movement controller. */
@@ -30,7 +31,13 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
       return animateSmallAnimal(createRaccoon(), 'maskedRaccoon', phaseSeed);
     case 'fox':
       return animateSmallAnimal(createFox(), 'fox', phaseSeed);
-    case 'elk':
+    case 'elk': {
+      // Polyfork's Forest Deer once it has loaded; the cedar stag keeps its own figure.
+      const deer = createDeerModel();
+      return deer === undefined
+        ? createWoodlandCreature(kind, undefined, phaseSeed)
+        : animateSmallAnimal(deer, 'elk', phaseSeed);
+    }
     case 'curiousRaccoon':
     case 'woodlandGuardian':
       return createWoodlandCreature(kind, undefined, phaseSeed);
