@@ -1,6 +1,7 @@
 import { FISH_SPECIES, fishRecordsFromSaved, REEL_CYCLE, reelSteady } from '@acorn/shared';
 import type { HudState } from './store';
 import { JournalTabs } from './DiscoveryJournal';
+import { ItemIcon } from './item-icons';
 export function FishingJournal({
   state,
   onChange,
@@ -21,36 +22,9 @@ export function FishingJournal({
       <div className="fishing-species">
         {FISH_SPECIES.map((species, i) => (
           <article key={species.item}>
-            <svg viewBox="0 0 180 100" role="img" aria-label={`${species.name} illustration`}>
-              <path
-                d="M18 80 Q90 60 162 80 M26 88 Q90 74 154 88"
-                fill="none"
-                stroke="#9cae9d"
-                opacity=".5"
-              />
-              <path d="M132 48 L166 26 L160 66 Z" fill={species.color} />
-              <ellipse cx="87" cy="46" rx="51" ry="22" fill={species.color} />
-              <path d="M76 26 L95 9 L117 30 M79 58 L101 77 L118 59" fill={species.color} />
-              {species.item === 'perch' ? (
-                <path
-                  d="M63 28 L58 61 M79 25 L73 65 M96 26 L91 66"
-                  stroke="#3b4b40"
-                  strokeWidth="3"
-                  opacity=".4"
-                />
-              ) : species.item === 'trout' ? (
-                <>
-                  <path d="M42 49 Q84 43 133 46" fill="none" stroke="#bc7887" strokeWidth="5" />
-                  {[62, 81, 105, 121].map((x) => (
-                    <circle key={x} cx={x} cy="35" r="2" fill="#3b4b40" />
-                  ))}
-                </>
-              ) : (
-                <path d="M78 38L83 45L91 47L83 49L78 56L76 49L69 47L76 45Z" fill="#f4db87" />
-              )}
-              <circle cx="49" cy="41" r="3" fill="#26342b" />
-              <path d="M39 48 Q53 57 61 42" fill="none" stroke="#53694f" />
-            </svg>
+            <div className="fishing-species-art" aria-hidden="true">
+              <ItemIcon item={species.item} color={species.color} />
+            </div>
             <h3>{species.name}</h3>
             <p>{species.note}</p>
             <strong>

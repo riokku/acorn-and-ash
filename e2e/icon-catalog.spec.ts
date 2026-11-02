@@ -34,14 +34,16 @@ test('painted icon catalog visual review', async ({ page }) => {
   });
   expect(data.imageCount).toBe((await cards.count()) * 8);
   expect(new Set(data.ids).size).toBe(data.ids.length);
-  expect(data.atlases.length).toBe(6);
-  expect(data.loaded.length).toBe(6);
+  // Six shared icon sheets and one compact raid-threat sprite.
+  expect(data.atlases.length).toBe(7);
+  expect(data.loaded.length).toBe(7);
   await page.screenshot({ path: `${dir}/icons-board.png`, fullPage: true });
   for (const [name, pattern] of [
     ['requiem', /King.s Requiem/i],
     ['knife', /knife/i],
     ['compass', /^compass \(system\)$/i],
     ['health', /^health \(system\)$/i],
+    ['threat', /^raidThreat \(system\)$/i],
   ] as const) {
     const card = cards.filter({ has: page.getByRole('heading', { name: pattern }) }).first();
     await expect(card).toBeVisible();

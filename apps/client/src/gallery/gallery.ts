@@ -339,6 +339,11 @@ const SCENERY: readonly { kind: PropKindId; x: number; z: number; scale: number 
 export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const focus = params.get('gallery') ?? '';
+  if (focus === 'body-icons') {
+    const { showBodyIcon } = await import('./body-icons');
+    await showBodyIcon(canvas, params);
+    return;
+  }
   if (focus === 'backdrop') {
     const { showBackdrop } = await import('./backdrop');
     await showBackdrop(canvas);

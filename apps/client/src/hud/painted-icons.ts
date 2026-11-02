@@ -5,6 +5,7 @@ import relics from '../../../../assets/ui/item-relics.webp?url';
 import shelters from '../../../../assets/ui/item-shelters.webp?url';
 import foodDecor from '../../../../assets/ui/item-food-decor.webp?url';
 import systems from '../../../../assets/ui/item-systems.webp?url';
+import raidThreat from '../../../../assets/ui/raid-threat.webp?url';
 
 /** Visible alpha bounds in the source image, in pixels. */
 export interface ArtSpec {
@@ -109,6 +110,7 @@ export const PAINTED_ICONS: Partial<Record<ItemId | BuildableKindId, ArtSpec>> =
 };
 
 export const SYSTEM_ICONS = {
+  raidThreat: art(raidThreat, 256, [29, 21, 222, 214]),
   health: art(systems, 1254, [396, 426, 222, 192]),
   hunger: art(systems, 1254, [671, 411, 238, 222]),
   settings: art(systems, 1254, [975, 406, 238, 235]),
