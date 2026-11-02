@@ -14,8 +14,13 @@
 #     export_body(rig, 'knight', tmp_dir)                # assets/characters/knight.glb (Body 1)
 #     dwarf_bodies.render_views(out_dir, 'tag', ...)     # preview pictures
 #
-# The cleaned-up result is saved in assets/characters/soft-body1.blend. After exporting, refit the
-# moves with tools/retarget-dwarf-animations.mjs (see README).
+# Body 2 is the same with BODY2, prepare(raw, 'body2', tris=5400, head_tris=2900), her braids
+# from hair = build_hair(ob, BODY2) passed to attach(ob, rig, beards.values(), hair), and
+# export_body(rig, 'barbarian', tmp_dir). Every soft body shares one skeleton (BONES), so a body
+# whose arms sit elsewhere is moved onto it (arm_fit) rather than given bones of its own.
+#
+# The cleaned-up results are saved in assets/characters/soft-body1.blend and soft-body2.blend. If
+# the skeleton ever changes, refit the moves with tools/retarget-dwarf-animations.mjs (see README).
 #
 # Colours go by body part, measured on the model in metres, because Meshy's own model has no
 # colours: the shirt down to its hem with sleeves out to the elbow, the shorts, and bare skin
@@ -53,6 +58,25 @@ BODY1 = dict(
     smile=(1.047, .042, .011, .011),  # height, half-width, how far the corners turn up, how wide it opens
     skin='#ecb898', blush='#e0857a', shirt='#e2d3b6', shorts_colour='#6e4a34',
     brows='#5a3a2a', eyes_colour='#2a1d18', mouth='#7a2e28', beard='#5a3a2a',
+)
+
+# Body 2, the woman: blonde hair pulled back, with braids made here (build_hair). Her arms are
+# moved onto Body 1's skeleton so both share one set of moves (arm_fit). The hairline runs
+# (depth, height) from the forehead past the temples, behind the ears and round to the nape.
+BODY2 = dict(
+    id='body2',
+    arm_fit=(.04, .045, .03),  # raise, move back, lengthen
+    collar_front=(-.09, .895), collar_back=(.14, .925), collar_v=(.045, .85), shoulders=.19,
+    hem=.43, shorts=.275, sleeve=.38,
+    hairline=((-.135, 1.212), (-.11, 1.202), (-.04, 1.09), (.04, 1.05), (.12, .96), (.22, .945)),
+    ears=(.165, (-.015, .045), (1.03, 1.135)),
+    smooth=(((.068, 1.15), .045), ((.07, 1.095), .035)),  # Meshy's carved eye lines, under the new eyes
+    eyes=(.068, 1.132), eye_size=(.012, .0155), lashes=True,
+    brow=((.035, 1.168), (.07, 1.18), (.103, 1.173)), brow_thick=.018,
+    nose=((0, 1.067), .032), nose_base=-.134, nose_keep=1.0, cheeks=((.095, 1.05), .045),
+    smile=(1.022, .03, .008, .009), beard_shift=(-.019, -.025),  # her mouth, from Body 1's
+    skin='#eab08e', blush='#e0857a', shirt='#e2d3b6', shorts_colour='#6e4a34', hair='#e3b85c',
+    ties='#c0403a', brows='#b8893a', eyes_colour='#2a1d18', mouth='#7a2e28', beard='#d9ad55',
 )
 
 BEARD_STYLES = dwarf_bodies.BEARD_STYLES
@@ -133,6 +157,63 @@ def shorten_nose(ob, B):
     ob.data.update()
 
 
+def smoothstep(a, b, t):
+    t = min(1.0, max(0.0, (t - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def fit_arms(ob, lift, back, longer):
+    """Move the arms onto the shared skeleton's: up by `lift`, back by `back` and `longer` at the
+    hands, easing in from the shoulders so the body keeps its shape."""
+    for v in ob.data.vertices:
+        x, y, z = v.co
+        w = smoothstep(.17, .32, abs(x)) * smoothstep(.62, .74, z)
+        if w:
+            v.co.z += lift * w
+            v.co.y += back * w
+            v.co.x += math.copysign(longer * smoothstep(.35, .62, abs(x)) * w, x)
+    ob.data.update()
+
+
+def smooth_face(ob, B):
+    """Smooth away carved lines where new face pieces go, mirrored on both sides: each region is a
+    (x, z) centre and radius on the front of the face."""
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    for (cx, cz), r in B.get('smooth', ()):
+        weights = {}
+        for v in bm.verts:
+            x, y, z = v.co
+            d = math.hypot(abs(x) - cx, z - cz)
+            if y < -.08 and d < r:
+                weights[v] = 1 - smoothstep(r * .5, r, d)
+        for _ in range(8):
+            moved = {v: sum((e.other_vert(v).co for e in v.link_edges), Vector()) / len(v.link_edges)
+                     for v in weights}
+            for v, w in weights.items():
+                v.co = v.co.lerp(moved[v], .5 * w)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+
+def hair_z(B, y):
+    """How low the hair comes at depth y: the hairline, between its points."""
+    pts = B['hairline']
+    if y <= pts[0][0]:
+        return pts[0][1]
+    for (y0, z0), (y1, z1) in zip(pts, pts[1:]):
+        if y <= y1:
+            return z0 + (y - y0) * (z1 - z0) / (y1 - y0)
+    return pts[-1][1]
+
+
+def is_ear(B, c):
+    out, (y0, y1), (z0, z1) = B['ears']
+    return abs(c[0]) > out and y0 < c[1] < y1 and z0 < c[2] < z1
+
+
 def collar_z(B, y):
     """How high the shirt comes up the neck at depth y."""
     (y0, z0), (y1, z1) = B['collar_front'], B['collar_back']
@@ -168,6 +249,12 @@ def cut_hems(ob, B):
         ((0, 0, vz), (-1, 0, slope), throat),  # the V's two sides: |x| = (z - vz) * slope
         ((0, 0, vz), (1, 0, slope), throat),
     ]
+    # the hairline, one plane per stretch between its points, each only on the head at that depth
+    pts = B.get('hairline', ())
+    for (ya, za), (yb, zb) in zip(pts, pts[1:]):
+        def on_head(c, ya=ya, yb=yb):
+            return c.z > .9 and ya - .02 < c.y < yb + .02 and not is_ear(B, c)
+        planes.append(((0, ya, za), (0, -(zb - za), yb - ya), on_head))
     for co, no, near in planes:
         faces = [f for f in bm.faces if near(f.calc_center_median())]
         edges = list({e for f in faces for e in f.edges})
@@ -183,6 +270,8 @@ def cut_hems(ob, B):
 def body_part(B, c, normal):
     """Which part of the outfit (or bare skin) the surface at point c is."""
     x, y, z = c
+    if 'hairline' in B and z > .9 and z > hair_z(B, y) and not is_ear(B, c):
+        return 'hair'
     # the tops of the shoulders rise beside the jowls; they face up where the jowls face down
     shoulder = z < 1.02 and abs(x) > .12 and normal.z > .3
     if z > collar_z(B, y) and not (z < 1.0 and abs(x) > B['shoulders']) and not shoulder:
@@ -294,6 +383,16 @@ def face_pieces(ob, B):
             upper.append((px, pz + h * .55))
             lower.append((px, pz - h * .45))
         out.append((decal('brow', tree, [upper, lower], .0035, rows_between=2), B['brows']))
+        if B.get('lashes'):
+            # a thin dark sweep along the top of the eye, flicking out past its outer corner
+            inner, outer = [], []
+            for k in range(9):
+                a = math.radians(40 + 100 * k / 8)  # from above the outer corner round over the top
+                f = 1.0 + .25 * smoothstep(.5, 1.0, 1 - k / 8)
+                px, pz = x + s * rx * math.cos(a) * f, ez + rz * math.sin(a)
+                inner.append((px, pz))
+                outer.append((x + s * (rx + .004) * math.cos(a) * f * 1.05, ez + (rz + .003) * math.sin(a)))
+            out.append((decal('lashes', tree, [inner, outer], .002, rows_between=1), B['eyes_colour']))
     z0, w, lift, opening = B['smile']
     n = 12
     top, bottom = [], []
@@ -309,6 +408,9 @@ def face_pieces(ob, B):
 def dress(ob, B):
     """Cut the hems, colour the body by part and add the face pieces, all in one mesh with two
     materials: [<id>_body, <id>_skin]."""
+    if 'arm_fit' in B:
+        fit_arms(ob, *B['arm_fit'])
+    smooth_face(ob, B)
     shorten_nose(ob, B)
     cut_hems(ob, B)
     me = ob.data
@@ -318,6 +420,8 @@ def dress(ob, B):
         me.materials.append(m)
     attr = me.color_attributes.get('Col') or me.color_attributes.new('Col', 'FLOAT_COLOR', 'CORNER')
     flat = {'shirt': common.hexc(B['shirt']), 'shorts': common.hexc(B['shorts_colour'])}
+    if 'hair' in B:
+        flat['hair'] = common.hexc(B['hair'])
     counts = {}
     for p in me.polygons:
         part = body_part(B, p.center, p.normal)
@@ -422,12 +526,59 @@ def build_beards(ob, B):
         if old:
             bpy.data.objects.remove(old, do_unlink=True)
         big = style in ('long', 'braids')
-        meshes = [shade(dwarf_bodies.meta_mesh('beard', beard_shapes(ob, style), .008,
+        shapes = beard_shapes(ob, style)
+        # the face shapes move to where this face's mouth and chin are; what hangs on the shirt
+        # already follows it
+        dy, dz = B.get('beard_shift', (0, 0))
+        for e in shapes:
+            x, y, z = e['co']
+            if z > .9:
+                e['co'] = (x, y + dy, z + dz)
+        meshes = [shade(dwarf_bodies.meta_mesh('beard', shapes, .008,
                                                300 if style == 'stache' else 1100 if big else 800), B['beard'], mat)]
         meshes += [shade(m, c, mat) for m, c in beard_extras(ob, style)]
         piece = dwarf_bodies.join_meshes(name, meshes, ob.users_collection[0])
         out[style] = piece
     return out
+
+
+def braid_path(ob, x=.14):
+    """Where a braid runs on the left side: from behind the ear, down the side of the neck,
+    forward over the shoulder and down the front of the shirt."""
+    pts = [(.125, .07, 1.03), (.14, .045, .975), (.15, -.02, .93), (.15, -.09, .885)]
+    for z in (.84, .79, .74, .69):
+        pts.append((x, chest_front(ob, z, x) - .022, z))
+    return pts
+
+
+def build_hair(ob, B):
+    """Two plaited braids with ties at their ends, as <id>_Hair on the clothes material, so skin
+    tone leaves them alone. The plait is soft lobes leaning left and right in turn down the path."""
+    name = B['id'] + '_Hair'
+    old = bpy.data.objects.get(name)
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    path = [Vector(p) for p in braid_path(ob)]
+    E, ties = [], []
+    for s in (-1, 1):
+        lobes = []
+        for a, b in zip(path, path[1:]):
+            n = max(1, round((b - a).length / .02))
+            lobes += [a.lerp(b, k / n) for k in range(n)]
+        lobes.append(path[-1])
+        for k, p in enumerate(lobes):
+            t = k / (len(lobes) - 1)
+            r = .024 - .007 * t
+            lean = .009 * (1 if k % 2 else -1)
+            E.append(el((s * (p.x + lean), p.y, p.z), (r, r * .85, r * 1.25), stiff=3, rot=(0, s * lean * 2200, 0)))
+        end = path[-1]
+        E.append(el((s * end.x, end.y - .004, end.z - .05), (.022, .016, .03), stiff=3))  # the tuft
+        ties.append((dwarf_bodies.prim_mesh('tie', 'ball', (s * end.x, end.y, end.z - .016), (.024, .02, .011),
+                                            sub=2), B['ties']))
+    mat = ob.data.materials[0]
+    meshes = [shade(dwarf_bodies.meta_mesh('hair', E, .006, 950), B['hair'], mat)]
+    meshes += [shade(m, c, mat) for m, c in ties]
+    return dwarf_bodies.join_meshes(name, meshes, ob.users_collection[0])
 
 
 # ---------------------------------------------------------------- skeleton
@@ -484,10 +635,22 @@ def build_rig(name):
     return rig
 
 
-def attach(ob, rig, beards):
+def attach(ob, rig, beards, hair=None):
     """Skin the body to the skeleton with Blender's automatic weights (each bone moves the skin
     nearest it, blending at the joints). Anything the automatic weights miss (the small face pieces
-    are separate from the skin) follows the head; so do the beards, as on the faceted dwarves."""
+    are separate from the skin) follows the head; so do the beards, as on the faceted dwarves.
+    Braids follow the head behind the ears and the chest where they lie on the shirt."""
+    if hair is not None:
+        hair.vertex_groups.clear()
+        head_g, chest_g = hair.vertex_groups.new(name='head'), hair.vertex_groups.new(name='chest')
+        for v in hair.data.vertices:
+            w = smoothstep(.86, .97, v.co.z)
+            head_g.add([v.index], w, 'REPLACE')
+            chest_g.add([v.index], 1 - w, 'REPLACE')
+        hair.parent = rig
+        hair.matrix_parent_inverse.identity()
+        mod = hair.modifiers.get('Armature') or hair.modifiers.new('Armature', 'ARMATURE')
+        mod.object = rig
     for o in bpy.context.view_layer.objects:
         o.select_set(False)
     ob.select_set(True)

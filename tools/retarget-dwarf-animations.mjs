@@ -156,6 +156,45 @@ if (soft) {
   }
 }
 
+// These moves also hold the upper arms about 40° out from the body, room the faceted dwarves' round
+// bellies needed. The soft dwarves' chests are slimmer, so it looked like a watermelon under each
+// arm. On them, the upper arms in these moves turn this far in towards the body (radians); the walk
+// and run held them out wider still.
+const TUCKED_ARMS = { idle: 0.28, idleLook: 0.28, walk: 0.45, run: 0.45 };
+const parentOf = new Map();
+for (const node of dwarf.getRoot().listNodes()) {
+  for (const child of node.listChildren()) parentOf.set(child, node);
+}
+/** The bone's resting turn in the scene, through all of its parents. */
+function restingWorldTurn(bone) {
+  let turn = bone.getRotation();
+  for (let p = parentOf.get(bone); p; p = parentOf.get(p)) turn = multiply(p.getRotation(), turn);
+  return turn;
+}
+/** Turns vector v by quaternion q. */
+function turnVector(q, v) {
+  const [x, y, z] = multiply(multiply(q, [...v, 0]), inverse(q));
+  return [x, y, z];
+}
+let tucked = 0;
+if (soft) {
+  for (const [name, tuckAngle] of Object.entries(TUCKED_ARMS)) {
+    for (const channel of armTracks(name) ?? []) {
+      const bone = dwarfBones.get(channel.getTargetNode().getName());
+      if (!bone.getName().startsWith('upperarm')) continue;
+      // About the body's forward axis, seen from the chest the upper arm hangs from.
+      const [ax, ay, az] = turnVector(inverse(restingWorldTurn(parentOf.get(bone))), [0, 0, 1]);
+      const half = ((bone.getName().endsWith('.l') ? -1 : 1) * tuckAngle) / 2;
+      const tuck = [ax * Math.sin(half), ay * Math.sin(half), az * Math.sin(half), Math.cos(half)];
+      const values = channel.getSampler().getOutput();
+      for (let i = 0; i < values.getCount(); i++) {
+        values.setElement(i, multiply(tuck, values.getElement(i, [])));
+      }
+      tucked++;
+    }
+  }
+}
+
 // The library's bones rest where the dwarf's do, so tools/add-animation.mjs can tell which tracks
 // of a new dwarf move never leave the resting pose.
 for (const [name, bone] of libraryBones) {
@@ -169,5 +208,5 @@ for (const [name, bone] of libraryBones) {
 library.createExtension(EXTMeshoptCompression).setRequired(true);
 await io.write(outputPath, library);
 console.log(
-  `${library.getRoot().listAnimations().length} moves: ${turned} turning tracks and ${moved} placing tracks fitted (legs ${shrink.toFixed(3)} as long), ${calmed} arm tracks calmed -> ${outputPath}`,
+  `${library.getRoot().listAnimations().length} moves: ${turned} turning tracks and ${moved} placing tracks fitted (legs ${shrink.toFixed(3)} as long), ${calmed} arm tracks calmed and ${tucked} tucked in ->${outputPath}`,
 );
