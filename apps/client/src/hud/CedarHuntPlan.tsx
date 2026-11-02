@@ -1,6 +1,7 @@
 import { MEAL_BENEFITS } from '@acorn/shared';
 import { ITEM_KINDS, EQUIPMENT_BONUSES, itemRarity } from '../item-catalog';
 import { cedarHuntProgress } from './cedar-hunt';
+import { ItemIcon } from './item-icons';
 import type { HudState } from './store';
 type HuntState = Pick<HudState, 'carrying' | 'worn' | 'meal' | 'cedarHuntPinned'>;
 export function CedarHuntPlan({
@@ -39,22 +40,26 @@ export function CedarHuntPlan({
         </li>
       </ol>
       <div className="cedar-hunt-reward">
-        <strong>
-          {ITEM_KINDS.cedarstalkerCoat.displayName} ·{' '}
-          <span className="cedar-hunt-rarity">{itemRarity('cedarstalkerCoat')}</span>
-        </strong>
-        <span>
-          +{bonus.protection ?? 0} protection · +{bonus.warmth ?? 0} warmth
-        </span>
-        <span>
-          Quiet step · prey notices you from 15% less distance while worn. Hostile creatures are
-          unaffected.
-        </span>
+        <ItemIcon item="cedarstalkerCoat" color="#496342" className="cedar-hunt-reward-icon" />
+        <div>
+          <strong>
+            {ITEM_KINDS.cedarstalkerCoat.displayName} ·{' '}
+            <span className="cedar-hunt-rarity">{itemRarity('cedarstalkerCoat')}</span>
+          </strong>
+          <span>
+            +{bonus.protection ?? 0} protection · +{bonus.warmth ?? 0} warmth
+          </span>
+          <span>
+            Quiet step · prey notices you from 15% less distance while worn. Hostile creatures are
+            unaffected.
+          </span>
+        </div>
       </div>
       {!progress.crafted && (
         <div className="cedar-hunt-ingredients" aria-label="Coat ingredients">
           {progress.ingredients.map((cost) => (
             <span key={cost.item} className={cost.have < cost.amount ? 'cedar-hunt-missing' : ''}>
+              <ItemIcon item={cost.item} color={cost.have < cost.amount ? '#784833' : '#496342'} />
               {cost.have}/{cost.amount}{' '}
               {(cost.amount === 1
                 ? ITEM_KINDS[cost.item].displayName
