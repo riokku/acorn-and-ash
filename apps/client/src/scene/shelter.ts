@@ -1,6 +1,7 @@
 import { createFireGlow } from './fire-light';
 import { addShelterStitching } from './shelter-stitching';
 import { housingDetails } from './housing-details';
+import { createTentModel } from './tent-model';
 import * as THREE from 'three/webgpu';
 import { color, texture } from 'three/tsl';
 import { artTexture } from '../art/textures';
@@ -9,7 +10,11 @@ import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import type { Cabin } from './cabin';
 
-/** Original canvas shelters: shaped panels, stitched seams, poles, ropes and pegged hems. */
+/**
+ * Canvas shelters. The tent is Polyfork's Camp Tent once tent-model.ts has
+ * loaded it; otherwise, and for the teepee, shaped panels, stitched seams,
+ * poles, ropes and pegged hems.
+ */
 export function createShelter(kind: 'tent' | 'teepee'): Cabin {
   const scale = homeOuterScale(kind);
   const doorX = -0.575 * scale;
@@ -31,7 +36,16 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
   }).clone();
   const group = new THREE.Group();
   group.name = kind;
-  const authoredCanvas = housingDetails(kind === 'tent' ? 'Tent' : 'Teepee');
+  // The real tent brings its own canvas, poles and groundsheet, door centred on doorX.
+  const realTent = kind === 'tent' ? createTentModel(depth * 2) : undefined;
+  if (realTent !== undefined) {
+    realTent.position.x = doorX;
+    group.add(realTent);
+  }
+  const authoredCanvas =
+    realTent === undefined
+      ? housingDetails(kind === 'tent' ? 'Tent' : 'Teepee')
+      : new THREE.Group();
   group.add(authoredCanvas);
   type Point = readonly [number, number, number];
   const panel = (a: Point, b: Point, c: Point, material: THREE.Material = canvas): void => {
@@ -67,7 +81,9 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
       placed(x, 0.18, z, { x: Math.PI / 2 }),
     );
   };
-  if (kind === 'tent') {
+  if (realTent !== undefined) {
+    // Nothing to build: the model is the whole shelter.
+  } else if (kind === 'tent') {
     const left = -1.3,
       right = 1.54,
       ridge = 2.12;
@@ -156,12 +172,14 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
     placed(doorX, 0.018, depth + 0.14),
   );
   // A tucked-in groundsheet gives the opening depth instead of exposing bright grass.
-  builder.add(
-    hem,
-    plankGeometry(0.82, 0.025, 0.8, 'z', 0.5, 903),
-    placed(doorX, 0.022, depth - 0.45),
-  );
-  const lx = doorX + 0.72,
+  if (realTent === undefined)
+    builder.add(
+      hem,
+      plankGeometry(0.82, 0.025, 0.8, 'z', 0.5, 903),
+      placed(doorX, 0.022, depth - 0.45),
+    );
+  // The real tent's flaps spread wider than the old door, so its lantern stands clear of them.
+  const lx = doorX + (realTent === undefined ? 0.72 : 1.3),
     lz = depth + 0.02;
   builder.add(wood, new THREE.CylinderGeometry(0.035, 0.05, 0.94, 6), placed(lx, 0.47, lz));
   builder.add(iron, new THREE.BoxGeometry(0.25, 0.05, 0.23), placed(lx, 0.67, lz));
@@ -178,7 +196,8 @@ export function createShelter(kind: 'tent' | 'teepee'): Cabin {
         new THREE.CylinderGeometry(0.012, 0.012, 0.25, 4),
         placed(lx + dx, 0.81, lz + dz),
       );
-  addShelterStitching(builder, kind, doorX, depth, { hem, thread: rope, wood });
+  if (realTent === undefined)
+    addShelterStitching(builder, kind, doorX, depth, { hem, thread: rope, wood });
   const built = builder.build();
   group.add(built.group);
   const lanternGlow = createFireGlow(0xffc577, 0.65, 2.4, 0.025);
