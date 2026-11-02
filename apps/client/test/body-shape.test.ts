@@ -12,6 +12,11 @@ it('knows a dwarf by the mark on its skeleton', () => {
   rig.userData.dwarf = true;
   dwarf.add(rig);
   expect(bodyShapeOf(dwarf)).toBe('dwarf');
+  const soft = new THREE.Group();
+  const softRig = new THREE.Group();
+  softRig.userData.softDwarf = true;
+  soft.add(softRig);
+  expect(bodyShapeOf(soft)).toBe('softDwarf');
 });
 
 it('shows only the chosen beard, including one split into parts by glTF', () => {

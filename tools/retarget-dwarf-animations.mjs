@@ -16,7 +16,8 @@
 // one clip in it at a time, without touching the others.
 //
 // Run with:
-//   node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/dwarf.glb
+//   node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/barbarian.glb assets/animations/dwarf.glb
+//   node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/soft-dwarf.glb
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
