@@ -60,3 +60,41 @@ export function polyforkGroup(
   }
   return { group, dispose: () => undefined };
 }
+
+/**
+ * Splits off the triangles painted in one colour (a model's glass, say) so
+ * they can wear their own material. Returns [the rest, those triangles].
+ */
+export function splitByPaint(
+  geometry: THREE.BufferGeometry,
+  colour: THREE.Color,
+  tolerance = 0.02,
+): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  const flat = geometry.index === null ? geometry : geometry.toNonIndexed();
+  const position = flat.getAttribute('position');
+  const normal = flat.getAttribute('normal');
+  const paint = flat.getAttribute('color');
+  const rest = { position: [] as number[], normal: [] as number[], color: [] as number[] };
+  const picked = { position: [] as number[], normal: [] as number[], color: [] as number[] };
+  const matches = (i: number) =>
+    Math.abs(paint.getX(i) - colour.r) < tolerance &&
+    Math.abs(paint.getY(i) - colour.g) < tolerance &&
+    Math.abs(paint.getZ(i) - colour.b) < tolerance;
+  for (let start = 0; start < position.count; start += 3) {
+    const target = matches(start) && matches(start + 1) && matches(start + 2) ? picked : rest;
+    for (let i = start; i < start + 3; i++) {
+      target.position.push(position.getX(i), position.getY(i), position.getZ(i));
+      target.normal.push(normal.getX(i), normal.getY(i), normal.getZ(i));
+      target.color.push(paint.getX(i), paint.getY(i), paint.getZ(i));
+    }
+  }
+  if (picked.position.length === 0) throw new Error('no triangles are painted in that colour');
+  const build = (data: typeof rest) => {
+    const piece = new THREE.BufferGeometry();
+    piece.setAttribute('position', new THREE.Float32BufferAttribute(data.position, 3));
+    piece.setAttribute('normal', new THREE.Float32BufferAttribute(data.normal, 3));
+    piece.setAttribute('color', new THREE.Float32BufferAttribute(data.color, 3));
+    return piece;
+  };
+  return [build(rest), build(picked)];
+}
