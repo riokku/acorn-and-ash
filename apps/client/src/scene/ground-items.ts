@@ -5,7 +5,7 @@ import { createLastBellTrophy } from './skeleton-town';
 import { createWatchCaptainHelm } from './worn-gear-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { createSentinelTrophy } from './sentinel-art';
-import { createForageModel, createMealModel } from './forest-food';
+import { PATCH_SCENERY, createForageModel, createMealModel } from './forest-food';
 import * as THREE from 'three/webgpu';
 
 import {
@@ -168,7 +168,11 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
       const model = kind === 'patch' ? patches.get(id) : piles.get(id)?.model;
       if (model === undefined || !model.group.visible) return null;
       if (kind === 'pile') return model.group;
-      return model.group.children.findLast((child) => child.visible) ?? null;
+      return (
+        model.group.children.findLast(
+          (child) => child.visible && child.userData[PATCH_SCENERY] !== true,
+        ) ?? null
+      );
     },
     dispose: () => {
       harvesting.clear();
@@ -183,7 +187,7 @@ export function createGroundItems(heightAt: (x: number, z: number) => number): G
 
 /** A stick, flower, berry, mushroom or reed patch, built to hold as many as any patch ever can. */
 function createPatchModel(item: ItemId, colony = false): GroundModel {
-  if (item === 'berry' || item === 'mushroom') return createForageModel(item, colony);
+  if (item === 'berry' || item === 'mushroom') return createForageModel(item, colony, true);
   if (item === 'reed') return createPartsModel(item, createReedPatchModel());
   if (item === 'stone' || item === 'ironOre') return createRocksModel(item);
   return item === 'flower' ? createFlowerModel('flower') : createSticksModel(item);

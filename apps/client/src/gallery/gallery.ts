@@ -231,6 +231,17 @@ const EXHIBITS: readonly Exhibit[] = [
     },
   },
   {
+    name: 'berry-bush',
+    x: 26,
+    z: 12,
+    view: 2.5,
+    create: () => {
+      const bush = createForageModel('berry', false, true);
+      bush.show(4);
+      return bush;
+    },
+  },
+  {
     name: 'ruins',
     x: 15,
     z: 10,
