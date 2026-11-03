@@ -19,7 +19,8 @@ export type AnimalKindId =
   | 'woodlandGuardian'
   | 'jackrabbit'
   | 'coyote'
-  | 'cedarStag';
+  | 'cedarStag'
+  | 'blackBear';
 
 /**
  * How a threat fights, once it has closed in. Present only on a kind that
@@ -257,6 +258,35 @@ export const ANIMAL_KINDS = {
       attackCooldownSeconds: 1.65,
       damage: 28,
       hitsToDefeat: 4,
+    },
+  },
+  blackBear: {
+    id: 'blackBear',
+    displayName: 'Black bear',
+    // Big but slow (Chris, 2026-11-02): it lumbers about the deep woods.
+    wanderSpeed: 0.9,
+    alertRadius: 10,
+    safeRadius: 18,
+    leashRadius: 14,
+    catchItem: 'meat',
+    restSeconds: [3, 6],
+    collider: { radius: 0.5, height: 1.2 },
+    triangleBudget: 5000,
+    placeholderColor: 0x2a2420,
+    threat: {
+      // It won't follow you out of its stretch of woods.
+      leashRadius: 32,
+      // Quicker than a walk, so you can't stroll away, but a sprint always
+      // gets you clear: the way out of a fight that is going badly.
+      chaseSpeed: (PLAYER_WALK_SPEED + PLAYER_SPRINT_SPEED) / 2 - 0.3,
+      attackRadius: 2,
+      // The longest, plainest wind-up of anything in the woods: it rears up
+      // on its hind legs, so there is always time to dodge.
+      windupSeconds: 1.3,
+      attackCooldownSeconds: 2.4,
+      // The hardest hitter: three swipes knock you out.
+      damage: 40,
+      hitsToDefeat: 8,
     },
   },
 } as const satisfies Record<AnimalKindId, AnimalKind>;

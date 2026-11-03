@@ -60,7 +60,13 @@ export class WildlifeAtmosphere {
     const distance = previous
       ? Math.hypot(pose.x - previous.x, pose.y - previous.y, pose.z - previous.z)
       : 0;
-    const strideLength = hooved ? 0.9 : kind === 'woodlandGuardian' ? 1.1 : 0.5;
+    const strideLength = hooved
+      ? 0.9
+      : kind === 'woodlandGuardian'
+        ? 1.1
+        : kind === 'blackBear'
+          ? 0.8
+          : 0.5;
     const next: LastAnimal = {
       ...pose,
       stride: previous?.stride ?? 0,

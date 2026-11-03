@@ -31,6 +31,11 @@ export const ANIMAL_DENS: readonly AnimalDen[] = [
   // from either - well past its own leashRadius (16). A chase only happens
   // if wandering happens to carry them together; see decision 0035.
   { id: 1007, kind: 'fox', x: 22, z: -18 },
+  // Black bears keep to the deep woods (Chris, 2026-11-02): one on each side
+  // of the map, in thick forest well away from home, water and other dens.
+  { id: 1011, kind: 'blackBear', x: 190, z: -90 },
+  { id: 1012, kind: 'blackBear', x: -10, z: -200 },
+  { id: 1013, kind: 'blackBear', x: -170, z: -10 },
   ...WOODLAND_ENCOUNTERS.filter((site) => site.kind !== 'cedarStag'),
   ...PLAINS_DENS,
   CEDAR_STAG,

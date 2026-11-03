@@ -380,6 +380,7 @@ import { preloadTentModel } from './scene/tent-model';
 import { preloadLanternModel } from './scene/lantern-model';
 import { preloadPolyforkPieces } from './scene/polyfork-piece';
 import { preloadDeerModel } from './scene/deer-model';
+import { preloadBearModel } from './scene/bear-model';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -1282,6 +1283,7 @@ export class Game {
     void preloadLanternModel();
     void preloadPolyforkPieces();
     void preloadDeerModel();
+    void preloadBearModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
     void preloadRaiderModels();
@@ -3161,6 +3163,7 @@ export class Game {
           preloadLanternModel(),
           preloadPolyforkPieces(),
           preloadDeerModel(),
+          preloadBearModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
           preloadRaiderModels(),

@@ -2,7 +2,12 @@ import * as THREE from 'three/webgpu';
 import { lerp, smoothstep } from '@acorn/shared';
 import type { WoodlandCreature, WoodlandPose } from './woodland-creatures';
 
-type SmallAnimal = 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote' | 'elk';
+type SmallAnimal = 'rabbit' | 'maskedRaccoon' | 'fox' | 'coyote' | 'elk' | 'blackBear';
+
+/** How far behind its middle a bear's hind feet stand, which it rears up on. */
+const BEAR_HIND_FEET = 0.75;
+/** How far back it tips onto them in a full wind-up, in radians. */
+const BEAR_REAR = 0.55;
 
 /**
  * Give the existing small-animal figures, and the real Polyfork animals,
@@ -101,6 +106,14 @@ export function animateSmallAnimal(
         motion.scale.y -= windup * 0.12 + recovering * 0.025;
         motion.rotation.x = -windup * 0.035 + strike * 0.045 + recovering * 0.015;
         motion.position.z = -strike * 0.24;
+      }
+      if (kind === 'blackBear') {
+        // The wind-up rears it back onto its hind feet; the swipe brings it
+        // down and forward. Turning about the hind feet keeps them planted.
+        const rear = windup * BEAR_REAR - strike * 0.08;
+        motion.rotation.x = rear;
+        motion.position.y = BEAR_HIND_FEET * Math.sin(rear) - defeat * 0.06;
+        motion.position.z = BEAR_HIND_FEET * (1 - Math.cos(rear)) - strike * 0.3;
       }
     },
     dispose: () => model.dispose(),

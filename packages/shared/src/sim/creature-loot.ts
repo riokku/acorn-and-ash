@@ -20,7 +20,7 @@ export function creatureClothingDrop(
   const tier =
     kind === 'sentinel' || kind === 'captain' || kind === 'woodlandGuardian'
       ? 'boss'
-      : source === 'raider' || kind === 'maskedRaccoon'
+      : source === 'raider' || kind === 'maskedRaccoon' || kind === 'blackBear'
         ? 'threat'
         : 'prey';
   const rng = createRng(hashSeed(seed, 'creature-clothing', source, kind, id, tick));

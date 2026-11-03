@@ -4,6 +4,7 @@ import { createRaccoon } from './raccoon';
 import { createFox } from './fox';
 import { animateSmallAnimal } from './animal-motion';
 import { createDeerModel } from './deer-model';
+import { createBearModel } from './bear-model';
 import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatures';
 
 /** The coyote is drawn as a fox grown this much. */
@@ -41,6 +42,8 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
         ? createWoodlandCreature(kind, undefined, phaseSeed)
         : animateSmallAnimal(deer, 'elk', phaseSeed);
     }
+    case 'blackBear':
+      return animateSmallAnimal(createBearModel(), 'blackBear', phaseSeed);
     case 'curiousRaccoon':
     case 'woodlandGuardian':
       return createWoodlandCreature(kind, undefined, phaseSeed);

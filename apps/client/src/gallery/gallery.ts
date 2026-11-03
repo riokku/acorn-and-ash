@@ -65,6 +65,7 @@ import { preloadTentModel } from '../scene/tent-model';
 import { preloadLanternModel } from '../scene/lantern-model';
 import { polyforkPaint, preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { preloadDeerModel } from '../scene/deer-model';
+import { preloadBearModel } from '../scene/bear-model';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
@@ -113,6 +114,23 @@ interface Exhibit {
     group: THREE.Group;
     update?(deltaSeconds: number): void;
     setDaylight?(brightness: number): void;
+  };
+}
+
+/** A black bear standing still, or held in the pose `?pose=` names. */
+function createBlackBearExhibit() {
+  const pose = new URLSearchParams(location.search).get('pose');
+  const bear = createCritterFor('blackBear');
+  return {
+    group: bear.group,
+    update: (deltaSeconds: number) =>
+      bear.update(deltaSeconds, {
+        speed: 0,
+        alert: pose !== null,
+        windup: pose === 'windup',
+        attacking: pose === 'swipe',
+        groundHeight: () => 0,
+      }),
   };
 }
 
@@ -398,6 +416,9 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'mine-supports', x: -16, z: 20, view: 9, create: createMineSupportsExhibit },
   // The hanging mine lantern, made in Blender (see mine-lantern.ts).
   { name: 'mine-lantern', x: -17, z: 14, view: 1, create: createMineLantern },
+  // Polyfork's black bear (see bear-model.ts). Add &pose=windup to see it
+  // rear up before a swipe, or &pose=swipe for the swipe itself.
+  { name: 'black-bear', x: -34, z: 8, yaw: 2.3, view: 4, create: createBlackBearExhibit },
   // A hole cut into real hillside, with the world's own ground (see dug-ground.ts).
   { name: 'dug-ground', x: 0, z: 0, view: 6, alone: true, create: createDugGround },
   { name: 'dug-ramp', x: 0, z: 0, view: 6, alone: true, create: createDugRamp },
@@ -523,6 +544,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadLanternModel(),
     preloadPolyforkPieces(),
     preloadDeerModel(),
+    preloadBearModel(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),
