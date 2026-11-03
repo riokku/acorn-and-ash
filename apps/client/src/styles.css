@@ -261,11 +261,12 @@ body {
 .season-hex-badge {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   box-sizing: border-box;
   width: min(460px, 100%);
   margin-top: 28px;
-  padding: 8px 20px 8px 8px;
+  padding: 8px 20px;
   border: 1px solid rgba(255, 232, 196, 0.14);
   border-radius: 18px;
   background: #29211b;
@@ -281,9 +282,10 @@ body {
   height: 84px;
 }
 
+/* Sized to its words, so the picture and text sit together in the middle of the plate. */
 .season-hex-text {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
