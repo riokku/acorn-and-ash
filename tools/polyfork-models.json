@@ -174,6 +174,12 @@
       "id": "red-fox-5c3bc0",
       "title": "Red Fox",
       "page": "https://polyfork.dev/asset/red-fox-5c3bc0"
+    },
+    {
+      "name": "wolf",
+      "id": "wolf-base",
+      "title": "Wolf",
+      "page": "https://polyfork.dev/asset/wolf-base"
     }
   ]
 }

@@ -5,9 +5,10 @@ import { createFox } from './fox';
 import { animateSmallAnimal } from './animal-motion';
 import { createDeerModel } from './deer-model';
 import { createBearModel } from './bear-model';
+import { createCoyoteModel } from './coyote-model';
 import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatures';
 
-/** The coyote is drawn as a fox grown this much. */
+/** Until Polyfork's wolf loads, the coyote is drawn as a fox grown this much. */
 const COYOTE_SIZE = 1.45;
 
 /** The existing wildlife figure and its movement controller. */
@@ -25,6 +26,8 @@ export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCre
       return model;
     }
     case 'coyote': {
+      const wolf = createCoyoteModel();
+      if (wolf !== undefined) return animateSmallAnimal(wolf, 'coyote', phaseSeed);
       const model = animateSmallAnimal(createFox(COYOTE_SIZE), 'coyote', phaseSeed);
       model.group.scale.setScalar(COYOTE_SIZE);
       return model;

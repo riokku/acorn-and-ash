@@ -66,6 +66,7 @@ import { preloadLanternModel } from '../scene/lantern-model';
 import { polyforkPaint, preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { preloadDeerModel } from '../scene/deer-model';
 import { preloadBearModel } from '../scene/bear-model';
+import { createCoyoteModel, preloadCoyoteModel } from '../scene/coyote-model';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
@@ -368,13 +369,15 @@ const EXHIBITS: readonly Exhibit[] = [
     create: () => smallAnimalExhibit('maskedRaccoon', createRaccoon()),
   },
   { name: 'fox', x: 8.6, z: 1.3, view: 2, create: () => smallAnimalExhibit('fox', createFox()) },
-  // The plains coyote is drawn as a fox grown by half (see wildlife-models.ts).
+  // The plains coyote: Polyfork's wolf, shrunk, or a fox grown by half (see wildlife-models.ts).
   {
     name: 'coyote',
     x: 10.4,
     z: 1.6,
     view: 2.8,
     create: () => {
+      const wolf = createCoyoteModel();
+      if (wolf !== undefined) return smallAnimalExhibit('coyote', wolf);
       const exhibit = smallAnimalExhibit('coyote', createFox(1.45));
       exhibit.group.scale.setScalar(1.45);
       return exhibit;
@@ -545,6 +548,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadPolyforkPieces(),
     preloadDeerModel(),
     preloadBearModel(),
+    preloadCoyoteModel(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),
