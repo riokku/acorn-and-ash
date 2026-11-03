@@ -18,7 +18,7 @@ export default defineConfig({
   // Each case owns its browser context/world fixture. This lets CI balance
   // individual cases across shards, including the large play.spec.ts file.
   fullyParallel: true,
-  // Two tests at a time on each machine (decision 0280). Most of a test is
+  // Two tests at a time on each machine (decision 0281). Most of a test is
   // one browser tab building the world on one processor core, so a second
   // tab uses a core that would otherwise sit idle. E2E_WORKERS overrides it.
   workers: Number(process.env.E2E_WORKERS ?? 2),
