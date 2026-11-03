@@ -4,7 +4,7 @@ import * as shared from '../packages/shared/src/index';
 test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 0.65 });
 test.setTimeout(180_000);
 
-test('opens settings during play, shows a wide guide and resumes controls on close', async ({
+test('opens settings during play, keeps one card size across tabs and resumes controls on close', async ({
   page,
 }, testInfo) => {
   const sim = new shared.WorldSimulation({ seed: shared.DEFAULT_WORLD_SEED });
@@ -53,11 +53,28 @@ test('opens settings during play, shows a wide guide and resumes controls on clo
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
     await expect(dialog).toBeVisible();
+    const cardSize = () =>
+      dialog.evaluate((element) => {
+        const { width, height } = element.getBoundingClientRect();
+        return { width, height };
+      });
+    const generalSize = await cardSize();
     walkingInputs = 0;
     await page.getByRole('tab', { name: 'Keybindings' }).click();
-    expect(
-      await dialog.evaluate((element) => element.getBoundingClientRect().width),
-    ).toBeGreaterThan(850);
+    // Switching tabs must not resize the card: the long guide scrolls inside it instead.
+    expect(await cardSize()).toEqual(generalSize);
+    const guide = page.locator('#settings-keybindings');
+    expect(await guide.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+      true,
+    );
+    await guide.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(dialog.getByRole('heading', { name: 'Settings' })).toBeInViewport();
+    await expect(page.getByRole('tab', { name: 'General' })).toBeInViewport();
+    await page.getByRole('tab', { name: 'General' }).click();
+    expect(await cardSize()).toEqual(generalSize);
+    await page.getByRole('tab', { name: 'Keybindings' }).click();
     expect(
       await page
         .locator('.keybindings-groups')
@@ -72,7 +89,7 @@ test('opens settings during play, shows a wide guide and resumes controls on clo
     await expect(page.locator('.hud-journal')).toHaveCount(0);
     await page.screenshot({
       path: process.env.CI
-        ? testInfo.outputPath('settings-wide.png')
+        ? testInfo.outputPath('settings-keybindings.png')
         : '/workspace/acorn-settings-wide.png',
     });
     await page.setViewportSize({ width: 600, height: 800 });
