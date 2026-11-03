@@ -355,6 +355,18 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'buriedCache', x: 5.3, z: 0.8, view: 2, create: createBuriedCacheMound },
   { name: 'bag', x: -5.6, z: 3.4, yaw: 0.4, view: 1.3, create: createSatchel },
   { name: 'sticks', x: -4.6, z: 3.6, view: 1.4, create: createStickPileModel },
+  // What a beaten skeleton leaves behind, three bones' worth (see ground-items.ts).
+  {
+    name: 'bones',
+    x: -3.4,
+    z: 4.2,
+    view: 1.4,
+    create: () => {
+      const bones = createPileModel('bone');
+      bones.show(3);
+      return bones;
+    },
+  },
   // Yaw 0 for all three, so it is plain which way each one faces: yaw 0
   // walks towards -Z, away from the camera's usual spot.
   {

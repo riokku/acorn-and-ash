@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, logGeometry, placed, uvAround } from '../art/shapes';
+import { polyforkGroup, polyforkPiece } from './polyfork-piece';
 
 /**
  * Small things lying about the clearing to be found or gathered (see
@@ -79,6 +80,29 @@ const PATCH_STICKS = [
   { turn: -1.2, length: 0.4, radius: 0.017, x: -0.18, y: 0.02, z: 0.2 },
 ] as const;
 
+/**
+ * Polyfork's free Fallen Twig (decision 0272). It is drawn at an insect's
+ * scale, 24 m long, so each one is shrunk to the length of the stick it
+ * stands in for, and thickened a little so it reads from a step or two away.
+ */
+const fallenTwig = polyforkPiece('fallen-twig');
+const TWIG_LENGTH = 24;
+const TWIG_THICKENING = 1.6;
+
+/** A real twig in one stick's place, or undefined to build the placeholder. */
+function realTwig(index: number): THREE.Group | undefined {
+  const stick = PATCH_STICKS[index];
+  const parts = fallenTwig.parts();
+  if (stick === undefined || parts === undefined) return undefined;
+  const twig = polyforkGroup('fallen-twig', parts.values()).group;
+  // Crossed sticks lie a little on top of one another, as the placeholders do.
+  twig.position.set(stick.x, Math.max(0, stick.y - 0.03), stick.z);
+  twig.rotation.y = stick.turn;
+  const scale = stick.length / TWIG_LENGTH;
+  twig.scale.set(scale, scale * TWIG_THICKENING, scale * TWIG_THICKENING);
+  return twig;
+}
+
 /** One forked stick lying on the grass, with its bark on and its broken ends showing. */
 function addStick(builder: ModelBuilder, index: number): void {
   const stick = PATCH_STICKS[index];
@@ -121,6 +145,13 @@ function addStick(builder: ModelBuilder, index: number): void {
  * grass, their bark on and their broken ends showing.
  */
 export function createStickPileModel(count = 4): { group: THREE.Group; dispose(): void } {
+  if (fallenTwig.parts() !== undefined) {
+    const group = new THREE.Group();
+    for (let index = 0; index < Math.min(count, PATCH_STICKS.length); index++)
+      group.add(realTwig(index)!);
+    // The twig's geometry is shared by every stick in the world.
+    return { group, dispose: () => undefined };
+  }
   const builder = new ModelBuilder();
   for (let index = 0; index < Math.min(count, PATCH_STICKS.length); index++) {
     addStick(builder, index);
@@ -139,6 +170,11 @@ export function createStickPatchModel(): {
   dispose(): void;
 } {
   const group = new THREE.Group();
+  if (fallenTwig.parts() !== undefined) {
+    const twigs = PATCH_STICKS.map((_, index) => realTwig(index)!);
+    group.add(...twigs);
+    return { group, sticks: twigs, dispose: () => undefined };
+  }
   const models = PATCH_STICKS.map((_, index) => {
     const builder = new ModelBuilder();
     addStick(builder, index);

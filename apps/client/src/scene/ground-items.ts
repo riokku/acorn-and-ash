@@ -22,6 +22,7 @@ import {
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { flowerModelParts } from './flower-models';
 import { createSatchel, createStickPatchModel } from './pickup-models';
+import { polyforkGroup, polyforkPiece } from './polyfork-piece';
 import {
   createReedPatchModel,
   createReedPileModel,
@@ -514,8 +515,35 @@ const BONE_PLACES: readonly { x: number; z: number; yaw: number }[] = [
  * lying in the grass, a shaft with a knuckle at each end - built from the
  * same simple shapes as every other placeholder.
  */
+/**
+ * Polyfork's free Bone Scatter (decision 0272): a skull and a few bones,
+ * shrunk to about 0.8 m across. One bone shows a small scatter, three the
+ * whole of it.
+ */
+const BONE_SCATTER_SCALE = 0.55;
+const boneScatter = polyforkPiece(
+  'bone-scatter',
+  new THREE.Matrix4().makeScale(BONE_SCATTER_SCALE, BONE_SCATTER_SCALE, BONE_SCATTER_SCALE),
+);
+const BONE_SCATTER_SIZES = [0.6, 0.8, 1];
+
 function createBonesModel(item: ItemId): GroundModel {
   const group = new THREE.Group();
+  const scatterParts = boneScatter.parts();
+  if (scatterParts !== undefined) {
+    const scatter = polyforkGroup('bone-scatter', scatterParts.values());
+    group.add(scatter.group);
+    return {
+      item,
+      group,
+      show: (count) => {
+        group.visible = count > 0;
+        const size = BONE_SCATTER_SIZES[Math.min(count, BONE_SCATTER_SIZES.length) - 1];
+        scatter.group.scale.setScalar(size ?? 1);
+      },
+      dispose: scatter.dispose,
+    };
+  }
   const bones: THREE.Group[] = [];
   const length = 0.34;
   const shaftGeometry = new THREE.CylinderGeometry(0.022, 0.026, length, 6).rotateZ(Math.PI / 2);
