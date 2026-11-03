@@ -5,6 +5,7 @@ import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/sh
 
 import { plainMaterial } from '../art/materials';
 import { wornGearModelTemplate } from './worn-gear-models';
+import { bodyUnderClothes, type BoundGeometry } from './hidden-under-clothes';
 import { woodenShieldParts, wornWeapon } from './gear-models';
 
 /**
@@ -13,10 +14,10 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
  * Every helm is its own file fitted to the soft bodies (tools/art/soft_hats.py,
  * decision 0283): the Knight's helmet and visor, the Mage's hat, the bear hat,
  * the mask, the wool cap and the Last Watch helm. Both bodies share one
- * skeleton, so each fits either head. Body, legs, boots and gloves are a thin
- * coloured skin laid over the matching part of the body, and the shield hangs
- * from the off hand. The skins stand in for the real pieces that will come out
- * of a Blender session.
+ * skeleton, so each fits either head. Every top is fitted the same way
+ * (tools/art/soft_tops.py, decision 0284), one fit for each body in its file.
+ * On the old Adventurers, clothes are a thin coloured skin laid over the
+ * matching part of the body. The shield hangs from the off hand.
  *
  * The pieces already baked into the six models (the helmet, the hat, the mask)
  * are hidden, so a head is bare until a helm is worn.
@@ -24,6 +25,11 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
 
 /** The baked-in head pieces to hide, by the end of their names. */
 const BAKED_HEAD_PIECE = /_(Helmet|HelmetVisor|Hat|BearHat|Mask)$/;
+
+/** The soft bodies' own meshes are named `body1` and `body2` (split by colour: `body1_1`). */
+const SOFT_BODY = /^(body\d)(?:_\d+)?$/;
+/** A piece fitted to one of them ends in its name: `linen_shirt_body1`. */
+const FIT_FOR = /_(body\d)$/;
 
 /** Along the arm (in the model's own units) from here out is the hand. */
 const HAND_STARTS_AT = 0.78;
@@ -144,9 +150,10 @@ export function hideBakedHeadPieces(model: THREE.Object3D): void {
 /**
  * Gear for the character built from this model. `leftHand` is the bone the
  * shield hangs from; `heldScale` cancels the character's own scale for things
- * parented that deep in its skeleton. With `bodyFitted` false, clothes are
- * left off a body they were not made for; helms (fitted to the soft bodies'
- * shared skeleton) and what is held are still drawn.
+ * parented that deep in its skeleton. With `bodyFitted` true (the old
+ * Adventurers), clothes are a skin laid over the body's own parts; with it
+ * false (the soft bodies), each piece comes from its fitted file, and a piece
+ * without one is left off. Helms always come from their fitted files.
  */
 export function createGearVisuals(
   model: THREE.Object3D,
@@ -196,16 +203,37 @@ export function createGearVisuals(
     into.push(mesh);
   };
 
-  const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
+  /**
+   * Which soft body this is ('body1' or 'body2'), from its mesh's name, or from the
+   * group that holds it when the mesh was split by colour (Body 1's parts are `body1002_0`).
+   */
+  const wearer = skinned
+    .flatMap((mesh) => [mesh.name, mesh.parent?.name ?? ''])
+    .map((name) => SOFT_BODY.exec(name)?.[1])
+    .find((found) => found);
+
+  /**
+   * Draws a piece from its own fitted file. A top holds one fit for each body, named for it
+   * (`linen_shirt_body1`), and only the wearer's is drawn; a helm fits both, so all of it is.
+   */
+  const buildFitted = (item: ItemId, into: THREE.Object3D[]): void => {
     const body = skinned[0];
     const template = wornGearModelTemplate(item);
     if (template === undefined || body === undefined) return;
     template.root.traverse((found) => {
-      if (found instanceof THREE.SkinnedMesh) {
-        const material = Array.isArray(found.material) ? found.material[0] : found.material;
-        if (material !== undefined) addSkinned(body, found, found.geometry, material, into);
-      }
+      if (!(found instanceof THREE.SkinnedMesh) || !fitsWearer(found, template.root)) return;
+      const material = Array.isArray(found.material) ? found.material[0] : found.material;
+      if (material !== undefined) addSkinned(body, found, found.geometry, material, into);
     });
+  };
+
+  /** Whether a piece is the wearer's fit, or one made for any body. */
+  const fitsWearer = (piece: THREE.Object3D, root: THREE.Object3D): boolean => {
+    for (let at: THREE.Object3D | null = piece; at !== null && at !== root; at = at.parent) {
+      const fit = FIT_FOR.exec(at.name)?.[1];
+      if (fit !== undefined) return fit === wearer;
+    }
+    return true;
   };
 
   const buildSkin = (slot: keyof typeof LAYERS, item: ItemId, into: THREE.Object3D[]): void => {
@@ -250,9 +278,10 @@ export function createGearVisuals(
 
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
-    if (slot === 'helm') buildHelm(item, objects);
+    if (slot === 'helm') buildFitted(item, objects);
     else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
       if (bodyFitted) buildSkin(slot, item, objects);
+      else buildFitted(item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
     else if (slot === 'offHand' && item === 'huntingKnife') buildOffHandKnife(objects);
     for (const object of objects)
@@ -260,6 +289,44 @@ export function createGearVisuals(
         part.userData.gearItem = item;
       });
     return objects;
+  };
+
+  /** The soft body's own meshes, with the geometry each was loaded with. */
+  const bareBody = new Map(
+    skinned
+      .filter((mesh) => SOFT_BODY.test(mesh.name) || SOFT_BODY.test(mesh.parent?.name ?? ''))
+      .map((mesh) => [mesh, mesh.geometry] as const),
+  );
+
+  /**
+   * A piece of this model as it stood when bound, in `bone`'s frame. Body 1's file packs
+   * its vertices into a small box and keeps the unpacking in its bind pose, so its bare
+   * vertices only line up with a top's once both are taken to the same bone.
+   */
+  const boundTo = (
+    mesh: THREE.SkinnedMesh,
+    geometry: THREE.BufferGeometry,
+    bone: THREE.Bone,
+  ): BoundGeometry | undefined => {
+    const inverse = mesh.skeleton.boneInverses[mesh.skeleton.bones.indexOf(bone)];
+    if (inverse === undefined) return undefined;
+    return { geometry, toBone: inverse.clone().multiply(mesh.bindMatrix) };
+  };
+
+  /** Leaves out the parts of a soft body its fitted clothes cover, so none pokes through. */
+  const hideCoveredBody = (): void => {
+    const cloth: THREE.SkinnedMesh[] = [];
+    for (const [slot, { objects }] of shown)
+      if (slot !== 'helm' && !bodyFitted)
+        for (const object of objects) if (object instanceof THREE.SkinnedMesh) cloth.push(object);
+    for (const [mesh, bare] of bareBody) {
+      const bone = mesh.skeleton.bones[0];
+      const body = bone && boundTo(mesh, bare, bone);
+      const covers = bone
+        ? cloth.flatMap((piece) => boundTo(piece, piece.geometry, bone) ?? [])
+        : [];
+      mesh.geometry = body && covers.length > 0 ? bodyUnderClothes(body, covers) : bare;
+    }
   };
 
   const clear = (slot: GearSlot): void => {
@@ -279,9 +346,11 @@ export function createGearVisuals(
         clear(slot);
         if (item !== undefined) shown.set(slot, { item, objects: build(slot, item) });
       }
+      hideCoveredBody();
     },
     dispose: () => {
       for (const slot of GEAR_SLOTS) clear(slot);
+      hideCoveredBody();
     },
   };
 }

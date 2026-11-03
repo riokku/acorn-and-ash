@@ -1719,8 +1719,11 @@ To see one piece of gear worn on its own, open
 `/?gallery=winter-gear&body=knight&wear=bearHat` (`body=barbarian` for Body 2).
 Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
 `&view=three-quarter` to turn the character, and `&before` for plain clothes.
+`&close` looks at the chest and shoulders up close, and `&walk`, `&run` or
+`&swing` keeps the character moving, to check that gear bends with the body.
 Every hat is fitted to both soft bodies by `tools/art/soft_hats.py`
-(decision 0283).
+(decision 0283), and every top, with one fit per body, by
+`tools/art/soft_tops.py` (decision 0284).
 
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include
