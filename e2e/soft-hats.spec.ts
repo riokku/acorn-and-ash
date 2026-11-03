@@ -3,7 +3,7 @@ import * as shared from '../packages/shared/src/index';
 test.setTimeout(240_000);
 test.use({ viewport: { width: 640, height: 480 }, deviceScaleFactor: 0.75 });
 
-// Every helm is fitted to the soft bodies' shared skeleton (decision 0282).
+// Every helm is fitted to the soft bodies' shared skeleton (decision 0283).
 test('draws every helm on both bodies', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -11,7 +11,7 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
  * What a character is wearing, drawn on the body (decision 0113).
  *
  * Every helm is its own file fitted to the soft bodies (tools/art/soft_hats.py,
- * decision 0282): the Knight's helmet and visor, the Mage's hat, the bear hat,
+ * decision 0283): the Knight's helmet and visor, the Mage's hat, the bear hat,
  * the mask, the wool cap and the Last Watch helm. Both bodies share one
  * skeleton, so each fits either head. Body, legs, boots and gloves are a thin
  * coloured skin laid over the matching part of the body, and the shield hangs

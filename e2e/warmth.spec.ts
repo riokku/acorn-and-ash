@@ -145,7 +145,7 @@ test(
       timeout: 120_000,
     });
     await expect(page.getByText('Winter clothing · Warmth 100')).toBeVisible();
-    // The bear hat is fitted to both soft bodies (decision 0282); the clothes are not yet.
+    // The bear hat is fitted to both soft bodies (decision 0283); the clothes are not yet.
     await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '1');
     expect(errors).toEqual([]);
   },

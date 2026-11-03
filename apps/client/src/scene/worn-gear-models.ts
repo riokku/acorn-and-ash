@@ -9,7 +9,7 @@ import rogueMaskUrl from '@assets/gear/rogue-mask.glb?url';
 import woolCapUrl from '@assets/gear/wool-cap.glb?url';
 import wornWatchHelmUrl from '@assets/gear/last-watch-helm-worn.glb?url';
 
-/** Every helm a player can wear, fitted to the soft bodies' skeleton (decision 0282). */
+/** Every helm a player can wear, fitted to the soft bodies' skeleton (decision 0283). */
 const URLS: Readonly<Partial<Record<ItemId, string>>> = {
   watchCaptainHelm: wornWatchHelmUrl,
   knightHelmet: knightHelmetUrl,

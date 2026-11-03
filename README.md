@@ -1720,7 +1720,7 @@ To see one piece of gear worn on its own, open
 Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
 `&view=three-quarter` to turn the character, and `&before` for plain clothes.
 Every hat is fitted to both soft bodies by `tools/art/soft_hats.py`
-(decision 0282).
+(decision 0283).
 
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include
