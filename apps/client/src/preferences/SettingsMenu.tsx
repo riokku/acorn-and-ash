@@ -109,7 +109,7 @@ export function SettingsMenu({
           }}
         >
           <div
-            className={`settings-card${section === 'keybindings' ? ' settings-card-keybindings' : ''}`}
+            className="settings-card"
             aria-modal="true"
             onKeyDown={(event) => {
               event.stopPropagation();
@@ -170,7 +170,12 @@ export function SettingsMenu({
               </button>
             </div>
             {section === 'general' ? (
-              <div id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab">
+              <div
+                id="settings-general"
+                className="settings-panel"
+                role="tabpanel"
+                aria-labelledby="settings-general-tab"
+              >
                 <SliderRow
                   label="Music volume"
                   value={preferences.musicVolume}
@@ -211,7 +216,7 @@ export function SettingsMenu({
             ) : (
               <div
                 id="settings-keybindings"
-                className="keybindings-reference"
+                className="settings-panel keybindings-reference"
                 role="tabpanel"
                 aria-labelledby="settings-keybindings-tab"
               >
