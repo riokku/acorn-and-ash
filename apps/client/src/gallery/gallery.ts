@@ -67,6 +67,9 @@ import { polyforkPaint, preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { preloadDeerModel } from '../scene/deer-model';
 import { preloadBearModel } from '../scene/bear-model';
 import { createCoyoteModel, preloadCoyoteModel } from '../scene/coyote-model';
+import { preloadStagModel } from '../scene/stag-model';
+import { preloadHareModel } from '../scene/hare-model';
+import { preloadFishModel } from '../scene/fish-models';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
@@ -361,6 +364,21 @@ const EXHIBITS: readonly Exhibit[] = [
     view: 1.6,
     create: () => smallAnimalExhibit('rabbit', createCritter()),
   },
+  // The jackrabbit: Polyfork's mountain hare (see wildlife-models.ts).
+  {
+    name: 'jackrabbit',
+    x: 5.4,
+    z: 2.6,
+    view: 1.6,
+    create: () => {
+      const run = new URLSearchParams(location.search).get('motion') === 'run';
+      const hare = createCritterFor('jackrabbit');
+      return {
+        group: hare.group,
+        update: (deltaSeconds: number) => hare.update(deltaSeconds, { speed: run ? 6 : 0 }),
+      };
+    },
+  },
   {
     name: 'raccoon',
     x: 7.4,
@@ -549,6 +567,9 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadDeerModel(),
     preloadBearModel(),
     preloadCoyoteModel(),
+    preloadStagModel(),
+    preloadHareModel(),
+    preloadFishModel(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),

@@ -1,7 +1,9 @@
 import * as THREE from 'three/webgpu';
-import type { ModelPart } from './model-loading';
+import { loadNamedGeometries, type ModelPart } from './model-loading';
 
-type Species = 'perch' | 'trout' | 'goldenCarp';
+import fishUrl from '@assets/critters/fish.glb?url';
+
+export type Species = 'perch' | 'trout' | 'goldenCarp';
 
 /** Small, closed low-poly fish; head faces -Z, preserving the existing food grip. */
 export function createFishParts(species: Species, roasted = false): ModelPart[] {
@@ -222,5 +224,83 @@ export function createFishParts(species: Species, roasted = false): ModelPart[] 
     geometry: new THREE.BoxGeometry(0.018 * width, 0.002, 0.002).translate(0, -0.003, -0.171),
     material: dark,
   });
+  return parts;
+}
+
+/**
+ * Quaternius's CC0 Fish, baked still from its swimming rig, in three parts
+ * (back, belly and fins) so each kind wears its own colours. Fitted to the
+ * placeholder's size and grip: 0.375 m nose to tail, head towards -Z.
+ */
+const FISH_FRONT = -0.17;
+const FISH_BACK = 0.205;
+/** Turns the model's head to -Z: Quaternius draws it facing +Z. */
+const HEAD_TURN = Math.PI;
+const FISH_COLOURS: Record<Species, { back: number; belly: number; fins: number }> = {
+  perch: { back: 0x5b6b34, belly: 0xd8d6a6, fins: 0xc0703a },
+  trout: { back: 0x56695f, belly: 0xc9a4a0, fins: 0x7d8c7c },
+  goldenCarp: { back: 0xa0712c, belly: 0xf1d893, fins: 0xc98a3a },
+};
+const ROASTED_COLOURS = { back: 0x6b4429, belly: 0xc99a62, fins: 0x704728 };
+
+let realFish: Map<string, THREE.BufferGeometry> | undefined;
+let fishLoading: Promise<void> | null = null;
+
+/** Fetches the real fish up front. Idempotent, like the other model preloads. */
+export function preloadFishModel(): Promise<void> {
+  fishLoading ??= loadNamedGeometries(fishUrl).then(
+    (parts) => {
+      const box = new THREE.Box3();
+      for (const geometry of parts.values()) {
+        geometry.rotateY(HEAD_TURN);
+        geometry.computeBoundingBox();
+        box.union(geometry.boundingBox!);
+      }
+      const size = box.getSize(new THREE.Vector3());
+      const centre = box.getCenter(new THREE.Vector3());
+      const scale = (FISH_BACK - FISH_FRONT) / size.z;
+      for (const geometry of parts.values()) {
+        geometry
+          .translate(-centre.x, -centre.y, -box.min.z)
+          .scale(scale, scale, scale)
+          .translate(0, 0, FISH_FRONT);
+      }
+      realFish = parts;
+    },
+    (error: unknown) => {
+      console.error('Could not load the fish model; keeping the placeholder.', error);
+    },
+  );
+  return fishLoading;
+}
+
+const heldFish = new Map<string, ModelPart[]>();
+
+/** The fish to hold: the real one once it has loaded, else the placeholder. */
+export function fishParts(species: Species, roasted = false): ModelPart[] {
+  const key = `${species}-${roasted}-${realFish !== undefined}`;
+  const known = heldFish.get(key);
+  if (known !== undefined) return known;
+  const colours = roasted ? ROASTED_COLOURS : FISH_COLOURS[species];
+  const parts =
+    realFish === undefined
+      ? createFishParts(species, roasted)
+      : (['top', 'bottom', 'fins'] as const).flatMap((name) => {
+          const geometry = realFish!.get(name);
+          if (geometry === undefined) return [];
+          const colour =
+            name === 'top' ? colours.back : name === 'bottom' ? colours.belly : colours.fins;
+          return [
+            {
+              geometry,
+              material: new THREE.MeshStandardMaterial({
+                color: colour,
+                flatShading: true,
+                roughness: roasted ? 0.9 : 0.5,
+              }),
+            },
+          ];
+        });
+  heldFish.set(key, parts);
   return parts;
 }

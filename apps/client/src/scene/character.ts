@@ -1,5 +1,5 @@
 import { HarvestingReach } from './harvesting-reach';
-import { createFishParts } from './fish-models';
+import { fishParts } from './fish-models';
 import { ITEM_KINDS } from '../item-catalog';
 import { CanoePaddling } from './canoe-paddling';
 import { StandingFootContact, type FootGroundHeight } from './standing-foot-contact';
@@ -423,12 +423,6 @@ const FOOD_HELD_PARTS: Partial<Record<ItemId, ModelPart[]>> = {
   trailRation: forestHeldParts('trailRation'),
   forestStew: forestHeldParts('forestStew'),
   berryTea: forestHeldParts('berryTea'),
-  perch: createFishParts('perch'),
-  trout: createFishParts('trout'),
-  goldenCarp: createFishParts('goldenCarp'),
-  roastedPerch: createFishParts('perch', true),
-  roastedTrout: createFishParts('trout', true),
-  roastedGoldenCarp: createFishParts('goldenCarp', true),
   meat: [
     {
       geometry: MEAT_BODY_GEOMETRY,
@@ -539,8 +533,20 @@ export function heldItemParts(thing: ItemId | 'shovel'): ModelPart[] | undefined
   if (thing === 'axe' || thing === 'rod' || thing === 'torch' || thing === 'shovel') {
     return itemModelParts(thing);
   }
+  const fish = HELD_FISH[thing];
+  if (fish !== undefined) return fishParts(...fish);
   return FOOD_HELD_PARTS[thing];
 }
+
+/** Fish are looked up as they are held, so the real model shows once it has loaded. */
+const HELD_FISH: Partial<Record<ItemId, Parameters<typeof fishParts>>> = {
+  perch: ['perch'],
+  trout: ['trout'],
+  goldenCarp: ['goldenCarp'],
+  roastedPerch: ['perch', true],
+  roastedTrout: ['trout', true],
+  roastedGoldenCarp: ['goldenCarp', true],
+};
 
 /** Where along a held thing its far end is: the full length of a tool, the middle of a fish. */
 function tipHeightOf(thing: ItemId | 'shovel'): number {
