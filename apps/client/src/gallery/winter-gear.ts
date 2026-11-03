@@ -7,6 +7,7 @@ import { createCharacter } from '../scene/character';
 import { MoveMemory } from '../scene/character-driver';
 import { preloadCharacterModels } from '../scene/character-model';
 import { preloadCharacterAnimations } from '../scene/character-animations';
+import { preloadStagModel } from '../scene/stag-model';
 import type { RendererSetup } from '../scene/renderer';
 import type { FireLights } from '../scene/fire-light';
 
@@ -17,7 +18,7 @@ export async function showWinterGear(
   lights: FireLights,
   params: URLSearchParams,
 ): Promise<void> {
-  await Promise.all([preloadCharacterModels(), preloadCharacterAnimations()]);
+  await Promise.all([preloadCharacterModels(), preloadCharacterAnimations(), preloadStagModel()]);
   const asked = params.get('body');
   const kind: CharacterId =
     asked !== null && asked in CHARACTER_KINDS ? (asked as CharacterId) : 'barbarian';

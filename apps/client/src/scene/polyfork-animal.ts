@@ -25,21 +25,30 @@ export interface AnimatedAnimal {
   dispose(): void;
 }
 
-export function polyforkAnimal(
-  file: string,
-  gait: {
-    /** The speeds (m/s) the Walk and Run clips look right at, at this scale. */
-    walkSpeed: number;
-    runSpeed: number;
-    /** Grown or shrunk evenly from Polyfork's size. */
-    scale?: number;
-  },
-): PolyforkAnimal {
+export interface Gait {
+  /** The speeds (m/s) the walk and run clips look right at, at this scale. */
+  walkSpeed: number;
+  runSpeed: number;
+  /** Grown or shrunk evenly from the file's size. */
+  scale?: number;
+  /** The run clip's name, when it isn't 'Run' (Quaternius calls it 'Gallop'). */
+  runClip?: string;
+}
+
+export function polyforkAnimal(file: string, gait: Gait): PolyforkAnimal {
+  return riggedAnimal(`${import.meta.env.BASE_URL}polyfork/${file}.glb`, file, gait);
+}
+
+/**
+ * Any rigged animal with Idle, Walk and Run clips that faces +Z, like
+ * Polyfork's and Quaternius's: the same handling, from any address.
+ */
+export function riggedAnimal(url: string, file: string, gait: Gait): PolyforkAnimal {
   let template: AnimatedModel | undefined;
   let loading: Promise<void> | null = null;
   return {
     preload() {
-      loading ??= loadAnimatedModel(`${import.meta.env.BASE_URL}polyfork/${file}.glb`).then(
+      loading ??= loadAnimatedModel(url).then(
         (loaded) => {
           template = loaded;
         },
@@ -57,7 +66,7 @@ export function polyforkAnimal(
       const walkSpeed = gait.walkSpeed * size;
       const runSpeed = gait.runSpeed * size;
       const { root, mixer, actions } = instantiateAnimatedModel(template);
-      // Polyfork faces +Z; every creature here faces -Z before it is turned.
+      // The file faces +Z; every creature here faces -Z before it is turned.
       root.rotation.y = Math.PI;
       root.scale.setScalar(gait.scale ?? 1);
       root.traverse((child) => {
@@ -69,7 +78,7 @@ export function polyforkAnimal(
       const clip = (name: string) => actions.find((action) => action.getClip().name === name);
       const idle = clip('Idle');
       const walk = clip('Walk');
-      const run = clip('Run');
+      const run = clip(gait.runClip ?? 'Run');
       for (const action of [idle, walk, run]) action?.play();
 
       return {

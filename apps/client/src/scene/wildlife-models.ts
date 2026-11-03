@@ -6,6 +6,7 @@ import { animateSmallAnimal } from './animal-motion';
 import { createDeerModel } from './deer-model';
 import { createBearModel } from './bear-model';
 import { createCoyoteModel } from './coyote-model';
+import { createStagModel } from './stag-model';
 import { createWoodlandCreature, type WoodlandCreature } from './woodland-creatures';
 
 /** Until Polyfork's wolf loads, the coyote is drawn as a fox grown this much. */
@@ -15,6 +16,12 @@ const COYOTE_SIZE = 1.45;
 export function createCritterFor(kind: AnimalKindId, phaseSeed = 0): WoodlandCreature {
   switch (kind) {
     case 'cedarStag': {
+      const stag = createStagModel();
+      if (stag !== undefined) {
+        const animated = animateSmallAnimal(stag, 'elk', phaseSeed);
+        animated.group.name = 'Old Cedar Stag';
+        return animated;
+      }
       const model = createWoodlandCreature('elk', 'cedar', phaseSeed);
       model.group.name = 'Old Cedar Stag';
       model.group.scale.setScalar(1.15);

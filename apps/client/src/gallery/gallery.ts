@@ -67,6 +67,7 @@ import { polyforkPaint, preloadPolyforkPieces } from '../scene/polyfork-piece';
 import { preloadDeerModel } from '../scene/deer-model';
 import { preloadBearModel } from '../scene/bear-model';
 import { createCoyoteModel, preloadCoyoteModel } from '../scene/coyote-model';
+import { preloadStagModel } from '../scene/stag-model';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
@@ -549,6 +550,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadDeerModel(),
     preloadBearModel(),
     preloadCoyoteModel(),
+    preloadStagModel(),
     preloadIronAxe(),
     preloadUnderstory(),
     preloadDugWalls(),
