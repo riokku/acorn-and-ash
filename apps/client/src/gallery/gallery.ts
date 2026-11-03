@@ -69,6 +69,11 @@ import { preloadBearModel } from '../scene/bear-model';
 import { createCoyoteModel, preloadCoyoteModel } from '../scene/coyote-model';
 import { preloadStagModel } from '../scene/stag-model';
 import { preloadHareModel } from '../scene/hare-model';
+import {
+  createSceneryAnimal,
+  preloadSceneryWildlife,
+  type SceneryKind,
+} from '../scene/scenery-wildlife';
 import { preloadFishModel } from '../scene/fish-models';
 import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
@@ -118,6 +123,18 @@ interface Exhibit {
     group: THREE.Group;
     update?(deltaSeconds: number): void;
     setDaylight?(brightness: number): void;
+  };
+}
+
+/** One of the scenery animals, idling, or flying with `?motion=fly`. */
+function sceneryExhibit(kind: SceneryKind) {
+  const animal = createSceneryAnimal(kind);
+  if (animal === undefined) return { group: new THREE.Group() };
+  const flying = new URLSearchParams(location.search).get('motion') === 'fly' ? 1 : 0;
+  if (flying > 0) animal.group.position.y = 0.6;
+  return {
+    group: animal.group,
+    update: (deltaSeconds: number) => animal.animate(deltaSeconds, 0, flying),
   };
 }
 
@@ -413,6 +430,40 @@ const EXHIBITS: readonly Exhibit[] = [
       return exhibit;
     },
   },
+  // The scenery wildlife: Polyfork's duck, frog, crow and owl (see scenery-wildlife.ts).
+  // `?motion=fly` shows the birds in flight.
+  {
+    name: 'duck',
+    x: 4.2,
+    z: 5.2,
+    yaw: Math.PI * 0.8,
+    view: 1.8,
+    create: () => sceneryExhibit('duck'),
+  },
+  {
+    name: 'frog',
+    x: 5.4,
+    z: 5.2,
+    yaw: Math.PI * 0.8,
+    view: 0.7,
+    create: () => sceneryExhibit('frog'),
+  },
+  {
+    name: 'crow',
+    x: 6.2,
+    z: 5.2,
+    yaw: Math.PI * 0.8,
+    view: 1.2,
+    create: () => sceneryExhibit('crow'),
+  },
+  {
+    name: 'owl',
+    x: 7.2,
+    z: 5.2,
+    yaw: Math.PI * 0.8,
+    view: 1.2,
+    create: () => sceneryExhibit('owl'),
+  },
   // The iron axe, made in Blender (see iron-axe.ts).
   { name: 'iron-axe', x: -16.9, z: -3.2, view: 1.4, create: createIronAxe },
   // The forest-floor plants, made in Blender (see understory.ts).
@@ -581,6 +632,7 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     preloadCoyoteModel(),
     preloadStagModel(),
     preloadHareModel(),
+    preloadSceneryWildlife(),
     preloadFishModel(),
     preloadIronAxe(),
     preloadUnderstory(),

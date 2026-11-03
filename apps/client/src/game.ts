@@ -384,6 +384,11 @@ import { preloadBearModel } from './scene/bear-model';
 import { preloadCoyoteModel } from './scene/coyote-model';
 import { preloadStagModel } from './scene/stag-model';
 import { preloadHareModel } from './scene/hare-model';
+import {
+  createSceneryWildlife,
+  preloadSceneryWildlife,
+  type SceneryKind,
+} from './scene/scenery-wildlife';
 import { preloadFishModel } from './scene/fish-models';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
@@ -673,6 +678,8 @@ export interface GameDebug {
   wildlifeSoundCount(): number;
   wildfireEffects(): { fires: number; smoke: number; embers: number; lightning: boolean };
   weatherEffects(): { rainDrops: number; fireflies: number };
+  /** The ducks, frogs, crows and owls drawn near the player just now. */
+  sceneryWildlife(): Record<SceneryKind, number>;
   /** How much of the ground and grass is under snow right now, from 0 to 1. */
   snowOnGround(): number;
   /** How many petals, pollen specks, leaves and snowflakes are drifting in view. */
@@ -1037,6 +1044,7 @@ export class Game {
   private wildfireState: WildfireView = { fires: [], lightning: null, now: 0 };
   private weatherSeed = 0;
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
+  private sceneryWildlife: ReturnType<typeof createSceneryWildlife> | null = null;
   private weatherCloud = 0;
   private seasonFallArt: ReturnType<typeof createSeasonFall> | null = null;
   private readonly viewDirection = new THREE.Vector3();
@@ -1291,6 +1299,7 @@ export class Game {
     void preloadCoyoteModel();
     void preloadStagModel();
     void preloadHareModel();
+    void preloadSceneryWildlife();
     void preloadFishModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
@@ -1755,6 +1764,7 @@ export class Game {
       wildfireEffects: () =>
         this.wildfireArt?.visibleEffects() ?? { fires: 0, smoke: 0, embers: 0, lightning: false },
       weatherEffects: () => this.weatherArt?.visibleEffects() ?? { rainDrops: 0, fireflies: 0 },
+      sceneryWildlife: () => this.sceneryWildlife?.drawn() ?? { duck: 0, frog: 0, crow: 0, owl: 0 },
       snowOnGround: () => seasonUniforms.snow.value,
       seasonFall: () =>
         this.seasonFallArt?.visibleEffects() ?? { petals: 0, pollen: 0, leaves: 0, snow: 0 },
@@ -1955,6 +1965,7 @@ export class Game {
     this.waterWake.clear();
     for (const ripple of waterRippleUniforms) ripple.value.set(0, 0, 10, 0);
     this.weatherArt?.dispose();
+    this.sceneryWildlife?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
     this.deadwood?.dispose();
@@ -3175,6 +3186,7 @@ export class Game {
           preloadCoyoteModel(),
           preloadStagModel(),
           preloadHareModel(),
+          preloadSceneryWildlife(),
           preloadFishModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
@@ -3204,6 +3216,11 @@ export class Game {
       this.weatherArt?.dispose();
       this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.weatherArt.group);
+      this.sceneryWildlife?.dispose();
+      this.sceneryWildlife = createSceneryWildlife(seed, clearing.water, (x, z) =>
+        terrain.heightAt(x, z),
+      );
+      this.outdoors.add(this.sceneryWildlife.group);
       this.seasonFallArt?.dispose();
       this.seasonFallArt = createSeasonFall(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.seasonFallArt.group);
@@ -4067,6 +4084,13 @@ export class Game {
       this.space !== OUTDOORS,
       this.reducedMotion.matches,
       weather.kind === 'blizzard' ? 0 : rainShareFor(season),
+    );
+    this.sceneryWildlife?.update(
+      deltaSeconds,
+      watcher,
+      dayBrightness(dayProgress(weatherNow)),
+      this.lakeFrozen,
+      this.space !== OUTDOORS,
     );
     // Fill the air where the camera is looking, so it is the part that is seen that is full.
     camera.camera.getWorldDirection(this.viewDirection);
