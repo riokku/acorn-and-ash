@@ -1,4 +1,4 @@
-import { logStorageCapacity, logStorageSpot } from '../sim/fire-fuel';
+import { logStorageCapacity, logStorageSpot, WOODSHED } from '../sim/fire-fuel';
 import type { BuildableKindId } from '../data/buildables';
 import { GARDEN_TRAY } from '../data/home-facilities';
 import { isHomeKind } from '../data/housing';
@@ -18,6 +18,11 @@ export interface PlacedSolidProp {
 /** Solid parts only: foliage, flames, rugs and inset path stones stay walkable. */
 export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Collider[] {
   const { x, z, yaw, kind } = prop;
+  // The woodshed is one solid block: its stack is reached from the front, not climbed.
+  if (kind === 'woodshed') {
+    const half = WOODSHED.height / 2;
+    return [box(x, groundY + half, z, WOODSHED.halfX, half, WOODSHED.halfZ, yaw)];
+  }
   if (logStorageCapacity(kind) > 0) {
     const spot = logStorageSpot(prop),
       columns = kind === 'largeCabin' ? 10 : 5,

@@ -80,6 +80,8 @@ export const PAINTED_ICONS: Partial<Record<ItemId | BuildableKindId, ArtSpec>> =
   flowerBed: art(shelters, 1254, [956, 435, 262, 154]),
   campfire: art(shelters, 1254, [59, 657, 215, 223]),
   rowboat: art(shelters, 1254, [342, 678, 261, 199]),
+  // The woodshed is shown by what it holds, until it has a painting of its own.
+  woodshed: art(basic, 1254, [399, 708, 184, 156]),
   fence: art(shelters, 1254, [662, 686, 243, 189]),
   gardenPath: art(shelters, 1254, [965, 679, 239, 196]),
   mineSupport: art(shelters, 1254, [56, 947, 235, 222]),

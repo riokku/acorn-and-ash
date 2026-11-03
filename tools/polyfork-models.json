@@ -228,6 +228,12 @@
       "id": "frog-base",
       "title": "Frog",
       "page": "https://polyfork.dev/asset/frog-base"
+    },
+    {
+      "name": "open-woodshed",
+      "id": "open-woodshed-050a0a",
+      "title": "Open Woodshed",
+      "page": "https://polyfork.dev/asset/open-woodshed-050a0a"
     }
   ]
 }

@@ -234,6 +234,15 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
   largeCabinBlueprint: blueprint(),
   cabin: <polygon points="12,3 21,10 21,21 3,21 3,10" />,
   trailWorkbench: <path d="M2 9H22V12H20V22H17V12H7V22H4V12H2ZM9 3H16V8H9Z" />,
+  // A lean-to roof on two posts, logs stacked underneath.
+  woodshed: (
+    <>
+      <path d="M1 10L12 3L23 10V12H1ZM3 12H5V22H3ZM19 12H21V22H19Z" />
+      <circle cx="9" cy="19.5" r="2.2" />
+      <circle cx="15" cy="19.5" r="2.2" />
+      <circle cx="12" cy="15.5" r="2.2" />
+    </>
+  ),
   trailPantry: <path d="M3 8Q3 3 8 3H16Q21 3 21 8V21H3ZM4 9H20V12H4ZM10 10V15H14V10Z" />,
   kitchenGarden: (
     <path d="M2 14H22V21H2ZM6 14V7L2 4L7 5L8 1L10 6L7 9V14ZM16 14V9L12 6L17 7L18 3L20 8L17 11V14Z" />

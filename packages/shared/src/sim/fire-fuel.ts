@@ -20,12 +20,24 @@ export function remainingFireFuel(until: number | null, stored: number, now: num
 
 /** Firewood is separate from the indoor chest and never feeds a fire automatically. */
 export function logStorageCapacity(kind: string): number {
+  if (kind === 'woodshed') return WOODSHED.capacity;
   return kind === 'cabin' ? 20 : kind === 'largeCabin' ? 50 : 0;
 }
+
+/** The woodshed (decision 0281): an open-fronted lean-to, its logs stacked under the roof. */
+export const WOODSHED = {
+  capacity: 40,
+  /** Half its width (along its own X) and depth, and its height, in metres. */
+  halfX: 1.7,
+  halfZ: 0.85,
+  height: 2.33,
+} as const;
 export function logStorageSpot(home: { kind: string; x: number; z: number; yaw: number }): {
   x: number;
   z: number;
 } {
+  // A woodshed's logs are under its own roof, reached from its open front.
+  if (home.kind === 'woodshed') return { x: home.x, z: home.z };
   const offset = -2.9 * (home.kind === 'largeCabin' ? 1.2 : 1);
   return { x: home.x + Math.cos(home.yaw) * offset, z: home.z - Math.sin(home.yaw) * offset };
 }
