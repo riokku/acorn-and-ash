@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { colliderTopAt } from '../src/collision/solid-surface';
 import { CHOP_REACH } from '../src/constants';
 import { PROP_KINDS, choppingRuleFor } from '../src/data/props';
 import { treeInReach } from '../src/sim/chopping';
@@ -102,16 +103,30 @@ describe('what the trees are worth', () => {
 
 describe('what a felled tree leaves behind', () => {
   it('leaves a stump you can walk around instead of a trunk you cannot', () => {
-    const trunk = PROP_KINDS.oak.colliderRadius * oak.scale;
     const stump = stumpColliderFor(oak);
     expect(stump.shape).toBe('cylinder');
     if (stump.shape !== 'cylinder') throw new Error('expected a cylinder');
 
     expect(stump.x).toBe(oak.x);
     expect(stump.z).toBe(oak.z);
-    expect(stump.radius).toBeLessThan(trunk);
-    // Low enough to read as remains rather than as a post.
+    // Low enough to read as remains rather than as a post, and something to
+    // climb onto rather than a wall. Its roots spread wider than the trunk did.
     expect(stump.height).toBeLessThan(1);
+    expect(stump.standable).toBe(true);
+  });
+
+  it('leaves a stump as wide as the trunk was where it was cut', () => {
+    for (const kind of ['pine', 'birch', 'oak', 'maple', 'alder'] as const) {
+      const tree = { ...oak, kind, scale: 1.2 };
+      const trunk = PROP_KINDS[kind].shape.trunkRadius * tree.scale;
+      const stump = stumpColliderFor(tree);
+      if (stump.shape !== 'cylinder') throw new Error('expected a cylinder');
+      const sawnTop = stump.baseY + stump.height;
+      // Just inside where the bark was, you are standing on the sawn top...
+      expect(colliderTopAt(stump, tree.x + trunk * 0.9, tree.z)).toBeCloseTo(sawnTop, 1);
+      // ...and a little outside it, you are down among the roots.
+      expect(colliderTopAt(stump, tree.x + trunk * 1.15, tree.z) ?? 0).toBeLessThan(sawnTop * 0.8);
+    }
   });
 
   it('leaves a bigger stump where a bigger tree stood', () => {

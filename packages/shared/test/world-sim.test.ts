@@ -2202,12 +2202,13 @@ describe('chopping a tree down', () => {
     const after = sim.collision.colliders[index];
     expect(sim.felledTreeIds()).toEqual([tree.id]);
     expect(sim.swingsLeftOn(tree.id)).toBeNull();
-    // You can walk where the trunk was: only the stump is left to bump into.
+    // You can walk where the trunk was: only a low stump you can climb onto is left.
     if (before?.shape !== 'cylinder' || after?.shape !== 'cylinder') {
       throw new Error('expected cylinders');
     }
-    expect(after.radius).toBeLessThan(before.radius);
     expect(after.height).toBeLessThan(before.height);
+    expect(after.height).toBeLessThan(1);
+    expect(after.standable).toBe(true);
   });
 
   it('cannot be chopped twice', () => {

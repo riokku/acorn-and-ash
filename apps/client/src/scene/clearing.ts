@@ -4,7 +4,6 @@ import * as THREE from 'three/webgpu';
 import {
   PROP_KINDS,
   choppingRuleFor,
-  stumpFor,
   treeAtGeneration,
   treeFallTimes,
   treeFallAngle,
@@ -27,10 +26,11 @@ import {
   createPropMeshes,
   placeInstance,
   placeOneInstance,
+  placeStump,
   type PropPart,
 } from './props';
 import { createTreeBurning } from './tree-burning';
-import { treeVariant } from './prop-models';
+import { stumpForTree, treeVariant } from './prop-models';
 
 /** The scenery, plus an invisible mesh the camera uses to avoid clipping. */
 export interface ClearingScene {
@@ -262,11 +262,10 @@ export function buildClearingScene(clearing: Clearing, terrain?: Terrain): Clear
 
         const stumpSlot = stumpSlotOf.get(tree.id);
         if (stumpSlot !== undefined) {
+          if (want.felled) placeStump(freshStumps, stumpSlot, grown);
           for (const part of freshStumps) {
-            if (want.felled) {
-              placeOneInstance(part, stumpSlot, stumpFor(grown));
-              part.burn?.(stumpSlot, want.burned ? 1 : 0);
-            } else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
+            if (want.felled) part.burn?.(stumpSlot, want.burned ? 1 : 0);
+            else part.mesh.setMatrixAt(stumpSlot, HIDDEN_INSTANCE);
             part.mesh.instanceMatrix.needsUpdate = true;
             // Instance uploads do not invalidate Three's cached culling bounds.
             part.mesh.boundingSphere = null;
@@ -349,7 +348,7 @@ function blockersFor(
   return clearing.props.map((prop) => {
     const state = states.get(prop.id);
     const grown = treeAtGeneration(clearing.seed, prop, state?.generation ?? 0, state?.growth);
-    const here: PlacedProp = state?.felled === true ? stumpFor(grown) : grown;
+    const here: PlacedProp = state?.felled === true ? stumpForTree(grown) : grown;
     return blockerGeometry(PROP_KINDS[here.kind], here);
   });
 }

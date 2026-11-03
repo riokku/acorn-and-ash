@@ -1568,10 +1568,16 @@ and reuse bounded voices; paused/hidden worlds stop old tails. Reduced motion
 suppresses impact camera shake. See
 [contact feedback](docs/decisions/0154-visible-contact-and-impact-feedback.md).
 
-The woodland now uses Douglas-fir, western redcedar and Sitka spruce models.
-Most trees are 10–21 metres tall, with a mature mix reaching 32 metres in the
-clearing's tree line and wilderness. Taller trees take longer to fall;
-their wood still drops within reach. Faraway trees use simpler meshes.
+The woodland now uses Quaternius's CC0 pines as its main conifer (five shapes,
+imported by `tools/art/quaternius-pines.mjs`), with western redcedar and Sitka
+spruce models. Most trees are 10–21 metres tall, with a mature mix reaching 32
+metres in the clearing's tree line and wilderness. Taller trees take longer to
+fall; their wood still drops within reach. Faraway trees use simpler meshes.
+A felled tree leaves a stump as wide as its own trunk where the axe cut, 0.4 m
+up, wearing that tree's bark (redcedar's redder, alder's paler) around a lighter
+sawn top. `tools/check-tree-trunks.mjs` keeps the trunk widths in the scenery table
+matched to the tree models, because the server sizes the stump you bump into
+from the table.
 
 ### Forest gameplay loop
 
@@ -1668,7 +1674,7 @@ unverified addresses, other accounts and test sign-in all leave the editor locke
 Open `/?gallery=tree-models&season=summer` to inspect all five forest species.
 Evergreens retain their painted green needles, including low branches and distant
 meshes. Winter snow settles on upper branch faces and clears with the seasonal thaw.
-Use the species, shape, season, distant-mesh and trunk close-up controls;
+Use the species, shape, season, distant-mesh, trunk close-up and stump-beside controls;
 drag to orbit and scroll to zoom. The tree builders in `tools/art/trees.py`
 and `tools/art/deciduous.py` retain their Blender sources under `assets/trees/`.
 After exporting, compress each model with

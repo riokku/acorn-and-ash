@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu';
 
-import { PROP_KINDS, propHeight, type PropKindId } from '@acorn/shared';
+import { PROP_KINDS, propHeight, stumpFor, type PlacedProp, type PropKindId } from '@acorn/shared';
 
 import { createRockMaterial, paintedMaterial } from '../art/materials';
 import { loadScaledModel, type ModelPart } from './model-loading';
+import { trunkRadiusAt } from './prop-grounding';
 
 import cedarUrl from '@assets/trees/western-redcedar.glb?url';
 import cedarBUrl from '@assets/trees/western-redcedar-b.glb?url';
@@ -17,12 +18,16 @@ import spruceCUrl from '@assets/trees/sitka-spruce-c.glb?url';
 import spruceDistantUrl from '@assets/trees/sitka-spruce-distant.glb?url';
 import spruceBDistantUrl from '@assets/trees/sitka-spruce-b-distant.glb?url';
 import spruceCDistantUrl from '@assets/trees/sitka-spruce-c-distant.glb?url';
-import firUrl from '@assets/trees/douglas-fir.glb?url';
-import firBUrl from '@assets/trees/douglas-fir-b.glb?url';
-import firCUrl from '@assets/trees/douglas-fir-c.glb?url';
-import firDistantUrl from '@assets/trees/douglas-fir-distant.glb?url';
-import firBDistantUrl from '@assets/trees/douglas-fir-b-distant.glb?url';
-import firCDistantUrl from '@assets/trees/douglas-fir-c-distant.glb?url';
+import pine1Url from '@assets/trees/pine-1.glb?url';
+import pine2Url from '@assets/trees/pine-2.glb?url';
+import pine3Url from '@assets/trees/pine-3.glb?url';
+import pine4Url from '@assets/trees/pine-4.glb?url';
+import pine5Url from '@assets/trees/pine-5.glb?url';
+import pine1DistantUrl from '@assets/trees/pine-1-distant.glb?url';
+import pine2DistantUrl from '@assets/trees/pine-2-distant.glb?url';
+import pine3DistantUrl from '@assets/trees/pine-3-distant.glb?url';
+import pine4DistantUrl from '@assets/trees/pine-4-distant.glb?url';
+import pine5DistantUrl from '@assets/trees/pine-5-distant.glb?url';
 import mapleUrl from '@assets/trees/bigleaf-maple.glb?url';
 import mapleDistantUrl from '@assets/trees/bigleaf-maple-distant.glb?url';
 import mapleBUrl from '@assets/trees/bigleaf-maple-b.glb?url';
@@ -39,18 +44,18 @@ import boulderUrl from '@assets/rocks/boulder.glb?url';
 import mossyRockUrl from '@assets/rocks/mossyRock.glb?url';
 
 /**
- * Original PNW tree meshes and licensed CC0 rocks (see
- * assets/LICENSES.csv). Any kind with no entry here keeps drawing its
+ * Original PNW tree meshes, Quaternius's CC0 pines and licensed CC0 rocks
+ * (see assets/LICENSES.csv). Any kind with no entry here keeps drawing its
  * placeholder shape; see the fallback in createPropMeshes.
  *
- * Every kind has a list of shapes: the trees have three each so a forest is
- * not one tree stamped out many times, and each tree keeps the same shape for
- * good (see `treeVariant`).
+ * Every kind has a list of shapes: the pines have five and the other trees
+ * three each, so a forest is not one tree stamped out many times, and each
+ * tree keeps the same shape for good (see `treeVariant`).
  */
 const MODEL_URLS: Partial<Record<PropKindId, readonly string[]>> = {
   birch: [cedarUrl, cedarBUrl, cedarCUrl],
   oak: [spruceUrl, spruceBUrl, spruceCUrl],
-  pine: [firUrl, firBUrl, firCUrl],
+  pine: [pine1Url, pine2Url, pine3Url, pine4Url, pine5Url],
   maple: [mapleUrl, mapleBUrl, mapleCUrl],
   alder: [alderUrl, alderBUrl, alderCUrl],
   boulder: [boulderUrl],
@@ -58,7 +63,7 @@ const MODEL_URLS: Partial<Record<PropKindId, readonly string[]>> = {
 };
 
 const DISTANT_URLS: Partial<Record<PropKindId, readonly string[]>> = {
-  pine: [firDistantUrl, firBDistantUrl, firCDistantUrl],
+  pine: [pine1DistantUrl, pine2DistantUrl, pine3DistantUrl, pine4DistantUrl, pine5DistantUrl],
   birch: [cedarDistantUrl, cedarBDistantUrl, cedarCDistantUrl],
   oak: [spruceDistantUrl, spruceBDistantUrl, spruceCDistantUrl],
   maple: [mapleDistantUrl, mapleBDistantUrl, mapleCDistantUrl],
@@ -68,6 +73,11 @@ const distantParts = new Map<PropKindId, ModelPart[][]>();
 
 const modelParts = new Map<PropKindId, ModelPart[][]>();
 let preloadPromise: Promise<void> | null = null;
+
+/** Where an axe takes a tree down, in metres above its roots on a full-grown tree. */
+const STUMP_CUT_HEIGHT = 0.4;
+/** Each tree shape's trunk radius at that height, by kind and shape (see `stumpForTree`). */
+const cutRadii = new Map<PropKindId, (number | undefined)[]>();
 
 /**
  * Fetches every real prop model up front. Idempotent, so both the eager
@@ -130,6 +140,20 @@ export function treeVariant(prop: { readonly id: number; readonly kind: PropKind
   return (Math.imul(prop.id, 2654435761) >>> 16) % count;
 }
 
+/**
+ * The stump a felled tree leaves: as wide as that tree's own trunk where it
+ * was cut, whichever shape it wore. Both stump models are as wide as the
+ * stump's table radius at scale 1, so the trunk's radius sets the scale.
+ * Until the tree's model has loaded, the table's trunk size stands in.
+ */
+export function stumpForTree(tree: PlacedProp, variant = treeVariant(tree)): PlacedProp {
+  const stump = stumpFor(tree);
+  const radii = cutRadii.get(tree.kind);
+  const radius = radii?.[variant % radii.length];
+  if (radius === undefined) return stump;
+  return { ...stump, scale: (radius / PROP_KINDS.stump.shape.radius) * tree.scale };
+}
+
 /** The real model's parts for this kind and shape, or undefined to keep the placeholder. */
 export function realModelPartsFor(
   id: PropKindId,
@@ -163,7 +187,19 @@ async function loadAll(): Promise<void> {
       }),
     );
     const loaded = results.filter((parts): parts is ModelPart[] => parts !== null);
-    if (loaded.length > 0) into.set(id, loaded);
+    if (loaded.length === 0) return;
+    into.set(id, loaded);
+    if (into === modelParts && PROP_KINDS[id].shape.family === 'tree') {
+      cutRadii.set(
+        id,
+        loaded.map((parts) =>
+          trunkRadiusAt(
+            parts.filter((part) => /bark/i.test(part.material.name)).map((part) => part.geometry),
+            STUMP_CUT_HEIGHT,
+          ),
+        ),
+      );
+    }
   };
   await Promise.all([
     ...(Object.entries(DISTANT_URLS) as Array<[PropKindId, readonly string[]]>).map(([id, urls]) =>
@@ -190,11 +226,16 @@ function dressUp(id: PropKindId, parts: ModelPart[]): ModelPart[] {
       part.material.dispose();
       return {
         geometry: part.geometry,
-        material: paintedMaterial('bark', {
-          roughness: 1,
-          tint: id === 'birch' ? 0xdbb7a2 : id === 'alder' ? 0xe6e1d6 : 0xc0b5a9,
-        }),
+        material: paintedMaterial('bark', { roughness: 1, tint: barkTint(id) }),
       };
     });
   return parts;
+}
+
+/**
+ * The colour each kind's painted bark is tinted: redcedar's redder, alder's
+ * paler. A felled tree's stump wears the same, so it reads as that tree's.
+ */
+export function barkTint(id: PropKindId): number {
+  return id === 'birch' ? 0xdbb7a2 : id === 'alder' ? 0xe6e1d6 : 0xc0b5a9;
 }
