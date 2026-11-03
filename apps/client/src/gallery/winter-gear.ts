@@ -3,7 +3,10 @@ import { createLastBellTrophy } from '../scene/skeleton-town';
 import { characterStats } from '../item-catalog';
 import * as THREE from 'three/webgpu';
 import {
+  ActionKind,
   CHARACTER_KINDS,
+  LIGHT_COMBO,
+  TICK_HZ,
   GEAR_SLOT_LABELS,
   ITEM_KINDS,
   gearSlotsOf,
@@ -128,6 +131,11 @@ export async function showWinterGear(
   const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 50);
   camera.position.set(1.3, lastWatch ? 1.4 : 1.2, lastWatch ? 3 : 2.4);
   camera.lookAt(0, 0.6, 0);
+  // `&close` looks at the chest and shoulders from arm's length, to check the fit.
+  if (params.has('close')) {
+    camera.position.set(0.55, 1.0, 1.05);
+    camera.lookAt(0, 0.68, 0);
+  }
   if (cedar) {
     camera.position.set(5.2, 3.4, 9);
     camera.lookAt(1.15, 1.85, 0);
@@ -139,13 +147,26 @@ export async function showWinterGear(
   };
   resize();
   window.addEventListener('resize', resize);
+  // `&walk` or `&run` moves on the spot and `&swing` swings over and over, to see gear bend.
+  const speed = params.has('run') ? 5 : params.has('walk') ? 1.6 : 0;
+  const swingTicks = LIGHT_COMBO[0].end;
+  const started = performance.now();
   let frames = 0,
     last = performance.now();
   renderer.setAnimationLoop(() => {
     const now = performance.now();
+    const ticks = Math.floor(((now - started) / 1000) * TICK_HZ);
     actor.update(Math.min(0.1, (now - last) / 1000), {
-      move: memory.view(0, 0, 0, false, 'forward', false),
-      locomotion: { speed: 0, airborne: false },
+      move: params.has('swing')
+        ? memory.view(
+            ActionKind.Swing,
+            Math.floor(ticks / swingTicks),
+            ticks % swingTicks,
+            false,
+            'forward',
+          )
+        : memory.view(0, 0, 0, false, 'forward', false),
+      locomotion: { speed, airborne: false },
       groundHeight: () => 0,
     });
     last = now;

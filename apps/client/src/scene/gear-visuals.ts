@@ -5,6 +5,7 @@ import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/sh
 
 import { plainMaterial } from '../art/materials';
 import { wornGearModelTemplate } from './worn-gear-models';
+import { bodyUnderClothes, type BoundGeometry } from './hidden-under-clothes';
 import { woodenShieldParts, wornWeapon } from './gear-models';
 
 /**
@@ -290,6 +291,44 @@ export function createGearVisuals(
     return objects;
   };
 
+  /** The soft body's own meshes, with the geometry each was loaded with. */
+  const bareBody = new Map(
+    skinned
+      .filter((mesh) => SOFT_BODY.test(mesh.name) || SOFT_BODY.test(mesh.parent?.name ?? ''))
+      .map((mesh) => [mesh, mesh.geometry] as const),
+  );
+
+  /**
+   * A piece of this model as it stood when bound, in `bone`'s frame. Body 1's file packs
+   * its vertices into a small box and keeps the unpacking in its bind pose, so its bare
+   * vertices only line up with a top's once both are taken to the same bone.
+   */
+  const boundTo = (
+    mesh: THREE.SkinnedMesh,
+    geometry: THREE.BufferGeometry,
+    bone: THREE.Bone,
+  ): BoundGeometry | undefined => {
+    const inverse = mesh.skeleton.boneInverses[mesh.skeleton.bones.indexOf(bone)];
+    if (inverse === undefined) return undefined;
+    return { geometry, toBone: inverse.clone().multiply(mesh.bindMatrix) };
+  };
+
+  /** Leaves out the parts of a soft body its fitted clothes cover, so none pokes through. */
+  const hideCoveredBody = (): void => {
+    const cloth: THREE.SkinnedMesh[] = [];
+    for (const [slot, { objects }] of shown)
+      if (slot !== 'helm' && !bodyFitted)
+        for (const object of objects) if (object instanceof THREE.SkinnedMesh) cloth.push(object);
+    for (const [mesh, bare] of bareBody) {
+      const bone = mesh.skeleton.bones[0];
+      const body = bone && boundTo(mesh, bare, bone);
+      const covers = bone
+        ? cloth.flatMap((piece) => boundTo(piece, piece.geometry, bone) ?? [])
+        : [];
+      mesh.geometry = body && covers.length > 0 ? bodyUnderClothes(body, covers) : bare;
+    }
+  };
+
   const clear = (slot: GearSlot): void => {
     const current = shown.get(slot);
     if (current === undefined) return;
@@ -307,9 +346,11 @@ export function createGearVisuals(
         clear(slot);
         if (item !== undefined) shown.set(slot, { item, objects: build(slot, item) });
       }
+      hideCoveredBody();
     },
     dispose: () => {
       for (const slot of GEAR_SLOTS) clear(slot);
+      hideCoveredBody();
     },
   };
 }
