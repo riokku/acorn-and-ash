@@ -79,6 +79,8 @@ test.describe('from the Enter World screen', () => {
   });
 
   test('lets the same account make a different character straight away', async ({ page }) => {
+    // Loads the world twice, with two tests sharing the machine (decision 0281).
+    test.setTimeout(180_000);
     const world = newWorld();
     await makeCharacter(page, world, 'Hazel');
     await page.evaluate(() =>

@@ -1,5 +1,7 @@
 import { expect, test } from './fixtures';
-test.setTimeout(180000);
+// Draws the real mountain view twice on the processor, with another test
+// sharing the machine (decision 0281).
+test.setTimeout(360_000);
 test(
   'renders softer mountain ground transitions with the real world terrain',
   { tag: '@real-drawing' },
@@ -15,7 +17,7 @@ test(
         `/?gallery=forest-distance&renderer=webgl2&view=mountain${before ? '&before' : ''}`,
       );
       await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true', {
-        timeout: 120000,
+        timeout: 170_000,
       });
       await page.screenshot({ path: info.outputPath(before ? 'before.png' : 'after.png') });
     }

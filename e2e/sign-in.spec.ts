@@ -238,6 +238,8 @@ test.describe('one character per world', () => {
   });
 
   test('is kept by the server, whatever a browser says later', async ({ page }) => {
+    // Loads the world twice, with two tests sharing the machine (decision 0281).
+    test.setTimeout(180_000);
     const world = `kept-${Date.now()}`;
     await page.goto(`/?renderer=webgl2&world=${world}`);
     await page.locator('#home-name').fill('Hazel');

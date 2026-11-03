@@ -165,6 +165,8 @@ test.describe('showing the character off', () => {
 
 test.describe('coming back', () => {
   test('welcomes you to your own character, shown off the same way', async ({ page }) => {
+    // Loads the world twice, with two tests sharing the machine (decision 0281).
+    test.setTimeout(180_000);
     const world = newWorld();
     await openScreen(page, world);
     await page.getByRole('button', { name: 'Body 2' }).click();

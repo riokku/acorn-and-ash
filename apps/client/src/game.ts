@@ -484,6 +484,15 @@ interface AnimalJolt {
   readonly strength: number;
 }
 
+/**
+ * Browser tests that switch drawing off (e2e/skip-drawing.ts) skip the effect
+ * warm-up too. It only exists to hide a first-use stutter on screen, and on a
+ * test machine's processor it adds eight or more seconds to every load.
+ */
+function effectWarmUpSkipped(): boolean {
+  return (window as Window & { acornE2eSkipWarmUp?: boolean }).acornE2eSkipWarmUp === true;
+}
+
 /** Which way a blow from `from` travels on into `to`, flat along the ground. */
 function awayFrom(
   from: Readonly<{ x: number; z: number }>,
@@ -3420,7 +3429,7 @@ export class Game {
       // Warm the outdoor view before hiding it for a room. Keep Space
       // messages queued during preparation so the latest server destination
       // still wins if it changes while either view is drawing.
-      this.warmEffectsOnNextFrame = true;
+      this.warmEffectsOnNextFrame = !effectWarmUpSkipped();
       await this.waitForWorldFrame();
       while (this.pendingSpace !== null) {
         const arrived = this.pendingSpace;
