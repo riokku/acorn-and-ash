@@ -144,6 +144,22 @@ describe('building the furniture that used to come with every home', () => {
       null,
     );
   });
+  it('keeps the spot where you wake on the floor clear, except for a flat rug', () => {
+    const wake = homeFloorWakeSpot('cabin');
+    const on = (kind: HomeDecoration['kind']): HomeDecoration => ({
+      id: 9,
+      homeId: 7,
+      kind,
+      x: wake.x - 0.3,
+      z: wake.z,
+      yaw: 0,
+    });
+    expect(checkDecorationSpot('cabin', on('cedarBench'), [], { x: 0, z: 2 })).toBe('blocked');
+    // A rug in the middle of the cabin reaches it, and that is fine.
+    expect(
+      checkDecorationSpot('cabin', { ...on('wovenRug'), x: 0, z: 0 }, [], { x: 0, z: 2 }),
+    ).toBe(null);
+  });
   it('builds furniture inside only', () => {
     for (const kind of ['bed', 'desk', 'storageChest', 'indoorGarden'] as const)
       expect(isIndoorOnlyKind(kind)).toBe(true);

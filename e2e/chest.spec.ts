@@ -17,9 +17,10 @@ import {
 
 // Exercise the real room, ray picking, protocol and panel with a seeded private
 // home. Durable Object persistence and isolation are covered by the Worker test.
-// Homes start empty (decision 0285), so this one has a chest built in it.
+// Homes start empty (decision 0285), so this one has a chest built in it: in
+// reach of where you wake by the fire, but clear of the fire's own panel on screen.
 const WAKE = homeFloorWakeSpot('cabin');
-const CHEST = { id: 1, homeId: 7, kind: 'storageChest', x: 1.5, z: -2.5, yaw: 0 } as const;
+const CHEST = { id: 1, homeId: 7, kind: 'storageChest', x: 0.2, z: -1.6, yaw: 0 } as const;
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
 test('opens a built storage chest by clicking its model and moves saved stacks both ways', async ({

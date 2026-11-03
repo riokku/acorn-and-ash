@@ -211,7 +211,10 @@ export function checkDecorationSpot(
     )
   )
     return 'blocked';
-  for (const spot of [homeEntry(kind), homeFloorWakeSpot(kind)])
+  // A flat rug may lie where you wake on the floor; nothing may block the door.
+  const keepClear =
+    piece.kind === 'wovenRug' ? [homeEntry(kind)] : [homeEntry(kind), homeFloorWakeSpot(kind)];
+  for (const spot of keepClear)
     if (outline.some((part) => overlaps(spot, 0.7, part))) return 'blocked';
   // Room to get into this bed or onto this chair.
   if (rest !== null) {

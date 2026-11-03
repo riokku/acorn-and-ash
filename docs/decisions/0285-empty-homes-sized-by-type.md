@@ -36,7 +36,8 @@ all worked out from that row, with no scaling.
 so older wire indices stay where they were. Each has a real box outline in
 `HOME_FURNITURE_SHAPES`, used for collision and for checking where it may go:
 inside the walls, off the fire and its cooking spot, clear of the door and
-the wake spot, and with room to stand at the bed and the chair. A home holds
+the wake spot (a flat rug may cover the wake spot, so a cabin can still have
+one in the middle), and with room to stand at the bed and the chair. A home holds
 one of each (`onlyOne`). The chest, workbench, garden, bed and chair are all
 found by looking for the built piece, so they work wherever it was put.
 

@@ -112,7 +112,8 @@ test('places, rotates, moves and packs up decorations in a private home', async 
     await expect.poll(() => sim.decorationsList().length).toBe(1);
     await menu();
     await page.getByRole('button', { name: /2 · Timber table/ }).click();
-    await clickFloor(1.5, 0.4);
+    // Spots clear of where you wake on the floor by the fire (decision 0285).
+    await clickFloor(1.6, 1);
     await expect.poll(() => sim.decorationsList().length).toBe(2);
     await menu();
     await page.getByRole('button', { name: /3 · Woven forest rug/ }).click();
@@ -120,15 +121,15 @@ test('places, rotates, moves and packs up decorations in a private home', async 
     await expect.poll(() => sim.decorationsList().length).toBe(3);
     await menu();
     await page.getByRole('button', { name: /Fern lantern/ }).click();
-    await clickFloor(1.6, -1.6);
+    await clickFloor(1.6, -2.3);
     await expect.poll(() => sim.decorationsList().length).toBe(4);
     await menu();
     await page.getByRole('button', { name: /Moonlit lantern/ }).click();
-    await clickFloor(-0.5, -2.5);
+    await clickFloor(-0.5, -2.4);
     await expect.poll(() => sim.decorationsList().length).toBe(5);
     await menu();
     await page.getByRole('button', { name: /Woodland flower planter/ }).click();
-    await clickFloor(1.6, 1.8);
+    await clickFloor(2.6, 2.3);
     await expect.poll(() => sim.decorationsList().length).toBe(6);
     await menu();
     await page
@@ -136,13 +137,13 @@ test('places, rotates, moves and packs up decorations in a private home', async 
       .filter({ hasText: 'Cedar bench' })
       .getByRole('button', { name: 'Move', exact: true })
       .click();
-    await moveFloor(0, -1.1);
+    await moveFloor(-1.2, -1.1);
     const originalYaw = sim.decorationsList()[0]!.yaw;
     await page.mouse.wheel(0, 120);
     await expect
       .poll(() => page.evaluate(() => window.acornDebug?.buildPreview()?.spot?.yaw))
       .not.toBe(originalYaw);
-    await clickFloor(0, -1.1);
+    await clickFloor(-1.2, -1.1);
     await expect.poll(() => sim.decorationsList()[0]?.z).toBeCloseTo(-1.1, 1);
     expect(sim.inventoryOf(1).log).toBe(7);
     await page.screenshot({

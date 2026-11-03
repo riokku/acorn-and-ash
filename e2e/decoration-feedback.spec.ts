@@ -135,14 +135,14 @@ test('keeps decoration previews through delay and refusal, and ignores broadcast
     await expect.poll(() => page.evaluate(() => window.acornDebug!.buildPreview())).toBeNull();
     await menu();
     await page.getByRole('button', { name: /2 · Timber table/ }).click();
-    await aim(1.5, 0.4);
+    await aim(1.6, 1);
     complete!();
     await expect(page.locator('.interaction-note')).toHaveText('Cedar bench placed.');
     await expect
       .poll(() => page.evaluate(() => window.acornDebug!.buildPreview()?.kind))
       .toBe('timberTable');
     expect(sim.decorationsList()).toHaveLength(1);
-    const nextPoint = await aim(1.5, 0.4);
+    const nextPoint = await aim(1.6, 1);
     await page.mouse.click(nextPoint.x, nextPoint.y);
     await expect.poll(() => requests).toBe(3);
     complete!();
