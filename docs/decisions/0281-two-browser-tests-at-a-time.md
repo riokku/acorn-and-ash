@@ -33,6 +33,8 @@ with the same checks and the same retry. Because two tests share a machine,
 each one takes longer on its own (39 seconds on average instead of 28). Three
 tests that load the world twice came close to the 90-second default limit, so
 they now get 180 seconds, like most tests that load the world. A new test
-that loads the world more than once may need the same. Making the terrain itself faster to
-compute would help both tests and players; that is game work for its own pull
-request.
+that loads the world more than once may need the same. Tests that really draw
+slow down the most, because drawing on the processor uses several cores: the
+mountain-ground drawing test went from 2 to over 3 minutes and now gets 6.
+Making the terrain itself faster to compute would help both tests and players;
+that is game work for its own pull request.
