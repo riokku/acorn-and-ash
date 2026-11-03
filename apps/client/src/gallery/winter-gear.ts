@@ -2,7 +2,17 @@ import { createCritterFor } from '../scene/wildlife-models';
 import { createLastBellTrophy } from '../scene/skeleton-town';
 import { characterStats } from '../item-catalog';
 import * as THREE from 'three/webgpu';
-import { CHARACTER_KINDS, type CharacterId } from '@acorn/shared';
+import {
+  CHARACTER_KINDS,
+  GEAR_SLOT_LABELS,
+  ITEM_KINDS,
+  gearSlotsOf,
+  slotToWear,
+  type CharacterId,
+  type GearSlot,
+  type ItemId,
+  type WornGear,
+} from '@acorn/shared';
 import { createCharacter } from '../scene/character';
 import { MoveMemory } from '../scene/character-driver';
 import { preloadCharacterModels } from '../scene/character-model';
@@ -10,6 +20,19 @@ import { preloadCharacterAnimations } from '../scene/character-animations';
 import { preloadStagModel } from '../scene/stag-model';
 import type { RendererSetup } from '../scene/renderer';
 import type { FireLights } from '../scene/fire-light';
+
+/**
+ * `&wear=<gear id>` wears just that one piece, in the slot a right-click would
+ * use, or in `&slot=offHand` (any slot it fits).
+ */
+function wornAlone(params: URLSearchParams): { item: ItemId; slot: GearSlot } | null {
+  const asked = params.get('wear');
+  if (asked === null || !(asked in ITEM_KINDS)) return null;
+  const item = asked as ItemId;
+  const askedSlot = params.get('slot');
+  const slot = gearSlotsOf(item).find((fits) => fits === askedSlot) ?? slotToWear(item, {});
+  return slot === null ? null : { item, slot };
+}
 
 /** Actual worn gear on the shared animated body; reuse the existing clothing rendering. */
 export async function showWinterGear(
@@ -25,26 +48,36 @@ export async function showWinterGear(
   const cedar = params.get('gallery') === 'cedar-hunt';
   const basic = params.get('gallery') === 'basic-clothing';
   const lastWatch = params.get('gear') === 'last-watch-helm';
-  const worn = cedar
-    ? ({
-        upperBody: 'cedarstalkerCoat',
-        lowerBody: 'travelerTrousers',
-        feet: 'leatherBoots',
-      } as const)
-    : lastWatch
-      ? ({ helm: 'watchCaptainHelm' } as const)
-      : basic
-        ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
-        : ({
-            upperBody: 'winterJacket',
-            helm: 'bearHat',
+  const single = wornAlone(params);
+  const worn: WornGear =
+    single !== null
+      ? { [single.slot]: single.item }
+      : cedar
+        ? ({
+            upperBody: 'cedarstalkerCoat',
             lowerBody: 'travelerTrousers',
             feet: 'leatherBoots',
-            hands: 'leatherGloves',
-          } as const);
+          } as const)
+        : lastWatch
+          ? ({ helm: 'watchCaptainHelm' } as const)
+          : basic
+            ? ({ helm: 'woolCap', upperBody: 'linenShirt', lowerBody: 'workTrousers' } as const)
+            : ({
+                upperBody: 'winterJacket',
+                helm: 'bearHat',
+                lowerBody: 'travelerTrousers',
+                feet: 'leatherBoots',
+                hands: 'leatherGloves',
+              } as const);
   const actor = createCharacter(kind, 0x82955e);
   actor.setGear(params.has('before') || params.get('gear') === 'last-bell' ? {} : worn);
-  actor.group.rotation.y = params.has('back') ? -0.18 : Math.PI - 0.18;
+  // The main hand is drawn as what is held, not as worn gear.
+  if (single?.slot === 'mainHand' && !params.has('before')) actor.setEquippedItem(single.item);
+  // `&view=side` or `&view=three-quarter` turns the character from the front.
+  const view = params.get('view');
+  actor.group.rotation.y =
+    (params.has('back') ? -0.18 : Math.PI - 0.18) +
+    (view === 'side' ? Math.PI / 2 : view === 'three-quarter' ? Math.PI / 4 : 0);
   scene.add(actor.group);
   const stag = cedar ? createCritterFor(params.has('before') ? 'elk' : 'cedarStag') : null;
   if (stag) {
@@ -71,15 +104,17 @@ export async function showWinterGear(
   const caption = document.createElement('p');
   caption.textContent = params.has('before')
     ? 'Plain clothes · Warmth 0'
-    : cedar
-      ? 'Cedarstalker coat · Protection 6% · Warmth 45 · Quiet step 15%'
-      : params.get('gear') === 'last-bell'
-        ? 'Last Bell keepsake · earned at Bonehollow, displayed at home'
-        : lastWatch
-          ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
-          : basic
-            ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
-            : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
+    : single !== null
+      ? `${ITEM_KINDS[single.item].displayName} · ${GEAR_SLOT_LABELS[single.slot]}`
+      : cedar
+        ? 'Cedarstalker coat · Protection 6% · Warmth 45 · Quiet step 15%'
+        : params.get('gear') === 'last-bell'
+          ? 'Last Bell keepsake · earned at Bonehollow, displayed at home'
+          : lastWatch
+            ? 'Last Watch helm · Protection 10% · Vitality 5 · Warmth 10'
+            : basic
+              ? `Basic clothing · Protection ${characterStats(worn).protection}% · Warmth ${characterStats(worn).warmth}`
+              : `Winter clothing · Warmth ${characterStats(worn).warmth}`;
   caption.style.cssText =
     'position:absolute;left:0;right:0;bottom:24px;text-align:center;color:#f1efdc;font:18px Georgia;pointer-events:none';
   document.body.append(caption);
