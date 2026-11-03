@@ -38,19 +38,34 @@ async function pretendSignedOut(page: Page): Promise<void> {
 }
 
 test.describe('on the home screens', () => {
-  test('hangs over the front page, before and after Play', async ({ page }) => {
+  test('sits under Play on the front page, then hangs in the corner after it', async ({ page }) => {
     await pretendSignedOut(page);
     await page.goto('/?season=autumn');
     await expect(page.getByTestId('front-door')).toBeVisible();
 
-    const banner = page.getByTestId('season-banner');
-    await expect(banner).toHaveAttribute('data-season', 'autumn');
-    await expect(banner).toContainText('Autumn');
+    const badge = page.getByTestId('season-badge');
+    await expect(badge).toHaveAttribute('data-season', 'autumn');
+    await expect(badge).toContainText('Autumn');
+    await expect(badge).toContainText('Day 1 of 6');
     // No world is chosen here, so no year: the browser clock's "year" is a number like 62201.
-    await expect(banner).not.toContainText('Year');
-    await expect(banner).toContainText('Winter is coming');
+    await expect(badge).not.toContainText('Year');
+    await expect(badge).toContainText('Winter is coming');
+    await expect(page.getByTestId('season-banner')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Play' }).click();
+    // Centred under the Play button.
+    const play = page.getByRole('button', { name: 'Play' });
+    const playBox = await play.boundingBox();
+    const badgeBox = await badge.boundingBox();
+    expect(playBox).not.toBeNull();
+    expect(badgeBox).not.toBeNull();
+    if (playBox !== null && badgeBox !== null) {
+      expect(badgeBox.y).toBeGreaterThan(playBox.y + playBox.height);
+      expect(
+        Math.abs(badgeBox.x + badgeBox.width / 2 - (playBox.x + playBox.width / 2)),
+      ).toBeLessThan(2);
+    }
+
+    await play.click();
     await expect(page.getByTestId('front-choices')).toBeVisible();
     await expect(page.getByTestId('season-banner')).toHaveAttribute('data-season', 'autumn');
   });

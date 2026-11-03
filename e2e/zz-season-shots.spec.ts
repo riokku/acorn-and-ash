@@ -21,7 +21,7 @@ test.setTimeout(240_000);
 test('front page autumn', async ({ page }) => {
   await signedOut(page);
   await page.goto('/?season=autumn');
-  await expect(page.getByTestId('season-banner')).toBeVisible();
+  await expect(page.getByTestId('season-badge')).toBeVisible();
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/banner-front-autumn.png` });
 });
