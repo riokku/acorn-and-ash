@@ -5,7 +5,7 @@ import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/sh
 
 import { plainMaterial } from '../art/materials';
 import { wornGearModelTemplate, createWatchCaptainHelm } from './worn-gear-models';
-import { woodenShieldParts } from './gear-models';
+import { woodenShieldParts, wornWeapon } from './gear-models';
 import { woolCapGeometry } from './basic-clothing';
 
 /**
@@ -258,6 +258,21 @@ export function createGearVisuals(
     into.push(held);
   };
 
+  /** A knife worn in the off hand, the same knife the main hand swings, its point forward. */
+  const buildOffHandKnife = (into: THREE.Object3D[]): void => {
+    const knife = wornWeapon('huntingKnife');
+    if (leftHand === undefined || knife === undefined) return;
+    const held = new THREE.Group();
+    for (const part of knife.parts) {
+      const mesh = new THREE.Mesh(part.geometry, part.material);
+      mesh.castShadow = true;
+      held.add(mesh);
+    }
+    held.scale.setScalar(heldScale);
+    leftHand.add(held);
+    into.push(held);
+  };
+
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
     if (slot === 'helm') {
@@ -270,6 +285,7 @@ export function createGearVisuals(
     ) {
       if (bodyFitted) buildSkin(slot, item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
+    else if (slot === 'offHand' && item === 'huntingKnife') buildOffHandKnife(objects);
     for (const object of objects)
       object.traverse((part) => {
         part.userData.gearItem = item;

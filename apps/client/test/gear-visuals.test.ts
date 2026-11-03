@@ -125,6 +125,22 @@ it('attaches the Last Watch helm to the animated head without disposing shared a
   expect(disposeGeometry).not.toHaveBeenCalled();
   expect(disposeMaterial).not.toHaveBeenCalled();
 });
+it('holds a knife worn in the off hand, on every body, and puts it away when taken off', () => {
+  const root = new THREE.Group();
+  const body = part('body1_1');
+  const hand = new THREE.Bone();
+  root.add(body.mesh, body.bone, hand);
+  const visuals = createGearVisuals(root, hand, 1, { bodyFitted: false });
+  visuals.setWorn({ offHand: 'huntingKnife' });
+  expect(hand.children).toHaveLength(1);
+  expect(hand.children[0]!.children.length).toBeGreaterThan(0);
+  expect(hand.children[0]!.children[0]!.userData.gearItem).toBe('huntingKnife');
+  visuals.setWorn({ offHand: 'woodenShield' });
+  expect(hand.children).toHaveLength(1);
+  expect(hand.children[0]!.userData.gearItem).toBe('woodenShield');
+  visuals.setWorn({});
+  expect(hand.children).toHaveLength(0);
+});
 it('leaves helms and clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_Body');
