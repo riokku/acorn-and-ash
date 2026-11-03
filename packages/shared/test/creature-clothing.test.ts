@@ -19,6 +19,7 @@ it('occasionally drops each clothing kind from wildlife, skeletons and bosses de
   for (const [source, kind, low, high] of [
     ['animal', 'rabbit', 0.1, 0.2],
     ['animal', 'maskedRaccoon', 0.25, 0.35],
+    ['animal', 'blackBear', 0.25, 0.35],
     ['raider', 'minion', 0.25, 0.35],
     ['raider', 'sentinel', 0.45, 0.55],
   ] as const) {
