@@ -7,9 +7,9 @@ import {
   encodeDecorationState,
   decodeClientMessage,
   decodeServerMessage,
-  HOME_WAKE_SPOT,
-  HOME_ENTRY,
-  HOME_FACILITIES,
+  homeEntry,
+  homeFire,
+  homeFloorWakeSpot,
   PLAYER_RADIUS,
   BUILDABLE_KINDS,
   createInput,
@@ -46,7 +46,7 @@ it('lets an owner freely place, rotate and move a piece without paying twice', (
   expect(sim.inventoryOf(1)).toMatchObject({ log: 16, stick: 18 });
   const piece = sim.decorationsList()[0]!;
   expect(
-    sim.requestDecoration(1, { ...piece, action: 'move', x: 0, z: -1.1, yaw: Math.PI / 2 }).reason,
+    sim.requestDecoration(1, { ...piece, action: 'move', x: -1, z: -1.1, yaw: Math.PI / 2 }).reason,
   ).toBeNull();
   expect(sim.inventoryOf(1)).toMatchObject({ log: 16, stick: 18 });
   expect(sim.decorationsList()[0]?.yaw).toBe(Math.PI / 2);
@@ -64,10 +64,9 @@ it('keeps doorways, waking spots, furniture, useful stations and players clear w
   const sim = room(),
     before = { ...sim.inventoryOf(1) };
   for (const spot of [
-    HOME_WAKE_SPOT,
-    HOME_ENTRY,
-    HOME_FACILITIES.cooking,
-    HOME_FACILITIES.workbench,
+    homeFloorWakeSpot('cabin'),
+    homeEntry('cabin'),
+    homeFire('cabin').cooking,
     { x: 0, z: 2 },
     { x: 3.5, z: 0 },
   ])

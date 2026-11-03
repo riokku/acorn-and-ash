@@ -225,6 +225,32 @@ const ICON_SHAPES: Record<IconId, React.JSX.Element> = {
       <path d="M8 12L12 8L16 12L12 16Z" fill="var(--parchment,#e8dbc2)" />
     </>
   ),
+  // A headboard, the mattress and a pillow.
+  bed: (
+    <>
+      <path d="M2 7H5V13H22V20H19V17H5V20H2Z" />
+      <rect x="6.5" y="9.5" width="5" height="3" rx="1.2" />
+    </>
+  ),
+  // The table, and the chair pulled up to it.
+  desk: <path d="M1 9H15V11H13V21H11V11H5V21H3V11H1ZM17 4H19V12H23V14H22V21H20V16H19V21H17Z" />,
+  storageChest: (
+    <>
+      <path d="M3 9Q3 4 12 4Q21 4 21 9ZM3 10H21V20H3Z" />
+      <rect x="10.5" y="8.5" width="3" height="4" fill="var(--parchment,#e8dbc2)" />
+    </>
+  ),
+  // Three trays with a sprout in each.
+  indoorGarden: (
+    <>
+      <path d="M1 15H7V20H1ZM9 15H15V20H9ZM17 15H23V20H17Z" />
+      <path
+        d="M4 14V10Q2 9 2 7M12 14V8Q14 7 15 5M20 14V10Q22 9 22 7"
+        stroke="currentColor"
+        fill="none"
+      />
+    </>
+  ),
   campfire: <polygon points="12,2 15,9 18,8 15,15 17,20 12,23 7,20 9,15 6,8 9,9" />,
   tent: <polygon points="12,3 23,21 1,21 9,16 12,8 15,16" />,
   teepee: <polygon points="10,1 12,5 14,1 15,2 13,7 22,22 14,22 12,15 10,22 2,22 11,7 9,2" />,

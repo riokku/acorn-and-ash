@@ -35,8 +35,8 @@ import {
   buildableKindIndex,
   choppingRuleFor,
   isExploredAt,
-  HOME_WAKE_SPOT,
-  HOME_ENTRY,
+  homeEntry,
+  homeFloorWakeSpot,
   recipeFor,
   type ItemId,
   type WorldSimulation,
@@ -2060,7 +2060,7 @@ describe('building', () => {
       }
       return sim.spaceOf(client.welcome().netId) !== 0;
     });
-    if (inside) await walkWithinReach(client, { x: 0, z: HOME_ENTRY.z + 5 });
+    if (inside) await walkWithinReach(client, { x: 0, z: homeEntry('cabin').z + 5 });
     client.walk(0, 0, 0, 1);
     await waitFor('outdoors at the established home', () => client.latestSpace()?.space === 0);
   }
@@ -2373,13 +2373,14 @@ describe('building', () => {
     owner.close();
     await sleep(300);
 
-    // Reconnecting wakes them up inside their own home now, by the bed,
-    // not back where they stood when they logged out - see decision 0055.
+    // Reconnecting wakes them up inside their own home now, on the floor by
+    // the fire until they build a bed, not back where they stood when they
+    // logged out - see decisions 0055 and 0285.
     const returning = await TestClient.connect(worldId, 'has-a-cabin');
     await waitFor('word of where they are', () => returning.latestSpace() !== undefined);
     expect(returning.latestSpace()?.space).toBe(home.id);
-    expect(returning.latestSpace()?.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 1);
-    expect(returning.latestSpace()?.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 1);
+    expect(returning.latestSpace()?.x).toBeCloseTo(homeFloorWakeSpot('tent').x, 1);
+    expect(returning.latestSpace()?.z).toBeCloseTo(homeFloorWakeSpot('tent').z, 1);
 
     // Their own door locks and unlocks, and everybody hears about it.
     returning.setDoorLock(true);

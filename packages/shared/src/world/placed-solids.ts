@@ -1,6 +1,6 @@
 import { logStorageCapacity, logStorageSpot, WOODSHED } from '../sim/fire-fuel';
 import type { BuildableKindId } from '../data/buildables';
-import { GARDEN_TRAY } from '../data/home-facilities';
+import { GARDEN_TRAY, furnitureColliders, isHomeFurniture } from './home';
 import { isHomeKind } from '../data/housing';
 import { box, cylinder, type Collider } from './colliders';
 import { navigableWaterSurfaceAt } from './navigable-water';
@@ -52,6 +52,9 @@ export function placedPropColliders(prop: PlacedSolidProp, groundY: number): Col
       }),
     ];
   }
+  // Indoor-only furniture never stands outside.
+  // Furniture is built indoors, on the room's floor, out of its own boxes.
+  if (isHomeFurniture(kind)) return furnitureColliders({ ...prop, kind });
   if (isHomeKind(kind) || kind === 'gardenPath' || kind === 'wovenRug') return [];
   const slab = (
     halfX: number,

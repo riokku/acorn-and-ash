@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ActionKind,
-  HOME_BED,
   BOAT_SEAT_HEIGHT,
+  furnitureRestingPlace,
+  type HomeDecoration,
   STREAM,
   streamPointAt,
   navigableWaterSurfaceAt,
-  HOME_CHAIR,
   OUTDOORS,
   RiseFrom,
   dodgeHeading,
@@ -59,20 +59,29 @@ describe('where a body rests', () => {
     expect(boatSeatAt(source.x, source.z, 0).y).toBeGreaterThan(30);
   });
 
+  // A room with a bed and a desk built in it, turned different ways.
+  const bed: HomeDecoration = { id: 1, homeId: 1, kind: 'bed', x: -2.75, z: -1.95, yaw: 0 };
+  const desk: HomeDecoration = { id: 2, homeId: 1, kind: 'desk', x: 1.2, z: 1.4, yaw: Math.PI };
+  const chair = furnitureRestingPlace(desk)!;
+  const mattress = furnitureRestingPlace(bed)!;
+  const near = (place: typeof chair) => ({ pieces: [bed, desk], position: place.stand });
+
   it('settles onto the chair sitting down, and stays there getting up out of it', () => {
-    expect(restSpotFor(ActionKind.Sit, 0, 1)).toEqual(HOME_CHAIR.rest);
-    expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, 1)).toEqual(HOME_CHAIR.rest);
+    expect(restSpotFor(ActionKind.Sit, 0, 1, near(chair))).toEqual(chair.rest);
+    expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, 1, near(chair))).toEqual(chair.rest);
   });
 
   it('lies on the bed, and gets up from it', () => {
-    expect(restSpotFor(ActionKind.Lie, 0, 1)).toEqual(HOME_BED.rest);
-    expect(restSpotFor(ActionKind.Rise, RiseFrom.Bed, 1)).toEqual(HOME_BED.rest);
+    expect(restSpotFor(ActionKind.Lie, 0, 1, near(mattress))).toEqual(mattress.rest);
+    expect(restSpotFor(ActionKind.Rise, RiseFrom.Bed, 1, near(mattress))).toEqual(mattress.rest);
   });
 
   it('gets up off the ground where it stands, and rests nowhere outdoors', () => {
-    expect(restSpotFor(ActionKind.Rise, RiseFrom.Ground, 1)).toBeNull();
-    expect(restSpotFor(ActionKind.Swing, 1, 1)).toBeNull();
+    expect(restSpotFor(ActionKind.Rise, RiseFrom.Ground, 1, near(chair))).toBeNull();
+    expect(restSpotFor(ActionKind.Swing, 1, 1, near(chair))).toBeNull();
     expect(restSpotFor(ActionKind.Sit, 0, OUTDOORS)).toBeNull();
+    // Nothing to lie on in a room with no bed built.
+    expect(restSpotFor(ActionKind.Lie, 0, 1, { pieces: [], position: mattress.stand })).toBeNull();
   });
 });
 
@@ -151,9 +160,11 @@ it('uses the same rotated outdoor bench rest spot for sitting and rising without
   const bench = { id: 1, kind: 'cedarBench', x: 8, z: 8, yaw: Math.PI / 2 };
   const position = { x: 7.18, y: 3, z: 8.42 };
   const outdoor = { pieces: [bench], position, heightAt: () => 3 };
-  const sitting = restSpotFor(ActionKind.Sit, 0, OUTDOORS, 'tent', outdoor);
+  const sitting = restSpotFor(ActionKind.Sit, 0, OUTDOORS, undefined, outdoor);
   expect(sitting?.y).toBeCloseTo(3.18);
   expect(sitting?.yaw).toBeCloseTo(Math.PI / 2);
-  expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, OUTDOORS, 'tent', outdoor)).toEqual(sitting);
-  expect(restSpotFor(ActionKind.SitGround, 0, OUTDOORS, 'tent', outdoor)).toBeNull();
+  expect(restSpotFor(ActionKind.Rise, RiseFrom.Chair, OUTDOORS, undefined, outdoor)).toEqual(
+    sitting,
+  );
+  expect(restSpotFor(ActionKind.SitGround, 0, OUTDOORS, undefined, outdoor)).toBeNull();
 });

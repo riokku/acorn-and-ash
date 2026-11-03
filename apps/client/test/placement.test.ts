@@ -249,7 +249,8 @@ it('flags interior conflicts before showing a green cabin upgrade preview', () =
       { item: 'bone', count: 8 },
     ],
     built: [built({ id: 7, kind: 'teepee', x: 0, z: -4.2, yours: true })],
-    decorations: [{ id: 1, homeId: 7, kind: 'lantern', x: -2.5, z: 2, yaw: 0 }],
+    // Where the cabin's fireplace will stand, against its +X wall.
+    decorations: [{ id: 1, homeId: 7, kind: 'lantern', x: 2.4, z: -0.9, yaw: 0 }],
   };
   expect(planPlacement(inputs).refusal).toContain('lantern inside your home');
   expect(planPlacement({ ...inputs, decorations: [] }).refusal).toBeNull();

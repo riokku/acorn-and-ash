@@ -6,6 +6,7 @@ import {
   FIRE_CAPACITY_MS,
   HUNGER_MAX,
   logStorageSpot,
+  homeFire,
   countOf,
   clockShiftForSeason,
   encodeFireRequest,
@@ -47,7 +48,8 @@ function setup(kind: BuildableKindId = 'campfire') {
   );
   sim.placePlayer(
     1,
-    kind === 'campfire' ? { x: 0, y: 0, z: 1.5 } : { x: 2, y: 0, z: -1.08 },
+    // Indoors, at the spot the home's own fire is cooked at.
+    kind === 'campfire' ? { x: 0, y: 0, z: 1.5 } : { ...homeFire(kind).cooking, y: 0 },
     0,
     kind === 'campfire' ? 0 : 7,
   );

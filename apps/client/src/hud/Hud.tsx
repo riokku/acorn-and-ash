@@ -24,7 +24,7 @@ import { DAYS_PER_SEASON, fishDisplayLearned, fishRecordsFromSaved } from '@acor
 import { FishingJournal, RareReelHint } from './FishingJournal';
 import { ExpeditionPanel } from './ExpeditionPanel';
 import type { ExpeditionRequest } from '@acorn/shared';
-import { DECORATION_KINDS } from '@acorn/shared';
+import { DECORATION_KINDS, isHomeFurniture } from '@acorn/shared';
 import { MEAL_BENEFITS, TICK_HZ } from '@acorn/shared';
 import { DiscoveryJournal, JournalTabs } from './DiscoveryJournal';
 import { GardenJournal } from './GardenJournal';
@@ -421,13 +421,16 @@ export function Hud({
                     <h3>{group}</h3>
                     <div className="decor-options">
                       {DECORATION_KINDS.flatMap((kind, index) =>
-                        buildGroup(kind, true) !== group
+                        buildGroup(kind, true) !== group ||
+                        // Only a large cabin has room for a garden indoors.
+                        (kind === 'indoorGarden' && state.homeKind !== 'largeCabin')
                           ? []
                           : [
                               <button
                                 type="button"
                                 key={kind}
                                 disabled={
+                                  alreadyBuilt(kind, state.decorations) ||
                                   (kind === 'trailPennant' &&
                                     !((state.expedition?.cosmetics ?? 0) & 1)) ||
                                   !fishDisplayLearned(kind, fishRecordsFromSaved(state.fishRecords))
@@ -438,15 +441,17 @@ export function Hud({
                                 <strong>
                                   {index < 6 ? `${index + 1} · ` : ''}
                                   {BUILDABLE_KINDS[kind].displayName}
-                                  {kind === 'trailPennant' &&
-                                  !((state.expedition?.cosmetics ?? 0) & 1)
-                                    ? ' · recover a rumor or complete three outings'
-                                    : !fishDisplayLearned(
-                                          kind,
-                                          fishRecordsFromSaved(state.fishRecords),
-                                        )
-                                      ? ' · earn through fishing'
-                                      : ''}
+                                  {alreadyBuilt(kind, state.decorations)
+                                    ? ' · one per home, already built'
+                                    : kind === 'trailPennant' &&
+                                        !((state.expedition?.cosmetics ?? 0) & 1)
+                                      ? ' · recover a rumor or complete three outings'
+                                      : !fishDisplayLearned(
+                                            kind,
+                                            fishRecordsFromSaved(state.fishRecords),
+                                          )
+                                        ? ' · earn through fishing'
+                                        : ''}
                                 </strong>
                                 <span>
                                   {BUILDABLE_KINDS[kind].costs
@@ -937,10 +942,18 @@ function CacheCompass({
   );
 }
 
+/** A home has room for one of each piece of furniture (decision 0285). */
+function alreadyBuilt(
+  kind: BuildableKindId,
+  pieces: readonly { readonly kind: BuildableKindId }[] | null | undefined,
+): boolean {
+  return isHomeFurniture(kind) && (pieces ?? []).some((piece) => piece.kind === kind);
+}
+
 /** Group related pieces without changing their existing shortcut indices. */
 function buildGroup(kind: BuildableKindId, indoors = false): string {
   if (isHomeKind(kind)) return 'Home';
-  if (kind === 'cedarBench' || kind === 'timberTable') return 'Furniture';
+  if (kind === 'cedarBench' || kind === 'timberTable' || isHomeFurniture(kind)) return 'Furniture';
   if (kind === 'lantern' || kind === 'fernLantern' || kind === 'moonLantern')
     return indoors ? 'Lighting' : 'Camp & lighting';
   if (kind === 'campfire') return 'Camp & lighting';

@@ -17,16 +17,26 @@ test('cooks at home, makes an improved axe and tends a persistent garden', async
       litUntilMs: Date.now() + 600_000,
     },
   ]);
+  // Homes start empty but for the fire (decision 0285): this one has had a
+  // desk and an indoor garden built.
+  sim.restoreDecorations([
+    { id: 1, homeId: 7, kind: 'desk', x: -4.55, z: 1, yaw: 0 },
+    { id: 2, homeId: 7, kind: 'indoorGarden', x: 0, z: -3.4, yaw: 0 },
+  ]);
   sim.addPlayer(1, undefined, 'gardener');
   Object.assign(sim.inventoryOf(1), { axe: 1, log: 6, bone: 4, berry: 1, meat: 1 });
   let sendWorld: ((data: ArrayBuffer) => void) | undefined;
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  const scale = shared.homeRoomScale('largeCabin');
-  const spot = (facility: 'cooking' | 'workbench' | 'garden') => {
-    const at = shared.HOME_FACILITIES[facility];
-    return { x: at.x * scale - 0.75, z: at.z * scale };
-  };
+  const cooking = shared.homeFire('largeCabin').cooking;
+  const spot = (facility: 'cooking' | 'workbench' | 'garden') =>
+    ({
+      cooking: { x: cooking.x - 0.75, z: cooking.z },
+      // Beside the desk, clear of its chair.
+      workbench: { x: -4.4, z: -0.05 },
+      // In front of the garden's trays.
+      garden: { x: 0, z: -2.3 },
+    })[facility];
   const initial = spot('cooking');
   sim.placePlayer(1, { ...initial, y: 0 }, 0, 7);
   await page.route('https://fonts.googleapis.com/**', (route) =>
@@ -46,6 +56,7 @@ test('cooks at home, makes an improved axe and tends a persistent garden', async
     send(shared.encodeWelcome(1, shared.DEFAULT_WORLD_SEED, 0, Date.now()));
     send(shared.encodeBuiltProps(sim.builtPropsList(), () => true));
     send(shared.encodeSpace(7, initial.x, initial.z, 0));
+    send(shared.encodeDecorationState({ pieces: sim.decorationsList(), reason: null }));
     refresh();
     socket.onMessage((message) => {
       if (typeof message === 'string') return;

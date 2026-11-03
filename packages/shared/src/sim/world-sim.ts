@@ -109,7 +109,8 @@ import {
   isIndoorOnlyKind,
   isDecorationKind,
   checkDecorationSpot,
-  decorationCollider,
+  decorationColliders,
+  insideTheWalls,
   MAX_HOME_DECORATIONS,
   MAX_WORLD_DECORATIONS,
   type DecorationRequest,
@@ -164,7 +165,6 @@ import {
   learnHome,
   nextHome,
   nextBlueprint,
-  homeRoomScale,
   type HomeBuildReason,
   type HomeBuildFeedback,
   type HomeKind,
@@ -254,7 +254,7 @@ import {
 } from '../world/clearing';
 import type { GatherSpot } from '../world/clearing';
 import { createFlatTerrain, createWildernessTerrain, type Terrain } from '../world/terrain';
-import { homeFacilityInReach, homeHasFacility } from '../data/home-facilities';
+import { homeFacilityInReach } from '../data/home-facilities';
 import { toolKind } from '../data/items';
 import { canWearIn, isWeapon, type GearSlot, type WornGear } from '../data/gear';
 import {
@@ -275,14 +275,13 @@ import {
   type GardenReason,
 } from './garden';
 import {
-  HOME_ENTRY,
-  homeSpot,
-  homeChestSpot,
-  HOME_ROOM,
-  HOME_WAKE_SPOT,
+  homeEntry,
+  furnitureSpot,
+  homeWakeSpot,
   cabinCollider,
   cabinDoorstep,
   homeRoomColliders,
+  homeRoomReach,
   isEnteringDoorway,
   isLeavingRoom,
   restingPlaceInReach,
@@ -1254,13 +1253,13 @@ export class WorldSimulation {
   readonly discoverySites: readonly DiscoverySite[];
   readonly collision: CollisionWorld;
   /**
-   * Inside a home. Every room is laid out the same, so one set of walls and
-   * furniture serves them all, in the room's own coordinates.
+   * Inside an empty cabin: its walls and its fire, in the room's own
+   * coordinates. Other kinds of home, and furnished rooms, get their own.
    */
   readonly roomCollision: CollisionWorld = createCollisionWorld(
     createFlatTerrain(0),
     homeRoomColliders(),
-    HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
+    homeRoomReach(),
   );
   /** Set once at creation, except for a browser test that asks to fast-forward it. */
   private treeRegrowMinSeconds: number;
@@ -1531,7 +1530,7 @@ export class WorldSimulation {
         counts.set(piece.homeId, count + 1);
         return true;
       })
-      .map((piece) => ({ ...piece }));
+      .map((piece) => insideTheWalls(this.kindOfHome(piece.homeId), piece));
     this.nextDecorationId = Math.max(0, ...this.decorations.map((piece) => piece.id)) + 1;
     this.decoratedHomes.clear();
     for (const piece of this.decorations) this.decoratedHomes.add(piece.homeId);
@@ -1570,6 +1569,15 @@ export class WorldSimulation {
     if (request.action === 'reclaim') {
       const at = runtime.entity.get(Position);
       if (at === undefined || Math.hypot(at.x - old!.x, at.z - old!.z) > 6) return result('tooFar');
+      // The chest's slots and the garden's trays belong to the home, so a
+      // full chest or a growing garden stays put until it is emptied.
+      if (
+        (old!.kind === 'storageChest' &&
+          (this.homeChests.get(home.id) ?? []).some((slot) => slot !== null)) ||
+        (old!.kind === 'indoorGarden' &&
+          (this.homeGardens.get(home.id) ?? []).some((plot) => plot.crop !== null))
+      )
+        return result('contents');
       const copy = { ...runtime.inventory };
       for (const cost of BUILDABLE_KINDS[old!.kind].costs)
         if (addItem(copy, cost.item, cost.amount) !== cost.amount) return result('packFull');
@@ -1754,14 +1762,11 @@ export class WorldSimulation {
     if (this.decoratedHomes.has(space)) {
       let decorated = this.decoratedRooms.get(space);
       if (decorated === undefined) {
-        const colliders = this.decorations
-          .filter((piece) => piece.homeId === space)
-          .map(decorationCollider)
-          .filter((value): value is NonNullable<typeof value> => value !== null);
+        const colliders = this.furnishingsOf(space).flatMap(decorationColliders);
         decorated = createCollisionWorld(
           createFlatTerrain(0),
           [...homeRoomColliders(kind), ...colliders],
-          (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+          homeRoomReach(kind),
         );
         this.decoratedRooms.set(space, decorated);
       }
@@ -1773,11 +1778,15 @@ export class WorldSimulation {
       room = createCollisionWorld(
         createFlatTerrain(0),
         homeRoomColliders(kind),
-        (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+        homeRoomReach(kind),
       );
       this.roomWorlds.set(kind, room);
     }
     return room;
+  }
+  /** The pieces built inside one home. */
+  private furnishingsOf(homeId: number): HomeDecoration[] {
+    return this.decorations.filter((piece) => piece.homeId === homeId);
   }
   homeSkillsOf(netId: number): number {
     return this.players.get(netId)?.homeSkills ?? 0;
@@ -2215,17 +2224,14 @@ export class WorldSimulation {
     // shared clearing, but waking up at home, by their own bed, beats that
     // too, every time (see decision 0055).
     const home = playerKey !== null ? this.homeOf(playerKey) : null;
-    const wake = homeSpot(
-      HOME_WAKE_SPOT,
-      home !== null && isHomeKind(home.kind) ? home.kind : 'cabin',
-    );
+    const wake = home === null ? null : homeWakeSpot(home.kind, this.furnishingsOf(home.id)).spot;
     const spawn =
-      home !== null
+      wake !== null
         ? { x: wake.x, y: 0, z: wake.z }
         : saved
           ? this.savedSpot(saved)
           : this.nextSpawnPosition();
-    const facingYaw = home !== null ? HOME_WAKE_SPOT.yaw : (saved?.facingYaw ?? 0);
+    const facingYaw = wake !== null ? wake.yaw : (saved?.facingYaw ?? 0);
 
     const entity = this.world.spawn(
       PlayerTag,
@@ -2354,10 +2360,12 @@ export class WorldSimulation {
       reason,
     });
     const position = runtime.entity.get(Position);
+    // Indoors, the chest the owner built; until then, what was stored is kept for it.
     const chest =
       home.kind === 'trailPantry'
         ? home
-        : homeChestSpot(isHomeKind(home.kind) ? home.kind : 'cabin');
+        : furnitureSpot('storageChest', this.furnishingsOf(home.id));
+    if (chest === null) return reply('unavailable');
     if (
       position === undefined ||
       Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8 ||
@@ -2506,7 +2514,13 @@ export class WorldSimulation {
           position !== undefined &&
           Math.hypot(position.x - outdoor.x, position.z - outdoor.z) <= 2 &&
           Math.abs(position.y - this.collision.terrain.heightAt(outdoor.x, outdoor.z)) <= 2
-        : position !== undefined && homeFacilityInReach('largeCabin', 'garden', position);
+        : position !== undefined &&
+          homeFacilityInReach(
+            this.kindOfHome(state.homeId),
+            'garden',
+            position,
+            this.furnishingsOf(state.homeId),
+          );
     if (!inReach) return refuse('tooFar');
     if (runtime.health <= 0 || runtime.action.kind !== ActionKind.Idle || runtime.cast !== null)
       return refuse('busy');
@@ -2904,7 +2918,7 @@ export class WorldSimulation {
             ? restingPlaceInReach(
                 scratch.position.x,
                 scratch.position.z,
-                this.kindOfHome(runtime.space),
+                this.furnishingsOf(runtime.space),
               )
             : null;
           const hungryWithFood =
@@ -3123,12 +3137,7 @@ export class WorldSimulation {
       if (home.locked === true && this.ownedBuiltProps.get(home.id) !== runtime.playerKey) {
         return false;
       }
-      this.moveBetweenSpaces(
-        runtime,
-        motion,
-        home.id,
-        homeSpot(HOME_ENTRY, isHomeKind(home.kind) ? home.kind : 'cabin'),
-      );
+      this.moveBetweenSpaces(runtime, motion, home.id, homeEntry(home.kind));
       return true;
     }
     return false;
@@ -4567,11 +4576,9 @@ export class WorldSimulation {
     return true;
   }
 
-  /** Only cooking fires accept fuel; a tent has no hearth. */
+  /** Only cooking fires accept fuel: campfires, and the fire in every home. */
   private hasFuelFire(prop: BuiltProp): boolean {
-    return (
-      prop.kind === 'campfire' || (isHomeKind(prop.kind) && homeHasFacility(prop.kind, 'cooking'))
-    );
+    return prop.kind === 'campfire' || isHomeKind(prop.kind);
   }
 
   fireFuelRemainingMs(propId: number, nowMs = this.nowMs): number {
@@ -5895,7 +5902,7 @@ export class WorldSimulation {
     const home = runtime.playerKey !== null ? this.homeOf(runtime.playerKey) : null;
     if (home !== null) {
       runtime.doorCooldownTicks = DOOR_COOLDOWN_TICKS;
-      const wake = homeSpot(HOME_WAKE_SPOT, isHomeKind(home.kind) ? home.kind : 'cabin');
+      const { spot: wake, fromBed } = homeWakeSpot(home.kind, this.furnishingsOf(home.id));
       this.placePlayer(runtime.netId, { x: wake.x, y: 0, z: wake.z }, wake.yaw, home.id);
       this.spaceChanges.push({
         netId: runtime.netId,
@@ -5904,7 +5911,7 @@ export class WorldSimulation {
         z: wake.z,
         yaw: wake.yaw,
       });
-      beginAction(runtime.action, ActionKind.Rise, RiseFrom.Bed);
+      beginAction(runtime.action, ActionKind.Rise, fromBed ? RiseFrom.Bed : RiseFrom.Ground);
     } else {
       const facingYaw = runtime.entity.get(Facing)?.yaw ?? 0;
       this.placePlayer(runtime.netId, this.nextSpawnPosition(), facingYaw);
@@ -7553,7 +7560,12 @@ export class WorldSimulation {
       position !== undefined &&
       (runtime.space === OUTDOORS
         ? nearestHomesteadPiece(this.builtProps, 'trailWorkbench', position) !== null
-        : homeFacilityInReach(this.kindOfHome(runtime.space), 'workbench', position))
+        : homeFacilityInReach(
+            this.kindOfHome(runtime.space),
+            'workbench',
+            position,
+            this.furnishingsOf(runtime.space),
+          ))
     );
   }
 

@@ -4,6 +4,7 @@ import { createExpeditionBoard } from '../src/scene/expedition-board';
 import { createHomeDecoration } from '../src/scene/home-decoration';
 import { createDiscoveryLandmarks } from '../src/scene/discovery-sites';
 import { createHomeFacilities } from '../src/scene/home-facilities';
+import { createHomeFurniture } from '../src/scene/home-furniture';
 import { createForageModel, createMealModel } from '../src/scene/forest-food';
 import { DISCOVERIES } from '@acorn/shared';
 import { createEncounterLandmarks } from '../src/scene/encounter-sites';
@@ -65,10 +66,11 @@ describe("the game's own models", () => {
       make: () => createHomeDecoration('trailPennant'),
       budget: BUILDABLE_KINDS.trailPennant.triangleBudget,
     },
-    ...(['teepee', 'cabin', 'largeCabin'] as const).map((kind) => ({
-      name: `${kind} facilities`,
-      budget: kind === 'largeCabin' ? PROP_BUDGET * 3 : PROP_BUDGET,
-      make: () => createHomeFacilities(kind),
+    { name: 'fire ring', budget: PROP_BUDGET, make: () => createHomeFacilities('campfire') },
+    ...(['bed', 'desk', 'storageChest', 'indoorGarden'] as const).map((kind) => ({
+      name: `${kind} furniture`,
+      budget: kind === 'indoorGarden' ? PROP_BUDGET * 3 : PROP_BUDGET,
+      make: () => createHomeFurniture(kind),
     })),
     ...DISCOVERIES.filter(
       (definition) => definition.id < 4 || definition.kind === 'raccoonHollow',

@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../src/constants';
 import { createCollisionWorld, resolveCapsule } from '../src/collision/capsule';
 import {
-  HOME_ENTRY,
-  HOME_FURNITURE,
   HOME_ROOM,
-  HOME_WAKE_SPOT,
+  homeEntry,
+  homeFire,
+  homeFloorWakeSpot,
+  homeRoom,
   cabinCollider,
   cabinDoorstep,
   cabinDoorway,
@@ -138,23 +139,23 @@ describe('each home from the outside', () => {
 describe('the room inside', () => {
   const colliders = homeRoomColliders();
 
-  it('lets you stand where you come in and where you wake up', () => {
-    for (const spot of [HOME_ENTRY, HOME_WAKE_SPOT]) {
-      const there = pushedOut(spot.x, spot.z, colliders);
-      expect(there.x).toBeCloseTo(spot.x, 3);
-      expect(there.z).toBeCloseTo(spot.z, 3);
-    }
-  });
+  for (const kind of HOME_TIERS)
+    it(`lets you stand where you come in and where you wake up in a ${kind}`, () => {
+      for (const spot of [homeEntry(kind), homeFloorWakeSpot(kind)]) {
+        const there = pushedOut(spot.x, spot.z, homeRoomColliders(kind));
+        expect(there.x).toBeCloseTo(spot.x, 3);
+        expect(there.z).toBeCloseTo(spot.z, 3);
+      }
+    });
 
-  it('keeps everything inside the walls', () => {
-    const { halfWidth, halfDepth } = HOME_ROOM;
-    const { bed, hearth, table, chair, shelf } = HOME_FURNITURE;
-    expect(Math.abs(bed.x) + bed.halfWidth).toBeLessThanOrEqual(halfWidth);
-    expect(Math.abs(bed.z) + bed.halfLength).toBeLessThanOrEqual(halfDepth);
-    expect(hearth.x + hearth.halfDepth).toBeLessThanOrEqual(halfWidth);
-    expect(Math.abs(table.x) + table.halfWidth).toBeLessThanOrEqual(halfWidth);
-    expect(Math.abs(chair.x) + chair.radius).toBeLessThanOrEqual(halfWidth);
-    expect(shelf.x + shelf.halfDepth).toBeLessThanOrEqual(halfWidth);
+  it('keeps each fire inside its own walls', () => {
+    for (const kind of HOME_TIERS) {
+      const { halfWidth, halfDepth } = homeRoom(kind);
+      const fire = homeFire(kind);
+      expect(Math.abs(fire.x)).toBeLessThan(halfWidth);
+      expect(Math.abs(fire.z)).toBeLessThan(halfDepth);
+      expect(Math.abs(fire.cooking.x)).toBeLessThan(halfWidth - PLAYER_RADIUS);
+    }
   });
 
   it('holds you inside its walls, whichever way you push', () => {
@@ -166,13 +167,13 @@ describe('the room inside', () => {
     ] as const) {
       const there = pushedOut(x * 0.8, z * 0.8, colliders);
       expect(Math.abs(there.x)).toBeLessThanOrEqual(
-        HOME_ROOM.halfWidth + HOME_ROOM.wallThickness + 0.5,
+        homeRoom().halfWidth + HOME_ROOM.wallThickness + 0.5,
       );
     }
   });
 
   it('counts walking at the door from inside as leaving, and only there', () => {
-    const atDoor = { x: HOME_ROOM.doorX, z: HOME_ROOM.halfDepth - 0.4 };
+    const atDoor = { x: homeRoom().doorX, z: homeRoom().halfDepth - 0.4 };
     expect(isLeavingRoom(atDoor.x, atDoor.z, 0, 1, false)).toBe(true);
     expect(isLeavingRoom(atDoor.x, atDoor.z, 0, 0, true)).toBe(true);
     expect(isLeavingRoom(atDoor.x, atDoor.z, 0, -1, false)).toBe(false);
@@ -181,7 +182,7 @@ describe('the room inside', () => {
     // Nor is a stretch of the front wall away from the door.
     expect(isLeavingRoom(2.5, atDoor.z, 0, 1, false)).toBe(false);
     // And coming in, you land clear of the way out.
-    expect(isLeavingRoom(HOME_ENTRY.x, HOME_ENTRY.z, 0, 0, false)).toBe(false);
+    expect(isLeavingRoom(homeEntry().x, homeEntry().z, 0, 0, false)).toBe(false);
   });
 });
 

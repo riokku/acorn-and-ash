@@ -10,10 +10,7 @@ import {
   ActionKind,
   BOAT_SEAT_HEIGHT,
   navigableWaterSurfaceAt,
-  HOME_BED,
-  homeRestingPlace,
-  type HomeKind,
-  HOME_CHAIR,
+  restingPlaceAt,
   outdoorSeatInReach,
   type BenchPlacement,
   type Vec3,
@@ -22,6 +19,12 @@ import {
   headingDirection,
   type RestingPlace,
 } from '@acorn/shared';
+
+/** What has been built in the room, and where the body is. */
+export interface IndoorSurroundings {
+  readonly pieces: Parameters<typeof restingPlaceAt>[3];
+  readonly position: Readonly<Pick<Vec3, 'x' | 'z'>>;
+}
 
 import type { MoveView } from './character-moves';
 import type { RestSpot, RollDirection } from './character';
@@ -52,15 +55,15 @@ export function boatSeatAt(x: number, z: number, facingYaw: number): RestSpot {
 }
 
 /**
- * Where a body in a home settles for this move - the chair's seat or the
- * bed's mattress - or null when it stays where it stands. Rooms are all
- * laid out alike (see `world/home.ts`), so the spot needs nothing else.
+ * Where a body in a home settles for this move - the seat of the chair or
+ * the mattress of the bed it is using, whichever built one is nearest - or
+ * null when it stays where it stands.
  */
 export function restSpotFor(
   kind: ActionKind,
   step: number,
   space: number,
-  homeKind: HomeKind = 'cabin',
+  indoor?: IndoorSurroundings,
   outdoor?: {
     pieces: readonly BenchPlacement[];
     position: Readonly<Vec3>;
@@ -76,15 +79,16 @@ export function restSpotFor(
     return outdoorSeatInReach(outdoor.pieces, outdoor.position, outdoor.heightAt)?.rest ?? null;
   }
   const place = restingPlaceFor(kind, step);
-  return place === null ? null : homeRestingPlace(place, homeKind).rest;
+  if (place === null || !indoor) return null;
+  return restingPlaceAt(place, indoor.position.x, indoor.position.z, indoor.pieces)?.rest ?? null;
 }
 
-function restingPlaceFor(kind: ActionKind, step: number): RestingPlace | null {
+function restingPlaceFor(kind: ActionKind, step: number): RestingPlace['kind'] | null {
   if (kind === ActionKind.Sit || (kind === ActionKind.Rise && step === RiseFrom.Chair)) {
-    return HOME_CHAIR;
+    return 'chair';
   }
   if (kind === ActionKind.Lie || (kind === ActionKind.Rise && step === RiseFrom.Bed)) {
-    return HOME_BED;
+    return 'bed';
   }
   return null;
 }

@@ -1,13 +1,10 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { expect, it } from 'vitest';
-import {
-  HOME_FACILITIES,
-  homeRoomScale,
-  buildableKindIndex,
-  type GardenState,
-  type WorldSimulation,
-} from '@acorn/shared';
+import { buildableKindIndex, type GardenState, type WorldSimulation } from '@acorn/shared';
 import { TestClient, sleep, waitFor } from './helpers';
+/** The large cabin's indoor garden, built against its back wall, and where to tend it from. */
+const GARDEN = { id: 1, homeId: 7, kind: 'indoorGarden', x: 0, z: -3.4, yaw: 0 } as const;
+const TENDING = { x: 0, y: 0, z: -2.3 };
 const lastGarden = (client: TestClient) =>
   client.received
     .filter((message): message is GardenState & { type: 'garden' } => message.type === 'garden')
@@ -32,9 +29,14 @@ it('persists a private garden and its harvest across an empty world', async () =
         litUntilMs: null,
       },
     ]);
-    const scale = homeRoomScale('largeCabin'),
-      spot = HOME_FACILITIES.garden;
-    sim.placePlayer(id, { x: spot.x * scale - 0.75, y: 0, z: spot.z * scale }, 0, 7);
+    sim.restoreDecorations([GARDEN]);
+    // Homes start empty (decision 0285): this one has had a garden built.
+    state.storage.sql.exec(
+      'INSERT INTO world_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'home-decorations',
+      JSON.stringify(sim.decorationsList()),
+    );
+    sim.placePlayer(id, TENDING, 0, 7);
     Object.assign(sim.inventoryOf(id), { berry: 1 });
     state.storage.sql.exec(
       'INSERT INTO built_props (id,kind_index,x,z,yaw,built_at_ms,owner_key) VALUES (?,?,?,?,?,?,?)',
@@ -89,10 +91,8 @@ it('persists a private garden and its harvest across an empty world', async () =
   );
   await runInDurableObject(stub, (instance) => {
     const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
-    const spot = HOME_FACILITIES.garden,
-      scale = homeRoomScale('largeCabin');
     for (const netId of [returned.welcome().netId, visitor.welcome().netId])
-      sim.placePlayer(netId, { x: spot.x * scale - 0.75, y: 0, z: spot.z * scale }, 0, 7);
+      sim.placePlayer(netId, TENDING, 0, 7);
   });
   visitor.garden({ action: 'harvest', plot: 0 });
   await waitFor('private refusal', () => lastGarden(visitor)?.reason === 'private');

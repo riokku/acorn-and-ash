@@ -36,7 +36,11 @@ export type BuildableKindId =
   | 'trailWorkbench'
   | 'trailPantry'
   | 'kitchenGarden'
-  | 'woodshed';
+  | 'woodshed'
+  | 'bed'
+  | 'desk'
+  | 'storageChest'
+  | 'indoorGarden';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -429,6 +433,63 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 2000,
     placeholderColor: 0x8a6642,
   },
+  // Furniture built inside a home (decision 0285). Homes start empty except
+  // for their fire; these used to come with every room. Each footprint is the
+  // circle round the piece's own boxes in `HOME_FURNITURE_SHAPES`.
+  bed: {
+    id: 'bed',
+    displayName: 'Bed',
+    costs: [
+      { item: 'log', amount: 6 },
+      { item: 'rope', amount: 2 },
+    ],
+    footprintRadius: 1.14,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x8f6444,
+  },
+  desk: {
+    id: 'desk',
+    displayName: 'Desk and chair',
+    costs: [
+      { item: 'log', amount: 6 },
+      { item: 'stick', amount: 4 },
+    ],
+    footprintRadius: 1.02,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0xd7ad82,
+  },
+  storageChest: {
+    id: 'storageChest',
+    displayName: 'Storage chest',
+    costs: [
+      { item: 'log', amount: 4 },
+      { item: 'stick', amount: 2 },
+    ],
+    footprintRadius: 0.53,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x8f6444,
+  },
+  indoorGarden: {
+    id: 'indoorGarden',
+    displayName: 'Indoor garden',
+    // The kitchen garden's own materials, for the same three growing trays.
+    costs: [
+      { item: 'log', amount: 4 },
+      { item: 'stick', amount: 6 },
+      { item: 'flower', amount: 3 },
+    ],
+    footprintRadius: 0.9,
+    isHome: false,
+    capPerPlayer: false,
+    triangleBudget: 2000,
+    placeholderColor: 0x739c7b,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -461,6 +522,10 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'trailPantry',
   'kitchenGarden',
   'woodshed',
+  'bed',
+  'desk',
+  'storageChest',
+  'indoorGarden',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

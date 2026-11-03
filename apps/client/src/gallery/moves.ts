@@ -9,8 +9,6 @@ import {
   DODGE_ATTACKS,
   FLINCH,
   Gesture,
-  HOME_BED,
-  HOME_CHAIR,
   KNOCKED_OUT_TICKS,
   DIG_SWING,
   LIGHT_COMBO,
@@ -247,7 +245,6 @@ export async function showMoves(
   const askedBody = params.get('body');
   const body: CharacterId =
     askedBody !== null && askedBody in CHARACTER_KINDS ? (askedBody as CharacterId) : 'knight';
-
   const showings: Showing[] = [];
   bursts = new ImpactBursts();
   scene.add(bursts.group);
@@ -265,7 +262,6 @@ export async function showMoves(
     scene.add(trail.mesh);
     showings.push({ demo, character, trail, age, drawnAge: 0, frozen });
   };
-
   const onlyDemo = demos[0];
   if (strip > 1 && onlyDemo !== undefined) {
     for (let i = 0; i < strip; i++) {
@@ -281,7 +277,6 @@ export async function showMoves(
       place(demo, x, row * spacing, freezeAt ?? 0, freezeAt !== null);
     });
   }
-
   const columns = strip > 1 ? strip : Math.ceil(Math.sqrt(demos.length));
   const rows = strip > 1 ? 1 : Math.ceil(demos.length / columns);
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 300);
@@ -314,7 +309,6 @@ export async function showMoves(
       bursts.update(TICK_SECONDS / 4);
     }
   }
-
   let last = performance.now();
   let frames = 0;
   renderer.setAnimationLoop(() => {
@@ -434,6 +428,8 @@ function landed(
 export async function addRestingCharacters(
   scene: THREE.Scene,
   at: number,
+  chair: RestingPlace,
+  bed: RestingPlace,
 ): Promise<(deltaSeconds: number) => void> {
   await Promise.all([preloadCharacterModels(), preloadItemModels(), preloadCharacterAnimations()]);
   const settle = (place: RestingPlace, kind: ActionKind, item: ItemId | null): Character => {
@@ -446,8 +442,8 @@ export async function addRestingCharacters(
     for (let tick = 0; tick <= at; tick++) drawResting(character, kind, tick, TICK_SECONDS);
     return character;
   };
-  const sitter = settle(HOME_CHAIR, ActionKind.Sit, 'axe');
-  const sleeper = settle(HOME_BED, ActionKind.Lie, null);
+  const sitter = settle(chair, ActionKind.Sit, 'axe');
+  const sleeper = settle(bed, ActionKind.Lie, null);
   let age = at;
   return (deltaSeconds) => {
     age += deltaSeconds / TICK_SECONDS;
