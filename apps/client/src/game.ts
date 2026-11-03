@@ -384,6 +384,7 @@ import { preloadBearModel } from './scene/bear-model';
 import { preloadCoyoteModel } from './scene/coyote-model';
 import { preloadStagModel } from './scene/stag-model';
 import { preloadHareModel } from './scene/hare-model';
+import { preloadFishModel } from './scene/fish-models';
 import { preloadFoxModel } from './scene/fox-model';
 import { preloadArtTextures } from './art/textures';
 import { rainShareFor } from './art/season-fall';
@@ -1290,6 +1291,7 @@ export class Game {
     void preloadCoyoteModel();
     void preloadStagModel();
     void preloadHareModel();
+    void preloadFishModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
     void preloadRaiderModels();
@@ -3173,6 +3175,7 @@ export class Game {
           preloadCoyoteModel(),
           preloadStagModel(),
           preloadHareModel(),
+          preloadFishModel(),
           preloadCharacterModels(),
           preloadCharacterAnimations(),
           preloadRaiderModels(),
