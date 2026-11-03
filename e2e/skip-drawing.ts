@@ -31,8 +31,13 @@ export async function skipDrawing(
     ({ sceneOnly }) => {
       // Galleries are small scenes and provide actual asset-rendering coverage.
       if (new URLSearchParams(location.search).has('gallery')) return;
-      const host = window as Window & { acornE2eDrawing?: (enabled: boolean) => void };
+      const host = window as Window & {
+        acornE2eDrawing?: (enabled: boolean) => void;
+        acornE2eSkipWarmUp?: boolean;
+      };
       if (host.acornE2eDrawing !== undefined) return;
+      // Nothing is drawn, so there is no first-use stutter to hide (game.ts).
+      host.acornE2eSkipWarmUp = true;
       const originals: { prototype: Record<string, unknown>; name: string; method: unknown }[] = [];
       const drawCalls = [
         'drawArrays',

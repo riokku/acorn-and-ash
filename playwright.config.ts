@@ -5,7 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  * each other move? These run the real stack — the client served by apps/web,
  * talking to the World Durable Object in apps/game-server.
  */
-const PORT = 8787;
+// E2E_PORT lets a second checkout run its own server beside one already on 8787.
+const PORT = Number(process.env.E2E_PORT ?? 8787);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
@@ -17,7 +18,10 @@ export default defineConfig({
   // Each case owns its browser context/world fixture. This lets CI balance
   // individual cases across shards, including the large play.spec.ts file.
   fullyParallel: true,
-  workers: 1,
+  // Two tests at a time on each machine (decision 0280). Most of a test is
+  // one browser tab building the world on one processor core, so a second
+  // tab uses a core that would otherwise sit idle. E2E_WORKERS overrides it.
+  workers: Number(process.env.E2E_WORKERS ?? 2),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],
   use: {
