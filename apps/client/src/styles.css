@@ -227,35 +227,6 @@ body {
   transition: transform 0.15s ease;
 }
 
-/*
- * The season banner (decision 0110), after Northgard's: a dark plaque, a stripe
- * in the season's colour across the top (one piece for each day of the season),
- * a round badge, the season's name and a line of advice. It is the home
- * screens' version, pinned to the top-left corner. In the game the season is a
- * ring round the minimap instead (below).
- */
-.season-banner {
-  --season: #8cc66b;
-  --season-ink: #1f3a16;
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 280px;
-  padding: 15px 26px 10px 10px;
-  overflow: hidden;
-  border: 1px solid rgba(212, 168, 98, 0.5);
-  border-radius: 4px 4px 12px 12px;
-  background: linear-gradient(180deg, rgba(48, 43, 37, 0.96), rgba(27, 25, 22, 0.96));
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.4),
-    inset 0 1px rgba(255, 227, 171, 0.1);
-  color: #f3e9d4;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
 :root {
   --season-spring: #8cc66b;
   --season-summer: #f0c24b;
@@ -263,115 +234,29 @@ body {
   --season-winter: #8cc7ec;
 }
 
-.season-banner-spring,
 .season-ring-spring {
   --season: var(--season-spring);
   --season-ink: #1f3a16;
 }
 
-.season-banner-summer,
 .season-ring-summer {
   --season: var(--season-summer);
   --season-ink: #4a3208;
 }
 
-.season-banner-autumn,
 .season-ring-autumn {
   --season: var(--season-autumn);
   --season-ink: #4a2208;
 }
 
-.season-banner-winter,
 .season-ring-winter {
   --season: var(--season-winter);
   --season-ink: #123049;
 }
 
-.season-banner-days {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  gap: 2px;
-  height: 5px;
-}
-
-.season-banner-day {
-  flex: 1;
-  background: var(--season);
-  opacity: 0.25;
-}
-
-.season-banner-day.is-past {
-  opacity: 0.8;
-}
-
-.season-banner-day.is-today {
-  opacity: 1;
-  box-shadow: 0 0 8px var(--season);
-}
-
-.season-banner-badge {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 2px solid #d9b46a;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff6dc 0%, var(--season) 55%);
-  color: var(--season-ink);
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.45),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.18);
-}
-
-.season-banner-title,
-.season-banner-hint {
-  margin: 0;
-}
-
-.season-banner-title {
-  font:
-    500 20px/1.15 'Fraunces',
-    Georgia,
-    serif;
-  letter-spacing: 0.01em;
-}
-
-.season-banner-title strong {
-  font-weight: 700;
-}
-
-.season-banner-title em {
-  font-style: italic;
-}
-
-.season-banner-dot {
-  color: #d9b46a;
-}
-
-.season-banner-hint {
-  margin-top: 3px;
-  color: #cfc3aa;
-  font-size: 13px;
-  font-style: italic;
-}
-
 /*
- * On the home screens it hangs in the top-left corner: the middle of those
- * screens is the title, the character and the card, and the settings gear holds
- * the top-right.
- */
-.home-season-banner {
-  top: 20px;
-  left: 24px;
-}
-
-/*
- * The front page's season badge, centred under Play: a dark plate with a
- * hexagon window onto the valley. The hexagon's edges are the season's days.
+ * The season badge on the home screens, centred by the main button: a dark plate
+ * with a hexagon window onto the valley. The hexagon's edges are the season's days.
  */
 .season-hex-badge {
   display: flex;
@@ -437,11 +322,30 @@ body {
   line-height: 1.3;
 }
 
-/* A short or narrow character-creation window has no spare corner for it. */
-@media (max-width: 899px), (max-height: 539px) {
-  .home-season-banner-making {
-    display: none;
-  }
+/* Inside the parchment character cards it sits closer to Enter World, with no shadow. */
+.home-card .season-hex-badge {
+  margin-top: 16px;
+  box-shadow: none;
+}
+
+.home-card .season-hex-picture {
+  width: 72px;
+  height: 72px;
+}
+
+.home-card .season-hex-name {
+  font-size: 24px;
+}
+
+.home-card .season-hex-hint {
+  font-size: 14px;
+}
+
+/* Under the sign-in panel. */
+.front-door-choices .season-hex-badge {
+  position: relative;
+  z-index: 1;
+  margin-top: 20px;
 }
 
 /*
