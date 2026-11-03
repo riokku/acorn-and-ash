@@ -4,19 +4,19 @@ import * as THREE from 'three/webgpu';
 import { GEAR_SLOTS, type GearSlot, type ItemId, type WornGear } from '@acorn/shared';
 
 import { plainMaterial } from '../art/materials';
-import { wornGearModelTemplate, createWatchCaptainHelm } from './worn-gear-models';
+import { wornGearModelTemplate } from './worn-gear-models';
 import { woodenShieldParts, wornWeapon } from './gear-models';
-import { woolCapGeometry } from './basic-clothing';
 
 /**
  * What a character is wearing, drawn on the body (decision 0113).
  *
- * Helms use the existing separately exported head pieces: the Knight's
- * helmet and visor, the Mage's hat, the Barbarian's bear hat and the hooded
- * Rogue's mask. Every body shares one skeleton, so any of them fits on any head.
- * Body, legs, boots and gloves are a thin coloured skin laid over the matching
- * part of the body, and the shield hangs from the off hand. All of it stands in
- * for the real pieces that will come out of a Blender session.
+ * Every helm is its own file fitted to the soft bodies (tools/art/soft_hats.py,
+ * decision 0282): the Knight's helmet and visor, the Mage's hat, the bear hat,
+ * the mask, the wool cap and the Last Watch helm. Both bodies share one
+ * skeleton, so each fits either head. Body, legs, boots and gloves are a thin
+ * coloured skin laid over the matching part of the body, and the shield hangs
+ * from the off hand. The skins stand in for the real pieces that will come out
+ * of a Blender session.
  *
  * The pieces already baked into the six models (the helmet, the hat, the mask)
  * are hidden, so a head is bare until a helm is worn.
@@ -144,9 +144,9 @@ export function hideBakedHeadPieces(model: THREE.Object3D): void {
 /**
  * Gear for the character built from this model. `leftHand` is the bone the
  * shield hangs from; `heldScale` cancels the character's own scale for things
- * parented that deep in its skeleton. With `bodyFitted` false, only what is
- * held (the shield) is drawn: helms and clothes are left off a body they were
- * not made for.
+ * parented that deep in its skeleton. With `bodyFitted` false, clothes are
+ * left off a body they were not made for; helms (fitted to the soft bodies'
+ * shared skeleton) and what is held are still drawn.
  */
 export function createGearVisuals(
   model: THREE.Object3D,
@@ -197,31 +197,6 @@ export function createGearVisuals(
   };
 
   const buildHelm = (item: ItemId, into: THREE.Object3D[]): void => {
-    if (item === 'watchCaptainHelm' || item === 'kingCrown') {
-      const head = model.getObjectByName('head');
-      const helm = createWatchCaptainHelm();
-      if (head && helm) {
-        // The ranger's swept fringe needs extra clearance at the brow.
-        const ranger = skinned.some((mesh) => mesh.name.startsWith('Ranger_Head'));
-        helm.scale.set(
-          heldScale * (ranger ? 1.5 : 1.35),
-          heldScale,
-          heldScale * (ranger ? 1.65 : 1.35),
-        );
-        helm.position.y = 0.56;
-        head.add(helm);
-        into.push(helm);
-      }
-      return;
-    }
-    if (item === 'woolCap') {
-      const heads = skinned.filter((mesh) => /_Head(?:_\d+)?$/.test(mesh.name));
-      const source = heads[0];
-      if (source !== undefined)
-        for (const geometry of woolCapGeometry(heads))
-          addSkinned(source, source, geometry, clothMaterial(item), into);
-      return;
-    }
     const body = skinned[0];
     const template = wornGearModelTemplate(item);
     if (template === undefined || body === undefined) return;
@@ -275,14 +250,8 @@ export function createGearVisuals(
 
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
-    if (slot === 'helm') {
-      if (bodyFitted) buildHelm(item, objects);
-    } else if (
-      slot === 'upperBody' ||
-      slot === 'lowerBody' ||
-      slot === 'feet' ||
-      slot === 'hands'
-    ) {
+    if (slot === 'helm') buildHelm(item, objects);
+    else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
       if (bodyFitted) buildSkin(slot, item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);
     else if (slot === 'offHand' && item === 'huntingKnife') buildOffHandKnife(objects);

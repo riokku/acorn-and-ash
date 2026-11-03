@@ -772,8 +772,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // The head pieces baked into the six models give way to whatever is worn.
   hideBakedHeadPieces(model);
   showBeard(model, look.beard ?? null);
-  // Today's helms and clothes were made for the taller Adventurers, so a
-  // dwarf wears none until they are refitted (the shield is held, so it stays).
+  // Helms are fitted to the soft bodies (decision 0282), but today's clothes
+  // were made for the taller Adventurers, so a dwarf wears none until they are refitted.
   const gear = createGearVisuals(model, model.getObjectByName(OFF_HAND_BONE_NAME), heldScale, {
     bodyFitted: shape === 'adventurer',
   });

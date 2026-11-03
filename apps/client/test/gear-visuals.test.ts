@@ -1,10 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GEAR_ITEMS, canWearIn } from '@acorn/shared';
 vi.mock('../src/scene/worn-gear-models', () => ({
   wornGearModelTemplate: vi.fn(),
-  createWatchCaptainHelm: vi.fn(),
 }));
-import { wornGearModelTemplate, createWatchCaptainHelm } from '../src/scene/worn-gear-models';
+import { wornGearModelTemplate } from '../src/scene/worn-gear-models';
 import { createGearVisuals } from '../src/scene/gear-visuals';
 
 function part(name: string, x = 0.2, bone = new THREE.Bone()) {
@@ -64,66 +64,38 @@ it('covers sleeves and hands in the multipart meshes exported by glTF', () => {
   visuals.dispose();
   expect(extraMeshes(root, [sleeve.mesh, hand.mesh])).toHaveLength(0);
 });
-it('fits a low-poly cap to the head and keeps it attached through animation and repeated swaps', () => {
+it('draws every helm from its fitted file on a soft body, following the head through swaps', () => {
+  const helms = GEAR_ITEMS.filter((item) => canWearIn(item, 'helm'));
+  expect(helms).toEqual(expect.arrayContaining(['woolCap', 'watchCaptainHelm', 'kingCrown']));
   const root = new THREE.Group();
-  const head = part('Ranger_Head');
-  root.add(head.mesh, head.bone);
-  const visuals = createGearVisuals(root, undefined, 1);
-  visuals.setWorn({ helm: 'woolCap' });
-  const cap = extraMeshes(root, [head.mesh]);
-  expect(cap).toHaveLength(2);
-  expect(cap.every((mesh) => mesh.skeleton === head.mesh.skeleton && !mesh.frustumCulled)).toBe(
-    true,
-  );
+  const body = part('body1_1');
+  root.add(body.mesh, body.bone);
+  const hat = part('hat');
+  const source = new THREE.Group();
+  source.add(hat.mesh);
+  vi.mocked(wornGearModelTemplate).mockReturnValue({ root: source, clips: [] });
+  const visuals = createGearVisuals(root, undefined, 1, { bodyFitted: false });
+  for (const helm of helms) {
+    visuals.setWorn({ helm });
+    const worn = extraMeshes(root, [body.mesh]);
+    expect(worn, helm).toHaveLength(1);
+    expect(worn[0]!.userData.gearItem).toBe(helm);
+    expect(worn[0]!.skeleton.bones[0]).toBe(body.bone);
+    expect(vi.mocked(wornGearModelTemplate)).toHaveBeenLastCalledWith(helm);
+  }
   const point = new THREE.Vector3();
-  cap[0]!.updateMatrixWorld(true);
-  head.bone.updateMatrixWorld(true);
-  head.mesh.skeleton.update();
-  cap[0]!.getVertexPosition(0, point);
-  const before = point.clone();
-  head.bone.position.x += 0.3;
-  head.bone.updateMatrixWorld(true);
-  head.mesh.skeleton.update();
-  cap[0]!.getVertexPosition(0, point);
-  expect(point.x - before.x).toBeCloseTo(0.3);
-  const triangles = cap.reduce(
-    (sum, mesh) =>
-      sum + (mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position').count) / 3,
-    0,
-  );
-  expect(triangles).toBeLessThan(2000);
-  visuals.setWorn({});
-  expect(extraMeshes(root, [head.mesh])).toHaveLength(0);
-  visuals.setWorn({ helm: 'woolCap' });
-  expect(extraMeshes(root, [head.mesh])).toHaveLength(2);
-  visuals.dispose();
-  expect(extraMeshes(root, [head.mesh])).toHaveLength(0);
-});
-
-it('attaches the Last Watch helm to the animated head without disposing shared assets', () => {
-  const root = new THREE.Group();
-  const head = new THREE.Bone();
-  head.name = 'head';
-  root.add(head);
-  const helm = new THREE.Group();
-  const geometry = new THREE.BoxGeometry();
-  const material = new THREE.MeshStandardMaterial();
-  helm.add(new THREE.Mesh(geometry, material));
-  const disposeGeometry = vi.spyOn(geometry, 'dispose');
-  const disposeMaterial = vi.spyOn(material, 'dispose');
-  vi.mocked(createWatchCaptainHelm).mockReturnValue(helm);
-  const visuals = createGearVisuals(root, undefined, 1);
-  visuals.setWorn({ helm: 'watchCaptainHelm' });
-  expect(helm.parent).toBe(head);
-  expect(helm.children[0]!.userData.gearItem).toBe('watchCaptainHelm');
-  head.position.x = 2;
+  const [worn] = extraMeshes(root, [body.mesh]);
   root.updateMatrixWorld(true);
-  expect(helm.getWorldPosition(new THREE.Vector3()).x).toBe(2);
+  worn!.skeleton.update();
+  worn!.getVertexPosition(0, point);
+  const before = point.clone();
+  body.bone.position.x += 0.3;
+  root.updateMatrixWorld(true);
+  worn!.skeleton.update();
+  worn!.getVertexPosition(0, point);
+  expect(point.x - before.x).toBeCloseTo(0.3);
   visuals.setWorn({});
-  expect(helm.parent).toBeNull();
-  visuals.dispose();
-  expect(disposeGeometry).not.toHaveBeenCalled();
-  expect(disposeMaterial).not.toHaveBeenCalled();
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
 });
 it('holds a knife worn in the off hand, on every body, and puts it away when taken off', () => {
   const root = new THREE.Group();
@@ -141,13 +113,17 @@ it('holds a knife worn in the off hand, on every body, and puts it away when tak
   visuals.setWorn({});
   expect(hand.children).toHaveLength(0);
 });
-it('leaves helms and clothes off a body they were not made for, but still hangs the shield', () => {
+it('leaves clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_Body');
   const hand = new THREE.Bone();
   root.add(body.mesh, body.bone, hand);
   const visuals = createGearVisuals(root, hand, 1, { bodyFitted: false });
-  visuals.setWorn({ helm: 'woolCap', upperBody: 'winterJacket', offHand: 'woodenShield' });
+  visuals.setWorn({
+    upperBody: 'winterJacket',
+    lowerBody: 'workTrousers',
+    offHand: 'woodenShield',
+  });
   expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
   expect(hand.children).toHaveLength(1);
   visuals.dispose();

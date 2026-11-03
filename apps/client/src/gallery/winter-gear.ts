@@ -96,6 +96,12 @@ export async function showWinterGear(
     if (object.userData.gearItem === (basic ? 'woolCap' : 'bearHat')) heads++;
   });
   document.body.dataset.winterGearHeads = String(heads);
+  if (single !== null)
+    document.body.dataset.wornPieces = String(
+      actor.group
+        .getObjectsByProperty('type', 'SkinnedMesh')
+        .filter((mesh) => mesh.userData.gearItem === single.item).length,
+    );
   document.body.dataset.clothingPieces = String(
     actor.group
       .getObjectsByProperty('type', 'SkinnedMesh')

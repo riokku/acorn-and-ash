@@ -145,8 +145,8 @@ test(
       timeout: 120_000,
     });
     await expect(page.getByText('Winter clothing · Warmth 100')).toBeVisible();
-    // Worn gear is not drawn on the dwarf bodies until it is refitted (decision 0270).
-    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '0');
+    // The bear hat is fitted to both soft bodies (decision 0282); the clothes are not yet.
+    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '1');
     expect(errors).toEqual([]);
   },
 );

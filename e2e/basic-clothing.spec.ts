@@ -9,8 +9,8 @@ test('shows basic clothing on every body with a rigged cap', async ({ page }, te
   for (const body of Object.keys(shared.CHARACTER_KINDS)) {
     await page.goto(`/?gallery=basic-clothing&body=${body}&renderer=webgl2&still`);
     await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true');
-    // Worn gear is not drawn on the dwarf bodies until it is refitted (decision 0270).
-    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '0');
+    // The wool cap is fitted to both soft bodies (decision 0282): its crown and cuff.
+    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '2');
     await expect(page.locator('body')).toContainText('Protection 5% · Warmth 30');
     await page.screenshot({ path: testInfo.outputPath(`basic-${body}.png`) });
   }

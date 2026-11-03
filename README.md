@@ -1709,6 +1709,13 @@ Watchtowers, spectral lanterns and the enlarged bronze bell mark the approach.
 `/?gallery=skeleton-town&view=captain` gives a close look at the captain and helm.
 Inspect the player reward with `/?gallery=winter-gear&gear=last-watch-helm`.
 
+To see one piece of gear worn on its own, open
+`/?gallery=winter-gear&body=knight&wear=bearHat` (`body=barbarian` for Body 2).
+Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
+`&view=three-quarter` to turn the character, and `&before` for plain clothes.
+Every hat is fitted to both soft bodies by `tools/art/soft_hats.py`
+(decision 0282).
+
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include
 `&view=gateway`, `&view=market`, `&view=graveyard` and `&view=bell-hall`.
