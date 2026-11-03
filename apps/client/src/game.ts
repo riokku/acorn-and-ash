@@ -45,7 +45,6 @@ import {
   FIRE_CAPACITY_MS,
   logStorageCapacity,
   logStorageSpot,
-  HOME_FACILITIES,
   type FireRequest,
   type FireFuelView,
 } from '@acorn/shared';
@@ -86,7 +85,7 @@ import {
   isDecorationKind,
   isIndoorOnlyKind,
   checkDecorationSpot,
-  decorationCollider,
+  decorationColliders,
   canAfford,
   type HomeDecoration,
   type DecorationState,
@@ -94,6 +93,7 @@ import {
 import { createHomesteadProject } from './scene/homestead-project';
 import { isHomesteadProject, nearestHomesteadPiece } from '@acorn/shared';
 import { createHomeDecoration } from './scene/home-decoration';
+import type { HomeFurnitureModel } from './scene/home-furniture';
 import { forestWeather, BLIZZARD_SPEED } from '@acorn/shared';
 import { createSnowFootprints } from './scene/snow-footprints';
 import { FloatingBoatMotion } from './scene/floating-boat-motion';
@@ -139,8 +139,11 @@ import {
   knowsHome,
   blueprintHome,
   HOME_TIERS,
-  homeChestSpot,
-  homeRoomScale,
+  furnitureSpot,
+  homeFire,
+  homeRoom,
+  homeRoomReach,
+  type HomeFurnitureKind,
   isHomeKind,
   nextHome,
   type HomeKind,
@@ -154,7 +157,6 @@ import {
   BUILDABLE_KIND_ORDER,
   BUILD_ROTATION_STEP,
   DOORWAY_REACH,
-  HOME_ROOM,
   type ChestRequest,
   type ChestReason,
   OUTDOORS,
@@ -651,6 +653,10 @@ function createBuiltMesh(
     case 'sentinelTrophy':
     case 'fishDisplay':
     case 'goldenFishDisplay':
+    case 'bed':
+    case 'desk':
+    case 'storageChest':
+    case 'indoorGarden':
       return createHomeDecoration(kind);
   }
 }
@@ -990,11 +996,11 @@ export class Game {
   private readonly rowingBoats = new RowingBoats(this.outdoors);
   /** The room inside a home, built the first time anybody goes in. */
   private homeInterior: HomeInterior | null = null;
-  /** The walls and furniture of a room, shared by every home, in its own coordinates. */
+  /** The walls, fire and built furniture of the room we are in, in its own coordinates. */
   private roomCollision = createCollisionWorld(
     createFlatTerrain(0),
     homeRoomColliders(),
-    HOME_ROOM.halfWidth + HOME_ROOM.wallThickness,
+    homeRoomReach(),
   );
   /** Homes already made solid in `collision`, so a resent list never adds one twice. */
   private readonly solidPlacedProps = new Map<number, Collider[]>();
@@ -1459,9 +1465,9 @@ export class Game {
     this.chestOpen = false;
     // Closing a panel cannot cancel a command already sent to the server.
     this.chestDismissed = this.chestPending;
-    this.homeInterior?.setChestOpen(false);
+    this.furnitureModel('storageChest')?.setChestOpen?.(false);
     for (const model of this.builtMeshes.values())
-      if ('setChestOpen' in model) model.setChestOpen(false);
+      if ('setChestOpen' in model) model.setChestOpen?.(false);
     this.syncGameplayControls();
     this.options.hud.publish({ chestSlots: null, chestPending: false, chestNote: null });
   }
@@ -1469,7 +1475,7 @@ export class Game {
   private chestAt(point: { x: number; y: number }, camera: FollowCamera): boolean {
     return this.space === OUTDOORS
       ? this.outdoorProjectAt(point, camera, 'trailPantry')
-      : this.interiorTargetAt(point, camera, this.homeInterior?.chest);
+      : this.interiorTargetAt(point, camera, this.furnitureModel('storageChest')?.group);
   }
   private outdoorProjectAt(
     point: { x: number; y: number },
@@ -1556,9 +1562,10 @@ export class Game {
         : 'Left-click to open · 10 extra private slots';
     }
     if (this.homeHere()?.yours !== true) return 'Private · belongs to the home owner';
-    const chest = homeChestSpot(this.currentHomeKind());
+    const chest = furnitureSpot('storageChest', this.indoorPieces());
+    if (chest === null) return 'Build a storage chest to keep things in';
     const position = this.motionOrOrigin();
-    if (Math.hypot(position.x - chest.x, position.z - chest.z) > 1.8)
+    if (Math.hypot(position.x - chest.x, position.z - chest.z) > chest.reach)
       return 'Too far away · move closer';
     return 'Left-click to open · 10 storage slots';
   }
@@ -1700,6 +1707,7 @@ export class Game {
       missing: 'That decoration is no longer here',
       packFull: 'Make room in your backpack before packing this up',
       recipe: 'Learn this decoration recipe first',
+      onlyOne: 'Your home has room for one of these',
     }[reason];
   }
   private refreshDecorations(): void {
@@ -1709,7 +1717,7 @@ export class Game {
     }
     this.decorModels.length = 0;
     if (this.space === OUTDOORS || this.homeInterior === null) return;
-    const pieces = this.decorations.filter((piece) => piece.homeId === this.space);
+    const pieces = this.indoorPieces();
     for (const piece of pieces) {
       const model = createHomeDecoration(piece.kind);
       model.group.userData.decorationId = piece.id;
@@ -1717,16 +1725,26 @@ export class Game {
       model.group.rotation.y = piece.yaw;
       this.homeInterior.group.add(model.group);
       this.decorModels.push(model);
+      model.setChestOpen?.(this.chestOpen);
+      model.setGardenPlots?.(this.garden.homeId === this.space ? this.garden.plots : emptyGarden());
     }
-    const colliders = pieces
-      .map(decorationCollider)
-      .filter((value): value is NonNullable<typeof value> => value !== null);
     this.roomCollision.colliders.splice(
       0,
       this.roomCollision.colliders.length,
       ...homeRoomColliders(this.currentHomeKind()),
-      ...colliders,
+      ...pieces.flatMap(decorationColliders),
     );
+  }
+  /** What the owner has built in the home we are in; nothing outdoors. */
+  private indoorPieces(): HomeDecoration[] {
+    if (this.space === OUTDOORS) return [];
+    return this.decorations.filter((piece) => piece.homeId === this.space);
+  }
+  /** How the room's one built piece of this furniture is drawn, if it has one. */
+  private furnitureModel(kind: HomeFurnitureKind): HomeFurnitureModel | undefined {
+    const piece = this.indoorPieces().find((other) => other.kind === kind);
+    if (piece === undefined) return undefined;
+    return this.decorModels.find((model) => model.group.userData.decorationId === piece.id);
   }
   pickBuildable(kind: BuildableKindId): void {
     if (kind === 'trailPennant' && !(this.expedition.cosmetics & 1)) return;
@@ -2110,9 +2128,9 @@ export class Game {
           this.chestOpen = true;
           Object.assign(this, menuPanelState(null));
           this.controls?.setGameplayEnabled(false);
-          this.homeInterior?.setChestOpen(true);
+          this.furnitureModel('storageChest')?.setChestOpen?.(true);
           const pantry = this.builtMeshes.get(message.homeId);
-          if (pantry && 'setChestOpen' in pantry) pantry.setChestOpen(true);
+          if (pantry && 'setChestOpen' in pantry) pantry.setChestOpen?.(true);
           this.options.hud.publish({
             chestSlots: message.slots,
             chestPending: false,
@@ -2453,9 +2471,10 @@ export class Game {
       }
       case 'garden': {
         this.garden = message;
-        if (message.homeId === this.space) this.homeInterior?.setGardenPlots(message.plots);
+        if (message.homeId === this.space)
+          this.furnitureModel('indoorGarden')?.setGardenPlots?.(message.plots);
         const garden = this.builtMeshes.get(message.homeId);
-        if (garden && 'setGardenPlots' in garden) garden.setGardenPlots(message.plots);
+        if (garden && 'setGardenPlots' in garden) garden.setGardenPlots?.(message.plots);
         this.options.hud.publish({ garden: message });
         break;
       }
@@ -3573,7 +3592,7 @@ export class Game {
       const appearance = this.homesteadAppearances.get(prop.id);
       if (appearance && 'setAppearance' in built) built.setAppearance(appearance);
       if ('setGardenPlots' in built && this.garden.homeId === prop.id)
-        built.setGardenPlots(this.garden.plots);
+        built.setGardenPlots?.(this.garden.plots);
       // Reflects whatever the server already thinks, not always unlit - a
       // client that joins mid-burn should see the fire going from the start.
       if ('setLit' in built) built.setLit?.(this.fuelFireLit(prop.id));
@@ -3872,7 +3891,11 @@ export class Game {
           ((this.space === OUTDOORS &&
             this.outdoorProjectAt(clickPoint, camera, 'kitchenGarden')) ||
             (this.currentHomeKind() === 'largeCabin' &&
-              this.interiorTargetAt(clickPoint, camera, this.homeInterior?.garden)))
+              this.interiorTargetAt(
+                clickPoint,
+                camera,
+                this.furnitureModel('indoorGarden')?.group,
+              )))
         ) {
           controls.swallowLeftPress();
           this.setJournalTab('garden');
@@ -4031,7 +4054,7 @@ export class Game {
       this.reducedMotion.matches,
     );
     this.floats.update(deltaSeconds, (netId) => this.anglerOf(netId));
-    for (const model of this.decorModels) if ('update' in model) model.update(deltaSeconds);
+    for (const model of this.decorModels) model.update?.(deltaSeconds);
     const weatherNow = this.estimatedServerTimeMs();
     const weather = this.currentWeather();
     if (this.localPlayer) {
@@ -5164,8 +5187,7 @@ export class Game {
       this.selectedLogStorage = null;
       if (!homeFacilityInReach(this.currentHomeKind(), 'cooking', position)) return null;
       prop = this.builtProps.find((p) => p.id === this.space);
-      const scale = homeRoomScale(this.currentHomeKind());
-      point = { x: HOME_FACILITIES.cooking.x * scale, z: HOME_FACILITIES.cooking.z * scale };
+      point = homeFire(this.currentHomeKind()).cooking;
     } else {
       prop = nearestCampfire(position, this.builtProps) ?? undefined;
       point = prop ?? null;
@@ -5777,11 +5799,17 @@ export class Game {
     character.setRestSpot(
       rowing
         ? boatSeatAt(position.x, position.z, player.renderYaw())
-        : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind(), {
-            pieces: this.builtProps,
-            position: player.motion.position,
-            heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
-          }),
+        : restSpotFor(
+            action.kind,
+            action.step,
+            this.space,
+            { pieces: this.indoorPieces(), position: player.motion.position },
+            {
+              pieces: this.builtProps,
+              position: player.motion.position,
+              heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
+            },
+          ),
     );
     const speed = Math.hypot(velocity.x, velocity.z);
     const travelSpeed = player.travelSpeed();
@@ -5869,7 +5897,7 @@ export class Game {
         this.chestAt(pointer, camera);
       this.options.canvas.style.cursor = this.hoveredChest ? LOOT_CURSOR : '';
       this.gatheringFocus.setTarget(
-        this.hoveredChest ? (this.homeInterior?.chest ?? null) : null,
+        this.hoveredChest ? (this.furnitureModel('storageChest')?.group ?? null) : null,
         0.65,
         this.homeHere()?.yours !== true,
       );
@@ -5892,11 +5920,13 @@ export class Game {
         this.currentHomeKind(),
         'workbench',
         player.motion.position,
+        this.indoorPieces(),
       );
       this.nearGarden = homeFacilityInReach(
         this.currentHomeKind(),
         'garden',
         player.motion.position,
+        this.indoorPieces(),
       );
       this.aimedTree = null;
       this.aimedAnimal = null;
@@ -5909,7 +5939,7 @@ export class Game {
         ? (restingPlaceInReach(
             player.motion.position.x,
             player.motion.position.z,
-            this.currentHomeKind(),
+            this.indoorPieces(),
           )?.kind ?? null)
         : null;
       this.canBuild = false;
@@ -6252,15 +6282,12 @@ export class Game {
       this.roomCollision = createCollisionWorld(
         createFlatTerrain(0),
         homeRoomColliders(kind),
-        (HOME_ROOM.halfWidth + HOME_ROOM.wallThickness) * homeRoomScale(kind),
+        homeRoomReach(kind),
       );
       this.homeInterior = createHomeInterior(kind);
       this.scene.add(this.homeInterior.group);
     }
     if (this.homeInterior !== null) this.homeInterior.group.visible = inside;
-    this.homeInterior?.setGardenPlots(
-      this.garden.homeId === space ? this.garden.plots : emptyGarden(),
-    );
     this.refreshDecorations();
     this.daylight?.setIndoors(inside);
     // Coming out, the camera looks at you from out front, with your home
@@ -6331,9 +6358,8 @@ export class Game {
 
   private doorHintAt(position: Readonly<Vec3>): 'enter' | 'visit' | 'locked' | 'leave' | null {
     if (this.space !== OUTDOORS) {
-      const scale = homeRoomScale(this.currentHomeKind());
-      return position.z / scale > HOME_ROOM.halfDepth - 1.4 &&
-        Math.abs(position.x / scale - HOME_ROOM.doorX) < 1.3
+      const room = homeRoom(this.currentHomeKind());
+      return position.z > room.halfDepth - 1.4 && Math.abs(position.x - room.doorX) < 1.3
         ? 'leave'
         : null;
     }
@@ -6781,11 +6807,17 @@ export class Game {
       character.setRestSpot(
         rowing
           ? boatSeatAt(pose.x, pose.z, pose.yaw)
-          : restSpotFor(action.kind, action.step, this.space, this.currentHomeKind(), {
-              pieces: this.builtProps,
-              position: pose,
-              heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
-            }),
+          : restSpotFor(
+              action.kind,
+              action.step,
+              this.space,
+              { pieces: this.indoorPieces(), position: pose },
+              {
+                pieces: this.builtProps,
+                position: pose,
+                heightAt: (x, z) => this.collision?.terrain.heightAt(x, z) ?? 0,
+              },
+            ),
       );
       if (rowing) this.rowingBoats.place(netId, pose.x, pose.z, pose.yaw);
       const drawn = character.update(deltaSeconds, {

@@ -1077,12 +1077,12 @@ the original home position and heading. The server checks the larger footprint,
 materials, ownership and that everyone has left the room before changing it;
 a refusal keeps the materials and explains what prevented the upgrade.
 
-Upgrades preserve the home ID, ownership, door lock, chest contents and exact
-storage slots. The canvas shelters have travel beds and warm lanterns; the
-teepee adds a table and chair. Cabins have the furnished log room and hearth;
-the larger cabin expands the room and adds an exterior porch. Interiors use the
-same tier dimensions for rendering, resting, doors and collision. Canvas roofs
-lift away in the indoor view so they cannot hide the bed or chest.
+Upgrades preserve the home ID, ownership, door lock, chest contents, exact
+storage slots and whatever you have built inside. Each home type has a room of
+its own size: 4 × 4 m in a tent, 5.5 × 5.5 m in a teepee, 7 × 6 m in a cabin
+and 10 × 8 m in a large cabin, which also adds an exterior porch. The same
+sizes are used for drawing, doors and collision. Canvas roofs lift away in the
+indoor view so they cannot hide what is inside.
 
 Blueprint learning and pack consumption save together immediately. Character
 knowledge lives in this world's SQLite database. Existing numeric item/build
@@ -1092,13 +1092,24 @@ IDs stay unchanged. See [decision 0073](docs/decisions/0073-learning-to-build-a-
 
 Walk into your home's entrance, or press `E` at it, and the screen fades
 into the room inside: bigger than the outside suggests, seen from above like
-a dollhouse with the near walls cut away. There's a bed, a stone hearth with
-a real fire, a table and chair by the window with an oil lamp, a shelf of
-books and jars, herbs drying from a beam and a braided rug. The fire and the
-lamp glow brighter at night. Walk back into the door to go out.
+a dollhouse with the near walls cut away. A new home is empty but for its
+fire: a small open fire in a tent, an open fire in the middle of a teepee, and
+a stone fireplace in a cabin. The fire glows brighter at night. Walk back into
+the door to go out.
+
+Everything else you build with the Decorate button. Under Furniture there's a
+bed (6 logs, 2 rope), a desk and chair that is your indoor workbench (6 logs,
+4 sticks), a storage chest with 10 slots (4 logs, 2 sticks) and, in a large
+cabin, an indoor garden (4 logs, 6 sticks, 3 flowers). A home has room for one
+of each. Whatever was in an older home's built-in chest turns up in the first
+chest you build there. See
+[decision 0285](docs/decisions/0285-empty-homes-sized-by-type.md), and
+`/?gallery=home&tier=tent&furnished` (or `teepee`, `cabin`, `largeCabin`)
+to look into each room with its furniture built.
 
 Once you have a home, it's where you wake up: when you arrive, and after a
-knockout, you're beside your own bed. A connection that drops and comes back
+knockout, you're beside your own bed, or on the floor by the fire until you
+have built one. A connection that drops and comes back
 is not arriving, though: you carry on right where you were, and there is only
 ever one of you in a world. Open the game in a second tab and that tab takes
 over, while the first one pauses and offers to take you back. See
@@ -1107,7 +1118,7 @@ top locks the door to visitors or opens it again. Anybody can visit an open
 home, and only ever sees whoever else is inside with them. See
 [decision 0055](docs/decisions/0055-going-inside-your-home.md).
 
-Press `E` beside the chair to sit down at the table, or beside the bed to
+Press `E` beside the desk's chair to sit down at it, or beside your bed to
 lie down on it; walk, or press `E` again, to get up. Only one person fits in
 each at a time. With food in your hand and room for it, `E` eats it first.
 See [decision 0056](docs/decisions/0056-moves-with-weight.md).

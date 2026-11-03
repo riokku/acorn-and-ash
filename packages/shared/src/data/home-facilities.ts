@@ -1,33 +1,42 @@
-import { homeRoomScale, type HomeKind } from './housing';
+import type { HomeKind } from './housing';
+import type { BuildableKindId } from './buildables';
 import type { Vec3 } from '../math/vec3';
-
-export type HomeFacility = 'cooking' | 'workbench' | 'garden';
-export const HOME_FACILITIES = {
-  cooking: { x: 2.25, z: -0.9, reach: 1.2 },
-  workbench: { x: -2.9, z: 1.1, reach: 1.2 },
-  garden: { x: 1.4, z: 2.15, reach: 1.65 },
-} as const;
+import { furnitureSpot, homeFire, type HomePlacement } from '../world/home';
 
 /**
- * The garden's three growing trays (Polyfork's Seedling Tray, its long side
- * front to back), this far apart along X. Both the cabin's indoor garden and
- * the campsite kitchen garden are solid to this size.
+ * A home's stations: cooking at its fire, which every home has, and the
+ * workbench and garden, which are the desk and the indoor garden once built
+ * (see decision 0285).
  */
-export const GARDEN_TRAY = { spacing: 0.65, halfX: 0.2, halfZ: 0.3, height: 0.15 } as const;
+export type HomeFacility = 'cooking' | 'workbench' | 'garden';
 
-export function homeHasFacility(kind: HomeKind, facility: HomeFacility): boolean {
-  if (facility === 'cooking') return kind !== 'tent';
-  if (facility === 'workbench') return kind === 'cabin' || kind === 'largeCabin';
-  return kind === 'largeCabin';
+/** The pieces furnishing one home, as far as its stations care. */
+type Furnishings = readonly (HomePlacement & { readonly kind: BuildableKindId })[];
+
+/** Where a home's station is used from, and how far it reaches, or null when it has none. */
+export function homeFacilitySpot(
+  kind: HomeKind,
+  facility: HomeFacility,
+  pieces: Furnishings = [],
+): { readonly x: number; readonly z: number; readonly reach: number } | null {
+  if (facility === 'cooking') return homeFire(kind).cooking;
+  return furnitureSpot(facility === 'workbench' ? 'desk' : 'indoorGarden', pieces);
+}
+
+export function homeHasFacility(
+  kind: HomeKind,
+  facility: HomeFacility,
+  pieces: Furnishings = [],
+): boolean {
+  return homeFacilitySpot(kind, facility, pieces) !== null;
 }
 
 export function homeFacilityInReach(
   kind: HomeKind,
   facility: HomeFacility,
   position: Pick<Vec3, 'x' | 'z'>,
+  pieces: Furnishings = [],
 ): boolean {
-  if (!homeHasFacility(kind, facility)) return false;
-  const spot = HOME_FACILITIES[facility],
-    scale = homeRoomScale(kind);
-  return Math.hypot(position.x - spot.x * scale, position.z - spot.z * scale) <= spot.reach;
+  const spot = homeFacilitySpot(kind, facility, pieces);
+  return spot !== null && Math.hypot(position.x - spot.x, position.z - spot.z) <= spot.reach;
 }

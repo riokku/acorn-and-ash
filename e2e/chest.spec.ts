@@ -1,12 +1,12 @@
 import { expect, test } from './fixtures';
 import {
   DEFAULT_WORLD_SEED,
-  HOME_FURNITURE,
-  HOME_WAKE_SPOT,
   WorldSimulation,
   decodeClientMessage,
   encodeBuiltProps,
   encodeChestState,
+  encodeDecorationState,
+  homeFloorWakeSpot,
   encodeInventory,
   encodePong,
   encodeSnapshot,
@@ -17,14 +17,19 @@ import {
 
 // Exercise the real room, ray picking, protocol and panel with a seeded private
 // home. Durable Object persistence and isolation are covered by the Worker test.
+// Homes start empty (decision 0285), so this one has a chest built in it: in
+// reach of where you wake by the fire, but clear of the fire's own panel on screen.
+const WAKE = homeFloorWakeSpot('cabin');
+const CHEST = { id: 1, homeId: 7, kind: 'storageChest', x: 0.2, z: -1.6, yaw: 0 } as const;
 test.use({ viewport: { width: 960, height: 640 }, deviceScaleFactor: 0.5 });
 test.setTimeout(180_000);
-test('opens the bed chest by clicking its model and moves saved stacks both ways', async ({
+test('opens a built storage chest by clicking its model and moves saved stacks both ways', async ({
   page,
 }, testInfo) => {
   const sim = new WorldSimulation({ seed: DEFAULT_WORLD_SEED });
   const home = { id: 7, kind: 'cabin' as const, x: 0, z: -20, yaw: 0, lit: false };
   sim.restoreBuiltProps([{ ...home, ownerKey: 'chest-owner', litUntilMs: null }]);
+  sim.restoreDecorations([CHEST]);
   sim.addPlayer(1, undefined, 'chest-owner');
   Object.assign(sim.inventoryOf(1), { log: 12, stick: 4 });
   let finishStorage: (() => void) | null = null;
@@ -37,7 +42,8 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     send(encodeWelcome(1, DEFAULT_WORLD_SEED, 0, Date.now()));
     send(encodeBuiltProps([home], () => true));
     send(encodeInventory(inventoryEntries(sim.inventoryOf(1))));
-    send(encodeSpace(7, HOME_WAKE_SPOT.x, HOME_WAKE_SPOT.z, HOME_WAKE_SPOT.yaw));
+    send(encodeSpace(7, WAKE.x, WAKE.z, WAKE.yaw));
+    send(encodeDecorationState({ pieces: sim.decorationsList(), reason: null }));
     send(encodeSnapshot(0, Date.now(), 0, sim.snapshotFor(1)));
     socket.onMessage((message) => {
       if (typeof message === 'string') return;
@@ -65,10 +71,10 @@ test('opens the bed chest by clicking its model and moves saved stacks both ways
     });
     await expect
       .poll(() => page.evaluate(() => window.acornDebug?.localPosition().x))
-      .toBeCloseTo(HOME_WAKE_SPOT.x, 1);
+      .toBeCloseTo(WAKE.x, 1);
     const point = await page.evaluate(
       ([x, z]) => window.acornDebug?.screenPoint(x!, 0.3, z!),
-      [HOME_FURNITURE.chest.x, HOME_FURNITURE.chest.z],
+      [CHEST.x, CHEST.z],
     );
     if (point == null) throw new Error('Chest is off screen');
     await page.mouse.move(point.x, point.y);

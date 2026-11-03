@@ -2,11 +2,11 @@ import { createDisplayTool } from './display-item';
 import { createMealModel } from './forest-food';
 import type { HomesteadAppearance, ItemId } from '@acorn/shared';
 import * as THREE from 'three/webgpu';
-import { HOME_FACILITIES, type HomesteadProject, type GardenPlot } from '@acorn/shared';
+import type { HomesteadProject, GardenPlot } from '@acorn/shared';
 import { createHomeFacilities } from './home-facilities';
 import { createHomeDecoration } from './home-decoration';
 import { createStorageChest } from './storage-chest';
-/** Reuses the actual table, workbench fittings, chest and growing boxes already in cabins. */
+/** Reuses the table, workbench fittings, chest and growing trays built inside homes. */
 export function createHomesteadProject(kind: HomesteadProject) {
   const group = new THREE.Group();
   group.name = kind;
@@ -43,9 +43,8 @@ export function createHomesteadProject(kind: HomesteadProject) {
     };
   } else {
     const facility = kind === 'trailWorkbench' ? 'workbench' : 'garden';
-    const fittings = createHomeFacilities('largeCabin', facility);
-    const spot = HOME_FACILITIES[facility];
-    fittings.group.position.set(-spot.x, kind === 'trailWorkbench' ? 0.085 : 0, -spot.z);
+    const fittings = createHomeFacilities(facility);
+    fittings.group.position.y = kind === 'trailWorkbench' ? 0.085 : 0;
     group.add(fittings.group);
     pieces.push(fittings);
     setPlots = fittings.setGardenPlots;

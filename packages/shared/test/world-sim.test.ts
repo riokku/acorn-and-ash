@@ -66,10 +66,9 @@ import {
   OUTDOORS,
 } from '../src/sim/world-sim';
 import {
-  HOME_BED,
-  HOME_CHAIR,
-  HOME_ENTRY,
-  HOME_WAKE_SPOT,
+  furnitureRestingPlace,
+  homeEntry,
+  homeFloorWakeSpot,
   cabinDoorstep,
   cabinDoorway,
 } from '../src/world/home';
@@ -3446,14 +3445,15 @@ describe('threats', () => {
       sim.placePlayer(1, closeToDen, 0);
       for (let i = 0; i < 4 * 42 + KNOCKED_OUT_TICKS; i++) sim.step(tickClock());
 
-      // Inside, getting out of their own bed - see decisions 0055 and 0056.
+      // Inside, getting up off the floor by the fire: a new tent has no bed
+      // yet - see decisions 0055 and 0285.
       expect(sim.spaceOf(1)).toBe(home.id);
-      expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Bed });
+      expect(sim.actionOf(1)).toMatchObject({ kind: ActionKind.Rise, step: RiseFrom.Ground });
       const position = sim.snapshotFor(1).find((entity) => entity.netId === 1);
       expect(position).toBeDefined();
       if (position === undefined) return;
-      expect(position.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 1);
-      expect(position.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 1);
+      expect(position.x).toBeCloseTo(homeFloorWakeSpot('tent').x, 1);
+      expect(position.z).toBeCloseTo(homeFloorWakeSpot('tent').z, 1);
       expect(sim.drainSpaceChanges().some((change) => change.space === home.id)).toBe(true);
     });
 
@@ -4289,7 +4289,7 @@ describe('building', () => {
       expect(sim.drainHomeBuildFeedback()[0]?.reason).toBe('identity');
     });
 
-    it('wakes its owner up inside, by their own bed, next time', () => {
+    it('wakes its owner up inside, by the fire until they build a bed, next time', () => {
       const sim = createWorld();
       sim.addPlayer(1, withTenLogs(1), 'chris');
       sim.placePlayer(1, { x: 0, y: 0, z: 0 }, FACE_OUT);
@@ -4307,8 +4307,8 @@ describe('building', () => {
       back.addPlayer(9, undefined, 'chris');
       expect(back.spaceOf(9)).toBe(home?.id);
       const position = back.snapshotFor(9).find((entity) => entity.netId === 9);
-      expect(position?.x).toBeCloseTo(HOME_WAKE_SPOT.x * 0.8, 5);
-      expect(position?.z).toBeCloseTo(HOME_WAKE_SPOT.z * 0.8, 5);
+      expect(position?.x).toBeCloseTo(homeFloorWakeSpot('tent').x, 5);
+      expect(position?.z).toBeCloseTo(homeFloorWakeSpot('tent').z, 5);
     });
 
     it('puts the front door on whichever side the cabin was turned to face', () => {
@@ -4331,7 +4331,8 @@ describe('building', () => {
           .map((prop) => ({ ...prop, ownerKey: 'chris', litUntilMs: null })),
       );
       back.addPlayer(9, undefined, 'chris');
-      back.placePlayer(9, { x: HOME_ENTRY.x, y: 0, z: HOME_ENTRY.z }, 0, home.id);
+      const entry = homeEntry('tent');
+      back.placePlayer(9, { x: entry.x, y: 0, z: entry.z }, 0, home.id);
       for (let seq = 1; seq <= 20 && back.spaceOf(9) !== OUTDOORS; seq++) {
         // Backwards, towards the door, with the camera looking into the room.
         back.queueInput(9, createInput(seq, 0, -1, 0));
@@ -4373,8 +4374,8 @@ describe('building', () => {
         expect(sim.spaceOf(1)).toBe(home.id);
         const arrived = sim.drainSpaceChanges().at(-1);
         expect(arrived).toMatchObject({ netId: 1, space: home.id });
-        expect(arrived?.x).toBeCloseTo(HOME_ENTRY.x, 5);
-        expect(arrived?.z).toBeCloseTo(HOME_ENTRY.z, 5);
+        expect(arrived?.x).toBeCloseTo(homeEntry('cabin').x, 5);
+        expect(arrived?.z).toBeCloseTo(homeEntry('cabin').z, 5);
 
         // Wait out the door's breather, then walk back out.
         for (let i = 0; i < 20; i++) sim.step(tickClock());
@@ -4930,11 +4931,18 @@ describe('building', () => {
 });
 
 describe('moves in the world', () => {
-  /** A cabin built for `chris`, restored into a fresh world: chris starts inside it, by the bed. */
+  /** The bed and desk chris has built, where every cabin used to come with them. */
+  const bed = { id: 1, homeId: 7, kind: 'bed', x: -2.75, z: -1.95, yaw: 0 } as const;
+  const desk = { id: 2, homeId: 7, kind: 'desk', x: -2.9, z: 1.1, yaw: 0 } as const;
+  const HOME_BED = furnitureRestingPlace(bed)!;
+  const HOME_CHAIR = furnitureRestingPlace(desk)!;
+
+  /** A furnished cabin built for `chris`, restored into a fresh world: chris starts inside it, by the bed. */
   function worldWithChrisAtHome(): { sim: WorldSimulation; home: BuiltProp } {
     const sim = createWorld();
     const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false };
     sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+    sim.restoreDecorations([bed, desk]);
     sim.addPlayer(1, undefined, 'chris');
     return { sim, home };
   }
@@ -4982,6 +4990,7 @@ describe('moves in the world', () => {
     const sim = createWorld();
     const home: BuiltProp = { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false };
     sim.restoreBuiltProps([{ ...home, ownerKey: 'chris', litUntilMs: null }]);
+    sim.restoreDecorations([desk]);
     sim.addPlayer(
       1,
       {

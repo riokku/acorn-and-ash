@@ -36,6 +36,11 @@ import {
   pondGroundHeight,
   dayBrightness,
   isHomeKind,
+  furnitureRestingPlace,
+  homeRoom,
+  type HomeDecoration,
+  type HomeFurnitureKind,
+  type HomeKind,
   type BuildableKindId,
   type PlacedProp,
   type PropKindId,
@@ -80,6 +85,7 @@ import { createCritterFor } from '../scene/wildlife-models';
 import { createGardenPath } from '../scene/garden-path';
 import { createLantern } from '../scene/lantern';
 import { createHomeInterior } from '../scene/home-interior';
+import { createHomeFurniture } from '../scene/home-furniture';
 import { addDaylight, type DaylightRig } from '../scene/lighting';
 import { FireLights } from '../scene/fire-light';
 import { createSatchel, createStickPileModel } from '../scene/pickup-models';
@@ -965,6 +971,26 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   });
 }
 
+/** A bed, desk and chest laid out to fit any room, and the garden in a large cabin. */
+type Furnishing = HomeDecoration & { readonly kind: HomeFurnitureKind };
+function exampleFurnishings(kind: HomeKind): Furnishing[] {
+  const { halfWidth, halfDepth } = homeRoom(kind);
+  const piece = (
+    id: number,
+    furniture: HomeFurnitureKind,
+    x: number,
+    z: number,
+    yaw: number,
+  ): Furnishing => ({ id, homeId: 1, kind: furniture, x, z, yaw });
+  const pieces = [
+    piece(1, 'bed', -halfWidth + 0.65, -halfDepth + 1.01, 0),
+    piece(2, 'storageChest', -halfWidth + 1.9, -halfDepth + 0.3, 0),
+    piece(3, 'desk', halfWidth - 0.45, halfDepth - 1.2, Math.PI),
+  ];
+  if (kind === 'largeCabin') pieces.push(piece(4, 'indoorGarden', 0.4, -halfDepth + 0.6, 0));
+  return pieces;
+}
+
 /** The room inside a home, looked into from above the cut-away front wall. */
 function showHomeInside(
   renderer: RendererSetup['renderer'],
@@ -976,18 +1002,26 @@ function showHomeInside(
 ): void {
   daylight.setIndoors(true);
   const requested = params.get('tier') as BuildableKindId | null;
-  const inside = createHomeInterior(
-    requested !== null && isHomeKind(requested) ? requested : 'cabin',
-  );
+  const kind = requested !== null && isHomeKind(requested) ? requested : 'cabin';
+  const inside = createHomeInterior(kind);
   inside.setFireLit(!params.has('unlit'));
-  // `&open` lifts the storage chest's lid.
-  inside.setChestOpen(params.has('open'));
-  if (requested === 'largeCabin')
-    inside.setGardenPlots([
+  // `&furnished` builds a bed, a desk and a chest (and, in a large cabin, the
+  // garden); `&open` lifts the chest's lid. Homes start empty otherwise.
+  const furnishings =
+    params.has('furnished') || params.has('resting') ? exampleFurnishings(kind) : [];
+  const furniture = furnishings.map((piece) => {
+    const model = createHomeFurniture(piece.kind);
+    model.group.position.set(piece.x, 0, piece.z);
+    model.group.rotation.y = piece.yaw;
+    model.setChestOpen?.(params.has('open'));
+    model.setGardenPlots?.([
       { crop: 'berry', growTicks: 0 },
       { crop: 'mushroom', growTicks: 0 },
       { crop: 'flower', growTicks: 0 },
     ]);
+    inside.group.add(model.group);
+    return model;
+  });
   scene.add(inside.group);
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 100);
   // `&x=` and `&z=` look somewhere else in the room, up close.
@@ -997,8 +1031,10 @@ function showHomeInside(
     Number(params.get('z') ?? -0.3),
   );
   let angle = Number(params.get('angle') ?? 0.25);
-  const distance = Number(params.get('distance') ?? 8.8);
-  const height = Number(params.get('height') ?? 6.2);
+  // Bigger rooms than a cabin's are looked at from further back, to see them whole.
+  const roomy = Math.max(1, homeRoom(kind).halfWidth / homeRoom('cabin').halfWidth);
+  const distance = Number(params.get('distance') ?? 8.8 * roomy);
+  const height = Number(params.get('height') ?? 6.2 * roomy);
   const spin = params.has('spin');
   const resize = (): void => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -1010,10 +1046,12 @@ function showHomeInside(
   const daylightAmount = dayBrightness(Number.isFinite(time) ? time : 0.42);
   // `&resting` sits somebody in the chair and lies somebody on the bed.
   let drawResting: ((deltaSeconds: number) => void) | null = null;
-  if (params.has('resting')) {
+  const chair = furnishings.map(furnitureRestingPlace).find((place) => place?.kind === 'chair');
+  const bed = furnishings.map(furnitureRestingPlace).find((place) => place?.kind === 'bed');
+  if (params.has('resting') && chair && bed) {
     void import('./moves')
       .then(({ addRestingCharacters }) =>
-        addRestingCharacters(scene, Number(params.get('at') ?? 60)),
+        addRestingCharacters(scene, Number(params.get('at') ?? 60), chair, bed),
       )
       .then((draw) => {
         drawResting = draw;
@@ -1036,6 +1074,7 @@ function showHomeInside(
     camera.lookAt(target);
     inside.cutAway(camera.position.x, camera.position.z);
     inside.update(delta, daylightAmount);
+    for (const model of furniture) model.update?.(delta);
     fireLights.update(camera.position);
     renderer.render(scene, camera);
     frames += 1;

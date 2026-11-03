@@ -4,19 +4,27 @@
  * Outside, a cabin is a solid block with a doorway on its +Z side, the side
  * the model's front door is on: walk into the doorway, or press the interact
  * key there, and you go in. Inside is a room of its own, roomier than the
- * outside suggests, the way cozy games like to do it: the same room for every
- * cabin for now, laid out here in the room's own coordinates, with the
- * doorway on its +Z wall so you come in facing into the room.
+ * outside suggests, the way cozy games like to do it: sized by the kind of
+ * home (`HOME_INTERIORS`), laid out here in the room's own coordinates, with
+ * the doorway on its +Z wall so you come in facing into the room. Every room
+ * starts empty except for its fire (see decision 0285); the bed, desk, chest
+ * and garden are pieces the owner builds and places.
  *
  * Plain numbers, shared by the server (which decides who goes in and out)
  * and the browser (which predicts walking about in there, and draws it).
  */
 
 import type { BuildableKindId } from '../data/buildables';
-import { homeOuterScale, homeRoomScale, isHomeKind, type HomeKind } from '../data/housing';
+import {
+  homeInteriorSize,
+  homeOuterScale,
+  isHomeKind,
+  type HomeFire,
+  type HomeInteriorSize,
+  type HomeKind,
+} from '../data/housing';
 import { PLAYER_RADIUS } from '../constants';
 import { box, cylinder, type Collider } from './colliders';
-import { GARDEN_TRAY, HOME_FACILITIES } from '../data/home-facilities';
 
 /** A flat point with the way something faces, in the same yaw convention as everything else. */
 export interface PlacedSpot {
@@ -158,51 +166,161 @@ export function isEnteringDoorway(
 /* ------------------------------------------------------------------------ */
 
 /**
- * The room inside every cabin, in the room's own coordinates: 7 m by 6 m,
- * the doorway in the +Z wall, a little left of the middle the way the
- * cabin's own front door is.
+ * What every room shares, whatever its size: the walls, the doorway's width
+ * and the two windows. How big a room is, and where its door and fire are,
+ * comes from `HOME_INTERIORS`.
  */
 export const HOME_ROOM = {
-  halfWidth: 3.5,
-  halfDepth: 3,
   wallHeight: 2.7,
   wallThickness: 0.3,
-  doorX: -1.1,
   doorHalfWidth: 0.55,
-  /** A window in the -X wall, above the table, for daylight. */
+  /** A window in the -X wall, for daylight. */
   sideWindow: { z: 1.1, halfWidth: 0.55, bottom: 0.95, top: 1.8 },
-  /** And one in the back wall, between the bed and the hearth. */
+  /** And one in the back wall. */
   backWindow: { x: 0.4, halfWidth: 0.55, bottom: 1.0, top: 1.8 },
 } as const;
 
-/** The furniture every room starts with, where it stands. */
-export const HOME_FURNITURE = {
-  /** Headboard against the back wall, along the -X wall. */
-  bed: { x: -2.75, z: -1.95, halfWidth: 0.58, halfLength: 0.98, height: 0.48 },
-  /** The existing chest at the foot of the bed. */
-  chest: { x: -2.75, z: -0.64, halfWidth: 0.47, halfDepth: 0.25, height: 0.51 },
-  /** A stone fireplace in the +X wall, under the chimney you see outside. */
-  hearth: { x: 3.02, z: -0.9, halfDepth: 0.48, halfWidth: 0.9, height: 1.35 },
-  /** Under the side window. */
-  table: { x: -2.9, z: 1.1, halfWidth: 0.4, halfLength: 0.56, height: 0.66 },
-  /** Pulled up to the table, facing it. */
-  chair: { x: -2.1, z: 1.1, radius: 0.28, yaw: Math.PI / 2 },
-  /** Against the +X wall, nearer the front. */
-  shelf: { x: 3.33, z: 1.55, halfDepth: 0.17, halfWidth: 0.72, height: 1.9 },
-  /** An oval rug in the middle of the floor. Nothing to bump into. */
-  rug: { x: 0.35, z: -0.2, radiusX: 1.35, radiusZ: 0.95 },
-} as const;
+export type HomeRoom = typeof HOME_ROOM & HomeInteriorSize;
+
+/** The room inside this kind of home: its size, its door and its fire. */
+export function homeRoom(kind: BuildableKindId = 'cabin'): HomeRoom {
+  return { ...HOME_ROOM, ...homeInteriorSize(kind) };
+}
+
+/** The stone fireplace in a cabin's +X wall, under the chimney you see outside. */
+export const HOME_FIREPLACE = { z: -0.9, halfDepth: 0.48, halfWidth: 0.9, height: 1.35 } as const;
+/** The open fire ring in a tent or teepee, before its home's `fireScale`. */
+export const HOME_FIRE_RING = { z: -0.4, radius: 0.36, height: 0.45 } as const;
+/** How far from where you stand to cook the fire still reaches. */
+const COOKING_REACH = 1.2;
+
+export interface HomeFireLayout {
+  readonly kind: HomeFire;
+  /** Where the fire itself burns. */
+  readonly x: number;
+  readonly z: number;
+  /** Where you stand to cook over it, and how far from there it reaches. */
+  readonly cooking: { readonly x: number; readonly z: number; readonly reach: number };
+  readonly collider: Collider;
+}
+
+/** The one thing every room comes with: its fire, open or in a fireplace. */
+export function homeFire(kind: BuildableKindId = 'cabin'): HomeFireLayout {
+  const room = homeInteriorSize(kind);
+  if (room.fire === 'fireplace') {
+    const { z, halfDepth, halfWidth, height } = HOME_FIREPLACE;
+    const x = room.halfWidth - halfDepth;
+    return {
+      kind: 'fireplace',
+      x,
+      z,
+      // Out in front of the hearthstones.
+      cooking: { x: room.halfWidth - 1.25, z, reach: COOKING_REACH },
+      collider: box(x, height / 2, z, halfDepth, height / 2, halfWidth),
+    };
+  }
+  const { z, radius, height } = HOME_FIRE_RING;
+  return {
+    kind: 'campfire',
+    x: 0,
+    z,
+    cooking: { x: 0, z, reach: COOKING_REACH },
+    collider: cylinder(0, z, radius * room.fireScale, height),
+  };
+}
 
 /** Where you appear coming in: just inside the door, facing into the room. */
-export const HOME_ENTRY: PlacedSpot = { x: HOME_ROOM.doorX, z: HOME_ROOM.halfDepth - 0.65, yaw: 0 };
+export function homeEntry(kind: BuildableKindId = 'cabin'): PlacedSpot {
+  const room = homeInteriorSize(kind);
+  return { x: room.doorX, z: room.halfDepth - 0.65, yaw: 0 };
+}
 
-/** Where you wake up after a knockout, or arriving home: beside the bed, facing into the room. */
-export const HOME_WAKE_SPOT: PlacedSpot = {
-  x: HOME_FURNITURE.bed.x + HOME_FURNITURE.bed.halfWidth + 0.55,
-  z: HOME_FURNITURE.bed.z + 0.35,
-  // Facing +X, out into the room.
-  yaw: -Math.PI / 2,
+/**
+ * Where you wake up after a knockout, or arriving home, before you have built
+ * a bed: on the floor beside the fire, facing it (+X).
+ */
+export function homeFloorWakeSpot(kind: BuildableKindId = 'cabin'): PlacedSpot {
+  const fire = homeFire(kind);
+  return {
+    x: fire.kind === 'fireplace' ? fire.cooking.x - 0.75 : fire.x - 1.1,
+    z: fire.z,
+    yaw: -Math.PI / 2,
+  };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Furniture you build                                                      */
+/* ------------------------------------------------------------------------ */
+
+export type HomeFurnitureKind = 'bed' | 'desk' | 'storageChest' | 'indoorGarden';
+export const HOME_FURNITURE_KINDS: readonly HomeFurnitureKind[] = [
+  'bed',
+  'desk',
+  'storageChest',
+  'indoorGarden',
+];
+export function isHomeFurniture(kind: BuildableKindId): kind is HomeFurnitureKind {
+  return (HOME_FURNITURE_KINDS as readonly string[]).includes(kind);
+}
+
+/** A solid part of a piece of furniture, in the piece's own coordinates. */
+export interface FurnitureBox {
+  readonly x: number;
+  readonly z: number;
+  readonly halfX: number;
+  readonly halfZ: number;
+  readonly height: number;
+}
+
+/**
+ * The garden's three growing trays (Polyfork's Seedling Tray, its long side
+ * front to back), this far apart along X. Both the indoor garden and the
+ * campsite kitchen garden are solid to this size.
+ */
+export const GARDEN_TRAY = { spacing: 0.65, halfX: 0.2, halfZ: 0.3, height: 0.15 } as const;
+
+/**
+ * What each piece of built furniture is made of, before it is turned and
+ * placed: what you bump into, and what has to fit inside the walls.
+ */
+export const HOME_FURNITURE_SHAPES: Record<HomeFurnitureKind, readonly FurnitureBox[]> = {
+  // Lengthways along Z, headboard at -Z.
+  bed: [{ x: 0, z: 0, halfX: 0.58, halfZ: 0.98, height: 0.48 }],
+  // The table, and the chair pulled up to its +X side, facing it.
+  desk: [
+    { x: 0, z: 0, halfX: 0.4, halfZ: 0.56, height: 0.66 },
+    { x: 0.8, z: 0, halfX: 0.22, halfZ: 0.22, height: 0.9 },
+  ],
+  storageChest: [{ x: 0, z: 0, halfX: 0.47, halfZ: 0.25, height: 0.51 }],
+  // Three seedling trays in a row.
+  indoorGarden: [-1, 0, 1].map((index) => ({
+    x: index * GARDEN_TRAY.spacing,
+    z: 0,
+    halfX: GARDEN_TRAY.halfX,
+    halfZ: GARDEN_TRAY.halfZ,
+    height: GARDEN_TRAY.height,
+  })),
 };
+
+/** Where the desk's chair stands, in the desk's own coordinates. */
+const DESK_CHAIR = { x: 0.8, z: 0, radius: 0.28 } as const;
+
+/** A piece placed in a room: a home decoration, or anything shaped like one. */
+type PlacedPiece = HomePlacement & { readonly kind: BuildableKindId };
+
+/**
+ * What you bump into on a piece of furniture placed here, in the room's own
+ * coordinates.
+ */
+export function furnitureColliders(piece: PlacedPiece & { kind: HomeFurnitureKind }): Collider[] {
+  return HOME_FURNITURE_SHAPES[piece.kind].map((part) => {
+    const at = toWorld(piece, part.x, part.z);
+    return box(at.x, part.height / 2, at.z, part.halfX, part.height / 2, part.halfZ, piece.yaw);
+  });
+}
+
+/** How far from a piece's middle you can be and still use it, by what it is. */
+export const FURNITURE_REACH = { storageChest: 1.8, desk: 1.2, indoorGarden: 1.65 } as const;
 
 /**
  * Somewhere to sit or lie down inside (see decision 0056).
@@ -221,73 +339,157 @@ export interface RestingPlace {
 }
 
 /**
- * The chair, pulled up to the table and facing it. The sitting pose sits
- * back into a seat a little behind where it starts, so the model rests just
- * in front of the chair's middle; you stand beside it, on the door side.
+ * The desk's chair, in the desk's own coordinates, pulled up to the table and
+ * facing it. The sitting pose sits back into a seat a little behind where it
+ * starts, so the model rests just in front of the chair's middle; you stand
+ * beside it, on its +Z side.
  */
 export const HOME_CHAIR: RestingPlace = {
   kind: 'chair',
   stand: {
-    x: HOME_FURNITURE.chair.x,
-    z: HOME_FURNITURE.chair.z + HOME_FURNITURE.chair.radius + PLAYER_RADIUS + 0.07,
-    yaw: HOME_FURNITURE.chair.yaw,
+    x: DESK_CHAIR.x,
+    z: DESK_CHAIR.z + DESK_CHAIR.radius + PLAYER_RADIUS + 0.07,
+    yaw: Math.PI / 2,
   },
   rest: {
     // Facing -X, towards the table: "in front" is -X.
-    x: HOME_FURNITURE.chair.x - 0.24,
+    x: DESK_CHAIR.x - 0.24,
     y: 0.15,
-    z: HOME_FURNITURE.chair.z,
-    yaw: HOME_FURNITURE.chair.yaw,
+    z: DESK_CHAIR.z,
+    yaw: Math.PI / 2,
   },
 };
 
+const BED = HOME_FURNITURE_SHAPES.bed[0]!;
+
 /**
- * The bed: lying on your back on top of the quilt with your head on the
- * pillow at the headboard (-Z) end, and getting in and out on the side that
- * faces the room, where you wake up too.
+ * The bed, in its own coordinates: lying on your back on top of the quilt
+ * with your head on the pillow at the headboard (-Z) end, and getting in and
+ * out on its +X side, where you wake up too.
  */
 export const HOME_BED: RestingPlace = {
   kind: 'bed',
-  stand: HOME_WAKE_SPOT,
+  // Facing +X, out into the room.
+  stand: { x: BED.halfX + 0.55, z: 0.35, yaw: -Math.PI / 2 },
   rest: {
-    x: HOME_FURNITURE.bed.x,
-    y: HOME_FURNITURE.bed.height + 0.02,
-    z: HOME_FURNITURE.bed.z - HOME_FURNITURE.bed.halfLength + 0.8,
+    x: 0,
+    y: BED.height + 0.02,
+    z: -BED.halfZ + 0.8,
     // Facing +Z, so lying on your back puts your head towards the headboard.
     yaw: Math.PI,
   },
 };
 
+/** A spot in a piece's own coordinates, out in the room. */
+function placedSpot(piece: HomePlacement, spot: PlacedSpot): PlacedSpot {
+  return { ...toWorld(piece, spot.x, spot.z), yaw: spot.yaw + piece.yaw };
+}
+
+/** The chair or the bed of a piece of furniture, where it stands in the room. */
+export function furnitureRestingPlace(piece: PlacedPiece): RestingPlace | null {
+  const place = piece.kind === 'bed' ? HOME_BED : piece.kind === 'desk' ? HOME_CHAIR : null;
+  if (place === null) return null;
+  return {
+    kind: place.kind,
+    stand: placedSpot(piece, place.stand),
+    rest: { ...placedSpot(piece, place.rest), y: place.rest.y },
+  };
+}
+
 /** How far from the chair's middle, or the bed's edge, you can be and still use it. */
 const RESTING_REACH = 0.85;
 
-/** The chair or the bed, if you are close enough to either to sit or lie down. */
+/** How far a spot in the room is from a piece's chair, or from the edge of its bed. */
+function restingDistance(piece: PlacedPiece, x: number, z: number): number | null {
+  // Into the piece's own coordinates: `toWorld` backwards.
+  const cos = Math.cos(piece.yaw),
+    sin = Math.sin(piece.yaw),
+    dx = x - piece.x,
+    dz = z - piece.z;
+  const localX = dx * cos - dz * sin,
+    localZ = dx * sin + dz * cos;
+  if (piece.kind === 'desk')
+    return Math.hypot(localX - DESK_CHAIR.x, localZ - DESK_CHAIR.z) - DESK_CHAIR.radius;
+  if (piece.kind !== 'bed') return null;
+  return Math.hypot(
+    Math.max(0, Math.abs(localX - BED.x) - BED.halfX),
+    Math.max(0, Math.abs(localZ - BED.z) - BED.halfZ),
+  );
+}
+
+/** The nearest chair or bed you are close enough to sit or lie down on, if any. */
 export function restingPlaceInReach(
   x: number,
   z: number,
-  kind: HomeKind = 'cabin',
+  pieces: readonly PlacedPiece[],
 ): RestingPlace | null {
-  const scale = homeRoomScale(kind);
-  x /= scale;
-  z /= scale;
-  const { chair, bed } = HOME_FURNITURE;
-  if (kind !== 'tent' && Math.hypot(x - chair.x, z - chair.z) <= chair.radius + RESTING_REACH)
-    return homeRestingPlace(HOME_CHAIR, kind);
-  const outsideX = Math.max(0, Math.abs(x - bed.x) - bed.halfWidth);
-  const outsideZ = Math.max(0, Math.abs(z - bed.z) - bed.halfLength);
-  if (Math.hypot(outsideX, outsideZ) <= RESTING_REACH) return homeRestingPlace(HOME_BED, kind);
-  return null;
+  let nearest: RestingPlace | null = null,
+    best = RESTING_REACH;
+  for (const piece of pieces) {
+    const distance = restingDistance(piece, x, z);
+    if (distance === null || distance > best) continue;
+    nearest = furnitureRestingPlace(piece);
+    best = distance;
+  }
+  return nearest;
 }
 
-/** Everything you bump into inside, in the room's own coordinates. */
-function cabinRoomColliders(): Collider[] {
-  const { halfWidth, halfDepth, wallHeight, wallThickness, doorX, doorHalfWidth } = HOME_ROOM;
+/**
+ * The chair or bed someone using one is at: the one of that kind whose
+ * standing spot is nearest where they are.
+ */
+export function restingPlaceAt(
+  kind: RestingPlace['kind'],
+  x: number,
+  z: number,
+  pieces: readonly PlacedPiece[],
+): RestingPlace | null {
+  let nearest: RestingPlace | null = null,
+    best = Infinity;
+  for (const piece of pieces) {
+    const place = furnitureRestingPlace(piece);
+    if (place === null || place.kind !== kind) continue;
+    const distance = Math.hypot(place.stand.x - x, place.stand.z - z);
+    if (distance < best) {
+      nearest = place;
+      best = distance;
+    }
+  }
+  return nearest;
+}
+
+/**
+ * Where you wake up at home: getting out of your bed, if you have built one,
+ * or else on the floor by the fire.
+ */
+export function homeWakeSpot(
+  kind: BuildableKindId,
+  pieces: readonly PlacedPiece[],
+): { readonly spot: PlacedSpot; readonly fromBed: boolean } {
+  const bed = pieces.find((piece) => piece.kind === 'bed');
+  const place = bed === undefined ? null : furnitureRestingPlace(bed);
+  return place === null
+    ? { spot: homeFloorWakeSpot(kind), fromBed: false }
+    : { spot: place.stand, fromBed: true };
+}
+
+/** The first piece of this kind in a home, and how far from its middle you can use it. */
+export function furnitureSpot(
+  kind: keyof typeof FURNITURE_REACH,
+  pieces: readonly PlacedPiece[],
+): { readonly x: number; readonly z: number; readonly reach: number } | null {
+  const piece = pieces.find((other) => other.kind === kind);
+  return piece === undefined ? null : { x: piece.x, z: piece.z, reach: FURNITURE_REACH[kind] };
+}
+
+/** The walls and the fire: everything you bump into in an empty room. */
+export function homeRoomColliders(kind: BuildableKindId = 'cabin'): Collider[] {
+  const { halfWidth, halfDepth, wallHeight, wallThickness, doorX, doorHalfWidth } = homeRoom(kind);
   const outerX = halfWidth + wallThickness;
   const wall = wallThickness / 2;
   const height = wallHeight / 2;
   const doorLeft = doorX - doorHalfWidth;
   const doorRight = doorX + doorHalfWidth;
-  const { bed, chest, hearth, table, chair, shelf } = HOME_FURNITURE;
   return [
     // Back, left and right walls.
     box(0, height, -halfDepth - wall, outerX, height, wall),
@@ -299,25 +501,15 @@ function cabinRoomColliders(): Collider[] {
     // The closed door itself, just outside the gap, so walking into the
     // doorway is walking into the door - which is what takes you out.
     box(doorX, height, halfDepth + wallThickness + 0.1, doorHalfWidth + 0.1, height, 0.1),
-    // Furniture.
-    box(bed.x, bed.height / 2, bed.z, bed.halfWidth, bed.height / 2, bed.halfLength),
-    box(chest.x, chest.height / 2, chest.z, chest.halfWidth, chest.height / 2, chest.halfDepth),
-    box(
-      hearth.x,
-      hearth.height / 2,
-      hearth.z,
-      hearth.halfDepth,
-      hearth.height / 2,
-      hearth.halfWidth,
-    ),
-    box(table.x, table.height / 2, table.z, table.halfWidth, table.height / 2, table.halfLength),
-    cylinder(chair.x, chair.z, chair.radius, 0.9),
-    box(shelf.x, shelf.height / 2, shelf.z, shelf.halfDepth, shelf.height / 2, shelf.halfWidth),
+    homeFire(kind).collider,
   ];
 }
 
-/** How far into the doorway you have to be, inside, for walking at it to take you out. */
-const EXIT_DEPTH = HOME_ROOM.halfDepth - PLAYER_RADIUS - 0.25;
+/** How far out from the middle a room's collision has to reach, walls and all. */
+export function homeRoomReach(kind: BuildableKindId = 'cabin'): number {
+  const room = homeRoom(kind);
+  return Math.max(room.halfWidth, room.halfDepth) + room.wallThickness;
+}
 
 /**
  * Whether a player inside, here, walking this way or pressing interact, is
@@ -331,77 +523,13 @@ export function isLeavingRoom(
   interacting: boolean,
   kind: HomeKind = 'cabin',
 ): boolean {
-  const scale = homeRoomScale(kind);
-  x /= scale;
-  z /= scale;
-  if (z < EXIT_DEPTH) return false;
-  if (Math.abs(x - HOME_ROOM.doorX) > HOME_ROOM.doorHalfWidth + 0.15) return false;
+  const room = homeInteriorSize(kind);
+  // How far into the doorway you have to be, inside, for walking at it to take you out.
+  if (z < room.halfDepth - PLAYER_RADIUS - 0.25) return false;
+  if (Math.abs(x - room.doorX) > HOME_ROOM.doorHalfWidth + 0.15) return false;
   if (interacting) return true;
   const length = Math.hypot(walkX, walkZ);
   if (length === 0) return false;
   // Out through the door is +Z, in the room's own coordinates.
   return walkZ / length >= DOORWAY_FACING_COSINE;
-}
-
-export function homeSpot(spot: PlacedSpot, kind: HomeKind = 'cabin'): PlacedSpot {
-  const scale = homeRoomScale(kind);
-  return { x: spot.x * scale, z: spot.z * scale, yaw: spot.yaw };
-}
-export function homeRestingPlace(place: RestingPlace, kind: HomeKind = 'cabin'): RestingPlace {
-  return {
-    kind: place.kind,
-    stand: homeSpot(place.stand, kind),
-    rest: { ...homeSpot(place.rest, kind), y: place.rest.y },
-  };
-}
-export function homeChestSpot(kind: HomeKind = 'cabin'): { x: number; z: number } {
-  const scale = homeRoomScale(kind);
-  return { x: HOME_FURNITURE.chest.x * scale, z: HOME_FURNITURE.chest.z * scale };
-}
-export function homeRoomColliders(kind: HomeKind = 'cabin'): Collider[] {
-  const scale = homeRoomScale(kind);
-  // The base room lists six wall/door colliders, then bed, chest, hearth, table, chair and shelf.
-  const extra: Collider[] = [];
-  if (kind === 'teepee') {
-    const spot = HOME_FACILITIES.cooking;
-    extra.push(cylinder(spot.x, spot.z, 0.36, 0.45));
-  }
-  if (kind === 'largeCabin') {
-    const spot = HOME_FACILITIES.garden;
-    const tray = GARDEN_TRAY;
-    for (let index = 0; index < 3; index++)
-      extra.push(
-        box(
-          spot.x + (index - 1) * tray.spacing,
-          tray.height / 2,
-          spot.z,
-          tray.halfX,
-          tray.height / 2,
-          tray.halfZ,
-        ),
-      );
-  }
-  return [
-    ...cabinRoomColliders().filter((_, index) => {
-      if (kind === 'tent') return ![8, 9, 10, 11].includes(index);
-      if (kind === 'teepee') return ![8, 11].includes(index);
-      return true;
-    }),
-    ...extra,
-  ].map((collider) =>
-    collider.shape === 'box'
-      ? {
-          ...collider,
-          x: collider.x * scale,
-          z: collider.z * scale,
-          halfX: collider.halfX * scale,
-          halfZ: collider.halfZ * scale,
-        }
-      : {
-          ...collider,
-          x: collider.x * scale,
-          z: collider.z * scale,
-          radius: collider.radius * scale,
-        },
-  );
 }

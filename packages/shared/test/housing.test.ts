@@ -8,11 +8,9 @@ import {
   nextBlueprint,
   knowsHome,
   learnHome,
-  HOME_WAKE_SPOT,
-  homeSpot,
-  homeRoomScale,
+  HOME_INTERIORS,
+  homeEntry,
   homeRoomColliders,
-  HOME_ENTRY,
   isLeavingRoom,
   cabinDoorway,
   cabinCollider,
@@ -115,19 +113,21 @@ describe('housing knowledge and safe upgrades', () => {
       );
       expect(oldCollider).toBeDefined();
       sim.restoreChest(7, [{ item: 'bone', count: 3 }, ...Array(9).fill(null)]);
+      const chest = { id: 1, homeId: 7, kind: 'storageChest', x: -1.2, z: -1.5, yaw: 0 } as const;
+      sim.restoreDecorations([chest]);
       build(sim, to);
       expect(sim.builtPropsList()[0]).toMatchObject({ id: 7, kind: to, locked: true });
       expect(sim.builtPropOwner(7)).toBe('owner');
       expect(sim.collision.colliders).not.toContain(oldCollider);
-      const at = homeSpot(HOME_WAKE_SPOT, to);
-      sim.placePlayer(1, { ...at, y: 0 }, at.yaw, 7);
+      sim.placePlayer(1, { x: chest.x, y: 0, z: chest.z + 0.7 }, 0, 7);
       expect(sim.requestChest(1, { action: 'open' }).slots[0]).toEqual({ item: 'bone', count: 3 });
       expect(sim.drainHomeBuildFeedback()[0]?.reason).toBeNull();
     });
   }
   it('identifies an indoor obstruction without spending supplies or changing the home', () => {
     const sim = world('teepee');
-    sim.restoreDecorations([{ id: 1, homeId: 7, kind: 'lantern', x: -2.5, z: 2, yaw: 0 }]);
+    // A lantern where the cabin's fireplace would stand.
+    sim.restoreDecorations([{ id: 1, homeId: 7, kind: 'lantern', x: 2.2, z: -0.9, yaw: 0 }]);
     const before = { ...sim.inventoryOf(1) };
     build(sim, 'cabin');
     expect(sim.builtPropsList()[0]?.kind).toBe('teepee');
@@ -228,11 +228,13 @@ describe('housing knowledge and safe upgrades', () => {
   });
   for (const kind of HOME_TIERS)
     it(`uses matching room and doorway dimensions for ${kind}`, () => {
-      const at = homeSpot(HOME_ENTRY, kind),
-        scale = homeRoomScale(kind);
-      expect(at.z).toBeCloseTo(HOME_ENTRY.z * scale);
-      expect(isLeavingRoom(HOME_ENTRY.x * scale, 3 * scale, 0, 1, true, kind)).toBe(true);
-      expect(homeRoomColliders(kind).length).toBeGreaterThanOrEqual(8);
+      const at = homeEntry(kind),
+        room = HOME_INTERIORS[kind];
+      expect(at.z).toBeCloseTo(room.halfDepth - 0.65);
+      expect(isLeavingRoom(at.x, at.z, 0, 0, false, kind)).toBe(false);
+      expect(isLeavingRoom(room.doorX, room.halfDepth, 0, 1, true, kind)).toBe(true);
+      // Four walls, the door and the fire: nothing else until it is built.
+      expect(homeRoomColliders(kind)).toHaveLength(7);
       const home: BuiltProp = { id: 7, kind, x: 0, z: 0, yaw: 0, lit: false };
       expect(cabinDoorway(home).z).toBeGreaterThan(
         (cabinCollider(home) as { halfZ: number }).halfZ,

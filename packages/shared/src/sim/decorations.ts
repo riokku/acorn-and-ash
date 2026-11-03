@@ -1,8 +1,14 @@
 import { BUILDABLE_KINDS, type BuildableKindId } from '../data/buildables';
-import { HOME_FACILITIES, homeHasFacility } from '../data/home-facilities';
-import { homeRoomScale, type HomeKind } from '../data/housing';
-import { HOME_ROOM, HOME_ENTRY, HOME_WAKE_SPOT, homeRoomColliders, homeSpot } from '../world/home';
-import { cylinder, type Collider } from '../world/colliders';
+import { homeInteriorSize, type HomeKind } from '../data/housing';
+import {
+  furnitureColliders,
+  furnitureRestingPlace,
+  homeEntry,
+  homeFire,
+  homeFloorWakeSpot,
+  isHomeFurniture,
+} from '../world/home';
+import { cylinder, type BoxCollider, type Collider } from '../world/colliders';
 import { PLAYER_RADIUS } from '../constants';
 export const DECORATION_KINDS = [
   'cedarBench',
@@ -20,6 +26,10 @@ export const DECORATION_KINDS = [
   'lastBellTrophy',
   'sunreachPennant',
   'firstBellRelic',
+  'bed',
+  'desk',
+  'storageChest',
+  'indoorGarden',
 ] as const;
 export type DecorationKind = (typeof DECORATION_KINDS)[number];
 export const DECORATION_REASONS = [
@@ -36,6 +46,7 @@ export const DECORATION_REASONS = [
   'occupied',
   'contents',
   'unsupported',
+  'onlyOne',
 ] as const;
 export type DecorationReason = (typeof DECORATION_REASONS)[number];
 export const MAX_HOME_DECORATIONS = 16;
@@ -63,18 +74,28 @@ export interface DecorationState {
 export function isDecorationKind(kind: BuildableKindId): kind is DecorationKind {
   return (DECORATION_KINDS as readonly string[]).includes(kind);
 }
+/** The rug and the furniture that used to come with every room are only ever built inside. */
 export function isIndoorOnlyKind(kind: BuildableKindId): boolean {
-  return kind === 'wovenRug';
+  return kind === 'wovenRug' || isHomeFurniture(kind);
 }
-export function decorationCollider(piece: HomeDecoration): Collider | null {
-  return piece.kind === 'wovenRug'
-    ? null
-    : cylinder(
-        piece.x,
-        piece.z,
-        BUILDABLE_KINDS[piece.kind].footprintRadius,
-        piece.kind === 'cedarBench' ? 0.5 : 1.2,
-      );
+/** What you bump into on a placed piece: nothing at all for a rug. */
+export function decorationColliders(piece: HomeDecoration): Collider[] {
+  if (piece.kind === 'wovenRug') return [];
+  if (isHomeFurniture(piece.kind)) return furnitureColliders({ ...piece, kind: piece.kind });
+  return [
+    cylinder(
+      piece.x,
+      piece.z,
+      BUILDABLE_KINDS[piece.kind].footprintRadius,
+      piece.kind === 'cedarBench' ? 0.5 : 1.2,
+    ),
+  ];
+}
+/** The floor a piece takes up: its furniture's boxes, or the circle of its footprint. */
+function decorationOutline(piece: HomeDecoration): Collider[] {
+  return isHomeFurniture(piece.kind)
+    ? furnitureColliders({ ...piece, kind: piece.kind })
+    : [cylinder(piece.x, piece.z, BUILDABLE_KINDS[piece.kind].footprintRadius, 1.2)];
 }
 function overlaps(point: { x: number; z: number }, radius: number, collider: Collider): boolean {
   const dx = point.x - collider.x,
@@ -91,6 +112,72 @@ function overlaps(point: { x: number; z: number }, radius: number, collider: Col
     ) < radius
   );
 }
+/** A box's own two flat axes, out in the room, the way `overlaps` turns into them. */
+function boxAxes(box: BoxCollider): [[number, number], [number, number]] {
+  const c = Math.cos(box.rotationY),
+    s = Math.sin(box.rotationY);
+  return [
+    [c, -s],
+    [s, c],
+  ];
+}
+/** How far a box reaches either side of its middle, along this flat direction. */
+function boxReach(box: BoxCollider, along: readonly [number, number]): number {
+  const [u, v] = boxAxes(box);
+  return (
+    box.halfX * Math.abs(u[0] * along[0] + u[1] * along[1]) +
+    box.halfZ * Math.abs(v[0] * along[0] + v[1] * along[1])
+  );
+}
+/** Whether two outlines come closer than `gap` on the floor. Boxes test each other's sides. */
+function outlinesOverlap(a: Collider, b: Collider, gap: number): boolean {
+  if (a.shape === 'cylinder') return overlaps(a, a.radius + gap, b);
+  if (b.shape === 'cylinder') return overlaps(b, b.radius + gap, a);
+  const between = [b.x - a.x, b.z - a.z] as const;
+  return [...boxAxes(a), ...boxAxes(b)].every(
+    (axis) =>
+      Math.abs(between[0] * axis[0] + between[1] * axis[1]) <
+      boxReach(a, axis) + boxReach(b, axis) + gap,
+  );
+}
+/** How far an outline reaches from its middle along X and along Z. */
+function outlineExtent(outline: Collider): { x: number; z: number } {
+  if (outline.shape === 'cylinder') return { x: outline.radius, z: outline.radius };
+  return { x: boxReach(outline, [1, 0]), z: boxReach(outline, [0, 1]) };
+}
+/** How far from the wall a piece keeps: furniture stands flush, anything round a little off it. */
+function wallMargin(kind: BuildableKindId): number {
+  return isHomeFurniture(kind) ? 0.03 : 0.15;
+}
+/**
+ * The same piece moved in from the walls, only as far as it has to be to fit
+ * inside a room of this kind - for a saved piece in a room that has since
+ * shrunk (decision 0285).
+ */
+export function insideTheWalls(kind: HomeKind, piece: HomeDecoration): HomeDecoration {
+  const room = homeInteriorSize(kind),
+    margin = wallMargin(piece.kind);
+  let reachX = 0,
+    reachZ = 0;
+  for (const part of decorationOutline(piece)) {
+    const extent = outlineExtent(part);
+    reachX = Math.max(reachX, part.x - piece.x + extent.x, piece.x - part.x + extent.x);
+    reachZ = Math.max(reachZ, part.z - piece.z + extent.z, piece.z - part.z + extent.z);
+  }
+  const clamp = (value: number, half: number) =>
+    Math.max(-Math.max(0, half), Math.min(Math.max(0, half), value));
+  return {
+    ...piece,
+    x: clamp(piece.x, room.halfWidth - margin - reachX),
+    z: clamp(piece.z, room.halfDepth - margin - reachZ),
+  };
+}
+/**
+ * Whether a piece can go here in a home of this kind, among the others
+ * already there, with its owner standing at `player`: inside the walls, clear
+ * of the fire, the doorway, the spot you wake on the floor, every other piece,
+ * and wherever anyone gets into a bed or onto a chair.
+ */
 export function checkDecorationSpot(
   kind: HomeKind,
   piece: HomeDecoration,
@@ -98,46 +185,79 @@ export function checkDecorationSpot(
   player: { x: number; z: number },
 ): DecorationReason | null {
   if (![piece.x, piece.z, piece.yaw].every(Number.isFinite)) return 'blocked';
-  const radius = BUILDABLE_KINDS[piece.kind].footprintRadius,
-    scale = homeRoomScale(kind);
-  if (
-    Math.abs(piece.x) + radius > HOME_ROOM.halfWidth * scale - 0.15 ||
-    Math.abs(piece.z) + radius > HOME_ROOM.halfDepth * scale - 0.15
-  )
-    return 'blocked';
+  const room = homeInteriorSize(kind),
+    fire = homeFire(kind),
+    outline = decorationOutline(piece),
+    rest = furnitureRestingPlace(piece);
+  if (piece.kind === 'indoorGarden' && kind !== 'largeCabin') return 'unsupported';
+  const company = others.filter((other) => other.id !== piece.id);
+  if (isHomeFurniture(piece.kind) && company.some((other) => other.kind === piece.kind))
+    return 'onlyOne';
+  const margin = wallMargin(piece.kind);
+  for (const part of outline) {
+    const extent = outlineExtent(part);
+    if (
+      Math.abs(part.x) + extent.x > room.halfWidth - margin ||
+      Math.abs(part.z) + extent.z > room.halfDepth - margin
+    )
+      return 'blocked';
+  }
   if (Math.hypot(piece.x - player.x, piece.z - player.z) > 6) return 'tooFar';
+  if (piece.kind !== 'wovenRug' && outline.some((part) => overlaps(player, PLAYER_RADIUS, part)))
+    return 'blocked';
   if (
-    piece.kind !== 'wovenRug' &&
-    Math.hypot(piece.x - player.x, piece.z - player.z) < radius + PLAYER_RADIUS
+    outline.some(
+      (part) => outlinesOverlap(part, fire.collider, 0.08) || overlaps(fire.cooking, 0.6, part),
+    )
   )
     return 'blocked';
-  if (homeRoomColliders(kind).some((c) => overlaps(piece, radius + 0.08, c))) return 'blocked';
-  for (const spot of [homeSpot(HOME_ENTRY, kind), homeSpot(HOME_WAKE_SPOT, kind)])
-    if (Math.hypot(piece.x - spot.x, piece.z - spot.z) < radius + 0.7) return 'blocked';
-  for (const facility of ['cooking', 'workbench', 'garden'] as const) {
-    if (!homeHasFacility(kind, facility)) continue;
-    const spot = HOME_FACILITIES[facility];
-    if (Math.hypot(piece.x - spot.x * scale, piece.z - spot.z * scale) < radius + 0.6)
+  // A flat rug may lie where you wake on the floor; nothing may block the door.
+  const keepClear =
+    piece.kind === 'wovenRug' ? [homeEntry(kind)] : [homeEntry(kind), homeFloorWakeSpot(kind)];
+  for (const spot of keepClear)
+    if (outline.some((part) => overlaps(spot, 0.7, part))) return 'blocked';
+  // Room to get into this bed or onto this chair.
+  if (rest !== null) {
+    const stand = rest.stand;
+    if (
+      Math.abs(stand.x) + PLAYER_RADIUS > room.halfWidth ||
+      Math.abs(stand.z) + PLAYER_RADIUS > room.halfDepth ||
+      overlaps(stand, PLAYER_RADIUS, fire.collider) ||
+      company.some(
+        (other) =>
+          other.kind !== 'wovenRug' &&
+          decorationOutline(other).some((part) => overlaps(stand, PLAYER_RADIUS, part)),
+      )
+    )
+      return 'blocked';
+  }
+  for (const other of company) {
+    const stand = furnitureRestingPlace(other)?.stand;
+    if (
+      stand !== undefined &&
+      piece.kind !== 'wovenRug' &&
+      outline.some((part) => overlaps(stand, PLAYER_RADIUS + 0.05, part))
+    )
       return 'blocked';
   }
   if (
-    others.some(
+    piece.kind !== 'wovenRug' &&
+    company.some(
       (other) =>
-        other.id !== piece.id &&
         other.kind !== 'wovenRug' &&
-        piece.kind !== 'wovenRug' &&
-        Math.hypot(other.x - piece.x, other.z - piece.z) <
-          radius + BUILDABLE_KINDS[other.kind].footprintRadius + 0.1,
+        decorationOutline(other).some((theirs) =>
+          outline.some((ours) => outlinesOverlap(ours, theirs, 0.1)),
+        ),
     )
   )
     return 'blocked';
   if (
     piece.kind === 'wovenRug' &&
-    others.some(
+    company.some(
       (other) =>
         other.kind === 'wovenRug' &&
-        other.id !== piece.id &&
-        Math.hypot(other.x - piece.x, other.z - piece.z) < radius + 1.05,
+        Math.hypot(other.x - piece.x, other.z - piece.z) <
+          BUILDABLE_KINDS.wovenRug.footprintRadius + 1.05,
     )
   )
     return 'blocked';
@@ -198,6 +318,10 @@ export const DECORATION_REQUEST_KINDS: readonly BuildableKindId[] = [
   'trailPantry',
   'kitchenGarden',
   'woodshed',
+  'bed',
+  'desk',
+  'storageChest',
+  'indoorGarden',
 ];
 export const DECORATION_ACTIONS = [
   'place',

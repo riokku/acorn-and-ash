@@ -3,8 +3,7 @@ import { expect, it } from 'vitest';
 import {
   buildableKindIndex,
   itemIndex,
-  homeSpot,
-  HOME_WAKE_SPOT,
+  homeFloorWakeSpot,
   type WorldSimulation,
 } from '@acorn/shared';
 import { TestClient, sleep, waitFor } from './helpers';
@@ -37,6 +36,14 @@ it('learns a blueprint atomically, upgrades the same saved home, and restores sk
       { item: 'log', count: 8 },
       ...Array(8).fill(null),
     ]);
+    // A chest built in the tent's back corner, still in reach once it is a teepee.
+    sim.restoreDecorations([{ id: 1, homeId: 7, kind: 'storageChest', x: -1.1, z: -1.6, yaw: 0 }]);
+    // Homes start empty (decision 0285): this one has had a storage chest built.
+    state.storage.sql.exec(
+      'INSERT INTO world_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'home-decorations',
+      JSON.stringify(sim.decorationsList()),
+    );
     sim.placePlayer(id, { x: 0, y: 0, z: 0 }, 0);
     Object.assign(sim.inventoryOf(id), { teepeeBlueprint: 1, log: 4, stick: 16 });
     state.storage.sql.exec(
@@ -116,7 +123,7 @@ it('learns a blueprint atomically, upgrades the same saved home, and restores sk
   await waitFor('restored knowledge', () =>
     returned.received.some((message) => message.type === 'homeSkills' && message.skills === 1),
   );
-  const wake = homeSpot(HOME_WAKE_SPOT, 'teepee');
+  const wake = homeFloorWakeSpot('teepee');
   await waitFor('inside upgraded home', () => returned.latestSpace()?.space === 7);
   expect(returned.latestSpace()?.x).toBeCloseTo(wake.x, 2);
   returned.chest({ action: 'open' });

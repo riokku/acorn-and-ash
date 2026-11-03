@@ -4,10 +4,11 @@ import { createSentinelTrophy } from './sentinel-art';
 import * as THREE from 'three/webgpu';
 import { ModelBuilder, placed } from '../art/shapes';
 import { paintedMaterial } from '../art/materials';
-import type { DecorationKind } from '@acorn/shared';
+import { isHomeFurniture, type DecorationKind } from '@acorn/shared';
 import { createLantern } from './lantern';
 import { createGuardianTrophy } from './guardian-trophy';
 import { polyforkGroup, polyforkPiece } from './polyfork-piece';
+import { createHomeFurniture, type HomeFurnitureModel } from './home-furniture';
 
 /**
  * Polyfork's free Wooden Bench and Campsite Picnic Table (decision 0272). The
@@ -27,7 +28,8 @@ const polyforkFurniture = {
  * A piece of home decoration. `realModel: false` keeps the placeholder bench,
  * which the cabins stretch into their woodpile shelf.
  */
-export function createHomeDecoration(kind: DecorationKind, realModel = true) {
+export function createHomeDecoration(kind: DecorationKind, realModel = true): HomeFurnitureModel {
+  if (isHomeFurniture(kind)) return createHomeFurniture(kind);
   if (realModel && (kind === 'cedarBench' || kind === 'timberTable')) {
     const real = polyforkFurniture[kind].parts();
     if (real !== undefined) return polyforkGroup(kind, real.values());

@@ -1,13 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import {
-  GARDEN_TRAY,
-  HOME_FACILITIES,
-  GARDEN_GROW_TICKS,
-  homeHasFacility,
-  type HomeKind,
-  type GardenPlot,
-} from '@acorn/shared';
+import { GARDEN_TRAY, GARDEN_GROW_TICKS, type GardenPlot } from '@acorn/shared';
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { ModelBuilder, placed, plankGeometry } from '../art/shapes';
 import { createForageModel } from './forest-food';
@@ -55,8 +48,12 @@ function seedlingTrayParts(): typeof trayParts {
   return trayParts;
 }
 
-/** Tier facilities use the same room coordinates as authoritative reach checks. */
-export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garden') {
+/**
+ * One of a home's fittings, drawn round its own middle: the open fire ring
+ * and its pot in a tent or teepee (`fireScale` smaller in a tent), the
+ * workbench's tools on a table top, or the garden's three growing trays.
+ */
+export function createHomeFacilities(fitting: 'campfire' | 'workbench' | 'garden', fireScale = 1) {
   const builder = new ModelBuilder();
   const cookingFlameMaterial = plainMaterial(0xff9e47, {
     emissive: 0xe85c24,
@@ -65,9 +62,10 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
   const wood = paintedMaterial('wood', { tint: 0xd2b08a, roughness: 0.9 });
   const metal = plainMaterial(0x484c47, { roughness: 0.55 });
   const stone = paintedMaterial('stone', { tint: 0xaab79b, roughness: 1 });
-  const oven = kind === 'teepee' && only === undefined ? dutchOven.parts() : undefined;
-  if (kind === 'teepee' && only === undefined) {
-    const { x, z } = HOME_FACILITIES.cooking;
+  const oven = fitting === 'campfire' ? dutchOven.parts() : undefined;
+  if (fitting === 'campfire') {
+    const x = 0,
+      z = 0;
     for (let index = 0; index < 8; index++) {
       const angle = (index * Math.PI) / 4;
       builder.add(
@@ -88,8 +86,9 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
     }
     builder.add(cookingFlameMaterial, new THREE.ConeGeometry(0.09, 0.17, 5), placed(x, 0.1, z));
   }
-  if (homeHasFacility(kind, 'workbench') && only !== 'garden') {
-    const { x, z } = HOME_FACILITIES.workbench;
+  if (fitting === 'workbench') {
+    const x = 0,
+      z = 0;
     builder.add(wood, plankGeometry(0.65, 0.035, 0.72, 'z', 1, 2601), placed(x, 0.69, z));
     for (const dx of [-0.065, 0.065])
       builder.add(metal, new THREE.BoxGeometry(0.055, 0.11, 0.13), placed(x + dx, 0.77, z - 0.07));
@@ -116,8 +115,9 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
     sprouts: THREE.Group | null;
   }[] = [];
   const gardenModels: ReturnType<ModelBuilder['build']>[] = [];
-  if (homeHasFacility(kind, 'garden') && only !== 'workbench') {
-    const { x, z } = HOME_FACILITIES.garden;
+  if (fitting === 'garden') {
+    const x = 0,
+      z = 0;
     const trays = seedlingTrayParts();
     for (let index = 0; index < 3; index++) {
       const bed = new ModelBuilder(),
@@ -181,13 +181,13 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
       plants.push({ berry, mushroom, flower: flowers.group, sprouts });
     }
   }
-  model.group.add(garden);
+  if (fitting === 'garden') model.group.add(garden);
   if (oven !== undefined) {
     const pot = polyforkGroup('dutch-oven', oven.values());
-    const { x, z } = HOME_FACILITIES.cooking;
-    pot.group.position.set(x, DUTCH_OVEN_HEIGHT, z);
+    pot.group.position.set(0, DUTCH_OVEN_HEIGHT, 0);
     model.group.add(pot.group);
   }
+  if (fitting === 'campfire') model.group.scale.setScalar(fireScale);
   return {
     group: model.group,
     garden,

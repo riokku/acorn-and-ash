@@ -8,7 +8,6 @@ import {
   type ChestSlot,
 } from '../src/sim/chest';
 import { countOf, inventoryEntries, type Inventory } from '../src/sim/inventory';
-import { HOME_FURNITURE } from '../src/world/home';
 import { OUTDOORS } from '../src/sim/world-sim';
 import { ClientMessageType, ServerMessageType } from '../src/net/messages';
 import {
@@ -22,13 +21,17 @@ const worlds: WorldSimulation[] = [];
 afterEach(() => {
   for (const sim of worlds.splice(0)) sim.dispose();
 });
+/** The chest the owner built, at the foot of where the bed used to be. */
+const chest = { id: 1, homeId: 7, kind: 'storageChest', x: -2.75, z: -0.64, yaw: 0 } as const;
 function atHome() {
   const sim = new WorldSimulation({ seed: 123 });
   worlds.push(sim);
   sim.restoreBuiltProps([
     { id: 7, kind: 'cabin', x: 0, z: -20, yaw: 0, lit: false, ownerKey: 'owner', litUntilMs: null },
   ]);
+  sim.restoreDecorations([chest]);
   sim.addPlayer(1, undefined, 'owner');
+  sim.placePlayer(1, { x: chest.x + 0.9, y: 0, z: chest.z }, 0, 7);
   return sim;
 }
 
@@ -119,7 +122,7 @@ describe('private cabin storage', () => {
     sim.requestChest(1, { action: 'deposit', item: 'log', amount: 10 });
     sim.placePlayer(1, { x: 2, y: 0, z: 2 }, 0, 7);
     expect(sim.requestChest(1, { action: 'withdraw', slot: 0, amount: 10 }).reason).toBe('tooFar');
-    sim.placePlayer(1, { x: HOME_FURNITURE.chest.x, y: 0, z: HOME_FURNITURE.chest.z }, 0, OUTDOORS);
+    sim.placePlayer(1, { x: chest.x, y: 0, z: chest.z }, 0, OUTDOORS);
     expect(sim.requestChest(1, { action: 'open' }).reason).toBe('unavailable');
     expect(countOf(sim.inventoryOf(1), 'log')).toBe(0);
   });

@@ -49,9 +49,31 @@ export function nextBlueprint(skills: number): BlueprintItem | null {
   const home = HOME_TIERS.find((kind) => !knowsHome(skills, kind));
   return home === undefined ? null : blueprintForHome(home);
 }
-/** Shared dimensions: positions, collision and rendering use the same scale. */
-export function homeRoomScale(kind: BuildableKindId = 'cabin'): number {
-  return kind === 'tent' ? 0.8 : kind === 'teepee' ? 0.9 : kind === 'largeCabin' ? 1.2 : 1;
+/** An open fire ring on the floor, or a stone fireplace built into the +X wall. */
+export type HomeFire = 'campfire' | 'fireplace';
+export interface HomeInteriorSize {
+  /** Half the room's width (X) and depth (Z), inside the walls. */
+  readonly halfWidth: number;
+  readonly halfDepth: number;
+  /** The middle of the doorway, along the +Z wall. */
+  readonly doorX: number;
+  readonly fire: HomeFire;
+  /** How big the fire ring is drawn and bumped into, for a campfire. */
+  readonly fireScale: number;
+}
+/**
+ * Each home's room inside (see decision 0285). Every room starts empty
+ * except for its fire; the bed, desk, chest and garden are built.
+ */
+export const HOME_INTERIORS: Record<HomeKind, HomeInteriorSize> = {
+  tent: { halfWidth: 2, halfDepth: 2, doorX: -0.6, fire: 'campfire', fireScale: 0.75 },
+  teepee: { halfWidth: 2.75, halfDepth: 2.75, doorX: -0.85, fire: 'campfire', fireScale: 1 },
+  cabin: { halfWidth: 3.5, halfDepth: 3, doorX: -1.1, fire: 'fireplace', fireScale: 1 },
+  largeCabin: { halfWidth: 5, halfDepth: 4, doorX: -1.1, fire: 'fireplace', fireScale: 1 },
+};
+/** The room inside this home, as a cabin's when it isn't one of the home kinds. */
+export function homeInteriorSize(kind: BuildableKindId = 'cabin'): HomeInteriorSize {
+  return HOME_INTERIORS[isHomeKind(kind) ? kind : 'cabin'];
 }
 export function homeOuterScale(kind: BuildableKindId = 'cabin'): number {
   return kind === 'tent' ? 0.6 : kind === 'teepee' ? 0.8 : kind === 'largeCabin' ? 1.2 : 1;

@@ -82,6 +82,13 @@ export const PAINTED_ICONS: Partial<Record<ItemId | BuildableKindId, ArtSpec>> =
   rowboat: art(shelters, 1254, [342, 678, 261, 199]),
   // The woodshed is shown by what it holds, until it has a painting of its own.
   woodshed: art(basic, 1254, [399, 708, 184, 156]),
+  // Built furniture borrows the painting nearest to it until it has its own:
+  // the workbench for the desk, the pantry for the chest, the kitchen garden
+  // for the indoor one, and a tent, the first place you sleep, for the bed.
+  bed: art(shelters, 1254, [53, 126, 259, 198]),
+  desk: art(shelters, 1254, [49, 403, 250, 200]),
+  storageChest: art(shelters, 1254, [379, 384, 189, 226]),
+  indoorGarden: art(shelters, 1254, [636, 410, 266, 201]),
   fence: art(shelters, 1254, [662, 686, 243, 189]),
   gardenPath: art(shelters, 1254, [965, 679, 239, 196]),
   mineSupport: art(shelters, 1254, [56, 947, 235, 222]),

@@ -1,9 +1,7 @@
-import { createStorageChest } from './storage-chest';
 import * as THREE from 'three/webgpu';
 import { createHomeFacilities } from './home-facilities';
-import type { GardenPlot } from '@acorn/shared';
 
-import { HOME_FURNITURE, HOME_ROOM, homeRoomScale, type HomeKind } from '@acorn/shared';
+import { HOME_FIREPLACE, HOME_ROOM, homeFire, homeRoom, type HomeKind } from '@acorn/shared';
 
 import { paintedMaterial, plainMaterial } from '../art/materials';
 import { seededRandom } from '../art/noise';
@@ -11,29 +9,26 @@ import { ModelBuilder, logGeometry, placed, plankGeometry, stoneGeometry } from 
 import { createCanvasMaterial, fabricTriangle } from './shelter';
 import { createFlame } from './flame';
 import { createFireGlow } from './fire-light';
-import { ellipsoid } from './critter';
 
 /**
- * The room inside every cabin (see decision 0055), built in code from the
- * same painted logs, planks and stones as the cabin outside, laid out by the
- * shared `HOME_ROOM` and `HOME_FURNITURE` so what you see is exactly what you
- * bump into.
+ * The room inside a home (see decision 0055), built in code from the same
+ * painted logs, planks and stones as the cabin outside, sized by the shared
+ * `homeRoom` for its kind so what you see is exactly what you bump into. It
+ * starts empty but for its fire (decision 0285): a stone fireplace in a
+ * cabin, an open fire ring in a tent or teepee. What the owner builds is
+ * drawn into `group` by the game.
  *
  * Seen like a dollhouse: whichever walls stand between the camera and the
  * room are cut down to their bottom log (`cutAway`), so the room is always in
- * full view. Warm by the hearth, and by the lamp on the table, and brighter
- * still at night when the windows go dark.
+ * full view. Warm by the fire, and brighter still at night when the windows
+ * go dark.
  */
 export interface HomeInterior {
   readonly group: THREE.Group;
-  readonly chest: THREE.Group;
-  readonly garden: THREE.Group;
-  setGardenPlots(plots: readonly GardenPlot[]): void;
   setFireLit(lit: boolean): void;
-  setChestOpen(open: boolean): void;
   /** Cut down whichever walls the camera, at this spot in the room's own coordinates, is looking in through. */
   cutAway(cameraX: number, cameraZ: number): void;
-  /** Firelight, lamplight and the windows; `daylight` runs from 0 (midnight) to 1 (noon). */
+  /** Firelight and the windows; `daylight` runs from 0 (midnight) to 1 (noon). */
   update(deltaSeconds: number, daylight: number): void;
   dispose(): void;
 }
@@ -42,8 +37,8 @@ const LOG_RADIUS = 0.16;
 /** One course of logs to the next, each sitting a little down into the one below. */
 const COURSE = 0.3;
 const DOOR_TOP = 2.05;
-/** Where the one ceiling beam runs, across the back of the room. */
-const HERB_BEAM_Z = -2.2;
+/** How far in from the back wall the one ceiling beam runs. */
+const BEAM_INSET = 0.8;
 
 /** The four walls, by which way they face out of the room. */
 type WallSide = 'back' | 'front' | 'left' | 'right';
@@ -72,15 +67,12 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   const canvasHome = kind === 'tent' || kind === 'teepee';
   const group = new THREE.Group();
   group.name = 'home-interior';
-  const scale = homeRoomScale(kind);
-  group.scale.set(scale, 1, scale);
   const disposers: Array<() => void> = [];
   const keep = (built: { group: THREE.Group; dispose(): void }): THREE.Group => {
     disposers.push(built.dispose);
     return built.group;
   };
-  const facilities = createHomeFacilities(kind);
-  group.add(keep(facilities));
+  const fire = homeFire(kind);
 
   const materials = {
     logs: paintedMaterial('wood', { tint: 0xf0dcc0, roughness: 0.85 }),
@@ -94,19 +86,8 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     soot: plainMaterial(0x2b2420, { roughness: 1 }),
     bark: paintedMaterial('bark', { roughness: 1 }),
     linen: paintedMaterial('burlap', { tint: 0xfbf4e4, roughness: 1 }),
-    quilt: paintedMaterial('quilt', { roughness: 0.95 }),
-    rug: paintedMaterial('rug', { roughness: 1 }),
     brass: plainMaterial(0xb68a3e, { roughness: 0.35 }),
     iron: plainMaterial(0x3b3733, { roughness: 0.55 }),
-    lampGlass: plainMaterial(0xfff0c8, {
-      roughness: 0.2,
-      emissive: 0xffc46a,
-      emissiveIntensity: 1.4,
-    }),
-    herbGreen: plainMaterial(0x6f8a4f, { roughness: 1, flatShading: true }),
-    herbLavender: plainMaterial(0x8d77a8, { roughness: 1, flatShading: true }),
-    herbYarrow: plainMaterial(0xe8dcae, { roughness: 1, flatShading: true }),
-    string: plainMaterial(0xcdb68c, { roughness: 1 }),
   };
   const windowGlass = new THREE.MeshStandardMaterial({
     color: 0xcfe4f2,
@@ -116,7 +97,8 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   });
   disposers.push(() => windowGlass.dispose());
 
-  const { halfWidth, halfDepth, wallHeight, doorX, doorHalfWidth } = HOME_ROOM;
+  const { halfWidth, halfDepth, wallHeight, doorX, doorHalfWidth, fireScale } = homeRoom(kind);
+  const beamZ = -halfDepth + BEAM_INSET;
   const courses = Math.round(wallHeight / COURSE);
 
   /* -------------------------------------------------------------------- */
@@ -316,7 +298,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   }
   // A ceiling beam across the back of the room to hang herbs from - only the
   // one, so nothing crosses the dollhouse view of the room.
-  for (const z of canvasHome ? [] : [HERB_BEAM_Z]) {
+  for (const z of canvasHome ? [] : [beamZ]) {
     const beam = logGeometry(halfWidth * 2 + 0.4, 0.13, {
       sides: 8,
       seed: 420 + z * 10,
@@ -442,7 +424,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   /* The hearth                                                           */
   /* -------------------------------------------------------------------- */
 
-  const { hearth } = HOME_FURNITURE;
+  const hearth = { ...HOME_FIREPLACE, x: fire.x, z: fire.z };
   const hearthModel = new ModelBuilder();
   const back = hearth.x + hearth.halfDepth;
   const front = hearth.x - hearth.halfDepth;
@@ -534,329 +516,31 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
       );
   }
   const hearthGroup = keep(hearthModel.build());
-  if (!canvasHome) group.add(hearthGroup);
+  if (fire.kind === 'fireplace') group.add(hearthGroup);
+
+  // A tent or teepee has an open fire ring in the middle instead, smaller in a tent.
+  const fireRing = fire.kind === 'campfire' ? createHomeFacilities('campfire', fireScale) : null;
+  if (fireRing) {
+    fireRing.group.position.set(fire.x, 0, fire.z);
+    group.add(keep(fireRing));
+  }
 
   // The fire itself: the campfire's own animated flame, and its light.
-  const fireGlow = createFireGlow(0xff8f45, 14, 9);
-  fireGlow.anchor.position.set(front - 0.25, 0.55, hearth.z);
-  if (!canvasHome) group.add(fireGlow.anchor);
+  const fireGlow =
+    fire.kind === 'fireplace'
+      ? createFireGlow(0xff8f45, 14, 9)
+      : createFireGlow(0xff9a52, 6 * fireScale, 6 * fireScale);
+  if (fire.kind === 'fireplace') fireGlow.anchor.position.set(front - 0.25, 0.55, hearth.z);
+  else fireGlow.anchor.position.set(fire.x, 0.6 * fireScale, fire.z);
+  group.add(fireGlow.anchor);
   disposers.push(() => fireGlow.dispose());
-  const flame = canvasHome ? null : createFlame();
+  const flame = fire.kind === 'fireplace' ? createFlame() : null;
   const hearthFlame = flame?.root;
   if (hearthFlame) {
     hearthFlame.position.set(hearth.x - 0.02, 0.06, hearth.z);
     hearthFlame.scale.setScalar(0.7);
     group.add(hearthFlame);
   }
-
-  /* -------------------------------------------------------------------- */
-  /* The bed                                                              */
-  /* -------------------------------------------------------------------- */
-
-  const { bed } = HOME_FURNITURE;
-  const bedModel = new ModelBuilder();
-  const head = bed.z - bed.halfLength;
-  const foot = bed.z + bed.halfLength;
-  const bedWidth = bed.halfWidth * 2;
-  // Four posts, taller at the head.
-  for (const [x, z, height] of [
-    [bed.x - bed.halfWidth + 0.05, head + 0.05, 0.9],
-    [bed.x + bed.halfWidth - 0.05, head + 0.05, 0.9],
-    [bed.x - bed.halfWidth + 0.05, foot - 0.05, 0.62],
-    [bed.x + bed.halfWidth - 0.05, foot - 0.05, 0.62],
-  ] as const) {
-    bedModel
-      .add(
-        materials.darkWood,
-        plankGeometry(0.1, height, 0.1, 'y', 1, 470 + x * z),
-        placed(x, height / 2, z),
-      )
-      .add(materials.darkWood, new THREE.SphereGeometry(0.065, 8, 6), placed(x, height + 0.03, z));
-  }
-  bedModel
-    // Side rails and end boards.
-    .add(
-      materials.darkWood,
-      plankGeometry(0.06, 0.18, bed.halfLength * 2 - 0.1, 'z', 1, 475),
-      placed(bed.x - bed.halfWidth + 0.05, 0.26, bed.z),
-    )
-    .add(
-      materials.darkWood,
-      plankGeometry(0.06, 0.18, bed.halfLength * 2 - 0.1, 'z', 1, 476),
-      placed(bed.x + bed.halfWidth - 0.05, 0.26, bed.z),
-    )
-    .add(
-      materials.darkWood,
-      plankGeometry(bedWidth - 0.1, 0.55, 0.05, 'x', 1, 477),
-      placed(bed.x, 0.48, head + 0.05),
-    )
-    .add(
-      materials.darkWood,
-      plankGeometry(bedWidth - 0.1, 0.32, 0.05, 'x', 1, 478),
-      placed(bed.x, 0.36, foot - 0.05),
-    )
-    // Mattress and a turned-down sheet.
-    .add(
-      materials.linen,
-      plankGeometry(bedWidth - 0.14, 0.2, bed.halfLength * 2 - 0.14, 'z', 0.6, 479),
-      placed(bed.x, 0.38, bed.z),
-    )
-    // The quilt, folded back at the top, draping a little over the sides.
-    .add(
-      materials.quilt,
-      plankGeometry(bedWidth + 0.02, 0.06, bed.halfLength * 1.35, 'z', 1.1, 480),
-      placed(bed.x, 0.505, foot - 0.07 - bed.halfLength * 0.675),
-    )
-    .add(
-      materials.quilt,
-      plankGeometry(bedWidth - 0.1, 0.05, 0.22, 'x', 1.1, 481),
-      placed(bed.x, 0.54, foot - 0.07 - bed.halfLength * 1.35 + 0.08, { x: 0.25 }),
-    )
-    // A plump pillow at the head.
-    .add(materials.linen, ellipsoid(0.34, 0.08, 0.19, 12, 8), placed(bed.x, 0.54, head + 0.28));
-  const bedGroup = keep(bedModel.build());
-  if (!canvasHome) group.add(bedGroup);
-  else {
-    // A padded bedroll on a low travel cot; resting height stays the same.
-    const roll = new ModelBuilder();
-    roll.add(
-      materials.darkWood,
-      plankGeometry(bedWidth, 0.16, bed.halfLength * 2, 'z', 1, 1200),
-      placed(bed.x, 0.1, bed.z),
-    );
-    roll.add(
-      materials.quilt,
-      plankGeometry(bedWidth, 0.28, bed.halfLength * 2, 'z', 0.8, 1201),
-      placed(bed.x, 0.36, bed.z),
-    );
-    roll.add(materials.linen, ellipsoid(0.34, 0.07, 0.18, 10, 6), placed(bed.x, 0.54, head + 0.3));
-    roll.add(
-      materials.linen,
-      new THREE.CylinderGeometry(0.13, 0.13, bedWidth - 0.12, 10).rotateZ(Math.PI / 2),
-      placed(bed.x, 0.55, foot - 0.14),
-    );
-    group.add(keep(roll.build()));
-  }
-  const storage = createStorageChest(materials),
-    chest = storage.group,
-    lid = storage.lid;
-  disposers.push(storage.dispose);
-  const chestShape = HOME_FURNITURE.chest;
-  chest.position.set(chestShape.x, 0, chestShape.z);
-  group.add(chest);
-  let chestOpen = false;
-
-  /* -------------------------------------------------------------------- */
-  /* Table, chair and lamp                                                */
-  /* -------------------------------------------------------------------- */
-
-  const { table, chair } = HOME_FURNITURE;
-  const tableModel = new ModelBuilder();
-  tableModel.add(
-    materials.floor,
-    plankGeometry(table.halfWidth * 2, 0.05, table.halfLength * 2, 'z', 1, 490),
-    placed(table.x, table.height - 0.025, table.z),
-  );
-  for (const [dx, dz] of [
-    [-1, -1],
-    [-1, 1],
-    [1, -1],
-    [1, 1],
-  ] as const) {
-    tableModel.add(
-      materials.darkWood,
-      plankGeometry(0.06, table.height - 0.05, 0.06, 'y', 1, 491 + dx + dz * 2),
-      placed(
-        table.x + dx * (table.halfWidth - 0.07),
-        (table.height - 0.05) / 2,
-        table.z + dz * (table.halfLength - 0.07),
-      ),
-    );
-  }
-  // The chair, pulled up facing the table: its back is on the far side.
-  const seatHeight = 0.4;
-  const behind = chair.x + 0.2;
-  tableModel.add(
-    materials.floor,
-    plankGeometry(0.42, 0.05, 0.42, 'x', 1, 495),
-    placed(chair.x, seatHeight, chair.z),
-  );
-  for (const [dx, dz] of [
-    [-1, -1],
-    [-1, 1],
-    [1, -1],
-    [1, 1],
-  ] as const) {
-    const tall = dx > 0;
-    const height = tall ? 0.9 : seatHeight;
-    tableModel.add(
-      materials.darkWood,
-      plankGeometry(0.045, height, 0.045, 'y', 1, 496 + dx + dz * 2),
-      placed(chair.x + dx * 0.18, height / 2, chair.z + dz * 0.18),
-    );
-  }
-  for (const y of [0.6, 0.74, 0.86]) {
-    tableModel.add(
-      materials.floor,
-      plankGeometry(0.03, 0.06, 0.38, 'z', 1, 500 + y * 10),
-      placed(behind - 0.02, y, chair.z),
-    );
-  }
-  // A mug remains on the desk; the hearth supplies the cabin's firelight.
-  tableModel.add(
-    materials.stone,
-    new THREE.CylinderGeometry(0.045, 0.04, 0.1, 10),
-    placed(table.x + 0.12, table.height + 0.05, table.z + 0.3),
-  );
-  const tableGroup = keep(tableModel.build());
-  if (kind !== 'tent') group.add(tableGroup);
-  // A steady flame behind glass: no flicker.
-  const lampGlow = kind === 'tent' ? createFireGlow(0xffb866, 1, 5, 0) : null;
-  lampGlow?.anchor.position.set(
-    table.x + 0.05,
-    kind === 'tent' ? 0.5 : table.height + 0.32,
-    table.z - 0.25,
-  );
-  if (lampGlow) group.add(lampGlow.anchor);
-  if (kind === 'tent') {
-    const lantern = new ModelBuilder();
-    const x = table.x + 0.05,
-      z = table.z - 0.25;
-    lantern.add(
-      materials.darkWood,
-      new THREE.CylinderGeometry(0.22, 0.25, 0.24, 8),
-      placed(x, 0.12, z),
-    );
-    lantern.add(materials.lampGlass, new THREE.BoxGeometry(0.15, 0.22, 0.15), placed(x, 0.36, z));
-    lantern.add(
-      materials.iron,
-      new THREE.ConeGeometry(0.17, 0.1, 4),
-      placed(x, 0.51, z, { y: Math.PI / 4 }),
-    );
-    group.add(keep(lantern.build()));
-  }
-  disposers.push(() => lampGlow?.dispose());
-
-  /* -------------------------------------------------------------------- */
-  /* Shelf, woodbox, herbs and the rug                                    */
-  /* -------------------------------------------------------------------- */
-
-  const { shelf, rug } = HOME_FURNITURE;
-  const shelfModel = new ModelBuilder();
-  const random = seededRandom(510);
-  const shelfBack = shelf.x + shelf.halfDepth;
-  // Two sides and three boards.
-  for (const side of [-1, 1]) {
-    shelfModel.add(
-      materials.darkWood,
-      plankGeometry(shelf.halfDepth * 2, shelf.height, 0.05, 'y', 1, 511 + side),
-      placed(shelf.x, shelf.height / 2, shelf.z + side * (shelf.halfWidth - 0.025)),
-    );
-  }
-  const boardHeights = [0.1, 0.75, 1.3, shelf.height - 0.03];
-  for (const [index, y] of boardHeights.entries()) {
-    shelfModel.add(
-      materials.floor,
-      plankGeometry(shelf.halfDepth * 2, 0.04, shelf.halfWidth * 2 - 0.1, 'z', 1, 515 + index),
-      placed(shelf.x, y, shelf.z),
-    );
-  }
-  // Books on the middle board, leaning a little at the end of the row.
-  const spines = [0x8a3b2e, 0x3e5d74, 0x6b7a43, 0xb88a3c, 0x5a3f5f, 0x2f4a3d];
-  let along = shelf.z - shelf.halfWidth + 0.12;
-  for (let book = 0; book < 9; book++) {
-    const thickness = 0.04 + random() * 0.04;
-    const height = 0.2 + random() * 0.1;
-    const lean = book === 8 ? 0.35 : 0;
-    shelfModel.add(
-      plainMaterial(spines[book % spines.length] ?? 0x8a3b2e, { roughness: 0.85 }),
-      new THREE.BoxGeometry(0.2, height, thickness),
-      placed(shelfBack - 0.14, 0.77 + height / 2, along + thickness / 2, { x: lean }),
-    );
-    along += thickness + 0.005;
-  }
-  // Jars and crocks on the top board and the bottom one.
-  const jarColours = [0xd9e7d8, 0xe8d6b0, 0xc9d8e4];
-  for (let jar = 0; jar < 4; jar++) {
-    const z = shelf.z - shelf.halfWidth + 0.2 + jar * 0.32;
-    const height = 0.16 + random() * 0.08;
-    shelfModel
-      .add(
-        plainMaterial(jarColours[jar % jarColours.length] ?? 0xd9e7d8, { roughness: 0.25 }),
-        new THREE.CylinderGeometry(0.07, 0.075, height, 12),
-        placed(shelfBack - 0.15, 1.32 + height / 2, z),
-      )
-      .add(
-        materials.darkWood,
-        new THREE.CylinderGeometry(0.075, 0.075, 0.03, 12),
-        placed(shelfBack - 0.15, 1.32 + height + 0.015, z),
-      );
-  }
-  for (let crock = 0; crock < 3; crock++) {
-    shelfModel.add(
-      materials.stone,
-      new THREE.CylinderGeometry(0.1, 0.12, 0.24, 12),
-      placed(shelfBack - 0.16, 0.12 + 0.12, shelf.z - 0.4 + crock * 0.4),
-    );
-  }
-  // A small potted plant on top.
-  shelfModel
-    .add(
-      materials.stone,
-      new THREE.CylinderGeometry(0.08, 0.06, 0.13, 10),
-      placed(shelfBack - 0.15, shelf.height + 0.05, shelf.z + 0.45),
-    )
-    .add(
-      materials.herbGreen,
-      ellipsoid(0.13, 0.12, 0.13, 8, 6),
-      placed(shelfBack - 0.15, shelf.height + 0.2, shelf.z + 0.45),
-    );
-  // A box of split logs by the hearth.
-  const box = { x: 3.1, z: 0.45 };
-  shelfModel
-    .add(
-      materials.darkWood,
-      plankGeometry(0.5, 0.32, 0.55, 'x', 1, 530),
-      placed(box.x, 0.16, box.z),
-    )
-    .add(materials.soot, plankGeometry(0.42, 0.02, 0.47, 'x', 1, 0), placed(box.x, 0.31, box.z));
-  for (let log = 0; log < 5; log++) {
-    const piece = logGeometry(0.46, 0.06, { sides: 6, seed: 531 + log, tile: 0.5, ringEvery: 0.5 });
-    const matrix = placed(
-      box.x - 0.15 + (log % 3) * 0.14,
-      0.36 + Math.floor(log / 3) * 0.1,
-      box.z,
-      { y: Math.PI / 2 },
-    );
-    shelfModel.add(materials.bark, piece.side, matrix).add(materials.logEnds, piece.ends, matrix);
-  }
-  // Bunches of herbs drying, hung from the beam near the hearth.
-  const herbs = [materials.herbGreen, materials.herbLavender, materials.herbYarrow];
-  for (let bunch = 0; bunch < 5; bunch++) {
-    const x = 1.3 + bunch * 0.32;
-    const drop = 0.28 + random() * 0.14;
-    shelfModel
-      .add(
-        materials.string,
-        new THREE.CylinderGeometry(0.006, 0.006, drop, 4),
-        placed(x, wallHeight - drop / 2, HERB_BEAM_Z),
-      )
-      .add(
-        herbs[bunch % herbs.length] ?? materials.herbGreen,
-        new THREE.ConeGeometry(0.07, 0.3, 7),
-        placed(x, wallHeight - drop - 0.12, HERB_BEAM_Z, { x: Math.PI }),
-      );
-  }
-  const shelfGroup = keep(shelfModel.build());
-  if (!canvasHome) group.add(shelfGroup);
-
-  const rugMesh = new THREE.Mesh(new THREE.CircleGeometry(1, 48), materials.rug);
-  rugMesh.rotation.x = -Math.PI / 2;
-  rugMesh.scale.set(rug.radiusX, rug.radiusZ, 1);
-  rugMesh.position.set(rug.x, 0.006, rug.z);
-  rugMesh.receiveShadow = true;
-  group.add(rugMesh);
-  disposers.push(() => rugMesh.geometry.dispose());
 
   // A doormat inside the door.
   const mat = new THREE.Mesh(
@@ -870,6 +554,7 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
   disposers.push(() => mat.geometry.dispose());
 
   // Scattered stones along the hearth's foot, so it sits into the floor.
+  const random = seededRandom(510);
   const pebbles = new ModelBuilder();
   for (let stone = 0; stone < 4; stone++) {
     pebbles.add(
@@ -879,20 +564,14 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
     );
   }
   const pebbleGroup = keep(pebbles.build());
-  if (!canvasHome) group.add(pebbleGroup);
+  if (fire.kind === 'fireplace') group.add(pebbleGroup);
 
   return {
     group,
-    chest,
-    garden: facilities.garden,
-    setGardenPlots: facilities.setGardenPlots,
     setFireLit(lit) {
       if (hearthFlame) hearthFlame.visible = lit;
-      fireGlow.anchor.visible = lit && !canvasHome;
-      facilities.setFireLit(lit);
-    },
-    setChestOpen(open) {
-      chestOpen = open;
+      fireGlow.anchor.visible = lit;
+      fireRing?.setFireLit(lit);
     },
     cutAway(cameraX, cameraZ) {
       const length = Math.hypot(cameraX, cameraZ) || 1;
@@ -903,14 +582,11 @@ export function createHomeInterior(kind: HomeKind = 'cabin'): HomeInterior {
       }
     },
     update(deltaSeconds, daylight) {
-      lid.rotation.x +=
-        ((chestOpen ? -0.95 : 0) - lid.rotation.x) * (1 - Math.exp(-deltaSeconds * 9));
       flame?.update(deltaSeconds);
       fireGlow.update(deltaSeconds);
-      // The fire and the lamp matter far more once the windows go dark.
+      // The fire matters far more once the windows go dark.
       const night = 1 - daylight;
       fireGlow.brightness = 0.75 + night * 0.6;
-      if (lampGlow) lampGlow.brightness = 1.2 + night * 3.2;
       windowGlass.emissive.setRGB(
         0.5 + daylight * 0.36,
         0.56 + daylight * 0.36,

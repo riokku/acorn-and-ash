@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   WorldSimulation,
   DEFAULT_WORLD_SEED,
-  HOME_FACILITIES,
-  homeRoomScale,
   homeFacilityInReach,
+  homeFacilitySpot,
   homeHasFacility,
-  homeRoomColliders,
-  homeChestSpot,
+  homeFire,
   emptyGarden,
   useGarden,
   gardenFromSaved,
@@ -30,6 +28,9 @@ const sims: WorldSimulation[] = [];
 afterEach(() => {
   sims.splice(0).forEach((sim) => sim.dispose());
 });
+/** The desk and garden the owner has built, where cabins used to come with them. */
+const desk = { id: 1, homeId: 7, kind: 'desk', x: -2.9, z: 1.1, yaw: 0 } as const;
+const garden = { id: 2, homeId: 7, kind: 'indoorGarden', x: 1.68, z: 2.58, yaw: 0 } as const;
 function atHome(
   kind: HomeKind = 'largeCabin',
   facility: 'cooking' | 'workbench' | 'garden' = 'garden',
@@ -39,29 +40,29 @@ function atHome(
   sim.restoreBuiltProps([
     { id: 7, kind, x: 0, z: -5, yaw: 0, ownerKey: 'owner', lit: false, litUntilMs: null },
   ]);
+  const pieces = kind === 'largeCabin' ? [desk, garden] : [desk];
+  sim.restoreDecorations(pieces);
   sim.addPlayer(1, undefined, 'owner');
   sim.addPlayer(2, undefined, 'visitor');
-  const spot = HOME_FACILITIES[facility],
-    scale = homeRoomScale(kind);
-  for (const netId of [1, 2])
-    sim.placePlayer(netId, { x: spot.x * scale - 0.75, y: 0, z: spot.z * scale }, 0, 7);
-  if (facility === 'cooking' && homeHasFacility(kind, 'cooking')) {
+  const spot = homeFacilitySpot(kind, facility, pieces)!;
+  for (const netId of [1, 2]) sim.placePlayer(netId, { x: spot.x - 0.75, y: 0, z: spot.z }, 0, 7);
+  if (facility === 'cooking') {
     sim.inventoryOf(1).log = 1;
     sim.requestFire(1, { propId: 7, action: 'addLog' }, 0);
   }
   return sim;
 }
 describe('useful housing facilities', () => {
-  it('unlocks stations in order and preserves tent rest/storage collision', () => {
-    expect(homeHasFacility('tent', 'cooking')).toBe(false);
-    expect(homeHasFacility('teepee', 'cooking')).toBe(true);
-    expect(homeHasFacility('teepee', 'workbench')).toBe(false);
-    expect(homeHasFacility('cabin', 'workbench')).toBe(true);
-    expect(homeHasFacility('cabin', 'garden')).toBe(false);
-    expect(homeHasFacility('largeCabin', 'garden')).toBe(true);
-    const chest = homeChestSpot('tent');
-    expect(homeRoomColliders('tent').some((c) => c.x === chest.x && c.z === chest.z)).toBe(true);
-    expect(homeFacilityInReach('tent', 'cooking', HOME_FACILITIES.cooking)).toBe(false);
+  it("cooks at every home's fire, and works and grows only at the desk and garden built there", () => {
+    for (const kind of ['tent', 'teepee', 'cabin', 'largeCabin'] as const) {
+      expect(homeHasFacility(kind, 'cooking')).toBe(true);
+      expect(homeFacilityInReach(kind, 'cooking', homeFire(kind).cooking)).toBe(true);
+      expect(homeHasFacility(kind, 'workbench')).toBe(false);
+      expect(homeHasFacility(kind, 'garden')).toBe(false);
+    }
+    expect(homeFacilityInReach('tent', 'workbench', desk, [desk])).toBe(true);
+    expect(homeFacilityInReach('cabin', 'workbench', { x: 1, z: -1 }, [desk])).toBe(false);
+    expect(homeFacilityInReach('largeCabin', 'garden', garden, [garden])).toBe(true);
   });
   it('saves held raw food for the teepee cooking station and cooks on E', () => {
     const sim = atHome('teepee', 'cooking');
@@ -103,7 +104,8 @@ describe('useful housing facilities', () => {
     const saved = sim.persistablePlayers()[0]!;
     sim.removePlayer(1);
     sim.addPlayer(1, { ...saved, discoveriesFound: 8, discoveriesClaimed: 8 }, 'owner');
-    sim.placePlayer(1, { x: 1.3, y: 0, z: -0.81 }, 0, 7);
+    const fire = homeFire('teepee').cooking;
+    sim.placePlayer(1, { x: fire.x - 0.75, y: 0, z: fire.z }, 0, 7);
     expect(sim.craftItem(1, 'berryTea')).toBe(true);
     expect(sim.inventoryOf(1).berryTea).toBe(1);
   });

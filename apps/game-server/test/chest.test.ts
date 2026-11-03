@@ -1,13 +1,17 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { expect, it } from 'vitest';
 import {
-  HOME_WAKE_SPOT,
+  homeFloorWakeSpot,
   buildableKindIndex,
   itemIndex,
   type ChestStateMessage,
   type WorldSimulation,
 } from '@acorn/shared';
 import { TestClient, sleep, waitFor } from './helpers';
+
+/** Where its owner wakes in an empty cabin: on the floor by the fire, near the chest built here. */
+const BY_THE_FIRE = homeFloorWakeSpot('cabin');
+const CHEST = { id: 1, homeId: 7, kind: 'storageChest', x: 1.5, z: -2.5, yaw: 0 } as const;
 
 const lastChest = (client: TestClient): ChestStateMessage | undefined =>
   client.received
@@ -46,7 +50,14 @@ it('saves both sides of a chest transfer immediately, survives an empty world, a
       Date.now(),
       'chest-owner',
     );
-    sim.placePlayer(id, { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z }, HOME_WAKE_SPOT.yaw, 7);
+    sim.restoreDecorations([CHEST]);
+    // Homes start empty (decision 0285): this one has had a storage chest built.
+    state.storage.sql.exec(
+      'INSERT INTO world_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'home-decorations',
+      JSON.stringify(sim.decorationsList()),
+    );
+    sim.placePlayer(id, { x: BY_THE_FIRE.x, y: 0, z: BY_THE_FIRE.z }, BY_THE_FIRE.yaw, 7);
     Object.assign(sim.inventoryOf(id), { log: 12 });
   });
   owner.chest({ action: 'storeSupplies' });
@@ -74,12 +85,7 @@ it('saves both sides of a chest transfer immediately, survives an empty world, a
   const visitorId = visitor.welcome().netId;
   await runInDurableObject(stub, (instance) => {
     const sim = (instance as unknown as { simulation: WorldSimulation }).simulation;
-    sim.placePlayer(
-      visitorId,
-      { x: HOME_WAKE_SPOT.x, y: 0, z: HOME_WAKE_SPOT.z },
-      HOME_WAKE_SPOT.yaw,
-      7,
-    );
+    sim.placePlayer(visitorId, { x: BY_THE_FIRE.x, y: 0, z: BY_THE_FIRE.z }, BY_THE_FIRE.yaw, 7);
   });
   visitor.chest({ action: 'withdraw', slot: 0, amount: 10 });
   await waitFor('private refusal', () => lastChest(visitor)?.reason === 'private');

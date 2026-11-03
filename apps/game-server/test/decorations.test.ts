@@ -70,7 +70,8 @@ it('saves private placement, movement and material reclamation with the backpack
         .toArray(),
     ).toEqual([]);
   });
-  owner.sendRaw(encodeDecorationRequest({ ...piece!, action: 'move', x: 0, z: -1.1, yaw: 1 }));
+  // Clear of the spot by the fire where you wake on the floor (decision 0285).
+  owner.sendRaw(encodeDecorationRequest({ ...piece!, action: 'move', x: -1.2, z: -1.1, yaw: 1 }));
   await waitFor('movement', () =>
     owner.received.some((message) => message.type === 'decoration' && message.pieces[0]?.yaw === 1),
   );

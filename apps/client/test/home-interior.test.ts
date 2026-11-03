@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 
-import { HOME_ROOM } from '@acorn/shared';
+import { HOME_TIERS, homeRoom } from '@acorn/shared';
 
 import { triangleCount } from '../src/art/shapes';
 import { FireLights } from '../src/scene/fire-light';
@@ -10,18 +10,33 @@ import { createHomeInterior } from '../src/scene/home-interior';
 describe('the room inside a home', () => {
   const room = createHomeInterior();
 
-  it('stays inside its walls', () => {
-    const box = new THREE.Box3().setFromObject(room.group);
-    const reach = HOME_ROOM.halfWidth + HOME_ROOM.wallThickness + 0.5;
-    expect(box.max.x).toBeLessThan(reach);
-    expect(box.min.x).toBeGreaterThan(-reach);
-    expect(box.max.z).toBeLessThan(HOME_ROOM.halfDepth + HOME_ROOM.wallThickness + 0.5);
-    expect(box.min.y).toBeGreaterThan(-0.2);
+  for (const kind of HOME_TIERS)
+    it(`builds a ${kind} to its own size, inside its walls`, () => {
+      const inside = createHomeInterior(kind);
+      const { halfWidth, halfDepth, wallThickness } = homeRoom(kind);
+      const box = new THREE.Box3().setFromObject(inside.group);
+      expect(box.max.x).toBeLessThan(halfWidth + wallThickness + 0.5);
+      expect(box.min.x).toBeGreaterThan(-halfWidth - wallThickness - 0.5);
+      expect(box.max.z).toBeLessThan(halfDepth + wallThickness + 0.5);
+      // Its walls reach most of the way out to its own size.
+      expect(box.max.x).toBeGreaterThan(halfWidth - 0.1);
+      expect(box.min.y).toBeGreaterThan(-0.2);
+      inside.dispose();
+    });
+
+  it('starts empty but for its fire', () => {
+    for (const kind of HOME_TIERS) {
+      const inside = createHomeInterior(kind);
+      const names: string[] = [];
+      inside.group.traverse((child) => names.push(child.name));
+      for (const furniture of ['bed', 'desk', 'storage-chest', 'indoor-garden', 'home-garden'])
+        expect(names).not.toContain(furniture);
+      inside.dispose();
+    }
   });
 
   it('is modest enough to draw on an everyday laptop', () => {
-    // A whole furnished room, with a lamp and a fire, in about as many
-    // triangles as three trees.
+    // The walls and the fire, in about as many triangles as three trees.
     expect(triangleCount(room.group)).toBeLessThan(40_000);
   });
 
