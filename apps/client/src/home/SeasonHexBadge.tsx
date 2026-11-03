@@ -33,7 +33,6 @@ interface SceneColours {
 interface SeasonLook {
   /** The season's colour: past days' edges and the "Day 3 of 6" chip. */
   readonly accent: string;
-  readonly chipBackground: string;
   /** The soft halo behind today's edge. */
   readonly glow: string;
   readonly scene: SceneColours;
@@ -43,7 +42,6 @@ interface SeasonLook {
 const SEASON_LOOKS: Record<SeasonId, SeasonLook> = {
   spring: {
     accent: '#f6b3c8',
-    chipBackground: 'rgba(246, 179, 200, 0.16)',
     glow: 'rgba(246, 179, 200, 0.28)',
     scene: {
       skyTop: '#f2bfc0',
@@ -71,7 +69,6 @@ const SEASON_LOOKS: Record<SeasonId, SeasonLook> = {
   },
   summer: {
     accent: '#ffd45a',
-    chipBackground: 'rgba(255, 212, 90, 0.16)',
     glow: 'rgba(255, 212, 90, 0.28)',
     scene: {
       skyTop: '#86c6e4',
@@ -99,7 +96,6 @@ const SEASON_LOOKS: Record<SeasonId, SeasonLook> = {
   },
   autumn: {
     accent: '#f5a05e',
-    chipBackground: 'rgba(245, 160, 94, 0.16)',
     glow: 'rgba(245, 160, 94, 0.28)',
     scene: {
       skyTop: '#e58450',
@@ -127,7 +123,6 @@ const SEASON_LOOKS: Record<SeasonId, SeasonLook> = {
   },
   winter: {
     accent: '#8ec3ec',
-    chipBackground: 'rgba(142, 195, 236, 0.16)',
     glow: 'rgba(142, 195, 236, 0.28)',
     scene: {
       skyTop: '#7d8fc0',
@@ -172,10 +167,10 @@ const FAR_FOREST =
   'M-40,16 L-40,11 L-38.5,8 L-37,11 L-35.5,9 L-34,11 L-32,7 L-30,11 L-28.5,9.5 L-27,11 L-25,8 L-23,11 L-21.5,9 L-20,11 L-18,7.5 L-16,11 L-14,9 L-12,11 L-10,8 L-8,11 L-6.5,9.5 L-5,11 L-3,8.5 L-1,11 L1,9 L3,11 L5,7.5 L7,11 L8.5,9.5 L10,11 L12,8 L14,11 L16,9 L18,11 L20,7 L22,11 L24,9.5 L26,11 L28,8 L30,11 L32,9 L34,11 L36,7.5 L38,11 L40,9 L40,16 Z';
 
 /**
- * The season and the day of it, on the front page under Play: a dark plate with
+ * The season on the front page under Play: its name on a small dark plate, over
  * a hexagon window onto the valley in that season's colours. The hexagon's six
  * edges are the six days of the season. Days gone by are lit in the season's
- * colour, and today's edge glows white.
+ * colour, and today's edge glows white; the day itself is only read aloud.
  */
 export function SeasonHexBadge({
   view,
@@ -189,21 +184,14 @@ export function SeasonHexBadge({
     <div
       className={`season-hex-badge ${className}`.trim()}
       role="status"
-      aria-label={`${view.title}, day ${view.day} of ${view.daysInSeason}. ${view.hint}`}
+      aria-label={`${view.title}, day ${view.day} of ${view.daysInSeason}`}
       data-testid="season-badge"
       data-season={view.season}
-      style={{ '--season-hex-accent': look.accent } as React.CSSProperties}
     >
+      <span className="season-hex-name" aria-hidden="true">
+        {view.seasonName}
+      </span>
       <SeasonHexagon season={view.season} day={view.day} look={look} />
-      <div className="season-hex-text" aria-hidden="true">
-        <div className="season-hex-heading">
-          <span className="season-hex-name">{view.seasonName}</span>
-          <span className="season-hex-day" style={{ background: look.chipBackground }}>
-            Day {view.day} of {view.daysInSeason}
-          </span>
-        </div>
-        <p className="season-hex-hint">{view.hint}</p>
-      </div>
     </div>
   );
 }
