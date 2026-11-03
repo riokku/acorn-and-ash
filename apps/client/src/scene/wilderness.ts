@@ -8,7 +8,6 @@ import {
   PLAYABLE_HALF_EXTENT,
   PROP_KINDS,
   choppingRuleFor,
-  stumpFor,
   treeAtGeneration,
   treeFallAngle,
   treeFallTimes,
@@ -31,9 +30,10 @@ import {
   createPropMeshes,
   placeInstance,
   placeOneInstance,
+  placeStump,
 } from './props';
 import { createTreeBurning } from './tree-burning';
-import { treeVariant } from './prop-models';
+import { stumpForTree, treeVariant } from './prop-models';
 import { refineGroundContacts } from './ground-contact';
 import { shoreGroundCells } from './shore-ground';
 
@@ -261,7 +261,7 @@ export function buildWildernessScene(
         const now = standingTree(prop);
         return blockerGeometry(
           PROP_KINDS[felled.has(prop.id) ? 'stump' : now.kind],
-          felled.has(prop.id) ? stumpFor(now) : now,
+          felled.has(prop.id) ? stumpForTree(now) : now,
         );
       }),
     );
@@ -344,7 +344,7 @@ export function buildWildernessScene(
         drawn.get(id)?.generation ?? 0,
         drawn.get(id)?.growth,
       );
-      placeInstance(stumpParts, count, stumpFor(grown));
+      placeStump(stumpParts, count, grown);
       for (const part of stumpParts) part.burn?.(count, drawn.get(id)?.burned ? 1 : 0);
       count++;
     }

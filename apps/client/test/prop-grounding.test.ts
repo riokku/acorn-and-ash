@@ -6,6 +6,7 @@ import {
   groundWeights,
   propBurialDepth,
   propFootprint,
+  trunkRadiusAt,
 } from '../src/scene/prop-grounding';
 import { createPropMeshes, placeInstance, placeOneInstance } from '../src/scene/props';
 
@@ -91,4 +92,16 @@ it('extends a merged shore rock base below a slope while preserving its upper ve
     else expect(positions.getY(i)).toBeLessThan(heightAt(positions.getX(i), positions.getZ(i)));
   }
   rock.dispose();
+});
+
+it('measures a trunk where an axe would cut it, past a low branch', () => {
+  // A trunk narrowing from 0.5 m at its foot to 0.3 m at 4 m up, standing on the ground.
+  const trunk = new THREE.CylinderGeometry(0.3, 0.5, 4, 16).translate(0, 2, 0);
+  // A thin branch reaching out across the cut height.
+  const branch = new THREE.CylinderGeometry(0.05, 0.05, 2, 6)
+    .rotateZ(Math.PI / 2)
+    .translate(1.5, 0.4, 0);
+  const radius = trunkRadiusAt([trunk, branch], 0.4);
+  expect(radius).toBeCloseTo(0.48, 1);
+  expect(trunkRadiusAt([trunk], 5)).toBeUndefined();
 });

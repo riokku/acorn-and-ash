@@ -1,7 +1,7 @@
 import { advanceForestWind, forestWind } from '../art/forest-wind';
 import * as THREE from 'three/webgpu';
 import { PROP_KINDS, treeAtGeneration, type PropKindId } from '@acorn/shared';
-import { createPropMeshes, placeInstance } from '../scene/props';
+import { createPropMeshes, placeInstance, placeStump } from '../scene/props';
 import type { RendererSetup } from '../scene/renderer';
 import type { FireLights } from '../scene/fire-light';
 
@@ -16,7 +16,7 @@ export function showTreeModels(
   const names = ['Douglas-fir', 'Western redcedar', 'Sitka spruce', 'Bigleaf maple', 'Red alder'];
   const requested = params.get('kind');
   const chosen = kinds.find((kind) => kind === requested);
-  const variant = Math.max(0, Math.min(2, Math.floor(Number(params.get('variant')) || 0)));
+  const variant = Math.max(0, Math.min(4, Math.floor(Number(params.get('variant')) || 0)));
   const close = params.has('close');
   const growth = params.has('growth')
     ? Math.max(0, Math.min(255, Number(params.get('growth')) || 0))
@@ -32,10 +32,17 @@ export function showTreeModels(
       scale: 1,
       rotationY: 0,
     };
-    placeInstance(parts, 0, growth === undefined ? tree : treeAtGeneration(1, tree, 1, growth));
+    const shown = growth === undefined ? tree : treeAtGeneration(1, tree, 1, growth);
+    placeInstance(parts, 0, shown);
     for (const part of parts) {
       if (params.has('bark') && !part.mesh.geometry.getAttribute('uv')) continue;
       scene.add(part.mesh);
+    }
+    if (params.has('stump')) {
+      // The stump this tree would leave, just beside it, to compare with its trunk.
+      const stump = createPropMeshes(PROP_KINDS.stump, 1);
+      placeStump(stump, 0, { ...shown, x: shown.x + 1.6 }, variant);
+      for (const part of stump) scene.add(part.mesh);
     }
   });
   const toolbar = document.createElement('div');
@@ -58,7 +65,7 @@ export function showTreeModels(
   select.setAttribute('aria-label', 'Tree species');
   toolbar.append(select);
   for (const [key, label, values] of [
-    ['variant', 'Shape', ['0', '1', '2']],
+    ['variant', 'Shape', ['0', '1', '2', '3', '4']],
     ['season', 'Season', ['spring', 'summer', 'autumn', 'winter']],
     ['growth', 'Growth', ['', '0', '127', '255']],
   ] as const) {
@@ -94,6 +101,7 @@ export function showTreeModels(
   for (const [key, text] of [
     ['distant', 'Distant mesh'],
     ['close', 'Trunk close-up'],
+    ['stump', 'Stump beside'],
   ] as const) {
     const label = document.createElement('label');
     const control = document.createElement('input');
@@ -110,7 +118,8 @@ export function showTreeModels(
     toolbar.append(label);
   }
   document.body.append(toolbar);
-  const target = new THREE.Vector3(0, close ? 1.7 : 7, 0);
+  const stumpCloseUp = close && params.has('stump');
+  const target = new THREE.Vector3(stumpCloseUp ? 0.8 : 0, stumpCloseUp ? 0.5 : close ? 1.7 : 7, 0);
   const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.05, 160);
   let angle = Number(params.get('angle') ?? '0.8');
   let distance = close ? 3.4 : chosen ? 27 : 60;

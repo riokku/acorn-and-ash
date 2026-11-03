@@ -28,6 +28,46 @@ export function propFootprint(
   return { bottom, band, radius };
 }
 
+/**
+ * How thick a trunk is at `height`: slices the bark there and takes the
+ * middle distance of the cut from the trunk's centre line (the model's
+ * origin), so a low branch or a bulging root doesn't throw it off. Undefined
+ * if nothing reaches that height.
+ */
+export function trunkRadiusAt(
+  geometries: readonly THREE.BufferGeometry[],
+  height: number,
+): number | undefined {
+  const distances: number[] = [];
+  for (const geometry of geometries) {
+    const positions = geometry.getAttribute('position');
+    const index = geometry.getIndex();
+    const corner = (i: number) => index?.getX(i) ?? i;
+    const count = index?.count ?? positions.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      for (const [a, b] of [
+        [corner(i), corner(i + 1)],
+        [corner(i + 1), corner(i + 2)],
+        [corner(i + 2), corner(i)],
+      ] as const) {
+        const ya = positions.getY(a) - height;
+        const yb = positions.getY(b) - height;
+        if (ya * yb >= 0) continue;
+        const t = ya / (ya - yb);
+        distances.push(
+          Math.hypot(
+            positions.getX(a) + (positions.getX(b) - positions.getX(a)) * t,
+            positions.getZ(a) + (positions.getZ(b) - positions.getZ(a)) * t,
+          ),
+        );
+      }
+    }
+  }
+  if (distances.length === 0) return undefined;
+  distances.sort((a, b) => a - b);
+  return distances[Math.floor(distances.length / 2)];
+}
+
 /** Only the lower base stretches; the trunk, canopy and rock top keep their original placement. */
 export function groundWeights(
   geometry: THREE.BufferGeometry,
