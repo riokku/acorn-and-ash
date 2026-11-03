@@ -384,6 +384,7 @@ import { preloadBearModel } from './scene/bear-model';
 import { preloadCoyoteModel } from './scene/coyote-model';
 import { preloadStagModel } from './scene/stag-model';
 import { preloadHareModel } from './scene/hare-model';
+import { createWoodshed } from './scene/woodshed';
 import {
   createSceneryWildlife,
   preloadSceneryWildlife,
@@ -626,6 +627,8 @@ function createBuiltMesh(
       return createGuardianTrophy();
     case 'rowboat':
       return createRowboat();
+    case 'woodshed':
+      return createWoodshed();
     case 'cedarBench':
     case 'timberTable':
     case 'wovenRug':
@@ -5457,7 +5460,9 @@ export class Game {
     if (storageHit && !indoor && logStorageCapacity(piece.kind) > 0) {
       const spot = logStorageSpot(piece);
       if (Math.hypot(spot.x - this.motionOrOrigin().x, spot.z - this.motionOrOrigin().z) > 2) {
-        this.showActionNote('Move closer to use the log shelf.');
+        this.showActionNote(
+          `Move closer to use the ${piece.kind === 'woodshed' ? 'woodshed' : 'log shelf'}.`,
+        );
         return true;
       }
       this.selectedLogStorage = id;

@@ -95,11 +95,11 @@ it('refuses free, distant, elevated and cross-space ignition', () => {
   expect(sim.requestFire(1, { propId: 7, action: 'addLog' }, 1000)).toBe(false);
   expect(countOf(sim.inventoryOf(1), 'log')).toBe(5);
 });
-it.each(['cabin', 'largeCabin'] as const)(
+it.each(['cabin', 'largeCabin', 'woodshed'] as const)(
   'caps %s storage and withdraws through inventory without feeding the fire',
   (kind) => {
     const sim = setup(kind),
-      capacity = kind === 'cabin' ? 20 : 50;
+      capacity = { cabin: 20, largeCabin: 50, woodshed: 40 }[kind];
     const spot = logStorageSpot(sim.builtPropsList()[0]!);
     sim.placePlayer(1, { x: spot.x - 1.2, z: spot.z, y: 0 }, 0);
     sim.inventoryOf(1).log = capacity;
@@ -120,6 +120,15 @@ it.each(['cabin', 'largeCabin'] as const)(
     expect(sim.requestFire(1, { propId: 7, action: 'takeLogs' })).toBe(false);
   },
 );
+it('stores logs in a woodshed from its open front but never burns them', () => {
+  const sim = setup('woodshed');
+  sim.placePlayer(1, { x: 0, y: 0, z: 1.6 }, 0);
+  sim.inventoryOf(1).log = 5;
+  expect(sim.requestFire(1, { propId: 7, action: 'addLog' })).toBe(false);
+  expect(sim.requestFire(1, { propId: 7, action: 'toggle' })).toBe(false);
+  expect(sim.requestFire(1, { propId: 7, action: 'storeLogs', amount: 5 })).toBe(true);
+  expect(sim.fireFuelViews()).toEqual([{ propId: 7, lit: false, remainingMs: 0, storedLogs: 5 }]);
+});
 it('restores paused fuel and logs, and catches up elapsed burning time', () => {
   const sim = setup('cabin');
   const restored = new WorldSimulation({ seed: sim.seed, forestEncounters: false });

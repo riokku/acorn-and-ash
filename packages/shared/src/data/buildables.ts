@@ -35,7 +35,8 @@ export type BuildableKindId =
   | 'rowboat'
   | 'trailWorkbench'
   | 'trailPantry'
-  | 'kitchenGarden';
+  | 'kitchenGarden'
+  | 'woodshed';
 
 export interface BuildableKind {
   readonly id: BuildableKindId;
@@ -412,6 +413,22 @@ export const BUILDABLE_KINDS = {
     triangleBudget: 3000,
     placeholderColor: 0x8a5a36,
   },
+  woodshed: {
+    id: 'woodshed',
+    displayName: 'Woodshed',
+    // Spare logs live here, stacked under the roof as they come home.
+    costs: [
+      { item: 'log', amount: 10 },
+      { item: 'stick', amount: 8 },
+    ],
+    // An open-fronted lean-to, wide along its own X axis.
+    footprintRadius: 0.9,
+    footprintHalfLength: 0.85,
+    isHome: false,
+    capPerPlayer: true,
+    triangleBudget: 2000,
+    placeholderColor: 0x8a6642,
+  },
 } as const satisfies Record<BuildableKindId, BuildableKind>;
 
 /** A stable order, so a buildable kind can be sent over the wire as a small number. */
@@ -443,6 +460,7 @@ export const BUILDABLE_KIND_ORDER: readonly BuildableKindId[] = [
   'trailWorkbench',
   'trailPantry',
   'kitchenGarden',
+  'woodshed',
 ];
 
 export function buildableKindIndex(id: BuildableKindId): number {

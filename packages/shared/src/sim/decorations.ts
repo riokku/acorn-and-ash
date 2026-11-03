@@ -197,6 +197,7 @@ export const DECORATION_REQUEST_KINDS: readonly BuildableKindId[] = [
   'trailWorkbench',
   'trailPantry',
   'kitchenGarden',
+  'woodshed',
 ];
 export const DECORATION_ACTIONS = [
   'place',

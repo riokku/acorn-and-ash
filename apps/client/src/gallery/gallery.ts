@@ -69,6 +69,7 @@ import { preloadBearModel } from '../scene/bear-model';
 import { createCoyoteModel, preloadCoyoteModel } from '../scene/coyote-model';
 import { preloadStagModel } from '../scene/stag-model';
 import { preloadHareModel } from '../scene/hare-model';
+import { createWoodshed } from '../scene/woodshed';
 import {
   createSceneryAnimal,
   preloadSceneryWildlife,
@@ -360,6 +361,19 @@ const EXHIBITS: readonly Exhibit[] = [
   { name: 'teepee', x: -8, z: 9, view: 8, create: () => createShelter('teepee') },
   { name: 'largeCabin', x: 2, z: 10, view: 12, create: createLargeCabin },
   { name: 'cabin', x: -11, z: -1, yaw: 0.35, view: 11, create: createCabin },
+  // Polyfork's Open Woodshed, holding `?logs=` of its 40 (see woodshed.ts).
+  {
+    name: 'woodshed',
+    x: -2,
+    z: 9,
+    yaw: 0.4,
+    view: 5,
+    create: () => {
+      const shed = createWoodshed();
+      shed.setStoredLogs?.(Number(new URLSearchParams(location.search).get('logs') ?? 24));
+      return shed;
+    },
+  },
   { name: 'fence', x: -4.9, z: 0, view: 4.5, create: createFence },
   { name: 'fence', x: -3.5, z: 0, view: 4.5, create: createFence },
   { name: 'fence', x: -2.8, z: -0.7, yaw: Math.PI / 2, view: 4.5, create: createFence },

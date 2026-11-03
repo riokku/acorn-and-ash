@@ -4596,7 +4596,7 @@ export class WorldSimulation {
 
   fireFuelViews(nowMs = this.nowMs): FireFuelView[] {
     return this.builtProps
-      .filter((prop) => this.hasFuelFire(prop))
+      .filter((prop) => this.hasFuelFire(prop) || logStorageCapacity(prop.kind) > 0)
       .map((prop) => ({
         propId: prop.id,
         lit: this.fireIsLit(prop.id, nowMs),
@@ -4614,7 +4614,7 @@ export class WorldSimulation {
       !runtime ||
       !position ||
       !prop ||
-      !this.hasFuelFire(prop) ||
+      !(this.hasFuelFire(prop) || logStorageCapacity(prop.kind) > 0) ||
       this.builtPropOwner(prop.id) === ABANDONED_OWNER ||
       runtime.health <= 0 ||
       !isFreeToInteract(runtime.action) ||
