@@ -10,6 +10,7 @@ export type PropFamily = 'tree' | 'rock' | 'stump';
 
 export interface TreeShape {
   readonly family: 'tree';
+  /** The trunk's radius 0.4 m up, where an axe cuts it: the typical width of this kind's models there. */
   readonly trunkRadius: number;
   readonly trunkHeight: number;
   readonly canopyRadius: number;
@@ -69,7 +70,7 @@ export const PROP_KINDS = {
     displayName: 'Douglas-fir',
     shape: {
       family: 'tree',
-      trunkRadius: 0.3,
+      trunkRadius: 0.43,
       trunkHeight: 3.8,
       canopyRadius: 2.6,
       canopyHeight: 10.2,
@@ -84,7 +85,7 @@ export const PROP_KINDS = {
     displayName: 'Western redcedar',
     shape: {
       family: 'tree',
-      trunkRadius: 0.34,
+      trunkRadius: 0.47,
       trunkHeight: 2.8,
       canopyRadius: 2.8,
       canopyHeight: 9.2,
@@ -99,7 +100,7 @@ export const PROP_KINDS = {
     displayName: 'Sitka spruce',
     shape: {
       family: 'tree',
-      trunkRadius: 0.4,
+      trunkRadius: 0.52,
       trunkHeight: 3,
       canopyRadius: 2.4,
       canopyHeight: 13,
@@ -130,7 +131,7 @@ export const PROP_KINDS = {
     displayName: 'Big-leaf maple',
     shape: {
       family: 'tree',
-      trunkRadius: 0.36,
+      trunkRadius: 0.66,
       trunkHeight: 3.2,
       canopyRadius: 4.6,
       canopyHeight: 8.8,
@@ -146,7 +147,7 @@ export const PROP_KINDS = {
     displayName: 'Red alder',
     shape: {
       family: 'tree',
-      trunkRadius: 0.24,
+      trunkRadius: 0.3,
       trunkHeight: 4.2,
       canopyRadius: 2.5,
       canopyHeight: 8.8,
@@ -209,6 +210,8 @@ export function choppingRuleFor(kind: PropKind): ChoppingRule | null {
 /** The stump a felled tree of this size leaves behind. */
 export function stumpScaleFor(kind: PropKind, scale: number): number {
   if (kind.shape.family !== 'tree') return scale;
-  // Roughly as wide as the trunk was, so the stump reads as its remains.
+  // As wide as the trunk was where it was cut, so the stump reads as its
+  // remains. The stump's radius is its sawn trunk's, not its root spread.
+  // The client refines this to each tree's own shape (see stumpForTree).
   return (kind.shape.trunkRadius / PROP_KINDS.stump.shape.radius) * scale;
 }

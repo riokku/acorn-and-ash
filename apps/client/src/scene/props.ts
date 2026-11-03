@@ -25,11 +25,89 @@ import {
 import { seasonUniforms } from '../art/season-uniforms';
 import { paintedMaterial } from '../art/materials';
 import { stumpGeometries } from './pickup-models';
-import { polyforkPaint, polyforkPiece } from './polyfork-piece';
+import { polyforkPaint, polyforkPiece, splitByPaint } from './polyfork-piece';
 
-/** Polyfork's free Tree Stump, already our stump's size (0.82 m across, 0.48 m tall). */
-const polyforkStump = polyforkPiece('tree-stump');
-import { realModelPartsFor, treeVariant } from './prop-models';
+/**
+ * Polyfork's free Tree Stump, 0.48 m tall. Its roots spread 0.42 m but its
+ * sawn trunk is only about 0.19 m in radius, so it is widened (not raised)
+ * until the trunk is the stump's table radius, as the placeholder stump's is.
+ * Then a stump scaled to a tree's trunk matches it where the axe cut.
+ */
+const STUMP_WIDENING = PROP_KINDS.stump.shape.radius / 0.19;
+const polyforkStump = polyforkPiece(
+  'tree-stump',
+  new THREE.Matrix4().makeScale(STUMP_WIDENING, 1, STUMP_WIDENING),
+);
+/** The flat brown its sides are painted, apart from the lighter wood of the sawn top. */
+const POLYFORK_STUMP_BARK = new THREE.Color(0.26, 0.14, 0.06);
+/** Metres of trunk one repeat of the bark picture covers going up, as on the trees. */
+const BARK_REPEAT_HEIGHT = 2.5;
+let stumpPieces: { bark: THREE.BufferGeometry; top: THREE.BufferGeometry } | undefined;
+
+/** The Polyfork stump split into bark sides, wrapped for the bark picture, and its sawn top. */
+function polyforkStumpPieces(): typeof stumpPieces {
+  if (stumpPieces !== undefined) return stumpPieces;
+  const parts = polyforkStump.parts();
+  if (parts === undefined) return undefined;
+  const split = [...parts.values()].map((geometry) => splitByPaint(geometry, POLYFORK_STUMP_BARK));
+  const bark = mergeGeometries(split.map(([, sides]) => sides));
+  const top = mergeGeometries(split.map(([rest]) => rest));
+  wrapBarkAround(bark);
+  stumpPieces = { bark, top };
+  return stumpPieces;
+}
+
+/**
+ * Bark picture coordinates for a stump's sides: once around, like a trunk's,
+ * so the stump wears the same pattern at the same size as the tree it was.
+ */
+function wrapBarkAround(geometry: THREE.BufferGeometry): void {
+  const position = geometry.getAttribute('position');
+  const uv = new Float32Array(position.count * 2);
+  for (let corner = 0; corner < position.count; corner += 3) {
+    const around = [0, 1, 2].map(
+      (i) => Math.atan2(position.getZ(corner + i), position.getX(corner + i)) / (Math.PI * 2) + 0.5,
+    );
+    // A face straddling the seam would otherwise squeeze the whole picture into itself.
+    const straddles = Math.max(...around) - Math.min(...around) > 0.5;
+    around.forEach((u, i) => {
+      uv[(corner + i) * 2] = straddles && u < 0.5 ? u + 1 : u;
+      uv[(corner + i) * 2 + 1] = position.getY(corner + i) / BARK_REPEAT_HEIGHT;
+    });
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Give a part a colour per instance, white until something tints it. */
+function tintable(part: PropPart): PropPart {
+  part.mesh.instanceColor = new THREE.InstancedBufferAttribute(
+    new Float32Array(part.mesh.count * 3).fill(1),
+    3,
+  );
+  return part;
+}
+
+const stumpTint = new THREE.Color();
+
+/**
+ * Put down the stump a felled tree leaves: as wide as its trunk (see
+ * stumpForTree) and in the same tinted bark, so it reads as that tree's.
+ */
+export function placeStump(
+  parts: PropPart[],
+  index: number,
+  tree: PlacedProp,
+  variant?: number,
+): void {
+  placeInstance(parts, index, stumpForTree(tree, variant));
+  stumpTint.setHex(barkTint(tree.kind));
+  for (const part of parts) {
+    if (part.mesh.instanceColor === null) continue;
+    part.mesh.setColorAt(index, stumpTint);
+    part.mesh.instanceColor.needsUpdate = true;
+  }
+}
+import { barkTint, realModelPartsFor, stumpForTree, treeVariant } from './prop-models';
 import {
   groundWeights,
   propBurialDepth,
@@ -114,16 +192,20 @@ function propMeshes(kind: PropKind, count: number, distant: boolean, variant: nu
   }
 
   if (kind.shape.family === 'stump') {
-    const real = polyforkStump.parts();
+    // The sides wear the trunks' painted bark, tinted per stump to the tree it
+    // was (see placeStump); the sawn top keeps its own wood.
+    const barkSides = paintedMaterial('bark', { roughness: 1 });
+    const real = polyforkStumpPieces();
     if (real !== undefined)
-      return [...real.values()].map((geometry) =>
-        instanced(geometry, polyforkPaint, count, 0, false),
-      );
+      return [
+        tintable(instanced(real.bark, barkSides, count, 0, false)),
+        instanced(real.top, polyforkPaint, count, 0, false),
+      ];
     // Bark sides flaring into roots, and a sawn top showing its rings (see
     // pickup-models.ts), wearing the shared painted materials.
     const { bark, top } = stumpGeometries(kind.shape.radius, kind.shape.height);
     return [
-      instanced(bark, paintedMaterial('bark', { roughness: 1 }), count, 0, 'geometry'),
+      tintable(instanced(bark, barkSides, count, 0, 'geometry')),
       instanced(top, paintedMaterial('logEnd', { roughness: 0.95 }), count, 0, 'geometry'),
     ];
   }
@@ -307,6 +389,8 @@ function burnablePart(part: PropPart, height: number): PropPart {
       vec3(localDirection.x.mul(bend), 0, localDirection.y.mul(bend)),
     );
   }
+  // A colour of our own drops the texture's alpha, which cut-out needle cards need.
+  if (source.map && source.alphaTest > 0) material.opacityNode = texture(source.map).a;
   const front = attribute('treeBurn', 'float').mul(1.2).sub(0.1);
   const char = nodeSmoothstep(localHeight.sub(0.08), localHeight.add(0.08), front);
   material.colorNode = mix(base, base.mul(0.12).add(vec3(0.018, 0.012, 0.009)), char);
