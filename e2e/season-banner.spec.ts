@@ -60,11 +60,10 @@ test.describe('on the home screens', () => {
 
     const badge = page.getByTestId('season-badge');
     await expect(badge).toHaveAttribute('data-season', 'autumn');
-    await expect(badge).toContainText('Autumn');
-    await expect(badge).toContainText('Day 1 of 6');
+    // Just the season's name on show; the day is only read aloud, and there is no tagline.
+    await expect(badge).toHaveText('Autumn');
     // No world is chosen here, so no year: the browser clock's "year" is a number like 62201.
-    await expect(badge).not.toContainText('Year');
-    await expect(badge).toContainText('Winter is coming');
+    await expect(badge).toHaveAttribute('aria-label', 'Autumn, day 1 of 6');
     const play = page.getByRole('button', { name: 'Play' });
     await expectCentredUnder(play, badge);
 
@@ -80,7 +79,7 @@ test.describe('on the home screens', () => {
     await expect(page.locator('#home-name')).toBeVisible();
     const badge = page.getByTestId('season-badge');
     await expect(badge).toHaveAttribute('data-season', 'winter');
-    await expect(badge).toContainText('The lake is frozen');
+    await expect(badge).toHaveText('Winter');
     const enterWorld = page.getByRole('button', { name: 'Enter World' });
     await expectCentredUnder(enterWorld, badge);
 
