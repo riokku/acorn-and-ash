@@ -20,8 +20,11 @@ export interface PolyforkAnimal {
 
 export interface AnimatedAnimal {
   readonly group: THREE.Group;
-  /** Plays its own gait at this speed (m/s). */
-  animate(deltaSeconds: number, speed: number): void;
+  /**
+   * Plays its own gait at this speed (m/s). `flying`, from 0 to 1, blends
+   * in its Fly clip, for the birds that have one.
+   */
+  animate(deltaSeconds: number, speed: number, flying?: number): void;
   dispose(): void;
 }
 
@@ -33,6 +36,8 @@ export interface Gait {
   scale?: number;
   /** The run clip's name, when it isn't 'Run' (Quaternius calls it 'Gallop'). */
   runClip?: string;
+  /** The flying clip, for a bird that has one. */
+  flyClip?: string;
 }
 
 export function polyforkAnimal(file: string, gait: Gait): PolyforkAnimal {
@@ -79,16 +84,20 @@ export function riggedAnimal(url: string, file: string, gait: Gait): PolyforkAni
       const idle = clip('Idle');
       const walk = clip('Walk');
       const run = clip(gait.runClip ?? 'Run');
-      for (const action of [idle, walk, run]) action?.play();
+      const fly = gait.flyClip === undefined ? undefined : clip(gait.flyClip);
+      for (const action of [idle, walk, run, fly]) action?.play();
+      fly?.setEffectiveWeight(0);
 
       return {
         group,
-        animate(deltaSeconds, speed) {
+        animate(deltaSeconds, speed, flying = 0) {
           const moving = smoothstep(speed, 0.05, 0.5);
           const running = smoothstep(speed, walkSpeed * 1.8, walkSpeed * 3.6);
-          idle?.setEffectiveWeight(1 - moving);
-          walk?.setEffectiveWeight(moving * (1 - running));
-          run?.setEffectiveWeight(moving * running);
+          const grounded = fly === undefined ? 1 : 1 - flying;
+          idle?.setEffectiveWeight((1 - moving) * grounded);
+          walk?.setEffectiveWeight(moving * (1 - running) * grounded);
+          run?.setEffectiveWeight(moving * running * grounded);
+          fly?.setEffectiveWeight(flying);
           walk?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / walkSpeed, 0.5, 1.8));
           run?.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / runSpeed, 0.6, 1.5));
           mixer.update(deltaSeconds);

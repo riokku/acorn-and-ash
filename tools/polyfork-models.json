@@ -186,6 +186,48 @@
       "id": "mountain-hare-base",
       "title": "Mountain hare",
       "page": "https://polyfork.dev/asset/mountain-hare-base"
+    },
+    {
+      "name": "camp-dutch-oven",
+      "id": "camp-dutch-oven-843dda",
+      "title": "Camp Dutch Oven",
+      "page": "https://polyfork.dev/asset/camp-dutch-oven-843dda"
+    },
+    {
+      "name": "fallen-twig",
+      "id": "fallen-twig-4c64de",
+      "title": "Fallen Twig",
+      "page": "https://polyfork.dev/asset/fallen-twig-4c64de"
+    },
+    {
+      "name": "bone-scatter",
+      "id": "bone-scatter-90313d",
+      "title": "Bone Scatter",
+      "page": "https://polyfork.dev/asset/bone-scatter-90313d"
+    },
+    {
+      "name": "owl",
+      "id": "owl-base",
+      "title": "Owl",
+      "page": "https://polyfork.dev/asset/owl-base"
+    },
+    {
+      "name": "crow",
+      "id": "crow-base",
+      "title": "Crow",
+      "page": "https://polyfork.dev/asset/crow-base"
+    },
+    {
+      "name": "duck",
+      "id": "duck-base",
+      "title": "Duck",
+      "page": "https://polyfork.dev/asset/duck-base"
+    },
+    {
+      "name": "frog",
+      "id": "frog-base",
+      "title": "Frog",
+      "page": "https://polyfork.dev/asset/frog-base"
     }
   ]
 }
