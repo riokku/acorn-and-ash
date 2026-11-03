@@ -113,6 +113,46 @@ it('holds a knife worn in the off hand, on every body, and puts it away when tak
   visuals.setWorn({});
   expect(hand.children).toHaveLength(0);
 });
+it.each([
+  ['body1', 'body1002_0'],
+  ['body2', 'body2_0'],
+])('draws only %s’s fit of every top, and no clothes it has no file for', (wearer, meshName) => {
+  const tops = GEAR_ITEMS.filter((item) => canWearIn(item, 'upperBody'));
+  expect(tops).toEqual(
+    expect.arrayContaining(['travelerTunic', 'linenShirt', 'winterJacket', 'cedarstalkerCoat']),
+  );
+  const root = new THREE.Group();
+  const holder = new THREE.Group();
+  holder.name = wearer;
+  const body = part(meshName);
+  holder.add(body.mesh);
+  root.add(holder, body.bone);
+  const source = new THREE.Group();
+  const fits = new Map<string, THREE.SkinnedMesh[]>();
+  for (const fit of ['body1', 'body2']) {
+    const group = new THREE.Group();
+    group.name = `linen_shirt_${fit}`;
+    const pieces = [part(`${group.name}_0`).mesh, part(`${group.name}_1`).mesh];
+    group.add(...pieces);
+    source.add(group);
+    fits.set(fit, pieces);
+  }
+  vi.mocked(wornGearModelTemplate).mockImplementation((item) =>
+    tops.includes(item) ? { root: source, clips: [] } : undefined,
+  );
+  const visuals = createGearVisuals(root, undefined, 1, { bodyFitted: false });
+  for (const top of tops) {
+    visuals.setWorn({ upperBody: top, lowerBody: 'workTrousers' });
+    const worn = extraMeshes(root, [body.mesh]);
+    expect(worn, top).toHaveLength(2);
+    expect(worn.map((mesh) => mesh.geometry)).toEqual(
+      fits.get(wearer)!.map((piece) => piece.geometry),
+    );
+    expect(worn[0]!.skeleton.bones[0]).toBe(body.bone);
+  }
+  visuals.setWorn({});
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
+});
 it('leaves clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_Body');

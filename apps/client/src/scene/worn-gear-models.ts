@@ -8,8 +8,15 @@ import bearHatUrl from '@assets/gear/barbarian-bear-hat.glb?url';
 import rogueMaskUrl from '@assets/gear/rogue-mask.glb?url';
 import woolCapUrl from '@assets/gear/wool-cap.glb?url';
 import wornWatchHelmUrl from '@assets/gear/last-watch-helm-worn.glb?url';
+import linenShirtUrl from '@assets/gear/linen-shirt.glb?url';
+import travelerTunicUrl from '@assets/gear/traveler-tunic.glb?url';
+import winterJacketUrl from '@assets/gear/winter-jacket.glb?url';
+import cedarstalkerCoatUrl from '@assets/gear/cedarstalker-coat.glb?url';
 
-/** Every helm a player can wear, fitted to the soft bodies' skeleton (decision 0283). */
+/**
+ * Gear fitted to the soft bodies' skeleton: every helm (decision 0283), and every top, which
+ * holds one fit for each body (decision 0284).
+ */
 const URLS: Readonly<Partial<Record<ItemId, string>>> = {
   watchCaptainHelm: wornWatchHelmUrl,
   knightHelmet: knightHelmetUrl,
@@ -17,6 +24,10 @@ const URLS: Readonly<Partial<Record<ItemId, string>>> = {
   bearHat: bearHatUrl,
   rogueMask: rogueMaskUrl,
   woolCap: woolCapUrl,
+  linenShirt: linenShirtUrl,
+  travelerTunic: travelerTunicUrl,
+  winterJacket: winterJacketUrl,
+  cedarstalkerCoat: cedarstalkerCoatUrl,
 };
 const templates = new Map<ItemId, AnimatedModel>();
 /** The Last Watch helm on its own, for the captain's head and for one lying on the ground. */
