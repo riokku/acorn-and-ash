@@ -24,6 +24,18 @@ const SPROUT_GREENS = [new THREE.Color(0.301, 0.402, 0.109), new THREE.Color(0.1
 const SEEDLING_TRAY_SOIL = 0.11;
 let trayParts: { tray: THREE.BufferGeometry; sprouts: THREE.BufferGeometry } | undefined;
 
+/**
+ * Polyfork's free Camp Dutch Oven (decision 0272) hangs over the teepee's
+ * fire ring in place of the placeholder pot, grown a little to its size.
+ */
+const DUTCH_OVEN_SCALE = 1.15;
+const dutchOven = polyforkPiece(
+  'camp-dutch-oven',
+  new THREE.Matrix4().makeScale(DUTCH_OVEN_SCALE, DUTCH_OVEN_SCALE, DUTCH_OVEN_SCALE),
+);
+/** The oven's feet stand just above the flame, on the ring's stones. */
+const DUTCH_OVEN_HEIGHT = 0.16;
+
 function seedlingTrayParts(): typeof trayParts {
   if (trayParts !== undefined) return trayParts;
   const whole = seedlingTray.parts()?.values().next().value;
@@ -53,6 +65,7 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
   const wood = paintedMaterial('wood', { tint: 0xd2b08a, roughness: 0.9 });
   const metal = plainMaterial(0x484c47, { roughness: 0.55 });
   const stone = paintedMaterial('stone', { tint: 0xaab79b, roughness: 1 });
+  const oven = kind === 'teepee' && only === undefined ? dutchOven.parts() : undefined;
   if (kind === 'teepee' && only === undefined) {
     const { x, z } = HOME_FACILITIES.cooking;
     for (let index = 0; index < 8; index++) {
@@ -63,14 +76,16 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
         placed(x + Math.cos(angle) * 0.26, 0.1, z + Math.sin(angle) * 0.26),
       );
     }
-    builder.add(metal, new THREE.CylinderGeometry(0.23, 0.17, 0.22, 12), placed(x, 0.27, z));
-    builder.add(
-      plainMaterial(0xc69b60, { roughness: 0.6 }),
-      new THREE.CircleGeometry(0.21, 12),
-      placed(x, 0.384, z, { x: -Math.PI / 2 }),
-    );
-    const handle = new THREE.TorusGeometry(0.2, 0.015, 5, 12, Math.PI);
-    builder.add(metal, handle, placed(x, 0.38, z));
+    if (oven === undefined) {
+      builder.add(metal, new THREE.CylinderGeometry(0.23, 0.17, 0.22, 12), placed(x, 0.27, z));
+      builder.add(
+        plainMaterial(0xc69b60, { roughness: 0.6 }),
+        new THREE.CircleGeometry(0.21, 12),
+        placed(x, 0.384, z, { x: -Math.PI / 2 }),
+      );
+      const handle = new THREE.TorusGeometry(0.2, 0.015, 5, 12, Math.PI);
+      builder.add(metal, handle, placed(x, 0.38, z));
+    }
     builder.add(cookingFlameMaterial, new THREE.ConeGeometry(0.09, 0.17, 5), placed(x, 0.1, z));
   }
   if (homeHasFacility(kind, 'workbench') && only !== 'garden') {
@@ -167,6 +182,12 @@ export function createHomeFacilities(kind: HomeKind, only?: 'workbench' | 'garde
     }
   }
   model.group.add(garden);
+  if (oven !== undefined) {
+    const pot = polyforkGroup('dutch-oven', oven.values());
+    const { x, z } = HOME_FACILITIES.cooking;
+    pot.group.position.set(x, DUTCH_OVEN_HEIGHT, z);
+    model.group.add(pot.group);
+  }
   return {
     group: model.group,
     garden,
