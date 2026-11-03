@@ -1,18 +1,31 @@
 import { hudValue } from './hud-diagnostics';
-import { expect, test, type Page } from './fixtures';
+import { expect, test, type Locator, type Page } from './fixtures';
 
 import { skipDrawing } from './skip-drawing';
 
 /**
- * The season banner (decision 0110). On the front page and the character screen
- * it is the season's name with a line of advice, up in the corner. In the game it
- * is a ring round the minimap: the whole year in 24 pieces, coloured by season,
- * a badge for the current season, and words only on hover.
+ * The season banner (decision 0110). On the home screens it is a hexagon badge
+ * centred under each screen's main button: the season's name, the day of it and a
+ * line of advice. In the game it is a ring round the minimap: the whole year in 24
+ * pieces, coloured by season, a badge for the current season, and words only on
+ * hover.
  *
  * `?season=` shows the first day of a season, so these can name the season they
  * expect. Which one it is without that switch depends on the date, so the
  * unforced cases only check the banner agrees with the Season line in the game.
  */
+
+/** The badge sits below the button and is centred on it. */
+async function expectCentredUnder(button: Locator, badge: Locator): Promise<void> {
+  const buttonBox = await button.boundingBox();
+  const badgeBox = await badge.boundingBox();
+  expect(buttonBox).not.toBeNull();
+  expect(badgeBox).not.toBeNull();
+  if (buttonBox === null || badgeBox === null) return;
+  expect(badgeBox.y).toBeGreaterThan(buttonBox.y + buttonBox.height);
+  const middle = (box: { x: number; width: number }): number => box.x + box.width / 2;
+  expect(Math.abs(middle(badgeBox) - middle(buttonBox))).toBeLessThan(2);
+}
 
 const newWorld = (): string => `season-banner-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -38,33 +51,41 @@ async function pretendSignedOut(page: Page): Promise<void> {
 }
 
 test.describe('on the home screens', () => {
-  test('hangs over the front page, before and after Play', async ({ page }) => {
+  test('sits under Play on the front page, and under the sign-in panel after it', async ({
+    page,
+  }) => {
     await pretendSignedOut(page);
     await page.goto('/?season=autumn');
     await expect(page.getByTestId('front-door')).toBeVisible();
 
-    const banner = page.getByTestId('season-banner');
-    await expect(banner).toHaveAttribute('data-season', 'autumn');
-    await expect(banner).toContainText('Autumn');
+    const badge = page.getByTestId('season-badge');
+    await expect(badge).toHaveAttribute('data-season', 'autumn');
+    await expect(badge).toContainText('Autumn');
+    await expect(badge).toContainText('Day 1 of 6');
     // No world is chosen here, so no year: the browser clock's "year" is a number like 62201.
-    await expect(banner).not.toContainText('Year');
-    await expect(banner).toContainText('Winter is coming');
+    await expect(badge).not.toContainText('Year');
+    await expect(badge).toContainText('Winter is coming');
+    const play = page.getByRole('button', { name: 'Play' });
+    await expectCentredUnder(play, badge);
 
-    await page.getByRole('button', { name: 'Play' }).click();
+    await play.click();
     await expect(page.getByTestId('front-choices')).toBeVisible();
-    await expect(page.getByTestId('season-banner')).toHaveAttribute('data-season', 'autumn');
+    await expect(badge).toHaveAttribute('data-season', 'autumn');
+    await expectCentredUnder(page.locator('.front-panel'), badge);
   });
 
   test('is on the character screen, making a character and coming back', async ({ page }) => {
     const world = newWorld();
     await page.goto(`/?renderer=webgl2&world=${world}&season=winter`);
     await expect(page.locator('#home-name')).toBeVisible();
-    const banner = page.getByTestId('season-banner');
-    await expect(banner).toHaveAttribute('data-season', 'winter');
-    await expect(banner).toContainText('The lake is frozen');
+    const badge = page.getByTestId('season-badge');
+    await expect(badge).toHaveAttribute('data-season', 'winter');
+    await expect(badge).toContainText('The lake is frozen');
+    const enterWorld = page.getByRole('button', { name: 'Enter World' });
+    await expectCentredUnder(enterWorld, badge);
 
     await page.locator('#home-name').fill('Hazel');
-    await page.getByRole('button', { name: 'Enter World' }).click();
+    await enterWorld.click();
     await expect(page.locator('.hud-panel')).toHaveAttribute('data-world-ready', 'true', {
       timeout: 120_000,
     });
@@ -74,20 +95,8 @@ test.describe('on the home screens', () => {
 
     await page.goto(`/?renderer=webgl2&world=${world}&season=spring`);
     await expect(page.getByTestId('saved-character')).toContainText('Hazel');
-    await expect(page.getByTestId('season-banner')).toHaveAttribute('data-season', 'spring');
-  });
-
-  test('keeps clear of the Play button', async ({ page }) => {
-    await pretendSignedOut(page);
-    await page.goto('/?season=summer');
-    const play = page.getByRole('button', { name: 'Play' });
-    await expect(play).toBeVisible();
-    const banner = await page.getByTestId('season-banner').boundingBox();
-    const button = await play.boundingBox();
-    expect(banner).not.toBeNull();
-    expect(button).not.toBeNull();
-    // The banner is up in the corner and the button is nowhere near it.
-    expect(banner!.y + banner!.height).toBeLessThan(button!.y);
+    await expect(badge).toHaveAttribute('data-season', 'spring');
+    await expectCentredUnder(enterWorld, badge);
   });
 });
 

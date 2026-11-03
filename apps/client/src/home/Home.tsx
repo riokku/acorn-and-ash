@@ -25,7 +25,7 @@ const BODY_PORTRAITS: Record<CharacterId, string> = {
 };
 
 import { DeleteCharacterDialog } from './DeleteCharacterPanel';
-import { HomeSeasonBanner } from './HomeSeasonBanner';
+import { HomeSeasonBadge } from './HomeSeasonBadge';
 import type { PlayerIdentity } from './identity';
 import { PaintingBackdrop } from '../backdrop/PaintingBackdrop';
 import { SettingsMenu, type SettingsAccount } from '../preferences/SettingsMenu';
@@ -145,7 +145,6 @@ export function Home({
           }}
         >
           <PaintingBackdrop />
-          <HomeSeasonBanner />
           <StageView
             look={{
               character: saved.character,
@@ -180,6 +179,7 @@ export function Home({
               <button type="submit" className="home-play" autoFocus>
                 Enter World
               </button>
+              <HomeSeasonBadge />
               <p className="home-footnote stage-hint">{STAGE_HINT}</p>
               <AdminItemsLink allowed={canEditItems} />
               <AccountLine accountName={accountName} onSignOut={onSignOut} />
@@ -212,7 +212,6 @@ export function Home({
   return (
     <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
-      <HomeSeasonBanner className="home-season-banner-making" />
       <StageView
         look={{ character, tint: TINT_COLORS[color].hex, skin }}
         placement={MAKING[wide ? 'wide' : 'narrow']}
@@ -356,6 +355,7 @@ export function Home({
         <button type="submit" className="home-play" disabled={!canPlay}>
           Enter World
         </button>
+        <HomeSeasonBadge />
         <p className="home-footnote">
           Others in the clearing will see this name. You get one character in this world, so choose
           with care: it can&rsquo;t be changed later.
