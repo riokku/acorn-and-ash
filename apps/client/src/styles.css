@@ -3622,9 +3622,6 @@ body {
 .game-settings .settings-button {
   right: 216px;
 }
-.settings-card-keybindings {
-  max-width: 920px;
-}
 .keybindings-groups {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6336,9 +6333,29 @@ body {
   outline-color: var(--journal-copper);
 }
 
+/* One size for every tab, so switching tabs never makes the card jump.
+   The header and tabs stay put; only the tab's own contents scroll. */
 .settings-card {
-  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  height: min(600px, calc(100dvh - 32px));
+  max-height: none;
+  overflow: hidden;
+}
+
+.settings-header,
+.settings-tabs {
+  flex: none;
+}
+
+.settings-panel {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  margin-right: -12px;
+  padding-right: 12px;
+  scrollbar-gutter: stable;
 }
 
 .settings-header {
