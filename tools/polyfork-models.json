@@ -180,6 +180,12 @@
       "id": "wolf-base",
       "title": "Wolf",
       "page": "https://polyfork.dev/asset/wolf-base"
+    },
+    {
+      "name": "mountain-hare",
+      "id": "mountain-hare-base",
+      "title": "Mountain hare",
+      "page": "https://polyfork.dev/asset/mountain-hare-base"
     }
   ]
 }
