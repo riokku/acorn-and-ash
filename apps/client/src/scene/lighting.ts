@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { dayBrightness } from '@acorn/shared';
 
 import type { Rgb } from '../art/season-look';
+import { createSkyline, type Skyline } from './skyline';
 
 const DAY_SKY = new THREE.Color(0x9fc4d8);
 const NIGHT_SKY = new THREE.Color(0x0d1830);
@@ -50,10 +51,14 @@ export interface SeasonalLight {
   readonly sky: Rgb;
   readonly light: Rgb;
   readonly sunStrength: number;
+  /** How snowed-in the far ridges are, 0 to 1. */
+  readonly snow?: number;
 }
 
 export interface DaylightRig {
   readonly sun: THREE.DirectionalLight;
+  /** The far ridges and Ash Peak (decision 0286), where the scene asked for them. */
+  readonly skyline: Skyline | null;
   /** Tint the sky and sunlight for the time of year, from the next `update` on. */
   setSeason(look: SeasonalLight): void;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
@@ -78,7 +83,7 @@ export interface DaylightRig {
 }
 
 /** Soft daylight over the clearing, fog so the tree line fades out, and a day/night cycle over both. */
-export function addDaylight(scene: THREE.Scene): DaylightRig {
+export function addDaylight(scene: THREE.Scene, options: { skyline?: boolean } = {}): DaylightRig {
   const background = new THREE.Color();
   scene.background = background;
   const fog = new THREE.Fog(DAY_SKY.getHex(), FOG_NEAR, FOG_FAR);
@@ -102,6 +107,9 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   scene.add(sun);
   scene.add(sun.target);
 
+  const skyline = options.skyline === true ? createSkyline() : null;
+  if (skyline !== null) scene.add(skyline.group);
+
   let indoors = false;
   let lastProgress = 0.5;
   let lastCloud = 0;
@@ -109,6 +117,8 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   const skyTint = new THREE.Color(1, 1, 1);
   const lightTint = new THREE.Color(1, 1, 1);
   let sunStrength = 1;
+  let seasonSnow = 0;
+  let whiteout = 0;
   let underground = 0;
   let weatherFogNear = FOG_NEAR;
   let weatherFogFar = FOG_FAR;
@@ -143,6 +153,20 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
     }
     if (underground > 0) background.lerp(UNDERGROUND_BLACK, underground);
     fog.color.copy(background);
+    whiteout += ((blizzard ? 1 : 0) - whiteout) * follow;
+    if (skyline !== null) {
+      // A home's room has no sky behind it at all.
+      if (indoors) skyline.group.visible = false;
+      else
+        skyline.update({
+          haze: background,
+          daylight: brightness,
+          cloud,
+          whiteout,
+          underground,
+          snow: seasonSnow,
+        });
+    }
     if (!indoors && underground > 0) {
       fog.near = THREE.MathUtils.lerp(fog.near, UNDERGROUND_FOG_NEAR, underground);
       fog.far = THREE.MathUtils.lerp(fog.far, UNDERGROUND_FOG_FAR, underground);
@@ -168,11 +192,13 @@ export function addDaylight(scene: THREE.Scene): DaylightRig {
   update(0.5);
   return {
     sun,
+    skyline,
     update,
     setSeason(look) {
       skyTint.setRGB(look.sky[0], look.sky[1], look.sky[2]);
       lightTint.setRGB(look.light[0], look.light[1], look.light[2]);
       sunStrength = look.sunStrength;
+      seasonSnow = look.snow ?? 0;
     },
     setUnderground(amount) {
       // Takes effect with the next `update`, which runs every frame.

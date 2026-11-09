@@ -27,6 +27,7 @@ import {
   createWildernessTerrain,
 } from '@acorn/shared';
 import { buildWildernessScene } from '../scene/wilderness';
+import { SKYLINE_VIEW_DISTANCE } from '../art/skyline-shape';
 import { createDeadwood } from '../scene/deadwood';
 import { buildClearingScene } from '../scene/clearing';
 import { createGrass } from '../scene/grass';
@@ -42,6 +43,8 @@ export async function showForestTrails(
   scene: THREE.Scene,
   lights: FireLights,
   params: URLSearchParams,
+  /** Something still loading that the picture should be drawn again for, once it arrives. */
+  arriving?: Promise<void>,
 ): Promise<void> {
   const stronghold = params.get('view') === 'stronghold' || params.get('view') === 'muster';
   if (stronghold) await Promise.all([preloadRaiderModels(), preloadCharacterAnimations()]);
@@ -140,7 +143,12 @@ export async function showForestTrails(
   const lx = lead?.markerX ?? 0,
     lz = lead?.markerZ ?? 0,
     ly = terrain.heightAt(lx, lz);
-  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 700);
+  const camera = new THREE.PerspectiveCamera(
+    50,
+    innerWidth / innerHeight,
+    0.1,
+    arriving === undefined ? 700 : SKYLINE_VIEW_DISTANCE,
+  );
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.minDistance = params.get('view') === 'clue' ? 1 : 4;
   controls.maxDistance = 180;
@@ -197,6 +205,13 @@ export async function showForestTrails(
       eye: [70, terrain.heightAt(70, -51) + 1.3, -51],
     },
     mountain: { label: 'Mountain switchbacks', target: [-42, 30, 216], eye: [18, 62, 271] },
+    peak: {
+      label: 'Ash Peak from the lake',
+      target: [100, terrain.heightAt(56, -56) + 14, -100],
+      eye: [56, terrain.heightAt(56, -56) + 1.8, -56],
+    },
+    clearing: { label: 'Skyline from home', target: [8, 6, -8], eye: [-6, 3.2, 6] },
+    summit: { label: 'Skyline from the summit', target: [-100, 62, 100], eye: [-152, 70, 152] },
   } as const;
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Forest viewpoints');
@@ -263,6 +278,11 @@ export async function showForestTrails(
     else document.body.dataset.galleryReady = 'true';
   };
   controls.addEventListener('change', requestDraw);
+  void arriving?.then(() => {
+    document.body.dataset.galleryReady = 'false';
+    frames = 0;
+    requestDraw();
+  });
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;

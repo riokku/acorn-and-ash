@@ -662,8 +662,9 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
   ]);
 
   const scene = new THREE.Scene();
-  const daylight = addDaylight(scene);
-  daylight.update(Number.isFinite(time) ? time : 0.42);
+  const daylight = addDaylight(scene, { skyline: focus === 'skyline' });
+  // `?cloud=1` closes the weather in, for seeing what rain does to the far ridges.
+  daylight.update(Number.isFinite(time) ? time : 0.42, Number(params.get('cloud') ?? 0) || 0);
   // `?season=autumn` (or spring, summer, winter) shows the trees dressed for that season.
   const season = parseSeason(params.get('season'));
   if (season !== undefined)
@@ -733,6 +734,13 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     if (!params.has('view')) params.set('view', 'mountain');
     const { showForestTrails } = await import('./forest-trails');
     await showForestTrails(renderer, scene, fireLights, params);
+    return;
+  }
+  if (focus === 'skyline') {
+    // The far ridges and Ash Peak (decision 0286), seen from the real map.
+    if (!params.has('view')) params.set('view', 'peak');
+    const { showForestTrails } = await import('./forest-trails');
+    await showForestTrails(renderer, scene, fireLights, params, daylight.skyline?.ready);
     return;
   }
   if (focus === 'forest-trails' || focus === 'high-plains' || focus === 'crownbreaker') {

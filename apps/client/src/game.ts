@@ -1328,7 +1328,7 @@ export class Game {
     setup.renderer.shadowMap.enabled = true;
     setup.renderer.shadowMap.type = THREE.PCFShadowMap;
 
-    this.daylight = addDaylight(this.scene);
+    this.daylight = addDaylight(this.scene, { skyline: true });
     this.fireLights = new FireLights(this.scene);
     this.scene.add(this.outdoors);
     this.scene.add(this.bursts.group);

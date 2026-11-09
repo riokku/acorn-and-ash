@@ -599,6 +599,17 @@ take them back out. Carry wood indoors and add it to the fire yourself. Storage
 survives reconnects and cabin upgrades. See
 [decision 0188](docs/decisions/0188-fire-fuel-and-cabin-firewood.md).
 
+### The far skyline
+
+Beyond the edge of the world stand three rings of blue forested ridges and Ash
+Peak, a great snow-capped volcano to the north-east, straight out across the
+lake. They are scenery: nobody can walk there. The high snow turns pink around
+sunset and sunrise, rain hides the furthest ridges first (the mountain is only
+"out" on a clear day), and in winter the snow line comes down. Inspect it at
+`/?gallery=skyline` (add `&view=summit` or `&view=clearing`, `&time=0.79` for
+sunset, `&season=winter`, or `&cloud=0.6` for rain). See
+[decision 0286](docs/decisions/0286-far-skyline-and-ash-peak.md).
+
 ### The seasons
 
 The year turns round spring, summer, autumn and winter, six game days (two

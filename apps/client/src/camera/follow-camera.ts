@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { CameraDistance } from './camera-distance';
+import { SKYLINE_VIEW_DISTANCE } from '../art/skyline-shape';
 
 import { PLAYER_HEIGHT, clamp, type Vec3 } from '@acorn/shared';
 
@@ -75,8 +76,9 @@ export class FollowCamera {
   private outdoorLook: CameraLook | null = null;
 
   constructor(aspect: number) {
-    // Include the full terrain enclosure so far clipping cannot expose sky below a dig.
-    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, 1500);
+    // Include the full terrain enclosure so far clipping cannot expose sky below a dig,
+    // and the far ridges and Ash Peak beyond the edge of the world (decision 0286).
+    this.camera = new THREE.PerspectiveCamera(58, aspect, 0.1, SKYLINE_VIEW_DISTANCE);
     this.raycaster.far = RESTING_DISTANCE;
     // three-mesh-bvh only needs the first hit, which is much faster.
     this.raycaster.firstHitOnly = true;
