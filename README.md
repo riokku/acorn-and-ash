@@ -610,6 +610,15 @@ sunset and sunrise, rain hides the furthest ridges first (the mountain is only
 sunset, `&season=winter`, or `&cloud=0.6` for rain). See
 [decision 0286](docs/decisions/0286-far-skyline-and-ash-peak.md).
 
+### Valley mist
+
+Mist lies on the lake, the river and the home pond, and pools in the hollows of
+the forest floor. It is thickest at dawn, burns off by mid-morning, returns a
+little at dusk and overnight, and hangs about in rain. Autumn is the mistiest
+season. It is scenery only and changes no rule. Inspect it at
+`/?gallery=skyline&view=lakeside&time=0.27` (add `&mist=1` for the thickest at
+any hour). See [decision 0287](docs/decisions/0287-valley-mist.md).
+
 ### The seasons
 
 The year turns round spring, summer, autumn and winter, six game days (two
