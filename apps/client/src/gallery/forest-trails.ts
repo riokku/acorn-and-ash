@@ -27,6 +27,9 @@ import {
   createWildernessTerrain,
 } from '@acorn/shared';
 import { buildWildernessScene } from '../scene/wilderness';
+import { createValleyMist } from '../scene/valley-mist';
+import { mistStrength } from '../art/valley-mist';
+import { dayBrightness, parseSeason } from '@acorn/shared';
 import { SKYLINE_VIEW_DISTANCE } from '../art/skyline-shape';
 import { createDeadwood } from '../scene/deadwood';
 import { buildClearingScene } from '../scene/clearing';
@@ -138,6 +141,22 @@ export async function showForestTrails(
     : [];
   const survey = createSurveyScenery(terrain);
   scene.add(landmarks.group, survey.group);
+  // Mist for the hour the gallery is set to (`&time=0.27` is dawn), or `&mist=1` for the thickest.
+  const mist = createValleyMist(DEFAULT_WORLD_SEED, terrain.heightAt, clearing.water);
+  scene.add(mist.group);
+  const galleryTime = Number(params.get('time') ?? '0.42');
+  const mistNow = params.has('mist')
+    ? Number(params.get('mist')) || 1
+    : mistStrength({
+        dayProgress: galleryTime,
+        kind: 'clear',
+        precipitation: Number(params.get('cloud') ?? 0) || 0,
+        season: {
+          from: parseSeason(params.get('season')) ?? 'summer',
+          to: 'summer',
+          amount: 0,
+        },
+      });
   document.body.dataset.discoveryLeads = String(leads.length);
   const lead = leads[0];
   const lx = lead?.markerX ?? 0,
@@ -210,6 +229,11 @@ export async function showForestTrails(
       target: [100, terrain.heightAt(56, -56) + 14, -100],
       eye: [56, terrain.heightAt(56, -56) + 1.8, -56],
     },
+    lakeside: {
+      label: 'Across the lake',
+      target: [100, LAKE.level + 4, -88],
+      eye: [60, LAKE.level + 1.7, -88],
+    },
     clearing: { label: 'Skyline from home', target: [8, 6, -8], eye: [-6, 3.2, 6] },
     summit: { label: 'Skyline from the summit', target: [-100, 62, 100], eye: [-152, 70, 152] },
   } as const;
@@ -273,6 +297,14 @@ export async function showForestTrails(
     forest.update(0, camera.position);
     grass.update(0, controls.target, true);
     lights.update(camera.position);
+    if (scene.fog !== null)
+      mist.update(1000, camera, {
+        strength: mistNow,
+        haze: scene.fog.color,
+        daylight: dayBrightness(galleryTime),
+        hidden: false,
+        reducedMotion: true,
+      });
     renderer.render(scene, camera);
     if (++frames === 1) requestDraw();
     else document.body.dataset.galleryReady = 'true';
@@ -301,6 +333,7 @@ export async function showForestTrails(
       bursts.dispose();
       landmarks.dispose();
       survey.dispose();
+      mist.dispose();
       for (const model of wildlife) model.dispose();
       grass.dispose();
       forest.dispose();

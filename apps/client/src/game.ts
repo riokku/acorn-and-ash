@@ -108,6 +108,8 @@ import {
   streamSurfaceAt,
 } from '@acorn/shared';
 import { createForestWeather } from './scene/forest-weather';
+import { createValleyMist, type ValleyMist } from './scene/valley-mist';
+import { mistStrength } from './art/valley-mist';
 import { NO_MEAL, mealCooldown, type MealState, DODGE, TICK_HZ } from '@acorn/shared';
 import { createAnimalTracks } from './scene/animal-tracks';
 import { combineHomeSupplies, type HomeSupplies, woodlandTrackHint } from '@acorn/shared';
@@ -1062,6 +1064,7 @@ export class Game {
   private wildfireState: WildfireView = { fires: [], lightning: null, now: 0 };
   private weatherSeed = 0;
   private weatherArt: ReturnType<typeof createForestWeather> | null = null;
+  private valleyMist: ValleyMist | null = null;
   private sceneryWildlife: ReturnType<typeof createSceneryWildlife> | null = null;
   private weatherCloud = 0;
   private seasonFallArt: ReturnType<typeof createSeasonFall> | null = null;
@@ -1995,6 +1998,7 @@ export class Game {
     this.waterWake.clear();
     for (const ripple of waterRippleUniforms) ripple.value.set(0, 0, 10, 0);
     this.weatherArt?.dispose();
+    this.valleyMist?.dispose();
     this.sceneryWildlife?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
@@ -3247,6 +3251,9 @@ export class Game {
       this.weatherArt?.dispose();
       this.weatherArt = createForestWeather(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.weatherArt.group);
+      this.valleyMist?.dispose();
+      this.valleyMist = createValleyMist(seed, (x, z) => terrain.heightAt(x, z), clearing.water);
+      this.outdoors.add(this.valleyMist.group);
       this.sceneryWildlife?.dispose();
       this.sceneryWildlife = createSceneryWildlife(seed, clearing.water, (x, z) =>
         terrain.heightAt(x, z),
@@ -4120,6 +4127,19 @@ export class Game {
       this.reducedMotion.matches,
       weather.kind === 'blizzard' ? 0 : rainShareFor(season),
     );
+    if (this.valleyMist !== null && this.camera !== null && this.scene.fog !== null)
+      this.valleyMist.update(deltaSeconds, this.camera.camera, {
+        strength: mistStrength({
+          dayProgress: dayProgress(weatherNow),
+          kind: weather.kind,
+          precipitation: weather.precipitation,
+          season,
+        }),
+        haze: this.scene.fog.color,
+        daylight: dayBrightness(dayProgress(weatherNow)),
+        hidden: this.space !== OUTDOORS || this.undergroundDark > 0.5,
+        reducedMotion: this.reducedMotion.matches,
+      });
     this.sceneryWildlife?.update(
       deltaSeconds,
       watcher,
