@@ -135,6 +135,29 @@ export function playConfirmedStrike(heavy: boolean, defeated: boolean): void {
   );
 }
 
+/**
+ * Two soft rising notes for a place's name coming up (decision 0293): a low,
+ * falling pair for somewhere dangerous, and one long airy note for a far-off sight.
+ */
+export function playPlaceChime(kind: 'region' | 'landmark' | 'danger' | 'home' | 'sight'): void {
+  if (effectsVolume() <= 0) return;
+  const context = soundContext();
+  if (context === null) return;
+  const at = context.currentTime;
+  if (kind === 'danger') {
+    tone(context, at, 196, 185, 0.9, 0.05);
+    tone(context, at + 0.22, 147, 139, 1.3, 0.05);
+  } else if (kind === 'sight') {
+    tone(context, at, 784, 792, 2.2, 0.03);
+    tone(context, at + 0.05, 1175, 1180, 1.8, 0.014);
+  } else {
+    const lift = kind === 'region' ? 1 : 1.26;
+    tone(context, at, 392 * lift, 392 * lift, 1.1, 0.045);
+    tone(context, at + 0.18, 587 * lift, 587 * lift, 1.5, 0.04);
+    if (kind === 'region') tone(context, at + 0.36, 784, 784, 1.9, 0.03);
+  }
+}
+
 /** A restrained bronze bell with a long tail for the Last Bell victory. */
 export function playLastBell(): void {
   if (effectsVolume() <= 0) return;

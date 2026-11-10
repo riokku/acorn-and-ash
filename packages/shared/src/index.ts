@@ -93,6 +93,7 @@ export * from './data/homestead';
 export * from './world/encounters';
 
 export * from './data/discoveries';
+export * from './data/places';
 
 export * from './sim/build-areas';
 
