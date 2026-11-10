@@ -663,6 +663,21 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
 
   const scene = new THREE.Scene();
   const daylight = addDaylight(scene, { skyline: focus === 'skyline' });
+  // `?moon=0.25` sets the moon's phase (0 new, 0.5 full), `?aurora=1` lights the
+  // northern lights and `?meteor=0.6` hangs a shooting star part-way down its fall.
+  const meteorAlong = Number(params.get('meteor') ?? Number.NaN);
+  daylight.setTonight({
+    moonPhase: Number(params.get('moon') ?? 0.5) || 0,
+    aurora: Number(params.get('aurora') ?? 0) || 0,
+    meteor: Number.isFinite(meteorAlong)
+      ? {
+          from: { x: 0.33, y: 0.72, z: -0.61 },
+          to: { x: 0.52, y: 0.5, z: -0.69 },
+          progress: meteorAlong,
+          brightness: 1,
+        }
+      : null,
+  });
   // `?cloud=1` closes the weather in, for seeing what rain does to the far ridges.
   daylight.update(Number.isFinite(time) ? time : 0.42, Number(params.get('cloud') ?? 0) || 0);
   // `?season=autumn` (or spring, summer, winter) shows the trees dressed for that season.
