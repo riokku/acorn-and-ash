@@ -105,6 +105,7 @@ export * from './sim/home-supplies';
 export * from './sim/meals';
 
 export * from './sim/weather';
+export * from './sim/world-events';
 
 export * from './sim/decorations';
 

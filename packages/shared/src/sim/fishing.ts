@@ -24,7 +24,7 @@ import {
   FISHING_LEASH,
   TICK_HZ,
 } from '../constants';
-import { POND_FISH, fishForRoll } from '../data/fish';
+import { POND_FISH, fishForRoll, type FishRow } from '../data/fish';
 import type { ItemId } from '../data/items';
 import type { Vec3 } from '../math/vec3';
 import { createRng, hashSeed } from '../rng';
@@ -55,6 +55,8 @@ export interface Cast {
    * null until one arrives. The window to click is counted from here.
    */
   sawBiteSeq: number | null;
+  /** The fish this cast can bring up, where that is not the usual table (the salmon run). */
+  readonly fish?: readonly FishRow[];
 }
 
 /** How a cast finished. */
@@ -105,6 +107,7 @@ export function startCast(
   from: Readonly<Vec3>,
   float: FloatSpot,
   delayMultiplier = 1,
+  fish?: readonly FishRow[],
 ): Cast {
   const biteTick = tick + Math.round(biteDelayTicks(worldSeed, castNumber, tick) * delayMultiplier);
   return {
@@ -116,6 +119,7 @@ export function startCast(
     giveUpTick: biteTick + BITE_GIVE_UP_TICKS,
     biting: false,
     sawBiteSeq: null,
+    ...(fish === undefined ? {} : { fish }),
   };
 }
 
@@ -125,9 +129,14 @@ export function startCast(
  * Decided at the moment it is hooked, from the tick of the click, so it cannot
  * be known in advance and fishing again cannot be timed to land a rare one.
  */
-export function fishOnTheLine(worldSeed: number, castNumber: number, tick: number): ItemId {
+export function fishOnTheLine(
+  worldSeed: number,
+  castNumber: number,
+  tick: number,
+  fish: readonly FishRow[] = POND_FISH,
+): ItemId {
   const rng = createRng(hashSeed('catch', worldSeed, castNumber, tick));
-  return fishForRoll(POND_FISH, rng.nextFloat());
+  return fishForRoll(fish, rng.nextFloat());
 }
 
 /**
@@ -172,7 +181,10 @@ export function readCastInput(
   if (input.clicked) {
     if (since === null) return { outcome: 'tooSoon' };
     if (since <= BITE_WINDOW_INPUTS) {
-      return { outcome: 'caught', item: fishOnTheLine(worldSeed, cast.castNumber, tick) };
+      return {
+        outcome: 'caught',
+        item: fishOnTheLine(worldSeed, cast.castNumber, tick, cast.fish),
+      };
     }
     return { outcome: 'tooLate' };
   }
