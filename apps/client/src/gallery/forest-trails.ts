@@ -171,7 +171,8 @@ export async function showForestTrails(
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.minDistance = params.get('view') === 'clue' ? 1 : 4;
   controls.maxDistance = 180;
-  controls.maxPolarAngle = Math.PI * 0.48;
+  // The skyline views may tilt up at the sky; the rest stay above the ground.
+  controls.maxPolarAngle = Math.PI * (arriving === undefined ? 0.48 : 0.85);
   const views = {
     stronghold: {
       label: 'The King’s Road',
@@ -235,6 +236,16 @@ export async function showForestTrails(
       eye: [60, LAKE.level + 1.7, -88],
     },
     clearing: { label: 'Skyline from home', target: [8, 6, -8], eye: [-6, 3.2, 6] },
+    stars: {
+      label: 'Stars over Ash Peak',
+      target: [80, terrain.heightAt(56, -56) + 26, -100],
+      eye: [56, terrain.heightAt(56, -56) + 1.8, -56],
+    },
+    moon: {
+      label: 'Moon over the lake',
+      target: [62, LAKE.level + 44, -40],
+      eye: [60, LAKE.level + 1.7, -88],
+    },
     summit: { label: 'Skyline from the summit', target: [-100, 62, 100], eye: [-152, 70, 152] },
   } as const;
   const nav = document.createElement('nav');

@@ -161,6 +161,7 @@ export function addDaylight(scene: THREE.Scene, options: { skyline?: boolean } =
         skyline.update({
           haze: background,
           daylight: brightness,
+          dayProgress: progress,
           cloud,
           whiteout,
           underground,
