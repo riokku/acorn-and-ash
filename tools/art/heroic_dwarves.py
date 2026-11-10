@@ -19,8 +19,9 @@
 #
 # Three materials: cloth (clothes, eyes, mouth), skin (marked 'skin', which the game shades for the
 # player's skin tone) and hair (marked 'hair': hair, brows and beards, so a hair colour can be
-# chosen later). The body is one object, `dwarf1` or `dwarf2`. Hair is `<id>_Hair` and each beard
-# `<id>_Beard_<style>`, so the game can show one beard and, later, hide hair under a helm.
+# chosen). The body is one object, `dwarf1` or `dwarf2`. Hair is `<id>_Hair`, with the knot or bun
+# on top of it apart as `<id>_HairTop` so the game can leave that off under a hat (decision 0291),
+# and each beard is `<id>_Beard_<style>`, so the game can show one.
 import math
 import os
 
@@ -650,13 +651,16 @@ def man_hair(B, rig, collection, materials):
         # Short at the nape, behind the ears, back from the temples, and over the whole crown.
         return 200 if z < 1.02 else 128 if z < 1.11 else 104 if z < 1.15 else 76 if z < 1.2 else 40 if z < 1.24 else 0
     S.add(loft(hairline_rings(B, line)), col, HAIR, ['head'], vary=.1)
-    # Swept back into a knot, bound in gold, with a short tail.
+    hair = S.finish(collection, materials, rig)
+    # Swept back into a knot, bound in gold, with a short tail. It is a piece of its own
+    # (`_HairTop`), which the game leaves off under a hat.
+    S = Sculpt(B['id'] + '_HairTop')
     S.add(lump((0, .105, 1.262), .058, (1, 1.05, .9), detail=1, seed=3, rough=.2), col, HAIR, ['head'], vary=.1)
     S.add(band((0, .112, 1.228), .034, .009), GOLD, CLOTH, ['head'], vary=.05)
     S.add(hull([(s * .03, .125, 1.22) for s in (1, -1)] + [(s * .04, .165, 1.17) for s in (1, -1)]
                + [(0, .11, 1.2), (0, .18, 1.2), (0, .155, 1.09), (.02, .14, 1.12), (-.02, .14, 1.12)]),
           col, HAIR, ['head'], vary=.1)
-    return S.finish(collection, materials, rig)
+    return hair, S.finish(collection, materials, rig)
 
 
 def woman_hair(B, rig, collection, materials, chest_tree):
@@ -671,8 +675,10 @@ def woman_hair(B, rig, collection, materials, chest_tree):
     S.add(hull([(.004, -.118, 1.262), (.004, -.135, 1.215), (.06, -.132, 1.19), (.112, -.092, 1.15),
                 (.142, -.03, 1.13), (.14, -.02, 1.22), (.09, -.09, 1.245), (.03, -.07, 1.285), (.1, -.02, 1.27)]),
           col, HAIR, ['head'], both=True, vary=.1)
-    # A bun at the crown.
-    S.add(lump((0, .07, 1.3), .07, (1.1, 1, .8), detail=1, seed=5, rough=.18), col, HAIR, ['head'], vary=.1)
+    # A bun at the crown: a piece of its own (`_HairTop`), which the game leaves off under a hat.
+    T = Sculpt(B['id'] + '_HairTop')
+    T.add(lump((0, .07, 1.3), .07, (1.1, 1, .8), detail=1, seed=5, rough=.18), col, HAIR, ['head'], vary=.1)
+    top = T.finish(collection, materials, rig)
 
     # Two thick braids from behind the ears, lying forward over the shoulders.
     def follows(co):
@@ -692,7 +698,7 @@ def woman_hair(B, rig, collection, materials, chest_tree):
     S.add(band((end[0], end[1], end[2] - .04), .034), GOLD, CLOTH, follows, both=True, vary=.05)
     S.add(hull([(end[0] + dx, end[1] + dy, end[2] - .05) for dx in (-.026, .026) for dy in (-.026, .026)]
                + [(end[0], end[1] - .004, end[2] - .135)]), col, HAIR, follows, both=True, vary=.12)
-    return S.finish(collection, materials, rig)
+    return S.finish(collection, materials, rig), top
 
 
 def moustache(B, face, droop=.0, size=1.0):
@@ -835,11 +841,11 @@ def build(B, x=0.0):
     face = head_pieces(S, B)
     body = S.finish(col, mats, rig)
     woman = B['id'] == 'dwarf2'
-    hair = woman_hair(B, rig, col, mats, chest) if woman else man_hair(B, rig, col, mats)
+    hair, hair_top = woman_hair(B, rig, col, mats, chest) if woman else man_hair(B, rig, col, mats)
     beard = {} if woman else beards(B, rig, col, mats, face, chest)
     rig.location.x = x
-    tris = {o.name: sum(len(p.vertices) - 2 for p in o.data.polygons) for o in [body, hair, *beard.values()]}
-    return dict(B=B, rig=rig, body=body, hair=hair, beards=beard, tris=tris)
+    tris = {o.name: sum(len(p.vertices) - 2 for p in o.data.polygons) for o in [body, hair, hair_top, *beard.values()]}
+    return dict(B=B, rig=rig, body=body, hair=hair, hair_top=hair_top, beards=beard, tris=tris)
 
 
 def show_beard(made, style):
@@ -918,7 +924,7 @@ def export_body(made, tmp_dir):
     rest(rig)
     rig.location.x = 0
     rig['softDwarf'] = True
-    meshes = [made['body'], made['hair'], *made['beards'].values()]
+    meshes = [made['body'], made['hair'], made['hair_top'], *made['beards'].values()]
     for scene in bpy.data.scenes:
         for layer in scene.view_layers:
             for o in layer.objects:

@@ -9,9 +9,8 @@ test('shows basic clothing on every body with a rigged cap', async ({ page }, te
   for (const body of Object.keys(shared.CHARACTER_KINDS)) {
     await page.goto(`/?gallery=basic-clothing&body=${body}&renderer=webgl2&still`);
     await expect(page.locator('body')).toHaveAttribute('data-gallery-ready', 'true');
-    // The wool cap was fitted to the soft bodies (decision 0283) and waits to be refitted to
-    // the faceted dwarves (decision 0288); until then no cap is drawn. Refitted, this is '2'.
-    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '0');
+    // The wool cap is fitted to both dwarves (decision 0291): its crown and cuff.
+    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '2');
     await expect(page.locator('body')).toContainText('Protection 5% · Warmth 30');
     await page.screenshot({ path: testInfo.outputPath(`basic-${body}.png`) });
   }
