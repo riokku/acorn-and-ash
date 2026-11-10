@@ -329,9 +329,9 @@ progress, and clothes have no picture in the item editor until they are refitted
 to the two bodies. See [decision 0275](docs/decisions/0275-two-bodies.md).
 Both bodies have since been remade again as chunky, faceted low-poly dwarves,
 hand-modelled in Blender: a red-bearded man and a woman with long blonde braids.
-They stand on the same skeleton, so every move still fits. Hats are refitted to
-them ([decision 0291](docs/decisions/0291-hats-fitted-to-the-dwarves.md)); tops
-are not drawn on them until they are refitted too. See
+They stand on the same skeleton, so every move still fits. Hats and tops are refitted to
+them (decisions [0291](docs/decisions/0291-hats-fitted-to-the-dwarves.md) and
+[0292](docs/decisions/0292-tops-fitted-to-the-dwarves.md)). See
 [decision 0288](docs/decisions/0288-heroic-faceted-dwarves.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
@@ -1776,9 +1776,8 @@ Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
 `&swing` keeps the character moving, to check that gear bends with the body.
 Every hat is fitted to both dwarves by `tools/art/dwarf_hats.py`
 (decision 0291); the knot or bun on top of their hair comes off under one.
-Every top was fitted to the soft bodies, one fit per body, by
-`tools/art/soft_tops.py` (decision 0284), and is not drawn on the faceted
-dwarves that replaced them until it is refitted (decision 0288).
+Every top is fitted to both dwarves too, one fit per body, by
+`tools/art/dwarf_tops.py` (decision 0292).
 
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include

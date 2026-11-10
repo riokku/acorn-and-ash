@@ -26,14 +26,17 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
 /** The baked-in head pieces to hide, by the end of their names. */
 const BAKED_HEAD_PIECE = /_(Helmet|HelmetVisor|Hat|BearHat|Mask)$/;
 
-/** The soft bodies' own meshes are named `body1` and `body2` (split by colour: `body1_1`). */
-const SOFT_BODY = /^(body\d)(?:_\d+)?$/;
+/**
+ * The players' own body meshes are named `dwarf1` and `dwarf2` (split by colour: `dwarf1_1`).
+ * The soft bodies before them were `body1` and `body2`.
+ */
+const SOFT_BODY = /^((?:body|dwarf)\d)(?:_\d+)?$/;
 /** The knot or bun on top of a dwarf's hair (split by colour: `dwarf1_HairTop_1`). */
 const HAIR_TOP = /_HairTop(?:_\d+)?$/;
 /** Helm-slot pieces that leave the top of the head bare. */
 const LEAVES_HAIR_TOP: ReadonlySet<ItemId> = new Set<ItemId>(['rogueMask']);
-/** A piece fitted to one of them ends in its name: `linen_shirt_body1`. */
-const FIT_FOR = /_(body\d)$/;
+/** A piece fitted to one of them ends in its name: `linen_shirt_dwarf1`. */
+const FIT_FOR = /_((?:body|dwarf)\d)$/;
 
 /** Along the arm (in the model's own units) from here out is the hand. */
 const HAND_STARTS_AT = 0.78;

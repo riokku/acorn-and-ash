@@ -116,6 +116,8 @@ it('holds a knife worn in the off hand, on every body, and puts it away when tak
 it.each([
   ['body1', 'body1002_0'],
   ['body2', 'body2_0'],
+  ['dwarf1', 'dwarf1_1'],
+  ['dwarf2', 'dwarf2_2'],
 ])('draws only %s’s fit of every top, and no clothes it has no file for', (wearer, meshName) => {
   const tops = GEAR_ITEMS.filter((item) => canWearIn(item, 'upperBody'));
   expect(tops).toEqual(
@@ -129,7 +131,7 @@ it.each([
   root.add(holder, body.bone);
   const source = new THREE.Group();
   const fits = new Map<string, THREE.SkinnedMesh[]>();
-  for (const fit of ['body1', 'body2']) {
+  for (const fit of ['body1', 'body2', 'dwarf1', 'dwarf2']) {
     const group = new THREE.Group();
     group.name = `linen_shirt_${fit}`;
     const pieces = [part(`${group.name}_0`).mesh, part(`${group.name}_1`).mesh];
