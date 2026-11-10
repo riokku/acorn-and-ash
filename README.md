@@ -329,8 +329,9 @@ progress, and clothes have no picture in the item editor until they are refitted
 to the two bodies. See [decision 0275](docs/decisions/0275-two-bodies.md).
 Both bodies have since been remade again as chunky, faceted low-poly dwarves,
 hand-modelled in Blender: a red-bearded man and a woman with long blonde braids.
-They stand on the same skeleton, so every move still fits. Hats and tops are
-not drawn on them until each family is refitted. See
+They stand on the same skeleton, so every move still fits. Hats and tops are refitted to
+them (decisions [0291](docs/decisions/0291-hats-fitted-to-the-dwarves.md) and
+[0292](docs/decisions/0292-tops-fitted-to-the-dwarves.md)). See
 [decision 0288](docs/decisions/0288-heroic-faceted-dwarves.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
@@ -623,12 +624,19 @@ sunset, `&season=winter`, or `&cloud=0.6` for rain). See
 
 ### The night sky
 
-After dark the stars come out, with a Milky Way band and a full moon that rises
+After dark the stars come out, with a Milky Way band and a moon that rises
 in the east at dusk and sets in the west at dawn. Cloud, blizzards and tunnels
 hide them. The stars are placed from the same seed as the far skyline. See them at
 `/?gallery=skyline&view=stars&time=0` or `&view=moon` (add `&cloud=1` for an
 overcast night). See
 [decision 0290](docs/decisions/0290-night-sky.md).
+
+The moon goes from new to full and back over six nights. Shooting stars fall
+every half minute or so, far more often on a meteor-shower night, and the
+northern lights show on most clear winter nights. Everyone sees the same ones.
+Try `/?gallery=skyline&view=moon&time=0&moon=0.17` and
+`/?gallery=skyline&view=stars&time=0&season=winter&aurora=1&meteor=0.6`. See
+[decision 0291](docs/decisions/0291-moon-phases-shooting-stars-northern-lights.md).
 
 ### Place names
 
@@ -1785,10 +1793,10 @@ Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
 `&view=three-quarter` to turn the character, and `&before` for plain clothes.
 `&close` looks at the chest and shoulders up close, and `&walk`, `&run` or
 `&swing` keeps the character moving, to check that gear bends with the body.
-Every hat was fitted to both soft bodies by `tools/art/soft_hats.py`
-(decision 0283), and every top, with one fit per body, by
-`tools/art/soft_tops.py` (decision 0284). Neither is drawn on the faceted
-dwarves that replaced those bodies until it is refitted (decision 0288).
+Every hat is fitted to both dwarves by `tools/art/dwarf_hats.py`
+(decision 0291); the knot or bun on top of their hair comes off under one.
+Every top is fitted to both dwarves too, one fit per body, by
+`tools/art/dwarf_tops.py` (decision 0292).
 
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include

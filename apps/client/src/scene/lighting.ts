@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 import { dayBrightness } from '@acorn/shared';
 
+import { PLAIN_NIGHT, type Tonight } from '../art/night-sky';
 import type { Rgb } from '../art/season-look';
 import { createSkyline, type Skyline } from './skyline';
 
@@ -61,6 +62,8 @@ export interface DaylightRig {
   readonly skyline: Skyline | null;
   /** Tint the sky and sunlight for the time of year, from the next `update` on. */
   setSeason(look: SeasonalLight): void;
+  /** The moon's phase, northern lights and shooting stars, from the next `update` on. */
+  setTonight(tonight: Tonight): void;
   /** Recolour the sky and lights for a point in the day: 0 and 1 are midnight, 0.5 is noon. */
   update(
     progress: number,
@@ -118,6 +121,7 @@ export function addDaylight(scene: THREE.Scene, options: { skyline?: boolean } =
   const lightTint = new THREE.Color(1, 1, 1);
   let sunStrength = 1;
   let seasonSnow = 0;
+  let tonight: Tonight = PLAIN_NIGHT;
   let whiteout = 0;
   let underground = 0;
   let weatherFogNear = FOG_NEAR;
@@ -162,6 +166,7 @@ export function addDaylight(scene: THREE.Scene, options: { skyline?: boolean } =
           haze: background,
           daylight: brightness,
           dayProgress: progress,
+          tonight,
           cloud,
           whiteout,
           underground,
@@ -200,6 +205,9 @@ export function addDaylight(scene: THREE.Scene, options: { skyline?: boolean } =
       lightTint.setRGB(look.light[0], look.light[1], look.light[2]);
       sunStrength = look.sunStrength;
       seasonSnow = look.snow ?? 0;
+    },
+    setTonight(next) {
+      tonight = next;
     },
     setUnderground(amount) {
       // Takes effect with the next `update`, which runs every frame.

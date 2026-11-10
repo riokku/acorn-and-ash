@@ -4,6 +4,7 @@ import { createRumorCache } from './scene/rumor-cache';
 import { HandSelection, handSelectionText } from './hud/hand-selection';
 import type { HomesteadAppearance } from '@acorn/shared';
 import { advanceForestWind } from './art/forest-wind';
+import { tonight } from './art/night-sky';
 import { FreshAnimalTracks } from './scene/fresh-animal-tracks';
 import { forageHabitatHint } from '@acorn/shared';
 import { isPickedPlant } from './scene/harvesting-motion';
@@ -4152,6 +4153,7 @@ export class Game {
     this.seasons.apply(season, this.daylight, weather.kind === 'blizzard');
     this.updateUnderground(deltaSeconds);
     const outdoorPosition = this.space === OUTDOORS ? this.localPlayer?.motion.position : undefined;
+    this.daylight?.setTonight(tonight(this.weatherSeed, weatherNow));
     this.daylight?.update(
       dayProgress(weatherNow),
       this.weatherCloud,

@@ -116,6 +116,8 @@ it('holds a knife worn in the off hand, on every body, and puts it away when tak
 it.each([
   ['body1', 'body1002_0'],
   ['body2', 'body2_0'],
+  ['dwarf1', 'dwarf1_1'],
+  ['dwarf2', 'dwarf2_2'],
 ])('draws only %s’s fit of every top, and no clothes it has no file for', (wearer, meshName) => {
   const tops = GEAR_ITEMS.filter((item) => canWearIn(item, 'upperBody'));
   expect(tops).toEqual(
@@ -129,7 +131,7 @@ it.each([
   root.add(holder, body.bone);
   const source = new THREE.Group();
   const fits = new Map<string, THREE.SkinnedMesh[]>();
-  for (const fit of ['body1', 'body2']) {
+  for (const fit of ['body1', 'body2', 'dwarf1', 'dwarf2']) {
     const group = new THREE.Group();
     group.name = `linen_shirt_${fit}`;
     const pieces = [part(`${group.name}_0`).mesh, part(`${group.name}_1`).mesh];
@@ -153,18 +155,33 @@ it.each([
   visuals.setWorn({});
   expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
 });
-it('leaves a helm off a body it has not been fitted to yet', () => {
+it('puts a hat on a dwarf and takes the knot of hair off while it is worn', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_1');
-  root.add(body.mesh, body.bone);
+  const knot = new THREE.Group();
+  knot.name = 'dwarf1_HairTop';
+  const knotPart = new THREE.Mesh();
+  knotPart.name = 'dwarf1_HairTop_1';
+  knot.add(knotPart);
+  root.add(body.mesh, body.bone, knot);
   const hat = part('hat');
   const source = new THREE.Group();
   source.add(hat.mesh);
   vi.mocked(wornGearModelTemplate).mockReturnValue({ root: source, clips: [] });
   const visuals = createGearVisuals(root, undefined, 1, { bodyFitted: false });
   visuals.setWorn({ helm: 'woolCap' });
-  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(1);
+  expect([knot.visible, knotPart.visible]).toEqual([false, false]);
+  // A mask leaves the top of the head bare, so the knot shows above it.
+  visuals.setWorn({ helm: 'rogueMask' });
+  expect(knot.visible).toBe(true);
+  visuals.setWorn({ helm: 'woolCap' });
+  expect(knot.visible).toBe(false);
+  visuals.setWorn({});
+  expect([knot.visible, knotPart.visible]).toEqual([true, true]);
+  visuals.setWorn({ helm: 'woolCap' });
   visuals.dispose();
+  expect(knot.visible).toBe(true);
 });
 it('leaves clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();

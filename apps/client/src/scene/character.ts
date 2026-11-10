@@ -802,7 +802,7 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // The head pieces baked into the six models give way to whatever is worn.
   hideBakedHeadPieces(model);
   showBeard(model, look.beard ?? null);
-  // Helms and tops were fitted to the soft bodies (decisions 0283 and 0284) and
+  // Helms and tops are fitted to the faceted dwarves (decisions 0291 and 0292);
   // the rest of the clothes to the taller Adventurers, so the faceted dwarves
   // (decision 0288) wear none of them until each is refitted.
   const gear = createGearVisuals(model, model.getObjectByName(OFF_HAND_BONE_NAME), heldScale, {

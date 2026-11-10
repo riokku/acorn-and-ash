@@ -11,7 +11,7 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
 /**
  * What a character is wearing, drawn on the body (decision 0113).
  *
- * Every helm is its own file fitted to the soft bodies (tools/art/soft_hats.py,
+ * Every helm is its own file fitted to the dwarves (tools/art/dwarf_hats.py,
  * decision 0283): the Knight's helmet and visor, the Mage's hat, the bear hat,
  * the mask, the wool cap and the Last Watch helm. Both bodies share one
  * skeleton, so each fits either head. Every top is fitted the same way
@@ -26,10 +26,17 @@ import { woodenShieldParts, wornWeapon } from './gear-models';
 /** The baked-in head pieces to hide, by the end of their names. */
 const BAKED_HEAD_PIECE = /_(Helmet|HelmetVisor|Hat|BearHat|Mask)$/;
 
-/** The soft bodies' own meshes are named `body1` and `body2` (split by colour: `body1_1`). */
-const SOFT_BODY = /^(body\d)(?:_\d+)?$/;
-/** A piece fitted to one of them ends in its name: `linen_shirt_body1`. */
-const FIT_FOR = /_(body\d)$/;
+/**
+ * The players' own body meshes are named `dwarf1` and `dwarf2` (split by colour: `dwarf1_1`).
+ * The soft bodies before them were `body1` and `body2`.
+ */
+const SOFT_BODY = /^((?:body|dwarf)\d)(?:_\d+)?$/;
+/** The knot or bun on top of a dwarf's hair (split by colour: `dwarf1_HairTop_1`). */
+const HAIR_TOP = /_HairTop(?:_\d+)?$/;
+/** Helm-slot pieces that leave the top of the head bare. */
+const LEAVES_HAIR_TOP: ReadonlySet<ItemId> = new Set<ItemId>(['rogueMask']);
+/** A piece fitted to one of them ends in its name: `linen_shirt_dwarf1`. */
+const FIT_FOR = /_((?:body|dwarf)\d)$/;
 
 /** Along the arm (in the model's own units) from here out is the hand. */
 const HAND_STARTS_AT = 0.78;
@@ -279,9 +286,7 @@ export function createGearVisuals(
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
     if (slot === 'helm') {
-      // The helms were fitted to the soft bodies' heads. On a body that is not one of them
-      // (the faceted dwarves of decision 0288), a helm waits to be refitted and is left off.
-      if (bodyFitted || wearer !== undefined) buildFitted(item, objects);
+      buildFitted(item, objects);
     } else if (
       slot === 'upperBody' ||
       slot === 'lowerBody' ||
@@ -337,6 +342,21 @@ export function createGearVisuals(
     }
   };
 
+  /**
+   * A dwarf's knot or bun stands above the hair (`<id>_HairTop`) and would poke through a
+   * hat, so it is left off while one is worn (decision 0291). A mask leaves the top of the
+   * head bare, so the knot stays.
+   */
+  const hairTops: THREE.Object3D[] = [];
+  model.traverse((child) => {
+    if (HAIR_TOP.test(child.name)) hairTops.push(child);
+  });
+  const showHairTop = (): void => {
+    const helm = shown.get('helm')?.item;
+    const covered = helm !== undefined && !LEAVES_HAIR_TOP.has(helm);
+    for (const piece of hairTops) piece.visible = !covered;
+  };
+
   const clear = (slot: GearSlot): void => {
     const current = shown.get(slot);
     if (current === undefined) return;
@@ -355,10 +375,12 @@ export function createGearVisuals(
         if (item !== undefined) shown.set(slot, { item, objects: build(slot, item) });
       }
       hideCoveredBody();
+      showHairTop();
     },
     dispose: () => {
       for (const slot of GEAR_SLOTS) clear(slot);
       hideCoveredBody();
+      showHairTop();
     },
   };
 }
