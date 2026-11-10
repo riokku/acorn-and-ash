@@ -34,6 +34,8 @@ import {
   type PlayerInput,
   type ServerMessage,
   type SupportCell,
+  type BeardId,
+  type HairColorId,
   type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
@@ -341,9 +343,16 @@ export class WorldConnection {
    * reconnect - each one is a fresh connection on the server, with nothing
    * remembered about this player until they say so again.
    */
-  sendHello(name: string, character: CharacterId, color: TintColorId, skin: SkinToneId): void {
+  sendHello(
+    name: string,
+    character: CharacterId,
+    color: TintColorId,
+    skin: SkinToneId,
+    hair: HairColorId,
+    beard: BeardId,
+  ): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(encodeHello(name, character, color, skin));
+    this.socket.send(encodeHello(name, character, color, skin, hair, beard));
   }
 
   close(): void {

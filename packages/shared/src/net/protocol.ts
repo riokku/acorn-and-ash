@@ -85,9 +85,17 @@ import { buildableKindFromIndex, buildableKindIndex } from '../data/buildables';
 import {
   characterFromIndex,
   characterIndex,
+  DEFAULT_BEARD,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
+  beardFromIndex,
+  beardIndex,
+  hairColorFromIndex,
+  hairColorIndex,
   skinToneFromIndex,
   skinToneIndex,
+  type BeardId,
+  type HairColorId,
   tintColorFromIndex,
   tintColorIndex,
   type CharacterId,
@@ -602,19 +610,23 @@ export function encodeUseItem(item: ItemId): ArrayBuffer {
 }
 
 /**
- * Introduce yourself: the name, character, tint and skin tone picked on the
- * Home screen.
+ * Introduce yourself: the name, character, tint, skin tone, hair colour and
+ * beard picked on the Home screen.
  *
- * type(1) + character(1) + color(1) + skin(1) + nameLength(1) + name bytes.
+ * type(1) + character(1) + color(1) + skin(1) + nameLength(1) + name bytes
+ * + hair(1) + beard(1). The last two come after the name so that a Hello
+ * from before they existed, which simply ends at the name, still reads.
  */
 export function encodeHello(
   name: string,
   character: CharacterId,
   color: TintColorId,
   skin: SkinToneId = DEFAULT_SKIN_TONE,
+  hair: HairColorId = DEFAULT_HAIR_COLOR,
+  beard: BeardId = DEFAULT_BEARD,
 ): ArrayBuffer {
   const nameBytes = encodeName(name);
-  const buffer = new ArrayBuffer(5 + nameBytes.length);
+  const buffer = new ArrayBuffer(5 + nameBytes.length + HELLO_LOOK_BYTES);
   const view = new DataView(buffer);
   view.setUint8(0, ClientMessageType.Hello);
   view.setUint8(1, characterIndex(character));
@@ -622,8 +634,13 @@ export function encodeHello(
   view.setUint8(3, skinToneIndex(skin));
   view.setUint8(4, nameBytes.length);
   new Uint8Array(buffer, 5).set(nameBytes);
+  view.setUint8(5 + nameBytes.length, hairColorIndex(hair));
+  view.setUint8(6 + nameBytes.length, beardIndex(beard));
   return buffer;
 }
+
+/** hair(1) + beard(1), after a Hello's name. */
+const HELLO_LOOK_BYTES = 2;
 
 /**
  * Read a message from a client.
@@ -865,9 +882,14 @@ export function decodeClientMessage(data: ArrayBuffer): ClientMessage | null {
     const skin = skinToneFromIndex(view.getUint8(3));
     const nameLength = view.getUint8(4);
     if (character === null || color === null || skin === null) return null;
-    if (data.byteLength !== 5 + nameLength) return null;
+    // One that ends at the name is from before hair and beards could be chosen.
+    const plain = data.byteLength === 5 + nameLength;
+    if (!plain && data.byteLength !== 5 + nameLength + HELLO_LOOK_BYTES) return null;
+    const hair = plain ? DEFAULT_HAIR_COLOR : hairColorFromIndex(view.getUint8(5 + nameLength));
+    const beard = plain ? DEFAULT_BEARD : beardFromIndex(view.getUint8(6 + nameLength));
+    if (hair === null || beard === null) return null;
     const name = textDecoder.decode(new Uint8Array(data, 5, nameLength));
-    return { type: 'hello', name, character, color, skin };
+    return { type: 'hello', name, character, color, skin, hair, beard };
   }
 
   return null;
@@ -1422,7 +1444,7 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
   const names = clipped.map((player) => encodeName(player.name));
 
   let total = 2;
-  for (const name of names) total += 6 + name.length;
+  for (const name of names) total += ROSTER_ENTRY_BYTES + name.length;
 
   const buffer = new ArrayBuffer(total);
   const view = new DataView(buffer);
@@ -1438,12 +1460,17 @@ export function encodeRoster(players: readonly RosterEntry[]): ArrayBuffer {
     view.setUint8(offset + 2, characterIndex(player.character));
     view.setUint8(offset + 3, tintColorIndex(player.color));
     view.setUint8(offset + 4, skinToneIndex(player.skin));
-    view.setUint8(offset + 5, name.length);
-    new Uint8Array(buffer, offset + 6, name.length).set(name);
-    offset += 6 + name.length;
+    view.setUint8(offset + 5, hairColorIndex(player.hair));
+    view.setUint8(offset + 6, beardIndex(player.beard));
+    view.setUint8(offset + 7, name.length);
+    new Uint8Array(buffer, offset + ROSTER_ENTRY_BYTES, name.length).set(name);
+    offset += ROSTER_ENTRY_BYTES + name.length;
   }
   return buffer;
 }
+
+/** netId(2) + character(1) + color(1) + skin(1) + hair(1) + beard(1) + nameLength(1), before the name. */
+const ROSTER_ENTRY_BYTES = 8;
 
 /** netId(2) + what's equipped, or the "no item" sentinel(1) */
 const BYTES_PER_EQUIPPED_ENTRY = 3;
@@ -2726,17 +2753,21 @@ export function decodeServerMessage(data: ArrayBuffer): ServerMessage | null {
       const players: RosterEntry[] = [];
       let offset = 2;
       for (let i = 0; i < count; i++) {
-        if (offset + 6 > data.byteLength) return null;
+        if (offset + ROSTER_ENTRY_BYTES > data.byteLength) return null;
         const netId = view.getUint16(offset, true);
         const character = characterFromIndex(view.getUint8(offset + 2));
         const color = tintColorFromIndex(view.getUint8(offset + 3));
         const skin = skinToneFromIndex(view.getUint8(offset + 4));
-        const nameLength = view.getUint8(offset + 5);
+        const hair = hairColorFromIndex(view.getUint8(offset + 5));
+        const beard = beardFromIndex(view.getUint8(offset + 6));
+        const nameLength = view.getUint8(offset + 7);
         if (character === null || color === null || skin === null) return null;
-        if (offset + 6 + nameLength > data.byteLength) return null;
-        const name = textDecoder.decode(new Uint8Array(data, offset + 6, nameLength));
-        players.push({ netId, name, character, color, skin });
-        offset += 6 + nameLength;
+        if (hair === null || beard === null) return null;
+        const start = offset + ROSTER_ENTRY_BYTES;
+        if (start + nameLength > data.byteLength) return null;
+        const name = textDecoder.decode(new Uint8Array(data, start, nameLength));
+        players.push({ netId, name, character, color, skin, hair, beard });
+        offset = start + nameLength;
       }
       if (offset !== data.byteLength) return null;
       return { type: 'roster', players };

@@ -335,7 +335,13 @@ not drawn on them until each family is refitted. See
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
 (see [decision 0113](docs/decisions/0113-skin-tones.md)).
-Your name, tint, character and skin tone travel to
+You pick a hair colour too, from a row of six swatches (the body's own, then
+red or blonde, brown, black, grey and white), and Body 1 picks one of five
+beards. The hair colour changes the hair, brows and beard and nothing else, and
+the tint colours the clothes only, never hair or skin. `?gallery=bodies&hairs` lines up both bodies in
+every hair colour. See
+[decision 0289](docs/decisions/0289-hair-colour-and-beard-pickers.md).
+Your name, tint, character, skin tone, hair colour and beard travel to
 the server and out to everybody else in the clearing, with a small name tag
 floating over your head the same way it does over anyone else's. Picked
 once, remembered the next time you visit. See

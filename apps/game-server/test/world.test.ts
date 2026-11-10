@@ -398,7 +398,15 @@ describe('introducing yourself', () => {
     await waitFor('the roster to include them', () => client.roster().length > 0);
 
     expect(client.roster()).toEqual([
-      { netId, name: 'Acorn', character: 'knight', color: 'moss', skin: 'natural' },
+      {
+        netId,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'moss',
+        skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
+      },
     ]);
     client.close();
   });
@@ -419,6 +427,8 @@ describe('introducing yourself', () => {
         character: 'knight',
         color: 'amber',
         skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
       },
     ]);
 
@@ -432,6 +442,8 @@ describe('introducing yourself', () => {
           character: 'knight',
           color: 'amber',
           skin: 'natural',
+          hair: 'own',
+          beard: 'braids',
         },
         {
           netId: second.welcome().netId,
@@ -439,6 +451,8 @@ describe('introducing yourself', () => {
           character: 'knight',
           color: 'teal',
           skin: 'natural',
+          hair: 'own',
+          beard: 'braids',
         },
       ]),
     );
@@ -475,13 +489,13 @@ describe('introducing yourself', () => {
     client.close();
   });
 
-  it('remembers a name, tint and skin tone across logging out and coming back', async () => {
+  it('remembers a name, tint, skin tone, hair colour and beard across logging out and coming back', async () => {
     const worldId = nextWorldId();
     const playerKey = 'remembers-who-they-are';
 
     const first = await TestClient.connect(worldId, playerKey);
     await waitFor('a welcome', () => first.received.length > 0);
-    first.hello('Acorn', 'knight', 'clay', 'darker');
+    first.hello('Acorn', 'knight', 'clay', 'darker', 'coal', 'chops');
     await waitFor('the roster to include them', () => first.roster().length > 0);
     first.close();
     await sleep(200);
@@ -495,6 +509,8 @@ describe('introducing yourself', () => {
         character: 'knight',
         color: 'clay',
         skin: 'darker',
+        hair: 'coal',
+        beard: 'chops',
       },
     ]);
     second.close();
@@ -527,6 +543,8 @@ describe('one character per world', () => {
       character: 'knight',
       color: 'moss',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     });
     client.close();
   });
@@ -551,7 +569,7 @@ describe('one character per world', () => {
 
     const second = await TestClient.connect(worldId, playerKey);
     await waitFor('the opening roster', () => second.countOfMessages('roster') > 0);
-    second.hello('Somebody Else', 'barbarian', 'plum', 'lightest');
+    second.hello('Somebody Else', 'barbarian', 'plum', 'lightest', 'snow', 'full');
     await sleep(200);
 
     expect(await characterOf(worldId, playerKey)).toEqual({
@@ -560,6 +578,8 @@ describe('one character per world', () => {
       character: 'knight',
       color: 'clay',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     });
     expect(second.roster()).toEqual([
       {
@@ -568,6 +588,8 @@ describe('one character per world', () => {
         character: 'knight',
         color: 'clay',
         skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
       },
     ]);
     second.close();

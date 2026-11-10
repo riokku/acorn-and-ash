@@ -63,7 +63,7 @@ export function StageView({ look, placement, label }: StageViewProps): React.JSX
 
   useEffect(() => {
     stage?.show(look);
-  }, [stage, look.character, look.tint, look.skin]);
+  }, [stage, look.character, look.tint, look.skin, look.hair, look.beard]);
 
   useEffect(() => {
     stage?.place(placement);

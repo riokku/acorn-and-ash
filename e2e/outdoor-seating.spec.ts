@@ -53,6 +53,8 @@ test('joins a friend on a two-seat outdoor bench, rises safely, and chooses furn
           character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         })),
       ),
     );

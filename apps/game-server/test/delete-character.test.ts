@@ -173,6 +173,8 @@ describe('deleting a character', () => {
         character: 'barbarian',
         color: 'plum',
         skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
       },
     ]);
     // Nothing of the old pack, and the axe, bag and rod are all waiting again.

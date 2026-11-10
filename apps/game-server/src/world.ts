@@ -58,6 +58,8 @@ import {
   CLOSE_CHARACTER_DELETED,
   CLOSE_PLAYING_ELSEWHERE,
   DEFAULT_CHARACTER,
+  DEFAULT_BEARD,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
   DEFAULT_TINT_COLOR,
   DEFAULT_WORLD_SEED,
@@ -123,6 +125,10 @@ import {
   itemIndex,
   sanitizePlayerName,
   SPAWN_POSITION,
+  beardFromIndex,
+  beardIndex,
+  hairColorFromIndex,
+  hairColorIndex,
   skinToneFromIndex,
   skinToneIndex,
   tintColorFromIndex,
@@ -137,6 +143,8 @@ import {
   type PersistedTree,
   type RosterEntry,
   type SnapshotEntity,
+  type BeardId,
+  type HairColorId,
   type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
@@ -155,6 +163,9 @@ interface ConnectionAttachment {
   readonly colorIndex: number;
   /** Missing on a socket attached before skin tones existed: read as the default. */
   readonly skinIndex?: number;
+  /** Missing on a socket attached before hair and beards could be chosen: read as the defaults. */
+  readonly hairIndex?: number;
+  readonly beardIndex?: number;
 }
 
 /** A player key is supplied by the client, so it is checked before it is trusted. */
@@ -357,6 +368,8 @@ export class World extends DurableObject<WorldEnv> {
       characterIndex: identity?.characterIndex ?? characterIndex(DEFAULT_CHARACTER),
       colorIndex: identity?.colorIndex ?? tintColorIndex(DEFAULT_TINT_COLOR),
       skinIndex: identity?.skinIndex ?? skinToneIndex(DEFAULT_SKIN_TONE),
+      hairIndex: identity?.hairIndex ?? hairColorIndex(DEFAULT_HAIR_COLOR),
+      beardIndex: identity?.beardIndex ?? beardIndex(DEFAULT_BEARD),
     } satisfies ConnectionAttachment);
 
     // A season asked for while testing, by the first one into an empty world.
@@ -687,6 +700,8 @@ export class World extends DurableObject<WorldEnv> {
         decoded.character,
         decoded.color,
         decoded.skin,
+        decoded.hair,
+        decoded.beard,
       );
       return;
     }
@@ -1773,6 +1788,8 @@ export class World extends DurableObject<WorldEnv> {
     requestedCharacter: CharacterId,
     color: TintColorId,
     skin: SkinToneId,
+    hair: HairColorId,
+    beard: BeardId,
   ): void {
     // One character per player per world (decision 0087). Whoever already has
     // a name here keeps it: what a returning browser says is ignored, and only
@@ -1796,6 +1813,8 @@ export class World extends DurableObject<WorldEnv> {
       characterIndex: characterIndex(character),
       colorIndex: tintColorIndex(color),
       skinIndex: skinToneIndex(skin),
+      hairIndex: hairColorIndex(hair),
+      beardIndex: beardIndex(beard),
     };
     ws.serializeAttachment(updated);
 
@@ -1806,6 +1825,8 @@ export class World extends DurableObject<WorldEnv> {
         updated.characterIndex,
         updated.colorIndex,
         skinToneIndex(skin),
+        hairColorIndex(hair),
+        beardIndex(beard),
       );
     }
     this.broadcast(encodeRoster(this.currentRoster()));
@@ -1823,6 +1844,8 @@ export class World extends DurableObject<WorldEnv> {
         character: characterFromIndex(attachment.characterIndex) ?? DEFAULT_CHARACTER,
         color: tintColorFromIndex(attachment.colorIndex) ?? DEFAULT_TINT_COLOR,
         skin: skinToneFromIndex(attachment.skinIndex ?? 0) ?? DEFAULT_SKIN_TONE,
+        hair: hairColorFromIndex(attachment.hairIndex ?? 0) ?? DEFAULT_HAIR_COLOR,
+        beard: beardFromIndex(attachment.beardIndex ?? 0) ?? DEFAULT_BEARD,
       });
     }
     return entries;
@@ -2283,6 +2306,10 @@ export class World extends DurableObject<WorldEnv> {
     // 0 is the body's own skin (`SKIN_TONE_ORDER`), so a character saved before
     // skin tones existed keeps looking exactly as it did.
     this.addColumn('players', 'skin_index', 'INTEGER NOT NULL DEFAULT 0');
+    // 0 is the body's own hair and the braids (`HAIR_COLOR_ORDER`, `BEARD_ORDER`),
+    // so a character saved before either could be chosen keeps what it had.
+    this.addColumn('players', 'hair_index', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumn('players', 'beard_index', 'INTEGER NOT NULL DEFAULT 0');
     // Null for a player saved before this existed, or one who never chose
     // anything - `initialEquippedItem` treats that exactly like a brand new
     // player, falling back to the first tool they still have, if any.
@@ -2554,11 +2581,17 @@ export class World extends DurableObject<WorldEnv> {
    * The character a player made in this world, in the words the browser uses,
    * or `{ made: false }` if they have not made one (or the key is not one).
    */
-  private savedCharacter(
-    requestedKey: string | null,
-  ):
+  private savedCharacter(requestedKey: string | null):
     | { made: false }
-    | { made: true; name: string; character: CharacterId; color: TintColorId; skin: SkinToneId } {
+    | {
+        made: true;
+        name: string;
+        character: CharacterId;
+        color: TintColorId;
+        skin: SkinToneId;
+        hair: HairColorId;
+        beard: BeardId;
+      } {
     if (requestedKey === null || !PLAYER_KEY_PATTERN.test(requestedKey)) return { made: false };
     const saved = this.loadPlayerIdentity(requestedKey);
     if (saved === undefined) return { made: false };
@@ -2568,21 +2601,33 @@ export class World extends DurableObject<WorldEnv> {
       character: characterFromIndex(saved.characterIndex) ?? DEFAULT_CHARACTER,
       color: tintColorFromIndex(saved.colorIndex) ?? DEFAULT_TINT_COLOR,
       skin: skinToneFromIndex(saved.skinIndex) ?? DEFAULT_SKIN_TONE,
+      hair: hairColorFromIndex(saved.hairIndex) ?? DEFAULT_HAIR_COLOR,
+      beard: beardFromIndex(saved.beardIndex) ?? DEFAULT_BEARD,
     };
   }
 
-  /** A returning player's last-known name, tint and skin tone, if they ever sent a Hello. */
-  private loadPlayerIdentity(
-    playerKey: string,
-  ): { name: string; characterIndex: number; colorIndex: number; skinIndex: number } | undefined {
+  /** A returning player's last-known name and look, if they ever sent a Hello. */
+  private loadPlayerIdentity(playerKey: string):
+    | {
+        name: string;
+        characterIndex: number;
+        colorIndex: number;
+        skinIndex: number;
+        hairIndex: number;
+        beardIndex: number;
+      }
+    | undefined {
     const rows = this.ctx.storage.sql
       .exec<{
         name: string | null;
         character_index: number;
         color_index: number;
         skin_index: number;
+        hair_index: number;
+        beard_index: number;
       }>(
-        'SELECT name, character_index, color_index, skin_index FROM players WHERE player_key = ?',
+        'SELECT name, character_index, color_index, skin_index, hair_index, beard_index ' +
+          'FROM players WHERE player_key = ?',
         playerKey,
       )
       .toArray();
@@ -2593,6 +2638,8 @@ export class World extends DurableObject<WorldEnv> {
       characterIndex: row.character_index,
       colorIndex: row.color_index,
       skinIndex: row.skin_index,
+      hairIndex: row.hair_index,
+      beardIndex: row.beard_index,
     };
   }
 
@@ -3134,13 +3181,17 @@ export class World extends DurableObject<WorldEnv> {
     characterIndex: number,
     colorIndex: number,
     skinIndex: number,
+    hairIndex: number,
+    beardIndex: number,
   ): void {
     this.ctx.storage.sql.exec(
       'INSERT INTO players ' +
-        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, skin_index, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
+        '(player_key, x, y, z, facing_yaw, hunger, health, name, character_index, color_index, ' +
+        'skin_index, hair_index, beard_index, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(player_key) DO UPDATE SET ' +
         'name = excluded.name, character_index = excluded.character_index, ' +
         'color_index = excluded.color_index, skin_index = excluded.skin_index, ' +
+        'hair_index = excluded.hair_index, beard_index = excluded.beard_index, ' +
         'updated_at = excluded.updated_at',
       playerKey,
       SPAWN_POSITION.x,
@@ -3153,6 +3204,8 @@ export class World extends DurableObject<WorldEnv> {
       characterIndex,
       colorIndex,
       skinIndex,
+      hairIndex,
+      beardIndex,
       Date.now(),
     );
   }

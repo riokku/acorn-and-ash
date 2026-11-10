@@ -33,6 +33,18 @@ async function dragAcross(page: Page, stage: Locator, dx: number): Promise<void>
   await page.mouse.up();
 }
 
+/**
+ * Goes in and waits until the world has heard who this is. The name is on
+ * screen before the game has connected, so leaving as soon as it shows can
+ * leave before the character was ever saved.
+ */
+async function enterWorld(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: 'Enter World' }).click();
+  const hud = page.locator('.hud-panel');
+  await expect(hud).toHaveAttribute('data-player-name', name, { timeout: 120_000 });
+  await expect(hud).toHaveAttribute('data-world-ready', 'true', { timeout: 120_000 });
+}
+
 async function clickCharacter(page: Page, stage: Locator): Promise<void> {
   const box = await stage.boundingBox();
   if (box === null) throw new Error('The character stage is not on the page.');
@@ -139,15 +151,44 @@ test.describe('showing the character off', () => {
     );
 
     await page.locator('#home-name').fill('Hazel');
-    await page.getByRole('button', { name: 'Enter World' }).click();
-    await expect(page.locator('.hud-panel')).toHaveAttribute('data-player-name', 'Hazel', {
-      timeout: 120_000,
-    });
+    await enterWorld(page, 'Hazel');
 
     // Coming back, the world remembers it: the character it saved has that skin.
     const again = await openScreen(page, world);
     await expect(page.getByTestId('saved-character')).toContainText('Hazel');
     await expect(again).toHaveAttribute('data-skin', 'darkest');
+  });
+
+  test('shows the hair colour and beard you pick, and keeps them on the way in', async ({
+    page,
+  }) => {
+    const world = newWorld();
+    const stage = await openScreen(page, world);
+    await expect(stage).toHaveAttribute('data-hair', 'own');
+    await expect(stage).toHaveAttribute('data-beard', 'braids');
+
+    await page.getByRole('button', { name: 'Hair: Coal' }).click();
+    await expect(stage).toHaveAttribute('data-hair', 'coal');
+    await page.getByTestId('beards').getByRole('button', { name: 'Chops' }).click();
+    await expect(stage).toHaveAttribute('data-beard', 'chops');
+    // Body 1 is red-haired already, so red is offered once, as its own.
+    await expect(page.getByRole('button', { name: 'Hair: Copper' })).toHaveCount(0);
+
+    // Body 2 has no beards to choose from, and keeps the hair colour picked.
+    await page.getByRole('button', { name: 'Body 2' }).click();
+    await expect(page.getByTestId('beards')).toHaveCount(0);
+    await expect(stage).toHaveAttribute('data-hair', 'coal');
+    await page.getByRole('button', { name: 'Body 1' }).click();
+    await expect(page.getByTestId('beards')).toBeVisible();
+
+    await page.locator('#home-name').fill('Hazel');
+    await enterWorld(page, 'Hazel');
+
+    // Coming back, the world remembers both.
+    const again = await openScreen(page, world);
+    await expect(page.getByTestId('saved-character')).toContainText('Hazel');
+    await expect(again).toHaveAttribute('data-hair', 'coal');
+    await expect(again).toHaveAttribute('data-beard', 'chops');
   });
 
   test.describe('for somebody who asked for less motion', () => {

@@ -22,7 +22,13 @@ import type { GardenRequest, GardenState } from '../sim/garden';
 import type { HomeBuildFeedback } from '../data/housing';
 import type { ChestRequest, ChestResult } from '../sim/chest';
 import type { BuildableKindId } from '../data/buildables';
-import type { CharacterId, SkinToneId, TintColorId } from '../data/characters';
+import type {
+  BeardId,
+  CharacterId,
+  HairColorId,
+  SkinToneId,
+  TintColorId,
+} from '../data/characters';
 import type { ItemId } from '../data/items';
 import type { GearSlot, WornGear } from '../data/gear';
 import type { GearRefusal } from '../sim/gear';
@@ -230,8 +236,8 @@ export interface TestPlaceMessage {
 }
 
 /**
- * Introduce yourself: the name, character, tint and skin tone picked on the
- * Home screen.
+ * Introduce yourself: the name, character, tint, skin tone, hair colour and
+ * beard picked on the Home screen.
  *
  * Sent once, right after `Welcome` - not bundled with it, so a slow Home
  * screen submit never holds up the very first snapshot. Nothing about a
@@ -244,6 +250,9 @@ export interface HelloMessage {
   readonly character: CharacterId;
   readonly color: TintColorId;
   readonly skin: SkinToneId;
+  readonly hair: HairColorId;
+  /** Worn only by a body that has beards (see `beardOn`). */
+  readonly beard: BeardId;
 }
 
 /**
@@ -560,6 +569,9 @@ export interface RosterEntry {
   readonly character: CharacterId;
   readonly color: TintColorId;
   readonly skin: SkinToneId;
+  readonly hair: HairColorId;
+  /** Worn only by a body that has beards (see `beardOn`). */
+  readonly beard: BeardId;
 }
 
 /**

@@ -174,3 +174,127 @@ export function skinToneIndex(id: SkinToneId): number {
 export function skinToneFromIndex(index: number): SkinToneId | null {
   return SKIN_TONE_ORDER[index] ?? null;
 }
+
+/**
+ * The hair colour a player picks when a character is made (decision 0289). It
+ * colours the hair, brows and beard and nothing else. `own` is the colour the
+ * body was modelled with: red for Body 1, blonde for Body 2.
+ */
+export type HairColorId = 'own' | 'copper' | 'wheat' | 'chestnut' | 'coal' | 'silver' | 'snow';
+
+export interface HairColor {
+  readonly id: HairColorId;
+  readonly displayName: string;
+  /** As 0xRRGGBB; null for `own`, which is whatever the body was modelled with. */
+  readonly hex: number | null;
+}
+
+export const HAIR_COLORS = {
+  own: { id: 'own', displayName: 'Natural', hex: null },
+  copper: { id: 'copper', displayName: 'Copper', hex: 0xbd4f1e },
+  wheat: { id: 'wheat', displayName: 'Wheat', hex: 0xf0c460 },
+  chestnut: { id: 'chestnut', displayName: 'Chestnut', hex: 0x6e4226 },
+  coal: { id: 'coal', displayName: 'Coal', hex: 0x2e2a2b },
+  silver: { id: 'silver', displayName: 'Silver', hex: 0x9c9fa3 },
+  snow: { id: 'snow', displayName: 'Snow', hex: 0xe6e1d6 },
+} as const satisfies Record<HairColorId, HairColor>;
+
+/**
+ * The order sent over the wire and saved. `own` is first so that every
+ * character made before hair colours existed (saved as 0) keeps its hair.
+ * Only ever add to the end - same reason the saved characters' numbers do.
+ */
+export const HAIR_COLOR_ORDER: readonly HairColorId[] = [
+  'own',
+  'copper',
+  'wheat',
+  'chestnut',
+  'coal',
+  'silver',
+  'snow',
+];
+
+export const DEFAULT_HAIR_COLOR: HairColorId = 'own';
+
+/** The colour each body was modelled with, which `own` already gives it. */
+const BODY_OWN_HAIR: Readonly<Record<CharacterId, HairColorId>> = {
+  knight: 'copper',
+  barbarian: 'wheat',
+};
+
+/** This body's hair in this colour, as 0xRRGGBB. */
+export function hairColorHex(character: CharacterId, hair: HairColorId): number {
+  return HAIR_COLORS[hair].hex ?? HAIR_COLORS[BODY_OWN_HAIR[character]].hex ?? 0;
+}
+
+/** The colours offered to this body: its own first, then every other one once. */
+export function hairColorsFor(character: CharacterId): readonly HairColorId[] {
+  return HAIR_COLOR_ORDER.filter((id) => id !== BODY_OWN_HAIR[character]);
+}
+
+/**
+ * The same hair on this body, named the way this body offers it: a colour
+ * that is this body's own is `own`, so its swatch is the one picked.
+ */
+export function hairColorOn(character: CharacterId, hair: HairColorId): HairColorId {
+  return hair === BODY_OWN_HAIR[character] ? 'own' : hair;
+}
+
+export function hairColorIndex(id: HairColorId): number {
+  const index = HAIR_COLOR_ORDER.indexOf(id);
+  if (index < 0) throw new Error(`Unknown hair colour: ${id}`);
+  return index;
+}
+
+export function hairColorFromIndex(index: number): HairColorId | null {
+  return HAIR_COLOR_ORDER[index] ?? null;
+}
+
+/**
+ * The beard a player picks when a character is made (decision 0289). Only a
+ * body that has beards wears it: Body 2 has hair only (decision 0288).
+ */
+export type BeardId = 'braids' | 'long' | 'full' | 'stache' | 'chops';
+
+export interface Beard {
+  readonly id: BeardId;
+  readonly displayName: string;
+}
+
+export const BEARDS = {
+  braids: { id: 'braids', displayName: 'Braids' },
+  long: { id: 'long', displayName: 'Long' },
+  full: { id: 'full', displayName: 'Full' },
+  stache: { id: 'stache', displayName: 'Moustache' },
+  chops: { id: 'chops', displayName: 'Chops' },
+} as const satisfies Record<BeardId, Beard>;
+
+/**
+ * The order offered, sent over the wire and saved. `braids` is first so that
+ * every Body 1 made before beards could be chosen (saved as 0) keeps the
+ * braids it had. Only ever add to the end.
+ */
+export const BEARD_ORDER: readonly BeardId[] = ['braids', 'long', 'full', 'stache', 'chops'];
+
+export const DEFAULT_BEARD: BeardId = 'braids';
+
+/** Which bodies have beards at all. */
+export const BODY_HAS_BEARD: Readonly<Record<CharacterId, boolean>> = {
+  knight: true,
+  barbarian: false,
+};
+
+/** The beard this body shows for this choice: none on a body without beards. */
+export function beardOn(character: CharacterId, beard: BeardId): BeardId | null {
+  return BODY_HAS_BEARD[character] ? beard : null;
+}
+
+export function beardIndex(id: BeardId): number {
+  const index = BEARD_ORDER.indexOf(id);
+  if (index < 0) throw new Error(`Unknown beard: ${id}`);
+  return index;
+}
+
+export function beardFromIndex(index: number): BeardId | null {
+  return BEARD_ORDER[index] ?? null;
+}

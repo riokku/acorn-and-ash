@@ -165,7 +165,10 @@ import {
   ActionKind,
   CAST_COOLDOWN_SECONDS,
   DEFAULT_CHARACTER,
+  DEFAULT_BEARD,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
+  beardOn,
   DEFAULT_WORLD_SEED,
   HEALTH_MAX,
   HUNGER_MAX,
@@ -364,6 +367,7 @@ import {
   type Character,
   type FishingPose,
 } from './scene/character';
+import { hairLook } from './scene/hair-colour';
 import { isSweeping, type MovePose } from './scene/character-moves';
 import { ImpactBursts } from './scene/impact-bursts';
 import { WeaponTrail } from './scene/weapon-trail';
@@ -1373,6 +1377,8 @@ export class Game {
         character: this.options.identity.character,
         tint: TINT_COLORS[this.options.identity.color].hex,
         skin: this.options.identity.skin,
+        hair: this.options.identity.hair,
+        beard: this.options.identity.beard,
       },
     });
     window.addEventListener('resize', this.handleResize);
@@ -2181,8 +2187,8 @@ export class Game {
         this.syncServerClock(message.serverTimeMs);
         // Every fresh connection is a clean slate on the server - this has to
         // be resent on every reconnect, not only the first one.
-        const { name, character, color, skin } = this.options.identity;
-        this.connection?.sendHello(name, character, color, skin);
+        const { name, character, color, skin, hair, beard } = this.options.identity;
+        this.connection?.sendHello(name, character, color, skin, hair, beard);
         void this.enterWorld(message.seed);
         break;
       }
@@ -3428,6 +3434,8 @@ export class Game {
         this.options.identity.character,
         TINT_COLORS[this.options.identity.color].hex,
         this.options.identity.skin,
+        this.options.identity.hair,
+        this.options.identity.beard,
       );
       // A redundant local nameplate can cover an enemy's name and health bar.
       this.localCharacter.setGear(this.worn.get(this.selfNetId) ?? {});
@@ -3760,6 +3768,8 @@ export class Game {
       this.characterKindFor(entry),
       this.colorFor(netId, entry),
       entry?.skin,
+      entry?.hair,
+      entry?.beard,
     );
     character.setName(entry?.name ?? null);
     character.setEquippedItem(this.equipped.get(netId) ?? null);
@@ -3796,6 +3806,9 @@ export class Game {
       const entry = this.roster.get(netId);
       character.setColor(this.colorFor(netId, entry));
       character.setSkinTone(entry?.skin ?? DEFAULT_SKIN_TONE);
+      const body = this.characterKindFor(entry);
+      character.setHair(hairLook(body, entry?.hair ?? DEFAULT_HAIR_COLOR));
+      character.setBeard(beardOn(body, entry?.beard ?? DEFAULT_BEARD));
       character.setName(entry?.name ?? null);
     }
   }

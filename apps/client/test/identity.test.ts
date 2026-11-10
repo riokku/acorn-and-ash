@@ -23,7 +23,14 @@ describe('remembering who you picked to be', () => {
 
   it('round-trips a real choice', () => {
     const storage = fakeStorage();
-    const identity = { name: 'Acorn', character: 'knight', color: 'moss', skin: 'darker' } as const;
+    const identity = {
+      name: 'Acorn',
+      character: 'knight',
+      color: 'moss',
+      skin: 'darker',
+      hair: 'coal',
+      beard: 'chops',
+    } as const;
     writeIdentity(storage, identity);
     expect(readIdentity(storage)).toEqual(identity);
   });
@@ -64,6 +71,24 @@ describe('remembering who you picked to be', () => {
     expect(readIdentity(storage).skin).toBe('natural');
   });
 
+  it("falls back to the body's own hair and the braids for ones this build does not know", () => {
+    const storage = fakeStorage();
+    storage.setItem(
+      'acorn.identity',
+      JSON.stringify({ name: 'Acorn', character: 'knight', color: 'amber', hair: 'green' }),
+    );
+    expect(readIdentity(storage)).toMatchObject({ hair: 'own', beard: 'braids' });
+  });
+
+  it("calls a body's own hair colour its own, so its swatch is the one picked", () => {
+    const storage = fakeStorage();
+    storage.setItem(
+      'acorn.identity',
+      JSON.stringify({ name: 'Acorn', character: 'knight', color: 'amber', hair: 'copper' }),
+    );
+    expect(readIdentity(storage).hair).toBe('own');
+  });
+
   it('sanitises a name that was tampered with directly in storage', () => {
     const storage = fakeStorage();
     storage.setItem(
@@ -83,7 +108,14 @@ describe('remembering who you picked to be', () => {
 describe('forgetting who you picked to be', () => {
   it('leaves the next visit with a blank card', () => {
     const storage = fakeStorage();
-    writeIdentity(storage, { name: 'Acorn', character: 'knight', color: 'moss', skin: 'natural' });
+    writeIdentity(storage, {
+      name: 'Acorn',
+      character: 'knight',
+      color: 'moss',
+      skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
+    });
     clearIdentity(storage);
     expect(readIdentity(storage)).toEqual(BLANK_IDENTITY);
   });

@@ -16,7 +16,7 @@ import {
   type TintColorId,
 } from '@acorn/shared';
 
-import { readSkinTone, type PlayerIdentity } from '../home/identity';
+import { readBeard, readHairColor, readSkinTone, type PlayerIdentity } from '../home/identity';
 
 /** The login services a player can use. */
 export type Provider = 'google' | 'discord';
@@ -162,7 +162,7 @@ export async function fetchSavedCharacter(
 
   const body: unknown = await response.json();
   if (typeof body !== 'object' || body === null) return null;
-  const { made, name, character, color, skin } = body as Record<string, unknown>;
+  const { made, name, character, color, skin, hair, beard } = body as Record<string, unknown>;
   if (made !== true || typeof name !== 'string') return null;
 
   const cleaned = sanitizePlayerName(name);
@@ -175,6 +175,8 @@ export async function fetchSavedCharacter(
     character: chosen,
     color: color as TintColorId,
     skin: readSkinTone(skin),
+    hair: readHairColor(hair),
+    beard: readBeard(beard),
   };
 }
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-import type { CharacterId } from '@acorn/shared';
+import type { BeardId, CharacterId } from '@acorn/shared';
 
 /**
  * The body shapes on the shared skeleton (Rig_Medium): the Adventurers'
@@ -66,9 +66,9 @@ export const HELD_SIZE: Readonly<Record<BodyShape, number>> = {
 };
 
 /** The beards every dwarf body carries, each its own `<body>_Beard_<style>` piece. */
-export type BeardStyle = 'braids' | 'long' | 'full' | 'stache' | 'chops';
+export type BeardStyle = BeardId;
 
-/** Each body's own beard; Body 2 has hair only (decision 0288). */
+/** The beard each body has until another is chosen; Body 2 has hair only (decision 0288). */
 export const BODY_BEARD: Readonly<Record<CharacterId, BeardStyle | null>> = {
   knight: 'braids',
   barbarian: null,
