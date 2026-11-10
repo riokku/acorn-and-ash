@@ -1547,7 +1547,7 @@ body {
 }
 
 .home-section {
-  margin-top: 30px;
+  margin-top: 24px;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -1662,6 +1662,35 @@ body {
 
 /* The selection ring itself is set inline, in the chosen swatch's own
    colour - see Home.tsx. */
+
+.home-beards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.home-beard {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(58, 42, 20, 0.22);
+  background: transparent;
+  color: var(--home-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.home-beard:hover {
+  border-color: var(--home-accent);
+}
+
+.home-beard-selected {
+  border-color: var(--home-accent);
+  background: var(--home-accent);
+  color: #fffaf0;
+}
 
 .home-play {
   margin-top: 34px;
@@ -6196,6 +6225,7 @@ body {
 .home-play:focus-visible,
 .home-character:focus-visible,
 .home-color:focus-visible,
+.home-beard:focus-visible,
 .home-link:focus-visible,
 .settings-button:focus-visible,
 .settings-close:focus-visible,

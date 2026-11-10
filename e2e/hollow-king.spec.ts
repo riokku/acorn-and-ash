@@ -62,6 +62,8 @@ test('shows the giant king and his authoritative health in Crownbreaker Hold', a
           character: shared.DEFAULT_CHARACTER,
           color: shared.DEFAULT_TINT_COLOR,
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         })),
       ),
     );

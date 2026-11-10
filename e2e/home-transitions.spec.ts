@@ -65,6 +65,8 @@ test('keeps the forest ready through repeated visits to a far-away home', async 
           character: 'barbarian' as const,
           color: 'moss' as const,
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         })),
       ),
     );

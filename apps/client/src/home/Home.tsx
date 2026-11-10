@@ -2,16 +2,25 @@ import { AdminItemsLink } from './AdminItemsLink';
 import { useRef, useState } from 'react';
 
 import {
+  BEARDS,
+  BEARD_ORDER,
+  BODY_HAS_BEARD,
   CHARACTER_KINDS,
   CHARACTER_ORDER,
+  HAIR_COLORS,
   MAX_PLAYER_NAME_LENGTH,
   SKIN_TONES,
   SKIN_TONE_SWATCHES,
   TINT_COLORS,
   TINT_COLOR_ORDER,
+  hairColorHex,
+  hairColorOn,
+  hairColorsFor,
   isValidPlayerName,
   sanitizePlayerName,
+  type BeardId,
   type CharacterId,
+  type HairColorId,
   type SkinToneId,
   type TintColorId,
 } from '@acorn/shared';
@@ -101,6 +110,14 @@ export function Home({
   const [character, setCharacter] = useState<CharacterId>(initial.character);
   const [color, setColor] = useState<TintColorId>(initial.color);
   const [skin, setSkin] = useState<SkinToneId>(initial.skin);
+  const [hair, setHair] = useState<HairColorId>(initial.hair);
+  const [beard, setBeard] = useState<BeardId>(initial.beard);
+
+  /** Another body keeps the hair colour picked, under whatever name that body offers it. */
+  const chooseBody = (next: CharacterId): void => {
+    setHair(hairColorOn(next, HAIR_COLORS[hair].hex === null ? 'own' : hair));
+    setCharacter(next);
+  };
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Settings has Sign out here too, so it is in the same place everywhere. No waiting: nobody is in the world yet.
@@ -130,7 +147,7 @@ export function Home({
   const handleSubmit = (event: React.FormEvent): void => {
     event.preventDefault();
     if (!canPlay) return;
-    onPlay({ name: trimmed, character, color, skin });
+    onPlay({ name: trimmed, character, color, skin, hair, beard });
   };
 
   if (saved !== null) {
@@ -150,6 +167,8 @@ export function Home({
               character: saved.character,
               tint: TINT_COLORS[saved.color].hex,
               skin: saved.skin,
+              hair: saved.hair,
+              beard: saved.beard,
             }}
             placement={welcomePlacement}
             label={`${saved.name}, your ${kind}. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
@@ -213,7 +232,7 @@ export function Home({
     <form className="home-screen has-stage" onSubmit={handleSubmit}>
       <PaintingBackdrop />
       <StageView
-        look={{ character, tint: TINT_COLORS[color].hex, skin }}
+        look={{ character, tint: TINT_COLORS[color].hex, skin, hair, beard }}
         placement={MAKING[wide ? 'wide' : 'narrow']}
         label={`${CHARACTER_KINDS[character].displayName}, the character you are choosing. Drag or use the arrow keys to turn them, click or press Space for a flourish.`}
       />
@@ -272,7 +291,7 @@ export function Home({
                   }
                   disabled={!kind.available}
                   aria-pressed={selected}
-                  onClick={() => setCharacter(id)}
+                  onClick={() => chooseBody(id)}
                   aria-label={
                     kind.available
                       ? `${kind.displayName} — select`
@@ -328,6 +347,52 @@ export function Home({
             })}
           </div>
         </div>
+
+        <div className="home-section">
+          <span className="home-label">Your hair</span>
+          <div className="home-colors" data-testid="hair-colours">
+            {hairColorsFor(character).map((id) => {
+              const hex = hexString(hairColorHex(character, id));
+              const selected = id === hair;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={'home-color' + (selected ? ' home-color-selected' : '')}
+                  style={{
+                    background: hex,
+                    boxShadow: selected ? `0 0 0 3px #f3e6c6, 0 0 0 5px ${hex}` : undefined,
+                  }}
+                  onClick={() => setHair(id)}
+                  aria-label={`Hair: ${HAIR_COLORS[id].displayName}`}
+                  aria-pressed={selected}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {BODY_HAS_BEARD[character] ? (
+          <div className="home-section">
+            <span className="home-label">Your beard</span>
+            <div className="home-beards" data-testid="beards">
+              {BEARD_ORDER.map((id) => {
+                const selected = id === beard;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={'home-beard' + (selected ? ' home-beard-selected' : '')}
+                    onClick={() => setBeard(id)}
+                    aria-pressed={selected}
+                  >
+                    {BEARDS[id].displayName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="home-section">
           <span className="home-label">Your tint</span>

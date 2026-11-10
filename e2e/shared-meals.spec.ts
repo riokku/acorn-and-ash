@@ -53,6 +53,8 @@ test('offers two prepared servings to a nearby companion and gives both the meal
           character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         },
         {
           netId: 2,
@@ -60,6 +62,8 @@ test('offers two prepared servings to a nearby companion and gives both the meal
           character: 'barbarian',
           color: 'moss',
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         },
       ]),
     );

@@ -3,10 +3,14 @@ import * as THREE from 'three/webgpu';
 import {
   CHARACTER_KINDS,
   CHARACTER_ORDER,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
+  HAIR_COLORS,
+  HAIR_COLOR_ORDER,
   SKIN_TONES,
   SKIN_TONE_SWATCHES,
   type CharacterId,
+  type HairColorId,
   type SkinToneId,
 } from '@acorn/shared';
 
@@ -16,6 +20,7 @@ import { BODY_BEARD, bodyShapeOf, showBeard, type BeardStyle } from '../scene/bo
 import { instantiateAnimatedModel, type AnimatedModelInstance } from '../scene/model-loading';
 import { createNameplate } from '../scene/nameplate';
 import { isSkinMaterial, skinShade } from '../scene/skin-tone';
+import { dyeHair, hairLook } from '../scene/hair-colour';
 import type { FireLights } from '../scene/fire-light';
 import type { RendererSetup } from '../scene/renderer';
 
@@ -24,9 +29,10 @@ import type { RendererSetup } from '../scene/renderer';
  * decision 0112): `?gallery=bodies` lines them up, each with its own beard;
  * `&beard=long` (braids, long, full, stache, chops or none) gives every one
  * that beard instead; `&motion=walk` or `run` sets them moving; `&skin=darker`
- * (any skin tone) gives them all that skin. `?gallery=bodies&tones` instead
- * lines up every body in all five skin tones, lightest at the front
- * (decision 0113).
+ * (any skin tone) gives them all that skin and `&hair=coal` (any hair colour)
+ * that hair. `?gallery=bodies&tones` instead lines up every body in all five
+ * skin tones, lightest at the front (decision 0113), and
+ * `?gallery=bodies&hairs` in every hair colour (decision 0289).
  */
 
 const BEARDS: readonly BeardStyle[] = ['braids', 'long', 'full', 'stache', 'chops'];
@@ -49,6 +55,12 @@ export async function showBodies(
   const askedSkin = params.get('skin');
   const skin: SkinToneId =
     askedSkin !== null && askedSkin in SKIN_TONES ? (askedSkin as SkinToneId) : DEFAULT_SKIN_TONE;
+  const askedHair = params.get('hair');
+  const hair: HairColorId =
+    askedHair !== null && Object.hasOwn(HAIR_COLORS, askedHair)
+      ? (askedHair as HairColorId)
+      : DEFAULT_HAIR_COLOR;
+  const hairs = params.has('hairs');
   const askedBeard = params.get('beard');
   const beardFor = (character: CharacterId): BeardStyle | null =>
     askedBeard === null
@@ -65,12 +77,14 @@ export async function showBodies(
     column: number,
     tone: SkinToneId = skin,
     z = 0,
+    colour: HairColorId = hair,
   ) => {
     const template = characterModelTemplate(character);
     if (template === undefined) return;
     const body = instantiateAnimatedModel(template);
     showBeard(body.root, beardFor(character));
     shadeSkin(body.root, tone);
+    dyeHair(body.root, hairLook(character, colour));
     body.root.scale.setScalar(MODEL_SCALE);
     body.root.position.set(x, 0, z);
     body.root.traverse((child) => {
@@ -83,7 +97,20 @@ export async function showBodies(
     mixers.push(body.mixer);
   };
 
-  if (tones) {
+  if (hairs) {
+    // A row for each colour, every body across it, its own colour at the front.
+    HAIR_COLOR_ORDER.forEach((colour, row) => {
+      const z = -row * TONE_ROW_GAP;
+      CHARACTER_ORDER.forEach((character, column) => {
+        const x = (column - (CHARACTER_ORDER.length - 1) / 2) * TONE_SPACING;
+        place(character, x, column + row, skin, z, colour);
+      });
+      const label = createNameplate(HAIR_COLORS[colour].displayName);
+      label.sprite.position.set(-((CHARACTER_ORDER.length + 0.8) / 2) * TONE_SPACING, 0.4, z);
+      label.sprite.scale.multiplyScalar(0.5);
+      scene.add(label.sprite);
+    });
+  } else if (tones) {
     // A row for each tone, lightest at the front, every body across it.
     SKIN_TONE_SWATCHES.forEach((tone, row) => {
       const z = -row * TONE_ROW_GAP;
@@ -107,22 +134,23 @@ export async function showBodies(
     });
   }
   const title = createNameplate(
-    tones ? 'Every body in each skin tone' : 'The two bodies, in a shirt and shorts',
+    hairs
+      ? 'Every body in each hair colour'
+      : tones
+        ? 'Every body in each skin tone'
+        : 'The two bodies, in a shirt and shorts',
   );
-  title.sprite.position.set(
-    0,
-    tones ? 1.4 : 1.25,
-    tones ? -(SKIN_TONE_SWATCHES.length - 1) * TONE_ROW_GAP : 0,
-  );
+  const rows = hairs ? HAIR_COLOR_ORDER.length : tones ? SKIN_TONE_SWATCHES.length : 1;
+  const depth = (rows - 1) * TONE_ROW_GAP;
+  const lineUp = rows > 1;
+  title.sprite.position.set(0, lineUp ? 1.4 : 1.25, -depth);
   title.sprite.scale.multiplyScalar(0.6);
   scene.add(title.sprite);
 
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 300);
-  const target = tones
-    ? new THREE.Vector3(0, 0.4, -((SKIN_TONE_SWATCHES.length - 1) * TONE_ROW_GAP) / 2)
-    : new THREE.Vector3(0, 0.5, 0);
-  const distance = Number(params.get('distance') ?? (tones ? 6 : 2.6));
-  const height = Number(params.get('height') ?? (tones ? 4.2 : 0.5));
+  const target = lineUp ? new THREE.Vector3(0, 0.4, -depth / 2) : new THREE.Vector3(0, 0.5, 0);
+  const distance = Number(params.get('distance') ?? (lineUp ? 1.6 + depth : 2.6));
+  const height = Number(params.get('height') ?? (lineUp ? 2 + depth / 2 : 0.5));
   const angle = Number(params.get('angle') ?? 0);
   camera.position.set(
     target.x + Math.sin(angle) * distance,

@@ -60,6 +60,8 @@ import {
   type PickupsTakenMessage,
   type RosterMessage,
   type ThreatHitMessage,
+  type BeardId,
+  type HairColorId,
   type SkinToneId,
   type TintColorId,
   type TreeHitMessage,
@@ -220,8 +222,10 @@ export class TestClient {
     character: CharacterId = 'knight',
     color: TintColorId = 'amber',
     skin: SkinToneId = 'natural',
+    hair: HairColorId = 'own',
+    beard: BeardId = 'braids',
   ): void {
-    this.socket.send(encodeHello(name, character, color, skin));
+    this.socket.send(encodeHello(name, character, color, skin, hair, beard));
   }
 
   sendRaw(payload: ArrayBuffer | string): void {

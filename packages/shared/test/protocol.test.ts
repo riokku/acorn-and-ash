@@ -1087,6 +1087,8 @@ describe('introducing yourself', () => {
       character: 'knight',
       color: 'amber',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     });
   });
 
@@ -1098,6 +1100,8 @@ describe('introducing yourself', () => {
       character: 'knight',
       color: 'moss',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     });
   });
 
@@ -1108,6 +1112,8 @@ describe('introducing yourself', () => {
       character: 'knight',
       color: 'amber',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     });
   });
 
@@ -1119,6 +1125,29 @@ describe('introducing yourself', () => {
       character: 'barbarian',
       color: 'teal',
       skin: 'darkest',
+      hair: 'own',
+      beard: 'braids',
+    });
+  });
+
+  it('carries the hair colour and beard picked', () => {
+    const decoded = decodeClientMessage(
+      encodeHello('Acorn', 'knight', 'teal', 'natural', 'coal', 'chops'),
+    );
+    expect(decoded).toMatchObject({ name: 'Acorn', hair: 'coal', beard: 'chops' });
+  });
+
+  it('still reads one from before hair and beards could be chosen', () => {
+    const encoded = encodeHello('Acorn', 'knight', 'amber', 'darker', 'coal', 'chops');
+    const older = encoded.slice(0, encoded.byteLength - 2);
+    expect(decodeClientMessage(older)).toEqual({
+      type: 'hello',
+      name: 'Acorn',
+      character: 'knight',
+      color: 'amber',
+      skin: 'darker',
+      hair: 'own',
+      beard: 'braids',
     });
   });
 
@@ -1139,6 +1168,14 @@ describe('introducing yourself', () => {
     const badSkin = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
     badSkin[3] = 200;
     expect(decodeClientMessage(badSkin.buffer)).toBeNull();
+
+    const badHair = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
+    badHair[badHair.length - 2] = 200;
+    expect(decodeClientMessage(badHair.buffer)).toBeNull();
+
+    const badBeard = new Uint8Array(encodeHello('Acorn', 'knight', 'amber').slice(0));
+    badBeard[badBeard.length - 1] = 200;
+    expect(decodeClientMessage(badBeard.buffer)).toBeNull();
   });
 });
 
@@ -1154,8 +1191,24 @@ describe('telling everybody who is who', () => {
 
   it('carries a name, character, tint and skin tone for each connected player', () => {
     const players: RosterEntry[] = [
-      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
-      { netId: 2, name: 'Ash', character: 'knight', color: 'teal', skin: 'darker' },
+      {
+        netId: 1,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'amber',
+        skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
+      },
+      {
+        netId: 2,
+        name: 'Ash',
+        character: 'knight',
+        color: 'teal',
+        skin: 'darker',
+        hair: 'silver',
+        beard: 'full',
+      },
     ];
     expect(roundTrip(players)).toEqual(players);
   });
@@ -1166,7 +1219,15 @@ describe('telling everybody who is who', () => {
 
   it('refuses one that has been cut short', () => {
     const encoded = encodeRoster([
-      { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
+      {
+        netId: 1,
+        name: 'Acorn',
+        character: 'knight',
+        color: 'amber',
+        skin: 'natural',
+        hair: 'own',
+        beard: 'braids',
+      },
     ]);
     expect(decodeServerMessage(encoded.slice(0, encoded.byteLength - 1))).toBeNull();
   });
@@ -1174,7 +1235,15 @@ describe('telling everybody who is who', () => {
   it('refuses a character, colour or skin tone this build has never heard of', () => {
     const encoded = new Uint8Array(
       encodeRoster([
-        { netId: 1, name: 'Acorn', character: 'knight', color: 'amber', skin: 'natural' },
+        {
+          netId: 1,
+          name: 'Acorn',
+          character: 'knight',
+          color: 'amber',
+          skin: 'natural',
+          hair: 'own',
+          beard: 'braids',
+        },
       ]).slice(0),
     );
     // header(2) + netId(2) + character(1) puts the colour byte at index 5,
@@ -1185,6 +1254,12 @@ describe('telling everybody who is who', () => {
     const badSkin = encoded.slice(0);
     badSkin[6] = 200;
     expect(decodeServerMessage(badSkin.buffer)).toBeNull();
+    const badHair = encoded.slice(0);
+    badHair[7] = 200;
+    expect(decodeServerMessage(badHair.buffer)).toBeNull();
+    const badBeard = encoded.slice(0);
+    badBeard[8] = 200;
+    expect(decodeServerMessage(badBeard.buffer)).toBeNull();
   });
 
   it('never carries more than a world can hold', () => {
@@ -1194,6 +1269,8 @@ describe('telling everybody who is who', () => {
       character: 'knight',
       color: 'amber',
       skin: 'natural',
+      hair: 'own',
+      beard: 'braids',
     }));
     expect(roundTrip(players)).toHaveLength(MAX_ROSTER_ENTRIES);
   });

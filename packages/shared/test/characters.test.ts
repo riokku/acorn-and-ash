@@ -1,15 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BEARDS,
+  BEARD_ORDER,
   CHARACTER_KINDS,
   CHARACTER_ORDER,
+  DEFAULT_BEARD,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
+  HAIR_COLORS,
+  HAIR_COLOR_ORDER,
   SKIN_TONES,
   SKIN_TONE_ORDER,
   SKIN_TONE_SWATCHES,
   characterFromIndex,
   characterFromName,
   characterIndex,
+  beardFromIndex,
+  beardIndex,
+  beardOn,
+  hairColorFromIndex,
+  hairColorHex,
+  hairColorIndex,
+  hairColorOn,
+  hairColorsFor,
   skinToneFromIndex,
   skinToneIndex,
 } from '../src/data/characters';
@@ -83,5 +97,67 @@ describe('the skin tones', () => {
         expect(channel).toBeLessThan(1.2);
       }
     }
+  });
+});
+
+describe('the hair colours', () => {
+  it("save the body's own hair as 0, so characters made before hair colours existed keep it", () => {
+    expect(DEFAULT_HAIR_COLOR).toBe('own');
+    expect(hairColorIndex('own')).toBe(0);
+    expect(hairColorFromIndex(0)).toBe('own');
+  });
+
+  it('keep the numbers already saved, and survive a round trip', () => {
+    expect(HAIR_COLOR_ORDER.slice(0, 7)).toEqual([
+      'own',
+      'copper',
+      'wheat',
+      'chestnut',
+      'coal',
+      'silver',
+      'snow',
+    ]);
+    for (const id of HAIR_COLOR_ORDER) expect(hairColorFromIndex(hairColorIndex(id))).toBe(id);
+    expect(hairColorFromIndex(200)).toBeNull();
+  });
+
+  it('give each body its own colour first, and never the same colour twice', () => {
+    for (const body of CHARACTER_ORDER) {
+      const offered = hairColorsFor(body);
+      expect(offered[0]).toBe('own');
+      const shown = offered.map((id) => hairColorHex(body, id));
+      expect(new Set(shown).size).toBe(shown.length);
+    }
+    expect(hairColorHex('knight', 'own')).toBe(HAIR_COLORS.copper.hex);
+    expect(hairColorHex('barbarian', 'own')).toBe(HAIR_COLORS.wheat.hex);
+  });
+
+  it("call a body's own colour its own, so its swatch is the one picked", () => {
+    expect(hairColorOn('knight', 'copper')).toBe('own');
+    expect(hairColorOn('barbarian', 'copper')).toBe('copper');
+    expect(hairColorOn('barbarian', 'wheat')).toBe('own');
+    expect(hairColorOn('knight', 'coal')).toBe('coal');
+  });
+});
+
+describe('the beards', () => {
+  it('save the braids as 0, so a Body 1 made before beards could be chosen keeps them', () => {
+    expect(DEFAULT_BEARD).toBe('braids');
+    expect(beardIndex('braids')).toBe(0);
+    expect(beardFromIndex(0)).toBe('braids');
+  });
+
+  it('keep the numbers already saved, and survive a round trip', () => {
+    expect(BEARD_ORDER.slice(0, 5)).toEqual(['braids', 'long', 'full', 'stache', 'chops']);
+    for (const id of BEARD_ORDER) {
+      expect(beardFromIndex(beardIndex(id))).toBe(id);
+      expect(BEARDS[id].displayName).not.toBe('');
+    }
+    expect(beardFromIndex(200)).toBeNull();
+  });
+
+  it('are worn by Body 1 only', () => {
+    expect(beardOn('knight', 'chops')).toBe('chops');
+    expect(beardOn('barbarian', 'chops')).toBeNull();
   });
 });

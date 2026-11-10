@@ -8,7 +8,10 @@ import { plainMaterial } from '../art/materials';
 
 import {
   ActionKind,
+  DEFAULT_BEARD,
+  DEFAULT_HAIR_COLOR,
   DEFAULT_SKIN_TONE,
+  beardOn,
   Gesture,
   isWeapon,
   ITEM_ORDER,
@@ -16,6 +19,8 @@ import {
   PLAYER_RADIUS,
   type CharacterId,
   type ItemId,
+  type BeardId,
+  type HairColorId,
   type SkinToneId,
   type WornGear,
 } from '@acorn/shared';
@@ -28,17 +33,11 @@ import { CharacterAnimator, type FishingPose, type Locomotion } from './characte
 import type { MoveClip, MovePose, MoveView } from './character-moves';
 import { createNameplate, type Nameplate } from './nameplate';
 import { isSkinMaterial, skinShade } from './skin-tone';
+import { greyHairGeometry, hairLook, isHairMaterial, type HairLook } from './hair-colour';
 import { createFireGlow, type FireGlow } from './fire-light';
 import { createTorchFlame } from './torch-flame';
 import { createGearVisuals, hideBakedHeadPieces } from './gear-visuals';
-import {
-  BODY_BEARD,
-  BODY_REACH,
-  HELD_SIZE,
-  bodyShapeOf,
-  showBeard,
-  type BeardStyle,
-} from './body-shape';
+import { BODY_REACH, HELD_SIZE, bodyShapeOf, showBeard, type BeardStyle } from './body-shape';
 import { wornWeapon } from './gear-models';
 
 export type { FishingPose, Locomotion, MoveView };
@@ -79,6 +78,10 @@ export interface Character {
   setColor(color: THREE.ColorRepresentation): void;
   /** Lightens or darkens just the skin (decision 0113). A no-op on the placeholder. */
   setSkinTone(tone: SkinToneId): void;
+  /** Colours just the hair, brows and beard (decision 0289). A no-op on the placeholder. */
+  setHair(hair: HairLook): void;
+  /** Shows this beard, or none for null. A no-op on a body with no beards. */
+  setBeard(beard: BeardStyle | null): void;
   /** Shows a floating name label above the character's head, or hides it for null. */
   setName(name: string | null): void;
   /**
@@ -489,6 +492,8 @@ export interface CharacterLook {
   readonly tint: THREE.ColorRepresentation | null;
   /** A lighter or darker shade of the body's own skin; its own skin if left out. */
   readonly skin?: SkinToneId;
+  /** Another colour for the hair, brows and beard; the model's own if left out. */
+  readonly hair?: HairLook;
   readonly weapon?: CharacterWeapon;
   /** A dwarf's beard; none if left out. */
   readonly beard?: BeardStyle | null;
@@ -595,10 +600,17 @@ export function createCharacter(
   character: CharacterId,
   color: THREE.ColorRepresentation,
   skin: SkinToneId = DEFAULT_SKIN_TONE,
+  hair: HairColorId = DEFAULT_HAIR_COLOR,
+  beard: BeardId = DEFAULT_BEARD,
 ): Character {
   const template = characterModelTemplate(character);
   if (template !== undefined)
-    return createAnimatedCharacter(template, { tint: color, skin, beard: BODY_BEARD[character] });
+    return createAnimatedCharacter(template, {
+      tint: color,
+      skin,
+      hair: hairLook(character, hair),
+      beard: beardOn(character, beard),
+    });
   return createPlaceholderCharacter(color);
 }
 
@@ -665,6 +677,9 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
   // so tinting one player's colour in below never bleeds into another's.
   const materials: THREE.MeshStandardMaterial[] = [];
   const skinMaterials = new Set<THREE.Material>();
+  const hairMaterials = new Set<THREE.Material>();
+  /** Every piece of hair, with the geometry it was modelled with. */
+  const hairPieces: { mesh: THREE.Mesh; own: THREE.BufferGeometry }[] = [];
   const cloned = new Map<THREE.Material, THREE.MeshStandardMaterial>();
   model.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
@@ -681,21 +696,38 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       cloned.set(original, next);
       materials.push(next);
       if (isSkinMaterial(original)) skinMaterials.add(next);
+      if (isHairMaterial(original)) hairMaterials.add(next);
     }
     child.material = next;
+    if (hairMaterials.has(next)) hairPieces.push({ mesh: child, own: child.geometry });
   });
-  // The tint colours the whole model; skin is then shaded on top of it.
+  // The tint colours the clothes and skin, and skin is then shaded on top of
+  // it. Hair is left out of the tint, so it is the colour that was picked
+  // (decision 0289).
   let tint: THREE.Color | null = look.tint === null ? null : new THREE.Color(look.tint);
   let skinTone = look.skin ?? DEFAULT_SKIN_TONE;
+  let hair: HairLook | null = look.hair ?? null;
   const paintMaterials = (): void => {
     const shade = skinShade(skinTone);
+    const chosenHair = hair === null || hair.chosen === null ? null : new THREE.Color(hair.chosen);
     for (const material of materials) {
+      if (hairMaterials.has(material)) {
+        if (chosenHair === null) material.color.setRGB(1, 1, 1);
+        else material.color.copy(chosenHair);
+        continue;
+      }
       if (tint !== null) material.color.copy(tint);
       else if (skinMaterials.has(material)) material.color.setRGB(1, 1, 1);
       if (skinMaterials.has(material)) material.color.multiply(shade);
     }
+    // A chosen colour is drawn over a grey copy of the hair (see hair-colour.ts).
+    for (const piece of hairPieces) {
+      piece.mesh.geometry =
+        hair === null || hair.chosen === null ? piece.own : greyHairGeometry(piece.own, hair.own);
+    }
   };
-  if (look.tint !== null || skinTone !== DEFAULT_SKIN_TONE) paintMaterials();
+  const hairChosen = hair !== null && hair.chosen !== null;
+  if (look.tint !== null || skinTone !== DEFAULT_SKIN_TONE || hairChosen) paintMaterials();
 
   // Every item that could ever be equipped gets its own group, parented
   // straight onto the hand bone - a real Object3D in the skeleton - so
@@ -838,6 +870,12 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
       skinTone = tone;
       paintMaterials();
     },
+    setHair: (next) => {
+      if (hair?.own === next.own && hair.chosen === next.chosen) return;
+      hair = next;
+      paintMaterials();
+    },
+    setBeard: (beard) => showBeard(model, beard),
     setName: nameplate.setName,
     setEquippedItem: (item) => {
       equipped = item;
@@ -1129,6 +1167,8 @@ function createPlaceholderCharacter(color: THREE.ColorRepresentation): Character
     group,
     setColor: (next) => material.color.set(next),
     setSkinTone: () => {},
+    setHair: () => {},
+    setBeard: () => {},
     setName: nameplate.setName,
     setEquippedItem: () => {},
     setGear: () => {},

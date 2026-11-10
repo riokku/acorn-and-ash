@@ -112,6 +112,8 @@ test('captures the cabin and forest visual review', { tag: '@real-drawing' }, as
           character: 'barbarian',
           color: 'amber',
           skin: shared.DEFAULT_SKIN_TONE,
+          hair: shared.DEFAULT_HAIR_COLOR,
+          beard: shared.DEFAULT_BEARD,
         },
       ]),
     );
@@ -128,6 +130,8 @@ test('captures the cabin and forest visual review', { tag: '@real-drawing' }, as
             character: 'barbarian',
             color: 'amber',
             skin: shared.DEFAULT_SKIN_TONE,
+            hair: shared.DEFAULT_HAIR_COLOR,
+            beard: shared.DEFAULT_BEARD,
           },
           {
             netId: 2,
@@ -135,6 +139,8 @@ test('captures the cabin and forest visual review', { tag: '@real-drawing' }, as
             character: 'barbarian',
             color: 'amber',
             skin: shared.DEFAULT_SKIN_TONE,
+            hair: shared.DEFAULT_HAIR_COLOR,
+            beard: shared.DEFAULT_BEARD,
           },
         ]),
       );

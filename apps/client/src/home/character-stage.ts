@@ -4,6 +4,9 @@ import {
   ActionKind,
   type CharacterId,
   type ItemId,
+  beardOn,
+  type BeardId,
+  type HairColorId,
   type SkinToneId,
   type WornGear,
 } from '@acorn/shared';
@@ -12,6 +15,7 @@ import { readSettings } from '../settings';
 import { preloadCharacterAnimations } from '../scene/character-animations';
 import { preloadCharacterModels } from '../scene/character-model';
 import { createCharacter, type Character, type CharacterFrame } from '../scene/character';
+import { hairLook } from '../scene/hair-colour';
 import {
   FrameBudget,
   KEY_TURN,
@@ -42,6 +46,8 @@ export interface StageLook {
   readonly character: CharacterId;
   readonly tint: number;
   readonly skin: SkinToneId;
+  readonly hair: HairColorId;
+  readonly beard: BeardId;
 }
 
 /** What a character does when it is simply standing there. */
@@ -143,13 +149,16 @@ export class CharacterStage {
       // The same character in another tint or skin tone: no need to start over.
       if (previous.tint !== look.tint) this.character.setColor(look.tint);
       if (previous.skin !== look.skin) this.character.setSkinTone(look.skin);
+      if (previous.hair !== look.hair) this.character.setHair(hairLook(look.character, look.hair));
+      if (previous.beard !== look.beard)
+        this.character.setBeard(beardOn(look.character, look.beard));
       this.look = look;
       this.dirty = true;
       this.report('ready');
       return;
     }
     this.removeCharacter();
-    const character = createCharacter(look.character, look.tint, look.skin);
+    const character = createCharacter(look.character, look.tint, look.skin, look.hair, look.beard);
     character.setName(null);
     character.setGear(this.worn);
     character.setEquippedItem(this.held ?? this.worn.mainHand ?? null);
@@ -228,6 +237,8 @@ export class CharacterStage {
     data.character = this.look?.character ?? '';
     data.tint = this.look === null ? '' : this.look.tint.toString(16).padStart(6, '0');
     data.skin = this.look?.skin ?? '';
+    data.hair = this.look?.hair ?? '';
+    data.beard = this.look?.beard ?? '';
     data.turn = String(Math.round((this.turn * 180) / Math.PI));
     data.flourishes = String(this.showcase.count);
   }
