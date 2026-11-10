@@ -327,6 +327,11 @@ are left to pick from. A character saved as one of Bodies 3 to 6 comes back as
 Body 1 (the men) or Body 2 (the women), keeping its beard, skin tone, items and
 progress, and clothes have no picture in the item editor until they are refitted
 to the two bodies. See [decision 0275](docs/decisions/0275-two-bodies.md).
+Both bodies have since been remade again as chunky, faceted low-poly dwarves,
+hand-modelled in Blender: a red-bearded man and a woman with long blonde braids.
+They stand on the same skeleton, so every move still fits. Hats and tops are
+not drawn on them until each family is refitted. See
+[decision 0288](docs/decisions/0288-heroic-faceted-dwarves.md).
 You also pick a skin tone: the body's own skin, or a little lighter or darker,
 from a row of five swatches; only the skin changes, never the hair or clothes
 (see [decision 0113](docs/decisions/0113-skin-tones.md)).
@@ -1531,8 +1536,9 @@ for why. (The dwarves, Dorrin and Hilde, were built the same way and have been
 deleted.) The six plain bodies and the gear lifted off their outfits were built
 the same way, by `tools/art/plain_bodies.py`, and the six faceted dwarf bodies
 that replaced them by `tools/art/dwarf_bodies.py` (both since retired; their
-`.blend` files stay as sources). The two bodies left, Body 1 and Body 2, are made
-from Meshy models by `tools/art/meshy_body.py` and share one skeleton and their
+`.blend` files stay as sources). The two bodies left, Body 1 and Body 2, were made
+from Meshy models by `tools/art/meshy_body.py` and are now built from scratch by
+`tools/art/heroic_dwarves.py` (decision 0288). They share one skeleton and their
 own fitted moves. After changing that skeleton, refit the moves with
 `node tools/retarget-dwarf-animations.mjs assets/animations/character.glb assets/characters/knight.glb assets/animations/soft-dwarf.glb`.
 
@@ -1752,9 +1758,10 @@ Add `&slot=offHand` to wear it in another slot it fits, `&view=side` or
 `&view=three-quarter` to turn the character, and `&before` for plain clothes.
 `&close` looks at the chest and shoulders up close, and `&walk`, `&run` or
 `&swing` keeps the character moving, to check that gear bends with the body.
-Every hat is fitted to both soft bodies by `tools/art/soft_hats.py`
+Every hat was fitted to both soft bodies by `tools/art/soft_hats.py`
 (decision 0283), and every top, with one fit per body, by
-`tools/art/soft_tops.py` (decision 0284).
+`tools/art/soft_tops.py` (decision 0284). Neither is drawn on the faceted
+dwarves that replaced those bodies until it is refitted (decision 0288).
 
 Open `/?gallery=skeleton-town` to inspect the settlement and its residents;
 use the district selector, drag to orbit and scroll to zoom. Direct views include

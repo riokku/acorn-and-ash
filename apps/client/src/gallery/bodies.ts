@@ -20,7 +20,7 @@ import type { FireLights } from '../scene/fire-light';
 import type { RendererSetup } from '../scene/renderer';
 
 /**
- * The two dwarf bodies in just a shirt and shorts (tools/art/meshy_body.py,
+ * The two dwarf bodies in just a shirt and shorts (tools/art/heroic_dwarves.py,
  * decision 0112): `?gallery=bodies` lines them up, each with its own beard;
  * `&beard=long` (braids, long, full, stache, chops or none) gives every one
  * that beard instead; `&motion=walk` or `run` sets them moving; `&skin=darker`

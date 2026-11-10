@@ -153,6 +153,19 @@ it.each([
   visuals.setWorn({});
   expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
 });
+it('leaves a helm off a body it has not been fitted to yet', () => {
+  const root = new THREE.Group();
+  const body = part('dwarf1_1');
+  root.add(body.mesh, body.bone);
+  const hat = part('hat');
+  const source = new THREE.Group();
+  source.add(hat.mesh);
+  vi.mocked(wornGearModelTemplate).mockReturnValue({ root: source, clips: [] });
+  const visuals = createGearVisuals(root, undefined, 1, { bodyFitted: false });
+  visuals.setWorn({ helm: 'woolCap' });
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
+  visuals.dispose();
+});
 it('leaves clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_Body');

@@ -278,8 +278,16 @@ export function createGearVisuals(
 
   const build = (slot: GearSlot, item: ItemId): THREE.Object3D[] => {
     const objects: THREE.Object3D[] = [];
-    if (slot === 'helm') buildFitted(item, objects);
-    else if (slot === 'upperBody' || slot === 'lowerBody' || slot === 'feet' || slot === 'hands') {
+    if (slot === 'helm') {
+      // The helms were fitted to the soft bodies' heads. On a body that is not one of them
+      // (the faceted dwarves of decision 0288), a helm waits to be refitted and is left off.
+      if (bodyFitted || wearer !== undefined) buildFitted(item, objects);
+    } else if (
+      slot === 'upperBody' ||
+      slot === 'lowerBody' ||
+      slot === 'feet' ||
+      slot === 'hands'
+    ) {
       if (bodyFitted) buildSkin(slot, item, objects);
       else buildFitted(item, objects);
     } else if (slot === 'offHand' && item === 'woodenShield') buildShield(objects);

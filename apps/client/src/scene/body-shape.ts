@@ -4,8 +4,9 @@ import type { CharacterId } from '@acorn/shared';
 
 /**
  * The body shapes on the shared skeleton (Rig_Medium): the Adventurers'
- * (skeleton raiders and the like) and the players' soft dwarves
- * (tools/art/meshy_body.py: short legs, a long chest). Same bones, different
+ * (skeleton raiders and the like) and the players' dwarves
+ * (tools/art/heroic_dwarves.py, on the skeleton fitted in decision 0272: short
+ * legs, a long chest). Same bones, different
  * lengths, so each shape plays moves fitted to it and reaches to different
  * places.
  */
@@ -67,7 +68,7 @@ export const HELD_SIZE: Readonly<Record<BodyShape, number>> = {
 /** The beards every dwarf body carries, each its own `<body>_Beard_<style>` piece. */
 export type BeardStyle = 'braids' | 'long' | 'full' | 'stache' | 'chops';
 
-/** Each body's own beard, as Chris approved them; none for Body 2. */
+/** Each body's own beard; Body 2 has hair only (decision 0288). */
 export const BODY_BEARD: Readonly<Record<CharacterId, BeardStyle | null>> = {
   knight: 'braids',
   barbarian: null,

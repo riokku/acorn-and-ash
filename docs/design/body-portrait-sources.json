@@ -5,15 +5,15 @@
   "sources": {
     "knight": {
       "model": "assets/characters/knight.glb",
-      "sha256": "3a38597cdeeb61ece2f7ae5ee65bb25b33ef898689f4b92cf8f7a43f4fd01d1d",
+      "sha256": "c8b21e092dbe39dc405bbd927dc2b47a37bd642f63e1cde693da2393558e025b",
       "portrait": "assets/ui/body-portraits/knight.webp",
-      "bounds": [17, 22, 78, 118]
+      "bounds": [17, 21, 78, 119]
     },
     "barbarian": {
       "model": "assets/characters/barbarian.glb",
-      "sha256": "f9397e21b01ea7c6f8044ed6d0a1820c3ae363d3ae435db8aea4f2e79ebe0292",
+      "sha256": "717144fad10fb07b11a1c5fae90ee44b909db02736dbf317e2c9b30baf583838",
       "portrait": "assets/ui/body-portraits/barbarian.webp",
-      "bounds": [20, 22, 75, 117]
+      "bounds": [18, 18, 77, 118]
     }
   }
 }

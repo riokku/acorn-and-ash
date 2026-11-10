@@ -145,8 +145,9 @@ test(
       timeout: 120_000,
     });
     await expect(page.getByText('Winter clothing · Warmth 100')).toBeVisible();
-    // The bear hat is fitted to both soft bodies (decision 0283); the clothes are not yet.
-    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '1');
+    // The bear hat was fitted to the soft bodies (decision 0283) and waits to be refitted to
+    // the faceted dwarves (decision 0288); until then it is not drawn. Refitted, this is '1'.
+    await expect(page.locator('body')).toHaveAttribute('data-winter-gear-heads', '0');
     expect(errors).toEqual([]);
   },
 );
