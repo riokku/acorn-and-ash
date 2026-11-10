@@ -488,7 +488,7 @@ export interface CharacterWeapon {
 
 /** How a character built from a model looks: its colours and anything it is never without. */
 export interface CharacterLook {
-  /** A colour to tint the whole model, or null to keep its own colours. */
+  /** A colour to tint the model's clothes, or null to keep their own colours. */
   readonly tint: THREE.ColorRepresentation | null;
   /** A lighter or darker shade of the body's own skin; its own skin if left out. */
   readonly skin?: SkinToneId;
@@ -701,9 +701,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
     child.material = next;
     if (hairMaterials.has(next)) hairPieces.push({ mesh: child, own: child.geometry });
   });
-  // The tint colours the clothes and skin, and skin is then shaded on top of
-  // it. Hair is left out of the tint, so it is the colour that was picked
-  // (decision 0289).
+  // The tint colours the clothes only. Skin keeps its own colour, shaded by
+  // the skin tone, and hair is the colour that was picked (decision 0289).
   let tint: THREE.Color | null = look.tint === null ? null : new THREE.Color(look.tint);
   let skinTone = look.skin ?? DEFAULT_SKIN_TONE;
   let hair: HairLook | null = look.hair ?? null;
@@ -716,9 +715,8 @@ function createAnimatedCharacter(template: AnimatedModel, look: CharacterLook): 
         else material.color.copy(chosenHair);
         continue;
       }
-      if (tint !== null) material.color.copy(tint);
-      else if (skinMaterials.has(material)) material.color.setRGB(1, 1, 1);
-      if (skinMaterials.has(material)) material.color.multiply(shade);
+      if (skinMaterials.has(material)) material.color.copy(shade);
+      else if (tint !== null) material.color.copy(tint);
     }
     // A chosen colour is drawn over a grey copy of the hair (see hair-colour.ts).
     for (const piece of hairPieces) {

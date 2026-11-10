@@ -338,7 +338,7 @@ from a row of five swatches; only the skin changes, never the hair or clothes
 You pick a hair colour too, from a row of six swatches (the body's own, then
 red or blonde, brown, black, grey and white), and Body 1 picks one of five
 beards. The hair colour changes the hair, brows and beard and nothing else, and
-the tint leaves hair alone. `?gallery=bodies&hairs` lines up both bodies in
+the tint colours the clothes only, never hair or skin. `?gallery=bodies&hairs` lines up both bodies in
 every hair colour. See
 [decision 0289](docs/decisions/0289-hair-colour-and-beard-pickers.md).
 Your name, tint, character, skin tone, hair colour and beard travel to

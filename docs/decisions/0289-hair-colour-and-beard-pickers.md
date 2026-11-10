@@ -32,9 +32,11 @@ blonde.
   anything stays reddish. A chosen colour is drawn over a copy of the hair
   whose facets are grey, as light or dark against the hair's own colour as
   they were. The copy is made once for each piece and shared.
-- **The tint leaves hair alone.** A tint used to colour hair along with
-  everything else, which turned silver hair tan under the amber tint. Hair is
-  now always the colour picked. Skin and clothes are tinted as before.
+- **The tint colours clothes only.** A tint used to colour hair and skin along
+  with everything else, which turned silver hair tan under the amber tint.
+  Chris settled it: hair is always the colour picked, skin is always the skin
+  tone picked, and the tint touches only the clothes.
+- **No clean-shaven option.** Chris decided Body 1 always has a beard.
 
 ## Consequences
 
@@ -42,8 +44,6 @@ blonde.
   character screen, because the tint no longer washes over it.
 - Characters already made cannot change hair or beard, the same as their body
   and skin tone: one character per world, fixed when made (0087).
-- Whether a tint should colour skin at all is still a question for Chris
-  (0288).
 - `?gallery=bodies&hairs` lines up both bodies in every hair colour, and
   `&hair=coal` gives the ordinary line-up that hair.
 - Hats and tops are still to be refitted to the new bodies (0288). A helm will
