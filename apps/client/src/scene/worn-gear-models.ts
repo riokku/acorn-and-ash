@@ -14,7 +14,7 @@ import winterJacketUrl from '@assets/gear/winter-jacket.glb?url';
 import cedarstalkerCoatUrl from '@assets/gear/cedarstalker-coat.glb?url';
 
 /**
- * Gear fitted to the soft bodies' skeleton: every helm (decision 0283), and every top, which
+ * Gear fitted to the players' skeleton: every helm (decision 0291), and every top, which
  * holds one fit for each body (decision 0284).
  */
 const URLS: Readonly<Partial<Record<ItemId, string>>> = {

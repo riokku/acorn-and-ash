@@ -153,18 +153,33 @@ it.each([
   visuals.setWorn({});
   expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
 });
-it('leaves a helm off a body it has not been fitted to yet', () => {
+it('puts a hat on a dwarf and takes the knot of hair off while it is worn', () => {
   const root = new THREE.Group();
   const body = part('dwarf1_1');
-  root.add(body.mesh, body.bone);
+  const knot = new THREE.Group();
+  knot.name = 'dwarf1_HairTop';
+  const knotPart = new THREE.Mesh();
+  knotPart.name = 'dwarf1_HairTop_1';
+  knot.add(knotPart);
+  root.add(body.mesh, body.bone, knot);
   const hat = part('hat');
   const source = new THREE.Group();
   source.add(hat.mesh);
   vi.mocked(wornGearModelTemplate).mockReturnValue({ root: source, clips: [] });
   const visuals = createGearVisuals(root, undefined, 1, { bodyFitted: false });
   visuals.setWorn({ helm: 'woolCap' });
-  expect(extraMeshes(root, [body.mesh])).toHaveLength(0);
+  expect(extraMeshes(root, [body.mesh])).toHaveLength(1);
+  expect([knot.visible, knotPart.visible]).toEqual([false, false]);
+  // A mask leaves the top of the head bare, so the knot shows above it.
+  visuals.setWorn({ helm: 'rogueMask' });
+  expect(knot.visible).toBe(true);
+  visuals.setWorn({ helm: 'woolCap' });
+  expect(knot.visible).toBe(false);
+  visuals.setWorn({});
+  expect([knot.visible, knotPart.visible]).toEqual([true, true]);
+  visuals.setWorn({ helm: 'woolCap' });
   visuals.dispose();
+  expect(knot.visible).toBe(true);
 });
 it('leaves clothes off a body they were not made for, but still hangs the shield', () => {
   const root = new THREE.Group();
