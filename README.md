@@ -621,6 +621,15 @@ sunset and sunrise, rain hides the furthest ridges first (the mountain is only
 sunset, `&season=winter`, or `&cloud=0.6` for rain). See
 [decision 0286](docs/decisions/0286-far-skyline-and-ash-peak.md).
 
+### The night sky
+
+After dark the stars come out, with a Milky Way band and a full moon that rises
+in the east at dusk and sets in the west at dawn. Cloud, blizzards and tunnels
+hide them. The stars are placed from the same seed as the far skyline. See them at
+`/?gallery=skyline&view=stars&time=0` or `&view=moon` (add `&cloud=1` for an
+overcast night). See
+[decision 0290](docs/decisions/0290-night-sky.md).
+
 ### Valley mist
 
 Mist lies on the lake, the river and the home pond, and pools in the hollows of

@@ -28,6 +28,7 @@ import {
   skylineClarity,
   type RidgeLayer,
 } from '../art/skyline-shape';
+import { createNightSky } from './night-sky';
 
 /**
  * The far country (decision 0286): a sky that deepens overhead, three rings of
@@ -80,6 +81,8 @@ export interface SkylineState {
   readonly haze: THREE.Color;
   /** 0 is midnight, 1 is noon. */
   readonly daylight: number;
+  /** 0 and 1 are midnight, 0.5 is noon: where the moon and stars have got to. */
+  readonly dayProgress: number;
   /** How much of the sky is rain cloud, 0 to 1. */
   readonly cloud: number;
   /** 1 in a blizzard, easing in and out. */
@@ -159,6 +162,10 @@ export function createSkyline(seed: number = DEFAULT_WORLD_SEED): Skyline {
   dome.frustumCulled = false;
   group.add(dome);
   owned.push(dome);
+
+  // Stars and a moon, inside the dome and behind everything else (decision 0290).
+  const nightSky = createNightSky(seed);
+  group.add(nightSky.group);
 
   const ridges: RidgeDraw[] = RIDGE_LAYERS.map((layer) => {
     const body = new THREE.Color();
@@ -242,6 +249,7 @@ export function createSkyline(seed: number = DEFAULT_WORLD_SEED): Skyline {
       const snow = THREE.MathUtils.clamp(state.snow, 0, 1);
       const glow = alpenglow(day) * clarity;
       haze.value.copy(state.haze);
+      nightSky.update({ dayProgress: state.dayProgress, daylight: day, clarity });
 
       // Overhead: a deeper blue by day, nearly black at night, flat grey under cloud.
       zenith.value
@@ -281,6 +289,7 @@ export function createSkyline(seed: number = DEFAULT_WORLD_SEED): Skyline {
     },
     dispose() {
       disposed = true;
+      nightSky.dispose();
       group.removeFromParent();
       for (const { geometry, material } of owned) {
         geometry.dispose();
