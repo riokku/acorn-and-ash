@@ -623,12 +623,19 @@ sunset, `&season=winter`, or `&cloud=0.6` for rain). See
 
 ### The night sky
 
-After dark the stars come out, with a Milky Way band and a full moon that rises
+After dark the stars come out, with a Milky Way band and a moon that rises
 in the east at dusk and sets in the west at dawn. Cloud, blizzards and tunnels
 hide them. The stars are placed from the same seed as the far skyline. See them at
 `/?gallery=skyline&view=stars&time=0` or `&view=moon` (add `&cloud=1` for an
 overcast night). See
 [decision 0290](docs/decisions/0290-night-sky.md).
+
+The moon goes from new to full and back over six nights. Shooting stars fall
+every half minute or so, far more often on a meteor-shower night, and the
+northern lights show on most clear winter nights. Everyone sees the same ones.
+Try `/?gallery=skyline&view=moon&time=0&moon=0.17` and
+`/?gallery=skyline&view=stars&time=0&season=winter&aurora=1&meteor=0.6`. See
+[decision 0291](docs/decisions/0291-moon-phases-shooting-stars-northern-lights.md).
 
 ### Valley mist
 

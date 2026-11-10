@@ -10,7 +10,7 @@
  * North is -z, east is +x and up is +y, as everywhere else.
  */
 
-import { createRng } from '@acorn/shared';
+import { DAY_LENGTH_MS, calendarAt, createRng, hashSeed, type SeasonId } from '@acorn/shared';
 
 export interface Star {
   /** Where it is in the sky, as a direction of length 1, before the sky turns. */
@@ -154,5 +154,142 @@ export function moonDirection(dayProgress: number): { x: number; y: number; z: n
     x: -Math.sin(angle),
     y: up * Math.sin(MOON_HEIGHT),
     z: up * Math.cos(MOON_HEIGHT),
+  };
+}
+
+/**
+ * Which night this is, counted from the world's first. A night runs from one
+ * noon to the next, so the whole of it, either side of midnight, is one night.
+ */
+export function nightNumber(nowMs: number): number {
+  return Math.floor(nowMs / DAY_LENGTH_MS + 0.5);
+}
+
+/** How many nights the moon takes to go from full round to full again: one season. */
+export const MOON_CYCLE_NIGHTS = 6;
+
+/**
+ * Where the moon is in its month on this night: 0 is a new moon, 0.25 a
+ * waxing half, 0.5 a full moon and 0.75 a waning half. It holds still for a
+ * whole night and steps on at noon, when nobody can see it.
+ */
+export function moonPhase(seed: number, nowMs: number): number {
+  const start = hashSeed('moon', seed) % MOON_CYCLE_NIGHTS;
+  const night =
+    (((nightNumber(nowMs) + start) % MOON_CYCLE_NIGHTS) + MOON_CYCLE_NIGHTS) % MOON_CYCLE_NIGHTS;
+  return night / MOON_CYCLE_NIGHTS;
+}
+
+/** How much of the moon's face is lit at a phase, 0 (new) to 1 (full). */
+export function moonLit(phase: number): number {
+  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
+}
+
+/** A throw of the dice between 0 and 1 that is the same for everyone. */
+function chance(...parts: readonly (string | number)[]): number {
+  return hashSeed(...parts) / 0x1_0000_0000;
+}
+
+/** How likely the northern lights are on a night that begins in each season. */
+const AURORA_CHANCE: Readonly<Record<SeasonId, number>> = {
+  spring: 0.15,
+  summer: 0,
+  autumn: 0.3,
+  winter: 0.7,
+};
+
+/**
+ * How strongly the northern lights show tonight, from 0 (none) to 1. Mostly a
+ * winter sight, sometimes autumn, rarely spring and never summer. Decided once
+ * for the whole night, from the season the night began in.
+ */
+export function auroraTonight(seed: number, nowMs: number): number {
+  const night = nightNumber(nowMs);
+  const dusk = (night - 0.25) * DAY_LENGTH_MS;
+  const likely = AURORA_CHANCE[calendarAt(seed, dusk).season];
+  if (chance('aurora', seed, night) >= likely) return 0;
+  return 0.55 + 0.45 * chance('aurora-strength', seed, night);
+}
+
+/** One night in this many is a meteor shower. */
+const SHOWER_EVERY = 6;
+
+/** Whether tonight is a meteor shower, when shooting stars come thick and fast. */
+export function meteorShowerTonight(seed: number, nowMs: number): boolean {
+  return hashSeed('meteor-shower', seed, nightNumber(nowMs)) % SHOWER_EVERY === 0;
+}
+
+/** How long a shooting star takes to cross its path, in milliseconds. */
+export const METEOR_MS = 900;
+/** The sky is given one chance of a shooting star in every stretch this long. */
+const METEOR_SLOT_MS = 12_000;
+const SHOWER_SLOT_MS = 2_500;
+const METEOR_CHANCE = 0.3;
+const SHOWER_CHANCE = 0.75;
+
+export interface Meteor {
+  /** Where it starts and ends, as directions of length 1. */
+  readonly from: { x: number; y: number; z: number };
+  readonly to: { x: number; y: number; z: number };
+  /** How far along it is, 0 to 1. */
+  readonly progress: number;
+  /** How bright this one is, 0 to 1. */
+  readonly brightness: number;
+}
+
+/**
+ * The shooting star crossing the sky at this moment, if there is one. Worked
+ * out from the clock alone, so everyone looking up sees the same one. On an
+ * ordinary night there is one every half minute or so; in a shower, one every
+ * few seconds.
+ */
+export function meteorAt(seed: number, nowMs: number): Meteor | null {
+  const shower = meteorShowerTonight(seed, nowMs);
+  const slotMs = shower ? SHOWER_SLOT_MS : METEOR_SLOT_MS;
+  const slot = Math.floor(nowMs / slotMs);
+  if (chance('meteor', seed, slot) >= (shower ? SHOWER_CHANCE : METEOR_CHANCE)) return null;
+  const rng = createRng(hashSeed('meteor-path', seed, slot));
+  const begins = slot * slotMs + rng.nextFloat() * (slotMs - METEOR_MS);
+  const progress = (nowMs - begins) / METEOR_MS;
+  if (progress < 0 || progress > 1) return null;
+
+  // Start somewhere well up the sky and fall away at a slant.
+  const turn = rng.nextFloat() * Math.PI * 2;
+  const height = (30 + rng.nextFloat() * 45) * (Math.PI / 180);
+  const swing = (rng.nextFloat() * 2 - 1) * 0.5;
+  const fall = (9 + rng.nextFloat() * 9) * (Math.PI / 180);
+  const endTurn = turn + swing * 0.5;
+  const endHeight = height - fall;
+  return {
+    from: skyPoint(turn, height),
+    to: skyPoint(endTurn, endHeight),
+    progress,
+    brightness: 0.6 + 0.4 * rng.nextFloat(),
+  };
+}
+
+function skyPoint(turn: number, height: number): { x: number; y: number; z: number } {
+  const flat = Math.cos(height);
+  return { x: Math.cos(turn) * flat, y: Math.sin(height), z: Math.sin(turn) * flat };
+}
+
+/** Everything about tonight that the sky needs beyond the hour. */
+export interface Tonight {
+  /** 0 is a new moon, 0.5 is full (see `moonPhase`). */
+  readonly moonPhase: number;
+  /** How strongly the northern lights show, 0 to 1. */
+  readonly aurora: number;
+  /** The shooting star in the sky right now, if any. */
+  readonly meteor: Meteor | null;
+}
+
+/** A plain night: a full moon and nothing else going on. */
+export const PLAIN_NIGHT: Tonight = { moonPhase: 0.5, aurora: 0, meteor: null };
+
+export function tonight(seed: number, nowMs: number): Tonight {
+  return {
+    moonPhase: moonPhase(seed, nowMs),
+    aurora: auroraTonight(seed, nowMs),
+    meteor: meteorAt(seed, nowMs),
   };
 }
