@@ -1,4 +1,4 @@
-import { PLAINS_LANDMARKS, HIGH_PLAINS, isExploredAt } from '@acorn/shared';
+import { MAPPED_PLACES, PLAINS_LANDMARKS, HIGH_PLAINS, isExploredAt } from '@acorn/shared';
 /**
  * Drawing the minimap and the big map onto their canvases (see decision
  * 0054): the painted world, the parchment over what is still unexplored,
@@ -261,9 +261,20 @@ export function drawBigMap(
     const at = place(landmark.x, landmark.z);
     drawLabel(context, landmark.name, at.x, at.y + (landmark === HIGH_PLAINS ? -22 : 0));
   }
+  // The named places of the forest (decision 0293), once you have been there. The plains'
+  // own names are drawn above, the dangerous places have their own marks, and home has its own.
+  for (const named of MAPPED_PLACES) {
+    if (named.kind !== 'landmark' || PLAINS_NAMES.has(named.name)) continue;
+    if (!isExploredAt(feed.explored, named.x, named.z)) continue;
+    const at = place(named.x, named.z);
+    drawLabel(context, named.name, at.x, at.y);
+  }
   const you = place(feed.player.x, feed.player.z);
   drawYou(context, you.x, you.y, arrowTurn(feed.player.facingYaw, 0), 1.25);
 }
+
+/** The plains landmarks, which the map already names. */
+const PLAINS_NAMES: ReadonlySet<string> = new Set(PLAINS_LANDMARKS.map((mark) => mark.name));
 
 function drawLabel(context: CanvasRenderingContext2D, text: string, x: number, y: number): void {
   context.font = LABEL_FONT;

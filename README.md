@@ -638,6 +638,18 @@ Try `/?gallery=skyline&view=moon&time=0&moon=0.17` and
 `/?gallery=skyline&view=stars&time=0&season=winter&aurora=1&meteor=0.6`. See
 [decision 0291](docs/decisions/0291-moon-phases-shooting-stars-northern-lights.md).
 
+### Place names
+
+Walking into a named place brings its name up across the screen with a soft
+chime: large for a region (Evergreen Mountains, Sunreach High Plains), smaller
+for a spot inside one (Acorn Hollow, Otter Pond, Mirrormere, the Alderwash, the
+Greywatch Range, Old Greywatch, Whisper Falls, Windbreak Pass and the rest), in
+a warning colour for Bonehollow, the King's Road and Crownbreaker Hold. A place
+just left is not announced again for three minutes. Ash Peak is announced once,
+from the lake, on a clear day. The forest's landmarks are labelled on the map
+once explored. Nothing is saved and no rule reads a place. See
+[decision 0293](docs/decisions/0293-place-name-banners.md).
+
 ### Valley mist
 
 Mist lies on the lake, the river and the home pond, and pools in the hollows of

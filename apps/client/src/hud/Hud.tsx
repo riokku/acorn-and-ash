@@ -76,6 +76,7 @@ import {
 } from '@acorn/shared';
 
 import type { HudStore, HudState, RaidBanner } from './store';
+import type { PlaceBanner } from './place-banner';
 import { BuildableIcon, ItemIcon, SystemIcon } from './item-icons';
 import { CombatOverlay } from './CombatOverlay';
 import type { CombatFeed } from './combat-feed';
@@ -559,6 +560,13 @@ export function Hud({
       {showingWorld && !state.kingVictory && state.raidBanner !== null && !state.worldBoss ? (
         <RaidBannerView key={state.raidBanner.key} banner={state.raidBanner} />
       ) : null}
+      {showingWorld &&
+      !state.kingVictory &&
+      !state.worldBoss &&
+      state.raidBanner === null &&
+      state.placeBanner ? (
+        <PlaceBannerView key={state.placeBanner.key} banner={state.placeBanner} />
+      ) : null}
       {showingWorld && !state.worldBoss && state.raidBanner === null && state.raidersInSight > 0 ? (
         <RaidTracker count={state.raidersInSight} />
       ) : null}
@@ -876,6 +884,24 @@ function RaidBannerView({ banner }: { banner: RaidBanner }): React.JSX.Element {
     <div className={`raid-banner raid-banner-${banner.tone}`} data-testid="raid-banner">
       <p className="raid-banner-title">{banner.title}</p>
       <p className="raid-banner-detail">{banner.detail}</p>
+    </div>
+  );
+}
+
+/**
+ * The name of the place just walked into (decision 0293): large for a region,
+ * smaller for a spot inside one. It fades in and out by itself and is never in
+ * the way of a click.
+ */
+function PlaceBannerView({ banner }: { banner: PlaceBanner }): React.JSX.Element {
+  return (
+    <div
+      className={`place-banner place-banner-${banner.size} place-banner-${banner.kind}`}
+      data-testid="place-banner"
+      role="status"
+    >
+      <p className="place-banner-title">{banner.title}</p>
+      {banner.line !== null ? <p className="place-banner-line">{banner.line}</p> : null}
     </div>
   );
 }

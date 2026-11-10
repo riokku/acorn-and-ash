@@ -2974,6 +2974,119 @@ body {
   animation: raid-banner 4.6s ease-out forwards;
 }
 
+/*
+ * The name of a place, on walking into it (decision 0293). No band behind it:
+ * just the words over the world, with a dark edge so they read on snow and sky.
+ */
+.place-banner {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  color: #fbf1d8;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 2px 0 rgba(20, 16, 10, 0.55),
+    0 0 18px rgba(20, 16, 10, 0.6);
+  animation: place-banner 5.2s ease-in-out forwards;
+}
+
+.place-banner-title {
+  margin: 0;
+  font:
+    700 34px/1.1 'Fraunces',
+    Georgia,
+    serif;
+  letter-spacing: 0.05em;
+}
+
+.place-banner-region .place-banner-title {
+  font-size: 50px;
+  letter-spacing: 0.07em;
+}
+
+.place-banner-line {
+  margin: 8px 0 0;
+  font:
+    500 20px/1.2 'Fraunces',
+    Georgia,
+    serif;
+  letter-spacing: 0.08em;
+  color: #ecdcb6;
+}
+
+.place-banner-region .place-banner-line::before,
+.place-banner-region .place-banner-line::after {
+  content: '';
+  display: inline-block;
+  width: 46px;
+  height: 1px;
+  margin: 0 14px;
+  vertical-align: middle;
+  background: currentcolor;
+  opacity: 0.7;
+}
+
+.place-banner-danger {
+  color: #ffc9b0;
+}
+
+.place-banner-danger .place-banner-title {
+  text-shadow:
+    0 2px 0 rgba(60, 8, 4, 0.7),
+    0 0 20px rgba(120, 16, 8, 0.75);
+}
+
+.place-banner-home {
+  color: #fff3c9;
+}
+
+.place-banner-sight {
+  color: #e6f0f7;
+}
+
+.place-banner-sight .place-banner-title {
+  font-style: italic;
+  font-weight: 600;
+}
+
+@keyframes place-banner {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+    letter-spacing: 0.02em;
+  }
+  16%,
+  78% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .place-banner {
+    animation-name: place-banner-still;
+  }
+
+  @keyframes place-banner-still {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    10%,
+    85% {
+      opacity: 1;
+    }
+  }
+}
+
 .raid-banner-victory {
   --band: rgba(122, 86, 18, 0.86);
 }

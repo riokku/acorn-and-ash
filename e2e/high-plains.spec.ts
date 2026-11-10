@@ -82,6 +82,8 @@ test('walks through Windbreak Pass into Sunreach and back without losing invento
     await page.locator('.home-play').click();
     await expect(page.getByTestId('loading-screen')).toBeHidden({ timeout: 120_000 });
     await expect(page.getByTestId('world-zone')).toHaveText('Evergreen Mountains');
+    // Arriving in the world announces where you are (decision 0293).
+    await expect(page.getByTestId('place-banner')).toContainText('Evergreen Mountains');
     for (const point of route.slice(1)) await walkTo(point);
     await expect(page.getByTestId('world-zone')).toHaveText('Sunreach High Plains');
     await expect
