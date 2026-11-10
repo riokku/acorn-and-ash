@@ -1,4 +1,5 @@
 import type { HomecomingSummary } from './homecoming';
+import type { PlaceBanner } from './place-banner';
 import type { HomesteadProject } from '@acorn/shared';
 import type { KingVictoryView } from './KingVictory';
 import type { KingStormView } from '@acorn/shared';
@@ -173,6 +174,8 @@ export interface HudState {
   readonly raidersClose: boolean;
   /** A raid turning up, fought off or over, while it is still worth showing. */
   readonly raidBanner: RaidBanner | null;
+  /** The name of the place just walked into, while it is on screen (decision 0293). */
+  readonly placeBanner?: PlaceBanner | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   readonly canBuild: boolean;
   readonly homeStoredSupplies: readonly { readonly item: ItemId; readonly count: number }[];

@@ -36,7 +36,10 @@ import { isPack, MAX_PACK_SLOTS } from '@acorn/shared';
 import { mushroomFlushHint } from '@acorn/shared';
 import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@acorn/shared';
 import { bonehollowVictory } from './hud/bonehollow-victory';
-import { playConfirmedStrike, playLastBell } from './audio/feedback';
+import { playConfirmedStrike, playLastBell, playPlaceChime } from './audio/feedback';
+import { PLACE_BANNER_MS, PlaceTracker } from './hud/place-banner';
+import { skylineClarity } from './art/skyline-shape';
+import { whereaboutsAt } from '@acorn/shared';
 import { preloadHousingDetails } from './scene/housing-details';
 import { preloadSkeletonTown } from './scene/skeleton-town';
 import { SKELETON_TOWN } from '@acorn/shared';
@@ -758,6 +761,8 @@ export interface GameDebug {
   aimedRaider(): { name: string; hitsLeft: number } | null;
   /** The raid banner showing right now, if any: its big words. */
   raidBanner(): string | null;
+  /** The place name showing right now, if any. */
+  placeBanner(): string | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
   /** Whether the room-decorating panel (opened with the Decorate button) is currently showing. */
@@ -972,6 +977,10 @@ export class Game {
   private journalTab: 'craft' | 'discoveries' | 'garden' | 'expeditions' | 'fishing' = 'craft';
   private craftTab: CraftTabId = 'all';
   private readonly homecoming = new Homecoming();
+  /** Which named place we are in, for the banner on walking into one (decision 0293). */
+  private readonly places = new PlaceTracker();
+  private placeBannerUntil = 0;
+  private placeBannerTitle: string | null = null;
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoveryLeads: readonly DiscoveryLead[] = [];
@@ -1878,6 +1887,7 @@ export class Game {
       raiderDisplay: (id) => this.raiders.display(id),
       aimedRaider: () => (this.aimedRaider === null ? null : { ...this.aimedRaider }),
       raidBanner: () => this.currentRaidBanner()?.title ?? null,
+      placeBanner: () => this.placeBannerTitle,
       canBuild: () => this.canBuild,
       buildMenuOpen: () => this.buildMenuOpen,
       craftMenuOpen: () => this.craftMenuOpen,
@@ -3019,6 +3029,35 @@ export class Game {
     this.options.hud.publish({ kingVictory: null });
   }
 
+  /** Shows the name of a place on walking into it, and takes it down when its time is up. */
+  private updatePlaceBanner(weatherNow: number, blizzard: boolean): void {
+    const now = performance.now();
+    if (this.placeBannerTitle !== null && now >= this.placeBannerUntil) {
+      this.placeBannerTitle = null;
+      this.options.hud.publish({ placeBanner: null });
+    }
+    const player = this.localPlayer;
+    if (player === null || this.clearing === null || this.enteringWorld) return;
+    if (this.space !== OUTDOORS || this.undergroundDark > 0.5) return;
+    const { x, z } = player.motion.position;
+    const daylight = dayBrightness(dayProgress(weatherNow));
+    // A far-off sight is only announced when it can be seen: by day, in clear air.
+    const canSeeFar =
+      daylight > 0.4 &&
+      skylineClarity({
+        daylight,
+        cloud: this.weatherCloud,
+        whiteout: blizzard ? 1 : 0,
+        underground: this.undergroundDark,
+      }) > 0.6;
+    const banner = this.places.update(now, whereaboutsAt(x, z, this.clearing.water), canSeeFar);
+    if (banner === null) return;
+    this.placeBannerTitle = banner.title;
+    this.placeBannerUntil = now + PLACE_BANNER_MS;
+    this.options.hud.publish({ placeBanner: banner });
+    playPlaceChime(banner.kind);
+  }
+
   private currentRaidBanner(now = performance.now()): RaidBanner | null {
     const shown = this.raidBanner;
     return shown !== null && now < shown.until ? shown.banner : null;
@@ -3259,6 +3298,9 @@ export class Game {
       this.outdoors.add(this.weatherArt.group);
       this.valleyMist?.dispose();
       this.valleyMist = createValleyMist(seed, (x, z) => terrain.heightAt(x, z), clearing.water);
+      this.places.reset();
+      this.placeBannerUntil = 0;
+      this.placeBannerTitle = null;
       this.outdoors.add(this.valleyMist.group);
       this.sceneryWildlife?.dispose();
       this.sceneryWildlife = createSceneryWildlife(seed, clearing.water, (x, z) =>
@@ -4153,6 +4195,7 @@ export class Game {
         hidden: this.space !== OUTDOORS || this.undergroundDark > 0.5,
         reducedMotion: this.reducedMotion.matches,
       });
+    this.updatePlaceBanner(weatherNow, weather.kind === 'blizzard');
     this.sceneryWildlife?.update(
       deltaSeconds,
       watcher,
