@@ -333,8 +333,9 @@ import {
 
 /** How long a cube the mouse was on stays good, in ticks: the browser repeats it every second. */
 const DIG_TARGET_TICKS = 3 * TICK_HZ;
-import { castLanding, overlapsWater, type WaterCircle } from '../world/water';
+import { castLanding, isOnWater, overlapsWater, type WaterCircle } from '../world/water';
 import { calendarAt, lakeIsFrozen, type Calendar } from './seasons';
+import { SALMON_RUN_BITE_DELAY, SALMON_RUN_FISH, fishesTheSalmonRun } from './world-events';
 import { buildWilderness, type Wilderness } from '../world/wilderness';
 import { buildEncounterSites, encounterColliders, type EncounterSite } from '../world/encounters';
 import { ANIMAL_DENS, type AnimalDen } from '../world/animals';
@@ -5932,13 +5933,18 @@ export class WorldSimulation {
     const spot = castLanding(position, aimYaw, this.clearing.water, this.openLake());
     if (spot === null) return;
 
+    // In the salmon run the lake fishes better and bites sooner (decision 0294).
+    const onTheLake = !isOnWater(this.clearing.water, spot.x, spot.z);
+    const run = fishesTheSalmonRun(this.calendar(), onTheLake);
     runtime.cast = startCast(
       this.seed,
       this.castCounter++,
       this.tick,
       position,
       spot,
-      this.equippedItemOf(runtime.netId) === 'refinedRod' ? 0.75 : 1,
+      (this.equippedItemOf(runtime.netId) === 'refinedRod' ? 0.75 : 1) *
+        (run ? SALMON_RUN_BITE_DELAY : 1),
+      run ? SALMON_RUN_FISH : undefined,
     );
     this.fishingEvents.push({ kind: 'cast', netId: runtime.netId, x: spot.x, z: spot.z });
   }

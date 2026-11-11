@@ -39,6 +39,9 @@ import { buildDiscoveryLeads, discoveryLeadHint, type DiscoveryLead } from '@aco
 import { bonehollowVictory } from './hud/bonehollow-victory';
 import { playConfirmedStrike, playLastBell, playPlaceChime } from './audio/feedback';
 import { PLACE_BANNER_MS, PlaceTracker } from './hud/place-banner';
+import { WorldEventWatcher } from './hud/world-event';
+import { createSalmonRun, preloadSalmon, type SalmonRun } from './scene/salmon-run';
+import { worldEventOn } from '@acorn/shared';
 import { skylineClarity } from './art/skyline-shape';
 import { whereaboutsAt } from '@acorn/shared';
 import { preloadHousingDetails } from './scene/housing-details';
@@ -764,6 +767,8 @@ export interface GameDebug {
   raidBanner(): string | null;
   /** The place name showing right now, if any. */
   placeBanner(): string | null;
+  /** The world event on right now, if any, and how many salmon are drawn. */
+  worldEvent(): { id: string; salmon: number } | null;
   /** Whether at least one buildable kind could be placed right where you stand. */
   canBuild(): boolean;
   /** Whether the room-decorating panel (opened with the Decorate button) is currently showing. */
@@ -982,6 +987,11 @@ export class Game {
   private readonly places = new PlaceTracker();
   private placeBannerUntil = 0;
   private placeBannerTitle: string | null = null;
+  /** The world event on right now (decision 0294), and its salmon. */
+  private readonly worldEvents = new WorldEventWatcher();
+  private worldEventShown: string | null = null;
+  private worldEventBanners = 0;
+  private salmonRun: SalmonRun | null = null;
   private discoveriesFound = 0;
   private discoveriesClaimed = 0;
   private discoveryLeads: readonly DiscoveryLead[] = [];
@@ -1335,6 +1345,7 @@ export class Game {
     void preloadStagModel();
     void preloadHareModel();
     void preloadSceneryWildlife();
+    void preloadSalmon();
     void preloadFishModel();
     void preloadCharacterModels();
     void preloadCharacterAnimations();
@@ -1889,6 +1900,10 @@ export class Game {
       aimedRaider: () => (this.aimedRaider === null ? null : { ...this.aimedRaider }),
       raidBanner: () => this.currentRaidBanner()?.title ?? null,
       placeBanner: () => this.placeBannerTitle,
+      worldEvent: () => {
+        const on = worldEventOn(this.currentCalendar());
+        return on === null ? null : { id: on.event.id, salmon: this.salmonRun?.inView() ?? 0 };
+      },
       canBuild: () => this.canBuild,
       buildMenuOpen: () => this.buildMenuOpen,
       craftMenuOpen: () => this.craftMenuOpen,
@@ -2017,6 +2032,7 @@ export class Game {
     this.weatherArt?.dispose();
     this.valleyMist?.dispose();
     this.sceneryWildlife?.dispose();
+    this.salmonRun?.dispose();
     this.seasonFallArt?.dispose();
     this.grass?.dispose();
     this.deadwood?.dispose();
@@ -3030,6 +3046,49 @@ export class Game {
     this.options.hud.publish({ kingVictory: null });
   }
 
+  /**
+   * The world event on right now (decision 0294): its banner as it begins and ends, the
+   * reminder by the minimap, and the salmon in the river while they run.
+   */
+  private updateWorldEvent(
+    worldNow: number,
+    watcher: { readonly x: number; readonly z: number },
+  ): void {
+    const on = this.enteringWorld ? null : worldEventOn(this.currentCalendar());
+    const outdoors = this.space === OUTDOORS && this.undergroundDark <= 0.5;
+    this.salmonRun?.update(
+      watcher,
+      worldNow / 1000,
+      outdoors && on?.event.id === 'salmonRun',
+      this.reducedMotion.matches,
+    );
+    if (this.enteringWorld) return;
+    const now = performance.now();
+    const { news, reminder } = this.worldEvents.update(
+      on,
+      outdoors && this.placeBannerTitle === null,
+    );
+    const shown = reminder === null ? null : `${reminder.id}:${reminder.timeLeft}`;
+    if (shown !== this.worldEventShown) {
+      this.worldEventShown = shown;
+      this.options.hud.publish({ worldEvent: reminder });
+    }
+    if (news === null) return;
+    this.placeBannerTitle = news.title;
+    this.placeBannerUntil = now + PLACE_BANNER_MS;
+    this.options.hud.publish({
+      placeBanner: {
+        // Counted down from zero, so an event's banner never shares a key with a place's.
+        key: -++this.worldEventBanners,
+        title: news.title,
+        line: news.line,
+        kind: 'event',
+        size: 'spot',
+      },
+    });
+    playPlaceChime('event');
+  }
+
   /** Shows the name of a place on walking into it, and takes it down when its time is up. */
   private updatePlaceBanner(weatherNow: number, blizzard: boolean): void {
     const now = performance.now();
@@ -3308,6 +3367,11 @@ export class Game {
         terrain.heightAt(x, z),
       );
       this.outdoors.add(this.sceneryWildlife.group);
+      this.salmonRun?.dispose();
+      this.salmonRun = createSalmonRun();
+      this.outdoors.add(this.salmonRun.group);
+      this.worldEvents.reset();
+      this.worldEventShown = null;
       this.seasonFallArt?.dispose();
       this.seasonFallArt = createSeasonFall(seed, (x, z) => terrain.heightAt(x, z));
       this.outdoors.add(this.seasonFallArt.group);
@@ -4198,6 +4262,7 @@ export class Game {
         reducedMotion: this.reducedMotion.matches,
       });
     this.updatePlaceBanner(weatherNow, weather.kind === 'blizzard');
+    this.updateWorldEvent(weatherNow, watcher);
     this.sceneryWildlife?.update(
       deltaSeconds,
       watcher,

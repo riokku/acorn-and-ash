@@ -751,6 +751,14 @@ export async function startGallery(canvas: HTMLCanvasElement): Promise<void> {
     await showForestTrails(renderer, scene, fireLights, params);
     return;
   }
+  if (focus === 'salmon-run') {
+    // The autumn salmon run (decision 0294) on the real river: `&view=falls` (the default),
+    // `&view=mouth`, and `&at=12` to hold the fish at one moment.
+    if (!params.has('view')) params.set('view', 'falls');
+    const { showForestTrails } = await import('./forest-trails');
+    await showForestTrails(renderer, scene, fireLights, params);
+    return;
+  }
   if (focus === 'skyline') {
     // The far ridges and Ash Peak (decision 0286), seen from the real map.
     if (!params.has('view')) params.set('view', 'peak');

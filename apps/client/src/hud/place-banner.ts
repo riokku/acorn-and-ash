@@ -21,7 +21,8 @@ export interface PlaceBanner {
   readonly title: string;
   /** The smaller line beneath, if any. */
   readonly line: string | null;
-  readonly kind: PlaceKind;
+  /** What it announces: a kind of place, or a world event beginning or ending (decision 0294). */
+  readonly kind: PlaceKind | 'event';
   /** A region is announced large; a spot inside one, smaller. */
   readonly size: 'region' | 'spot';
 }
