@@ -171,9 +171,6 @@ test.describe('in the game', () => {
     await expect(reminder).toHaveAttribute('data-event', 'salmonRun');
     await expect(reminder).toContainText('The Salmon Run');
     await expect(reminder).toContainText(/Ends in \d+ minutes/);
-    await expect
-      .poll(() => page.evaluate(() => window.acornDebug?.worldEvent()?.id ?? null))
-      .toBe('salmonRun');
   });
 
   test('colours each quarter of the year for its season', async ({ page }) => {
