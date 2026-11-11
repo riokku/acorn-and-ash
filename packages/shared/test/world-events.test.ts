@@ -52,7 +52,9 @@ describe('the salmon run', () => {
     const shift = clockShiftForSeason(DEFAULT_WORLD_SEED, 0, 'autumn');
     expect(worldEventOn(calendarAt(DEFAULT_WORLD_SEED, shift + 1000))?.event.id).toBe('salmonRun');
     expect(worldEventOn(calendarAt(DEFAULT_WORLD_SEED, shift - 1000))).toBeNull();
-    expect(worldEventOn(calendarAt(DEFAULT_WORLD_SEED, shift + 2 * DAY_LENGTH_MS + 1000))).toBeNull();
+    expect(
+      worldEventOn(calendarAt(DEFAULT_WORLD_SEED, shift + 2 * DAY_LENGTH_MS + 1000)),
+    ).toBeNull();
   });
 
   it('fishes the lake, not the home pond, and only while it is on', () => {
@@ -78,7 +80,8 @@ describe('the salmon run', () => {
     const rare = (table?: typeof POND_FISH) => {
       let count = 0;
       for (let cast = 0; cast < 2000; cast++)
-        if (fishOnTheLine(DEFAULT_WORLD_SEED, cast, 100 + cast * 7, table) === 'goldenCarp') count++;
+        if (fishOnTheLine(DEFAULT_WORLD_SEED, cast, 100 + cast * 7, table) === 'goldenCarp')
+          count++;
       return count;
     };
     expect(rare(SALMON_RUN_FISH)).toBeGreaterThan(rare() * 1.8);

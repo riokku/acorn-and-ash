@@ -131,6 +131,6 @@ def export(tmp_dir, repo):
                               export_apply=True, export_vertex_color='MATERIAL', export_all_vertex_colors=False,
                               export_materials='EXPORT')
     out = os.path.join(repo, 'assets', 'critters', 'salmon.glb')
-    subprocess.run(['node', os.path.join(repo, 'tools', 'import-model.mjs'), raw, out, '--quantize'],
+    subprocess.run(['node', os.path.join(repo, 'tools', 'import-model.mjs'), raw, out],
                    cwd=repo, check=True, shell=os.name == 'nt')
     return os.path.getsize(out)

@@ -28,6 +28,9 @@ import {
 } from '@acorn/shared';
 import { buildWildernessScene } from '../scene/wilderness';
 import { createValleyMist } from '../scene/valley-mist';
+import { createSalmonRun, preloadSalmon } from '../scene/salmon-run';
+import { riverAt } from '../art/salmon-run';
+import { streamSurfaceAt } from '@acorn/shared';
 import { mistStrength } from '../art/valley-mist';
 import { dayBrightness, parseSeason } from '@acorn/shared';
 import { SKYLINE_VIEW_DISTANCE } from '../art/skyline-shape';
@@ -173,6 +176,19 @@ export async function showForestTrails(
   controls.maxDistance = 180;
   // The skyline views may tilt up at the sky; the rest stay above the ground.
   controls.maxPolarAngle = Math.PI * (arriving === undefined ? 0.48 : 0.85);
+  // The salmon run (decision 0294), when the gallery asks for it.
+  const salmon = params.get('gallery') === 'salmon-run' ? createSalmonRun() : null;
+  if (salmon !== null) {
+    await preloadSalmon();
+    scene.add(salmon.group);
+  }
+  const heldAt = params.has('at') ? Number(params.get('at')) : null;
+  // The tallest fall, and a spot a few metres downstream of it to look from.
+  const tallest = STREAM.falls.reduce((best, fall) => (fall.drop > best.drop ? fall : best));
+  const fallsAt = riverAt(tallest.at);
+  const fallsFrom = riverAt(tallest.at + 5);
+  const fallsSurface = streamSurfaceAt(STREAM, tallest.at + 1.5);
+  const riverMouth = riverAt(STREAM.length);
   const views = {
     stronghold: {
       label: 'The King’s Road',
@@ -229,6 +245,21 @@ export async function showForestTrails(
       label: 'Ash Peak from the lake',
       target: [100, terrain.heightAt(56, -56) + 14, -100],
       eye: [56, terrain.heightAt(56, -56) + 1.8, -56],
+    },
+    falls: {
+      label: 'Whisper Falls',
+      target: [fallsAt.x, fallsSurface, fallsAt.z],
+      // From the bank, a little downstream and to one side.
+      eye: [fallsFrom.x - fallsFrom.dz * 5.5, fallsSurface + 1.6, fallsFrom.z + fallsFrom.dx * 5.5],
+    },
+    mouth: {
+      label: 'The river mouth',
+      target: [riverMouth.x + riverMouth.dx * 7, LAKE.level, riverMouth.z + riverMouth.dz * 7],
+      eye: [
+        riverMouth.x - riverMouth.dx * 6,
+        LAKE.level + 3.2,
+        riverMouth.z - riverMouth.dz * 6 + 3,
+      ],
     },
     lakeside: {
       label: 'Across the lake',
@@ -308,6 +339,12 @@ export async function showForestTrails(
     forest.update(0, camera.position);
     grass.update(0, controls.target, true);
     lights.update(camera.position);
+    salmon?.update(
+      { x: controls.target.x, z: controls.target.z },
+      heldAt ?? performance.now() / 1000,
+      true,
+      false,
+    );
     if (scene.fog !== null)
       mist.update(1000, camera, {
         strength: mistNow,
@@ -321,6 +358,9 @@ export async function showForestTrails(
     else document.body.dataset.galleryReady = 'true';
   };
   controls.addEventListener('change', requestDraw);
+  // The fish keep moving, so the picture keeps being drawn.
+  const swimming =
+    salmon !== null && heldAt === null ? window.setInterval(requestDraw, 1000 / 30) : null;
   void arriving?.then(() => {
     document.body.dataset.galleryReady = 'false';
     frames = 0;
@@ -345,6 +385,8 @@ export async function showForestTrails(
       landmarks.dispose();
       survey.dispose();
       mist.dispose();
+      salmon?.dispose();
+      if (swimming !== null) window.clearInterval(swimming);
       for (const model of wildlife) model.dispose();
       grass.dispose();
       forest.dispose();

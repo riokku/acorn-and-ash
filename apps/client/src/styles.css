@@ -4624,6 +4624,50 @@ body {
   pointer-events: none;
 }
 
+/* The world event on right now, under the region's name (decision 0294). */
+.minimap-event {
+  position: absolute;
+  top: calc(100% + 64px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 12px 6px;
+  border: 1px solid rgba(255, 214, 150, 0.55);
+  border-radius: 10px;
+  background: rgba(60, 28, 20, 0.78);
+  color: #ffe9c4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.minimap-event-name {
+  font:
+    700 13px Fraunces,
+    Georgia,
+    serif;
+  letter-spacing: 0.03em;
+}
+
+.minimap-event-time {
+  font-size: 11px;
+  color: #f0cfa4;
+}
+
+.place-banner-event {
+  color: #ffe2b0;
+}
+
+.place-banner-event .place-banner-title {
+  font-size: 44px;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 2px 0 rgba(70, 22, 10, 0.7),
+    0 0 22px rgba(150, 50, 20, 0.7);
+}
+
 .world-boss {
   position: absolute;
   top: 76px;

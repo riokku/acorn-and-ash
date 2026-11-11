@@ -514,6 +514,7 @@ export function Hud({
               ? undefined
               : seasonBannerView(state.season, { showYear: false })
           }
+          event={state.worldEvent ?? null}
           onOpenMap={onToggleMap}
         />
       ) : null}

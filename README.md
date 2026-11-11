@@ -650,6 +650,19 @@ from the lake, on a clear day. The forest's landmarks are labelled on the map
 once explored. Nothing is saved and no rule reads a place. See
 [decision 0293](docs/decisions/0293-place-name-banners.md).
 
+### World events
+
+Some things happen in the world for everyone at once, by the calendar. The
+first is the salmon run: for the first two days of every autumn, red salmon
+work their way up the Alderwash from Mirrormere and leap its waterfalls. While
+it lasts, a line cast into the lake bites sooner and brings up trout and golden
+carp far more often; the home pond fishes as ever. A banner announces it as it
+begins and ends, and the minimap names it with the time it has left. The server
+and every browser read it off the same calendar, so nothing is sent to start
+it. On a preview, `?season=autumn` starts a world on the first day of the run.
+Inspect the fish at `/?gallery=salmon-run` (`&view=mouth` for the river mouth).
+See [decision 0294](docs/decisions/0294-world-events-and-the-salmon-run.md).
+
 ### Valley mist
 
 Mist lies on the lake, the river and the home pond, and pools in the hollows of

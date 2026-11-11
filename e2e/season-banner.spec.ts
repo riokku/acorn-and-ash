@@ -161,6 +161,19 @@ test.describe('in the game', () => {
     await expect(ring.locator('.season-ring-day.is-past')).toHaveCount(18);
     await expect(ring.locator('.season-ring-day.is-today')).toHaveAttribute('data-day', '19');
     await expect(ring.locator('.season-ring-day.is-future')).toHaveCount(5);
+    // No world event in winter (decision 0294).
+    await expect(page.getByTestId('world-event')).toHaveCount(0);
+  });
+
+  test('opens autumn with the salmon run, named by the minimap', async ({ page }) => {
+    await enterWorld(page, '&season=autumn');
+    const reminder = page.getByTestId('world-event');
+    await expect(reminder).toHaveAttribute('data-event', 'salmonRun');
+    await expect(reminder).toContainText('The Salmon Run');
+    await expect(reminder).toContainText(/Ends in \d+ minutes/);
+    await expect
+      .poll(() => page.evaluate(() => window.acornDebug?.worldEvent()?.id ?? null))
+      .toBe('salmonRun');
   });
 
   test('colours each quarter of the year for its season', async ({ page }) => {

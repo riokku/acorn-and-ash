@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { type FogCache, drawMinimap, fitCanvas } from '../map/draw-map';
 import type { MapFeed } from '../map/map-feed';
+import type { WorldEventReminder } from './world-event';
 import type { SeasonBannerView } from './season-banner';
 import { SeasonRing } from './SeasonRing';
 
@@ -24,12 +25,15 @@ export function Minimap({
   feed,
   fog,
   season,
+  event = null,
   onOpenMap,
 }: {
   readonly feed: MapFeed;
   readonly fog: FogCache;
   /** Where the year is, drawn as a ring round the map (decision 0110). Left out until the server says. */
   readonly season?: SeasonBannerView;
+  /** The world event on right now, named under the region with the time it has left (decision 0294). */
+  readonly event?: WorldEventReminder | null;
   readonly onOpenMap: () => void;
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,6 +90,12 @@ export function Minimap({
       <div className="minimap-zone" data-testid="world-zone">
         {zone}
       </div>
+      {event === null ? null : (
+        <div className="minimap-event" data-testid="world-event" data-event={event.id}>
+          <span className="minimap-event-name">{event.name}</span>
+          <span className="minimap-event-time">{event.timeLeft}</span>
+        </div>
+      )}
       {season === undefined ? null : <SeasonRing view={season} />}
       <div className="minimap-buttons">
         <button type="button" aria-label="Zoom the minimap in" onClick={() => zoomBy(1)}>
